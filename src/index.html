@@ -26,16 +26,17 @@
 
   <div class="main">
     <section class="stage" aria-label="Exercise">
-      <div class="break" id="breakCard" hidden role="dialog" aria-labelledby="breakTitle">
+      <div class="break" id="breakCard" hidden role="dialog" aria-modal="true" aria-labelledby="breakTitle" tabindex="-1">
         <h2 id="breakTitle">Paused</h2>
         <p id="breakWhy"></p>
         <div id="breakClock" hidden>2:00</div>
         <div class="row"><button type="button" class="primary" id="backBtn">I'm back, resume</button><button type="button" id="snoozeBtn" hidden>Keep going 5 more minutes</button><button type="button" id="endBtn2">End session</button></div>
       </div>
-      <div id="prompt">Pick an instrument</div>
+      <div id="prompt" aria-live="polite" aria-atomic="true">Pick an instrument</div>
       <div id="hint"></div>
       <div class="timebar" aria-hidden="true"><div id="timeFill"></div></div>
-      <canvas id="cv" width="960" height="492"></canvas>
+      <canvas id="cv" width="960" height="492" role="img" aria-label="Exercise display" aria-describedby="cvDesc"></canvas>
+      <div id="cvDesc" class="visually-hidden"></div>
       <div class="choices" id="choices" hidden></div>
       <button type="button" id="tapPad" hidden>Tap here, or press space</button>
       <div class="stage-tools">

@@ -198,6 +198,14 @@ export async function launchPage(htmlPath, options = {}) {
   if (initScript) {
     await send('Page.addScriptToEvaluateOnNewDocument', { source: initScript });
   }
+  if (options.reducedMotion) {
+    // Applied before navigation so the app's own boot-time
+    // matchMedia('(prefers-reduced-motion: reduce)') read already sees it —
+    // toggling it only after load races the page's first animation frames.
+    await send('Emulation.setEmulatedMedia', {
+      features: [{ name: 'prefers-reduced-motion', value: 'reduce' }],
+    });
+  }
 
   const loaded = new Promise((resolve) => {
     const off = () => {};
