@@ -53,6 +53,25 @@ pin known judging bugs on purpose so a later change to the app is forced to
 touch them deliberately instead of silently inheriting the bug — they are
 not something to "fix" by editing the test.
 
+## Instruments are data
+
+Each instrument is a plain data record under `src/instruments/`, validated by
+`validateInstrument` in `src/instruments/schema.js` (id, name, family, input,
+pitch range, transposition, clefs, an octave-matching policy, an optional
+string tuning, and an ordered curriculum). `src/instruments/index.js` exports
+`INSTRUMENTS` and `byId`.
+
+To add an instrument: create `src/instruments/<id>.js` exporting a default
+object matching the schema, import it in `index.js`, and add it to the
+`INSTRUMENTS` array. Set `status: 'planned'` and `curriculum: []` if its
+lesson content isn't written yet; use `status: 'ready'` with a non-empty
+`curriculum` once it is. Run `npm test` — `tests/unit/instruments.test.mjs`
+checks every record against the schema.
+
+As of this writing `src/app.js` still has its own instrument definitions
+(the `MODS` object) and does not yet read `src/instruments/`; that
+switch-over is a separate, later change.
+
 ## Licence
 
 Apache-2.0 — see `LICENSE`.
