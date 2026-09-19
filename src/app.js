@@ -603,6 +603,6 @@
   setInterval(() => { if (!TOOLS[mod] || !micReady || !anTime) return; const buf = new Float32Array(anTime.fftSize); anTime.getFloatTimeDomainData(buf); const r = yin(buf, actx.sampleRate, 36, 1600), fr = { rms: r.rms, freq: r.freq && r.clarity > 0.8 ? r.freq : 0 }; if (fr.freq) fr.midi = fmidi(fr.freq); toolPitch(fr, 0.05); }, 50);
 
   loadDB(); if (!Array.isArray(DB.custom)) DB.custom = []; $('optNames').checked = DB.prefs.names; buildPicker(); setMod(mod); requestAnimationFrame(frame);
-  window.__coach = { state: () => S, db: () => DB, sess: () => sess, task: () => task, cur: cur, note: onNote, answer: answer, tap: onTap, bar: () => bar, playing: () => playing, setMod: setMod, testSource: testSource, heard: () => heard, yin: yin, cap: () => cap };
+  if (__DEBUG_HOOK__) window.__coach = { state: () => S, db: () => DB, sess: () => sess, task: () => task, cur: cur, note: onNote, answer: answer, tap: onTap, bar: () => bar, playing: () => playing, setMod: setMod, testSource: testSource, heard: () => heard, yin: yin, cap: () => cap };
 
 })();
