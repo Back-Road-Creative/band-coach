@@ -1,0 +1,48 @@
+name: store-package
+
+on:
+  workflow_dispatch: {}
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: build the app file
+        run: |
+          npm ci
+          npm run build
+
+      - name: install the store shell
+        working-directory: store
+        run: npm ci
+
+      - name: package the appx
+        working-directory: store
+        # BC_IDENTITY_NAME / BC_PUBLISHER / BC_PUBLISHER_DISPLAY_NAME are
+        # repository VARIABLES (public manifest values, not secrets). When
+        # unset, apply-identity.mjs falls back to the safe placeholders
+        # already committed in electron-builder.json.
+        run: npm run dist:appx
+        env:
+          BC_IDENTITY_NAME: ${{ vars.BC_IDENTITY_NAME }}
+          BC_PUBLISHER: ${{ vars.BC_PUBLISHER }}
+          BC_PUBLISHER_DISPLAY_NAME: ${{ vars.BC_PUBLISHER_DISPLAY_NAME }}
+
+      - name: upload appx artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: band-coach-appx
+          path: store/release/*.appx
+          if-no-files-found: error

@@ -53,6 +53,15 @@ pin known judging bugs on purpose so a later change to the app is forced to
 touch them deliberately instead of silently inheriting the bug — they are
 not something to "fix" by editing the test.
 
+## Windows Store edition
+
+`store/` packages the same built `dist/band-coach.html` into an unsigned Windows App Package
+(`.appx`) with a thin Electron shell, built on GitHub Actions' `windows-latest` runner (this repo
+has no Windows machine of its own, and the Microsoft Store re-signs whatever you submit for free,
+so no paid signing certificate is needed). It's a separate `package.json` under `store/` — the
+app itself gains no new dependency. See `store/README.md` for how to get your app's identity from
+Partner Center, run the `store-package` workflow, and submit the resulting `.appx`.
+
 ## Licence
 
 Apache-2.0 — see `LICENSE`.

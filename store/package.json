@@ -1,0 +1,18 @@
+{
+  "name": "band-coach-store-shell",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Thin Electron desktop shell that packages the built band-coach.html as a Windows Store MSIX (appx). The learning app itself lives entirely in ../src and ../dist; nothing here is loaded by the browser build.",
+  "license": "Apache-2.0",
+  "type": "commonjs",
+  "main": "main.js",
+  "scripts": {
+    "generate-icons": "node scripts/generate-icons.mjs",
+    "prepare-app": "node scripts/prepare-app.mjs",
+    "dist:appx": "npm run prepare-app && node scripts/apply-identity.mjs && electron-builder --win appx --config electron-builder.generated.json"
+  },
+  "devDependencies": {
+    "electron": "44.4.3",
+    "electron-builder": "26.15.3"
+  }
+}
