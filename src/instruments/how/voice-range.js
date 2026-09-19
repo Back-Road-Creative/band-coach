@@ -1,0 +1,81 @@
+// Voice "how to produce this note" — a range test as pure logic. Zero
+// dependencies; pure functions; no DOM, no microphone access here: the
+// caller runs an ascending/descending guided slide through the real pitch
+// detector and hands the resulting samples in.
+//
+// Wiring pass: feed a stream of `{ midi, ms }` samples (one detected pitch
+// and how many milliseconds it was held, from a slide that starts
+// comfortable and moves outward) to `estimateRange(samples)` to get a
+// `{ low, high }` comfortable range. `classify(range)` turns that into a
+// plain-language nearest-voice-type HINT (never a diagnosis). Replace the
+// three fixed voice.js ranges (VOICE_KINDS in src/app.js:111) with
+// `exerciseRangeFor(range)`, which pulls a safety margin in from both ends
+// so warm-up exercises never ask for the singer's absolute extremes.
+
+const MIN_SUSTAIN_MS = 400;
+
+// Drop samples too brief to be a deliberately held note, then trim
+// statistical outliers (spurious single-frame pitch-detector glitches) with
+// the standard interquartile rule, so one bad reading can't blow the range
+// out by an octave.
+export function estimateRange(samples) {
+  const sustained = samples.filter(s => s.ms >= MIN_SUSTAIN_MS).map(s => s.midi);
+  if (sustained.length === 0) return null;
+
+  const sorted = [...sustained].sort((a, b) => a - b);
+  const quartile = p => {
+    const idx = (sorted.length - 1) * p;
+    const lo = Math.floor(idx);
+    const hi = Math.ceil(idx);
+    return sorted[lo] + (sorted[hi] - sorted[lo]) * (idx - lo);
+  };
+  const q1 = quartile(0.25);
+  const q3 = quartile(0.75);
+  const iqr = q3 - q1;
+  const lowerFence = q1 - 1.5 * iqr;
+  const upperFence = q3 + 1.5 * iqr;
+  const trimmed = sorted.filter(m => m >= lowerFence && m <= upperFence);
+  const kept = trimmed.length > 0 ? trimmed : sorted;
+
+  return { low: Math.min(...kept), high: Math.max(...kept) };
+}
+
+// Approximate comfortable ranges for the standard voice types, used only to
+// find the nearest match — never a strict boundary. Ordered low to high.
+const VOICE_TYPES = [
+  { name: 'bass', low: 40, high: 64 }, // E2-E4
+  { name: 'baritone', low: 45, high: 69 }, // A2-A4
+  { name: 'tenor', low: 48, high: 72 }, // C3-C5
+  { name: 'alto', low: 53, high: 77 }, // F3-F5
+  { name: 'mezzo-soprano', low: 57, high: 81 }, // A3-A5
+  { name: 'soprano', low: 60, high: 84 } // C4-C6
+];
+
+// Nearest voice type by comparing range midpoints — a HINT, never a verdict:
+// callers should present it as "sounds closest to X", not "you are an X".
+export function classify(range) {
+  const mid = (range.low + range.high) / 2;
+  let best = VOICE_TYPES[0];
+  let bestDist = Infinity;
+  for (const type of VOICE_TYPES) {
+    const typeMid = (type.low + type.high) / 2;
+    const dist = Math.abs(mid - typeMid);
+    if (dist < bestDist) {
+      bestDist = dist;
+      best = type;
+    }
+  }
+  return { hint: best.name, wording: 'Sounds closest to ' + best.name + ' — sing wherever is comfortable, this is only a hint.' };
+}
+
+// The span exercises should actually ask for: a margin pulled in from both
+// ends of the comfortable range so warm-ups never sit right at a singer's
+// break or their absolute limit. Falls back to the full range (or a single
+// point) if the range is too narrow for the default margin.
+export function exerciseRangeFor(range, margin = 3) {
+  const low = range.low + margin;
+  const high = range.high - margin;
+  if (low < high) return { low, high };
+  const mid = Math.round((range.low + range.high) / 2);
+  return { low: mid, high: mid };
+}
