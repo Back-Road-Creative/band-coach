@@ -53,6 +53,19 @@ pin known judging bugs on purpose so a later change to the app is forced to
 touch them deliberately instead of silently inheriting the bug — they are
 not something to "fix" by editing the test.
 
+## Notation engine
+
+`src/notation/` is a pure layout engine for standard notation and tab: given
+notes and a key/clef/time signature, it returns plain drawing primitives
+(noteheads, stems, ledger lines, accidentals, clefs, key/time signatures,
+tab fret numbers) rather than drawing directly, so it can be unit-tested with
+`node --test` and no browser. `draw-canvas.js` is a thin Canvas 2D renderer
+for those primitives. It replaces the app's current treble-only staff with
+support for bass/alto/tenor clef, a grand staff, key signatures, correct
+enharmonic spelling and tab — but this module is not wired into the running
+app yet; `src/app.js` still draws its own staff until a later change swaps
+the call site over.
+
 ## Licence
 
 Apache-2.0 — see `LICENSE`.
