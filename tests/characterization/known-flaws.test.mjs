@@ -8,13 +8,15 @@ import { launchPage } from '../helpers/browser.mjs';
 
 const htmlPath = HTML_PATH;
 
-// F1 (band-coach.html:472): for a string/fret item, the judging condition
-// `(i.exact && exact) ? midi === i.midi : pc(midi) === pc(i.midi)` falls
-// through to a pitch-class-only comparison whenever the item itself has no
+// F1 was: for a string/fret item, the judging condition
+// `(i.exact && exact) ? midi === i.midi : pc(midi) === pc(i.midi)` fell
+// through to a pitch-class-only comparison whenever the item itself had no
 // `exact` flag (true for every guitar/bass/uke string item) — regardless of
 // whether the caller passed exact:true or exact:false. So a microphone pluck
-// (exact:false) on the right string but the wrong octave still passes.
-test('CURRENT BEHAVIOUR (flaw F1): gtr accepts the right pitch class in the wrong octave from a mic pluck', async (t) => {
+// (exact:false) on the right string but the wrong octave still passed. Fixed
+// by routing the judgement through src/core/judge.js's OCTAVE_POLICY, which
+// marks gtr/bass/uke as 'exact'.
+test('octave-exact: gtr rejects the right pitch class in the wrong octave from a mic pluck', async (t) => {
   const page = await launchPage(htmlPath);
   t.after(() => page.close());
 
@@ -30,8 +32,8 @@ test('CURRENT BEHAVIOUR (flaw F1): gtr accepts the right pitch class in the wron
 
   assert.equal(
     await page.evaluate("document.getElementById('feedback').className"),
-    'ok',
-    'the wrong-octave pluck is judged correct today'
+    'no',
+    'the wrong-octave pluck is now judged incorrect'
   );
 });
 
