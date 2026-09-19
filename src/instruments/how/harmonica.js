@@ -14,8 +14,11 @@
 // hole 1 blow (C4) to hole 10 blow (C7), which fixes the octave of every
 // note below. The pattern (semitones above hole-1 blow, i.e. above the
 // harp's tonic) is the standard Richter major-scale layout:
-const BLOW_STEPS = [0, 4, 7, 12, 16, 19, 24, 28, 31, 36]; // C E G C E G C E G C
-const DRAW_STEPS = [2, 7, 11, 14, 17, 21, 23, 26, 29, 33]; // D G B D F A B D F A
+// Exported so other modules (src/song/lesson.js's fitToInstrument) can build
+// a harmonica's fixed pitch set from this single source instead of keeping
+// their own copy of the Richter pattern.
+export const BLOW_STEPS = [0, 4, 7, 12, 16, 19, 24, 28, 31, 36]; // C E G C E G C E G C
+export const DRAW_STEPS = [2, 7, 11, 14, 17, 21, 23, 26, 29, 33]; // D G B D F A B D F A
 
 // `layoutFor(key)` — key is a semitone offset 0-11 from C (0 = C, matching
 // schema.js's `key.tonic`). Transposing the whole pattern by that many

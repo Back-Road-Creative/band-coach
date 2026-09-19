@@ -46,7 +46,7 @@ import { createPanels, sanitizePanelData } from './ui/panels.js';
 // slot:import:w-history
 //
 //
-// slot:import:w-fingerings
+import { registerFingerings } from './ui/fingerings.js';
 //
 //
 // slot:import:w-playalong
@@ -1042,7 +1042,7 @@ import { createPanels, sanitizePanelData } from './ui/panels.js';
   // slot:panel:w-history
   //
   //
-  // slot:panel:w-fingerings
+  registerFingerings(panels);
   //
   //
   // slot:panel:w-playalong

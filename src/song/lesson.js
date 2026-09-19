@@ -1,3 +1,5 @@
+import { BLOW_STEPS, DRAW_STEPS } from '../instruments/how/harmonica.js';
+
 // Lesson generator (plan unit 5.2, F9 "song practice never counts").
 //
 // Turns any Song (the shared shape owned by src/song/model.js — schema
@@ -56,11 +58,11 @@ function getPart(song, partId) {
 // offsets from hole-1-blow (the tonic). Blow reeds sound the major triad
 // arpeggio (0, 4, 7) repeated up two octaves plus the tonic on top (36 = 3
 // octaves); draw reeds fill in the dominant-seventh arpeggio between them.
-// Hand-checked against src/instruments/harp.js (range 60-96, tonic C4 = 60):
-// blow holes 1-10 -> C4 E4 G4 C5 E5 G5 C6 E6 G6 C7 (60,64,67,72,76,79,84,88,91,96);
-// draw holes 1-10 -> D4 G4 B4 D5 F5 A5 B5 D6 F6 A6 (62,67,71,74,77,81,83,86,89,93).
-const RICHTER_BLOW_INTERVALS = [0, 4, 7, 12, 16, 19, 24, 28, 31, 36];
-const RICHTER_DRAW_INTERVALS = [2, 7, 11, 14, 17, 21, 23, 26, 29, 33];
+// The pattern itself lives in src/instruments/how/harmonica.js (BLOW_STEPS/
+// DRAW_STEPS) so this module and the fingerings panel never disagree about
+// what a Richter harmonica can play.
+const RICHTER_BLOW_INTERVALS = BLOW_STEPS;
+const RICHTER_DRAW_INTERVALS = DRAW_STEPS;
 
 function harmonicaAvailableNotes(instrument) {
   const tonic = instrument.range.low; // hole 1 blow
