@@ -67,20 +67,21 @@ test('CURRENT BEHAVIOUR (flaw F9): answering the captured-melody drill leaves se
   assert.equal(await page.evaluate('window.__coach.sess().judged'), 0, 'captured-melody answers never register as judged');
 });
 
-// E5 (band-coach.html:348, :758): setMod() unconditionally sets the module-
-// level `mod` variable before checking MODS[m], and its trailing save() uses
-// that same variable — so switching to a tool (no learner model of its own)
-// still writes a `mods.<tool>` entry into localStorage.
-test('CURRENT BEHAVIOUR (flaw E5): switching to the tuner tool writes a mods.tuner key to storage', async (t) => {
+// E5 was (band-coach.html:348, :758): setMod() unconditionally set the
+// module-level `mod` variable before checking MODS[m], and its trailing
+// save() used that same variable — so switching to a tool (no learner model
+// of its own) still wrote a `mods.<tool>` entry into localStorage. Fixed by
+// having save() (src/app.js) only write DB.mods[mod] when MODS[mod] exists.
+test('FIXED (flaw E5): switching to the tuner tool does not write a mods.tuner key to storage', async (t) => {
   const page = await launchPage(htmlPath);
   t.after(() => page.close());
 
   await page.evaluate("window.__coach.setMod('kbd')");
   await page.evaluate("window.__coach.setMod('tuner')");
-  // save() debounces at 1.2s (band-coach.html:348).
+  // save() debounces at 1.2s (src/app.js:217).
   await new Promise((r) => setTimeout(r, 1500));
 
   const raw = await page.evaluate("localStorage.getItem('bandcoach.v1')");
   const parsed = JSON.parse(raw);
-  assert.ok('tuner' in parsed.mods, 'a mods.tuner key exists even though tuner is a tool, not an instrument');
+  assert.ok(!('tuner' in parsed.mods), 'tuner is a tool, not an instrument, so no mods.tuner key should exist');
 });
