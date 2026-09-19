@@ -3,10 +3,10 @@
 // frequency within 1% of the true pitch, and silence must return freq: 0.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { fileURLToPath } from 'node:url';
+import { HTML_PATH } from '../helpers/html-path.mjs';
 import { launchPage } from '../helpers/browser.mjs';
 
-const htmlPath = fileURLToPath(new URL('../../band-coach.html', import.meta.url));
+const htmlPath = HTML_PATH;
 const SR = 48000;
 const N = 4096;
 

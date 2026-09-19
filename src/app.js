@@ -1,168 +1,74 @@
-<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"></head><body style="margin:0;font-size:14px"><title>Band Coach</title>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;700&family=Barlow:wght@400;500;600&display=swap">
-<style>
-  /* Single committed look: the same dark stage as Kit Coach. */
-  :root {
-    --ground: #0a0d14; --panel: #121726; --panel-2: #1a2033; --line: #2a3350;
-    --text: #e9edf6; --muted: #93a0bd; --accent: #2f93ee; --good: #5be08a; --warn: #f3c52f; --bad: #ff6b5e;
-    --display: "Barlow Condensed", "Arial Narrow", "Helvetica Neue", Arial, sans-serif;
-    --body: "Barlow", "Segoe UI", system-ui, -apple-system, Arial, sans-serif;
-  }
-  * { box-sizing: border-box; }
-  [hidden] { display: none !important; }
-  html, body { background: var(--ground); }
-  body { color: var(--text); font-family: var(--body); font-size: 16px; line-height: 1.45; padding-inline: 16px; padding-block: 20px 40px; }
-  .wrap { max-width: 1080px; margin-inline: auto; display: flex; flex-direction: column; gap: 16px; }
-  header { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 12px 24px; }
-  h1 { font: 700 44px/1 var(--display); margin: 0; letter-spacing: .02em; text-transform: uppercase; }
-  h1 span { color: var(--accent); }
-  .sub { color: var(--muted); margin: 6px 0 0; max-width: 64ch; }
-  .io { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-  .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); flex: none; }
-  .dot.on { background: var(--good); box-shadow: 0 0 10px var(--good); } .dot.off { background: var(--bad); }
-  #ioText { color: var(--muted); font-size: 14px; max-width: 46ch; }
-  button, select { font: 600 15px var(--body); color: var(--text); background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 9px 14px; cursor: pointer; }
-  select { padding: 6px 8px; font-size: 14px; max-width: 100%; }
-  button:hover { border-color: var(--muted); }
-  button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-  button.primary { background: var(--accent); border-color: var(--accent); color: #06101d; }
-  button.big { font: 700 22px var(--display); letter-spacing: .06em; text-transform: uppercase; padding: 12px 22px; }
-  button.small { padding: 5px 10px; font-size: 13px; }
-  a { color: var(--accent); }
+import { judgePitch, OCTAVE_POLICY } from './core/judge.js';
+import { createDeafWindow } from './audio/deaf-window.js';
+import { exportProgress as exportProgressFile, importProgress as importProgressFile, migrate as migrateDB } from './core/progress-file.js';
+import { toAudioTime, judgeTap, medianLatency } from './core/timing.js';
+// Merge slots: a unit in flight adds its imports by replacing ONLY its own
+// slot line, so parallel branches never edit adjacent lines.
+import { recordError, getErrors } from './core/error-log.js';
+//
+import { yin } from './audio/yin.js';
+import { createPitchNode } from './audio/pitch-worklet.js';
+//
+import { noiseFloor, gatesFor, meterLevel } from './audio/levels.js';
+//
+import { chroma, judgeChord } from './audio/chords.js';
+//
+import { makeGrid, scoreTake, tempoLadder } from './core/groove.js';
+//
+import { shouldReveal, promptFor, hintFor as coreHintFor } from './core/reveal.js';
+//
+import * as RHY from './core/rhythm.js';
+//
+import { forInstrument } from './notation/for-instrument.js';
+import { drawPrimitives } from './notation/draw-canvas.js';
+import { byId as instrumentById } from './instruments/index.js';
+import { rangeForInstrument, FALLBACK_RANGE } from './audio/range.js';
+// slot:import:notation-wire
+//
+// slot:import:a11y
+import { describeTask } from './ui/describe.js';
+import { createWakeLock } from './ui/wake-lock.js';
+import { createFocusTrap } from './ui/dialog-focus.js';
+import { createPanels, sanitizePanelData } from './ui/panels.js';
+//
+//
+// slot:import:w-songs
+import { register as registerSongs, forwardNote as forwardSongNote } from './ui/songs.js';
+//
+import { register as registerEditor, __setDebugFrames, __getDebugSong, __isRecording } from './ui/editor.js';
+//
+//
+import { registerEar, __earTestHook } from './ui/ear.js';
+//
+//
+import { register as registerTheory, currentLessonQuestion as theoryCurrentQuestion } from './ui/theory.js';
+//
+//
+import { registerHistory } from './ui/history.js';
+//
+//
+import { registerFingerings } from './ui/fingerings.js';
+//
+//
+import { register as registerPlayalong } from './ui/playalong.js';
+//
+//
+// slot:import:w-fixes
+//
+//
 
-  .picker { display: flex; flex-wrap: wrap; gap: 8px; }
-  .picker button { border-left: 4px solid var(--c, var(--line)); }
-  .picker button[aria-pressed="true"] { background: var(--text); color: var(--ground); border-color: var(--text); border-left-color: var(--c); }
-  .picker small { display: block; font: 500 12px var(--body); color: var(--muted); }
-  .picker button[aria-pressed="true"] small { color: #3a4363; }
-
-  .main { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 18px; align-items: start; }
-  @media (max-width: 860px) { .main { grid-template-columns: minmax(0, 1fr); } }
-  .stage { position: relative; background: linear-gradient(#0d111c, #05070c); border: 1px solid var(--line); border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
-  #prompt { font: 700 40px/1.05 var(--display); text-transform: uppercase; letter-spacing: .02em; text-wrap: balance; min-height: 1.1em; }
-  #prompt b { color: var(--accent); font-weight: 700; }
-  #hint { color: var(--muted); min-height: 1.45em; }
-  .timebar { height: 6px; border-radius: 3px; background: var(--ground); border: 1px solid var(--line); overflow: hidden; }
-  #timeFill { height: 100%; width: 100%; background: var(--accent); }
-  canvas { display: block; width: 100%; max-width: 100%; aspect-ratio: 16 / 8.2; touch-action: manipulation; }
-  .choices { display: flex; flex-wrap: wrap; gap: 8px; }
-  .choices button { flex: 1 1 140px; }
-  .choices button.right { background: var(--good); border-color: var(--good); color: #04130a; }
-  .choices button.wrong { background: var(--bad); border-color: var(--bad); color: #1b0502; }
-  #tapPad { font: 700 26px var(--display); letter-spacing: .08em; text-transform: uppercase; padding: 26px; width: 100%; border: 2px dashed var(--line); background: var(--panel); }
-  #tapPad.down { background: var(--accent); color: #06101d; }
-  .stage-tools { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-
-  .break { position: absolute; inset: 12px 12px auto 12px; z-index: 3; background: #0a0d14f5; border: 1px solid var(--accent); border-radius: 10px; padding: 18px; display: flex; flex-direction: column; gap: 10px; }
-  .break h2 { font: 700 30px/1.05 var(--display); text-transform: uppercase; margin: 0; text-wrap: balance; }
-  .break p { margin: 0; color: var(--muted); max-width: 54ch; }
-  #breakClock { font: 700 44px/1 var(--display); font-variant-numeric: tabular-nums; color: var(--accent); }
-  .row { display: flex; flex-wrap: wrap; gap: 8px; }
-
-  .side { display: flex; flex-direction: column; gap: 14px; }
-  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
-  .eyebrow { font: 600 12px var(--body); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
-  .level-row { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
-  #levelName { font: 700 28px/1.1 var(--display); text-transform: uppercase; margin-top: 4px; text-wrap: balance; }
-  .meterbox { height: 12px; border-radius: 6px; background: var(--ground); border: 1px solid var(--line); margin-block: 10px 8px; overflow: hidden; }
-  .meterbox.thin { height: 10px; margin-block: 8px; }
-  #readyFill, #energyFill { height: 100%; width: 0; background: var(--good); transition: width .25s, background .25s; }
-  #coach { font-weight: 500; min-height: 2.9em; }
-  #sessLine { font-size: 14px; color: var(--muted); font-variant-numeric: tabular-nums; }
-  #feedback { min-height: 2.9em; font-weight: 600; }
-  #feedback.ok { color: var(--good); } #feedback.no { color: var(--bad); }
-  .stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
-  .stat { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
-  .stat b { display: block; font: 700 26px/1.1 var(--display); font-variant-numeric: tabular-nums; }
-  .stat span { font-size: 12px; color: var(--muted); }
-  .weak ul { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
-  .weak li { display: flex; justify-content: space-between; gap: 10px; font-size: 14px; }
-  .weak li span:last-child { font-variant-numeric: tabular-nums; color: var(--muted); }
-  .weak .none { color: var(--muted); }
-  .opts { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; color: var(--muted); font-size: 14px; }
-  .opts label { display: flex; gap: 7px; align-items: center; cursor: pointer; }
-  .opts input { accent-color: var(--accent); width: 16px; height: 16px; }
-  .help { color: var(--muted); font-size: 14px; border-top: 1px solid var(--line); padding-top: 12px; }
-  .help p { margin: 0 0 8px; max-width: 64ch; } .help strong { color: var(--text); font-weight: 600; }
-  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
-</style>
-
-<div class="wrap">
-  <header>
-    <div>
-      <h1>Band <span>Coach</span></h1>
-      <p class="sub">One coach, many instruments. It teaches where things are, then the moves between them, picks every next exercise from your own results, and watches your energy so practice stays fresh.</p>
-    </div>
-    <div class="io">
-      <span class="dot" id="ioDot"></span>
-      <span id="ioText"></span>
-      <button class="primary" id="ioBtn" type="button">Connect</button>
-    </div>
-  </header>
-
-  <div class="picker" id="picker" role="group" aria-label="Instrument"></div>
-
-  <div class="main">
-    <section class="stage" aria-label="Exercise">
-      <div class="break" id="breakCard" hidden role="dialog" aria-labelledby="breakTitle">
-        <h2 id="breakTitle">Paused</h2>
-        <p id="breakWhy"></p>
-        <div id="breakClock" hidden>2:00</div>
-        <div class="row"><button type="button" class="primary" id="backBtn">I'm back, resume</button><button type="button" id="snoozeBtn" hidden>Keep going 5 more minutes</button><button type="button" id="endBtn2">End session</button></div>
-      </div>
-      <div id="prompt">Pick an instrument</div>
-      <div id="hint"></div>
-      <div class="timebar" aria-hidden="true"><div id="timeFill"></div></div>
-      <canvas id="cv" width="960" height="492"></canvas>
-      <div class="choices" id="choices" hidden></div>
-      <button type="button" id="tapPad" hidden>Tap here, or press space</button>
-      <div class="stage-tools">
-        <button type="button" class="small" id="replayBtn" hidden>Hear it again</button>
-        <span class="opts" id="modOpts"></span>
-      </div>
-    </section>
-
-    <aside class="side">
-      <div class="row">
-        <button type="button" class="primary big" id="playBtn">Start</button>
-        <button type="button" id="endBtn" hidden>End session</button>
-      </div>
-      <div class="card">
-        <div class="eyebrow">Your energy this session</div>
-        <div class="meterbox thin" role="progressbar" aria-label="Estimated energy" aria-valuemin="0" aria-valuemax="100" id="energyBar"><div id="energyFill"></div></div>
-        <div id="sessLine">No session yet today.</div>
-      </div>
-      <div class="card">
-        <div class="level-row"><span class="eyebrow" id="levelNum">Level 1</span><span class="eyebrow" id="limitOut"></span></div>
-        <div id="levelName"></div>
-        <div class="meterbox" role="progressbar" aria-label="Progress to next level" aria-valuemin="0" aria-valuemax="100" id="readyBar"><div id="readyFill"></div></div>
-        <div id="coach">Pick an instrument, then press Start.</div>
-        <div class="row" style="margin-top:8px"><button type="button" class="small" id="easierBtn">Make it easier</button><button type="button" class="small" id="harderBtn">Skip ahead</button></div>
-      </div>
-      <div class="card"><div class="eyebrow">Instant feedback</div><div id="feedback" role="status"></div></div>
-      <div class="stats">
-        <div class="stat"><b id="sAcc">0%</b><span>last 20</span></div>
-        <div class="stat"><b id="sStreak">0</b><span>streak</span></div>
-        <div class="stat"><b id="sRt">0.0</b><span id="sRtLabel">sec to answer</span></div>
-      </div>
-      <div class="card weak"><div class="eyebrow">What the coach is leaning on</div><ul id="weakList"></ul></div>
-      <div class="opts">
-        <label for="optNames"><input type="checkbox" id="optNames" checked> Show note names</label>
-        <button type="button" class="small" id="resetBtn">Reset this instrument</button>
-      </div>
-      <div class="help">
-        <p id="helpText"></p>
-        <p><strong>How it decides:</strong> no dice. The next exercise is always the item or move with the largest need score (low knowledge, weak move, not seen lately), so the same results always give the same lesson. Knowledge fades if you stay away, so old material comes back.</p>
-        <p><strong>Drums</strong> have their own page, Kit Coach, with your kit drawn out.</p>
-      </div>
-    </aside>
-  </div>
-</div>
-
-<script>
 (function () {
   'use strict';
   const $ = id => document.getElementById(id);
+  const deafWindow = createDeafWindow({ now: () => performance.now() });
+  // ---------- accessibility: wake lock, dialog focus, reduced motion ----------
+  const wakeLock = createWakeLock();
+  let reducedMotion = false;
+  try {
+    const rmQuery = matchMedia('(prefers-reduced-motion: reduce)');
+    reducedMotion = rmQuery.matches;
+    rmQuery.addEventListener('change', (ev) => { reducedMotion = ev.matches; });
+  } catch (e) {}
   // ---------- music helpers ----------
   const NAMES = ['C', 'C♯', 'D', 'E♭', 'E', 'F', 'F♯', 'G', 'A♭', 'A', 'B♭', 'B'];
   const SOLFA = { 0: 'Do', 2: 'Re', 4: 'Mi', 5: 'Fa', 7: 'Sol', 9: 'La', 11: 'Ti', 12: 'high Do' };
@@ -182,6 +88,38 @@
 
   // ---------- audio ----------
   let actx = null, micStream = null, anTime = null, anFreq = null, micReady = false, testNodes = [];
+  let gates = gatesFor(null), micDevices = [];
+  // E3: pitch tracking moved off the main thread onto an AudioWorklet
+  // (src/audio/pitch-worklet.js) when available; pitchWorkletNode stays null
+  // (and listen() below keeps running its setInterval sampling unchanged) on
+  // any browser/context where AudioWorklet is missing or fails to load.
+  let pitchWorkletNode = null, lastAudioSource = null, lastWorkletPitchAt = 0, pitchWorkletPromise = null, lastWorkletRangeSent = null;
+  // Returns a promise that resolves once the worklet is wired (or has
+  // failed) so a caller that needs the real pipeline settled first — the
+  // testPluck() debug hook below, so its synthetic timings are not a race
+  // against addModule()'s async load — can await it. Real usage (openMic)
+  // fires it without awaiting: nothing about live play depends on the
+  // worklet winning the race against the setInterval fallback.
+  function ensurePitchWorklet() {
+    if (pitchWorkletPromise) return pitchWorkletPromise;
+    if (!actx) return Promise.resolve(null);
+    const M0 = MODS[mod], range0 = { fmin: (M0 && M0.fmin) || FALLBACK_RANGE.fmin, fmax: (M0 && M0.fmax) || FALLBACK_RANGE.fmax };
+    pitchWorkletPromise = createPitchNode(actx, { fmin: range0.fmin, fmax: range0.fmax, rmsGate: gates.pitch }).then(node => {
+      pitchWorkletNode = node; lastWorkletRangeSent = range0;
+      if (lastAudioSource) lastAudioSource.connect(node);
+      const mute = actx.createGain(); mute.gain.value = 0; node.connect(mute); mute.connect(actx.destination); // keeps the worklet in the live render graph without making sound
+      node.port.onmessage = ev => {
+        const d = ev.data, M = MODS[mod]; if (!M || !(M.input === 'pluck' || M.input === 'sustain')) return;
+        const fr = { rms: d.rms, freq: d.freq && d.clarity > 0.8 ? d.freq : 0, onset: d.onset }; if (fr.freq) fr.midi = fmidi(fr.freq);
+        if (task && cur() && cur().info.kind === 'chord') { const db = new Float32Array(anFreq.frequencyBinCount); anFreq.getFloatFrequencyData(db); fr.chroma = chroma(db, actx.sampleRate); }
+        meterUpdate(fr.rms);
+        const t = now(), dt = Math.min(0.2, t - (lastWorkletPitchAt || t)); lastWorkletPitchAt = t;
+        try { onPitch(fr, dt); } catch (e) { errCount++; recordError('onPitch', e); }
+      };
+      return node;
+    }).catch(() => null);
+    return pitchWorkletPromise;
+  }
   function ensureAudio() { if (!actx) { try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { actx = null; } } if (actx && actx.state === 'suspended') actx.resume(); return actx; }
   const now = () => actx ? actx.currentTime : performance.now() / 1000;
   function tone(m, at, dur, vol) {
@@ -190,29 +128,83 @@
     const g2 = actx.createGain(); g2.gain.value = 0.25; o2.connect(g2); g2.connect(v); o.connect(v); v.connect(actx.destination);
     v.gain.setValueAtTime(0.0001, at); v.gain.exponentialRampToValueAtTime(vol || 0.22, at + 0.015); v.gain.exponentialRampToValueAtTime(0.0001, at + dur);
     o.start(at); o2.start(at); o.stop(at + dur + 0.05); o2.stop(at + dur + 0.05);
+    deafWindow.open(Math.max(0, (at + dur - now()) * 1000));
   }
-  function click(at, accent) { if (!actx) return; const o = actx.createOscillator(), v = actx.createGain(); o.type = 'square'; o.frequency.value = accent ? 1500 : 1000; v.gain.setValueAtTime(0.0001, at); v.gain.exponentialRampToValueAtTime(0.16, at + 0.002); v.gain.exponentialRampToValueAtTime(0.0001, at + 0.05); o.connect(v); v.connect(actx.destination); o.start(at); o.stop(at + 0.06); }
+  function click(at, accent) { if (!actx) return; const o = actx.createOscillator(), v = actx.createGain(); o.type = 'square'; o.frequency.value = accent ? 1500 : 1000; v.gain.setValueAtTime(0.0001, at); v.gain.exponentialRampToValueAtTime(0.16, at + 0.002); v.gain.exponentialRampToValueAtTime(0.0001, at + 0.05); o.connect(v); v.connect(actx.destination); o.start(at); o.stop(at + 0.06); deafWindow.open(Math.max(0, (at + 0.06 - now()) * 1000)); }
 
-  // ---------- listening: pitch (YIN) and chord colour (chroma) ----------
-  function yin(buf, sr, fmin, fmax) {
-    const n = buf.length; let rms = 0; for (let i = 0; i < n; i++) rms += buf[i] * buf[i]; rms = Math.sqrt(rms / n); if (rms < 0.008) return { rms: rms, freq: 0 };
-    const tauMax = Math.min(Math.floor(sr / fmin), (n >> 1) - 1), tauMin = Math.max(2, Math.floor(sr / fmax)), W = n - tauMax, d = new Float32Array(tauMax + 2);
-    for (let tau = 1; tau <= tauMax + 1; tau++) { let s = 0; for (let i = 0; i < W; i++) { const x = buf[i] - buf[i + tau]; s += x * x; } d[tau] = s; }
-    let run = 0; const c = new Float32Array(tauMax + 2); c[0] = 1; for (let tau = 1; tau <= tauMax + 1; tau++) { run += d[tau]; c[tau] = run ? d[tau] * tau / run : 1; }
-    let best = -1; for (let tau = tauMin; tau <= tauMax; tau++) { if (c[tau] < 0.15) { while (tau + 1 <= tauMax && c[tau + 1] < c[tau]) tau++; best = tau; break; } }
-    if (best < 0) { let mn = 1, at = -1; for (let tau = tauMin; tau <= tauMax; tau++) if (c[tau] < mn) { mn = c[tau]; at = tau; } if (mn > 0.3) return { rms: rms, freq: 0 }; best = at; }
-    const a = c[best - 1], b = c[best], e = c[best + 1], den = a - 2 * b + e, shift = den ? 0.5 * (a - e) / den : 0;
-    return { rms: rms, freq: sr / (best + clamp(shift, -1, 1)), clarity: 1 - c[best] };
-  }
-  function chroma(db, sr, fft) { const out = new Array(12).fill(0), hz = sr / fft; let tot = 0; for (let i = Math.ceil(75 / hz); i < Math.min(db.length, Math.floor(2100 / hz)); i++) { if (db[i] < -75) continue; const p = Math.pow(10, db[i] / 10), k = pc(fmidi(i * hz)); out[k] += p; tot += p; } return tot ? out.map(x => x / tot) : out; }
+  // ---------- listening: pitch (YIN, src/audio/yin.js) and chord colour (chroma) ----------
+  // chroma() moved to src/audio/chords.js (imported above) — it now peels
+  // harmonics of a strong peak out of the spectrum before folding to
+  // pitch classes, fixing flaw F6 (a single note's own harmonics reading
+  // as another note). See that module for detail.
   async function openMic() {
     ensureAudio(); if (micReady) return true;
-    const st = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
-    micStream = st; const src = actx.createMediaStreamSource(st); wireAnalysers(src); micReady = true; return true;
+    const base = { echoCancellation: false, noiseSuppression: false, autoGainControl: false };
+    const wanted = DB.prefs.inputDeviceId ? { ...base, deviceId: { exact: DB.prefs.inputDeviceId } } : base;
+    let st;
+    try { st = await navigator.mediaDevices.getUserMedia({ audio: wanted }); }
+    catch (e) { if (!DB.prefs.inputDeviceId) throw e; st = await navigator.mediaDevices.getUserMedia({ audio: base }); }
+    micStream = st; const src = actx.createMediaStreamSource(st); wireAnalysers(src); micReady = true;
+    ensurePitchWorklet(); refreshMicDevices(); return true;
   }
-  function wireAnalysers(src) { if (!anTime) { anTime = actx.createAnalyser(); anTime.fftSize = 4096; anFreq = actx.createAnalyser(); anFreq.fftSize = 8192; anFreq.smoothingTimeConstant = 0.5; } src.connect(anTime); src.connect(anFreq); }
+  async function refreshMicDevices() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return;
+    let list = []; try { list = await navigator.mediaDevices.enumerateDevices(); } catch (e) { return; }
+    micDevices = list.filter(d => d.kind === 'audioinput');
+    const sel = $('micDeviceSelect'); if (!sel) return;
+    const wanted = DB.prefs.inputDeviceId || '';
+    sel.innerHTML = '';
+    const def = document.createElement('option'); def.value = ''; def.textContent = 'Default microphone'; sel.appendChild(def);
+    micDevices.forEach((d, i) => { const o = document.createElement('option'); o.value = d.deviceId; o.textContent = d.label || ('Microphone ' + (i + 1)); sel.appendChild(o); });
+    sel.value = micDevices.some(d => d.deviceId === wanted) ? wanted : '';
+  }
+  function meterUpdate(rms) { const el = $('micLevelFill'); if (el) el.style.width = (meterLevel(rms) * 100) + '%'; }
+  async function calibrateNoiseFloor() {
+    const resultEl = $('calibrateResult');
+    try { await openMic(); } catch (e) { if (resultEl) resultEl.textContent = 'The microphone was blocked, so it could not be checked.'; return; }
+    if (resultEl) resultEl.textContent = 'Listening for 3 seconds — stay quiet…';
+    const samples = [], t0 = performance.now();
+    await new Promise(resolve => {
+      const iv = setInterval(() => {
+        const buf = new Float32Array(anTime.fftSize); anTime.getFloatTimeDomainData(buf);
+        let s = 0; for (let i = 0; i < buf.length; i++) s += buf[i] * buf[i]; samples.push(Math.sqrt(s / buf.length));
+        if (performance.now() - t0 > 3000) { clearInterval(iv); resolve(); }
+      }, 50);
+    });
+    const floor = noiseFloor(samples);
+    DB.prefs.noiseFloor = Number.isFinite(floor) && floor >= 0 ? clamp(floor, 0, 1) : null;
+    gates = gatesFor(DB.prefs.noiseFloor); save();
+    if (resultEl) resultEl.textContent = (DB.prefs.noiseFloor === null || DB.prefs.noiseFloor < 0.003)
+      ? 'Your room is quiet.'
+      : 'There\'s a lot of background noise — move closer to the mic.';
+  }
+  function wireAnalysers(src) { if (!anTime) { anTime = actx.createAnalyser(); anTime.fftSize = 4096; anFreq = actx.createAnalyser(); anFreq.fftSize = 8192; anFreq.smoothingTimeConstant = 0.5; } src.connect(anTime); src.connect(anFreq); lastAudioSource = src; if (pitchWorkletNode) src.connect(pitchWorkletNode); }
   // test hook: feed synthetic notes through the same listening chain
-  function testSource(freqs) { ensureAudio(); testNodes.forEach(o => { try { o.stop(); } catch (e) {} }); testNodes = []; if (!freqs || !freqs.length) return; const mix = actx.createGain(); mix.gain.value = 0.5 / freqs.length; wireAnalysers(mix); micReady = true; freqs.forEach(f => [1, 2, 3].forEach(h => { const o = actx.createOscillator(), gg = actx.createGain(); o.frequency.value = f * h; gg.gain.value = 1 / (h * h); o.connect(gg); gg.connect(mix); o.start(); testNodes.push(o); })); }
+  function testSource(freqs) { ensureAudio(); testNodes.forEach(o => { try { o.stop(); } catch (e) {} }); testNodes = []; if (!freqs || !freqs.length) return; const mix = actx.createGain(); mix.gain.value = 0.5 / freqs.length; wireAnalysers(mix); micReady = true; ensurePitchWorklet(); freqs.forEach(f => [1, 2, 3].forEach(h => { const o = actx.createOscillator(), gg = actx.createGain(); o.frequency.value = f * h; gg.gain.value = 1 / (h * h); o.connect(gg); gg.connect(mix); o.start(); testNodes.push(o); })); }
+  // test hook (F8): testSource() has no decay envelope, so it cannot express
+  // a real pluck ringing out. testPluck(freq, attacksMs) schedules one real
+  // exponentially-decaying attack per entry in attacksMs (offsets in ms from
+  // now), through the same analyser/worklet chain as testSource, so a
+  // characterization test can prove a same-pitch re-pluck re-fires while the
+  // first attack is still ringing above the RMS 0.006 release floor.
+  async function testPluck(freq, attacksMs) {
+    ensureAudio(); testNodes.forEach(o => { try { o.stop(); } catch (e) {} }); testNodes = [];
+    const mix = actx.createGain(); mix.gain.value = 1; wireAnalysers(mix); micReady = true;
+    await ensurePitchWorklet(); // settle the worklet-vs-fallback race before scheduling test audio, not during it
+    const startAt = now() + 0.05;
+    (attacksMs && attacksMs.length ? attacksMs : [0]).forEach(ms => {
+      const at = startAt + ms / 1000;
+      [1, 2, 3].forEach(h => {
+        const o = actx.createOscillator(), gg = actx.createGain();
+        o.frequency.value = freq * h;
+        gg.gain.setValueAtTime(0.0001, at);
+        gg.gain.exponentialRampToValueAtTime(0.5 / (h * h), at + 0.005);
+        gg.gain.exponentialRampToValueAtTime(0.0001, at + 3);
+        o.connect(gg); gg.connect(mix); o.start(at); o.stop(at + 3.05); testNodes.push(o);
+      });
+    });
+    return startAt;
+  }
 
   // ---------- instruments: each is a curriculum plus a way of hearing you ----------
   const N = (...ms) => ms.map(m => 'n' + m), Wn = (...ms) => ms.map(m => 'w' + m), SF = (s, ...fs) => fs.map(f => 's' + s + 'f' + f), V = (...ds) => ds.map(d => 'v' + d);
@@ -236,9 +228,9 @@
         { name: 'Chords: C, F and G', add: ['cC', 'cF', 'cG'], task: 'chord', pool: 'c', limit: 12 }, { name: 'Chords: A minor, D minor, E minor', add: ['cAm', 'cDm', 'cEm'], task: 'chord', pool: 'c', limit: 10 },
         { name: 'Chord changes', task: 'seq', len: 2, pool: 'c', limit: 8 }
       ] },
-    gtr: { name: 'Guitar', tag: 'microphone', color: '#f28b25', input: 'pluck', fmin: 70, fmax: 1200, tuning: [40, 45, 50, 55, 59, 64], frets: 12, help: 'Guitar: press Connect to let the page listen through your microphone or audio interface. Play one clean note at a time. It hears the pitch, not which string you used, so any place that gives the right note counts. Chord listening is experimental.', levels: null },
+    gtr: { name: 'Guitar', tag: 'microphone', color: '#f28b25', input: 'pluck', fmin: 70, fmax: 1200, tuning: [40, 45, 50, 55, 59, 64], frets: 12, help: 'Guitar: press Connect to let the page listen through your microphone or audio interface. Play one clean note at a time. It hears the pitch, not which string you used, so any place that gives the right note counts. Chord listening is experimental: the microphone hears a chord as one blended sound, not separate notes, and a very noisy room can fool it either way.', levels: null },
     bass: { name: 'Bass', tag: 'microphone', color: '#e8392f', input: 'pluck', fmin: 36, fmax: 500, tuning: [28, 33, 38, 43], frets: 12, help: 'Bass: press Connect to let the page listen. Play one clean note at a time and let it ring for a moment; low notes take a little longer to recognise.', levels: null },
-    uke: { name: 'Ukulele', tag: 'microphone', color: '#f3c52f', input: 'pluck', fmin: 200, fmax: 1500, tuning: [67, 60, 64, 69], frets: 7, help: 'Ukulele: press Connect to let the page listen. Standard tuning G C E A with the high G. Chord listening is experimental.', levels: null },
+    uke: { name: 'Ukulele', tag: 'microphone', color: '#f3c52f', input: 'pluck', fmin: 200, fmax: 1500, tuning: [67, 60, 64, 69], frets: 7, help: 'Ukulele: press Connect to let the page listen. Standard tuning G C E A with the high G. Chord listening is experimental: the microphone hears a chord as one blended sound, not separate notes, and a very noisy room can fool it either way.', levels: null },
     voice: { name: 'Voice', tag: 'microphone', color: '#41c651', input: 'sustain', fmin: 70, fmax: 1100, help: 'Voice: press Connect to let the page listen. Hold each note steady for about half a second. Any octave counts, so sing where it is comfortable. The dot shows your pitch live; the feedback tells you how many cents sharp or flat you were (100 cents is one key on a piano).',
       levels: [
         { name: 'Match a note: Do, Re, Mi', add: V(0, 2, 4), ref: 'target', limit: 12 }, { name: 'Add Fa and Sol', add: V(5, 7), ref: 'target', limit: 12 }, { name: 'Add La, Ti and high Do', add: V(9, 11, 12), ref: 'target', limit: 12 },
@@ -262,13 +254,27 @@
       levels: [
         { name: 'Quarter notes and rests', add: ['rq', 'rqr'], task: 'bar', bpm: 66 }, { name: 'Add pairs of eighths', add: ['ree'], task: 'bar', bpm: 66 }, { name: 'Add half notes', add: ['rh'], task: 'bar', bpm: 72 },
         { name: 'The off-beat eighth', add: ['rree'], task: 'bar', bpm: 72 }, { name: 'Dotted quarter and eighth', add: ['rdqe'], task: 'bar', bpm: 72 }, { name: 'Sixteenth notes', add: ['rssss'], task: 'bar', bpm: 66 },
-        { name: 'Eighth and two sixteenths', add: ['ress', 'rsse'], task: 'bar', bpm: 66 }, { name: 'Syncopation', add: ['reqe'], task: 'bar', bpm: 72 }
+        { name: 'Eighth and two sixteenths', add: ['ress', 'rsse'], task: 'bar', bpm: 66 }, { name: 'Syncopation', add: ['reqe'], task: 'bar', bpm: 72 },
+        { name: 'Rests: halves and wholes', task: 'bar2', metre: '4/4', bpm: 66, bars: [[['q', 'q', 'hr']], [['hr', 'q', 'q']], [['wr']], [['q', 'hr', 'q']]] },
+        { name: 'Ties', task: 'bar2', metre: '4/4', bpm: 66, bars: [[['tqq', 'q', 'q']], [['q', 'tqq', 'q']], [['th', 'q']], [['q', 'q', 'q'], ['q~', 'q', 'q', 'q']]] },
+        { name: 'Dotted eighth and sixteenth', task: 'bar2', metre: '4/4', bpm: 66, bars: [[['des', 'des', 'q', 'q']], [['q', 'des', 'des', 'q']], [['des', 'q', 'des', 'q']]] },
+        { name: 'Triplets', task: 'bar2', metre: '4/4', bpm: 66, bars: [[['et3', 'et3', 'q', 'q']], [['qt3', 'q', 'q']], [['q', 'et3', 'et3', 'q']]] },
+        { name: 'Three-four time', task: 'bar2', metre: '3/4', bpm: 72, bars: [[['q', 'q', 'q']], [['h', 'q']], [['q', 'h']], [['dh.']]] },
+        { name: 'Six-eight time', task: 'bar2', metre: '6/8', bpm: 72, bars: [[['dq', 'dq']], [['e3', 'e3']], [['dq', 'e3']], [['e3', 'dq']], [['dqr', 'dq']]] },
+        { name: 'Swing eighths', task: 'bar2', metre: '4/4', bpm: 96, swing: 1, bars: [[['ee', 'ee', 'q', 'q']], [['q', 'ee', 'ee', 'q']], [['ee', 'ee', 'ee', 'ee']]] },
+        { name: 'Two-bar phrases', task: 'bar2', metre: '4/4', bpm: 72, bars: [[['q', 'q', 'q', 'q'], ['q', 'ee', 'h']], [['h', 'ee', 'q'], ['tqq', 'q', 'q']], [['ee', 'ee', 'q', 'q'], ['q', 'q', 'hr']]] }
       ] }
   };
   MODS.gtr.levels = stringLevels(MODS.gtr.tuning, ['Low E', 'A', 'D', 'G', 'B', 'High E'], 12, ['Em', 'G', 'C', 'D', 'Am', 'E', 'A']);
   MODS.bass.levels = stringLevels(MODS.bass.tuning, ['E', 'A', 'D', 'G'], 12, null);
   MODS.uke.levels = stringLevels(MODS.uke.tuning, ['G', 'C', 'E', 'A'], 7, ['C', 'Am', 'F', 'G7']);
   const MOD_IDS = Object.keys(MODS);
+  // Instruments the notation engine (src/notation/) is wired into. Wind
+  // already draws its own hand-built staff (drawStaff below); it is not
+  // equivalent to the engine's output (task-row layout, live tuning gauge,
+  // hold timer) so it is left alone rather than swapped.
+  const NOTATE_MOD_IDS = ['kbd', 'gtr', 'bass', 'uke', 'voice'];
+  const NOTATE_MODES = ['names', 'staff', 'both'];
   const WIND_KINDS = { c: ['Concert pitch: flute, oboe, violin', 0, 'treble'], bb: ['B flat: trumpet, clarinet, soprano sax', -2, 'treble'], bbt: ['B flat, octave lower: tenor sax', -14, 'treble'], eb: ['E flat: alto sax', -9, 'treble'], ebb: ['E flat, octave lower: baritone sax', -21, 'treble'], f: ['F: French horn', -7, 'treble'], bc: ['Bass clef: trombone, euphonium, tuba', -19, 'bass'] };
   const VOICE_KINDS = { low: ['Lower voice (Do = C3)', 48], mid: ['Middle voice (Do = G3)', 55], high: ['Higher voice (Do = C4)', 60] };
 
@@ -288,7 +294,7 @@
     if (k === 'r') return { kind: 'cell', cell: rest, beats: CELLS[rest].b, on: CELLS[rest].on, label: CELLS[rest].say, short: CELLS[rest].say };
     return { kind: 'note', midi: 60, label: id, short: id };
   };
-  let validId = function (mod, id) { try { if (typeof id !== 'string' || id.length > 10) return false; const k = id[0], r = id.slice(1); if (k === 'n' || k === 'w' || k === 'p' || k === 'v') return /^\d{1,3}$/.test(r); if (k === 's') return /^\d+f\d+$/.test(r) && MODS[mod].tuning && +r.split('f')[0] <= MODS[mod].tuning.length && +r.split('f')[0] >= 1; if (k === 'c') return !!CHORDS[r]; if (k === 'i') return /^\d{1,2}[adh]$/.test(r) && !!INTERVALS[parseInt(r, 10)]; if (k === 'q') return !!QUALS[r]; if (k === 'r') return !!CELLS[r]; return false; } catch (e) { return false; } };
+  let validId = function (mod, id) { try { if (typeof id !== 'string' || id.length > 10) return false; if (id === 'bar2') return true; const k = id[0], r = id.slice(1); if (k === 'n' || k === 'w' || k === 'p' || k === 'v') return /^\d{1,3}$/.test(r); if (k === 's') return /^\d+f\d+$/.test(r) && MODS[mod].tuning && +r.split('f')[0] <= MODS[mod].tuning.length && +r.split('f')[0] >= 1; if (k === 'c') return !!CHORDS[r]; if (k === 'i') return /^\d{1,2}[adh]$/.test(r) && !!INTERVALS[parseInt(r, 10)]; if (k === 'q') return !!QUALS[r]; if (k === 'r') return !!CELLS[r]; return false; } catch (e) { return false; } };
 
   // ---------- harmonica (10-hole diatonic in C) and the two tools ----------
   const HARP = { b: [60, 64, 67, 72, 76, 79, 84, 88, 91, 96], d: [62, 67, 71, 74, 77, 81, 83, 86, 89, 93] };
@@ -306,7 +312,7 @@
   };
   const TUNINGS = { gtr: ['Guitar', [40, 45, 50, 55, 59, 64]], bass: ['Bass', [28, 33, 38, 43]], uke: ['Ukulele', [67, 60, 64, 69]], vln: ['Violin', [55, 62, 69, 76]], chrom: ['Any note (chromatic)', []] };
   const _info = info, _valid = validId;
-  info = function (m, id, prefs) { if (id[0] === 'h') { const mm = /^h([bd])(\d+)$/.exec(id), dir = mm[1], hole = +mm[2], midi = HARP[dir][hole - 1]; return { kind: 'note', midi: midi, hole: hole, dir: dir, label: (dir === 'b' ? 'Blow ' : 'Draw ') + hole + ' (' + nname(midi) + ')', short: (dir === 'b' ? 'Blow ' : 'Draw ') + hole }; } return _info(m, id, prefs); };
+  info = function (m, id, prefs) { if (id[0] === 'h') { const mm = /^h([bd])(\d+)$/.exec(id), dir = mm[1], hole = +mm[2], midi = HARP[dir][hole - 1]; return { kind: 'note', midi: midi, hole: hole, dir: dir, note: nname(midi), label: (dir === 'b' ? 'Blow ' : 'Draw ') + hole + ' (' + nname(midi) + ')', short: (dir === 'b' ? 'Blow ' : 'Draw ') + hole }; } return _info(m, id, prefs); };
   validId = function (m, id) { if (typeof id === 'string' && id[0] === 'h') return /^h[bd]([1-9]|10)$/.test(id); return _valid(m, id); };
   // turn a heard note into an item this instrument can practise
   function customItem(m, midi, prefs) {
@@ -321,31 +327,44 @@
 
   // ---------- saved state: one learner model per instrument, shared session log ----------
   const KEY = 'bandcoach.v1';
+  const APP_VERSION = '0.1.0';
+  const BACKUP_AT_KEY = 'bandcoach.v1.backupAt';
+  let lastBackupAt = 0; try { lastBackupAt = +localStorage.getItem(BACKUP_AT_KEY) || 0; } catch (e) {}
   let DB, mod = 'kbd', S = null;
   const num = (x, d, lo, hi) => { x = +x; if (!isFinite(x)) x = d; return clamp(x, lo, hi); };
-  const freshModel = () => ({ level: 1, ready: 0.2, item: {}, trans: {}, conf: {}, gain: 0.05, gate: 0.6, offset: 0, acc: {}, cr: {}, tick: 0, judged: 0, promo: { at: -999, level: 0 }, fast: 0 });
+  const freshModel = () => ({ level: 1, ready: 0.2, item: {}, trans: {}, conf: {}, gain: 0.05, gate: 0.6, offset: 0, acc: {}, cr: {}, tick: 0, judged: 0, promo: { at: -999, level: 0 }, fast: 0, grooveBpm: 80 });
   function sanitizeModel(m, v) {
     const s = freshModel(); if (!v || typeof v !== 'object') return s;
     s.level = Math.floor(num(v.level, 1, 1, 80)); s.ready = num(v.ready, 0.2, 0, 1); s.gain = num(v.gain, 0.05, 0.025, 0.09); s.gate = num(v.gate, 0.6, 0.6, 0.75); s.offset = num(v.offset, 0, -0.15, 0.15);
     s.tick = Math.floor(num(v.tick, 0, 0, 1e9)); s.judged = Math.floor(num(v.judged, 0, 0, 1e9)); s.fast = Math.floor(num(v.fast, 0, 0, 3)); if (v.promo) s.promo = { at: num(v.promo.at, -999, -999, 1e9), level: num(v.promo.level, 0, 0, 99) };
+    s.grooveBpm = Math.round(num(v.grooveBpm, 80, 50, 168));
     Object.keys(v.item || {}).forEach(id => { const o = v.item[id]; if (validId(m, id) && o) s.item[id] = { m: num(o.m, 0.4, 0, 1), n: Math.floor(num(o.n, 0, 0, 1e7)), last: num(o.last, 0, 0, 1e14), seen: num(o.seen, 0, 0, 1e9) }; });
     Object.keys(v.trans || {}).forEach(k => { const ab = k.split('>'), o = v.trans[k]; if (ab.length === 2 && validId(m, ab[0]) && validId(m, ab[1]) && o) s.trans[k] = { m: num(o.m, 0.5, 0, 1), n: Math.floor(num(o.n, 0, 0, 1e7)), last: num(o.last, 0, 0, 1e14) }; });
     Object.keys(v.conf || {}).forEach(k => { if (k.length < 40) s.conf[k] = Math.floor(num(v.conf[k], 0, 0, 1e6)); });
     Object.keys(v.acc || {}).forEach(k => { s.acc[k] = num(v.acc[k], 0, 0, 3); }); Object.keys(v.cr || {}).forEach(k => { if (validId(m, k)) s.cr[k] = num(v.cr[k], 0, -80, 80); });
     return s;
   }
-  function sanitizeDB(v) {
-    const d = { v: 1, mods: {}, sessions: [], prefs: { mod: 'kbd', wind: 'bb', voice: 'low', names: true } }; v = (v && typeof v === 'object') ? v : {};
+  function sanitizeDB(v, defaultLatencyMs) {
+    const notate = {}; NOTATE_MOD_IDS.forEach(m => { notate[m] = 'names'; });
+    const d = { v: 1, mods: {}, sessions: [], prefs: { mod: 'kbd', wind: 'bb', voice: 'low', names: true, noiseFloor: null, inputDeviceId: null, notate: notate } }; v = (v && typeof v === 'object') ? v : {};
     MOD_IDS.forEach(m => { d.mods[m] = sanitizeModel(m, v.mods && v.mods[m]); });
     if (Array.isArray(v.sessions)) d.sessions = v.sessions.filter(x => x && typeof x.d === 'string' && MODS[x.mod]).slice(-60).map(x => ({ d: x.d.slice(0, 10), mod: x.mod, min: num(x.min, 0, 0, 600), acc: num(x.acc, 0, 0, 1), a1: num(x.a1, 0, 0, 1), a2: num(x.a2, 0, 0, 1), from: num(x.from, 1, 1, 80), to: num(x.to, 1, 1, 80), breaks: num(x.breaks, 0, 0, 99) }));
     const p = v.prefs || {}; if (MODS[p.mod]) d.prefs.mod = p.mod; if (WIND_KINDS[p.wind]) d.prefs.wind = p.wind; if (VOICE_KINDS[p.voice]) d.prefs.voice = p.voice; d.prefs.names = p.names !== false;
+    d.prefs.noiseFloor = (typeof p.noiseFloor === 'number' && isFinite(p.noiseFloor) && p.noiseFloor >= 0) ? clamp(p.noiseFloor, 0, 1) : null;
+    d.prefs.inputDeviceId = typeof p.inputDeviceId === 'string' && p.inputDeviceId ? p.inputDeviceId : null;
+    // "Show: staff / names / both" is per-instrument and defaults to 'names',
+    // i.e. today's display, untouched, for any instrument not set.
+    const pn = (p.notate && typeof p.notate === 'object') ? p.notate : {};
+    NOTATE_MOD_IDS.forEach(m => { if (NOTATE_MODES.indexOf(pn[m]) >= 0) d.prefs.notate[m] = pn[m]; });
     d.custom = Array.isArray(v.custom) ? v.custom.map(x => Math.round(num(x, 60, 20, 110))).slice(0, 300) : [];
+    d.latencyMs = num(v.latencyMs, defaultLatencyMs || 0, 0, 300);
+    d.panels = sanitizePanelData(v.panels);
     return d;
   }
   function forget(t) { const f = o => { if (!o.last) return; const days = (t - o.last) / 86400000; if (days > 0.5) { o.m = 0.4 + (o.m - 0.4) * Math.pow(0.5, days / 10); o.last = t; } }; MOD_IDS.forEach(m => { const s = DB.mods[m]; Object.keys(s.item).forEach(k => f(s.item[k])); Object.keys(s.trans).forEach(k => f(s.trans[k])); }); }
-  function loadDB() { let v = null; try { v = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) {} DB = sanitizeDB(v); forget(Date.now()); mod = DB.prefs.mod; S = DB.mods[mod]; }
+  function loadDB() { let v = null; try { v = migrateDB(JSON.parse(localStorage.getItem(KEY) || 'null')); } catch (e) {} DB = sanitizeDB(v, actx ? (actx.outputLatency || actx.baseLatency || 0) * 1000 : 0); forget(Date.now()); mod = DB.prefs.mod; S = DB.mods[mod]; gates = gatesFor(DB.prefs.noiseFloor); }
   let saveTimer = null;
-  function save() { if (saveTimer) return; saveTimer = setTimeout(() => { saveTimer = null; try { DB.mods[mod] = S = sanitizeModel(mod, S); localStorage.setItem(KEY, JSON.stringify(DB)); } catch (e) {} }, 1200); }
+  function save() { if (saveTimer) return; saveTimer = setTimeout(() => { saveTimer = null; try { if (MODS[mod]) DB.mods[mod] = S = sanitizeModel(mod, S); localStorage.setItem(KEY, JSON.stringify(DB)); } catch (e) {} }, 1200); }
   const it = id => S.item[id] || (S.item[id] = { m: 0.4, n: 0, last: 0, seen: 0 });
   const tr = (a, b) => { const k = a + '>' + b; return S.trans[k] || (S.trans[k] = { m: 0.5, n: 0, last: 0 }); };
   const upd = (o, q) => { o.m = o.m * 0.75 + q * 0.25; o.n++; o.last = Date.now(); };
@@ -409,7 +428,7 @@
     pool = poolFor(dd);
     if (sess.warm > 0) { sess.warm--; warm = true; const base = kind === 'bar' ? 'bar' : kind === 'chord' ? 'chord' : 'one'; kind = base; pool = byStrength(pool).slice(0, Math.max(2, Math.ceil(pool.length / 2))); }
     const t = { kind: kind, els: [], idx: 0, warm: warm, limit: d.limit || 8, ref: d.ref || 'none', blind: !!d.blind, t0: now(), done: false, revealed: false };
-    const mk = id => { S.tick++; it(id).seen = S.tick; return { id: id, info: inf(id), failed: false, t0: 0, rt: 0, reveal: it(id).n < 2 && !d.blind }; };
+    const mk = id => { S.tick++; it(id).seen = S.tick; return { id: id, info: inf(id), failed: false, t0: 0, rt: 0, reveal: shouldReveal({ exposures: it(id).n }) && !d.blind }; };
     if (kind === 'one' || kind === 'chord' || kind === 'hold') t.els.push(mk(pick(lastItem, pool)));
     else if (kind === 'seq') { let from = lastItem; for (let i = 0; i < (d.len || 2); i++) { const id = pick(from, pool); t.els.push(mk(id)); from = id; } }
     else if (kind === 'run') {
@@ -420,15 +439,19 @@
     }
     else if (kind === 'ear') { }
     else if (kind === 'bar') { let left = 4, from = lastItem, guard = 0; while (left > 0 && guard++ < 12) { const fit = pool.filter(id => CELLS[id.slice(1)].b <= left); const id = pick(from, fit.length ? fit : ['rq']); t.els.push(mk(id)); left -= CELLS[id.slice(1)].b; from = id; } if (!t.els.some(e => e.info.on.length)) { t.els[0] = mk('rq'); } }
+    else if (kind === 'bar2') { const variants = d.bars || [[['qr']]], cells = variants[S.tick % variants.length]; S.tick++; t.rCells = cells; t.els = [{ id: 'bar2', info: { label: d.name }, failed: false, t0: 0, rt: 0, reveal: false }]; }
     if (M.input === 'answer') { t.kind = 'ear'; if (!t.els.length) t.els.push(mk(pick(lastItem, pool))); const e = t.els[0], fam = pool.filter(id => id[0] === e.id[0] && (e.id[0] !== 'i' || id.slice(-1) === e.id.slice(-1))); t.choices = fam.slice().sort((a, b) => (inf(a).semi || 0) - (inf(b).semi || 0) || (a < b ? -1 : 1)); t.root = 55 + ((S.tick * 5) % 12); }
     return t;
   }
 
   // ---------- talking to the player ----------
-  const say = (t, cls) => { const f = $('feedback'); f.textContent = t; f.className = cls || ''; };
+  // #feedback lives inside #mainArea, which is hidden while a panel is open,
+  // so a panel's say() would be invisible. Mirror it into the panel's own
+  // status line whenever one is open.
+  const say = (t, cls) => { const f = $('feedback'); f.textContent = t; f.className = cls || ''; const p = $('panelSay'); if (p) { p.textContent = panels.current() ? t : ''; p.className = 'panel-say ' + (cls || ''); } };
   const coach = t => { $('coach').textContent = t; };
   const cur = () => task && task.els[task.idx];
-  let pressed = {}, heard = null, held = [], holdFor = 0, holdCents = [], wrongFor = 0, lastFired = -1, stableN = 0, stableMidi = -1, released = true, flashBad = 0, flashGood = 0;
+  let pressed = {}, heard = null, held = [], holdFor = 0, holdCents = [], wrongFor = 0, lastFired = -1, stableN = 0, stableMidi = -1, released = true, flashBad = -1e12, flashGood = -1e12;
 
   function playRef(t) {
     ensureAudio(); const at = now() + 0.05, e = t.els[0];
@@ -438,15 +461,20 @@
   }
   function present() {
     const t = task, M = MODS[mod], e = cur(); t.t0 = now(); if (e) e.t0 = now(); held = []; holdFor = 0; holdCents = []; wrongFor = 0; released = true;
-    $('choices').hidden = t.kind !== 'ear'; $('replayBtn').hidden = !(t.kind === 'ear' || mod === 'voice');
+    $('choices').hidden = t.kind !== 'ear'; $('replayBtn').hidden = !(t.kind === 'ear' || mod === 'voice'); $('showMeBtn').hidden = t.kind === 'ear' || t.kind === 'bar' || t.kind === 'bar2';
     let p = '', h = '';
     if (t.kind === 'ear') { p = e.info.kind === 'interval' ? 'Which <b>interval</b>?' : 'Which <b>chord</b>?'; h = 'Listen, then choose. Number keys work too.'; const box = $('choices'); box.innerHTML = ''; t.choices.forEach((id, k) => { const b = document.createElement('button'); b.type = 'button'; b.id = 'ch-' + id; b.textContent = (k + 1) + '. ' + inf(id).label; b.addEventListener('click', () => { b.blur(); answer(id); }); box.appendChild(b); }); playRef(t); }
     else if (t.kind === 'bar') { p = 'Read it, then <b>tap it</b>'; h = 'Four clicks to get ready, then tap the bar in time.'; startBar(); }
-    else { const verb = mod === 'voice' ? 'Sing' : 'Play'; p = verb + ' ' + t.els.map((el, k) => (k === t.idx ? '<b>' : '') + el.info.label.split(':')[0] + (k === t.idx ? '</b>' : '')).join(' → '); if (t.kind === 'hold') p = (mod === 'voice' ? 'Hold ' : 'Hold ') + '<b>' + e.info.label + '</b> for two seconds'; h = hintFor(e); playRef(t); }
-    $('prompt').innerHTML = p; $('hint').textContent = (t.warm ? 'Warm-up, does not count. ' : '') + h;
+    else if (t.kind === 'bar2') { p = 'Read it, then <b>tap it</b>'; h = 'Listen for the count-in, then tap the bar (or bars) in time.'; startBar2(); }
+    else if (t.kind === 'groove') { p = 'Get ready — <b>play it in time</b>'; h = 'Four clicks to count in, then play each note on the beat.'; startGroove(); }
+    else { const verb = mod === 'voice' ? 'Sing' : 'Play'; p = verb + ' ' + t.els.map((el, k) => (k === t.idx ? '<b>' : '') + promptFor(el.info, el.reveal) + (k === t.idx ? '</b>' : '')).join(' → '); if (t.kind === 'hold') p = (mod === 'voice' ? 'Hold ' : 'Hold ') + '<b>' + e.info.label + '</b> for two seconds'; h = hintFor(e); playRef(t); }
+    $('prompt').innerHTML = p; $('hint').textContent = (t.warm ? 'Warm-up, does not count. ' : '') + h; updateDesc();
   }
-  function hintFor(e) { const i = e.info; if (i.string) return 'String ' + i.string + (i.fret ? ', fret ' + i.fret : ', played open') + (e.reveal ? '. The dot shows where.' : '.'); if (i.anywhere) return 'Any string, any octave.'; if (i.kind === 'chord') return 'All the notes together: ' + i.pcs.map(x => NAMES[x]).join(', ') + '.'; if (mod === 'voice') return task.ref === 'target' ? 'You heard the note. Sing it back in any octave and hold it.' : 'You heard Do. Find ' + i.short + ' from it.'; if (mod === 'wind') return 'Written ' + i.label + '. Hold it steady.'; return e.reveal ? 'New key: it is lit up this time.' : ''; }
-  function refreshPrompt() { if (!task || task.kind === 'ear' || task.kind === 'bar' || task.kind === 'hold') return; const verb = mod === 'voice' ? 'Sing' : 'Play'; $('prompt').innerHTML = verb + ' ' + task.els.map((el, k) => (k === task.idx ? '<b>' : '') + el.info.label.split(':')[0] + (k === task.idx ? '</b>' : '')).join(' → '); const e = cur(); if (e) $('hint').textContent = (task.warm ? 'Warm-up, does not count. ' : '') + hintFor(e); }
+  function hintFor(e) { const i = e.info; if (i.string) return coreHintFor(i, e.reveal); if (i.anywhere) return 'Any string, any octave.'; if (i.kind === 'chord') return 'All the notes together: ' + i.pcs.map(x => NAMES[x]).join(', ') + '.'; if (mod === 'voice') return task.ref === 'target' ? 'You heard the note. Sing it back in any octave and hold it.' : 'You heard Do. Find ' + i.short + ' from it.'; if (mod === 'wind') return 'Written ' + i.label + '. Hold it steady.'; return e.reveal ? 'New key: it is lit up this time.' : ''; }
+  function refreshPrompt() { if (!task || task.kind === 'ear' || task.kind === 'bar' || task.kind === 'hold') return; const verb = mod === 'voice' ? 'Sing' : 'Play'; $('prompt').innerHTML = verb + ' ' + task.els.map((el, k) => (k === task.idx ? '<b>' : '') + promptFor(el.info, el.reveal) + (k === task.idx ? '</b>' : '')).join(' → '); const e = cur(); if (e) $('hint').textContent = (task.warm ? 'Warm-up, does not count. ' : '') + hintFor(e); updateDesc(); }
+  // text mirror of the canvas for the visually-hidden #cvDesc element (unit 7.7 item 1):
+  // revealed mirrors the current element's own reveal/failed flag, never invents one.
+  function updateDesc() { const el = $('cvDesc'); if (!el) return; const e = cur(); const revealed = task && task.kind === 'ear' ? !!task.revealed : !!(e && (e.reveal || e.failed)); el.textContent = describeTask(task, { revealed: revealed }); }
 
   // ---------- judging ----------
   const timeQ = (rt, limit) => rt <= 0.4 * limit ? 1 : clamp(1 - 0.4 * (rt - 0.4 * limit) / (0.6 * limit), 0.6, 1);
@@ -456,7 +484,7 @@
     task.idx++; held = []; holdFor = 0; holdCents = []; wrongFor = 0;
     if (task.idx >= task.els.length) finishTask(); else { cur().t0 = now(); refreshPrompt(); }
   }
-  function failEl(msg, confKey) { const e = cur(); if (!e) return; if (!e.failed) { e.failed = true; e.reveal = true; } if (confKey) S.conf[confKey] = (S.conf[confKey] || 0) + 1; flashBad = performance.now(); say(msg, 'no'); }
+  function failEl(msg, confKey) { const e = cur(); if (!e) return; if (!e.failed) { e.failed = true; e.reveal = true; } if (confKey) S.conf[confKey] = (S.conf[confKey] || 0) + 1; flashBad = performance.now(); say(msg, 'no'); updateDesc(); }
   let finishTask = function () {
     task.done = true; let from = lastItem, anyFail = false;
     task.els.forEach(e => { credit(e.id, e.q || 0, from, task.warm, e.rt); from = e.id; if (!(e.q > 0)) anyFail = true; });
@@ -465,45 +493,80 @@
   function dirWord(got, want) { let d = ((pc(want) - pc(got)) + 12) % 12; if (d > 6) d -= 12; return d > 0 ? 'higher' : 'lower'; }
   // a played note (MIDI key, screen key, or a plucked note the microphone recognised)
   function onNote(midi, exact) {
+    forwardSongNote(midi, exact);
     lastInputAt = now(); pressed[midi] = performance.now(); if (!playing || !task || task.done) return; const e = cur(); if (!e) return; const i = e.info;
     if (MODS[mod].input === 'tap') { onTap(); return; }
+    if (task.kind === 'groove') { grooveOnset(midi); return; }
     if (i.kind === 'chord') { if (!exact) return; held.push({ p: pc(midi), t: now() }); held = held.filter(x => now() - x.t < 1.5); const got = {}; held.forEach(x => { got[x.p] = 1; }); if (i.pcs.indexOf(pc(midi)) < 0) { failEl(nname(midi) + ' is not in ' + i.label + ' (' + i.pcs.map(x => NAMES[x]).join(', ') + ').', e.id + '>x' + pc(midi)); held = []; return; } if (i.pcs.every(x => got[x])) passEl(); return; }
     if (i.kind !== 'note') return;
-    const ok = (i.exact && exact) ? midi === i.midi : pc(midi) === pc(i.midi);
-    if (ok) { passEl(); return; }
-    let where = ''; if (i.exact && exact) { const st = midi - i.midi; where = Math.abs(st) === 12 ? 'Right note, wrong octave: go one octave ' + (st > 0 ? 'down' : 'up') + '.' : 'Go ' + Math.abs(st) + ' key' + (Math.abs(st) > 1 ? 's' : '') + ' to the ' + (st > 0 ? 'left' : 'right') + '.'; }
+    const policy = i.anywhere ? 'fold' : (OCTAVE_POLICY[mod] || 'fold');
+    const judged = judgePitch({ heardMidi: midi, targetMidi: i.midi, policy });
+    if (judged.ok) { passEl(); return; }
+    let where = ''; if (policy === 'exact') { const st = midi - i.midi; where = Math.abs(st) === 12 ? 'Right note, wrong octave: go one octave ' + (st > 0 ? 'down' : 'up') + '.' : 'Go ' + Math.abs(st) + ' key' + (Math.abs(st) > 1 ? 's' : '') + ' to the ' + (st > 0 ? 'left' : 'right') + '.'; }
     else if (i.string) { let df = ((pc(i.midi) - pc(midi)) + 12) % 12; if (df > 6) df -= 12; where = 'Go ' + Math.abs(df) + ' fret' + (Math.abs(df) > 1 ? 's' : '') + ' ' + (df > 0 ? 'higher' : 'lower') + '.'; }
     else where = 'Go ' + dirWord(midi, i.midi) + '.';
     failEl('That was ' + nname(midi) + ', the note is ' + nname(i.midi) + '. ' + where, e.id + '>' + nname(midi));
   }
   function answer(id) {
-    lastInputAt = now(); if (!playing || !task || task.kind !== 'ear' || task.done) return; const e = cur(), right = id === e.id; e.rt = now() - e.t0; e.q = right ? timeQ(e.rt, task.limit) : 0; task.revealed = true;
+    lastInputAt = now(); if (!playing || !task || task.kind !== 'ear' || task.done) return; const e = cur(), right = id === e.id; e.rt = now() - e.t0; e.q = right ? timeQ(e.rt, task.limit) : 0; task.revealed = true; updateDesc();
     const b = $('ch-' + id); if (b) b.className = right ? 'right' : 'wrong'; const rb = $('ch-' + e.id); if (rb) rb.className = 'right';
     if (right) say(e.info.label + ': yes.', 'ok'); else if (id === 'timeout') { say('Time. That was a ' + e.info.label.toLowerCase() + '. Listen again as it replays.', 'no'); playRef(task); } else { S.conf[e.id + '>' + id] = (S.conf[e.id + '>' + id] || 0) + 1; say('That was a ' + e.info.label.toLowerCase() + ', not a ' + inf(id).label.toLowerCase() + '. Listen again as it replays.', 'no'); playRef(task); }
     task.idx = 1; finishTask();
   }
   // microphone frames: plucked instruments fire note events, voices and winds are judged on a held pitch
   function onPitch(fr, dt) {
-    heard = fr; const M = MODS[mod]; if (!playing || !task || task.done) return; const e = cur(); if (!e) return;
+    heard = fr; if (deafWindow.isDeaf()) return; const M = MODS[mod]; if (!playing || !task || task.done) return; const e = cur(); if (!e) return;
     if (M.input === 'pluck') {
-      if (e.info.kind === 'chord') { if (fr.rms < 0.012 || !fr.chroma) { holdFor = 0; return; } const c = fr.chroma, score = e.info.pcs.reduce((s, x) => s + c[x], 0), each = e.info.pcs.every(x => c[x] > 0.06); e.score = score; if (score > 0.72 && each) { holdFor += dt; if (holdFor > 0.18) passEl(undefined, e.info.label + ': that rings true.'); } else holdFor = 0; if (fr.rms > 0.02) lastInputAt = now(); return; }
-      if (fr.rms < 0.01 || !fr.freq) { if (++stableN > 2 && fr.rms < 0.006) released = true; stableMidi = -1; return; }
+      // F8: an onset detector (src/audio/onset.js) catches a re-pluck of the
+      // SAME note on a still-ringing string, which the RMS-drop/pitch-change
+      // release check below can never see on its own.
+      if (fr.onset) { released = true; stableN = 0; }
+      if (e.info.kind === 'chord') { if (fr.rms < gates.chord || !fr.chroma) { holdFor = 0; return; } const j = judgeChord({ chroma: fr.chroma, targetPcs: e.info.pcs }); e.score = j.score; if (j.ok) { holdFor += dt; if (holdFor > 0.18) passEl(undefined, e.info.label + ': that rings true.'); } else holdFor = 0; if (fr.rms > 0.02) lastInputAt = now(); return; }
+      if (fr.rms < gates.note || !fr.freq) { if (++stableN > 2 && fr.rms < 0.006) released = true; stableMidi = -1; return; }
       const m = Math.round(fr.midi); if (m === stableMidi) stableN++; else { stableMidi = m; stableN = 1; }
       if (stableN === 3 && (released || m !== lastFired)) { lastFired = m; released = false; onNote(m, false); }
       return;
     }
     if (M.input === 'sustain') {
-      if (!fr.freq || fr.rms < 0.01) { holdFor = Math.max(0, holdFor - dt * 2); wrongFor = 0; return; } lastInputAt = now();
-      let cents = (fr.midi - e.info.midi) * 100; const sameName = pc(fr.midi) === pc(e.info.midi); if (!M.exactPitch) cents = ((cents + 600) % 1200 + 1200) % 1200 - 600; fr.cents = cents; const tol = 45, need = task.kind === 'hold' ? 2 : 0.5;
-      if (Math.abs(cents) <= tol) { holdFor += dt; holdCents.push(cents); wrongFor = 0; if (holdFor >= need) { const mc = mean(holdCents.map(Math.abs)), bias = mean(holdCents), q = clamp(1 - mc / 90, 0.6, 1); passEl(q, e.info.short + ': held it, ' + (Math.abs(bias) < 8 ? 'dead centre' : Math.round(Math.abs(bias)) + ' cents ' + (bias > 0 ? 'sharp' : 'flat')) + '.'); } }
-      else { holdFor = 0; holdCents = []; wrongFor += dt; if (wrongFor > 0.9) { wrongFor = 0; const near = Math.abs(cents) < 100; failEl(M.exactPitch && sameName && !near ? 'Right note name, wrong octave. You want ' + e.info.label + ', which is ' + (cents > 0 ? 'lower' : 'higher') + ' on the instrument.' : near ? 'Close: you are ' + Math.round(Math.abs(cents)) + ' cents ' + (cents > 0 ? 'sharp. Relax it down.' : 'flat. Lift it up.') : 'You are on ' + nname(fr.midi) + ', the note is ' + nname(e.info.midi) + '. Go ' + (cents > 0 ? 'lower' : 'higher') + '.', near ? null : e.id + '>' + nname(fr.midi)); } }
+      if (!fr.freq || fr.rms < gates.note) { holdFor = Math.max(0, holdFor - dt * 2); wrongFor = 0; return; } lastInputAt = now();
+      const octavePolicy = OCTAVE_POLICY[mod] || 'fold'; const octaveOk = octavePolicy !== 'exact' || judgePitch({ heardMidi: Math.round(fr.midi), targetMidi: Math.round(e.info.midi), policy: octavePolicy }).reason !== 'right-pitch-class-wrong-octave';
+      let cents = (fr.midi - e.info.midi) * 100; const sameName = pc(fr.midi) === pc(e.info.midi); if (octavePolicy !== 'exact') cents = ((cents + 600) % 1200 + 1200) % 1200 - 600; fr.cents = cents; const tol = 45, need = task.kind === 'hold' ? 2 : 0.5;
+      if (octaveOk && Math.abs(cents) <= tol) { holdFor += dt; holdCents.push(cents); wrongFor = 0; if (holdFor >= need) { const mc = mean(holdCents.map(Math.abs)), bias = mean(holdCents), q = clamp(1 - mc / 90, 0.6, 1); passEl(q, e.info.short + ': held it, ' + (Math.abs(bias) < 8 ? 'dead centre' : Math.round(Math.abs(bias)) + ' cents ' + (bias > 0 ? 'sharp' : 'flat')) + '.'); } }
+      else { holdFor = 0; holdCents = []; wrongFor += dt; if (wrongFor > 0.9) { wrongFor = 0; const near = octaveOk && Math.abs(cents) < 100; failEl(octavePolicy === 'exact' && sameName && !octaveOk ? 'Right note name, wrong octave. You want ' + e.info.label + ', which is ' + (cents > 0 ? 'lower' : 'higher') + ' on the instrument.' : near ? 'Close: you are ' + Math.round(Math.abs(cents)) + ' cents ' + (cents > 0 ? 'sharp. Relax it down.' : 'flat. Lift it up.') : 'You are on ' + nname(fr.midi) + ', the note is ' + nname(e.info.midi) + '. Go ' + (cents > 0 ? 'lower' : 'higher') + '.', near ? null : e.id + '>' + nname(fr.midi)); } }
     }
   }
 
   // ---------- rhythm reading: a count-in bar, then the bar you tap ----------
-  let bar = null;
+  let bar = null, calRun = null;
   function startBar() { const bpm = D().bpm || 72, spb = 60 / bpm, t0 = now() + 0.15; bar = { spb: spb, t0: t0, playAt: t0 + 4 * spb, end: t0 + 8 * spb, clicks: 0, taps: [], onsets: [], judged: false }; let b = 0; task.els.forEach(e => { e.info.on.forEach(o => bar.onsets.push({ t: bar.playAt + (b + o) * spb, el: e, hit: null })); e.b0 = b; b += e.info.beats; }); }
-  function onTap() { lastInputAt = now(); $('tapPad').classList.add('down'); setTimeout(() => $('tapPad').classList.remove('down'), 90); if (!playing || !task || task.kind !== 'bar' || !bar || bar.judged) return; const lat = actx ? (actx.outputLatency || actx.baseLatency || 0) : 0, t = now() - lat - S.offset; if (t < bar.playAt - 0.25) return; bar.taps.push({ t: t, used: false }); }
+  const audioNow = () => actx ? actx.currentTime : performance.now() / 1000;
+  const tapAudioTime = ev => toAudioTime({ eventTimeStamp: ev && typeof ev.timeStamp === 'number' ? ev.timeStamp : performance.now(), perfNow: performance.now(), audioNow: audioNow() });
+  function startCalibrate() {
+    if (calRun || !ensureAudio()) return;
+    const bpm = 72, spb = 60 / bpm, t0 = now() + 0.15, beats = [];
+    for (let i = 0; i < 8; i++) beats.push(t0 + i * spb);
+    beats.forEach((at, i) => click(at, i % 4 === 0));
+    calRun = { beats: beats };
+    calRun.taps = [];
+    say('Tap along with the eight clicks.', '');
+    renderOpts();
+    setTimeout(() => {
+      const taps = calRun ? calRun.taps : [];
+      if (taps.length >= 4) { DB.latencyMs = medianLatency(taps); say('Timing calibrated: ' + Math.round(DB.latencyMs) + ' ms.', 'ok'); save(); }
+      else say('Not enough taps caught. Try again.', 'no');
+      calRun = null; renderOpts();
+    }, (beats[beats.length - 1] - now() + 0.5) * 1000);
+  }
+  function onTap(ev) {
+    lastInputAt = now(); $('tapPad').classList.add('down'); setTimeout(() => $('tapPad').classList.remove('down'), 90);
+    if (calRun) { const raw = tapAudioTime(ev), v = judgeTap({ tapTime: raw, beatTimes: calRun.beats, latencyMs: 0, windowMs: 1e9 }); if (v.errorMs !== null) calRun.taps.push(v.errorMs); return; }
+    if (!playing || !task || (task.kind !== 'bar' && task.kind !== 'bar2') || !bar || bar.judged) return;
+    const latencyMs = DB.latencyMs != null ? DB.latencyMs : (actx ? (actx.outputLatency || actx.baseLatency || 0) * 1000 : 0);
+    const win = S.level > MODS.rhy.levels.length ? 0.11 : 0.15;
+    const raw = tapAudioTime(ev) - S.offset, verdict = judgeTap({ tapTime: raw, beatTimes: bar.onsets.map(o => o.t), latencyMs: latencyMs, windowMs: win * 1000 }), t = raw - latencyMs / 1000;
+    if (t < bar.playAt - 0.25) return;
+    bar.taps.push({ t: t, used: false, live: verdict });
+  }
   function tickBar() {
     if (!bar || !task || task.kind !== 'bar') return; const t = now();
     while (bar.clicks < 8 && bar.t0 + bar.clicks * bar.spb < t + 0.12) { const at = bar.t0 + bar.clicks * bar.spb; if (at > t - 0.01) click(at, bar.clicks % 4 === 0); bar.clicks++; }
@@ -520,11 +583,94 @@
     }
   }
 
+  // ---------- rhythm vocabulary bars: rests, ties, triplets, 3/4, 6/8, swing, two-bar phrases ----------
+  function startBar2() {
+    const d = D(), bpm = d.bpm || 72, metre = d.metre || '4/4', M = RHY.METRES[metre];
+    const phrase = RHY.buildPhrase({ metre: metre, cells: task.rCells });
+    const beatSec = (60 / bpm) * (M.beatUnit / RHY.TPQ);
+    const totalSec = RHY.totalTicks(phrase.events) * (60 / bpm) / RHY.TPQ;
+    const t0 = now() + 0.15, playAt = t0 + M.beats * beatSec;
+    const onsets = RHY.onsetsOf(phrase.events, { bpm: bpm, swing: d.swing || 0 }).map(t => ({ t: playAt + t, hit: null }));
+    bar = { spb: beatSec, t0: t0, playAt: playAt, end: playAt + totalSec + 0.3, clicks: 0, countBeats: M.beats, metre: metre, phrase: phrase, onsets: onsets, taps: [], judged: false };
+  }
+  function tickBar2() {
+    if (!bar || !task || task.kind !== 'bar2') return; const t = now();
+    while (bar.clicks < bar.countBeats && bar.t0 + bar.clicks * bar.spb < t + 0.12) { const at = bar.t0 + bar.clicks * bar.spb; if (at > t - 0.01) click(at, bar.clicks === 0); bar.clicks++; }
+    if (!bar.judged && t > bar.end) {
+      bar.judged = true; const win = 0.15, deltas = [];
+      bar.onsets.forEach(o => { let best = null; bar.taps.forEach(tp => { if (tp.used) return; const dd = tp.t - o.t; if (Math.abs(dd) <= win && (!best || Math.abs(dd) < Math.abs(best.t - o.t))) best = tp; }); if (best) { best.used = true; o.hit = best.t - o.t; deltas.push(o.hit); } });
+      const extra = bar.taps.filter(tp => !tp.used), misses = bar.onsets.filter(o => o.hit === null).length, e = cur();
+      e.rt = 1; e.q = misses || extra.length ? 0 : 1; e.failed = !!(misses || extra.length);
+      const bias = deltas.length ? mean(deltas) : 0;
+      say(misses === 0 && !extra.length ? 'Clean bar. Average ' + Math.round(Math.abs(bias) * 1000) + ' ms ' + (bias < 0 ? 'early' : 'late') + '.' : (misses ? misses + ' missed' : '') + (misses && extra.length ? ', ' : '') + (extra.length ? extra.length + ' extra tap' + (extra.length > 1 ? 's' : '') : '') + '.', misses === 0 && !extra.length ? 'ok' : 'no');
+      if (!bar.taps.length) sess.idleBars++; else sess.idleBars = 0;
+      if (sess.idleBars >= 2) { sess.idleBars = 0; task.done = true; takeBreak('away'); return; }
+      task.idx = task.els.length; finishTask(); nextTaskAt = now() + 0.4;
+    }
+  }
+
+  // ---------- play in time: a count-in, then the shown notes played on the beat (F7) ----------
+  // Only instruments whose note events surface through onNote() (MIDI/keys,
+  // or a mic pluck once its pitch is stable) can be judged this way; voice,
+  // wind and harp are held-pitch ('sustain') with no discrete attack to time.
+  let grooveOn = false, groove = null, grooveLast = null;
+  function groovable(m) { const M = MODS[m]; return !!M && (M.input === 'midi' || M.input === 'pluck'); }
+  // A metronome tick for a groove exercise deliberately does NOT open the
+  // shared deaf window (compare click(), which does): a click that blinds
+  // the mic for its usual 60ms + 250ms tail would make playing ON the beat
+  // unjudgeable for pluck instruments (F7's own bug, moved one level up).
+  // This click is under 35ms, and onPitch's own onset gate already needs
+  // three consecutive 50ms analyser frames of matching pitch (150ms) before
+  // it credits a note, so the transient cannot be mistaken for one; nothing
+  // in onPitch or the shared deaf window needs to change.
+  function grooveClick(at, accent) {
+    if (!actx) return; const o = actx.createOscillator(), v = actx.createGain();
+    o.type = 'square'; o.frequency.value = accent ? 1500 : 1000;
+    v.gain.setValueAtTime(0.0001, at); v.gain.exponentialRampToValueAtTime(0.12, at + 0.002); v.gain.exponentialRampToValueAtTime(0.0001, at + 0.03);
+    o.connect(v); v.connect(actx.destination); o.start(at); o.stop(at + 0.035);
+  }
+  function buildGrooveTask() {
+    const pool = poolFor(D()), len = 4; let from = lastItem; const els = [];
+    for (let i = 0; i < len; i++) { const id = pick(from, pool); S.tick++; it(id).seen = S.tick; els.push({ id: id, info: inf(id), failed: false, t0: 0, rt: 0, reveal: it(id).n < 2 }); from = id; }
+    return { kind: 'groove', els: els, idx: 0, warm: false, limit: 8, ref: 'none', blind: false, t0: now(), done: false };
+  }
+  function startGroove() {
+    const bpm = S.grooveBpm || 80, spb = 60 / bpm, t0 = now() + 0.15, beatsPerBar = task.els.length;
+    const grid = makeGrid({ bpm: bpm, beatsPerBar: beatsPerBar, bars: 1, subdivision: 1, startTime: t0 + beatsPerBar * spb });
+    groove = { bpm: bpm, spb: spb, t0: t0, grid: grid, clicks: 0, onsets: [], judged: false, end: grid[grid.length - 1] + spb * 0.6 };
+  }
+  function grooveOnset(midi) {
+    if (!groove || groove.judged) return; const t = now();
+    if (t < groove.grid[0] - groove.spb * 0.6) return; // before the count-in has handed off, ignore
+    groove.onsets.push({ t: t, midi: midi });
+  }
+  function tickGroove() {
+    if (!groove || !task || task.kind !== 'groove') return; const t = now(), total = task.els.length * 2;
+    while (groove.clicks < total && groove.t0 + groove.clicks * groove.spb < t + 0.12) { const at = groove.t0 + groove.clicks * groove.spb; if (at > t - 0.01) grooveClick(at, groove.clicks % task.els.length === 0); groove.clicks++; }
+    if (!groove.judged && t > groove.end) {
+      groove.judged = true;
+      const fold = ['gtr', 'bass', 'uke'].indexOf(mod) >= 0 || task.els.some(e => e.info.anywhere);
+      const expected = task.els.map((e, i) => ({ beat: i, midi: fold ? pc(e.info.midi) : e.info.midi }));
+      const onsets = groove.onsets.map(o => ({ t: o.t, midi: fold ? pc(o.midi) : o.midi }));
+      const latencyMs = DB.latencyMs != null ? DB.latencyMs : (actx ? (actx.outputLatency || actx.baseLatency || 0) * 1000 : 0);
+      const result = grooveLast = scoreTake({ onsets: onsets, grid: groove.grid, expected: expected, latencyMs: latencyMs, windowMs: 150 });
+      result.notes.forEach((r, i) => { const e = task.els[i]; e.rt = 1; if (r.ok) e.q = clamp(1 - Math.abs(r.errorMs || 0) / 150, 0.6, 1); else { e.q = 0; e.failed = true; } });
+      const passed = result.summary.hitRate >= 0.75 && result.summary.tendency === 'steady' && task.els.every(e => e.q > 0);
+      S.grooveBpm = tempoLadder({ bpm: groove.bpm, passed: passed });
+      const tend = result.summary.tendency;
+      const feel = tend === 'steady' ? 'right on it' : tend === 'rushing' ? 'a little early overall' : tend === 'dragging' ? 'a little late overall' : 'not enough to tell';
+      say(passed ? 'Clean take at ' + groove.bpm + ' bpm, ' + feel + '. Next: ' + S.grooveBpm + ' bpm.' : (tend === 'rushing' ? 'You are rushing it — coming in early.' : tend === 'dragging' ? 'You are dragging — coming in late.' : 'Not quite on the beat yet.') + ' Staying at ' + S.grooveBpm + ' bpm.', passed ? 'ok' : 'no');
+      task.idx = task.els.length; finishTask(); nextTaskAt = now() + 0.4; save();
+    }
+  }
+
   // ---------- the loop ----------
   function tick(dt) {
     sess.active += dt; sess.sinceBreak += dt;
     if (!task || (task.done && now() >= nextTaskAt)) { task = buildTask(); present(); }
     if (task.kind === 'bar') tickBar();
+    else if (task.kind === 'bar2') tickBar2();
+    else if (task.kind === 'groove') tickGroove();
     else if (!task.done) {
       const e = cur(), el = now() - e.t0, lim = task.limit * (task.kind === 'hold' ? 1.4 : 1);
       $('timeFill').style.width = Math.round(100 * c01(1 - el / lim)) + '%';
@@ -537,21 +683,29 @@
   }
   let lastFrame = 0, lastPitchAt = 0;
   function listen() {
+    if (pitchWorkletNode) return; // the worklet's own onmessage handler is feeding onPitch instead
     const M = MODS[mod]; if (!M || !micReady || !anTime || !(M.input === 'pluck' || M.input === 'sustain')) return; const t = now(), dt = Math.min(0.2, t - (lastPitchAt || t)); lastPitchAt = t;
-    const buf = new Float32Array(anTime.fftSize); anTime.getFloatTimeDomainData(buf); const r = yin(buf, actx.sampleRate, M.fmin, M.fmax), fr = { rms: r.rms, freq: r.freq && r.clarity > 0.8 ? r.freq : 0 }; if (fr.freq) fr.midi = fmidi(fr.freq);
-    if (task && cur() && cur().info.kind === 'chord') { const db = new Float32Array(anFreq.frequencyBinCount); anFreq.getFloatFrequencyData(db); fr.chroma = chroma(db, actx.sampleRate, anFreq.fftSize); }
-    try { onPitch(fr, dt); } catch (e) { errCount++; }
+    const buf = new Float32Array(anTime.fftSize); anTime.getFloatTimeDomainData(buf); const r = yin(buf, actx.sampleRate, M.fmin, M.fmax, gates.pitch), fr = { rms: r.rms, freq: r.freq && r.clarity > 0.8 ? r.freq : 0 }; if (fr.freq) fr.midi = fmidi(fr.freq);
+    if (task && cur() && cur().info.kind === 'chord') { const db = new Float32Array(anFreq.frequencyBinCount); anFreq.getFloatFrequencyData(db); fr.chroma = chroma(db, actx.sampleRate); }
+    meterUpdate(fr.rms);
+    try { onPitch(fr, dt); } catch (e) { errCount++; recordError('onPitch', e); }
   }
   setInterval(listen, 50);
   function frame() {
     const t = performance.now(), dt = Math.min(0.1, (t - (lastFrame || t)) / 1000); lastFrame = t;
     try { if (playing) tick(dt); draw(); }
-    catch (e) { errCount++; task = null; try { S = DB.mods[mod] = sanitizeModel(mod, S); } catch (e2) {} if (errCount > 4 && playing) { errCount = 0; takeBreak('error'); } }
+    catch (e) { errCount++; recordError('frame', e); task = null; try { S = DB.mods[mod] = sanitizeModel(mod, S); } catch (e2) {} if (errCount > 4 && playing) { errCount = 0; takeBreak('error'); } }
     if (paused) tickBreak(); requestAnimationFrame(frame);
   }
 
   // ---------- drawing ----------
-  const cv = $('cv'), g = cv.getContext('2d'); let keyRects = [], rowRects = [];
+  const cv = $('cv'), g = cv.getContext('2d'); let keyRects = [], rowRects = [], lastStaff = null;
+  cv.tabIndex = 0; // item 3 (Wave W, w-fixes): keyboard-reachable so a keyboard-only learner can play the on-screen piano
+  // item 3 (Wave W, w-fixes): a keyboard-driven focus cursor over the current keyRects, sorted left to right.
+  let kbdFocusIdx = 0;
+  const kbdOrder = () => keyRects.slice().sort((a, b) => a.x - b.x);
+  function kbdKeyName(k, idx, total) { return DB.prefs.names ? nname(k.m) + (pc(k.m) === 0 ? (Math.floor(k.m / 12) - 1) : '') : (k.black ? 'black' : 'white') + ' key ' + (idx + 1) + ' of ' + total; }
+  function kbdFocusInfo() { if (mod !== 'kbd') return null; const order = kbdOrder(); if (!order.length) return null; if (kbdFocusIdx >= order.length) kbdFocusIdx = 0; const k = order[kbdFocusIdx]; return { idx: kbdFocusIdx, total: order.length, m: k.m, black: k.black, x: k.x, y: k.y, w: k.w, h: k.h, name: kbdKeyName(k, kbdFocusIdx, order.length) }; }
   function size() { const r = cv.getBoundingClientRect(), d = Math.min(window.devicePixelRatio || 1, 2), w = Math.round(r.width * d), h = Math.round(r.height * d); if (w && h && (cv.width !== w || cv.height !== h)) { cv.width = w; cv.height = h; } }
   function rr(x, y, w, h, r) { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); }
   const font = (px, w) => { g.font = (w || 700) + ' ' + Math.round(px) + 'px "Barlow Condensed", Arial, sans-serif'; };
@@ -573,7 +727,7 @@
     const dot = (s, f, col, txt, a) => { g.globalAlpha = a; g.fillStyle = col; g.beginPath(); g.arc(fx(f), sy(s), H * 0.05, 0, 7); g.fill(); g.globalAlpha = 1; if (txt) { g.fillStyle = '#06101d'; font(H * 0.05); g.textAlign = 'center'; g.fillText(txt, fx(f), sy(s) + H * 0.018); } };
     if (heard && heard.freq && MODS[mod].input === 'pluck') { const p = pc(heard.midi); for (let s = 1; s <= ns; s++) for (let f = 0; f <= nf; f++) if (pc(M.tuning[ns - s] + f) === p) dot(s, f, '#9fb4d8', '', 0.25); }
     if (e && e.info.kind === 'note' && (e.reveal || e.failed)) { if (e.info.string) dot(e.info.string, e.info.fret, accent(), DB.prefs.names ? nname(e.info.midi) : '', 1); else for (let s = 1; s <= ns; s++) for (let f = 0; f <= nf; f++) if (pc(M.tuning[ns - s] + f) === pc(e.info.midi)) dot(s, f, accent(), '', 0.85); }
-    if (e && e.info.kind === 'chord') { g.fillStyle = '#e9edf6'; font(H * 0.2); g.textAlign = 'center'; g.fillText(e.info.sym, W * 0.5, H * 0.56); if (typeof e.score === 'number') { g.fillStyle = '#05070c'; rr(W * 0.3, H * 0.66, W * 0.4, H * 0.04, 4); g.fill(); g.fillStyle = e.score > 0.72 ? '#5be08a' : accent(); rr(W * 0.3, H * 0.66, W * 0.4 * c01(e.score), H * 0.04, 4); g.fill(); } }
+    if (e && e.info.kind === 'chord') { g.fillStyle = '#e9edf6'; font(H * 0.2); g.textAlign = 'center'; g.fillText(e.info.sym, W * 0.5, H * 0.56); if (typeof e.score === 'number') { g.fillStyle = '#05070c'; rr(W * 0.3, H * 0.66, W * 0.4, H * 0.04, 4); g.fill(); g.fillStyle = e.score > 0.5 ? '#5be08a' : accent(); rr(W * 0.3, H * 0.66, W * 0.4 * c01(e.score), H * 0.04, 4); g.fill(); } }
   }
   function gauge(x, y, w, cents, label) { g.fillStyle = '#05070c'; rr(x, y, w, 16, 8); g.fill(); g.fillStyle = '#5be08a55'; g.fillRect(x + w * 0.5 - w * 0.06, y, w * 0.12, 16); g.strokeStyle = '#e9edf6'; g.lineWidth = 2; g.beginPath(); g.moveTo(x + w / 2, y - 5); g.lineTo(x + w / 2, y + 21); g.stroke(); if (cents !== null) { const px = x + w / 2 + clamp(cents / 50, -1, 1) * w / 2; g.fillStyle = Math.abs(cents) < 10 ? '#5be08a' : Math.abs(cents) < 30 ? '#f3c52f' : '#ff6b5e'; g.beginPath(); g.arc(px, y + 8, 11, 0, 7); g.fill(); } const fs = Math.max(13, cv.width * 0.017); g.fillStyle = '#93a0bd'; font(fs, 600); g.textAlign = 'left'; g.fillText('flat', x, y + 22 + fs); g.textAlign = 'right'; g.fillText('sharp', x + w, y + 22 + fs); g.textAlign = 'center'; g.fillStyle = '#e9edf6'; font(fs * 1.25, 700); g.fillText(label || '', x + w / 2, y - 14); }
   function liveCents(target, exact) { if (!heard || !heard.freq) return null; let c = (heard.midi - target) * 100; if (!exact) c = ((c + 600) % 1200 + 1200) % 1200 - 600; return c; }
@@ -595,11 +749,11 @@
   }
   function drawHarp(e, W, H) {
     const x0 = W * 0.06, w = W * 0.88, hw = w / 10, y0 = H * 0.36, hh = H * 0.3; rr(x0 - 10, y0 - 14, w + 20, hh + 28, 14); g.fillStyle = '#8f96a3'; g.fill(); rr(x0 - 2, y0, w + 4, hh, 6); g.fillStyle = '#1b1e26'; g.fill();
-    for (let h = 1; h <= 10; h++) { const x = x0 + (h - 1) * hw, tb = e && e.info.hole === h && (e.reveal || e.failed || true); rr(x + hw * 0.16, y0 + hh * 0.2, hw * 0.68, hh * 0.6, 4); g.fillStyle = tb ? accent() : '#05070c'; g.fill(); g.fillStyle = '#e9edf6'; font(H * 0.07); g.textAlign = 'center'; g.fillText(String(h), x + hw / 2, y0 - H * 0.06);
+    for (let h = 1; h <= 10; h++) { const x = x0 + (h - 1) * hw, tb = e && e.info.hole === h && (e.reveal || e.failed); rr(x + hw * 0.16, y0 + hh * 0.2, hw * 0.68, hh * 0.6, 4); g.fillStyle = tb ? accent() : '#05070c'; g.fill(); g.fillStyle = '#e9edf6'; font(H * 0.07); g.textAlign = 'center'; g.fillText(String(h), x + hw / 2, y0 - H * 0.06);
       if (DB.prefs.names) { g.fillStyle = '#93a0bd'; font(H * 0.042, 600); g.fillText('↑ ' + nname(HARP.b[h - 1]), x + hw / 2, y0 + hh + H * 0.1); g.fillText('↓ ' + nname(HARP.d[h - 1]), x + hw / 2, y0 + hh + H * 0.17); } }
     if (e) { const x = x0 + (e.info.hole - 0.5) * hw, up = e.info.dir === 'b'; g.fillStyle = accent(); font(H * 0.2); g.textAlign = 'center'; g.fillText(up ? '↑' : '↓', x, up ? y0 - H * 0.13 : y0 - H * 0.13); font(H * 0.06); g.fillStyle = '#e9edf6'; g.fillText(up ? 'BLOW' : 'DRAW', x + hw * 1.3, y0 - H * 0.17); const c = liveCents(e.info.midi, true); g.fillStyle = '#5be08a'; g.fillRect(x0, H * 0.95, w * c01(holdFor / (task.kind === 'hold' ? 2 : 0.5)), H * 0.025); if (heard && heard.freq) { font(H * 0.05, 600); g.fillStyle = '#93a0bd'; g.textAlign = 'left'; g.fillText('Hearing ' + nname(heard.midi, true) + (c !== null && Math.abs(c) < 100 ? ', ' + Math.round(Math.abs(c)) + ' cents ' + (c > 0 ? 'sharp' : 'flat') : ''), x0, H * 0.1); } }
   }
-  function drawEar(W, H) { const t = task; if (t && t.revealed && t.played) { drawKeys(W * 0.05, H * 0.3, W * 0.9, H * 0.5, 48, 84, { target: t.played, good: [], names: DB.prefs.names }); g.fillStyle = '#e9edf6'; font(H * 0.09); g.textAlign = 'center'; g.fillText(t.played.map(m => nname(m)).join('  →  '), W / 2, H * 0.18); } else { g.fillStyle = accent(); font(H * 0.5); g.textAlign = 'center'; g.fillText('?', W / 2, H * 0.66); const k = (performance.now() / 600) % 1; g.strokeStyle = accent(); g.globalAlpha = 1 - k; g.lineWidth = 4; g.beginPath(); g.arc(W / 2, H * 0.5, H * (0.3 + 0.15 * k), 0, 7); g.stroke(); g.globalAlpha = 1; } }
+  function drawEar(W, H) { const t = task; if (t && t.revealed && t.played) { drawKeys(W * 0.05, H * 0.3, W * 0.9, H * 0.5, 48, 84, { target: t.played, good: [], names: DB.prefs.names }); g.fillStyle = '#e9edf6'; font(H * 0.09); g.textAlign = 'center'; g.fillText(t.played.map(m => nname(m)).join('  →  '), W / 2, H * 0.18); } else { g.fillStyle = accent(); font(H * 0.5); g.textAlign = 'center'; g.fillText('?', W / 2, H * 0.66); g.strokeStyle = accent(); g.lineWidth = 4; if (reducedMotion) { g.beginPath(); g.arc(W / 2, H * 0.5, H * 0.35, 0, 7); g.stroke(); } else { const k = (performance.now() / 600) % 1; g.globalAlpha = 1 - k; g.beginPath(); g.arc(W / 2, H * 0.5, H * (0.3 + 0.15 * k), 0, 7); g.stroke(); g.globalAlpha = 1; } } }
   function drawBar(W, H) {
     if (!bar || !task) return; const x0 = W * 0.08, x1 = W * 0.94, bw = (x1 - x0) / 4, y = H * 0.48, t = now(), stem = H * 0.26, nh = H * 0.045;
     g.strokeStyle = '#c9ced9'; g.lineWidth = 2; g.beginPath(); g.moveTo(x0 - 10, y); g.lineTo(x1 + 10, y); g.stroke(); g.lineWidth = 4; g.beginPath(); g.moveTo(x0 - 10, y - H * 0.2); g.lineTo(x0 - 10, y + H * 0.2); g.moveTo(x1 + 10, y - H * 0.2); g.lineTo(x1 + 10, y + H * 0.2); g.stroke();
@@ -615,16 +769,75 @@
       else if (c === 'dqe') { head(b0); g.beginPath(); g.arc(X(b0) + nh * 2.6, y, nh * 0.4, 0, 7); g.fill(); head(b0 + 1.5); flag(b0 + 1.5); } else if (c === 'ree') { rest8(b0); head(b0 + 0.5); flag(b0 + 0.5); }
       else if (c === 'ess') { head(b0); head(b0 + 0.5); head(b0 + 0.75); beam(b0, b0 + 0.75, 0); beam(b0 + 0.5, b0 + 0.75, 1); } else if (c === 'sse') { head(b0); head(b0 + 0.25); head(b0 + 0.5); beam(b0, b0 + 0.5, 0); beam(b0, b0 + 0.25, 1); }
       else if (c === 'eqe') { head(b0); flag(b0); head(b0 + 0.5); head(b0 + 1.5); flag(b0 + 1.5); } });
-    if (bar.judged) { bar.onsets.forEach(o => { const beat = (o.t - bar.playAt) / bar.spb; g.fillStyle = o.hit === null ? '#ff6b5e' : Math.abs(o.hit) < 0.06 ? '#5be08a' : '#f3c52f'; g.fillRect(X(beat) - 3 + (o.hit || 0) / bar.spb * bw, y + H * 0.2, 6, H * 0.08); }); bar.taps.filter(tp => !tp.used).forEach(tp => { g.fillStyle = '#ff6b5e'; font(H * 0.07); g.textAlign = 'center'; g.fillText('×', X((tp.t - bar.playAt) / bar.spb), y + H * 0.28); }); }
+    if (bar.judged) { bar.onsets.forEach(o => { const beat = (o.t - bar.playAt) / bar.spb, onTime = o.hit !== null && Math.abs(o.hit) < 0.06, mark = o.hit === null ? '✗' : onTime ? '✓' : (o.hit < 0 ? 'early' : 'late'); g.fillStyle = o.hit === null ? '#ff6b5e' : onTime ? '#5be08a' : '#f3c52f'; const mx = X(beat) - 3 + (o.hit || 0) / bar.spb * bw; g.fillRect(mx, y + H * 0.2, 6, H * 0.08); font(H * 0.032, 700); g.textAlign = 'center'; g.fillText(mark, mx + 3, y + H * 0.2 - 4); }); bar.taps.filter(tp => !tp.used).forEach(tp => { g.fillStyle = '#ff6b5e'; font(H * 0.07); g.textAlign = 'center'; g.fillText('×', X((tp.t - bar.playAt) / bar.spb), y + H * 0.28); }); }
     if (t < bar.playAt) { const left = Math.ceil((bar.playAt - t) / bar.spb); g.fillStyle = accent(); font(H * 0.22); g.textAlign = 'center'; g.fillText(String(clamp(left, 1, 4)), W * 0.5, H * 0.22); } else if (t < bar.end) { const px = X((t - bar.playAt) / bar.spb - 0); g.strokeStyle = accent(); g.lineWidth = 3; g.beginPath(); g.moveTo(px, y - H * 0.34); g.lineTo(px, y + H * 0.2); g.stroke(); bar.taps.forEach(tp => { g.fillStyle = '#93a0bd'; g.fillRect(X((tp.t - bar.playAt) / bar.spb) - 2, y + H * 0.2, 4, H * 0.06); }); }
+  }
+  // rests, ties, triplet brackets, dots and the time signature, for the rhythm-vocabulary bars
+  function drawBar2(W, H) {
+    if (!bar || !task) return; const x0 = W * 0.1, x1 = W * 0.94, y = H * 0.48, t = now(), stem = H * 0.26, nh = H * 0.045;
+    const total = RHY.totalTicks(bar.phrase.events) || 1, X = tick => x0 + (tick / total) * (x1 - x0);
+    g.strokeStyle = '#c9ced9'; g.lineWidth = 2; g.beginPath(); g.moveTo(x0 - 10, y); g.lineTo(x1 + 10, y); g.stroke();
+    bar.phrase.bars.forEach((b, i) => { const bx = i === 0 ? x0 - 10 : X(RHY.totalTicks(bar.phrase.events.slice(0, b.start))); g.lineWidth = i === 0 || i === bar.phrase.bars.length - 1 ? 4 : 2; g.beginPath(); g.moveTo(bx, y - H * 0.2); g.lineTo(bx, y + H * 0.2); g.stroke(); });
+    g.lineWidth = 4; g.beginPath(); g.moveTo(x1 + 10, y - H * 0.2); g.lineTo(x1 + 10, y + H * 0.2); g.stroke();
+    g.fillStyle = '#93a0bd'; font(H * 0.09, 700); g.textAlign = 'center'; g.fillText(bar.metre.split('/')[0], x0 - 25, y - H * 0.06); g.fillText(bar.metre.split('/')[1], x0 - 25, y + H * 0.11);
+    let cursor = 0; const tripletGroups = [];
+    bar.phrase.events.forEach((ev, i) => {
+      const startTick = cursor, col = bar.judged ? (task.els[0].failed ? '#ff6b5e' : '#5be08a') : '#e9edf6'; g.fillStyle = col; g.strokeStyle = col; g.lineWidth = 3;
+      const dotted = ev.dur === 720 || ev.dur === 360 || ev.dur === 1440;
+      if (ev.rest) {
+        if (ev.dur >= 960) { g.fillRect(X(startTick), ev.dur >= 1920 ? y + H * 0.03 : y - H * 0.06, nh * 1.6, H * 0.045); }
+        else { font(H * 0.16, 600); g.textAlign = 'center'; g.fillText('•', X(startTick) + nh, y - H * 0.02); g.beginPath(); g.moveTo(X(startTick) + nh + 3, y - H * 0.05); g.lineTo(X(startTick), y + H * 0.1); g.stroke(); }
+      } else if (!ev.tied) {
+        const hollow = ev.dur >= 960; g.beginPath(); g.ellipse(X(startTick), y, nh * 1.35, nh, -0.35, 0, 7); if (hollow) { g.lineWidth = 4; g.stroke(); g.lineWidth = 3; } else g.fill();
+        if (ev.dur < 1920) { g.beginPath(); g.moveTo(X(startTick) + nh * 1.25, y); g.lineTo(X(startTick) + nh * 1.25, y - stem); g.stroke(); }
+        if (ev.dur <= 240) { g.beginPath(); g.moveTo(X(startTick) + nh * 1.25, y - stem); g.quadraticCurveTo(X(startTick) + nh * 3.4, y - stem * 0.7, X(startTick) + nh * 2.4, y - stem * 0.35); g.stroke(); }
+      }
+      if (dotted) { g.beginPath(); g.arc(X(startTick) + nh * 2.6, ev.rest ? y - H * 0.06 : y, nh * 0.4, 0, 7); g.fill(); }
+      if (ev.triplet) { if (!tripletGroups.length || tripletGroups[tripletGroups.length - 1].last !== i - 1) tripletGroups.push({ first: i, firstTick: startTick, last: i }); else tripletGroups[tripletGroups.length - 1].last = i, tripletGroups[tripletGroups.length - 1].lastTick = startTick; }
+      // a tied event draws a curve from the previous sounding head to here, showing the note continues
+      if (ev.tied) { const px = X(startTick) - (total / 40); g.beginPath(); g.moveTo(px, y - nh * 1.6); g.quadraticCurveTo((px + X(startTick)) / 2, y - nh * 2.6, X(startTick) + nh, y - nh * 1.6); g.stroke(); }
+      cursor += ev.dur;
+    });
+    tripletGroups.forEach(grp => { const x2 = X(grp.lastTick != null ? grp.lastTick : grp.firstTick) + nh * 1.3, x1t = X(grp.firstTick); g.strokeStyle = '#93a0bd'; g.lineWidth = 2; g.beginPath(); g.moveTo(x1t, y - stem * 1.15); g.lineTo(x2, y - stem * 1.15); g.stroke(); g.fillStyle = '#93a0bd'; font(H * 0.06, 700); g.textAlign = 'center'; g.fillText('3', (x1t + x2) / 2, y - stem * 1.25); });
+    if (bar.judged) { bar.onsets.forEach(o => { const tick = Math.round(((o.t - bar.playAt) / (bar.end - 0.3 - bar.playAt)) * total); g.fillStyle = o.hit === null ? '#ff6b5e' : Math.abs(o.hit) < 0.06 ? '#5be08a' : '#f3c52f'; g.fillRect(X(tick) - 3, y + H * 0.2, 6, H * 0.08); }); bar.taps.filter(tp => !tp.used).forEach(tp => { g.fillStyle = '#ff6b5e'; font(H * 0.07); g.textAlign = 'center'; g.fillText('×', X(((tp.t - bar.playAt) / (bar.end - 0.3 - bar.playAt)) * total), y + H * 0.28); }); }
+    if (t < bar.playAt) { const left = Math.ceil((bar.playAt - t) / bar.spb); g.fillStyle = accent(); font(H * 0.22); g.textAlign = 'center'; g.fillText(String(clamp(left, 1, bar.countBeats)), W * 0.5, H * 0.22); }
+    else if (t < bar.end) { const tick = ((t - bar.playAt) / (bar.end - 0.3 - bar.playAt)) * total; g.strokeStyle = accent(); g.lineWidth = 3; g.beginPath(); g.moveTo(X(tick), y - H * 0.34); g.lineTo(X(tick), y + H * 0.2); g.stroke(); }
+  }
+  // Overlay staff for the five wired instruments (NOTATE_MOD_IDS), additive
+  // to each instrument's existing drawing so today's display is unchanged
+  // when the preference is left at 'names'. Never prints the letter name
+  // unless the app's own reveal flag says so.
+  function drawNotation(e, W, H) {
+    lastStaff = null;
+    if (!e || e.info.kind !== 'note' || e.info.midi === null || e.info.midi === undefined) return;
+    const notate = DB.prefs.notate[mod] || 'names';
+    if (notate === 'names') return;
+    const rec = instrumentById[mod];
+    if (!rec) return;
+    const out = forInstrument(rec, e.info.midi, { item: e.info, width: 280 });
+    if (!out) return;
+    const nameShown = notate === 'both' && DB.prefs.names && !!(e.reveal || e.failed);
+    lastStaff = Object.assign({ nameShown: nameShown }, out);
+    const scale = H * 0.0075, x0 = W * 0.05, y0 = H * 0.06;
+    g.save();
+    g.translate(x0, y0); g.scale(scale, scale);
+    g.strokeStyle = '#c9ced9'; g.fillStyle = '#e9edf6'; g.lineWidth = 1.5 / scale;
+    drawPrimitives(g, out.primitives, {});
+    if (out.tab) drawPrimitives(g, out.tab.primitives, {});
+    g.restore();
+    if (nameShown) {
+      g.fillStyle = '#93a0bd'; font(H * 0.05, 600); g.textAlign = 'left';
+      g.fillText(nname(e.info.midi), x0, y0 + H * 0.34);
+    }
   }
   function draw() {
     size(); const W = cv.width, H = cv.height; g.clearRect(0, 0, W, H); rowRects = []; keyRects = [];
     if (TOOLS[mod]) { if (mod === 'tuner') drawTuner(W, H); else drawCapture(W, H); return; }
     const M = MODS[mod], e = playing && task && !task.done ? cur() : null, showE = e || (task && task.done ? task.els[task.els.length - 1] : null);
-    if (mod === 'kbd') { const low = activeItems(mod, S.level).some(id => id[0] === 'n' && +id.slice(1) < 60) || customOn; const tg = []; if (e) { if (e.info.kind === 'chord') { if (e.reveal || e.failed) e.info.pcs.forEach(x => tg.push(60 + x)); } else if (e.reveal || e.failed) tg.push(e.info.midi); } const good = performance.now() - flashGood < 300 && task ? task.els.slice(0, task.idx).map(x => x.info.midi).filter(x => x) : []; drawKeys(W * 0.03, H * 0.18, W * 0.94, H * 0.7, low ? 48 : 60, 72, { target: tg, good: good, names: DB.prefs.names }); if (e && e.info.kind === 'chord') { g.fillStyle = '#e9edf6'; font(H * 0.11); g.textAlign = 'center'; g.fillText(e.info.sym, W / 2, H * 0.13); } }
-    else if (M.tuning) drawFret(M, e, W, H); else if (mod === 'voice') drawVoice(e, W, H); else if (mod === 'wind') drawStaff(e, W, H); else if (mod === 'harp') drawHarp(e, W, H); else if (mod === 'ear') drawEar(W, H); else if (mod === 'rhy') drawBar(W, H);
-    if (performance.now() - flashBad < 220) { g.strokeStyle = '#ff6b5e'; g.lineWidth = 8; g.strokeRect(4, 4, W - 8, H - 8); } else if (performance.now() - flashGood < 220) { g.strokeStyle = '#5be08a'; g.lineWidth = 8; g.strokeRect(4, 4, W - 8, H - 8); }
+    if (mod === 'kbd') { const low = activeItems(mod, S.level).some(id => id[0] === 'n' && +id.slice(1) < 60) || customOn; const tg = []; if (e) { if (e.info.kind === 'chord') { if (e.reveal || e.failed) e.info.pcs.forEach(x => tg.push(60 + x)); } else if (e.reveal || e.failed) tg.push(e.info.midi); } const good = performance.now() - flashGood < 300 && task ? task.els.slice(0, task.idx).map(x => x.info.midi).filter(x => x) : []; drawKeys(W * 0.03, H * 0.18, W * 0.94, H * 0.7, low ? 48 : 60, 72, { target: tg, good: good, names: DB.prefs.names }); if (e && e.info.kind === 'chord') { g.fillStyle = '#e9edf6'; font(H * 0.11); g.textAlign = 'center'; g.fillText(e.info.sym, W / 2, H * 0.13); } if (document.activeElement === cv) { const fi = kbdFocusInfo(); if (fi) { g.strokeStyle = '#ffd23f'; g.lineWidth = 4; g.strokeRect(fi.x + 2, fi.y + 2, fi.w - 4, fi.h - 4); } } }
+    else if (M.tuning) drawFret(M, e, W, H); else if (mod === 'voice') drawVoice(e, W, H); else if (mod === 'wind') drawStaff(e, W, H); else if (mod === 'harp') drawHarp(e, W, H); else if (mod === 'ear') drawEar(W, H); else if (mod === 'rhy') { if (task && task.kind === 'bar2') drawBar2(W, H); else drawBar(W, H); }
+    if (NOTATE_MOD_IDS.indexOf(mod) >= 0) drawNotation(e, W, H); else lastStaff = null;
+    if (!reducedMotion && performance.now() - flashBad < 220) { g.strokeStyle = '#ff6b5e'; g.lineWidth = 8; g.strokeRect(4, 4, W - 8, H - 8); g.fillStyle = '#ff6b5e'; font(H * 0.06, 700); g.textAlign = 'left'; g.fillText('✗', 14, H * 0.09); } else if (!reducedMotion && performance.now() - flashGood < 220) { g.strokeStyle = '#5be08a'; g.lineWidth = 8; g.strokeRect(4, 4, W - 8, H - 8); g.fillStyle = '#5be08a'; font(H * 0.06, 700); g.textAlign = 'left'; g.fillText('✓', 14, H * 0.09); }
     if (!playing) { g.fillStyle = '#93a0bd'; font(H * 0.08); g.textAlign = 'right'; g.fillText(sess ? 'PAUSED' : 'PRESS START', W * 0.97, H * 0.1); }
   }
 
@@ -654,6 +867,7 @@
     if (cap.on) { g.strokeStyle = '#ff6b5e'; g.lineWidth = 2; g.beginPath(); g.moveTo(X(now() - cap.start), H * 0.08); g.lineTo(X(now() - cap.start), H * 0.94); g.stroke(); if (heard && heard.freq) { g.fillStyle = '#e9edf6'; g.beginPath(); g.arc(X(now() - cap.start), Y(clamp(heard.midi, lo, hi)), 6, 0, 7); g.fill(); } }
   }
   function buildTask() {
+    if (grooveOn && groovable(mod)) return buildGrooveTask();
     if (customOn && DB.custom && DB.custom.length) {
       const ids = DB.custom.map(m => customItem(mod, m, DB.prefs)).filter(x => x), n = ids.length; if (n) { if (chunk * 4 >= n) { chunk = 0; coach('That was the whole tune. Back to the top.'); } const part = ids.slice(chunk * 4, chunk * 4 + 4), t = { kind: 'seq', els: [], idx: 0, warm: true, custom: true, limit: 10, ref: 'target', blind: false, t0: now(), done: false };
         part.forEach(id => { S.tick++; it(id).seen = S.tick; t.els.push({ id: id, info: inf(id), failed: false, t0: 0, rt: 0, reveal: true }); }); t.onDone = () => { if (!t.els.some(e => e.failed)) chunk++; else say('Same four notes again until they are clean.', ''); }; return t; }
@@ -672,27 +886,30 @@
     ensureAudio(); sess = newSession(); recent = []; streak = 0; errCount = 0; task = null; lastItem = null; lastInputAt = now(); chunk = 0; say('');
     let msg = 'Level ' + S.level + ': ' + D().name + '.'; if (tiredPattern()) { sess.target = 15; msg = 'Your last three sessions each ended weaker than they started, which is what tired practice looks like. Today is capped at 15 minutes. ' + msg; } else if (todayMinutes() >= 45) msg = 'You already have ' + Math.round(todayMinutes()) + ' minutes in today. Keep this one short. ' + msg;
     if (S.judged > 5 && !customOn) { sess.warm = 4; msg += ' First a short warm-up through what you know; it does not count.'; }
-    playing = true; paused = false; $('playBtn').textContent = 'Pause'; $('endBtn').hidden = false; coach(msg); showAll();
+    playing = true; paused = false; $('playBtn').textContent = 'Pause'; $('endBtn').hidden = false; coach(msg); showAll(); wakeLock.acquire();
   }
   function endSession() {
     if (!sess) return; const min = sess.active / 60; let line = 'Session ended. Too short to log.';
     if (sess.judged >= 8) { DB.sessions.push({ d: today(), mod: mod, min: Math.round(min * 10) / 10, acc: sess.ok / sess.judged, a1: mean(sess.first), a2: mean(sess.last), from: sess.from, to: S.level, breaks: sess.breaks }); DB.sessions = DB.sessions.slice(-60);
       let up = null, low = null; Object.keys(S.item).forEach(id => { const g0 = S.item[id].m - ((sess.m0[id] || { m: 0.4 }).m); if (up === null || g0 > up.g) up = { id: id, g: g0 }; if (S.item[id].n >= 3 && (low === null || S.item[id].m < S.item[low].m)) low = id; });
       line = 'Session done: ' + Math.round(min) + ' min, ' + Math.round(100 * sess.ok / sess.judged) + '% right, best streak ' + sess.bestStreak + ', level ' + sess.from + ' to ' + S.level + '.' + (up && up.g > 0.05 ? ' Most improved: ' + inf(up.id).short + '.' : '') + (low ? ' Next time starts with extra ' + inf(low).short + '.' : ''); }
-    sess = null; playing = false; paused = false; task = null; bar = null; $('breakCard').hidden = true; $('playBtn').textContent = 'Start'; $('endBtn').hidden = true; $('choices').hidden = true; $('prompt').textContent = MODS[mod].name; $('hint').textContent = ''; coach(line); save(); showAll();
+    if (sess.judged >= 1 && Date.now() - lastBackupAt > 7 * 86400000) showBackupNudge('You have been practising a while. Save a backup, just in case.');
+    sess = null; playing = false; paused = false; task = null; bar = null; breakTrap.deactivate(); $('breakCard').hidden = true; $('playBtn').textContent = 'Start'; $('endBtn').hidden = true; $('choices').hidden = true; $('prompt').textContent = MODS[mod].name; $('hint').textContent = ''; coach(line); save(); showAll(); wakeLock.release();
   }
   const BREAKS = {
     user: ['Paused', 'Take your time. A pause of 90 seconds or more counts as a break and resets your energy.', 0], away: ['You stepped away', 'Nothing came in for a while, so I paused. The exercise you left does not count against you.', 0], hidden: ['Paused', 'The page was hidden, so I stopped the clock. Nothing was counted while you were gone.', 0],
     error: ['Paused to recover', 'Something went wrong inside the trainer. It repaired its state and your progress is safe.', 0], tired: ['Break time: 2 minutes', '', 120], long: ['Break time: 5 minutes', '25 minutes without a break. Stand up, shake out your hands, get water. Practice past this point mostly rehearses mistakes.', 300], target: ['That is today\'s 15 minutes', 'Short and fresh beats long and tired. End here, or take a break and do one more block.', 300]
   };
+  const breakTrap = createFocusTrap({ container: $('breakCard'), onEscape: () => resume() });
   function takeBreak(kind) {
     if (!sess || paused) return; const b = BREAKS[kind]; playing = false; paused = true; pauseInfo = { at: Date.now(), secs: b[2] }; let why = b[1];
     if (kind === 'tired') why = 'Your accuracy slid from ' + Math.round(100 * sess.best30) + '% at your best today to ' + Math.round(100 * mean(sess.w30)) + '%' + (sess.bestRt && sess.rts.length >= 10 && median(sess.rts) > sess.bestRt * 1.3 ? ', and you are getting slower to answer' : '') + '. That pattern is fatigue, not lack of skill. Two minutes away fixes more than two more minutes of pushing.';
-    $('breakTitle').textContent = b[0]; $('breakWhy').textContent = why; $('breakClock').hidden = !b[2]; $('snoozeBtn').hidden = !(kind === 'tired' || kind === 'long'); $('breakCard').hidden = false; $('playBtn').textContent = 'Resume'; task = null; bar = null; save(); showAll();
+    if (kind === 'error') { const last = getErrors().slice(-1)[0]; if (last) why += ' Last error: ' + last.message; }
+    $('breakTitle').textContent = b[0]; $('breakWhy').textContent = why; $('breakClock').hidden = !b[2]; $('snoozeBtn').hidden = !(kind === 'tired' || kind === 'long'); $('breakCard').hidden = false; $('playBtn').textContent = 'Resume'; task = null; bar = null; save(); showAll(); breakTrap.activate($('playBtn'));
   }
   function tickBreak() { if (!pauseInfo || !pauseInfo.secs) return; const left = Math.max(0, pauseInfo.secs - (Date.now() - pauseInfo.at) / 1000); $('breakClock').textContent = left > 0 ? Math.floor(left / 60) + ':' + ('0' + Math.floor(left % 60)).slice(-2) : 'Ready when you are'; }
   function resume() {
-    const gone = pauseInfo ? (Date.now() - pauseInfo.at) / 1000 : 0; paused = false; playing = true; $('breakCard').hidden = true; $('playBtn').textContent = 'Pause'; ensureAudio(); task = null; lastInputAt = now();
+    const gone = pauseInfo ? (Date.now() - pauseInfo.at) / 1000 : 0; paused = false; playing = true; breakTrap.deactivate(); $('breakCard').hidden = true; $('playBtn').textContent = 'Pause'; ensureAudio(); task = null; lastInputAt = now();
     if (gone >= 90) { sess.breaks++; sess.sinceBreak = 0; sess.w30 = []; sess.best30 = 0; sess.rts = []; sess.bestRt = null; sess.tiredFor = 0; sess.failRun = 0; sess.warm = 3; coach('Welcome back after ' + (Math.round(gone / 6) / 10) + ' minutes. That counts as a real break, so your energy is reset. Three easy ones to warm back up.'); } else coach('Resuming level ' + S.level + '.');
     pauseInfo = null; showAll();
   }
@@ -702,7 +919,7 @@
     const tool = !!TOOLS[mod]; document.documentElement.style.setProperty('--accent', (MODS[mod] || TOOLS[mod]).color === '#e9edf6' ? '#9fb4d8' : (MODS[mod] || TOOLS[mod]).color);
     $('helpText').innerHTML = ''; const st = document.createElement('strong'); st.textContent = 'How this one works: '; $('helpText').appendChild(st); $('helpText').appendChild(document.createTextNode((MODS[mod] || TOOLS[mod]).help));
     document.querySelectorAll('.side .card, .side .stats, #playBtn, #resetBtn').forEach(el => { el.style.display = tool ? 'none' : ''; }); $('tapPad').hidden = mod !== 'rhy'; $('timeFill').parentElement.style.visibility = tool || mod === 'rhy' ? 'hidden' : 'visible';
-    if (tool) { $('prompt').textContent = TOOLS[mod].name; $('hint').textContent = mod === 'tuner' ? 'One open string at a time.' : 'One note at a time.'; $('choices').hidden = true; $('replayBtn').hidden = true; return; }
+    if (tool) { $('prompt').textContent = TOOLS[mod].name; $('hint').textContent = mod === 'tuner' ? 'One open string at a time.' : 'One note at a time.'; $('choices').hidden = true; $('replayBtn').hidden = true; $('showMeBtn').hidden = true; return; }
     const d = D(); $('levelNum').textContent = 'Level ' + S.level; $('levelName').textContent = customOn ? 'Your captured melody' : d.name; $('limitOut').textContent = d.task === 'bar' || mod === 'rhy' ? (d.bpm || 72) + ' bpm' : (d.limit || 8) + ' s per answer';
     const pct = Math.round(S.ready * 100); $('readyFill').style.width = pct + '%'; $('readyFill').style.background = S.ready < 0.25 ? 'var(--bad)' : S.ready < 0.6 ? 'var(--warn)' : 'var(--good)'; $('readyBar').setAttribute('aria-valuenow', pct);
     const e = sess ? 1 - sess.F : 1, ep = Math.round(e * 100); $('energyFill').style.width = ep + '%'; $('energyFill').style.background = e < 0.4 ? 'var(--bad)' : e < 0.65 ? 'var(--warn)' : 'var(--good)'; $('energyBar').setAttribute('aria-valuenow', ep);
@@ -718,11 +935,14 @@
     const box = $('modOpts'); box.innerHTML = ''; const sel = (id, label, opts, val, on) => { const l = document.createElement('label'); l.htmlFor = id; l.textContent = label + ' '; const s = document.createElement('select'); s.id = id; Object.keys(opts).forEach(k => { const o = document.createElement('option'); o.value = k; o.textContent = opts[k][0]; s.appendChild(o); }); s.value = val; s.addEventListener('change', () => on(s.value)); l.appendChild(s); box.appendChild(l); };
     const btn = (id, text, on, primary) => { const b = document.createElement('button'); b.type = 'button'; b.id = id; b.className = 'small' + (primary ? ' primary' : ''); b.textContent = text; b.addEventListener('click', () => { b.blur(); on(); }); box.appendChild(b); return b; };
     const chk = (id, text, val, on) => { const l = document.createElement('label'); l.htmlFor = id; const c = document.createElement('input'); c.type = 'checkbox'; c.id = id; c.checked = val; c.addEventListener('change', () => on(c.checked)); l.appendChild(c); l.appendChild(document.createTextNode(' ' + text)); box.appendChild(l); };
+    if (NOTATE_MOD_IDS.indexOf(mod) >= 0) sel('optNotate', 'Show', { names: ['Note names (today)'], staff: ['Staff'], both: ['Staff and names'] }, DB.prefs.notate[mod], v => { DB.prefs.notate[mod] = v; save(); });
     if (mod === 'wind') { sel('optWind', 'My instrument', WIND_KINDS, DB.prefs.wind, v => { DB.prefs.wind = v; task = null; save(); }); chk('optRef', 'Play me the note first', false, () => {}); }
     if (mod === 'voice') sel('optVoice', 'My range', VOICE_KINDS, DB.prefs.voice, v => { DB.prefs.voice = v; task = null; save(); });
     if (mod === 'tuner') { sel('optTune', 'Instrument', TUNINGS, tunerKind, v => { tunerKind = v; tuneSel = -1; }); btn('tuneReset', 'Start over', () => { tuned = {}; }); }
+    if (mod === 'rhy') btn('calBtn', calRun ? 'Listening for 8 taps…' : 'Calibrate timing (' + Math.round(DB.latencyMs || 0) + ' ms)', startCalibrate, false);
     if (mod === 'capture') { btn('capGo', cap.on ? 'Stop' : 'Listen', () => { if (cap.on) capStop(); else { ensureAudio(); cap.on = true; cap.notes = []; cap.start = now(); cap.curM = -1; renderOpts(); } }, true); btn('capPlay', 'Play it back', () => { ensureAudio(); const t0 = now() + 0.1; cap.notes.forEach(n => tone(n.m, t0 + n.t - (cap.notes[0] ? cap.notes[0].t : 0), Math.max(0.2, n.d))); }); const lessons = {}; MOD_IDS.filter(m => ['kbd', 'gtr', 'bass', 'uke', 'voice', 'wind', 'harp'].indexOf(m) >= 0).forEach(m => { lessons[m] = [MODS[m].name]; }); sel('capTo', cap.notes.length + ' notes. Practise on', lessons, 'kbd', () => {}); btn('capUse', 'Make it a lesson', () => { if (!cap.notes.length) { say('Nothing captured yet.', 'no'); return; } DB.custom = cap.notes.map(n => n.m).slice(0, 300); save(); const to = $('capTo').value; setMod(to); customOn = true; renderOpts(); showAll(); coach('Your captured tune is loaded: ' + DB.custom.length + ' notes, four at a time. Each group repeats until it is clean. Press Start.'); }); }
     if (MODS[mod] && DB.custom && DB.custom.length && ['kbd', 'gtr', 'bass', 'uke', 'voice', 'wind', 'harp'].indexOf(mod) >= 0) chk('optCustom', 'Practise my captured melody (' + DB.custom.length + ' notes)', customOn, v => { customOn = v; chunk = 0; task = null; showAll(); });
+    if (groovable(mod)) chk('optGroove', 'Play in time (metronome, ' + (S.grooveBpm || 80) + ' bpm)', grooveOn, v => { grooveOn = v; task = null; groove = null; showAll(); });
   }
 
   // ---------- inputs ----------
@@ -735,38 +955,186 @@
     if (!navigator.requestMIDIAccess) { ioState('off', 'This browser cannot read MIDI. Use Chrome or Edge. Screen and computer keys still work.'); return; }
     navigator.requestMIDIAccess().then(a => { const wire = () => { let n = 0; a.inputs.forEach(i => { n++; i.onmidimessage = ev => { const d = ev.data; if (d && d.length >= 3 && (d[0] & 0xf0) === 0x90 && d[2] > 0) onNote(d[1], true); }; }); midiOn = n > 0; ioRefresh(); if (!n) ioState('off', 'No MIDI device found. Plug it in and it will be picked up.'); }; wire(); a.onstatechange = wire; }).catch(() => ioState('off', 'MIDI was blocked here. Open the standalone copy in Chrome. Screen and computer keys still work.'));
   });
+  if ($('micDeviceSelect')) $('micDeviceSelect').addEventListener('change', function () {
+    DB.prefs.inputDeviceId = this.value || null; save();
+    if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; micReady = false; }
+    if (needsMic()) openMic().then(ioRefresh).catch(() => ioState('off', 'That microphone could not be opened.'));
+  });
+  if (navigator.mediaDevices && navigator.mediaDevices.addEventListener) navigator.mediaDevices.addEventListener('devicechange', refreshMicDevices);
+  if ($('calibrateBtn')) $('calibrateBtn').addEventListener('click', function () { this.blur(); calibrateNoiseFloor(); });
   const PCKEYS = { a: 60, w: 61, s: 62, e: 63, d: 64, f: 65, t: 66, g: 67, y: 68, h: 69, u: 70, j: 71, k: 72 };
   document.addEventListener('keydown', ev => {
     if (ev.repeat || ev.ctrlKey || ev.metaKey || ev.altKey) return; const tag = ev.target.tagName; if (tag === 'SELECT' || (tag === 'INPUT' && ev.target.type !== 'checkbox')) return;
-    if (mod === 'rhy' && (ev.key === ' ' || ev.key.length === 1)) { if (tag === 'BUTTON' && ev.key === ' ' && ev.target.id !== 'tapPad') return; ev.preventDefault(); ensureAudio(); onTap(); return; }
+    if (mod === 'rhy' && (ev.key === ' ' || ev.key.length === 1)) { if (tag === 'BUTTON' && ev.key === ' ' && ev.target.id !== 'tapPad') return; ev.preventDefault(); ensureAudio(); onTap(ev); return; }
     if (mod === 'ear' && task && task.choices && /^[1-9]$/.test(ev.key)) { const id = task.choices[+ev.key - 1]; if (id) answer(id); return; }
     if (mod === 'kbd' && PCKEYS[ev.key.toLowerCase()] !== undefined) { ev.preventDefault(); ensureAudio(); const m = PCKEYS[ev.key.toLowerCase()]; tone(m, now() + 0.01, 0.5, 0.15); onNote(m, true); }
   });
   cv.addEventListener('pointerdown', ev => { const r = cv.getBoundingClientRect(), x = (ev.clientX - r.left) * cv.width / r.width, y = (ev.clientY - r.top) * cv.height / r.height; ensureAudio(); if (mod === 'kbd') { const k = keyRects.find(q => x >= q.x && x <= q.x + q.w && y >= q.y && y <= q.y + q.h); if (k) { tone(k.m, now() + 0.01, 0.5, 0.15); onNote(k.m, true); } } if (mod === 'tuner') { const row = rowRects.find(q => x >= q.x && x <= q.x + q.w && y >= q.y && y <= q.y + q.h); if (row) tone(row.m, now() + 0.02, 1.6, 0.2); } });
-  $('tapPad').addEventListener('pointerdown', ev => { ev.preventDefault(); ensureAudio(); onTap(); });
+  // item 3 (Wave W, w-fixes): keyboard path onto the same canvas piano -- arrow keys move the focus cursor, Enter/Space plays the focused key.
+  cv.addEventListener('keydown', ev => { if (mod !== 'kbd') return; const order = kbdOrder(); if (!order.length) return; if (ev.key === 'ArrowRight' || ev.key === 'ArrowUp') { ev.preventDefault(); kbdFocusIdx = Math.min(order.length - 1, kbdFocusIdx + 1); } else if (ev.key === 'ArrowLeft' || ev.key === 'ArrowDown') { ev.preventDefault(); kbdFocusIdx = Math.max(0, kbdFocusIdx - 1); } else if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); const k = order[Math.min(kbdFocusIdx, order.length - 1)]; if (k) { ensureAudio(); tone(k.m, now() + 0.01, 0.5, 0.15); onNote(k.m, true); } } });
+  $('tapPad').addEventListener('pointerdown', ev => { ev.preventDefault(); ensureAudio(); onTap(ev); });
   $('replayBtn').addEventListener('click', function () { this.blur(); if (task && !task.done) { playRef(task); lastInputAt = now(); } });
+  $('showMeBtn').addEventListener('click', function () { this.blur(); const e = cur(); if (!task || task.done || !e) return; if (!e.failed) { e.failed = true; e.reveal = true; } say('Shown. This one will not count toward mastery.', ''); refreshPrompt(); });
   $('playBtn').addEventListener('click', function () { this.blur(); if (!sess) startSession(); else if (paused) resume(); else takeBreak('user'); });
   $('endBtn').addEventListener('click', function () { this.blur(); endSession(); }); $('endBtn2').addEventListener('click', endSession); $('backBtn').addEventListener('click', resume);
   $('snoozeBtn').addEventListener('click', () => { sess.snoozeUntil = Date.now() + 5 * 60000; sess.tiredFor = 0; S.ready = Math.min(S.ready, 0.6); pauseInfo = { at: Date.now(), secs: 0 }; resume(); coach('Five more minutes, then I will ask again. I have eased off the pace meanwhile.'); });
-  document.addEventListener('visibilitychange', () => { if (document.hidden && playing) takeBreak('hidden'); });
+  document.addEventListener('visibilitychange', () => { if (document.hidden && playing) takeBreak('hidden'); wakeLock.handleVisibilityChange(document); });
   function jump(dl) { const nl = Math.max(1, S.level + dl); if (nl === S.level) return; S.level = nl; S.ready = 0.3; task = null; coach((dl < 0 ? 'Moved down' : 'Skipped ahead') + ' to level ' + S.level + ': ' + D().name + '.'); save(); showAll(); }
   $('easierBtn').addEventListener('click', function () { this.blur(); jump(-1); }); $('harderBtn').addEventListener('click', function () { this.blur(); jump(1); });
   $('resetBtn').addEventListener('click', function () { this.blur(); if (sess) endSession(); DB.mods[mod] = S = freshModel(); recent = []; streak = 0; coach(MODS[mod].name + ' progress cleared. Back to level 1.'); save(); showAll(); });
   $('optNames').addEventListener('change', function () { DB.prefs.names = this.checked; save(); });
 
   function setMod(m) {
-    if (sess) endSession(); mod = m; if (MODS[m]) { S = DB.mods[m]; DB.prefs.mod = m; } customOn = false; task = null; bar = null; heard = null; cap.on = false;
+    if (sess) endSession(); mod = m; if (MODS[m]) { S = DB.mods[m]; DB.prefs.mod = m; } customOn = false; grooveOn = false; groove = null; task = null; bar = null; heard = null; cap.on = false;
+    if (pitchWorkletNode && MODS[m] && MODS[m].fmin && MODS[m].fmax) { lastWorkletRangeSent = { fmin: MODS[m].fmin, fmax: MODS[m].fmax }; pitchWorkletNode.port.postMessage({ type: 'range', fmin: MODS[m].fmin, fmax: MODS[m].fmax }); }
     document.querySelectorAll('#picker button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.mod === m)));
     $('prompt').textContent = (MODS[m] || TOOLS[m]).name; $('hint').textContent = ''; $('choices').hidden = true; say(''); if (MODS[m]) coach(S.judged ? 'Welcome back. You are on level ' + S.level + ': ' + D().name + '. Press Start.' : 'Press Start. Level 1: ' + D().name + '.');
     renderOpts(); ioRefresh(); showAll(); save();
   }
-  function buildPicker() { const box = $('picker'); MOD_IDS.concat(Object.keys(TOOLS)).forEach(m => { const o = MODS[m] || TOOLS[m], b = document.createElement('button'); b.type = 'button'; b.dataset.mod = m; b.style.setProperty('--c', o.color); b.setAttribute('aria-pressed', 'false'); b.appendChild(document.createTextNode(o.name)); const sm = document.createElement('small'); sm.textContent = o.tag; b.appendChild(sm); b.addEventListener('click', () => { b.blur(); setMod(m); }); box.appendChild(b); }); }
-  const _listen = listen; // tools listen even without a session
-  setInterval(() => { if (!TOOLS[mod] || !micReady || !anTime) return; const buf = new Float32Array(anTime.fftSize); anTime.getFloatTimeDomainData(buf); const r = yin(buf, actx.sampleRate, 36, 1600), fr = { rms: r.rms, freq: r.freq && r.clarity > 0.8 ? r.freq : 0 }; if (fr.freq) fr.midi = fmidi(fr.freq); toolPitch(fr, 0.05); }, 50);
+  function buildPicker() { const box = $('picker'); MOD_IDS.concat(Object.keys(TOOLS)).forEach(m => { const o = MODS[m] || TOOLS[m], b = document.createElement('button'); b.type = 'button'; b.dataset.mod = m; b.style.setProperty('--c', o.color); b.setAttribute('aria-pressed', 'false'); b.appendChild(document.createTextNode(o.name)); const sm = document.createElement('small'); sm.textContent = o.tag; b.appendChild(sm); b.addEventListener('click', () => { b.blur(); closePanel(); setMod(m); }); box.appendChild(b); }); }
+  // The tuner tool knows which instrument's open strings it is listening
+  // for (tunerKind); the melody-capture tool deliberately does not (it hears
+  // anything sung, hummed, whistled or played), so it keeps the generic
+  // fallback range -- see src/audio/range.js.
+  setInterval(() => { if (!TOOLS[mod] || !micReady || !anTime) return; const buf = new Float32Array(anTime.fftSize); anTime.getFloatTimeDomainData(buf); const toolRange = mod === 'tuner' ? rangeForInstrument(instrumentById[tunerKind === 'vln' ? 'violin' : tunerKind]) : FALLBACK_RANGE; const r = yin(buf, actx.sampleRate, toolRange.fmin, toolRange.fmax, gates.pitch), fr = { rms: r.rms, freq: r.freq && r.clarity > 0.8 ? r.freq : 0 }; if (fr.freq) fr.midi = fmidi(fr.freq); toolPitch(fr, 0.05); }, 50);
 
-  loadDB(); if (!Array.isArray(DB.custom)) DB.custom = []; $('optNames').checked = DB.prefs.names; buildPicker(); setMod(mod); requestAnimationFrame(frame);
-  window.__coach = { state: () => S, db: () => DB, sess: () => sess, task: () => task, cur: cur, note: onNote, answer: answer, tap: onTap, bar: () => bar, playing: () => playing, setMod: setMod, testSource: testSource, heard: () => heard, yin: yin, cap: () => cap };
+  // ---------- backups: a downloadable copy of the whole DB (E9: db.v now feeds migrateDB) ----------
+  function showBackupNudge(text) { $('backupNudgeText').textContent = text; $('backupNudge').hidden = false; }
+  function noteBackupMade(t) { lastBackupAt = t; try { localStorage.setItem(BACKUP_AT_KEY, String(t)); } catch (e) {} }
+  function doExportProgress() { return exportProgressFile(DB, { appVersion: APP_VERSION, now: Date.now }); }
+  function saveBackup() {
+    const env = doExportProgress();
+    const blob = new Blob([JSON.stringify(env, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = 'band-coach-progress.json';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    noteBackupMade(Date.now()); $('backupNudge').hidden = true;
+    coach('Backup saved to your downloads. Keep that file somewhere safe.');
+  }
+  function doImportProgress(text) {
+    const result = importProgressFile(text);
+    if (!result.ok) { coach(result.error); return result; }
+    const priorLatencyMs = DB && DB.latencyMs;
+    DB = sanitizeDB(result.db); DB.latencyMs = num(priorLatencyMs, DB.latencyMs, 0, 300); forget(Date.now()); if (!Array.isArray(DB.custom)) DB.custom = [];
+    $('optNames').checked = DB.prefs.names; setMod(DB.prefs.mod); coach('Backup restored.');
+    return result;
+  }
+  $('backupSaveBtn').addEventListener('click', function () { this.blur(); saveBackup(); });
+  $('backupRestoreInput').addEventListener('change', function () {
+    const file = this.files && this.files[0]; this.value = '';
+    if (!file) return;
+    if (!confirm('Restore this backup? It will replace your current progress.')) return;
+    const reader = new FileReader();
+    reader.onload = () => doImportProgress(String(reader.result));
+    reader.onerror = () => coach('That file could not be read.');
+    reader.readAsText(file);
+  });
+  $('backupNudgeDismiss').addEventListener('click', () => { $('backupNudge').hidden = true; });
+
+  const hadSavedProgressAtBoot = (() => { try { return localStorage.getItem(KEY) !== null; } catch (e) { return true; } })();
+  // ---------- feature panels (src/ui/panels.js): songs, ear, theory, history, fingerings, play-along ----------
+  // A panel unit registers ONE panel by replacing its own slot:panel line
+  // below; everything it needs from the app goes through panelApi.
+  const panels = createPanels();
+  const panelApi = {
+    db: () => DB, save: save, mod: () => mod, setMod: m => { closePanel(); setMod(m); }, instrument: id => instrumentById[id || mod],
+    audio: () => { ensureAudio(); return actx; }, openMic: openMic, analysers: () => ({ time: anTime, freq: anFreq }), gates: () => gates,
+    tone: tone, click: click, now: now, say: say, coach: coach, recordError: recordError, close: () => closePanel(),
+    // store(id): this panel's saved data, kept in DB.panels[id] (plain JSON, 256 KB max; see sanitizePanelData)
+    store: id => ({ get: () => (DB.panels && DB.panels[id]) || null, set: obj => { if (!DB.panels) DB.panels = {}; DB.panels[id] = obj; save(); } }),
+    // creditNote(): a panel-judged correct note feeds the current mod's streak and level-up path, same as credit() does for a built-in drill (no session log update, since no session runs while a panel is open).
+    creditNote: () => { streak++; S.ready = clamp(S.ready + S.gain, 0, 1); evaluate(); save(); },
+  };
+  //
+  //
+  // slot:panel:w-songs
+  registerSongs(panels);
+  //
+  registerEditor(panels);
+  //
+  //
+  registerEar(panels);
+  //
+  //
+  registerTheory(panels);
+  //
+  //
+  registerHistory(panels);
+  //
+  //
+  registerFingerings(panels);
+  //
+  //
+  registerPlayalong(panels);
+  //
+  //
+  // slot:panel:w-fixes
+  //
+  //
+  function openPanel(id) {
+    if (sess) endSession(); task = null;
+    document.querySelectorAll('#panelPicker button, #picker button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.panel === id)));
+    $('mainArea').hidden = true; $('panelHost').hidden = false; $('panelSay').textContent = ''; $('panelSay').hidden = false;
+    try { panels.open(id, $('panelHost'), panelApi); } catch (e) { recordError('panel:' + id, e); say('That screen could not open.', 'no'); }
+  }
+  function closePanel() {
+    if (!panels.current()) return;
+    panels.close(); $('panelHost').hidden = true; $('panelSay').hidden = true; $('mainArea').hidden = false;
+    document.querySelectorAll('#panelPicker button').forEach(b => b.setAttribute('aria-pressed', 'false'));
+  }
+  function buildPanelPicker() {
+    const box = $('panelPicker'); box.hidden = !panels.list().length;
+    panels.list().forEach(p => { const b = document.createElement('button'); b.type = 'button'; b.dataset.panel = p.id; b.style.setProperty('--c', p.color || '#93a0bd'); b.setAttribute('aria-pressed', 'false'); b.appendChild(document.createTextNode(p.name)); const sm = document.createElement('small'); sm.textContent = p.tag || ''; b.appendChild(sm); b.addEventListener('click', () => { b.blur(); openPanel(p.id); }); box.appendChild(b); });
+  }
+  loadDB(); if (!Array.isArray(DB.custom)) DB.custom = []; $('optNames').checked = DB.prefs.names; buildPicker(); buildPanelPicker(); setMod(mod); requestAnimationFrame(frame);
+  if (!hadSavedProgressAtBoot) showBackupNudge('Been here before? Restore a backup.');
+  const hook = !__DEBUG_HOOK__ ? null : { state: () => S, db: () => DB, sess: () => sess, task: () => task, cur: cur, note: onNote, answer: answer, tap: onTap, bar: () => bar, playing: () => playing, setMod: setMod, testSource: testSource, heard: () => heard, yin: yin, cap: () => cap, deaf: () => deafWindow.isDeaf(), exportProgress: doExportProgress, importProgress: doImportProgress, audioNow: audioNow };
+  // Debug-hook slots: replace ONLY your own line with
+  //   if (__DEBUG_HOOK__) Object.assign(hook, { … });
+  if (__DEBUG_HOOK__) Object.assign(hook, { errors: getErrors });
+  //
+  if (__DEBUG_HOOK__) Object.assign(hook, { testPluck: testPluck, pitchWorkletActive: () => !!pitchWorkletNode });
+  //
+  if (__DEBUG_HOOK__) Object.assign(hook, { gates: () => gates, calibrate: calibrateNoiseFloor, devices: () => micDevices });
+  //
+  if (__DEBUG_HOOK__) Object.assign(hook, { judgeChord: judgeChord, chroma: chroma });
+  if (__DEBUG_HOOK__) Object.assign(hook, { groove: () => groove, grooveLast: () => grooveLast, grooveBpm: () => S.grooveBpm, grooveOn: v => { grooveOn = !!v; task = null; groove = null; }, grooveInject: (midi, atAudioTime) => { const fire = () => { if (audioNow() >= atAudioTime) onNote(midi, true); else setTimeout(fire, 4); }; fire(); } });
+  //
+  if (__DEBUG_HOOK__) Object.assign(hook, { showMe: () => $('showMeBtn').click() });
+  //
+  // slot:hook:rhythm-vocab
+  //
+  if (__DEBUG_HOOK__) Object.assign(hook, { lastStaff: () => lastStaff, setNotate: v => { DB.prefs.notate[mod] = v; save(); } });
+  // slot:hook:notation-wire
+  //
+  // slot:hook:a11y
+  if (__DEBUG_HOOK__) Object.assign(hook, { reducedMotion: () => reducedMotion });
+  if (__DEBUG_HOOK__) Object.assign(hook, { panels: () => panels.list().map(p => p.id), openPanel: openPanel, closePanel: closePanel, panelOpen: () => panels.current(), registerPanel: def => { panels.register(def); $('panelPicker').innerHTML = ''; buildPanelPicker(); } });
+  //
+  //
+  // slot:hook:w-songs
+  if (__DEBUG_HOOK__) Object.assign(hook, { songsNote: forwardSongNote });
+  //
+  if (__DEBUG_HOOK__) Object.assign(hook, { editorSetFrames: __setDebugFrames, editorSong: __getDebugSong, editorRecording: __isRecording });
+  //
+  //
+  if (__DEBUG_HOOK__) Object.assign(hook, { ear: __earTestHook });
+  //
+  //
+  if (__DEBUG_HOOK__) Object.assign(hook, { theoryCurrentQuestion: theoryCurrentQuestion });
+  //
+  //
+  // slot:hook:w-history
+  //
+  //
+  // slot:hook:w-fingerings
+  //
+  //
+  // slot:hook:w-playalong
+  //
+  //
+  if (__DEBUG_HOOK__) Object.assign(hook, { flash: () => ({ bad: flashBad, good: flashGood }), pitchWorkletRange: () => lastWorkletRangeSent, kbdFocus: kbdFocusInfo });
+  if (__DEBUG_HOOK__) window.__coach = hook;
 
 })();
-</script>
-</body></html>

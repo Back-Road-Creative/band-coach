@@ -1,0 +1,121 @@
+// Instrument record schema + hand-written validator. Zero dependencies on purpose:
+// this module is imported by build/build.mjs's bundle target eventually, and by
+// plain `node --test` unit tests, so it must run standalone in either place.
+
+export const FAMILIES = ['keys', 'fretted', 'bowed', 'wind', 'brass', 'voice', 'percussion', 'free-reed'];
+export const INPUTS = ['mic', 'midi', 'mic+midi', 'tap'];
+export const CLEFS = ['treble', 'bass', 'alto', 'tenor', 'grand', 'tab', 'percussion'];
+export const OCTAVE_POLICIES = ['exact', 'nearest-octave'];
+export const STATUSES = ['ready', 'planned'];
+
+const ID_RE = /^[a-z][a-z0-9]*(-[a-z0-9]+)*$/;
+
+function isInt(x) {
+  return typeof x === 'number' && Number.isFinite(x) && Math.floor(x) === x;
+}
+
+function isMidi(x) {
+  return isInt(x) && x >= 0 && x <= 127;
+}
+
+// Validates one instrument record. Returns { ok: boolean, errors: string[] }.
+// Never throws: a malformed record (wrong types, missing fields) is reported
+// as errors, not an exception, so a bad data file fails a test rather than
+// crashing whatever reads it.
+export function validateInstrument(rec) {
+  const errors = [];
+  const fail = msg => errors.push(msg);
+
+  if (!rec || typeof rec !== 'object') {
+    return { ok: false, errors: ['record is not an object'] };
+  }
+
+  if (typeof rec.id !== 'string' || !ID_RE.test(rec.id)) {
+    fail('id must be a lowercase kebab-case string (got ' + JSON.stringify(rec.id) + ')');
+  }
+
+  if (typeof rec.name !== 'string' || rec.name.length === 0) {
+    fail('name must be a non-empty string');
+  }
+
+  if (typeof rec.family !== 'string' || !FAMILIES.includes(rec.family)) {
+    fail('family must be one of ' + FAMILIES.join('|') + ' (got ' + JSON.stringify(rec.family) + ')');
+  }
+
+  if (typeof rec.input !== 'string' || !INPUTS.includes(rec.input)) {
+    fail('input must be one of ' + INPUTS.join('|') + ' (got ' + JSON.stringify(rec.input) + ')');
+  }
+
+  if (!rec.range || typeof rec.range !== 'object') {
+    fail('range must be an object { low, high }');
+  } else {
+    const { low, high } = rec.range;
+    if (!isMidi(low)) fail('range.low must be an integer MIDI note 0-127 (got ' + JSON.stringify(low) + ')');
+    if (!isMidi(high)) fail('range.high must be an integer MIDI note 0-127 (got ' + JSON.stringify(high) + ')');
+    if (isMidi(low) && isMidi(high) && !(low < high)) fail('range.low must be less than range.high');
+  }
+
+  if (!isInt(rec.transposition)) {
+    fail('transposition must be an integer number of semitones (got ' + JSON.stringify(rec.transposition) + ')');
+  }
+
+  if (!Array.isArray(rec.clefs) || rec.clefs.length === 0) {
+    fail('clefs must be a non-empty array');
+  } else {
+    rec.clefs.forEach(c => { if (!CLEFS.includes(c)) fail('unknown clef ' + JSON.stringify(c)); });
+  }
+
+  if (typeof rec.octavePolicy !== 'string' || !OCTAVE_POLICIES.includes(rec.octavePolicy)) {
+    fail('octavePolicy must be one of ' + OCTAVE_POLICIES.join('|') + ' (got ' + JSON.stringify(rec.octavePolicy) + ')');
+  }
+
+  const needsTuning = rec.family === 'fretted' || rec.family === 'bowed';
+  if (rec.tuning !== undefined) {
+    if (!Array.isArray(rec.tuning) || rec.tuning.length === 0 || !rec.tuning.every(isMidi)) {
+      fail('tuning must be a non-empty array of integer MIDI notes');
+    } else if (rec.range && isMidi(rec.range.low) && isMidi(rec.range.high)) {
+      rec.tuning.forEach(t => {
+        if (t < rec.range.low || t > rec.range.high) fail('tuning note ' + t + ' falls outside range');
+      });
+    }
+  } else if (needsTuning) {
+    fail('tuning is required for family ' + rec.family);
+  }
+
+  if (rec.fretted !== undefined && typeof rec.fretted !== 'boolean') {
+    fail('fretted must be a boolean when present');
+  }
+
+  // Notation display convention: some instruments (guitar, bass) are printed
+  // an octave away from their sounding pitch to avoid a thicket of ledger
+  // lines. Absent, a record is written at its sounding pitch.
+  if (rec.writtenOctaveUp !== undefined && typeof rec.writtenOctaveUp !== 'boolean') {
+    fail('writtenOctaveUp must be a boolean when present');
+  }
+
+  if (typeof rec.status !== 'string' || !STATUSES.includes(rec.status)) {
+    fail('status must be one of ' + STATUSES.join('|') + ' (got ' + JSON.stringify(rec.status) + ')');
+  }
+
+  if (!Array.isArray(rec.curriculum)) {
+    fail('curriculum must be an array (use [] when not written yet)');
+  } else {
+    if (rec.curriculum.length === 0) {
+      if (rec.status === 'ready') fail('status "ready" requires a non-empty curriculum');
+    } else {
+      if (rec.status !== 'ready') fail('a non-empty curriculum requires status "ready"');
+      let prevLevel = 0;
+      rec.curriculum.forEach((entry, i) => {
+        if (!entry || typeof entry !== 'object') { fail('curriculum[' + i + '] must be an object'); return; }
+        if (!isInt(entry.level) || entry.level < 1) fail('curriculum[' + i + '].level must be a positive integer');
+        else if (entry.level <= prevLevel) fail('curriculum[' + i + '].level must increase (' + entry.level + ' after ' + prevLevel + ')');
+        else prevLevel = entry.level;
+        if (!Array.isArray(entry.items) || entry.items.length === 0 || !entry.items.every(x => typeof x === 'string' && x.length > 0)) {
+          fail('curriculum[' + i + '].items must be a non-empty array of strings');
+        }
+      });
+    }
+  }
+
+  return { ok: errors.length === 0, errors };
+}

@@ -81,7 +81,7 @@ function waitForOpen(ws) {
 // Spawns the browser and resolves once "DevTools listening on ws://..." is
 // seen on stderr, extracting the port that was actually bound (we always ask
 // for port 0 so parallel test files never collide).
-function spawnBrowser(bin, userDataDir) {
+function spawnBrowser(bin, userDataDir, extraArgs = []) {
   const args = [
     '--headless',
     '--remote-debugging-port=0',
@@ -90,6 +90,7 @@ function spawnBrowser(bin, userDataDir) {
     '--autoplay-policy=no-user-gesture-required',
     '--use-fake-ui-for-media-stream',
     '--use-fake-device-for-media-stream',
+    ...extraArgs,
     'about:blank',
   ];
   if (process.env.CI) args.splice(1, 0, '--no-sandbox');
@@ -120,9 +121,19 @@ function spawnBrowser(bin, userDataDir) {
  * `htmlPath` via its file:// URL (proving the app also runs double-clicked,
  * not just under a dev server). Returns a page-driving handle.
  *
+ * `options.fakeAudioFile`, if given, is an absolute path to a WAV file
+ * played into the fake microphone device (via Chromium's
+ * `--use-file-for-fake-audio-capture`) instead of silence, so a real
+ * `getUserMedia()` capture in the page has an actual signal to detect.
+ *
+ * `options.initScript`, if given, is a JS source string installed with
+ * `Page.addScriptToEvaluateOnNewDocument` so it runs before any of the
+ * page's own script — e.g. to instrument a global before app code loads.
+ *
  * Throws — never silently skips — if no browser binary can be found.
  */
-export async function launchPage(htmlPath) {
+export async function launchPage(htmlPath, options = {}) {
+  const { fakeAudioFile, initScript } = options;
   const bin = findBrowserBinary();
   if (!bin) {
     throw new Error(
@@ -132,7 +143,8 @@ export async function launchPage(htmlPath) {
     );
   }
   const userDataDir = mkdtempSync(join(tmpdir(), 'band-coach-cdp-'));
-  const { child, browserWsUrl } = await spawnBrowser(bin, userDataDir);
+  const extraArgs = fakeAudioFile ? [`--use-file-for-fake-audio-capture=${fakeAudioFile}`] : [];
+  const { child, browserWsUrl } = await spawnBrowser(bin, userDataDir, extraArgs);
   const browserWs = new WebSocket(browserWsUrl);
   await waitForOpen(browserWs);
   const browser = new DevtoolsClient(browserWs);
@@ -183,23 +195,70 @@ export async function launchPage(htmlPath) {
   await send('Runtime.enable');
   await send('Network.enable');
   await send('Page.enable');
+  await send('DOM.enable');
+  if (initScript) {
+    await send('Page.addScriptToEvaluateOnNewDocument', { source: initScript });
+  }
+  if (options.reducedMotion) {
+    // Applied before navigation so the app's own boot-time
+    // matchMedia('(prefers-reduced-motion: reduce)') read already sees it —
+    // toggling it only after load races the page's first animation frames.
+    await send('Emulation.setEmulatedMedia', {
+      features: [{ name: 'prefers-reduced-motion', value: 'reduce' }],
+    });
+  }
 
-  const loaded = new Promise((resolve) => {
-    const off = () => {};
-    const handler = (msg) => {
-      if (msg.method === 'Page.loadEventFired') {
-        page.listeners.delete(handler);
-        resolve();
-      }
-    };
-    page.listeners.add(handler);
-  });
+  function nextLoad() {
+    return new Promise((resolve) => {
+      const handler = (msg) => {
+        if (msg.method === 'Page.loadEventFired') {
+          page.listeners.delete(handler);
+          resolve();
+        }
+      };
+      page.listeners.add(handler);
+    });
+  }
 
   const url = 'file://' + htmlPath;
+
+  // Poll for the page actually BEING our document, rather than sleeping and
+  // hoping. Two things went wrong with the old fixed 150ms wait: under load
+  // the app's boot code (loadDB, buildPicker, first draw) had not finished,
+  // and `Page.loadEventFired` can be the initial about:blank's rather than
+  // ours — so tests read a document with no #cv at all and failed with
+  // "Cannot read properties of null/undefined". Both are the same bug: a
+  // sleep is not a readiness check.
+  async function waitForBoot() {
+    const deadline = Date.now() + 30000;
+    let last = null;
+    while (Date.now() < deadline) {
+      const r = await send('Runtime.evaluate', {
+        expression:
+          "(location.href.indexOf('file://') === 0) && document.readyState === 'complete' && !!document.getElementById('cv')",
+        returnByValue: true,
+      });
+      last = r && r.result && r.result.value;
+      if (last === true) return;
+      await new Promise((r2) => setTimeout(r2, 25));
+    }
+    throw new Error('the page never finished booting (no #cv in a complete file:// document within 30s)');
+  }
+
+  const loaded = nextLoad();
   await send('Page.navigate', { url });
   await loaded;
-  // Let the app's own boot code (loadDB, buildPicker, first draw) settle.
-  await new Promise((r) => setTimeout(r, 150));
+  await waitForBoot();
+
+  // Reload and wait for the NEW page's load event. Polling for window.__coach
+  // after evaluate('location.reload()') can see the OLD page before it
+  // unloads, then read it mid-teardown (CI flake, 2026-09-19, timing.test.mjs).
+  async function reload() {
+    const reloaded = nextLoad();
+    await send('Page.reload', {});
+    await reloaded;
+    await waitForBoot();
+  }
 
   async function evaluate(expression) {
     const result = await send('Runtime.evaluate', {
@@ -213,6 +272,24 @@ export async function launchPage(htmlPath) {
       );
     }
     return result.result.value;
+  }
+
+  // Sets a <input type="file"> element's FileList from real bytes on disk —
+  // the CDP-level equivalent of a learner picking a file, since a page
+  // script cannot construct a File backed by disk content itself. `selector`
+  // is a CSS selector for the input; `filePath` an absolute path. Dispatches
+  // a real 'change' event afterwards so the page's own listener fires.
+  async function setFileInput(selector, filePath) {
+    const { result } = await send('Runtime.evaluate', {
+      expression: `document.querySelector(${JSON.stringify(selector)})`,
+    });
+    if (!result || !result.objectId) {
+      throw new Error(`setFileInput: no element matches ${selector}`);
+    }
+    await send('DOM.setFileInputFiles', { files: [filePath], objectId: result.objectId });
+    await evaluate(
+      `document.querySelector(${JSON.stringify(selector)}).dispatchEvent(new Event('change', { bubbles: true }))`
+    );
   }
 
   async function waitFor(expression, timeoutMs = 5000) {
@@ -244,7 +321,9 @@ export async function launchPage(htmlPath) {
 
   return {
     evaluate,
+    reload,
     waitFor,
+    setFileInput,
     close,
     consoleErrors,
     exceptions,

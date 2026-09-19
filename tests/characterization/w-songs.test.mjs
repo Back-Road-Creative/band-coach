@@ -1,0 +1,239 @@
+// Songs panel (Wave W, unit "songs"). Drives the built page through
+// window.__coach.openPanel('songs') and the DOM, per the author brief.
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { HTML_PATH } from '../helpers/html-path.mjs';
+import { launchPage } from '../helpers/browser.mjs';
+
+const htmlPath = HTML_PATH;
+
+test('the songs panel lists the starter songs, easiest first', async (t) => {
+  const page = await launchPage(htmlPath);
+  t.after(() => page.close());
+
+  await page.evaluate("window.__coach.openPanel('songs')");
+  await page.waitFor("document.querySelectorAll('.panel-songs-row button').length > 0");
+
+  const titles = await page.evaluate(
+    "Array.from(document.querySelectorAll('.panel-songs-row button')).map(b => b.textContent)"
+  );
+  assert.ok(titles.includes('Hot Cross Buns'), 'the easiest starter tune is listed');
+  assert.ok(titles.includes('Minuet in G'), 'a harder starter tune is also listed');
+  assert.ok(titles.indexOf('Hot Cross Buns') < titles.indexOf('Minuet in G'), 'easiest tune is listed before a harder one');
+});
+
+test('the file input only accepts the four supported extensions', async (t) => {
+  const page = await launchPage(htmlPath);
+  t.after(() => page.close());
+
+  await page.evaluate("window.__coach.openPanel('songs')");
+  const accept = await page.evaluate("document.getElementById('songsFileInput').getAttribute('accept')");
+  assert.equal(accept, '.mid,.midi,.abc,.xml,.musicxml');
+  const label = await page.evaluate("document.querySelector('label[for=\"songsFileInput\"]').textContent");
+  assert.ok(label.includes('.mid'));
+});
+
+test('choosing a one-part starter song opens a practice lesson, starting with a listen step', async (t) => {
+  const page = await launchPage(htmlPath);
+  t.after(() => page.close());
+
+  await page.evaluate("window.__coach.setMod('kbd')");
+  await page.evaluate("window.__coach.openPanel('songs')");
+  await page.waitFor("document.querySelectorAll('.panel-songs-row button').length > 0");
+  await page.evaluate(
+    "Array.from(document.querySelectorAll('.panel-songs-row button')).find(b => b.textContent === 'Hot Cross Buns').click()"
+  );
+  await page.waitFor("document.querySelector('.panel-songs-practice h4')");
+
+  const stepTitle = await page.evaluate("document.querySelector('.panel-songs-practice h4').textContent");
+  assert.ok(stepTitle.startsWith('Listen'), 'first step is a listen step: ' + stepTitle);
+
+  // A listen step has no pass/fail judging, just a Next button.
+  const nextBtn = await page.evaluate(
+    "Array.from(document.querySelectorAll('.panel-songs-practice button')).find(b => b.textContent === 'Next')"
+  );
+  assert.ok(nextBtn !== undefined, 'a Next button is present for the listen step');
+
+  await page.evaluate(
+    "Array.from(document.querySelectorAll('.panel-songs-practice button')).find(b => b.textContent === 'Next').click()"
+  );
+  await page.waitFor("document.querySelector('.panel-songs-practice h4').textContent !== '" + stepTitle + "'");
+  const secondTitle = await page.evaluate("document.querySelector('.panel-songs-practice h4').textContent");
+  assert.notEqual(secondTitle, stepTitle);
+});
+
+test('recording via the keyboard/MIDI note forward counts notes and can be judged without crashing', async (t) => {
+  const page = await launchPage(htmlPath);
+  t.after(() => page.close());
+
+  await page.evaluate("window.__coach.setMod('kbd')");
+  await page.evaluate("window.__coach.openPanel('songs')");
+  await page.waitFor("document.querySelectorAll('.panel-songs-row button').length > 0");
+  await page.evaluate(
+    "Array.from(document.querySelectorAll('.panel-songs-row button')).find(b => b.textContent === 'Hot Cross Buns').click()"
+  );
+  await page.waitFor("document.querySelector('.panel-songs-practice h4')");
+  // advance past the listen step to a step with a pass rule and a "Your turn" button
+  await page.evaluate(
+    "Array.from(document.querySelectorAll('.panel-songs-practice button')).find(b => b.textContent === 'Next').click()"
+  );
+  await page.waitFor(
+    "Array.from(document.querySelectorAll('.panel-songs-practice button')).some(b => b.textContent === 'Your turn')"
+  );
+
+  await page.evaluate(
+    "Array.from(document.querySelectorAll('.panel-songs-practice button')).find(b => b.textContent === 'Your turn').click()"
+  );
+  await page.waitFor(
+    "Array.from(document.querySelectorAll('.panel-songs-practice button')).some(b => b.textContent === 'Stop and check')"
+  );
+
+  // Simulate the app's own onNote() forwarding a played keyboard note, the
+  // way a real MIDI keyboard or the on-screen keys would (app.js's onNote()
+  // forwards to this via the single added line, exposed here for testing as
+  // window.__coach.songsNote).
+  await page.evaluate('window.__coach.songsNote(64, true)');
+  await page.waitFor("document.querySelector('.panel-songs-count').textContent.includes('1')");
+
+  await page.evaluate(
+    "Array.from(document.querySelectorAll('.panel-songs-practice button')).find(b => b.textContent === 'Stop and check').click()"
+  );
+  // Judging must not throw, and the panel keeps showing a practice step
+  // (either the same one repeated, or the next one).
+  await page.waitFor("document.querySelector('.panel-songs-practice h4')");
+  assert.deepEqual(page.exceptions, []);
+});
+
+test('a correctly played song note feeds the trainer\'s readiness/level-up path, not just the song\'s own mastery record', async (t) => {
+  const page = await launchPage(htmlPath);
+  t.after(() => page.close());
+
+  await page.evaluate("window.__coach.setMod('kbd')");
+  const before = await page.evaluate('window.__coach.state().ready');
+
+  await page.evaluate("window.__coach.openPanel('songs')");
+  await page.waitFor("document.querySelectorAll('.panel-songs-row button').length > 0");
+  await page.evaluate(
+    "Array.from(document.querySelectorAll('.panel-songs-row button')).find(b => b.textContent === 'Hot Cross Buns').click()"
+  );
+  await page.waitFor("document.querySelector('.panel-songs-practice h4')");
+  await page.evaluate(
+    "Array.from(document.querySelectorAll('.panel-songs-practice button')).find(b => b.textContent === 'Next').click()"
+  );
+  await page.waitFor(
+    "Array.from(document.querySelectorAll('.panel-songs-practice button')).some(b => b.textContent === 'Your turn')"
+  );
+  await page.evaluate(
+    "Array.from(document.querySelectorAll('.panel-songs-practice button')).find(b => b.textContent === 'Your turn').click()"
+  );
+  await page.waitFor(
+    "Array.from(document.querySelectorAll('.panel-songs-practice button')).some(b => b.textContent === 'Stop and check')"
+  );
+
+  // Hot Cross Buns' first phrase begins on E4 (midi 64): a correctly pitched note.
+  await page.evaluate('window.__coach.songsNote(64, true)');
+  await page.waitFor("document.querySelector('.panel-songs-count').textContent.includes('1')");
+  await page.evaluate(
+    "Array.from(document.querySelectorAll('.panel-songs-practice button')).find(b => b.textContent === 'Stop and check').click()"
+  );
+  await page.waitFor("document.querySelector('.panel-songs-practice h4')");
+
+  const after = await page.evaluate('window.__coach.state().ready');
+  assert.ok(
+    after > before,
+    'a correctly played song note should raise the trainer\'s own readiness toward the next level, not just the song\'s mastery record: before=' + before + ' after=' + after
+  );
+});
+
+test('capturing a note while recording does not steal keyboard focus from the record button', async (t) => {
+  const page = await launchPage(htmlPath);
+  t.after(() => page.close());
+
+  await page.evaluate("window.__coach.setMod('kbd')");
+  await page.evaluate("window.__coach.openPanel('songs')");
+  await page.waitFor("document.querySelectorAll('.panel-songs-row button').length > 0");
+  await page.evaluate(
+    "Array.from(document.querySelectorAll('.panel-songs-row button')).find(b => b.textContent === 'Hot Cross Buns').click()"
+  );
+  await page.waitFor("document.querySelector('.panel-songs-practice h4')");
+  await page.evaluate(
+    "Array.from(document.querySelectorAll('.panel-songs-practice button')).find(b => b.textContent === 'Next').click()"
+  );
+  await page.waitFor(
+    "Array.from(document.querySelectorAll('.panel-songs-practice button')).some(b => b.textContent === 'Your turn')"
+  );
+  await page.evaluate(
+    "Array.from(document.querySelectorAll('.panel-songs-practice button')).find(b => b.textContent === 'Your turn').click()"
+  );
+  await page.waitFor(
+    "Array.from(document.querySelectorAll('.panel-songs-practice button')).some(b => b.textContent === 'Stop and check')"
+  );
+
+  // A learner tabbing through the controls has landed on (and stayed on) the
+  // record button; mark the real DOM node so a rebuild (a fresh node, no
+  // matter how identical its text) is caught, not just a text-content match.
+  await page.evaluate(
+    "(function () { const b = Array.from(document.querySelectorAll('.panel-songs-practice button')).find(x => x.textContent === 'Stop and check'); b.dataset.testMarker = 'kept'; b.focus(); })()"
+  );
+  assert.equal(await page.evaluate('document.activeElement.dataset.testMarker'), 'kept');
+
+  await page.evaluate('window.__coach.songsNote(64, true)');
+  await page.waitFor("document.querySelector('.panel-songs-count').textContent.includes('1')");
+
+  const stillFocused = await page.evaluate(
+    "document.activeElement && document.activeElement.dataset && document.activeElement.dataset.testMarker === 'kept'"
+  );
+  assert.equal(stillFocused, true, 'the record button (same DOM node, so focus survives) should not be rebuilt while a note is captured');
+});
+
+test('a real .abc file picked through the file input lands in the library and appears in the list', async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'band-coach-songs-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  // A minimal, valid one-line ABC tune (no existing fixture file in the repo
+  // to reuse; import-abc's own unit tests build a tune string like this one
+  // in-memory rather than from a file, so this is a hand-written minimal file).
+  const abcPath = join(dir, 'uploaded-tune.abc');
+  writeFileSync(abcPath, 'X:1\nT:Uploaded Tune\nM:4/4\nL:1/8\nK:C\nCDEFGABc|\n');
+
+  const page = await launchPage(htmlPath);
+  t.after(() => page.close());
+
+  await page.evaluate("window.__coach.openPanel('songs')");
+  await page.waitFor("document.querySelectorAll('.panel-songs-row button').length > 0");
+
+  await page.setFileInput('#songsFileInput', abcPath);
+  await page.waitFor("document.querySelector('.panel-songs-msg').textContent.includes('Uploaded Tune')");
+
+  assert.deepEqual(page.exceptions, [], 'no uncaught exceptions while importing the real file');
+  // The "imported" message and the rebuilt row list are two separate async
+  // steps: under load the message lands first, so poll for the row rather
+  // than reading the list once and hoping it has caught up.
+  await page.waitFor(
+    "Array.from(document.querySelectorAll('.panel-songs-row button')).some(b => b.textContent.includes('Uploaded Tune'))"
+  );
+  const titles = await page.evaluate(
+    "Array.from(document.querySelectorAll('.panel-songs-row button')).map(b => b.textContent)"
+  );
+  assert.ok(titles.includes('Uploaded Tune'), 'the uploaded song appears in the panel\'s list: ' + titles.join(', '));
+});
+
+test('the last song and part chosen are remembered across a re-open of the panel', async (t) => {
+  const page = await launchPage(htmlPath);
+  t.after(() => page.close());
+
+  await page.evaluate("window.__coach.setMod('kbd')");
+  await page.evaluate("window.__coach.openPanel('songs')");
+  await page.waitFor("document.querySelectorAll('.panel-songs-row button').length > 0");
+  await page.evaluate(
+    "Array.from(document.querySelectorAll('.panel-songs-row button')).find(b => b.textContent === 'Hot Cross Buns').click()"
+  );
+  await page.waitFor("document.querySelector('.panel-songs-practice h4')");
+
+  const saved = await page.evaluate("window.__coach.db().panels.songs");
+  assert.equal(saved.songId, 'hot-cross-buns');
+  assert.equal(saved.partId, 'melody');
+  assert.equal(saved.instrumentId, 'kbd');
+});

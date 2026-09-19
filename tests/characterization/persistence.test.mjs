@@ -4,10 +4,10 @@
 // model.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { fileURLToPath } from 'node:url';
+import { HTML_PATH } from '../helpers/html-path.mjs';
 import { launchPage } from '../helpers/browser.mjs';
 
-const htmlPath = fileURLToPath(new URL('../../band-coach.html', import.meta.url));
+const htmlPath = HTML_PATH;
 
 test('answers persist to localStorage under the known key', async (t) => {
   const page = await launchPage(htmlPath);
@@ -19,8 +19,9 @@ test('answers persist to localStorage under the known key', async (t) => {
   const midi = await page.evaluate('window.__coach.cur().info.midi');
   await page.evaluate(`window.__coach.note(${midi}, true)`);
 
-  // save() debounces at 1.2s (band-coach.html:348).
-  await page.waitFor("localStorage.getItem('bandcoach.v1') !== null", 3000);
+  // save() debounces at 1.2s (src/app.js:217). Poll rather than a short fixed
+  // wait: under CPU load the debounced write can land well past 1.2s.
+  await page.waitFor("localStorage.getItem('bandcoach.v1') !== null", 10000);
   const raw = await page.evaluate("localStorage.getItem('bandcoach.v1')");
   const parsed = JSON.parse(raw);
   assert.ok(parsed.mods && parsed.mods.kbd && parsed.mods.kbd.item, 'parsed DB has mods.kbd.item');
@@ -47,7 +48,7 @@ test('garbage preloaded into localStorage is sanitised on load', async (t) => {
     prefs: 42,
   });
   await page.evaluate(`localStorage.setItem('bandcoach.v1', ${JSON.stringify(garbage)})`);
-  await page.evaluate('location.reload()');
+  await page.reload();
   await page.waitFor('typeof window.__coach !== "undefined"', 8000);
   await page.waitFor("window.__coach.db().mods.kbd", 5000);
 
