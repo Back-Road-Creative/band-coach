@@ -2,6 +2,26 @@ import { judgePitch, OCTAVE_POLICY } from './core/judge.js';
 import { createDeafWindow } from './audio/deaf-window.js';
 import { exportProgress as exportProgressFile, importProgress as importProgressFile, migrate as migrateDB } from './core/progress-file.js';
 import { toAudioTime, judgeTap, medianLatency } from './core/timing.js';
+// Merge slots: a unit in flight adds its imports by replacing ONLY its own
+// slot line, so parallel branches never edit adjacent lines.
+// slot:import:small-fixes
+//
+// slot:import:worklet
+//
+// slot:import:device
+//
+// slot:import:chords
+//
+// slot:import:play-in-time
+//
+// slot:import:recall
+//
+// slot:import:rhythm-vocab
+//
+// slot:import:notation-wire
+//
+// slot:import:a11y
+//
 
 (function () {
   'use strict';
@@ -679,6 +699,27 @@ import { toAudioTime, judgeTap, medianLatency } from './core/timing.js';
   const hadSavedProgressAtBoot = (() => { try { return localStorage.getItem(KEY) !== null; } catch (e) { return true; } })();
   loadDB(); if (!Array.isArray(DB.custom)) DB.custom = []; $('optNames').checked = DB.prefs.names; buildPicker(); setMod(mod); requestAnimationFrame(frame);
   if (!hadSavedProgressAtBoot) showBackupNudge('Been here before? Restore a backup.');
-  if (__DEBUG_HOOK__) window.__coach = { state: () => S, db: () => DB, sess: () => sess, task: () => task, cur: cur, note: onNote, answer: answer, tap: onTap, bar: () => bar, playing: () => playing, setMod: setMod, testSource: testSource, heard: () => heard, yin: yin, cap: () => cap, deaf: () => deafWindow.isDeaf(), exportProgress: doExportProgress, importProgress: doImportProgress, audioNow: audioNow };
+  const hook = { state: () => S, db: () => DB, sess: () => sess, task: () => task, cur: cur, note: onNote, answer: answer, tap: onTap, bar: () => bar, playing: () => playing, setMod: setMod, testSource: testSource, heard: () => heard, yin: yin, cap: () => cap, deaf: () => deafWindow.isDeaf(), exportProgress: doExportProgress, importProgress: doImportProgress, audioNow: audioNow };
+  // Debug-hook slots: replace ONLY your own line with
+  //   if (__DEBUG_HOOK__) Object.assign(hook, { … });
+  // slot:hook:small-fixes
+  //
+  // slot:hook:worklet
+  //
+  // slot:hook:device
+  //
+  // slot:hook:chords
+  //
+  // slot:hook:play-in-time
+  //
+  // slot:hook:recall
+  //
+  // slot:hook:rhythm-vocab
+  //
+  // slot:hook:notation-wire
+  //
+  // slot:hook:a11y
+  //
+  if (__DEBUG_HOOK__) window.__coach = hook;
 
 })();
