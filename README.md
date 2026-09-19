@@ -102,6 +102,15 @@ checks every record against the schema.
 As of this writing `src/app.js` still has its own instrument definitions
 (the `MODS` object) and does not yet read `src/instruments/`; that
 switch-over is a separate, later change.
+## Rhythm vocabulary
+
+`src/core/rhythm.js` is a pure rhythm-notation module: cells (quarter, eighth pairs, rests, ties,
+dotted-eighth-plus-sixteenth, eighth/quarter triplets, plus 3/4 and 6/8 patterns) expressed as exact
+integer-tick durations, so triplets and swing are exact fractions rather than rounded beat offsets.
+`buildPhrase`/`onsetsOf`/`validateBar` are unit-tested in isolation under `tests/unit/rhythm.test.mjs`.
+Rhythm reading (`rhy`) gains eight further levels built on it, after the original ten-cell levels:
+rests, ties, dotted-eighth figures, triplets, 3/4, 6/8, swing, and two-bar phrases.
+
 ## Windows Store edition
 
 `store/` packages the same built `dist/band-coach.html` into an unsigned Windows App Package
