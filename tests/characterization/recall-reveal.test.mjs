@@ -26,9 +26,19 @@ async function driveToUnrevealed(page) {
     await page.waitFor('window.__coach.task() && !window.__coach.task().done', 5000);
     const e = await page.evaluate('window.__coach.cur()');
     if (e && e.reveal === false && !e.failed) return e;
-    const midi = await page.evaluate('window.__coach.cur().info.midi');
-    await page.evaluate(`window.__coach.note(${midi}, true)`);
-    await page.waitFor('window.__coach.task() && window.__coach.task().done', 5000);
+    // Answer every element of this task, not just the first: a task with more
+    // than one note never reports done after a single answer, and a break card
+    // can take the task away entirely (CI flake, 2026-09-19).
+    for (let k = 0; k < 12; k++) {
+      const state = await page.evaluate(
+        `(function () { const t = window.__coach.task(), c = window.__coach.cur();
+          return { done: !!(t && t.done), midi: c && c.info ? c.info.midi : null,
+                   paused: !document.getElementById('breakCard').hidden }; })()`
+      );
+      if (state.paused) { await page.evaluate("document.getElementById('backBtn').click()"); continue; }
+      if (state.done || state.midi === null) break;
+      await page.evaluate(`window.__coach.note(${state.midi}, true)`);
+    }
     await page.waitFor('window.__coach.task() && !window.__coach.task().done', 5000);
   }
   throw new Error(`no unrevealed task appeared within ${MAX_TASKS} tasks`);
