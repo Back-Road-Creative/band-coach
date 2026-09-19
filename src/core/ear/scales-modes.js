@@ -1,18 +1,14 @@
 // Scale and mode recognition. Every family here is COMPUTED from the major
-// scale's own interval pattern rather than typed out by ear: modeIntervals()
-// rotates the major scale to derive the other six modes; harmonic/melodic
-// minor are each a one-note alteration of the derived natural minor;
-// pentatonics and blues are subsets/additions of the derived major and
-// natural-minor scales.
-//
-// Wiring contract: call make(level, seed). Render `play` (ascending, one
-// octave plus the octave note) through the app's synth. Accept either a
-// multiple-choice family-name response (render `choices` as buttons, same
-// shape as today's ear-module answer buttons) or, if the learner played/sang
-// the scale back, an array of heard MIDI notes - check() handles both.
+// scale's own interval pattern, never typed out by ear: modeIntervals()
+// rotates the major scale for the other six modes; harmonic/melodic minor
+// are one-note alterations of the derived natural minor; pentatonics and
+// blues are subsets/additions of the derived major/natural-minor scales.
+// Wiring: make(level, seed) -> play ascending, one octave + the octave note;
+// the learner answers with a family-name pick (`choices`) or, if
+// played/sung back, an array of heard MIDI notes - check() handles both.
 
 import { makeRng, intRange, pickFrom } from './rng.js';
-import { NOTE_NAMES, MAJOR_STEPS } from './theory.js';
+import { NOTE_NAMES, MAJOR_STEPS, checkSequence } from './theory.js';
 
 export function modeIntervals(modeIndex) {
   const root = MAJOR_STEPS[modeIndex % 7];
@@ -46,13 +42,7 @@ export const SCALE_FAMILIES = {
 };
 
 export const LEVEL_COUNT = 5;
-export const LEVEL_NAMES = [
-  'Major and natural minor',
-  'Harmonic and melodic minor',
-  'Pentatonics',
-  'Blues',
-  'All seven modes',
-];
+export const LEVEL_NAMES = ['Major and natural minor', 'Harmonic and melodic minor', 'Pentatonics', 'Blues', 'All seven modes'];
 
 function poolForLevel(level) {
   const keys = ['major', 'natural_minor'];
@@ -88,12 +78,8 @@ export function make(level, seed) {
 
 export function check(question, response) {
   if (Array.isArray(response)) {
-    const got = response.map((m) => ((m % 12) + 12) % 12);
-    const wrong = [];
-    question.scalePcs.forEach((pc, i) => {
-      if (got[i] !== pc) wrong.push({ index: i, expected: pc, got: got[i] ?? null });
-    });
-    return { ok: wrong.length === 0 && got.length === question.scalePcs.length, detail: { wrong } };
+    const pc = (m) => ((m % 12) + 12) % 12;
+    return checkSequence(question.scalePcs, response.map(pc), (a, b) => a === b);
   }
   const ok = response === question.answer;
   return { ok, detail: ok ? {} : { expected: question.answer, got: response } };

@@ -1,31 +1,19 @@
 // Functional (scale-degree) ear training. A I-IV-V-I cadence establishes a
 // key, then one or more scale degrees sound; the learner names each degree
-// in order.
-//
-// Wiring contract: call make(level, seed) for a question. Render `play` (an
-// ordered list of {t, dur, midi[]}, t/dur in seconds) through whatever synth
-// the app already uses for the ear module. Collect the learner's answer as
-// an array of degree-label strings, in order, and pass {question, response}
-// to check(). `choices` is the full label set valid for the question's
-// level - render it as buttons per degree slot, same shape as today's
-// interval/chord answer buttons in src/app.js.
+// in order. Wiring: make(level, seed) -> play the cadence then the target
+// note(s); the learner answers with an array of degree-label strings,
+// checked against `choices` (render as answer buttons per degree slot, same
+// shape as today's interval/chord buttons in src/app.js).
 
 import { makeRng, intRange, pickFrom } from './rng.js';
-import { NOTE_NAMES } from './theory.js';
+import { NOTE_NAMES, checkSequence } from './theory.js';
 
 export const LEVEL_COUNT = 5;
-export const LEVEL_NAMES = [
-  'Tonic, dominant, mediant',
-  'All diatonic degrees',
-  'Chromatic degrees',
-  'Two degrees in a row',
-  'Three degrees in a row',
-];
+export const LEVEL_NAMES = ['Tonic, dominant, mediant', 'All diatonic degrees', 'Chromatic degrees', 'Two degrees in a row', 'Three degrees in a row'];
 
-// Semitone offset from the tonic -> functional label. Fixed regardless of
-// mode (movable-do, major-relative naming) - the same "distance from a
-// reference pitch" convention src/app.js already uses for its INTERVALS
-// table, rather than a mode-specific solfege system.
+// Semitone offset from the tonic -> functional label (movable-do,
+// major-relative), the same "distance from a reference pitch" convention
+// src/app.js already uses for its INTERVALS table.
 const DEGREE_LABEL = ['1', 'b2', '2', 'b3', '3', '4', '#4', '5', 'b6', '6', 'b7', '7'];
 
 const DIATONIC_MAJOR = [0, 2, 4, 5, 7, 9, 11];
@@ -44,12 +32,7 @@ function degreesPerQuestion(level) {
 }
 
 // I-IV-V-I triads as semitone offsets from the tonic.
-const CADENCE_CHORDS = [
-  [0, 4, 7], // I
-  [5, 9, 0], // IV
-  [7, 11, 2], // V
-  [0, 4, 7], // I
-];
+const CADENCE_CHORDS = [[0, 4, 7], [5, 9, 0], [7, 11, 2], [0, 4, 7]];
 
 export function make(level, seed) {
   const rng = makeRng(level, seed);
@@ -95,9 +78,5 @@ export function make(level, seed) {
 
 export function check(question, response) {
   const resp = Array.isArray(response) ? response : [response];
-  const wrong = [];
-  question.answer.forEach((deg, i) => {
-    if (resp[i] !== deg) wrong.push({ index: i, expected: deg, got: resp[i] ?? null });
-  });
-  return { ok: wrong.length === 0 && resp.length === question.answer.length, detail: { wrong } };
+  return checkSequence(question.answer, resp, (a, b) => a === b);
 }

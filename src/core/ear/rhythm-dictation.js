@@ -1,13 +1,10 @@
-// Rhythm dictation: one bar (then two) of 4/4 built from a small note-value
-// vocabulary. The learner taps or clicks the onsets back.
-//
-// Wiring contract: call make(level, seed). Render `play` (all on one fixed
-// click pitch) through the app's synth or a percussive sound. Collect the
-// learner's response as an array of onset times in ticks (480 ticks per
-// quarter note, matching src/song/model.js's Song shape) and pass to
-// check(), optionally with a tolerance override.
+// Rhythm dictation: one bar (then two) of 4/4 from a small note-value
+// vocabulary. Wiring: make(level, seed) -> play on one fixed click pitch;
+// the learner answers with onset times in ticks (480/quarter, matching
+// src/song/model.js's Song shape), checked with an optional tolerance.
 
 import { makeRng, pickFrom } from './rng.js';
+import { checkSequence } from './theory.js';
 
 const TICKS_PER_QUARTER = 480;
 const BAR_TICKS = TICKS_PER_QUARTER * 4; // 4/4
@@ -19,18 +16,10 @@ function vocabularyForLevel(level) {
   return [TICKS_PER_QUARTER, TICKS_PER_QUARTER / 2, TICKS_PER_QUARTER / 4, TICKS_PER_QUARTER * 1.5]; // + sixteenth
 }
 
-function barsForLevel(level) {
-  return level <= 3 ? 1 : 2;
-}
+const barsForLevel = (level) => (level <= 3 ? 1 : 2);
 
 export const LEVEL_COUNT = 5;
-export const LEVEL_NAMES = [
-  'One bar: quarters and halves',
-  'One bar: quarters and eighths',
-  'One bar: + dotted quarter',
-  'Two bars: + sixteenths',
-  'Two bars: full vocabulary',
-];
+export const LEVEL_NAMES = ['One bar: quarters and halves', 'One bar: quarters and eighths', 'One bar: + dotted quarter', 'Two bars: + sixteenths', 'Two bars: full vocabulary'];
 
 // Fill exactly one bar with note values drawn from `vocabulary`, always
 // closing the bar exactly (the last value is clipped to what remains if
@@ -72,13 +61,6 @@ export function make(level, seed) {
 }
 
 export function check(question, response, { toleranceTicks = 40 } = {}) {
-  const want = question.answer;
   const got = Array.isArray(response) ? response : [];
-  const wrong = [];
-  want.forEach((onset, i) => {
-    if (got[i] === undefined || Math.abs(got[i] - onset) > toleranceTicks) {
-      wrong.push({ index: i, expected: onset, got: got[i] ?? null });
-    }
-  });
-  return { ok: wrong.length === 0 && got.length === want.length, detail: { wrong } };
+  return checkSequence(question.answer, got, (a, b) => Math.abs(a - b) <= toleranceTicks);
 }

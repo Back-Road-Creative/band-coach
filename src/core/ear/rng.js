@@ -1,13 +1,7 @@
-// Deterministic PRNG for the ear-training generators. No Math.random and no
-// Date.now anywhere in this tree: every generator takes (level, seed) and
-// must return the exact same question for the same inputs, forever, because
-// tests pin exact values and a learner's "show me that one again" depends on
-// it.
-//
-// mulberry32 (public-domain small PRNG): fast, decent distribution for
-// picking from short lists. Seeded by folding level and seed into one
-// 32-bit integer so (level, seed) pairs never collide for the ranges this
-// app uses (level 1-99, seed 0-1e9).
+// Deterministic PRNG for the ear-training generators. No Math.random, no
+// Date.now: every generator takes (level, seed) and returns the same
+// question forever. mulberry32 (public-domain), seeded by folding level and
+// seed into one 32-bit integer.
 
 export function seedFrom(level, seed) {
   let h = (Number(level) >>> 0) * 0x9e3779b1;

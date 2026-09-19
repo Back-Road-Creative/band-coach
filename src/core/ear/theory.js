@@ -9,12 +9,20 @@ export function pcName(pc) {
   return NOTE_NAMES[((pc % 12) + 12) % 12];
 }
 
-// A short phrase that moves by scale degree within `scale` (a set of
-// ascending semitone offsets from the tonic, one octave, e.g. MAJOR_STEPS).
-// Always starts on the tonic. Shared by melodic-dictation (played/typed
-// back) and sing-back (sung back) so the "move by degree, wrap octaves"
-// logic lives once. Takes a plain rng() -> [0,1) function, not an rng.js
-// helper, so this file has no dependency on that module's internals.
+// Shared "ordered-list" grading: reports the ok/wrong shape every sequence
+// exercise here uses (degrees, progressions, melodic/rhythm dictation,
+// played-back scales). `sameFn` compares one expected/actual pair.
+export function checkSequence(want, got, sameFn) {
+  const wrong = [];
+  want.forEach((w, i) => {
+    if (got[i] === undefined || !sameFn(w, got[i])) wrong.push({ index: i, expected: w, got: got[i] ?? null });
+  });
+  return { ok: wrong.length === 0 && got.length === want.length, detail: { wrong } };
+}
+
+// A short phrase moving by scale degree within `scale` (ascending semitone
+// offsets from the tonic, one octave), always starting on the tonic. Shared
+// by melodic-dictation and sing-back. Takes a plain rng() -> [0,1) function.
 export function diatonicPhrase(rng, { count, maxStep, scale = MAJOR_STEPS, rootMidi }) {
   const pickStep = () => -maxStep + Math.floor(rng() * (2 * maxStep + 1)); // inclusive [-maxStep, maxStep]
   let degreeIdx = 0;

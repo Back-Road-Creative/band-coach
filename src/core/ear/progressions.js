@@ -1,21 +1,15 @@
 // Chord-progression recognition: I IV V vi ii iii in major, i iv v VI VII in
-// minor, played as 3-4 chord loops. The learner names each chord by roman
-// numeral.
-//
-// Wiring contract: call make(level, seed). Render `play` as block chords
-// through the app's synth. Collect the learner's answer as an array of
-// roman-numeral strings, in order, and pass {question, response} to check().
-// `choices` is the roman-numeral set valid for the question's key (major or
-// minor) - render as answer buttons, one pick per chord slot.
+// minor, played as 3-4 chord loops. Wiring: make(level, seed) -> play block
+// chords; the learner answers with an array of roman-numeral strings, one
+// per chord, checked against `choices` (valid for the question's key).
 
 import { makeRng, intRange, pickFrom } from './rng.js';
-import { NOTE_NAMES, MAJOR_STEPS } from './theory.js';
+import { NOTE_NAMES, MAJOR_STEPS, checkSequence } from './theory.js';
 
 const NATURAL_MINOR_SCALE = [0, 2, 3, 5, 7, 8, 10];
 
-// Diatonic triad built from a scale's own steps, degree by degree - quality
-// (and therefore roman-numeral case) falls out of the computed intervals,
-// never a memorized chord-quality table.
+// Diatonic triad from a scale's own steps - quality (and roman-numeral
+// case) falls out of the computed intervals, never a memorized table.
 function diatonicTriad(scale, degreeIndex) {
   const n = scale.length;
   return [0, 2, 4].map((step) => {
@@ -31,8 +25,7 @@ function triadQuality(triad) {
   if (a === 4 && b === 3) return 'major';
   if (a === 3 && b === 4) return 'minor';
   if (a === 3 && b === 3) return 'diminished';
-  if (a === 4 && b === 4) return 'augmented';
-  return 'other';
+  return a === 4 && b === 4 ? 'augmented' : 'other';
 }
 
 const ROMAN_BASE = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII'];
@@ -45,30 +38,12 @@ function romanNumeral(degreeIndex, quality) {
   return base;
 }
 
-// 0-indexed scale degrees, restricted to the ones this exercise uses: I IV V
-// vi ii iii in major (indices 0,3,4,5,1,2); i iv v VI VII in minor (indices
-// 0,3,4,5,6).
-const MAJOR_LOOPS = [
-  [0, 3, 4], // I-IV-V
-  [1, 4, 0], // ii-V-I
-  [0, 4, 5, 3], // I-V-vi-IV
-  [0, 5, 3, 4], // I-vi-IV-V
-];
-const MINOR_LOOPS = [
-  [0, 5, 6], // i-VI-VII
-  [0, 3, 4], // i-iv-v
-  [0, 3, 4, 0], // i-iv-v-i
-  [0, 6, 5, 6], // i-VII-VI-VII
-];
+// Degree indices restricted to I IV V vi ii iii (major) / i iv v VI VII (minor).
+const MAJOR_LOOPS = [[0, 3, 4], [1, 4, 0], [0, 4, 5, 3], [0, 5, 3, 4]]; // I-IV-V, ii-V-I, I-V-vi-IV, I-vi-IV-V
+const MINOR_LOOPS = [[0, 5, 6], [0, 3, 4], [0, 3, 4, 0], [0, 6, 5, 6]]; // i-VI-VII, i-iv-v, i-iv-v-i, i-VII-VI-VII
 
 export const LEVEL_COUNT = 5;
-export const LEVEL_NAMES = [
-  'Major loops, three chords',
-  'Major loops, four chords',
-  'Minor loops',
-  'Major and minor mixed',
-  'Major and minor mixed, new key every question',
-];
+export const LEVEL_NAMES = ['Major loops, three chords', 'Major loops, four chords', 'Minor loops', 'Major and minor mixed', 'Major and minor mixed, new key every question'];
 
 function poolForLevel(level) {
   if (level <= 1) return MAJOR_LOOPS.filter((l) => l.length === 3);
@@ -78,16 +53,8 @@ function poolForLevel(level) {
 }
 
 function choicesFor(scale, degrees) {
-  const seen = new Set();
-  const out = [];
-  for (const d of degrees) {
-    const rn = romanNumeral(d, triadQuality(diatonicTriad(scale, d)));
-    if (!seen.has(rn)) {
-      seen.add(rn);
-      out.push(rn);
-    }
-  }
-  return out;
+  const romans = degrees.map((d) => romanNumeral(d, triadQuality(diatonicTriad(scale, d))));
+  return [...new Set(romans)];
 }
 
 export function make(level, seed) {
@@ -125,9 +92,5 @@ export function make(level, seed) {
 
 export function check(question, response) {
   const resp = Array.isArray(response) ? response : [response];
-  const wrong = [];
-  question.answer.forEach((rn, i) => {
-    if (resp[i] !== rn) wrong.push({ index: i, expected: rn, got: resp[i] ?? null });
-  });
-  return { ok: wrong.length === 0 && resp.length === question.answer.length, detail: { wrong } };
+  return checkSequence(question.answer, resp, (a, b) => a === b);
 }
