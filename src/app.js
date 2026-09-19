@@ -682,7 +682,8 @@ import { recordError, getErrors } from './core/error-log.js';
   function doImportProgress(text) {
     const result = importProgressFile(text);
     if (!result.ok) { coach(result.error); return result; }
-    DB = sanitizeDB(result.db); forget(Date.now()); if (!Array.isArray(DB.custom)) DB.custom = [];
+    const priorLatencyMs = DB && DB.latencyMs;
+    DB = sanitizeDB(result.db); DB.latencyMs = num(priorLatencyMs, DB.latencyMs, 0, 300); forget(Date.now()); if (!Array.isArray(DB.custom)) DB.custom = [];
     $('optNames').checked = DB.prefs.names; setMod(DB.prefs.mod); coach('Backup restored.');
     return result;
   }
