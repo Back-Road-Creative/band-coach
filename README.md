@@ -46,6 +46,11 @@ Four kinds of tests live under `tests/`:
   same way, plus a fake microphone, to prove the thing a learner actually downloads works: no
   network calls, no console errors, the debug hook is gone, the version is stamped, the file is
   under the 1.5 MB size budget, and a note played into the microphone is heard.
+- `tests/build/pages.test.mjs` and `tests/build/pages-offline.test.mjs` check the "phone copy"
+  PWA build (below): the file set, the manifest, the generated icons, the service worker's
+  precache list, that it never changes the one-file release build, and — in headless Chromium
+  against a throwaway loopback HTTP server — that the service worker actually activates and the
+  app still renders after the server is stopped and the page reloaded.
 
 Some npm setups run with `ignore-scripts` on (check `npm config get ignore-scripts`), which skips
 `pretest`/`posttest` entirely — run `npm run build`, `npm test`, and `npm run gate` as separate
@@ -107,6 +112,30 @@ has no Windows machine of its own, and the Microsoft Store re-signs whatever you
 so no paid signing certificate is needed). It's a separate `package.json` under `store/` — the
 app itself gains no new dependency. See `store/README.md` for how to get your app's identity from
 Partner Center, run the `store-package` workflow, and submit the resulting `.appx`.
+## Phone copy
+
+Band Coach is also published as an installable web app ("Add to Home Screen") at
+`https://back-road-creative.github.io/band-coach/` — free GitHub Pages hosting from this same
+repo, never `headlessmode.com`. It is **the same app**: `npm run pages` (`node build/build.mjs
+--pages` → `dist/pages/`) takes the exact same release build as the desktop download and adds
+only what installing and offline use need — a web app manifest, a service worker that
+cache-first's the app shell, and a few icon sizes generated at build time (no image file is
+committed, no dependency added; see `build/pages.mjs` and `build/pages/png.mjs`). It never
+changes `dist/release/band-coach.html` or `dist/band-coach.html` — those stay the exact
+zero-network, one-file downloads they've always been (`tests/build/pages.test.mjs` proves the
+release file is byte-for-byte identical whether or not the pages edition is built).
+
+**iPhone microphone behaviour is unmeasured.** This edition has only been proven in headless
+Chromium against a loopback test server (`tests/build/pages-offline.test.mjs`) — that it installs,
+its service worker activates, and it renders after going offline. Whether Safari on an actual
+iPhone grants and sustains microphone access the way this app expects is a separate, open
+question; the plan's later phase tests that on real phones. Until then, don't tell a learner it
+works on their phone — only that a phone copy exists to try.
+
+`.github/workflows/pages.yml` builds and deploys `dist/pages/` on every published GitHub release
+(and by hand via "Run workflow"), using `actions/upload-pages-artifact` and
+`actions/deploy-pages`. **One manual step the repo owner has to click once, that this workflow
+cannot do for you:** Settings → Pages → Source: GitHub Actions.
 ## Releasing
 
 The file a learner downloads is one page, built from `src/` in release mode: minified,

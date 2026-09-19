@@ -102,9 +102,23 @@ export async function build({ release = false } = {}) {
 const isMain = process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1];
 if (isMain) {
   const release = process.argv.includes('--release');
+  const pages = process.argv.includes('--pages');
   try {
-    const outFile = await build({ release });
-    console.log('built ' + outFile);
+    if (pages) {
+      // Build the release file ourselves and hand pages.mjs the finished
+      // HTML, rather than letting it import `build` from this module: this
+      // module is mid-evaluation of its own top-level await right now (we
+      // are inside it), and a static import cycle back into an unsettled
+      // top-level-await module is a hard Node error, not just a warning.
+      const releaseFile = await build({ release: true });
+      const releaseHtml = readFileSync(releaseFile, 'utf8');
+      const { writePagesFiles } = await import('./pages.mjs');
+      const outDir = await writePagesFiles({ releaseHtml, version: PKG.version });
+      console.log('built ' + outDir);
+    } else {
+      const outFile = await build({ release });
+      console.log('built ' + outFile);
+    }
   } catch (err) {
     console.error(err);
     process.exit(1);
