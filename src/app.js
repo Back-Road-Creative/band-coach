@@ -34,7 +34,7 @@ import { createPanels, sanitizePanelData } from './ui/panels.js';
 // slot:import:w-songs
 //
 //
-// slot:import:w-editor
+import { register as registerEditor, __setDebugFrames, __getDebugSong, __isRecording } from './ui/editor.js';
 //
 //
 import { registerEar, __earTestHook } from './ui/ear.js';
@@ -1040,7 +1040,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
   // slot:panel:w-songs
   //
   //
-  // slot:panel:w-editor
+  registerEditor(panels);
   //
   //
   registerEar(panels);
@@ -1105,7 +1105,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
   // slot:hook:w-songs
   //
   //
-  // slot:hook:w-editor
+  if (__DEBUG_HOOK__) Object.assign(hook, { editorSetFrames: __setDebugFrames, editorSong: __getDebugSong, editorRecording: __isRecording });
   //
   //
   if (__DEBUG_HOOK__) Object.assign(hook, { ear: __earTestHook });

@@ -44,7 +44,19 @@
   /* slot:css:w-songs */
   /* */
   /* */
-  /* slot:css:w-editor */
+  .panel-editor { display: flex; flex-direction: column; gap: 12px; max-width: 100%; }
+  .panel-editor .editor-record { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .panel-editor .editor-record input[type="text"] { font: 600 15px var(--body); color: var(--text); background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; min-width: 10ch; }
+  .panel-editor .editor-status { color: var(--muted); font-size: 14px; }
+  .panel-editor .editor-check { background: var(--panel-2); border: 1px solid var(--warn); border-radius: 8px; padding: 12px; }
+  .panel-editor .editor-check ul { margin: 6px 0; padding-left: 20px; }
+  .panel-editor .editor-say { color: var(--good); min-height: 1.2em; }
+  .panel-editor .editor-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .panel-editor .editor-toolbar input[type="number"] { width: 6ch; font: 600 15px var(--body); color: var(--text); background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; }
+  .panel-editor .editor-toolbar label { color: var(--muted); font-size: 13px; }
+  .panel-editor .editor-canvas { background: #f6f3ea; border-radius: 8px; max-width: 100%; touch-action: manipulation; }
+  .panel-editor button:disabled, .panel-editor input:disabled, .panel-editor select:disabled { opacity: .45; cursor: not-allowed; }
+  @media (max-width: 480px) { .panel-editor .editor-toolbar button, .panel-editor .editor-toolbar input { font-size: 13px; padding: 7px 10px; } }
   /* */
   /* */
   .panel-ear .ear-exercises { display: flex; flex-wrap: wrap; gap: 8px; margin-block: 10px; }
