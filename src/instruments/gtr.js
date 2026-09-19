@@ -7,6 +7,8 @@
 // octavePolicy is exact: the right letter in the wrong octave is a wrong
 // note (the mic cannot tell which string was used, so position is taught by
 // diagram).
+// Guitar is a transposing instrument on the page: standard notation prints it
+// an octave above its sounding pitch, so writtenOctaveUp is true.
 export default {
   id: 'gtr',
   name: 'Guitar',
@@ -18,6 +20,7 @@ export default {
   octavePolicy: 'exact',
   tuning: [40, 45, 50, 55, 59, 64],
   fretted: true,
+  writtenOctaveUp: true,
   status: 'ready',
   curriculum: [
     { level: 1, items: ['The open strings'] },

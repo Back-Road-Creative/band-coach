@@ -69,6 +69,34 @@ test('validator rejects a table of bad records', () => {
   }
 });
 
+test('guitar and bass are written an octave above their sounding pitch', () => {
+  // Standard notation convention: guitar and bass sound an octave below what
+  // is printed, to keep the part off a thicket of ledger lines.
+  assert.equal(byId.gtr.writtenOctaveUp, true);
+  assert.equal(byId.bass.writtenOctaveUp, true);
+});
+
+test('validateInstrument accepts a boolean writtenOctaveUp and rejects anything else', () => {
+  const good = {
+    id: 'test-good-2',
+    name: 'Test Good 2',
+    family: 'keys',
+    input: 'midi',
+    range: { low: 40, high: 60 },
+    transposition: 0,
+    clefs: ['treble'],
+    octavePolicy: 'exact',
+    status: 'ready',
+    curriculum: [{ level: 1, items: ['First'] }]
+  };
+  assert.equal(validateInstrument(good).ok, true, 'writtenOctaveUp is optional');
+  assert.equal(validateInstrument({ ...good, writtenOctaveUp: true }).ok, true);
+  assert.equal(validateInstrument({ ...good, writtenOctaveUp: false }).ok, true);
+  const { ok, errors } = validateInstrument({ ...good, writtenOctaveUp: 'yes' });
+  assert.equal(ok, false);
+  assert.ok(errors.length > 0);
+});
+
 test('READY instrument ids match the instrument ids in today\'s MODS', () => {
   const src = readFileSync(APP_JS_PATH, 'utf8');
   const modsStart = src.indexOf('const MODS = {');
