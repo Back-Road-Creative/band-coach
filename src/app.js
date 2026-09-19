@@ -43,7 +43,7 @@ import { createPanels, sanitizePanelData } from './ui/panels.js';
 // slot:import:w-theory
 //
 //
-// slot:import:w-history
+import { registerHistory } from './ui/history.js';
 //
 //
 // slot:import:w-fingerings
@@ -1039,7 +1039,7 @@ import { createPanels, sanitizePanelData } from './ui/panels.js';
   // slot:panel:w-theory
   //
   //
-  // slot:panel:w-history
+  registerHistory(panels);
   //
   //
   // slot:panel:w-fingerings
