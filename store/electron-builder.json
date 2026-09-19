@@ -1,0 +1,32 @@
+{
+  "appId": "com.backroadcreative.bandcoach",
+  "productName": "Band Coach",
+  "copyright": "Back Road Creative",
+  "directories": {
+    "output": "release",
+    "buildResources": "build-resources"
+  },
+  "files": [
+    "main.js",
+    "preload.js",
+    "app/band-coach.html",
+    "package.json"
+  ],
+  "extraMetadata": {
+    "main": "main.js"
+  },
+  "win": {
+    "target": [
+      "appx"
+    ]
+  },
+  "appx": {
+    "identityName": "PLACEHOLDER.BandCoach",
+    "publisher": "CN=PLACEHOLDER",
+    "publisherDisplayName": "PLACEHOLDER PUBLISHER",
+    "applicationId": "BandCoach",
+    "backgroundColor": "#1c1c1c",
+    "languages": ["en-US"],
+    "capabilities": ["microphone"]
+  }
+}
