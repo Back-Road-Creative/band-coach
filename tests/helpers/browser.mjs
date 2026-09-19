@@ -195,6 +195,7 @@ export async function launchPage(htmlPath, options = {}) {
   await send('Runtime.enable');
   await send('Network.enable');
   await send('Page.enable');
+  await send('DOM.enable');
   if (initScript) {
     await send('Page.addScriptToEvaluateOnNewDocument', { source: initScript });
   }
@@ -250,6 +251,24 @@ export async function launchPage(htmlPath, options = {}) {
     return result.result.value;
   }
 
+  // Sets a <input type="file"> element's FileList from real bytes on disk —
+  // the CDP-level equivalent of a learner picking a file, since a page
+  // script cannot construct a File backed by disk content itself. `selector`
+  // is a CSS selector for the input; `filePath` an absolute path. Dispatches
+  // a real 'change' event afterwards so the page's own listener fires.
+  async function setFileInput(selector, filePath) {
+    const { result } = await send('Runtime.evaluate', {
+      expression: `document.querySelector(${JSON.stringify(selector)})`,
+    });
+    if (!result || !result.objectId) {
+      throw new Error(`setFileInput: no element matches ${selector}`);
+    }
+    await send('DOM.setFileInputFiles', { files: [filePath], objectId: result.objectId });
+    await evaluate(
+      `document.querySelector(${JSON.stringify(selector)}).dispatchEvent(new Event('change', { bubbles: true }))`
+    );
+  }
+
   async function waitFor(expression, timeoutMs = 5000) {
     const start = Date.now();
     for (;;) {
@@ -281,6 +300,7 @@ export async function launchPage(htmlPath, options = {}) {
     evaluate,
     reload,
     waitFor,
+    setFileInput,
     close,
     consoleErrors,
     exceptions,

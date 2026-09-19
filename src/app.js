@@ -49,7 +49,7 @@ import { createPanels, sanitizePanelData } from './ui/panels.js';
 // slot:import:w-fingerings
 //
 //
-// slot:import:w-playalong
+import { register as registerPlayalong } from './ui/playalong.js';
 //
 //
 // slot:import:w-fixes
@@ -1045,7 +1045,7 @@ import { createPanels, sanitizePanelData } from './ui/panels.js';
   // slot:panel:w-fingerings
   //
   //
-  // slot:panel:w-playalong
+  registerPlayalong(panels);
   //
   //
   // slot:panel:w-fixes
