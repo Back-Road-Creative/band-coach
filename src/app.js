@@ -679,6 +679,6 @@ import { toAudioTime, judgeTap, medianLatency } from './core/timing.js';
   const hadSavedProgressAtBoot = (() => { try { return localStorage.getItem(KEY) !== null; } catch (e) { return true; } })();
   loadDB(); if (!Array.isArray(DB.custom)) DB.custom = []; $('optNames').checked = DB.prefs.names; buildPicker(); setMod(mod); requestAnimationFrame(frame);
   if (!hadSavedProgressAtBoot) showBackupNudge('Been here before? Restore a backup.');
-  window.__coach = { state: () => S, db: () => DB, sess: () => sess, task: () => task, cur: cur, note: onNote, answer: answer, tap: onTap, bar: () => bar, playing: () => playing, setMod: setMod, testSource: testSource, heard: () => heard, yin: yin, cap: () => cap, deaf: () => deafWindow.isDeaf(), exportProgress: doExportProgress, importProgress: doImportProgress, audioNow: audioNow };
+  if (__DEBUG_HOOK__) window.__coach = { state: () => S, db: () => DB, sess: () => sess, task: () => task, cur: cur, note: onNote, answer: answer, tap: onTap, bar: () => bar, playing: () => playing, setMod: setMod, testSource: testSource, heard: () => heard, yin: yin, cap: () => cap, deaf: () => deafWindow.isDeaf(), exportProgress: doExportProgress, importProgress: doImportProgress, audioNow: audioNow };
 
 })();

@@ -81,7 +81,7 @@ function waitForOpen(ws) {
 // Spawns the browser and resolves once "DevTools listening on ws://..." is
 // seen on stderr, extracting the port that was actually bound (we always ask
 // for port 0 so parallel test files never collide).
-function spawnBrowser(bin, userDataDir) {
+function spawnBrowser(bin, userDataDir, extraArgs = []) {
   const args = [
     '--headless',
     '--remote-debugging-port=0',
@@ -90,6 +90,7 @@ function spawnBrowser(bin, userDataDir) {
     '--autoplay-policy=no-user-gesture-required',
     '--use-fake-ui-for-media-stream',
     '--use-fake-device-for-media-stream',
+    ...extraArgs,
     'about:blank',
   ];
   if (process.env.CI) args.splice(1, 0, '--no-sandbox');
@@ -120,9 +121,19 @@ function spawnBrowser(bin, userDataDir) {
  * `htmlPath` via its file:// URL (proving the app also runs double-clicked,
  * not just under a dev server). Returns a page-driving handle.
  *
+ * `options.fakeAudioFile`, if given, is an absolute path to a WAV file
+ * played into the fake microphone device (via Chromium's
+ * `--use-file-for-fake-audio-capture`) instead of silence, so a real
+ * `getUserMedia()` capture in the page has an actual signal to detect.
+ *
+ * `options.initScript`, if given, is a JS source string installed with
+ * `Page.addScriptToEvaluateOnNewDocument` so it runs before any of the
+ * page's own script — e.g. to instrument a global before app code loads.
+ *
  * Throws — never silently skips — if no browser binary can be found.
  */
-export async function launchPage(htmlPath) {
+export async function launchPage(htmlPath, options = {}) {
+  const { fakeAudioFile, initScript } = options;
   const bin = findBrowserBinary();
   if (!bin) {
     throw new Error(
@@ -132,7 +143,8 @@ export async function launchPage(htmlPath) {
     );
   }
   const userDataDir = mkdtempSync(join(tmpdir(), 'band-coach-cdp-'));
-  const { child, browserWsUrl } = await spawnBrowser(bin, userDataDir);
+  const extraArgs = fakeAudioFile ? [`--use-file-for-fake-audio-capture=${fakeAudioFile}`] : [];
+  const { child, browserWsUrl } = await spawnBrowser(bin, userDataDir, extraArgs);
   const browserWs = new WebSocket(browserWsUrl);
   await waitForOpen(browserWs);
   const browser = new DevtoolsClient(browserWs);
@@ -183,6 +195,9 @@ export async function launchPage(htmlPath) {
   await send('Runtime.enable');
   await send('Network.enable');
   await send('Page.enable');
+  if (initScript) {
+    await send('Page.addScriptToEvaluateOnNewDocument', { source: initScript });
+  }
 
   const loaded = new Promise((resolve) => {
     const off = () => {};

@@ -1,0 +1,42 @@
+name: release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: locate Chrome
+        run: echo "CHROME_BIN=$(which google-chrome)" >> "$GITHUB_ENV"
+      - name: tag must match package.json version
+        run: |
+          pkg_version="v$(node -p "require('./package.json').version")"
+          if [ "$GITHUB_REF_NAME" != "$pkg_version" ]; then
+            echo "Tag $GITHUB_REF_NAME does not match package.json version $pkg_version" >&2
+            exit 1
+          fi
+      - run: npm ci
+      - run: npm test
+        env:
+          CI: true
+      - run: npm run gate
+        env:
+          CI: true
+      - name: publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/release/band-coach.html \
+            --title "Band Coach $GITHUB_REF_NAME" \
+            --generate-notes
