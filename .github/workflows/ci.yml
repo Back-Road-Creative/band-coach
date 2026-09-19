@@ -21,4 +21,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - name: locate Chrome
+        run: echo "CHROME_BIN=$(which google-chrome)" >> "$GITHUB_ENV"
       - run: npm test
+        env:
+          CI: true
