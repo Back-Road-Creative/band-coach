@@ -14,6 +14,11 @@
       <span class="dot" id="ioDot"></span>
       <span id="ioText"></span>
       <button class="primary" id="ioBtn" type="button">Connect</button>
+      <label for="micDeviceSelect" class="small">Input</label>
+      <select id="micDeviceSelect" aria-label="Input device"><option value="">Default microphone</option></select>
+      <button type="button" class="small" id="calibrateBtn">Check my microphone</button>
+      <div class="meterbox thin mic-meter" role="progressbar" aria-label="Microphone level" aria-valuemin="0" aria-valuemax="100"><div id="micLevelFill"></div></div>
+      <span id="calibrateResult" role="status"></span>
     </div>
   </header>
 

@@ -20,7 +20,10 @@ npm run build
 
 Then open `dist/band-coach.html` in Chrome or Edge (double-click). That's the one file a learner
 downloads and runs — everything else under `src/` is only needed to build it. Microphone
-instruments ask for permission; a MIDI keyboard is optional.
+instruments ask for permission; a MIDI keyboard is optional. If you have more than one input
+(e.g. an audio interface), pick it from the input list next to Connect. "Check my microphone"
+listens for 3 seconds of quiet and tunes the listening thresholds to your room and hardware
+instead of a one-size-fits-all level; a small meter shows the live input level.
 
 ## Test
 

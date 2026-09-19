@@ -63,7 +63,9 @@
   #levelName { font: 700 28px/1.1 var(--display); text-transform: uppercase; margin-top: 4px; text-wrap: balance; }
   .meterbox { height: 12px; border-radius: 6px; background: var(--ground); border: 1px solid var(--line); margin-block: 10px 8px; overflow: hidden; }
   .meterbox.thin { height: 10px; margin-block: 8px; }
-  #readyFill, #energyFill { height: 100%; width: 0; background: var(--good); transition: width .25s, background .25s; }
+  #readyFill, #energyFill, #micLevelFill { height: 100%; width: 0; background: var(--good); transition: width .1s, background .25s; }
+  .mic-meter { width: 90px; margin-block: 0; flex: none; }
+  #calibrateResult { font-size: 13px; color: var(--muted); }
   #coach { font-weight: 500; min-height: 2.9em; }
   #sessLine { font-size: 14px; color: var(--muted); font-variant-numeric: tabular-nums; }
   #feedback { min-height: 2.9em; font-weight: 600; }
