@@ -14,7 +14,7 @@ import { chroma, judgeChord } from './audio/chords.js';
 //
 // slot:import:play-in-time
 //
-// slot:import:recall
+import { shouldReveal, promptFor, hintFor as coreHintFor } from './core/reveal.js';
 //
 // slot:import:rhythm-vocab
 //
@@ -211,7 +211,7 @@ import { chroma, judgeChord } from './audio/chords.js';
   };
   const TUNINGS = { gtr: ['Guitar', [40, 45, 50, 55, 59, 64]], bass: ['Bass', [28, 33, 38, 43]], uke: ['Ukulele', [67, 60, 64, 69]], vln: ['Violin', [55, 62, 69, 76]], chrom: ['Any note (chromatic)', []] };
   const _info = info, _valid = validId;
-  info = function (m, id, prefs) { if (id[0] === 'h') { const mm = /^h([bd])(\d+)$/.exec(id), dir = mm[1], hole = +mm[2], midi = HARP[dir][hole - 1]; return { kind: 'note', midi: midi, hole: hole, dir: dir, label: (dir === 'b' ? 'Blow ' : 'Draw ') + hole + ' (' + nname(midi) + ')', short: (dir === 'b' ? 'Blow ' : 'Draw ') + hole }; } return _info(m, id, prefs); };
+  info = function (m, id, prefs) { if (id[0] === 'h') { const mm = /^h([bd])(\d+)$/.exec(id), dir = mm[1], hole = +mm[2], midi = HARP[dir][hole - 1]; return { kind: 'note', midi: midi, hole: hole, dir: dir, note: nname(midi), label: (dir === 'b' ? 'Blow ' : 'Draw ') + hole + ' (' + nname(midi) + ')', short: (dir === 'b' ? 'Blow ' : 'Draw ') + hole }; } return _info(m, id, prefs); };
   validId = function (m, id) { if (typeof id === 'string' && id[0] === 'h') return /^h[bd]([1-9]|10)$/.test(id); return _valid(m, id); };
   // turn a heard note into an item this instrument can practise
   function customItem(m, midi, prefs) {
@@ -320,7 +320,7 @@ import { chroma, judgeChord } from './audio/chords.js';
     pool = poolFor(dd);
     if (sess.warm > 0) { sess.warm--; warm = true; const base = kind === 'bar' ? 'bar' : kind === 'chord' ? 'chord' : 'one'; kind = base; pool = byStrength(pool).slice(0, Math.max(2, Math.ceil(pool.length / 2))); }
     const t = { kind: kind, els: [], idx: 0, warm: warm, limit: d.limit || 8, ref: d.ref || 'none', blind: !!d.blind, t0: now(), done: false, revealed: false };
-    const mk = id => { S.tick++; it(id).seen = S.tick; return { id: id, info: inf(id), failed: false, t0: 0, rt: 0, reveal: it(id).n < 2 && !d.blind }; };
+    const mk = id => { S.tick++; it(id).seen = S.tick; return { id: id, info: inf(id), failed: false, t0: 0, rt: 0, reveal: shouldReveal({ exposures: it(id).n }) && !d.blind }; };
     if (kind === 'one' || kind === 'chord' || kind === 'hold') t.els.push(mk(pick(lastItem, pool)));
     else if (kind === 'seq') { let from = lastItem; for (let i = 0; i < (d.len || 2); i++) { const id = pick(from, pool); t.els.push(mk(id)); from = id; } }
     else if (kind === 'run') {
@@ -349,15 +349,15 @@ import { chroma, judgeChord } from './audio/chords.js';
   }
   function present() {
     const t = task, M = MODS[mod], e = cur(); t.t0 = now(); if (e) e.t0 = now(); held = []; holdFor = 0; holdCents = []; wrongFor = 0; released = true;
-    $('choices').hidden = t.kind !== 'ear'; $('replayBtn').hidden = !(t.kind === 'ear' || mod === 'voice');
+    $('choices').hidden = t.kind !== 'ear'; $('replayBtn').hidden = !(t.kind === 'ear' || mod === 'voice'); $('showMeBtn').hidden = t.kind === 'ear' || t.kind === 'bar';
     let p = '', h = '';
     if (t.kind === 'ear') { p = e.info.kind === 'interval' ? 'Which <b>interval</b>?' : 'Which <b>chord</b>?'; h = 'Listen, then choose. Number keys work too.'; const box = $('choices'); box.innerHTML = ''; t.choices.forEach((id, k) => { const b = document.createElement('button'); b.type = 'button'; b.id = 'ch-' + id; b.textContent = (k + 1) + '. ' + inf(id).label; b.addEventListener('click', () => { b.blur(); answer(id); }); box.appendChild(b); }); playRef(t); }
     else if (t.kind === 'bar') { p = 'Read it, then <b>tap it</b>'; h = 'Four clicks to get ready, then tap the bar in time.'; startBar(); }
-    else { const verb = mod === 'voice' ? 'Sing' : 'Play'; p = verb + ' ' + t.els.map((el, k) => (k === t.idx ? '<b>' : '') + el.info.label.split(':')[0] + (k === t.idx ? '</b>' : '')).join(' → '); if (t.kind === 'hold') p = (mod === 'voice' ? 'Hold ' : 'Hold ') + '<b>' + e.info.label + '</b> for two seconds'; h = hintFor(e); playRef(t); }
+    else { const verb = mod === 'voice' ? 'Sing' : 'Play'; p = verb + ' ' + t.els.map((el, k) => (k === t.idx ? '<b>' : '') + promptFor(el.info, el.reveal) + (k === t.idx ? '</b>' : '')).join(' → '); if (t.kind === 'hold') p = (mod === 'voice' ? 'Hold ' : 'Hold ') + '<b>' + e.info.label + '</b> for two seconds'; h = hintFor(e); playRef(t); }
     $('prompt').innerHTML = p; $('hint').textContent = (t.warm ? 'Warm-up, does not count. ' : '') + h;
   }
-  function hintFor(e) { const i = e.info; if (i.string) return 'String ' + i.string + (i.fret ? ', fret ' + i.fret : ', played open') + (e.reveal ? '. The dot shows where.' : '.') + ' The mic checks the note and its octave — not which string you used.'; if (i.anywhere) return 'Any string, any octave.'; if (i.kind === 'chord') return 'All the notes together: ' + i.pcs.map(x => NAMES[x]).join(', ') + '.'; if (mod === 'voice') return task.ref === 'target' ? 'You heard the note. Sing it back in any octave and hold it.' : 'You heard Do. Find ' + i.short + ' from it.'; if (mod === 'wind') return 'Written ' + i.label + '. Hold it steady.'; return e.reveal ? 'New key: it is lit up this time.' : ''; }
-  function refreshPrompt() { if (!task || task.kind === 'ear' || task.kind === 'bar' || task.kind === 'hold') return; const verb = mod === 'voice' ? 'Sing' : 'Play'; $('prompt').innerHTML = verb + ' ' + task.els.map((el, k) => (k === task.idx ? '<b>' : '') + el.info.label.split(':')[0] + (k === task.idx ? '</b>' : '')).join(' → '); const e = cur(); if (e) $('hint').textContent = (task.warm ? 'Warm-up, does not count. ' : '') + hintFor(e); }
+  function hintFor(e) { const i = e.info; if (i.string) return coreHintFor(i, e.reveal); if (i.anywhere) return 'Any string, any octave.'; if (i.kind === 'chord') return 'All the notes together: ' + i.pcs.map(x => NAMES[x]).join(', ') + '.'; if (mod === 'voice') return task.ref === 'target' ? 'You heard the note. Sing it back in any octave and hold it.' : 'You heard Do. Find ' + i.short + ' from it.'; if (mod === 'wind') return 'Written ' + i.label + '. Hold it steady.'; return e.reveal ? 'New key: it is lit up this time.' : ''; }
+  function refreshPrompt() { if (!task || task.kind === 'ear' || task.kind === 'bar' || task.kind === 'hold') return; const verb = mod === 'voice' ? 'Sing' : 'Play'; $('prompt').innerHTML = verb + ' ' + task.els.map((el, k) => (k === task.idx ? '<b>' : '') + promptFor(el.info, el.reveal) + (k === task.idx ? '</b>' : '')).join(' → '); const e = cur(); if (e) $('hint').textContent = (task.warm ? 'Warm-up, does not count. ' : '') + hintFor(e); }
 
   // ---------- judging ----------
   const timeQ = (rt, limit) => rt <= 0.4 * limit ? 1 : clamp(1 - 0.4 * (rt - 0.4 * limit) / (0.6 * limit), 0.6, 1);
@@ -535,7 +535,7 @@ import { chroma, judgeChord } from './audio/chords.js';
   }
   function drawHarp(e, W, H) {
     const x0 = W * 0.06, w = W * 0.88, hw = w / 10, y0 = H * 0.36, hh = H * 0.3; rr(x0 - 10, y0 - 14, w + 20, hh + 28, 14); g.fillStyle = '#8f96a3'; g.fill(); rr(x0 - 2, y0, w + 4, hh, 6); g.fillStyle = '#1b1e26'; g.fill();
-    for (let h = 1; h <= 10; h++) { const x = x0 + (h - 1) * hw, tb = e && e.info.hole === h && (e.reveal || e.failed || true); rr(x + hw * 0.16, y0 + hh * 0.2, hw * 0.68, hh * 0.6, 4); g.fillStyle = tb ? accent() : '#05070c'; g.fill(); g.fillStyle = '#e9edf6'; font(H * 0.07); g.textAlign = 'center'; g.fillText(String(h), x + hw / 2, y0 - H * 0.06);
+    for (let h = 1; h <= 10; h++) { const x = x0 + (h - 1) * hw, tb = e && e.info.hole === h && (e.reveal || e.failed); rr(x + hw * 0.16, y0 + hh * 0.2, hw * 0.68, hh * 0.6, 4); g.fillStyle = tb ? accent() : '#05070c'; g.fill(); g.fillStyle = '#e9edf6'; font(H * 0.07); g.textAlign = 'center'; g.fillText(String(h), x + hw / 2, y0 - H * 0.06);
       if (DB.prefs.names) { g.fillStyle = '#93a0bd'; font(H * 0.042, 600); g.fillText('↑ ' + nname(HARP.b[h - 1]), x + hw / 2, y0 + hh + H * 0.1); g.fillText('↓ ' + nname(HARP.d[h - 1]), x + hw / 2, y0 + hh + H * 0.17); } }
     if (e) { const x = x0 + (e.info.hole - 0.5) * hw, up = e.info.dir === 'b'; g.fillStyle = accent(); font(H * 0.2); g.textAlign = 'center'; g.fillText(up ? '↑' : '↓', x, up ? y0 - H * 0.13 : y0 - H * 0.13); font(H * 0.06); g.fillStyle = '#e9edf6'; g.fillText(up ? 'BLOW' : 'DRAW', x + hw * 1.3, y0 - H * 0.17); const c = liveCents(e.info.midi, true); g.fillStyle = '#5be08a'; g.fillRect(x0, H * 0.95, w * c01(holdFor / (task.kind === 'hold' ? 2 : 0.5)), H * 0.025); if (heard && heard.freq) { font(H * 0.05, 600); g.fillStyle = '#93a0bd'; g.textAlign = 'left'; g.fillText('Hearing ' + nname(heard.midi, true) + (c !== null && Math.abs(c) < 100 ? ', ' + Math.round(Math.abs(c)) + ' cents ' + (c > 0 ? 'sharp' : 'flat') : ''), x0, H * 0.1); } }
   }
@@ -643,7 +643,7 @@ import { chroma, judgeChord } from './audio/chords.js';
     const tool = !!TOOLS[mod]; document.documentElement.style.setProperty('--accent', (MODS[mod] || TOOLS[mod]).color === '#e9edf6' ? '#9fb4d8' : (MODS[mod] || TOOLS[mod]).color);
     $('helpText').innerHTML = ''; const st = document.createElement('strong'); st.textContent = 'How this one works: '; $('helpText').appendChild(st); $('helpText').appendChild(document.createTextNode((MODS[mod] || TOOLS[mod]).help));
     document.querySelectorAll('.side .card, .side .stats, #playBtn, #resetBtn').forEach(el => { el.style.display = tool ? 'none' : ''; }); $('tapPad').hidden = mod !== 'rhy'; $('timeFill').parentElement.style.visibility = tool || mod === 'rhy' ? 'hidden' : 'visible';
-    if (tool) { $('prompt').textContent = TOOLS[mod].name; $('hint').textContent = mod === 'tuner' ? 'One open string at a time.' : 'One note at a time.'; $('choices').hidden = true; $('replayBtn').hidden = true; return; }
+    if (tool) { $('prompt').textContent = TOOLS[mod].name; $('hint').textContent = mod === 'tuner' ? 'One open string at a time.' : 'One note at a time.'; $('choices').hidden = true; $('replayBtn').hidden = true; $('showMeBtn').hidden = true; return; }
     const d = D(); $('levelNum').textContent = 'Level ' + S.level; $('levelName').textContent = customOn ? 'Your captured melody' : d.name; $('limitOut').textContent = d.task === 'bar' || mod === 'rhy' ? (d.bpm || 72) + ' bpm' : (d.limit || 8) + ' s per answer';
     const pct = Math.round(S.ready * 100); $('readyFill').style.width = pct + '%'; $('readyFill').style.background = S.ready < 0.25 ? 'var(--bad)' : S.ready < 0.6 ? 'var(--warn)' : 'var(--good)'; $('readyBar').setAttribute('aria-valuenow', pct);
     const e = sess ? 1 - sess.F : 1, ep = Math.round(e * 100); $('energyFill').style.width = ep + '%'; $('energyFill').style.background = e < 0.4 ? 'var(--bad)' : e < 0.65 ? 'var(--warn)' : 'var(--good)'; $('energyBar').setAttribute('aria-valuenow', ep);
@@ -694,6 +694,7 @@ import { chroma, judgeChord } from './audio/chords.js';
   cv.addEventListener('pointerdown', ev => { const r = cv.getBoundingClientRect(), x = (ev.clientX - r.left) * cv.width / r.width, y = (ev.clientY - r.top) * cv.height / r.height; ensureAudio(); if (mod === 'kbd') { const k = keyRects.find(q => x >= q.x && x <= q.x + q.w && y >= q.y && y <= q.y + q.h); if (k) { tone(k.m, now() + 0.01, 0.5, 0.15); onNote(k.m, true); } } if (mod === 'tuner') { const row = rowRects.find(q => x >= q.x && x <= q.x + q.w && y >= q.y && y <= q.y + q.h); if (row) tone(row.m, now() + 0.02, 1.6, 0.2); } });
   $('tapPad').addEventListener('pointerdown', ev => { ev.preventDefault(); ensureAudio(); onTap(ev); });
   $('replayBtn').addEventListener('click', function () { this.blur(); if (task && !task.done) { playRef(task); lastInputAt = now(); } });
+  $('showMeBtn').addEventListener('click', function () { this.blur(); const e = cur(); if (!task || task.done || !e) return; if (!e.failed) { e.failed = true; e.reveal = true; } say('Shown. This one will not count toward mastery.', ''); refreshPrompt(); });
   $('playBtn').addEventListener('click', function () { this.blur(); if (!sess) startSession(); else if (paused) resume(); else takeBreak('user'); });
   $('endBtn').addEventListener('click', function () { this.blur(); endSession(); }); $('endBtn2').addEventListener('click', endSession); $('backBtn').addEventListener('click', resume);
   $('snoozeBtn').addEventListener('click', () => { sess.snoozeUntil = Date.now() + 5 * 60000; sess.tiredFor = 0; S.ready = Math.min(S.ready, 0.6); pauseInfo = { at: Date.now(), secs: 0 }; resume(); coach('Five more minutes, then I will ask again. I have eased off the pace meanwhile.'); });
@@ -761,7 +762,7 @@ import { chroma, judgeChord } from './audio/chords.js';
   if (__DEBUG_HOOK__) Object.assign(hook, { judgeChord: judgeChord, chroma: chroma });
   // slot:hook:play-in-time
   //
-  // slot:hook:recall
+  if (__DEBUG_HOOK__) Object.assign(hook, { showMe: () => $('showMeBtn').click() });
   //
   // slot:hook:rhythm-vocab
   //
