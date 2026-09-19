@@ -59,6 +59,18 @@ Progress is saved in the browser, keyed to the exact file path Band Coach was op
 or re-downloading the file can lose it, since browsers do not share that storage across paths. Use
 "Save a backup" in the app to download `band-coach-progress.json`, and "Restore a backup" to load
 one back in. A quiet reminder appears on a fresh profile and after a while without a backup.
+## Notation engine
+
+`src/notation/` is a pure layout engine for standard notation and tab: given
+notes and a key/clef/time signature, it returns plain drawing primitives
+(noteheads, stems, ledger lines, accidentals, clefs, key/time signatures,
+tab fret numbers) rather than drawing directly, so it can be unit-tested with
+`node --test` and no browser. `draw-canvas.js` is a thin Canvas 2D renderer
+for those primitives. It replaces the app's current treble-only staff with
+support for bass/alto/tenor clef, a grand staff, key signatures, correct
+enharmonic spelling and tab — but this module is not wired into the running
+app yet; `src/app.js` still draws its own staff until a later change swaps
+the call site over.
 
 ## Licence
 
