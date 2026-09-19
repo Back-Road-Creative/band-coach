@@ -3,7 +3,8 @@
 // ['E','A','D','G'], 12, null) at app.js:107 (no chordSet -> no chord levels; the
 // naming logic is app.js:57-66). Range high (55) is the 12th fret on the G string
 // (43+12); low (28) is the open E string. Mic input, any-octave name matching, so
-// octavePolicy is nearest-octave (same reasoning as gtr.js).
+// octavePolicy is exact: the right letter in the wrong octave is a wrong note (the
+// mic cannot tell which string was used, so position is taught by diagram).
 export default {
   id: 'bass',
   name: 'Bass',
@@ -12,7 +13,7 @@ export default {
   range: { low: 28, high: 55 },
   transposition: 0,
   clefs: ['bass'],
-  octavePolicy: 'nearest-octave',
+  octavePolicy: 'exact',
   tuning: [28, 33, 38, 43],
   fretted: true,
   status: 'ready',

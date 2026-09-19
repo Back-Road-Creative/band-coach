@@ -11,7 +11,7 @@ export default {
   range: { low: 55, high: 81 }, // conservative beginner range
   transposition: 0,
   clefs: ['treble'],
-  octavePolicy: 'nearest-octave',
+  octavePolicy: 'exact',
   tuning: [55, 60, 64, 69],
   fretted: true,
   status: 'planned',

@@ -6,7 +6,8 @@
 // down to string 1: G, C, E, A) rather than sorted low-to-high, because standard
 // ukulele tuning is re-entrant -- the G string rings HIGHER than the C string next
 // to it (same re-entrant idea as the 5-string banjo's 5th string; see banjo.js).
-// Mic input, any-octave name matching, so octavePolicy is nearest-octave.
+// octavePolicy is exact: the right letter in the wrong octave is a wrong note (the
+// mic cannot tell which string was used, so position is taught by diagram).
 export default {
   id: 'uke',
   name: 'Ukulele',
@@ -15,7 +16,7 @@ export default {
   range: { low: 60, high: 74 },
   transposition: 0,
   clefs: ['treble'],
-  octavePolicy: 'nearest-octave',
+  octavePolicy: 'exact',
   tuning: [67, 60, 64, 69],
   fretted: true,
   status: 'ready',

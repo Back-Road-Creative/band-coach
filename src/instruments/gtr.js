@@ -5,7 +5,8 @@
 // the 12th fret on the high E string (64+12); low (40) is the open low E.
 // Guitar is heard through a microphone (app.js MODS.gtr.input === 'pluck'),
 // matching pitch class in any octave for the "find it by name" levels, so
-// octavePolicy is nearest-octave.
+// octavePolicy is exact: the right letter in the wrong octave is a wrong note (the
+// mic cannot tell which string was used, so position is taught by diagram).
 export default {
   id: 'gtr',
   name: 'Guitar',
@@ -14,7 +15,7 @@ export default {
   range: { low: 40, high: 76 },
   transposition: 0,
   clefs: ['treble'],
-  octavePolicy: 'nearest-octave',
+  octavePolicy: 'exact',
   tuning: [40, 45, 50, 55, 59, 64],
   fretted: true,
   status: 'ready',

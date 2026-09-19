@@ -44,3 +44,18 @@ test('judgePitch(exact): a different pitch class reports wrong-pitch-class', () 
   assert.equal(result.ok, false);
   assert.equal(result.reason, 'wrong-pitch-class');
 });
+
+// One home for octave policy: the instrument records. The judge must not keep
+// its own table, or the two drift (they did, the day both were written).
+test('OCTAVE_POLICY is derived from the instrument records', async () => {
+  const { INSTRUMENTS } = await import('../../src/instruments/index.js');
+  for (const rec of INSTRUMENTS.filter((r) => r.status === 'ready')) {
+    assert.equal(OCTAVE_POLICY[rec.id], rec.octavePolicy, rec.id);
+  }
+});
+
+test('only the voice may answer in its own octave', async () => {
+  const { INSTRUMENTS } = await import('../../src/instruments/index.js');
+  const loose = INSTRUMENTS.filter((r) => r.octavePolicy !== 'exact').map((r) => r.id);
+  assert.deepEqual(loose, ['voice']);
+});

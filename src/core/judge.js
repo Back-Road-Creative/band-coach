@@ -1,3 +1,4 @@
+import { INSTRUMENTS } from '../instruments/index.js';
 // Pure pitch-judging logic: whether a heard MIDI note matches a target MIDI
 // note, under an explicit octave policy. No DOM, no globals, no state.
 //
@@ -18,15 +19,10 @@ const pc = (m) => ((Math.round(m) % 12) + 12) % 12;
 
 // instrument id -> its default octave policy. Read from band-coach.html's
 // MODS table (src/app.js:67-140, orig L229-267 area covers the ids this maps).
-export const OCTAVE_POLICY = {
-  kbd: 'exact',
-  gtr: 'exact',
-  bass: 'exact',
-  uke: 'exact',
-  wind: 'exact',
-  harp: 'exact',
-  voice: 'nearest-octave',
-};
+// Derived, never restated: the instrument record is the one home for octave policy.
+export const OCTAVE_POLICY = Object.fromEntries(
+  INSTRUMENTS.filter((r) => r.status === 'ready').map((r) => [r.id, r.octavePolicy]),
+);
 
 export function judgePitch({ heardMidi, targetMidi, policy }) {
   if (policy === 'exact') {
