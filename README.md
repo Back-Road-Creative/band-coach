@@ -53,6 +53,13 @@ pin known judging bugs on purpose so a later change to the app is forced to
 touch them deliberately instead of silently inheriting the bug — they are
 not something to "fix" by editing the test.
 
+## Backups
+
+Progress is saved in the browser, keyed to the exact file path Band Coach was opened from — moving
+or re-downloading the file can lose it, since browsers do not share that storage across paths. Use
+"Save a backup" in the app to download `band-coach-progress.json`, and "Restore a backup" to load
+one back in. A quiet reminder appears on a fresh profile and after a while without a backup.
+
 ## Licence
 
 Apache-2.0 — see `LICENSE`.

@@ -67,6 +67,15 @@
         <label for="optNames"><input type="checkbox" id="optNames" checked> Show note names</label>
         <button type="button" class="small" id="resetBtn">Reset this instrument</button>
       </div>
+      <div class="opts">
+        <button type="button" class="small" id="backupSaveBtn">Save a backup</button>
+        <label class="small file-label" for="backupRestoreInput">Restore a backup</label>
+        <input type="file" accept=".json,application/json" id="backupRestoreInput" hidden>
+      </div>
+      <div class="backup-nudge" id="backupNudge" hidden>
+        <span id="backupNudgeText"></span>
+        <button type="button" class="small" id="backupNudgeDismiss">Dismiss</button>
+      </div>
       <div class="help">
         <p id="helpText"></p>
         <p><strong>How it decides:</strong> no dice. The next exercise is always the item or move with the largest need score (low knowledge, weak move, not seen lately), so the same results always give the same lesson. Knowledge fades if you stay away, so old material comes back.</p>
