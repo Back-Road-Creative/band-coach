@@ -1,8 +1,10 @@
 import { judgePitch, OCTAVE_POLICY } from './core/judge.js';
+import { createDeafWindow } from './audio/deaf-window.js';
 
 (function () {
   'use strict';
   const $ = id => document.getElementById(id);
+  const deafWindow = createDeafWindow({ now: () => performance.now() });
   // ---------- music helpers ----------
   const NAMES = ['C', 'C♯', 'D', 'E♭', 'E', 'F', 'F♯', 'G', 'A♭', 'A', 'B♭', 'B'];
   const SOLFA = { 0: 'Do', 2: 'Re', 4: 'Mi', 5: 'Fa', 7: 'Sol', 9: 'La', 11: 'Ti', 12: 'high Do' };
@@ -30,8 +32,9 @@ import { judgePitch, OCTAVE_POLICY } from './core/judge.js';
     const g2 = actx.createGain(); g2.gain.value = 0.25; o2.connect(g2); g2.connect(v); o.connect(v); v.connect(actx.destination);
     v.gain.setValueAtTime(0.0001, at); v.gain.exponentialRampToValueAtTime(vol || 0.22, at + 0.015); v.gain.exponentialRampToValueAtTime(0.0001, at + dur);
     o.start(at); o2.start(at); o.stop(at + dur + 0.05); o2.stop(at + dur + 0.05);
+    deafWindow.open(Math.max(0, (at + dur - now()) * 1000));
   }
-  function click(at, accent) { if (!actx) return; const o = actx.createOscillator(), v = actx.createGain(); o.type = 'square'; o.frequency.value = accent ? 1500 : 1000; v.gain.setValueAtTime(0.0001, at); v.gain.exponentialRampToValueAtTime(0.16, at + 0.002); v.gain.exponentialRampToValueAtTime(0.0001, at + 0.05); o.connect(v); v.connect(actx.destination); o.start(at); o.stop(at + 0.06); }
+  function click(at, accent) { if (!actx) return; const o = actx.createOscillator(), v = actx.createGain(); o.type = 'square'; o.frequency.value = accent ? 1500 : 1000; v.gain.setValueAtTime(0.0001, at); v.gain.exponentialRampToValueAtTime(0.16, at + 0.002); v.gain.exponentialRampToValueAtTime(0.0001, at + 0.05); o.connect(v); v.connect(actx.destination); o.start(at); o.stop(at + 0.06); deafWindow.open(Math.max(0, (at + 0.06 - now()) * 1000)); }
 
   // ---------- listening: pitch (YIN) and chord colour (chroma) ----------
   function yin(buf, sr, fmin, fmax) {
@@ -325,7 +328,7 @@ import { judgePitch, OCTAVE_POLICY } from './core/judge.js';
   }
   // microphone frames: plucked instruments fire note events, voices and winds are judged on a held pitch
   function onPitch(fr, dt) {
-    heard = fr; const M = MODS[mod]; if (!playing || !task || task.done) return; const e = cur(); if (!e) return;
+    heard = fr; if (deafWindow.isDeaf()) return; const M = MODS[mod]; if (!playing || !task || task.done) return; const e = cur(); if (!e) return;
     if (M.input === 'pluck') {
       if (e.info.kind === 'chord') { if (fr.rms < 0.012 || !fr.chroma) { holdFor = 0; return; } const c = fr.chroma, score = e.info.pcs.reduce((s, x) => s + c[x], 0), each = e.info.pcs.every(x => c[x] > 0.06); e.score = score; if (score > 0.72 && each) { holdFor += dt; if (holdFor > 0.18) passEl(undefined, e.info.label + ': that rings true.'); } else holdFor = 0; if (fr.rms > 0.02) lastInputAt = now(); return; }
       if (fr.rms < 0.01 || !fr.freq) { if (++stableN > 2 && fr.rms < 0.006) released = true; stableMidi = -1; return; }
@@ -606,6 +609,6 @@ import { judgePitch, OCTAVE_POLICY } from './core/judge.js';
   setInterval(() => { if (!TOOLS[mod] || !micReady || !anTime) return; const buf = new Float32Array(anTime.fftSize); anTime.getFloatTimeDomainData(buf); const r = yin(buf, actx.sampleRate, 36, 1600), fr = { rms: r.rms, freq: r.freq && r.clarity > 0.8 ? r.freq : 0 }; if (fr.freq) fr.midi = fmidi(fr.freq); toolPitch(fr, 0.05); }, 50);
 
   loadDB(); if (!Array.isArray(DB.custom)) DB.custom = []; $('optNames').checked = DB.prefs.names; buildPicker(); setMod(mod); requestAnimationFrame(frame);
-  window.__coach = { state: () => S, db: () => DB, sess: () => sess, task: () => task, cur: cur, note: onNote, answer: answer, tap: onTap, bar: () => bar, playing: () => playing, setMod: setMod, testSource: testSource, heard: () => heard, yin: yin, cap: () => cap };
+  window.__coach = { state: () => S, db: () => DB, sess: () => sess, task: () => task, cur: cur, note: onNote, answer: answer, tap: onTap, bar: () => bar, playing: () => playing, setMod: setMod, testSource: testSource, heard: () => heard, yin: yin, cap: () => cap, deaf: () => deafWindow.isDeaf() };
 
 })();
