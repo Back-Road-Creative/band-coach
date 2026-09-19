@@ -10,6 +10,8 @@ import { yin } from './audio/yin.js';
 import { createPitchNode } from './audio/pitch-worklet.js';
 //
 import { noiseFloor, gatesFor, meterLevel } from './audio/levels.js';
+import { diagnoseInput } from './audio/input-diagnosis.js';
+import { createOnsetDetector } from './audio/onset.js';
 //
 import { chroma, judgeChord } from './audio/chords.js';
 //
@@ -110,7 +112,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
       const mute = actx.createGain(); mute.gain.value = 0; node.connect(mute); mute.connect(actx.destination); // keeps the worklet in the live render graph without making sound
       node.port.onmessage = ev => {
         const d = ev.data, M = MODS[mod]; if (!M || !(M.input === 'pluck' || M.input === 'sustain')) return;
-        const fr = { rms: d.rms, freq: d.freq && d.clarity > 0.8 ? d.freq : 0, onset: d.onset }; if (fr.freq) fr.midi = fmidi(fr.freq);
+        const fr = { rms: d.rms, freq: d.freq && d.clarity > 0.8 ? d.freq : 0, onset: d.onset, clarity: d.clarity }; if (fr.freq) fr.midi = fmidi(fr.freq);
         if (task && cur() && cur().info.kind === 'chord') { const db = new Float32Array(anFreq.frequencyBinCount); anFreq.getFloatFrequencyData(db); fr.chroma = chroma(db, actx.sampleRate); }
         meterUpdate(fr.rms);
         const t = now(), dt = Math.min(0.2, t - (lastWorkletPitchAt || t)); lastWorkletPitchAt = t;
@@ -228,9 +230,9 @@ import { register as registerPlayalong } from './ui/playalong.js';
         { name: 'Chords: C, F and G', add: ['cC', 'cF', 'cG'], task: 'chord', pool: 'c', limit: 12 }, { name: 'Chords: A minor, D minor, E minor', add: ['cAm', 'cDm', 'cEm'], task: 'chord', pool: 'c', limit: 10 },
         { name: 'Chord changes', task: 'seq', len: 2, pool: 'c', limit: 8 }
       ] },
-    gtr: { name: 'Guitar', tag: 'microphone', color: '#f28b25', input: 'pluck', fmin: 70, fmax: 1200, tuning: [40, 45, 50, 55, 59, 64], frets: 12, help: 'Guitar: press Connect to let the page listen through your microphone or audio interface. Play one clean note at a time. It hears the pitch, not which string you used, so any place that gives the right note counts. Chord listening is experimental: the microphone hears a chord as one blended sound, not separate notes, and a very noisy room can fool it either way.', levels: null },
+    gtr: { name: 'Guitar', tag: 'microphone', color: '#f28b25', input: 'pluck', fmin: 70, fmax: 1200, tuning: [40, 45, 50, 55, 59, 64], frets: 12, help: 'Guitar: press Connect to let the page listen through your microphone or audio interface. On a single-note lesson, play one clean note at a time; if it hears a strum instead it will tell you so rather than staying silent. It hears the pitch, not which string you used, so any place that gives the right note counts. Chord listening is experimental: the microphone hears a chord as one blended sound, not separate notes, and a very noisy room can fool it either way.', levels: null },
     bass: { name: 'Bass', tag: 'microphone', color: '#e8392f', input: 'pluck', fmin: 36, fmax: 500, tuning: [28, 33, 38, 43], frets: 12, help: 'Bass: press Connect to let the page listen. Play one clean note at a time and let it ring for a moment; low notes take a little longer to recognise.', levels: null },
-    uke: { name: 'Ukulele', tag: 'microphone', color: '#f3c52f', input: 'pluck', fmin: 200, fmax: 1500, tuning: [67, 60, 64, 69], frets: 7, help: 'Ukulele: press Connect to let the page listen. Standard tuning G C E A with the high G. Chord listening is experimental: the microphone hears a chord as one blended sound, not separate notes, and a very noisy room can fool it either way.', levels: null },
+    uke: { name: 'Ukulele', tag: 'microphone', color: '#f3c52f', input: 'pluck', fmin: 200, fmax: 1500, tuning: [67, 60, 64, 69], frets: 7, help: 'Ukulele: press Connect to let the page listen. Standard tuning G C E A with the high G. On a single-note lesson, play one clean note at a time; if it hears a strum instead it will tell you so rather than staying silent. Chord listening is experimental: the microphone hears a chord as one blended sound, not separate notes, and a very noisy room can fool it either way.', levels: null },
     voice: { name: 'Voice', tag: 'microphone', color: '#41c651', input: 'sustain', fmin: 70, fmax: 1100, help: 'Voice: press Connect to let the page listen. Hold each note steady for about half a second. Any octave counts, so sing where it is comfortable. The dot shows your pitch live; the feedback tells you how many cents sharp or flat you were (100 cents is one key on a piano).',
       levels: [
         { name: 'Match a note: Do, Re, Mi', add: V(0, 2, 4), ref: 'target', limit: 12 }, { name: 'Add Fa and Sol', add: V(5, 7), ref: 'target', limit: 12 }, { name: 'Add La, Ti and high Do', add: V(9, 11, 12), ref: 'target', limit: 12 },
@@ -452,6 +454,16 @@ import { register as registerPlayalong } from './ui/playalong.js';
   const coach = t => { $('coach').textContent = t; };
   const cur = () => task && task.els[task.idx];
   let pressed = {}, heard = null, held = [], holdFor = 0, holdCents = [], wrongFor = 0, lastFired = -1, stableN = 0, stableMidi = -1, released = true, flashBad = -1e12, flashGood = -1e12;
+  // Field report: a strummed chord on a single-note item clears no gate the
+  // app judges (see src/audio/input-diagnosis.js), so onPitch's early
+  // returns below used to leave the learner with no note, no message, no
+  // explanation. diagInputFrames is a rolling window of recent {rms,
+  // clarity} readings fed to diagnoseInput() so the coach line can say WHICH
+  // of silent / too-quiet / unclear-chord is actually happening, instead of
+  // saying nothing at all. diagLastState tracks the last state a message was
+  // shown for so a held state doesn't re-say the same line every frame.
+  let diagInputFrames = [], diagLastState = null;
+  const DIAG_WINDOW_SEC = 1.5;
 
   function playRef(t) {
     ensureAudio(); const at = now() + 0.05, e = t.els[0];
@@ -516,6 +528,20 @@ import { register as registerPlayalong } from './ui/playalong.js';
   // microphone frames: plucked instruments fire note events, voices and winds are judged on a held pitch
   function onPitch(fr, dt) {
     heard = fr; if (deafWindow.isDeaf()) return; const M = MODS[mod]; if (!playing || !task || task.done) return; const e = cur(); if (!e) return;
+    // Field-report fix: on a single-note item, tell the learner WHY nothing
+    // is being judged instead of leaving them with silence. Skipped on a
+    // chord item, where hearing more than one pitch class is the point, not
+    // a problem — its own chroma path below already handles it.
+    if ((M.input === 'pluck' || M.input === 'sustain') && e.info.kind !== 'chord') {
+      diagInputFrames.push({ rms: fr.rms, clarity: fr.clarity, t: now() });
+      const cutoff = now() - DIAG_WINDOW_SEC - 0.5;
+      while (diagInputFrames.length && diagInputFrames[0].t < cutoff) diagInputFrames.shift();
+      // pluck/sustain both judge a note against gates.note (not gates.pitch)
+      // below, so the diagnosis must use the same threshold or it could call
+      // "too-quiet" a signal onPitch itself would already have judged.
+      const diag = diagnoseInput(diagInputFrames, { gates: { pitch: gates.note } });
+      if (diag.state !== 'insufficient' && diag.state !== diagLastState) { diagLastState = diag.state; if (diag.message) coach(diag.message); }
+    } else { diagInputFrames = []; diagLastState = null; }
     if (M.input === 'pluck') {
       // F8: an onset detector (src/audio/onset.js) catches a re-pluck of the
       // SAME note on a still-ringing string, which the RMS-drop/pitch-change
@@ -681,11 +707,38 @@ import { register as registerPlayalong } from './ui/playalong.js';
     if (sess.target && sess.active > sess.target * 60) { sess.target = 0; takeBreak('target'); return; }
     if (!sess.capWarned && todayMinutes() >= 45) { sess.capWarned = true; coach('That is 45 minutes of practice today across your instruments. Skill settles in while you rest, so more today buys little. Finish this level bar and call it.'); }
   }
-  let lastFrame = 0, lastPitchAt = 0;
+  let lastFrame = 0, lastPitchAt = 0, listenOnsetDetector = null;
   function listen() {
     if (pitchWorkletNode) return; // the worklet's own onmessage handler is feeding onPitch instead
     const M = MODS[mod]; if (!M || !micReady || !anTime || !(M.input === 'pluck' || M.input === 'sustain')) return; const t = now(), dt = Math.min(0.2, t - (lastPitchAt || t)); lastPitchAt = t;
-    const buf = new Float32Array(anTime.fftSize); anTime.getFloatTimeDomainData(buf); const r = yin(buf, actx.sampleRate, M.fmin, M.fmax, gates.pitch), fr = { rms: r.rms, freq: r.freq && r.clarity > 0.8 ? r.freq : 0 }; if (fr.freq) fr.midi = fmidi(fr.freq);
+    const buf = new Float32Array(anTime.fftSize); anTime.getFloatTimeDomainData(buf); const r = yin(buf, actx.sampleRate, M.fmin, M.fmax, gates.pitch);
+    // F8 fallback parity: the worklet path has always fed onPitch an onset
+    // flag (src/audio/pitch-worklet.js); this setInterval path never did, so
+    // fr.onset at src/app.js's pluck branch was permanently false whenever
+    // the worklet failed to load, silently killing the F8 re-pluck detector.
+    // The worklet feeds the SAME detector a true continuous stream in small
+    // 512-sample hops (~11.6ms @44.1kHz), so one loud attack is only ever a
+    // sliver of its ~500ms adaptive-threshold history. getFloatTimeDomainData
+    // instead hands this setInterval the analyser's current ROLLING window
+    // (its newest fftSize samples ending now) once every ~50ms: pushing that
+    // whole window as one "frame" would smear an attack across several
+    // mostly-identical overlapping reads, and even pushing just the newest
+    // ~50ms slice makes each attack a much larger fraction of a shorter
+    // history, inflating the adaptive threshold right when the SAME attack's
+    // own flux spike is still in it. Splitting the newest audio into the
+    // worklet's own 512-sample hops and pushing each one separately (oldest
+    // first) keeps the detector's timing assumptions the same on both paths.
+    const HOP = 512;
+    if (!listenOnsetDetector) listenOnsetDetector = createOnsetDetector({ sampleRate: actx.sampleRate, frameSize: HOP, hop: HOP });
+    const newSamples = Math.max(0, Math.min(anTime.fftSize, Math.round((dt || 0.05) * actx.sampleRate)));
+    const nHops = Math.floor(newSamples / HOP);
+    let onset = false;
+    for (let c = nHops - 1; c >= 0; c--) {
+      const end = buf.length - c * HOP;
+      const chunk = buf.subarray(end - HOP, end);
+      if (listenOnsetDetector.push(chunk).onset) onset = true;
+    }
+    const fr = { rms: r.rms, freq: r.freq && r.clarity > 0.8 ? r.freq : 0, clarity: r.clarity, onset: onset }; if (fr.freq) fr.midi = fmidi(fr.freq);
     if (task && cur() && cur().info.kind === 'chord') { const db = new Float32Array(anFreq.frequencyBinCount); anFreq.getFloatFrequencyData(db); fr.chroma = chroma(db, actx.sampleRate); }
     meterUpdate(fr.rms);
     try { onPitch(fr, dt); } catch (e) { errCount++; recordError('onPitch', e); }
@@ -985,7 +1038,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
   $('optNames').addEventListener('change', function () { DB.prefs.names = this.checked; save(); });
 
   function setMod(m) {
-    if (sess) endSession(); mod = m; if (MODS[m]) { S = DB.mods[m]; DB.prefs.mod = m; } customOn = false; grooveOn = false; groove = null; task = null; bar = null; heard = null; cap.on = false;
+    if (sess) endSession(); mod = m; if (MODS[m]) { S = DB.mods[m]; DB.prefs.mod = m; } customOn = false; grooveOn = false; groove = null; task = null; bar = null; heard = null; cap.on = false; diagInputFrames = []; diagLastState = null;
     if (pitchWorkletNode && MODS[m] && MODS[m].fmin && MODS[m].fmax) { lastWorkletRangeSent = { fmin: MODS[m].fmin, fmax: MODS[m].fmax }; pitchWorkletNode.port.postMessage({ type: 'range', fmin: MODS[m].fmin, fmax: MODS[m].fmax }); }
     document.querySelectorAll('#picker button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.mod === m)));
     $('prompt').textContent = (MODS[m] || TOOLS[m]).name; $('hint').textContent = ''; $('choices').hidden = true; say(''); if (MODS[m]) coach(S.judged ? 'Welcome back. You are on level ' + S.level + ': ' + D().name + '. Press Start.' : 'Press Start. Level 1: ' + D().name + '.');
