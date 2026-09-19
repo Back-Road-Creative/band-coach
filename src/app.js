@@ -32,7 +32,7 @@ import { createPanels, sanitizePanelData } from './ui/panels.js';
 //
 //
 // slot:import:w-songs
-//
+import { register as registerSongs, forwardNote as forwardSongNote } from './ui/songs.js';
 //
 import { register as registerEditor, __setDebugFrames, __getDebugSong, __isRecording } from './ui/editor.js';
 //
@@ -492,6 +492,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
   function dirWord(got, want) { let d = ((pc(want) - pc(got)) + 12) % 12; if (d > 6) d -= 12; return d > 0 ? 'higher' : 'lower'; }
   // a played note (MIDI key, screen key, or a plucked note the microphone recognised)
   function onNote(midi, exact) {
+    forwardSongNote(midi, exact);
     lastInputAt = now(); pressed[midi] = performance.now(); if (!playing || !task || task.done) return; const e = cur(); if (!e) return; const i = e.info;
     if (MODS[mod].input === 'tap') { onTap(); return; }
     if (task.kind === 'groove') { grooveOnset(midi); return; }
@@ -1041,7 +1042,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
   //
   //
   // slot:panel:w-songs
-  //
+  registerSongs(panels);
   //
   registerEditor(panels);
   //
@@ -1106,7 +1107,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
   //
   //
   // slot:hook:w-songs
-  //
+  if (__DEBUG_HOOK__) Object.assign(hook, { songsNote: forwardSongNote });
   //
   if (__DEBUG_HOOK__) Object.assign(hook, { editorSetFrames: __setDebugFrames, editorSong: __getDebugSong, editorRecording: __isRecording });
   //

@@ -42,7 +42,15 @@
   /* */
   /* */
   /* slot:css:w-songs */
-  /* */
+  .panel-songs-list { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+  .panel-songs-row button { width: 100%; text-align: left; }
+  .panel-songs-intro { color: var(--muted); }
+  .panel-songs-msg { min-height: 1.2em; color: var(--good); }
+  .panel-songs-warn { color: var(--warn); }
+  .panel-songs-practice { border: 1px solid var(--line); border-radius: 10px; padding: 12px; margin-top: 12px; display: flex; flex-direction: column; gap: 8px; }
+  .panel-songs-practice button { align-self: flex-start; }
+  .panel-songs-count { color: var(--muted); }
+  @media (max-width: 400px) { .panel-songs-list { flex-direction: column; } }
   /* */
   .panel-editor { display: flex; flex-direction: column; gap: 12px; max-width: 100%; }
   .panel-editor .editor-record { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
