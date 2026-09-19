@@ -47,7 +47,16 @@
   /* slot:css:w-editor */
   /* */
   /* */
-  /* slot:css:w-ear */
+  .panel-ear .ear-exercises { display: flex; flex-wrap: wrap; gap: 8px; margin-block: 10px; }
+  .panel-ear .ear-status { color: var(--muted); font-size: 14px; }
+  .panel-ear .ear-prompt { font: 700 18px var(--display); letter-spacing: .02em; }
+  .panel-ear .ear-controls, .panel-ear .ear-choices, .panel-ear .ear-note-entry { display: flex; flex-wrap: wrap; gap: 8px; margin-block: 8px; }
+  .panel-ear .ear-note-entry button { padding: 6px 9px; font-size: 13px; }
+  .panel-ear .ear-progress { color: var(--muted); }
+  .panel-ear .ear-feedback { font-weight: 700; min-height: 1.4em; }
+  .panel-ear .ear-feedback.ok { color: var(--good); }
+  .panel-ear .ear-feedback.no { color: var(--bad); }
+  .panel-ear .ear-explain { color: var(--muted); }
   /* */
   /* */
   /* slot:css:w-theory */
