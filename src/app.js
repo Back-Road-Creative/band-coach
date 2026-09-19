@@ -28,7 +28,7 @@ import { byId as instrumentById } from './instruments/index.js';
 import { describeTask } from './ui/describe.js';
 import { createWakeLock } from './ui/wake-lock.js';
 import { createFocusTrap } from './ui/dialog-focus.js';
-import { createPanels } from './ui/panels.js';
+import { createPanels, sanitizePanelData } from './ui/panels.js';
 //
 //
 // slot:import:w-songs
@@ -356,6 +356,7 @@ import { createPanels } from './ui/panels.js';
     NOTATE_MOD_IDS.forEach(m => { if (NOTATE_MODES.indexOf(pn[m]) >= 0) d.prefs.notate[m] = pn[m]; });
     d.custom = Array.isArray(v.custom) ? v.custom.map(x => Math.round(num(x, 60, 20, 110))).slice(0, 300) : [];
     d.latencyMs = num(v.latencyMs, defaultLatencyMs || 0, 0, 300);
+    d.panels = sanitizePanelData(v.panels);
     return d;
   }
   function forget(t) { const f = o => { if (!o.last) return; const days = (t - o.last) / 86400000; if (days > 0.5) { o.m = 0.4 + (o.m - 0.4) * Math.pow(0.5, days / 10); o.last = t; } }; MOD_IDS.forEach(m => { const s = DB.mods[m]; Object.keys(s.item).forEach(k => f(s.item[k])); Object.keys(s.trans).forEach(k => f(s.trans[k])); }); }
@@ -1021,6 +1022,8 @@ import { createPanels } from './ui/panels.js';
     db: () => DB, save: save, mod: () => mod, setMod: m => { closePanel(); setMod(m); }, instrument: id => instrumentById[id || mod],
     audio: () => { ensureAudio(); return actx; }, openMic: openMic, analysers: () => ({ time: anTime, freq: anFreq }), gates: () => gates,
     tone: tone, click: click, now: now, say: say, coach: coach, recordError: recordError, close: () => closePanel(),
+    // store(id): this panel's saved data, kept in DB.panels[id] (plain JSON, 256 KB max; see sanitizePanelData)
+    store: id => ({ get: () => (DB.panels && DB.panels[id]) || null, set: obj => { if (!DB.panels) DB.panels = {}; DB.panels[id] = obj; save(); } }),
   };
   //
   //

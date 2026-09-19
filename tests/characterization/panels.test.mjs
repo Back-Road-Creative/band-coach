@@ -23,3 +23,15 @@ test('a registered panel opens in place of the trainer and an instrument closes 
   assert.equal(await page.evaluate("document.getElementById('mainArea').hidden"), false);
   assert.equal(await page.evaluate("document.getElementById('panelHost').hidden"), true);
 });
+
+test('panel data survives a reload and garbage in it is dropped', async (t) => {
+  const page = await launchPage(HTML_PATH);
+  t.after(() => page.close());
+  await page.evaluate(`(function () {
+    const db = window.__coach.db(); db.panels = { songs: { picked: 'ode-to-joy' }, ear: 'garbage' };
+    localStorage.setItem('bandcoach.v1', JSON.stringify(db));
+  })()`);
+  await page.reload();
+  await page.waitFor('window.__coach && window.__coach.db().mods.kbd', 5000);
+  assert.deepEqual(await page.evaluate('window.__coach.db().panels'), { songs: { picked: 'ode-to-joy' } });
+});

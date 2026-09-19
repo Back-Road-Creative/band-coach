@@ -40,3 +40,22 @@ export function createPanels() {
     current() { return open; },
   };
 }
+
+// Saved panel data lives in DB.panels[<panel id>] as a plain JSON object.
+// sanitizeDB keeps it through this: anything that is not a plain object, has
+// an unsafe key, or is bigger than PANEL_DATA_MAX once serialised is
+// dropped, so one broken panel can never stop the app from loading. Each
+// panel still validates its own fields when it reads them.
+export const PANEL_DATA_MAX = 256 * 1024;
+const PANEL_ID = /^[a-z][a-z0-9-]{0,31}$/;
+export function sanitizePanelData(v) {
+  const out = {};
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return out;
+  Object.keys(v).forEach(id => {
+    const x = v[id];
+    if (!PANEL_ID.test(id) || !x || typeof x !== 'object' || Array.isArray(x)) return;
+    let text; try { text = JSON.stringify(x); } catch (e) { return; }
+    if (text.length <= PANEL_DATA_MAX) out[id] = JSON.parse(text);
+  });
+  return out;
+}

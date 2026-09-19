@@ -29,3 +29,11 @@ test('bad registrations and unknown panels fail loudly', () => {
   p.open('x'); p.close(); p.close();
   assert.equal(p.current(), null);
 });
+
+test('saved panel data keeps plain objects and drops anything unsafe or oversized', async () => {
+  const { sanitizePanelData, PANEL_DATA_MAX } = await import('../../src/ui/panels.js');
+  assert.deepEqual(sanitizePanelData(null), {});
+  assert.deepEqual(sanitizePanelData([1]), {});
+  const got = sanitizePanelData({ songs: { list: [1, 2] }, ear: 'text', '__proto__x': {}, 'Bad Id': {}, big: { s: 'x'.repeat(PANEL_DATA_MAX) }, theory: [1] });
+  assert.deepEqual(got, { songs: { list: [1, 2] } });
+});
