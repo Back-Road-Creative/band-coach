@@ -59,19 +59,6 @@ export const starterSongDefs = [
       'E4:q D4:q C4:q D4:q | E4:q E4:q E4:q E4:q | D4:q D4:q E4:q D4:q | C4:w',
   },
   {
-    id: 'three-blind-mice',
-    title: 'Three Blind Mice',
-    composer: 'Traditional',
-    licence: PUBLIC_DOMAIN,
-    source: traditional('English nursery-rhyme'),
-    key: { tonic: 0, mode: 'major' },
-    metre: { num: 4, den: 4 },
-    bpm: 100,
-    level: 1,
-    notation:
-      'E4:q D4:q C4:h | E4:q D4:q C4:h | G4:q F4:q E4:h | G4:q F4:q E4:h | E4:q D4:q C4:h',
-  },
-  {
     id: 'au-clair-de-la-lune',
     title: 'Au clair de la lune',
     composer: 'Traditional',
@@ -82,7 +69,7 @@ export const starterSongDefs = [
     bpm: 100,
     level: 1,
     notation:
-      'C4:q C4:q C4:q D4:q | E4:h D4:h | C4:q E4:q D4:q C4:q | D4:q D4:q D4:q D4:q | D4:h C4:h',
+      'C4:q C4:q C4:q D4:q | E4:h D4:h | C4:q E4:q D4:q D4:q | C4:w',
   },
   {
     id: 'twinkle-twinkle',
@@ -111,7 +98,7 @@ export const starterSongDefs = [
     level: 2,
     notation:
       'C4:q D4:q E4:q C4:q | C4:q D4:q E4:q C4:q | E4:q F4:q G4:h | E4:q F4:q G4:h | ' +
-      'G4:q A4:q G4:q F4:q | E4:q C4:q E4:q C4:q | C4:q G3:q C4:h',
+      'G4:e A4:e G4:e F4:e E4:q C4:q | G4:e A4:e G4:e F4:e E4:q C4:q | C4:q G3:q C4:h | C4:q G3:q C4:h',
   },
   {
     id: 'london-bridge',
@@ -124,22 +111,8 @@ export const starterSongDefs = [
     bpm: 100,
     level: 2,
     notation:
-      'G4:q A4:q G4:q F4:q | E4:q F4:q G4:h | G4:q A4:q G4:q F4:q | E4:q F4:q G4:h | ' +
-      'D4:q E4:q F4:q G4:q | D4:q E4:q F4:h | G4:q A4:q G4:q F4:q | E4:q F4:q G4:h',
-  },
-  {
-    id: 'row-row-row-your-boat',
-    title: 'Row, Row, Row Your Boat',
-    composer: 'Traditional',
-    licence: PUBLIC_DOMAIN,
-    source: traditional('American'),
-    key: { tonic: 0, mode: 'major' },
-    metre: { num: 4, den: 4 },
-    bpm: 100,
-    level: 2,
-    notation:
-      'C4:q C4:q C4:q D4:q | E4:q E4:q D4:q E4:q | F4:h G4:h | C5:q C5:q C5:q G4:q | ' +
-      'G4:q G4:q E4:q E4:q | E4:q C4:q C4:q C4:q | G4:q F4:q E4:q D4:q | C4:w',
+      'G4:q A4:q G4:q F4:q | E4:q F4:q G4:h | D4:q E4:q F4:h | E4:q F4:q G4:h | ' +
+      'G4:q A4:q G4:q F4:q | E4:q F4:q G4:h | D4:h G4:h | E4:q C4:h.',
   },
   {
     id: 'ode-to-joy',
@@ -153,45 +126,7 @@ export const starterSongDefs = [
     level: 3,
     notation:
       'E4:q E4:q F4:q G4:q | G4:q F4:q E4:q D4:q | C4:q C4:q D4:q E4:q | E4:q. D4:e D4:h | ' +
-      'E4:q E4:q F4:q G4:q | G4:q F4:q E4:q D4:q | C4:q C4:q D4:q E4:q | D4:h C4:h',
-  },
-  {
-    id: 'oh-susanna',
-    title: 'Oh! Susanna',
-    composer: 'Stephen Foster',
-    licence: PUBLIC_DOMAIN,
-    source: composed('Stephen Foster', 'died 1864; published 1848'),
-    key: { tonic: 0, mode: 'major' },
-    metre: { num: 4, den: 4 },
-    bpm: 130,
-    level: 3,
-    notation:
-      'C4:q E4:q E4:q D4:q | C4:q D4:q E4:h | E4:q F4:q G4:q A4:q | G4:h E4:h | ' +
-      'C5:q C5:q A4:q G4:q | F4:q E4:q D4:h | C4:q E4:q G4:q A4:q | G4:w',
-  },
-  {
-    id: 'aura-lee',
-    title: 'Aura Lee',
-    composer: 'George R. Poulton',
-    licence: PUBLIC_DOMAIN,
-    source: composed('George R. Poulton', 'died 1867; published 1861, words by W. W. Fosdick'),
-    key: { tonic: 0, mode: 'major' },
-    metre: { num: 3, den: 4 },
-    bpm: 90,
-    level: 3,
-    notation: 'C4:q E4:q G4:q | A4:q G4:q E4:q | F4:q D4:q F4:q | E4:h.',
-  },
-  {
-    id: 'simple-gifts',
-    title: 'Simple Gifts',
-    composer: 'Joseph Brackett',
-    licence: PUBLIC_DOMAIN,
-    source: composed('Joseph Brackett', 'died 1882; Shaker song, 1848'),
-    key: { tonic: 0, mode: 'major' },
-    metre: { num: 4, den: 4 },
-    bpm: 110,
-    level: 3,
-    notation: 'C4:q F4:q G4:q A4:q | G4:h. F4:q | F4:q D4:q E4:q F4:q | C4:w',
+      'E4:q E4:q F4:q G4:q | G4:q F4:q E4:q D4:q | C4:q C4:q D4:q E4:q | D4:q. C4:e C4:h',
   },
   {
     id: 'amazing-grace',
@@ -203,7 +138,9 @@ export const starterSongDefs = [
     metre: { num: 3, den: 4 },
     bpm: 70,
     level: 3,
-    notation: '^ G4:q | C4:q. E4:e G4:q | E4:q. C4:e E4:q | D4:q. C4:e D4:q | C4:h',
+    notation:
+      '^ G3:q | C4:h E4:e C4:e | E4:h D4:q | C4:h A3:q | G3:h G3:q | ' +
+      'C4:h E4:e C4:e | E4:h D4:e E4:e | G4:h',
   },
   {
     id: 'minuet-in-g',
@@ -218,19 +155,9 @@ export const starterSongDefs = [
     metre: { num: 3, den: 4 },
     bpm: 100,
     level: 4,
-    notation: 'D4:q G4:q A4:q | B4:q C5:q D5:q | G4:h. | G4:q F#4:q E4:q | D4:h.',
-  },
-  {
-    id: 'brahms-lullaby',
-    title: "Brahms' Lullaby",
-    composer: 'Johannes Brahms',
-    licence: PUBLIC_DOMAIN,
-    source: composed('Johannes Brahms', 'died 1897; "Wiegenlied", Op. 49 No. 4'),
-    key: { tonic: 0, mode: 'major' },
-    metre: { num: 3, den: 4 },
-    bpm: 70,
-    level: 4,
-    notation: 'C4:q C4:q F4:q | F4:q A4:h | G4:q G4:q C5:q | C5:q E5:h',
+    notation:
+      'D5:q G4:e A4:e B4:e C5:e | D5:q G4:q G4:q | E5:q C5:e D5:e E5:e F#5:e | G5:q G4:q G4:q | ' +
+      'C5:q D5:e C5:e B4:e A4:e | B4:q C5:e B4:e A4:e G4:e | F#4:q G4:e A4:e B4:e G4:e | A4:h.',
   },
 ];
 
