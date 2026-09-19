@@ -86,6 +86,13 @@ export function validateInstrument(rec) {
     fail('fretted must be a boolean when present');
   }
 
+  // Notation display convention: some instruments (guitar, bass) are printed
+  // an octave away from their sounding pitch to avoid a thicket of ledger
+  // lines. Absent, a record is written at its sounding pitch.
+  if (rec.writtenOctaveUp !== undefined && typeof rec.writtenOctaveUp !== 'boolean') {
+    fail('writtenOctaveUp must be a boolean when present');
+  }
+
   if (typeof rec.status !== 'string' || !STATUSES.includes(rec.status)) {
     fail('status must be one of ' + STATUSES.join('|') + ' (got ' + JSON.stringify(rec.status) + ')');
   }

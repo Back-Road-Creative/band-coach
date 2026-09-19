@@ -5,6 +5,8 @@
 // (43+12); low (28) is the open E string. Mic input, any-octave name matching, so
 // octavePolicy is exact: the right letter in the wrong octave is a wrong note (the
 // mic cannot tell which string was used, so position is taught by diagram).
+// Bass, like guitar, is a transposing instrument on the page: standard
+// notation prints it an octave above its sounding pitch.
 export default {
   id: 'bass',
   name: 'Bass',
@@ -16,6 +18,7 @@ export default {
   octavePolicy: 'exact',
   tuning: [28, 33, 38, 43],
   fretted: true,
+  writtenOctaveUp: true,
   status: 'ready',
   curriculum: [
     { level: 1, items: ['The open strings'] },

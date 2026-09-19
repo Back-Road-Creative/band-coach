@@ -76,11 +76,17 @@ notes and a key/clef/time signature, it returns plain drawing primitives
 (noteheads, stems, ledger lines, accidentals, clefs, key/time signatures,
 tab fret numbers) rather than drawing directly, so it can be unit-tested with
 `node --test` and no browser. `draw-canvas.js` is a thin Canvas 2D renderer
-for those primitives. It replaces the app's current treble-only staff with
-support for bass/alto/tenor clef, a grand staff, key signatures, correct
-enharmonic spelling and tab — but this module is not wired into the running
-app yet; `src/app.js` still draws its own staff until a later change swaps
-the call site over.
+for those primitives, and `for-instrument.js` bridges an instrument record
+and a target MIDI note into what the engine needs (clef, the written pitch —
+guitar and bass print an octave above their sounding pitch, per each
+record's `writtenOctaveUp` — and a tab position for fretted instruments).
+
+Keyboard, guitar, bass, ukulele and voice each have a per-instrument "Show"
+preference (note names, staff, or both) that draws this staff as an overlay
+alongside the existing display; it defaults to "Note names (today)", so
+nothing changes unless a learner switches it. Wind and brass keeps its own
+hand-drawn staff (task-row layout, live tuning gauge, hold timer) rather
+than being swapped onto the engine, since the two are not equivalent.
 ## Instruments are data
 
 Each instrument is a plain data record under `src/instruments/`, validated by

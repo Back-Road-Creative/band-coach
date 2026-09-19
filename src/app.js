@@ -18,6 +18,9 @@ import { toAudioTime, judgeTap, medianLatency } from './core/timing.js';
 //
 // slot:import:rhythm-vocab
 //
+import { forInstrument } from './notation/for-instrument.js';
+import { drawPrimitives } from './notation/draw-canvas.js';
+import { byId as instrumentById } from './instruments/index.js';
 // slot:import:notation-wire
 //
 // slot:import:a11y
@@ -134,6 +137,12 @@ import { toAudioTime, judgeTap, medianLatency } from './core/timing.js';
   MODS.bass.levels = stringLevels(MODS.bass.tuning, ['E', 'A', 'D', 'G'], 12, null);
   MODS.uke.levels = stringLevels(MODS.uke.tuning, ['G', 'C', 'E', 'A'], 7, ['C', 'Am', 'F', 'G7']);
   const MOD_IDS = Object.keys(MODS);
+  // Instruments the notation engine (src/notation/) is wired into. Wind
+  // already draws its own hand-built staff (drawStaff below); it is not
+  // equivalent to the engine's output (task-row layout, live tuning gauge,
+  // hold timer) so it is left alone rather than swapped.
+  const NOTATE_MOD_IDS = ['kbd', 'gtr', 'bass', 'uke', 'voice'];
+  const NOTATE_MODES = ['names', 'staff', 'both'];
   const WIND_KINDS = { c: ['Concert pitch: flute, oboe, violin', 0, 'treble'], bb: ['B flat: trumpet, clarinet, soprano sax', -2, 'treble'], bbt: ['B flat, octave lower: tenor sax', -14, 'treble'], eb: ['E flat: alto sax', -9, 'treble'], ebb: ['E flat, octave lower: baritone sax', -21, 'treble'], f: ['F: French horn', -7, 'treble'], bc: ['Bass clef: trombone, euphonium, tuba', -19, 'bass'] };
   const VOICE_KINDS = { low: ['Lower voice (Do = C3)', 48], mid: ['Middle voice (Do = G3)', 55], high: ['Higher voice (Do = C4)', 60] };
 
@@ -203,10 +212,15 @@ import { toAudioTime, judgeTap, medianLatency } from './core/timing.js';
     return s;
   }
   function sanitizeDB(v, defaultLatencyMs) {
-    const d = { v: 1, mods: {}, sessions: [], prefs: { mod: 'kbd', wind: 'bb', voice: 'low', names: true } }; v = (v && typeof v === 'object') ? v : {};
+    const notate = {}; NOTATE_MOD_IDS.forEach(m => { notate[m] = 'names'; });
+    const d = { v: 1, mods: {}, sessions: [], prefs: { mod: 'kbd', wind: 'bb', voice: 'low', names: true, notate: notate } }; v = (v && typeof v === 'object') ? v : {};
     MOD_IDS.forEach(m => { d.mods[m] = sanitizeModel(m, v.mods && v.mods[m]); });
     if (Array.isArray(v.sessions)) d.sessions = v.sessions.filter(x => x && typeof x.d === 'string' && MODS[x.mod]).slice(-60).map(x => ({ d: x.d.slice(0, 10), mod: x.mod, min: num(x.min, 0, 0, 600), acc: num(x.acc, 0, 0, 1), a1: num(x.a1, 0, 0, 1), a2: num(x.a2, 0, 0, 1), from: num(x.from, 1, 1, 80), to: num(x.to, 1, 1, 80), breaks: num(x.breaks, 0, 0, 99) }));
     const p = v.prefs || {}; if (MODS[p.mod]) d.prefs.mod = p.mod; if (WIND_KINDS[p.wind]) d.prefs.wind = p.wind; if (VOICE_KINDS[p.voice]) d.prefs.voice = p.voice; d.prefs.names = p.names !== false;
+    // "Show: staff / names / both" is per-instrument and defaults to 'names',
+    // i.e. today's display, untouched, for any instrument not set.
+    const pn = (p.notate && typeof p.notate === 'object') ? p.notate : {};
+    NOTATE_MOD_IDS.forEach(m => { if (NOTATE_MODES.indexOf(pn[m]) >= 0) d.prefs.notate[m] = pn[m]; });
     d.custom = Array.isArray(v.custom) ? v.custom.map(x => Math.round(num(x, 60, 20, 110))).slice(0, 300) : [];
     d.latencyMs = num(v.latencyMs, defaultLatencyMs || 0, 0, 300);
     return d;
@@ -448,7 +462,7 @@ import { toAudioTime, judgeTap, medianLatency } from './core/timing.js';
   }
 
   // ---------- drawing ----------
-  const cv = $('cv'), g = cv.getContext('2d'); let keyRects = [], rowRects = [];
+  const cv = $('cv'), g = cv.getContext('2d'); let keyRects = [], rowRects = [], lastStaff = null;
   function size() { const r = cv.getBoundingClientRect(), d = Math.min(window.devicePixelRatio || 1, 2), w = Math.round(r.width * d), h = Math.round(r.height * d); if (w && h && (cv.width !== w || cv.height !== h)) { cv.width = w; cv.height = h; } }
   function rr(x, y, w, h, r) { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); }
   const font = (px, w) => { g.font = (w || 700) + ' ' + Math.round(px) + 'px "Barlow Condensed", Arial, sans-serif'; };
@@ -515,12 +529,40 @@ import { toAudioTime, judgeTap, medianLatency } from './core/timing.js';
     if (bar.judged) { bar.onsets.forEach(o => { const beat = (o.t - bar.playAt) / bar.spb; g.fillStyle = o.hit === null ? '#ff6b5e' : Math.abs(o.hit) < 0.06 ? '#5be08a' : '#f3c52f'; g.fillRect(X(beat) - 3 + (o.hit || 0) / bar.spb * bw, y + H * 0.2, 6, H * 0.08); }); bar.taps.filter(tp => !tp.used).forEach(tp => { g.fillStyle = '#ff6b5e'; font(H * 0.07); g.textAlign = 'center'; g.fillText('×', X((tp.t - bar.playAt) / bar.spb), y + H * 0.28); }); }
     if (t < bar.playAt) { const left = Math.ceil((bar.playAt - t) / bar.spb); g.fillStyle = accent(); font(H * 0.22); g.textAlign = 'center'; g.fillText(String(clamp(left, 1, 4)), W * 0.5, H * 0.22); } else if (t < bar.end) { const px = X((t - bar.playAt) / bar.spb - 0); g.strokeStyle = accent(); g.lineWidth = 3; g.beginPath(); g.moveTo(px, y - H * 0.34); g.lineTo(px, y + H * 0.2); g.stroke(); bar.taps.forEach(tp => { g.fillStyle = '#93a0bd'; g.fillRect(X((tp.t - bar.playAt) / bar.spb) - 2, y + H * 0.2, 4, H * 0.06); }); }
   }
+  // Overlay staff for the five wired instruments (NOTATE_MOD_IDS), additive
+  // to each instrument's existing drawing so today's display is unchanged
+  // when the preference is left at 'names'. Never prints the letter name
+  // unless the app's own reveal flag says so.
+  function drawNotation(e, W, H) {
+    lastStaff = null;
+    if (!e || e.info.kind !== 'note' || e.info.midi === null || e.info.midi === undefined) return;
+    const notate = DB.prefs.notate[mod] || 'names';
+    if (notate === 'names') return;
+    const rec = instrumentById[mod];
+    if (!rec) return;
+    const out = forInstrument(rec, e.info.midi, { item: e.info, width: 280 });
+    if (!out) return;
+    const nameShown = notate === 'both' && DB.prefs.names && !!(e.reveal || e.failed);
+    lastStaff = Object.assign({ nameShown: nameShown }, out);
+    const scale = H * 0.0075, x0 = W * 0.05, y0 = H * 0.06;
+    g.save();
+    g.translate(x0, y0); g.scale(scale, scale);
+    g.strokeStyle = '#c9ced9'; g.fillStyle = '#e9edf6'; g.lineWidth = 1.5 / scale;
+    drawPrimitives(g, out.primitives, {});
+    if (out.tab) drawPrimitives(g, out.tab.primitives, {});
+    g.restore();
+    if (nameShown) {
+      g.fillStyle = '#93a0bd'; font(H * 0.05, 600); g.textAlign = 'left';
+      g.fillText(nname(e.info.midi), x0, y0 + H * 0.34);
+    }
+  }
   function draw() {
     size(); const W = cv.width, H = cv.height; g.clearRect(0, 0, W, H); rowRects = []; keyRects = [];
     if (TOOLS[mod]) { if (mod === 'tuner') drawTuner(W, H); else drawCapture(W, H); return; }
     const M = MODS[mod], e = playing && task && !task.done ? cur() : null, showE = e || (task && task.done ? task.els[task.els.length - 1] : null);
     if (mod === 'kbd') { const low = activeItems(mod, S.level).some(id => id[0] === 'n' && +id.slice(1) < 60) || customOn; const tg = []; if (e) { if (e.info.kind === 'chord') { if (e.reveal || e.failed) e.info.pcs.forEach(x => tg.push(60 + x)); } else if (e.reveal || e.failed) tg.push(e.info.midi); } const good = performance.now() - flashGood < 300 && task ? task.els.slice(0, task.idx).map(x => x.info.midi).filter(x => x) : []; drawKeys(W * 0.03, H * 0.18, W * 0.94, H * 0.7, low ? 48 : 60, 72, { target: tg, good: good, names: DB.prefs.names }); if (e && e.info.kind === 'chord') { g.fillStyle = '#e9edf6'; font(H * 0.11); g.textAlign = 'center'; g.fillText(e.info.sym, W / 2, H * 0.13); } }
     else if (M.tuning) drawFret(M, e, W, H); else if (mod === 'voice') drawVoice(e, W, H); else if (mod === 'wind') drawStaff(e, W, H); else if (mod === 'harp') drawHarp(e, W, H); else if (mod === 'ear') drawEar(W, H); else if (mod === 'rhy') drawBar(W, H);
+    if (NOTATE_MOD_IDS.indexOf(mod) >= 0) drawNotation(e, W, H); else lastStaff = null;
     if (performance.now() - flashBad < 220) { g.strokeStyle = '#ff6b5e'; g.lineWidth = 8; g.strokeRect(4, 4, W - 8, H - 8); } else if (performance.now() - flashGood < 220) { g.strokeStyle = '#5be08a'; g.lineWidth = 8; g.strokeRect(4, 4, W - 8, H - 8); }
     if (!playing) { g.fillStyle = '#93a0bd'; font(H * 0.08); g.textAlign = 'right'; g.fillText(sess ? 'PAUSED' : 'PRESS START', W * 0.97, H * 0.1); }
   }
@@ -616,6 +658,7 @@ import { toAudioTime, judgeTap, medianLatency } from './core/timing.js';
     const box = $('modOpts'); box.innerHTML = ''; const sel = (id, label, opts, val, on) => { const l = document.createElement('label'); l.htmlFor = id; l.textContent = label + ' '; const s = document.createElement('select'); s.id = id; Object.keys(opts).forEach(k => { const o = document.createElement('option'); o.value = k; o.textContent = opts[k][0]; s.appendChild(o); }); s.value = val; s.addEventListener('change', () => on(s.value)); l.appendChild(s); box.appendChild(l); };
     const btn = (id, text, on, primary) => { const b = document.createElement('button'); b.type = 'button'; b.id = id; b.className = 'small' + (primary ? ' primary' : ''); b.textContent = text; b.addEventListener('click', () => { b.blur(); on(); }); box.appendChild(b); return b; };
     const chk = (id, text, val, on) => { const l = document.createElement('label'); l.htmlFor = id; const c = document.createElement('input'); c.type = 'checkbox'; c.id = id; c.checked = val; c.addEventListener('change', () => on(c.checked)); l.appendChild(c); l.appendChild(document.createTextNode(' ' + text)); box.appendChild(l); };
+    if (NOTATE_MOD_IDS.indexOf(mod) >= 0) sel('optNotate', 'Show', { names: ['Note names (today)'], staff: ['Staff'], both: ['Staff and names'] }, DB.prefs.notate[mod], v => { DB.prefs.notate[mod] = v; save(); });
     if (mod === 'wind') { sel('optWind', 'My instrument', WIND_KINDS, DB.prefs.wind, v => { DB.prefs.wind = v; task = null; save(); }); chk('optRef', 'Play me the note first', false, () => {}); }
     if (mod === 'voice') sel('optVoice', 'My range', VOICE_KINDS, DB.prefs.voice, v => { DB.prefs.voice = v; task = null; save(); });
     if (mod === 'tuner') { sel('optTune', 'Instrument', TUNINGS, tunerKind, v => { tunerKind = v; tuneSel = -1; }); btn('tuneReset', 'Start over', () => { tuned = {}; }); }
@@ -716,6 +759,7 @@ import { toAudioTime, judgeTap, medianLatency } from './core/timing.js';
   //
   // slot:hook:rhythm-vocab
   //
+  if (__DEBUG_HOOK__) Object.assign(hook, { lastStaff: () => lastStaff, setNotate: v => { DB.prefs.notate[mod] = v; save(); } });
   // slot:hook:notation-wire
   //
   // slot:hook:a11y
