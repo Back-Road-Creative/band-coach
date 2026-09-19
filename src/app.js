@@ -49,7 +49,7 @@ import { registerHistory } from './ui/history.js';
 import { registerFingerings } from './ui/fingerings.js';
 //
 //
-// slot:import:w-playalong
+import { register as registerPlayalong } from './ui/playalong.js';
 //
 //
 // slot:import:w-fixes
@@ -1045,7 +1045,7 @@ import { registerFingerings } from './ui/fingerings.js';
   registerFingerings(panels);
   //
   //
-  // slot:panel:w-playalong
+  registerPlayalong(panels);
   //
   //
   // slot:panel:w-fixes

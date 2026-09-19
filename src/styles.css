@@ -125,8 +125,24 @@
   .panel-fingerings .fing-recorder-hole.fing-half { background: linear-gradient(90deg, var(--muted) 50%, transparent 50%); }
   /* */
   /* */
-  /* slot:css:w-playalong */
-  /* */
+  .panel-playalong { display: flex; flex-direction: column; gap: 12px; }
+  .panel-playalong .pa-intro { color: var(--muted); max-width: 64ch; margin: 0; }
+  .panel-playalong .pa-note { color: var(--muted); font-size: 13px; margin: 0; }
+  .panel-playalong .pa-error { color: var(--bad); }
+  .panel-playalong .pa-filename { color: var(--muted); font-size: 13px; }
+  .panel-playalong .pa-progress { display: flex; align-items: center; gap: 10px; }
+  .panel-playalong .pa-progress-track { flex: 1 1 auto; height: 8px; border-radius: 4px; background: var(--ground); border: 1px solid var(--line); overflow: hidden; }
+  .panel-playalong .pa-progress-fill { height: 100%; width: 0; background: var(--accent); }
+  .panel-playalong .pa-facts { gap: 8px; }
+  .panel-playalong .pa-facts .stat { font-size: 14px; padding: 6px 10px; }
+  .panel-playalong .pa-timeline { position: relative; height: 64px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; touch-action: none; cursor: crosshair; }
+  .panel-playalong .pa-beat-tick, .panel-playalong .pa-bar-tick { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--line); }
+  .panel-playalong .pa-bar-tick { background: var(--muted); width: 2px; }
+  .panel-playalong .pa-chord { position: absolute; top: 4px; font: 600 12px var(--body); color: var(--text); background: var(--panel-2); border: 1px solid var(--line); border-radius: 4px; padding: 2px 5px; white-space: nowrap; overflow: hidden; }
+  .panel-playalong .pa-chord-unsure { color: var(--muted); font-style: italic; }
+  .panel-playalong .pa-loop-region { position: absolute; top: 0; bottom: 0; background: color-mix(in srgb, var(--accent) 25%, transparent); border-inline: 2px solid var(--accent); }
+  .panel-playalong .pa-playhead-row { align-items: center; gap: 8px; }
+  .panel-playalong .pa-playhead-row input[type="range"] { flex: 1 1 160px; }
   /* */
   /* slot:css:w-fixes */
   /* */
