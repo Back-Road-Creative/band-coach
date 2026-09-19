@@ -46,7 +46,7 @@ import { register as registerTheory, currentLessonQuestion as theoryCurrentQuest
 import { registerHistory } from './ui/history.js';
 //
 //
-// slot:import:w-fingerings
+import { registerFingerings } from './ui/fingerings.js';
 //
 //
 // slot:import:w-playalong
@@ -1042,7 +1042,7 @@ import { registerHistory } from './ui/history.js';
   registerHistory(panels);
   //
   //
-  // slot:panel:w-fingerings
+  registerFingerings(panels);
   //
   //
   // slot:panel:w-playalong

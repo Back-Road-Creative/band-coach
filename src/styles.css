@@ -93,7 +93,36 @@
   /* slot:css:w-history */
   /* */
   /* */
-  /* slot:css:w-fingerings */
+  .panel-fingerings { display: flex; flex-direction: column; gap: 12px; max-width: 100%; }
+  .panel-fingerings .fing-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .panel-fingerings .fing-desc { font-size: 15px; color: var(--text); background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+  .panel-fingerings .fing-range-wrap { display: flex; flex-direction: column; gap: 4px; }
+  .panel-fingerings .fing-range { position: relative; height: 10px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; }
+  .panel-fingerings .fing-range-fill { position: absolute; inset: 0; width: 0; background: transparent; }
+  .panel-fingerings .fing-range-marker { position: absolute; top: -3px; width: 4px; height: 16px; background: #f3c52f; border-radius: 2px; transform: translateX(-2px); }
+  .panel-fingerings .fing-range-labels { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); }
+  .panel-fingerings .fing-notes { display: flex; gap: 4px; overflow-x: auto; padding-bottom: 4px; max-width: 100%; }
+  .panel-fingerings .fing-note-btn { flex: none; padding: 6px 8px; font-size: 13px; }
+  .panel-fingerings .fing-note-btn[aria-pressed="true"] { background: #f3c52f; border-color: #f3c52f; color: #06101d; }
+  .panel-fingerings .fing-diagram-host { overflow-x: auto; }
+  .panel-fingerings .fing-fretboard { display: flex; flex-direction: column; gap: 2px; min-width: max-content; }
+  .panel-fingerings .fing-string { display: flex; align-items: center; gap: 2px; }
+  .panel-fingerings .fing-string-label { width: 3.2em; flex: none; font-size: 12px; color: var(--muted); }
+  .panel-fingerings .fing-fret { display: inline-flex; align-items: center; justify-content: center; width: 1.6em; height: 1.6em; border: 1px solid var(--line); font-size: 14px; color: var(--accent); }
+  .panel-fingerings .fing-fret.fing-hit { background: #f3c52f; color: #06101d; border-color: #f3c52f; }
+  .panel-fingerings .fing-brass { display: flex; align-items: center; gap: 8px; }
+  .panel-fingerings .fing-valve { display: inline-flex; align-items: center; justify-content: center; width: 2.4em; height: 2.4em; border-radius: 50%; border: 2px solid var(--line); font: 700 16px var(--display); }
+  .panel-fingerings .fing-valve.fing-hit { background: #f3c52f; border-color: #f3c52f; color: #06101d; }
+  .panel-fingerings .fing-slide-pos { font: 700 18px var(--display); }
+  .panel-fingerings .fing-warn { color: var(--warn); font-size: 13px; margin: 4px 0 0; }
+  .panel-fingerings .fing-harmonica { display: flex; gap: 4px; flex-wrap: wrap; }
+  .panel-fingerings .fing-hole { display: flex; flex-direction: column; align-items: center; justify-content: center; width: 2.6em; height: 2.6em; border-radius: 50%; border: 2px solid var(--line); font-size: 13px; }
+  .panel-fingerings .fing-hole.fing-hit { background: #f3c52f; border-color: #f3c52f; color: #06101d; }
+  .panel-fingerings .fing-hole small { font-size: 10px; }
+  .panel-fingerings .fing-recorder { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .panel-fingerings .fing-recorder-hole { display: inline-flex; align-items: center; justify-content: center; width: 1.8em; height: 1.8em; border-radius: 50%; border: 2px solid var(--line); font-size: 12px; }
+  .panel-fingerings .fing-recorder-hole.fing-hit { background: var(--muted); }
+  .panel-fingerings .fing-recorder-hole.fing-half { background: linear-gradient(90deg, var(--muted) 50%, transparent 50%); }
   /* */
   /* */
   /* slot:css:w-playalong */
