@@ -221,11 +221,34 @@ export async function launchPage(htmlPath, options = {}) {
   }
 
   const url = 'file://' + htmlPath;
+
+  // Poll for the page actually BEING our document, rather than sleeping and
+  // hoping. Two things went wrong with the old fixed 150ms wait: under load
+  // the app's boot code (loadDB, buildPicker, first draw) had not finished,
+  // and `Page.loadEventFired` can be the initial about:blank's rather than
+  // ours — so tests read a document with no #cv at all and failed with
+  // "Cannot read properties of null/undefined". Both are the same bug: a
+  // sleep is not a readiness check.
+  async function waitForBoot() {
+    const deadline = Date.now() + 30000;
+    let last = null;
+    while (Date.now() < deadline) {
+      const r = await send('Runtime.evaluate', {
+        expression:
+          "(location.href.indexOf('file://') === 0) && document.readyState === 'complete' && !!document.getElementById('cv')",
+        returnByValue: true,
+      });
+      last = r && r.result && r.result.value;
+      if (last === true) return;
+      await new Promise((r2) => setTimeout(r2, 25));
+    }
+    throw new Error('the page never finished booting (no #cv in a complete file:// document within 30s)');
+  }
+
   const loaded = nextLoad();
   await send('Page.navigate', { url });
   await loaded;
-  // Let the app's own boot code (loadDB, buildPicker, first draw) settle.
-  await new Promise((r) => setTimeout(r, 150));
+  await waitForBoot();
 
   // Reload and wait for the NEW page's load event. Polling for window.__coach
   // after evaluate('location.reload()') can see the OLD page before it
@@ -234,7 +257,7 @@ export async function launchPage(htmlPath, options = {}) {
     const reloaded = nextLoad();
     await send('Page.reload', {});
     await reloaded;
-    await new Promise((r) => setTimeout(r, 150));
+    await waitForBoot();
   }
 
   async function evaluate(expression) {
