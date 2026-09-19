@@ -3,10 +3,10 @@
 // ['Low E','A','D','G','B','High E'], 12, ['Em','G','C','D','Am','E','A']) at
 // app.js:106, whose level-naming logic lives at app.js:57-66. Range high (76) is
 // the 12th fret on the high E string (64+12); low (40) is the open low E.
-// Guitar is heard through a microphone (app.js MODS.gtr.input === 'pluck'),
-// matching pitch class in any octave for the "find it by name" levels, so
-// octavePolicy is exact: the right letter in the wrong octave is a wrong note (the
-// mic cannot tell which string was used, so position is taught by diagram).
+// Guitar is heard through a microphone (app.js MODS.gtr.input === 'pluck').
+// octavePolicy is exact: the right letter in the wrong octave is a wrong
+// note (the mic cannot tell which string was used, so position is taught by
+// diagram).
 export default {
   id: 'gtr',
   name: 'Guitar',
