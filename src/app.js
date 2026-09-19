@@ -92,7 +92,7 @@ import { createPanels, sanitizePanelData } from './ui/panels.js';
   // (src/audio/pitch-worklet.js) when available; pitchWorkletNode stays null
   // (and listen() below keeps running its setInterval sampling unchanged) on
   // any browser/context where AudioWorklet is missing or fails to load.
-  let pitchWorkletNode = null, lastAudioSource = null, lastWorkletPitchAt = 0, pitchWorkletPromise = null;
+  let pitchWorkletNode = null, lastAudioSource = null, lastWorkletPitchAt = 0, pitchWorkletPromise = null, lastWorkletRangeSent = null;
   // Returns a promise that resolves once the worklet is wired (or has
   // failed) so a caller that needs the real pipeline settled first — the
   // testPluck() debug hook below, so its synthetic timings are not a race
@@ -102,8 +102,9 @@ import { createPanels, sanitizePanelData } from './ui/panels.js';
   function ensurePitchWorklet() {
     if (pitchWorkletPromise) return pitchWorkletPromise;
     if (!actx) return Promise.resolve(null);
-    pitchWorkletPromise = createPitchNode(actx, { fmin: 36, fmax: 1600, rmsGate: gates.pitch }).then(node => {
-      pitchWorkletNode = node;
+    const M0 = MODS[mod], range0 = { fmin: (M0 && M0.fmin) || 36, fmax: (M0 && M0.fmax) || 1600 };
+    pitchWorkletPromise = createPitchNode(actx, { fmin: range0.fmin, fmax: range0.fmax, rmsGate: gates.pitch }).then(node => {
+      pitchWorkletNode = node; lastWorkletRangeSent = range0;
       if (lastAudioSource) lastAudioSource.connect(node);
       const mute = actx.createGain(); mute.gain.value = 0; node.connect(mute); mute.connect(actx.destination); // keeps the worklet in the live render graph without making sound
       node.port.onmessage = ev => {
@@ -292,7 +293,7 @@ import { createPanels, sanitizePanelData } from './ui/panels.js';
     if (k === 'r') return { kind: 'cell', cell: rest, beats: CELLS[rest].b, on: CELLS[rest].on, label: CELLS[rest].say, short: CELLS[rest].say };
     return { kind: 'note', midi: 60, label: id, short: id };
   };
-  let validId = function (mod, id) { try { if (typeof id !== 'string' || id.length > 10) return false; const k = id[0], r = id.slice(1); if (k === 'n' || k === 'w' || k === 'p' || k === 'v') return /^\d{1,3}$/.test(r); if (k === 's') return /^\d+f\d+$/.test(r) && MODS[mod].tuning && +r.split('f')[0] <= MODS[mod].tuning.length && +r.split('f')[0] >= 1; if (k === 'c') return !!CHORDS[r]; if (k === 'i') return /^\d{1,2}[adh]$/.test(r) && !!INTERVALS[parseInt(r, 10)]; if (k === 'q') return !!QUALS[r]; if (k === 'r') return !!CELLS[r]; return false; } catch (e) { return false; } };
+  let validId = function (mod, id) { try { if (typeof id !== 'string' || id.length > 10) return false; if (id === 'bar2') return true; const k = id[0], r = id.slice(1); if (k === 'n' || k === 'w' || k === 'p' || k === 'v') return /^\d{1,3}$/.test(r); if (k === 's') return /^\d+f\d+$/.test(r) && MODS[mod].tuning && +r.split('f')[0] <= MODS[mod].tuning.length && +r.split('f')[0] >= 1; if (k === 'c') return !!CHORDS[r]; if (k === 'i') return /^\d{1,2}[adh]$/.test(r) && !!INTERVALS[parseInt(r, 10)]; if (k === 'q') return !!QUALS[r]; if (k === 'r') return !!CELLS[r]; return false; } catch (e) { return false; } };
 
   // ---------- harmonica (10-hole diatonic in C) and the two tools ----------
   const HARP = { b: [60, 64, 67, 72, 76, 79, 84, 88, 91, 96], d: [62, 67, 71, 74, 77, 81, 83, 86, 89, 93] };
@@ -446,7 +447,7 @@ import { createPanels, sanitizePanelData } from './ui/panels.js';
   const say = (t, cls) => { const f = $('feedback'); f.textContent = t; f.className = cls || ''; };
   const coach = t => { $('coach').textContent = t; };
   const cur = () => task && task.els[task.idx];
-  let pressed = {}, heard = null, held = [], holdFor = 0, holdCents = [], wrongFor = 0, lastFired = -1, stableN = 0, stableMidi = -1, released = true, flashBad = 0, flashGood = 0;
+  let pressed = {}, heard = null, held = [], holdFor = 0, holdCents = [], wrongFor = 0, lastFired = -1, stableN = 0, stableMidi = -1, released = true, flashBad = -1e12, flashGood = -1e12;
 
   function playRef(t) {
     ensureAudio(); const at = now() + 0.05, e = t.els[0];
@@ -694,6 +695,12 @@ import { createPanels, sanitizePanelData } from './ui/panels.js';
 
   // ---------- drawing ----------
   const cv = $('cv'), g = cv.getContext('2d'); let keyRects = [], rowRects = [], lastStaff = null;
+  cv.tabIndex = 0; // item 3 (Wave W, w-fixes): keyboard-reachable so a keyboard-only learner can play the on-screen piano
+  // item 3 (Wave W, w-fixes): a keyboard-driven focus cursor over the current keyRects, sorted left to right.
+  let kbdFocusIdx = 0;
+  const kbdOrder = () => keyRects.slice().sort((a, b) => a.x - b.x);
+  function kbdKeyName(k, idx, total) { return DB.prefs.names ? nname(k.m) + (pc(k.m) === 0 ? (Math.floor(k.m / 12) - 1) : '') : (k.black ? 'black' : 'white') + ' key ' + (idx + 1) + ' of ' + total; }
+  function kbdFocusInfo() { if (mod !== 'kbd') return null; const order = kbdOrder(); if (!order.length) return null; if (kbdFocusIdx >= order.length) kbdFocusIdx = 0; const k = order[kbdFocusIdx]; return { idx: kbdFocusIdx, total: order.length, m: k.m, black: k.black, x: k.x, y: k.y, w: k.w, h: k.h, name: kbdKeyName(k, kbdFocusIdx, order.length) }; }
   function size() { const r = cv.getBoundingClientRect(), d = Math.min(window.devicePixelRatio || 1, 2), w = Math.round(r.width * d), h = Math.round(r.height * d); if (w && h && (cv.width !== w || cv.height !== h)) { cv.width = w; cv.height = h; } }
   function rr(x, y, w, h, r) { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); }
   const font = (px, w) => { g.font = (w || 700) + ' ' + Math.round(px) + 'px "Barlow Condensed", Arial, sans-serif'; };
@@ -822,7 +829,7 @@ import { createPanels, sanitizePanelData } from './ui/panels.js';
     size(); const W = cv.width, H = cv.height; g.clearRect(0, 0, W, H); rowRects = []; keyRects = [];
     if (TOOLS[mod]) { if (mod === 'tuner') drawTuner(W, H); else drawCapture(W, H); return; }
     const M = MODS[mod], e = playing && task && !task.done ? cur() : null, showE = e || (task && task.done ? task.els[task.els.length - 1] : null);
-    if (mod === 'kbd') { const low = activeItems(mod, S.level).some(id => id[0] === 'n' && +id.slice(1) < 60) || customOn; const tg = []; if (e) { if (e.info.kind === 'chord') { if (e.reveal || e.failed) e.info.pcs.forEach(x => tg.push(60 + x)); } else if (e.reveal || e.failed) tg.push(e.info.midi); } const good = performance.now() - flashGood < 300 && task ? task.els.slice(0, task.idx).map(x => x.info.midi).filter(x => x) : []; drawKeys(W * 0.03, H * 0.18, W * 0.94, H * 0.7, low ? 48 : 60, 72, { target: tg, good: good, names: DB.prefs.names }); if (e && e.info.kind === 'chord') { g.fillStyle = '#e9edf6'; font(H * 0.11); g.textAlign = 'center'; g.fillText(e.info.sym, W / 2, H * 0.13); } }
+    if (mod === 'kbd') { const low = activeItems(mod, S.level).some(id => id[0] === 'n' && +id.slice(1) < 60) || customOn; const tg = []; if (e) { if (e.info.kind === 'chord') { if (e.reveal || e.failed) e.info.pcs.forEach(x => tg.push(60 + x)); } else if (e.reveal || e.failed) tg.push(e.info.midi); } const good = performance.now() - flashGood < 300 && task ? task.els.slice(0, task.idx).map(x => x.info.midi).filter(x => x) : []; drawKeys(W * 0.03, H * 0.18, W * 0.94, H * 0.7, low ? 48 : 60, 72, { target: tg, good: good, names: DB.prefs.names }); if (e && e.info.kind === 'chord') { g.fillStyle = '#e9edf6'; font(H * 0.11); g.textAlign = 'center'; g.fillText(e.info.sym, W / 2, H * 0.13); } if (document.activeElement === cv) { const fi = kbdFocusInfo(); if (fi) { g.strokeStyle = '#ffd23f'; g.lineWidth = 4; g.strokeRect(fi.x + 2, fi.y + 2, fi.w - 4, fi.h - 4); } } }
     else if (M.tuning) drawFret(M, e, W, H); else if (mod === 'voice') drawVoice(e, W, H); else if (mod === 'wind') drawStaff(e, W, H); else if (mod === 'harp') drawHarp(e, W, H); else if (mod === 'ear') drawEar(W, H); else if (mod === 'rhy') { if (task && task.kind === 'bar2') drawBar2(W, H); else drawBar(W, H); }
     if (NOTATE_MOD_IDS.indexOf(mod) >= 0) drawNotation(e, W, H); else lastStaff = null;
     if (!reducedMotion && performance.now() - flashBad < 220) { g.strokeStyle = '#ff6b5e'; g.lineWidth = 8; g.strokeRect(4, 4, W - 8, H - 8); g.fillStyle = '#ff6b5e'; font(H * 0.06, 700); g.textAlign = 'left'; g.fillText('✗', 14, H * 0.09); } else if (!reducedMotion && performance.now() - flashGood < 220) { g.strokeStyle = '#5be08a'; g.lineWidth = 8; g.strokeRect(4, 4, W - 8, H - 8); g.fillStyle = '#5be08a'; font(H * 0.06, 700); g.textAlign = 'left'; g.fillText('✓', 14, H * 0.09); }
@@ -958,6 +965,8 @@ import { createPanels, sanitizePanelData } from './ui/panels.js';
     if (mod === 'kbd' && PCKEYS[ev.key.toLowerCase()] !== undefined) { ev.preventDefault(); ensureAudio(); const m = PCKEYS[ev.key.toLowerCase()]; tone(m, now() + 0.01, 0.5, 0.15); onNote(m, true); }
   });
   cv.addEventListener('pointerdown', ev => { const r = cv.getBoundingClientRect(), x = (ev.clientX - r.left) * cv.width / r.width, y = (ev.clientY - r.top) * cv.height / r.height; ensureAudio(); if (mod === 'kbd') { const k = keyRects.find(q => x >= q.x && x <= q.x + q.w && y >= q.y && y <= q.y + q.h); if (k) { tone(k.m, now() + 0.01, 0.5, 0.15); onNote(k.m, true); } } if (mod === 'tuner') { const row = rowRects.find(q => x >= q.x && x <= q.x + q.w && y >= q.y && y <= q.y + q.h); if (row) tone(row.m, now() + 0.02, 1.6, 0.2); } });
+  // item 3 (Wave W, w-fixes): keyboard path onto the same canvas piano -- arrow keys move the focus cursor, Enter/Space plays the focused key.
+  cv.addEventListener('keydown', ev => { if (mod !== 'kbd') return; const order = kbdOrder(); if (!order.length) return; if (ev.key === 'ArrowRight' || ev.key === 'ArrowUp') { ev.preventDefault(); kbdFocusIdx = Math.min(order.length - 1, kbdFocusIdx + 1); } else if (ev.key === 'ArrowLeft' || ev.key === 'ArrowDown') { ev.preventDefault(); kbdFocusIdx = Math.max(0, kbdFocusIdx - 1); } else if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); const k = order[Math.min(kbdFocusIdx, order.length - 1)]; if (k) { ensureAudio(); tone(k.m, now() + 0.01, 0.5, 0.15); onNote(k.m, true); } } });
   $('tapPad').addEventListener('pointerdown', ev => { ev.preventDefault(); ensureAudio(); onTap(ev); });
   $('replayBtn').addEventListener('click', function () { this.blur(); if (task && !task.done) { playRef(task); lastInputAt = now(); } });
   $('showMeBtn').addEventListener('click', function () { this.blur(); const e = cur(); if (!task || task.done || !e) return; if (!e.failed) { e.failed = true; e.reveal = true; } say('Shown. This one will not count toward mastery.', ''); refreshPrompt(); });
@@ -972,6 +981,7 @@ import { createPanels, sanitizePanelData } from './ui/panels.js';
 
   function setMod(m) {
     if (sess) endSession(); mod = m; if (MODS[m]) { S = DB.mods[m]; DB.prefs.mod = m; } customOn = false; grooveOn = false; groove = null; task = null; bar = null; heard = null; cap.on = false;
+    if (pitchWorkletNode && MODS[m] && MODS[m].fmin && MODS[m].fmax) { lastWorkletRangeSent = { fmin: MODS[m].fmin, fmax: MODS[m].fmax }; pitchWorkletNode.port.postMessage({ type: 'range', fmin: MODS[m].fmin, fmax: MODS[m].fmax }); }
     document.querySelectorAll('#picker button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.mod === m)));
     $('prompt').textContent = (MODS[m] || TOOLS[m]).name; $('hint').textContent = ''; $('choices').hidden = true; say(''); if (MODS[m]) coach(S.judged ? 'Welcome back. You are on level ' + S.level + ': ' + D().name + '. Press Start.' : 'Press Start. Level 1: ' + D().name + '.');
     renderOpts(); ioRefresh(); showAll(); save();
@@ -1113,9 +1123,7 @@ import { createPanels, sanitizePanelData } from './ui/panels.js';
   // slot:hook:w-playalong
   //
   //
-  // slot:hook:w-fixes
-  //
-  //
+  if (__DEBUG_HOOK__) Object.assign(hook, { flash: () => ({ bad: flashBad, good: flashGood }), pitchWorkletRange: () => lastWorkletRangeSent, kbdFocus: kbdFocusInfo });
   if (__DEBUG_HOOK__) window.__coach = hook;
 
 })();
