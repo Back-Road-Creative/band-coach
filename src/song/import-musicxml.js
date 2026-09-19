@@ -11,6 +11,7 @@
 // documents (measure-major layout; real scores are overwhelmingly
 // part-major `<score-partwise>`).
 
+import { songIdentity } from './ident.js';
 import { parseXml, elements, element, childText, attr, text } from './xml-lite.js';
 
 const TICKS_PER_QUARTER = 480;
@@ -41,7 +42,7 @@ function pitchToMidi(pitchNode) {
   return (octave + 1) * 12 + STEP_PC[step] + alter;
 }
 
-export function importMusicXml(rawText) {
+export function importMusicXml(rawText, options = {}) {
   if (typeof rawText !== 'string') throw new Error('importMusicXml: input must be a string');
   const trimmed = rawText.trimStart();
   if (trimmed.startsWith('PK\x03\x04') || (trimmed.charCodeAt(0) === 0x50 && trimmed.charCodeAt(1) === 0x4b)) {
@@ -156,8 +157,7 @@ export function importMusicXml(rawText) {
 
   const song = {
     schema: 'song/1',
-    id: null,
-    title,
+    ...songIdentity({ title, fileName: options.fileName, fallback: 'Imported score' }),
     composer,
     licence,
     source: null,

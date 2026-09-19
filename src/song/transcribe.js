@@ -22,6 +22,8 @@
 // stage whose confidence is low. A mandatory fix-it UI step should show
 // this list before letting the learner practise the transcribed song.
 
+import { songIdentity } from './ident.js';
+
 const TICKS_PER_QUARTER = 480;
 
 // ---- eventsToNotes -----------------------------------------------------
@@ -361,11 +363,10 @@ export function detectKey(notes) {
 
 // ---- transcribe ----------------------------------------------------------
 
-function emptySong() {
+function emptySong(opts) {
   return {
     schema: 'song/1',
-    id: null,
-    title: null,
+    ...songIdentity({ title: opts.title, fallback: 'My recording' }),
     composer: null,
     licence: null,
     source: null,
@@ -387,7 +388,7 @@ export function transcribe(frames, opts = {}) {
 
   if (!rawNotes.length) {
     return {
-      song: emptySong(),
+      song: emptySong(opts),
       report: {
         tempo: { bpm: 120, confidence: 0, candidates: [] },
         metre: { metre: { num: 4, den: 4 }, pickupTicks: 0, confidence: 0 },
@@ -405,8 +406,7 @@ export function transcribe(frames, opts = {}) {
 
   const song = {
     schema: 'song/1',
-    id: null,
-    title: null,
+    ...songIdentity({ title: opts.title, fallback: 'My recording' }),
     composer: null,
     licence: null,
     source: null,

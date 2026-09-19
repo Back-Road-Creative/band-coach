@@ -7,6 +7,8 @@
 // warning. Chord symbols in quotes become `song.chords`. Grace notes and
 // decorations are skipped with a warning, not guessed at.
 
+import { songIdentity } from './ident.js';
+
 const TICKS_PER_QUARTER = 480;
 const STEP_PC = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
 
@@ -69,7 +71,7 @@ class TokenReader {
   atEnd() { return this.i >= this.body.length; }
 }
 
-export function importAbc(rawText) {
+export function importAbc(rawText, options = {}) {
   if (typeof rawText !== 'string') throw new Error('importAbc: input must be a string');
   const warnings = [];
   let title = null;
@@ -156,8 +158,7 @@ export function importAbc(rawText) {
 
   const song = {
     schema: 'song/1',
-    id: null,
-    title,
+    ...songIdentity({ title, fileName: options.fileName, fallback: 'Imported tune' }),
     composer,
     licence: null,
     source: null,
