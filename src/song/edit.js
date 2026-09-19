@@ -330,16 +330,19 @@ function scaleDurations(song, factor, bpmFactor) {
 
 /**
  * Fixes a transcription that came out at double the true note values: halves
- * every note's start/duration and doubles bpm so the audible tempo is
- * unchanged, only the notation reads correctly.
+ * every note's start/duration and halves bpm with them, so the tune still
+ * sounds at the same speed and only the notation reads correctly. bpm moves
+ * WITH the tick scale because seconds = ticks / ticksPerQuarter * 60 / bpm
+ * (src/song/model.js ticksToSeconds); scaling it the other way made playback
+ * four times too fast.
  */
 export function halveDurations(song) {
-  return scaleDurations(song, 0.5, 2);
+  return scaleDurations(song, 0.5, 0.5);
 }
 
 /** Fixes a transcription that came out at half the true note values (mirror of halveDurations). */
 export function doubleDurations(song) {
-  return scaleDurations(song, 2, 0.5);
+  return scaleDurations(song, 2, 2);
 }
 
 export function octaveShiftPart(song, partIndex, octaves) {

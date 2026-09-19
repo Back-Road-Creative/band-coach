@@ -35,3 +35,19 @@ test('panel data survives a reload and garbage in it is dropped', async (t) => {
   await page.waitFor('window.__coach && window.__coach.db().mods.kbd', 5000);
   assert.deepEqual(await page.evaluate('window.__coach.db().panels'), { songs: { picked: 'ode-to-joy' } });
 });
+
+test('a message from an open panel is visible outside the panel body', async (t) => {
+  const page = await launchPage(HTML_PATH);
+  t.after(() => page.close());
+  await page.evaluate(`window.__coach.registerPanel({ id: 'talky', name: 'Talky',
+    mount: (el, api) => { el.innerHTML = '<button type="button" id="talkyBtn">say it</button>';
+      document.getElementById('talkyBtn').addEventListener('click', () => api.say('well done', 'ok')); } })`);
+  await page.evaluate("window.__coach.openPanel('talky')");
+  await page.evaluate("document.getElementById('talkyBtn').click()");
+  assert.equal(await page.evaluate("document.getElementById('panelSay').textContent"), 'well done');
+  assert.equal(await page.evaluate("document.getElementById('panelSay').hidden"), false);
+  // the trainer's own feedback line is hidden behind #mainArea while a panel is open
+  assert.equal(await page.evaluate("document.getElementById('mainArea').hidden"), true);
+  await page.evaluate('window.__coach.closePanel()');
+  assert.equal(await page.evaluate("document.getElementById('panelSay').hidden"), true);
+});

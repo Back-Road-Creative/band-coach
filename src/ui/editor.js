@@ -191,13 +191,12 @@ function mountEditor(hostEl, api) {
   });
   const insertBtn = btn('Insert note', insertHere);
   // halveDurations/doubleDurations (src/song/edit.js) rescale every note's
-  // ticks AND the song's bpm together. Measured against ticksToSeconds
-  // (src/song/model.js) this does NOT keep the playback speed the same —
-  // it changes it by the square of the scale factor (halving: 4x faster;
-  // doubling: 4x slower). Said plainly here rather than silently "fixed",
-  // per the author brief: report it, don't bend edit.js to match the claim.
-  const halveBtn = btn('Halve note values (also changes playback speed — listen after)', () => applyOp((s) => halveDurations(s)));
-  const doubleBtn = btn('Double note values (also changes playback speed — listen after)', () => applyOp((s) => doubleDurations(s)));
+  // ticks and the song's bpm by the SAME factor, so the tune keeps its
+  // speed and only the notation changes. (Until 2026-09-19 bpm moved the
+  // other way, which made playback four times too fast; tests/unit/
+  // editor-ops.test.mjs now pins the sounding position of a note.)
+  const halveBtn = btn('Halve note values (the tune keeps its speed)', () => applyOp((s) => halveDurations(s)));
+  const doubleBtn = btn('Double note values (the tune keeps its speed)', () => applyOp((s) => doubleDurations(s)));
   const octaveUpBtn = btn('Whole song up an octave', () => applyOp((s) => octaveShiftPart(s, PART_INDEX, 1)));
   const octaveDownBtn = btn('Whole song down an octave', () => applyOp((s) => octaveShiftPart(s, PART_INDEX, -1)));
   const pickupBtn = btn('Shift barline (pickup)', () => {

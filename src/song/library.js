@@ -1,7 +1,7 @@
 // Song library: CRUD over an injected async key-value store, plus an
 // IndexedDB adapter for the browser and an in-memory one for tests.
 // Wiring pass:
-//   const library = createLibrary(indexedDbStore(window.indexedDB, 'band-coach-songs'));
+//   const library = createLibrary(indexedDbStore(window.indexedDB, 'bandcoach-songs'));
 //   library.list() -> metadata only, for a song picker; library.get(id) -> full Song or null;
 //   library.add(song, { now: Date.now() }); library.rename(id, title); library.remove(id);
 //   library.exportAll()/importAll(json) -> backup/restore.

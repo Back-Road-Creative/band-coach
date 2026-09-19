@@ -23,6 +23,7 @@ import {
   createHistory,
   hitTest,
 } from '../../src/song/edit.js';
+import { ticksToSeconds } from '../../src/song/model.js';
 
 // A tiny song fixture: one part, three notes, no gaps, no overlaps.
 function fixture() {
@@ -370,8 +371,14 @@ test('halveDurations: fixes a double-time transcription and compensates bpm', ()
       [480, 240],
     ],
   );
-  assert.equal(out.bpm, 240, 'bpm doubles so the audible tempo is unchanged');
+  assert.equal(out.bpm, 60, 'bpm halves with the note values, so the sounding speed is unchanged');
   assertPositiveDurations(out.parts[0].notes);
+  // The point of the op: the notation reads correctly and the tune still
+  // sounds at the same speed. seconds = ticks / tpq * 60 / bpm, so bpm must
+  // move WITH the tick scale, not against it.
+  const secondsBefore = ticksToSeconds(song.parts[0].notes[2].start, song.bpm);
+  const secondsAfter = ticksToSeconds(out.parts[0].notes[2].start, out.bpm);
+  assert.equal(secondsAfter, secondsBefore, 'the third note still falls at the same moment');
 });
 
 test('doubleDurations: fixes a half-time transcription and compensates bpm', () => {
@@ -385,7 +392,12 @@ test('doubleDurations: fixes a half-time transcription and compensates bpm', () 
       [1920, 960],
     ],
   );
-  assert.equal(out.bpm, 60);
+  assert.equal(out.bpm, 240);
+  assert.equal(
+    ticksToSeconds(out.parts[0].notes[2].start, out.bpm),
+    ticksToSeconds(song.parts[0].notes[2].start, song.bpm),
+    'the third note still falls at the same moment',
+  );
 });
 
 test('halveDurations: never produces a zero duration even for a 1-tick note', () => {

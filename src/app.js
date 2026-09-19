@@ -444,7 +444,10 @@ import { register as registerPlayalong } from './ui/playalong.js';
   }
 
   // ---------- talking to the player ----------
-  const say = (t, cls) => { const f = $('feedback'); f.textContent = t; f.className = cls || ''; };
+  // #feedback lives inside #mainArea, which is hidden while a panel is open,
+  // so a panel's say() would be invisible. Mirror it into the panel's own
+  // status line whenever one is open.
+  const say = (t, cls) => { const f = $('feedback'); f.textContent = t; f.className = cls || ''; const p = $('panelSay'); if (p) { p.textContent = panels.current() ? t : ''; p.className = 'panel-say ' + (cls || ''); } };
   const coach = t => { $('coach').textContent = t; };
   const cur = () => task && task.els[task.idx];
   let pressed = {}, heard = null, held = [], holdFor = 0, holdCents = [], wrongFor = 0, lastFired = -1, stableN = 0, stableMidi = -1, released = true, flashBad = -1e12, flashGood = -1e12;
@@ -1064,12 +1067,12 @@ import { register as registerPlayalong } from './ui/playalong.js';
   function openPanel(id) {
     if (sess) endSession(); task = null;
     document.querySelectorAll('#panelPicker button, #picker button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.panel === id)));
-    $('mainArea').hidden = true; $('panelHost').hidden = false;
+    $('mainArea').hidden = true; $('panelHost').hidden = false; $('panelSay').textContent = ''; $('panelSay').hidden = false;
     try { panels.open(id, $('panelHost'), panelApi); } catch (e) { recordError('panel:' + id, e); say('That screen could not open.', 'no'); }
   }
   function closePanel() {
     if (!panels.current()) return;
-    panels.close(); $('panelHost').hidden = true; $('mainArea').hidden = false;
+    panels.close(); $('panelHost').hidden = true; $('panelSay').hidden = true; $('mainArea').hidden = false;
     document.querySelectorAll('#panelPicker button').forEach(b => b.setAttribute('aria-pressed', 'false'));
   }
   function buildPanelPicker() {
