@@ -142,6 +142,12 @@ function mountSongsPanel(hostEl, api) {
 
   // practice state for the currently chosen song+part, or null
   let practice = null; // { song, partId, instrument, plan, results, stepIndex, recording, playedEvents, recordStartSec, stop }
+  // The "Notes heard so far" paragraph from the last renderPractice(), when
+  // a recording is possible for the current step. Captured notes update its
+  // text in place (updateCount()) instead of rebuilding practiceSection, so
+  // a learner tabbed onto the record button keeps keyboard focus while
+  // playing a phrase.
+  let countEl = null;
 
   hostEl.innerHTML = '';
   const heading = el('h2', { text: 'Songs' });
@@ -232,7 +238,13 @@ function mountSongsPanel(hostEl, api) {
     renderPractice();
   }
 
+  function updateCount() {
+    if (countEl) countEl.textContent = practice.recording ? 'Notes heard so far: ' + practice.playedEvents.length : '';
+    else renderPractice();
+  }
+
   function renderPractice() {
+    countEl = null;
     practiceSection.innerHTML = '';
     practiceSection.appendChild(el('h3', { text: practice.song.title }));
     const { plan, stepIndex } = practice;
@@ -265,7 +277,8 @@ function mountSongsPanel(hostEl, api) {
         onclick: () => (practice.recording ? finishRecording(step) : startRecording()),
       });
       practiceSection.appendChild(recordBtn);
-      practiceSection.appendChild(el('p', { class: 'panel-songs-count', text: practice.recording ? 'Notes heard so far: ' + practice.playedEvents.length : '' }));
+      countEl = el('p', { class: 'panel-songs-count', text: practice.recording ? 'Notes heard so far: ' + practice.playedEvents.length : '' });
+      practiceSection.appendChild(countEl);
     } else {
       practiceSection.appendChild(el('button', { type: 'button', text: 'Next', onclick: () => advance(true, null) }));
     }
@@ -299,7 +312,7 @@ function mountSongsPanel(hostEl, api) {
     if (practice.instrument.input === 'midi') {
       const unsubscribe = onMidiNote((midi) => {
         practice.playedEvents.push({ midi, atSec: api.now() - practice.recordStartSec });
-        renderPractice();
+        updateCount();
       });
       practice.stop = unsubscribe;
     } else {
@@ -318,7 +331,7 @@ function mountSongsPanel(hostEl, api) {
         if (!r.freq || !(r.clarity > 0.7)) return;
         const midi = Math.round(69 + 12 * Math.log2(r.freq / 440));
         practice.playedEvents.push({ midi, atSec: api.now() - practice.recordStartSec });
-        renderPractice();
+        updateCount();
       }, 50);
       practice.stop = () => clearInterval(timer);
     }
@@ -341,6 +354,12 @@ function mountSongsPanel(hostEl, api) {
       timed,
     });
     const passed = passesRule(result, step.passRule);
+    // Every correctly-pitched note counts toward the trainer's own streak
+    // and level-up path, not just this song's mastery record (applyMasteryCredit
+    // below), whether or not the whole step ends up passing.
+    if (typeof api.creditNote === 'function') {
+      result.matches.forEach((m) => { if (m.ok) api.creditNote(); });
+    }
     advance(passed, result, elapsedMs);
   }
 

@@ -1038,6 +1038,8 @@ import { register as registerPlayalong } from './ui/playalong.js';
     tone: tone, click: click, now: now, say: say, coach: coach, recordError: recordError, close: () => closePanel(),
     // store(id): this panel's saved data, kept in DB.panels[id] (plain JSON, 256 KB max; see sanitizePanelData)
     store: id => ({ get: () => (DB.panels && DB.panels[id]) || null, set: obj => { if (!DB.panels) DB.panels = {}; DB.panels[id] = obj; save(); } }),
+    // creditNote(): a panel-judged correct note feeds the current mod's streak and level-up path, same as credit() does for a built-in drill (no session log update, since no session runs while a panel is open).
+    creditNote: () => { streak++; S.ready = clamp(S.ready + S.gain, 0, 1); evaluate(); save(); },
   };
   //
   //
