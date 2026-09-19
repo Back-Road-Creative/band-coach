@@ -11,62 +11,40 @@ function spectrumForFreq(freq, sr, size) {
   return proc.process(frame);
 }
 
+function maxPc(chroma) {
+  let m = 0;
+  for (let i = 1; i < 12; i++) if (chroma[i] > chroma[m]) m = i;
+  return m;
+}
+
 test('chromaFromSpectrum puts energy in the right pitch class for A4=440', () => {
-  const size = 4096;
-  const mag = spectrumForFreq(440, SR, size); // A -> pitch class 9
-  const chroma = chromaFromSpectrum(mag, SR, size);
-  let maxPc = 0;
-  for (let i = 1; i < 12; i++) if (chroma[i] > chroma[maxPc]) maxPc = i;
-  assert.equal(maxPc, 9);
+  assert.equal(maxPc(chromaFromSpectrum(spectrumForFreq(440, SR, 4096), SR, 4096)), 9);
 });
 
 test('chromaFromSpectrum follows a tuning offset when given a4', () => {
-  const size = 4096;
-  const a4 = 440 * Math.pow(2, 30 / 1200); // +30 cents sharp
-  const freq = midiToFreq(69, a4); // "A" but sharp
-  const mag = spectrumForFreq(freq, SR, size);
-  const chromaDefault = chromaFromSpectrum(mag, SR, size, { a4: 440 });
-  const chromaTuned = chromaFromSpectrum(mag, SR, size, { a4 });
-  let maxDefault = 0, maxTuned = 0;
-  for (let i = 1; i < 12; i++) {
-    if (chromaDefault[i] > chromaDefault[maxDefault]) maxDefault = i;
-    if (chromaTuned[i] > chromaTuned[maxTuned]) maxTuned = i;
-  }
-  assert.equal(maxTuned, 9);
+  const a4 = 440 * Math.pow(2, 30 / 1200);
+  const mag = spectrumForFreq(midiToFreq(69, a4), SR, 4096);
+  assert.equal(maxPc(chromaFromSpectrum(mag, SR, 4096, { a4 })), 9);
 });
 
 test('estimateTuningCents recovers a known offset', () => {
-  const size = 4096;
-  const centsOffset = 30;
-  const a4 = 440 * Math.pow(2, centsOffset / 1200);
-  const frames = [];
-  for (const pc of [0, 4, 7, 9]) {
-    const freq = midiToFreq(60 + pc, a4);
-    frames.push(spectrumForFreq(freq, SR, size));
-  }
-  const est = estimateTuningCents(frames, SR, size);
-  assert.ok(Math.abs(est - centsOffset) < 5, `expected ~${centsOffset}c, got ${est}`);
+  const cents = 30, a4 = 440 * Math.pow(2, cents / 1200);
+  const frames = [0, 4, 7, 9].map((pc) => spectrumForFreq(midiToFreq(60 + pc, a4), SR, 4096));
+  assert.ok(Math.abs(estimateTuningCents(frames, SR, 4096) - cents) < 5);
 });
 
 test('chromaDistance is zero for identical vectors and positive otherwise', () => {
-  const a = [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
-  const b = [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+  const a = [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], b = [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
   assert.equal(chromaDistance(a, a), 0);
   assert.ok(chromaDistance(a, b) > 0);
 });
 
 test('beatSynchronousChroma averages frames within each beat window', () => {
   const frameTimes = [0, 0.1, 0.2, 0.3, 0.4];
-  const chromaFrames = [
-    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-  ];
-  const beats = [0, 0.2];
-  const avg = beatSynchronousChroma(chromaFrames, frameTimes, beats);
+  const A = [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], B = [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+  const chromaFrames = [A, A, B, B, B];
+  const avg = beatSynchronousChroma(chromaFrames, frameTimes, [0, 0.2]);
   assert.equal(avg.length, 2);
-  assert.deepEqual(Array.from(avg[0]), [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
-  assert.deepEqual(Array.from(avg[1]), [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+  assert.deepEqual(Array.from(avg[0]), A);
+  assert.deepEqual(Array.from(avg[1]), B);
 });

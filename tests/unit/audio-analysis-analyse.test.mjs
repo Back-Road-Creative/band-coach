@@ -11,10 +11,8 @@ function accuracyReport(label, obj) {
 test('analyse recovers bpm, key and mostly-correct chords for a C major progression at 120bpm', async () => {
   const fixture = synthesizeProgression({ bpm: 120, bars: 8, tonicPc: 0, mode: 'major' });
   const result = await analyse(fixture.pcm, fixture.sr);
-
   const bpmErrPct = (Math.abs(result.bpm - fixture.bpm) / fixture.bpm) * 100;
   assert.ok(bpmErrPct < 2, `bpm ${result.bpm} vs expected ${fixture.bpm}, err ${bpmErrPct.toFixed(2)}%`);
-
   let withinTol = 0;
   for (const t of fixture.beatTimes) {
     let nearest = Infinity;
@@ -22,26 +20,19 @@ test('analyse recovers bpm, key and mostly-correct chords for a C major progress
     if (nearest <= 0.04) withinTol++;
   }
   const beatFrac = withinTol / fixture.beatTimes.length;
-
   assert.equal(result.key.tonic, 0);
   assert.equal(result.key.mode, 'major');
-
   const expectedRootNames = ['C', 'F', 'G', 'C', 'C', 'F', 'G', 'C'];
   let chordCorrect = 0;
   for (let bar = 0; bar < 8; bar++) {
-    const beatIdx = bar * 4;
-    const chord = result.chords.find((c) => c.startBeat === beatIdx);
+    const chord = result.chords.find((c) => c.startBeat === bar * 4);
     if (chord && chord.symbol === expectedRootNames[bar]) chordCorrect++;
   }
   const chordFrac = chordCorrect / 8;
-
   accuracyReport('C-major-120bpm', {
-    bpmErrPct: Number(bpmErrPct.toFixed(2)),
-    beatFrac: Number(beatFrac.toFixed(2)),
-    keyCorrect: result.key.tonic === 0 && result.key.mode === 'major',
-    chordFrac: Number(chordFrac.toFixed(2)),
+    bpmErrPct: Number(bpmErrPct.toFixed(2)), beatFrac: Number(beatFrac.toFixed(2)),
+    keyCorrect: result.key.tonic === 0 && result.key.mode === 'major', chordFrac: Number(chordFrac.toFixed(2)),
   });
-
   assert.ok(beatFrac > 0.85, `only ${(beatFrac * 100).toFixed(1)}% beats within 40ms`);
   assert.ok(chordFrac >= 0.8, `only ${(chordFrac * 100).toFixed(1)}% bar-downbeat chords correct`);
 });
