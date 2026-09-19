@@ -40,7 +40,7 @@ import { createPanels, sanitizePanelData } from './ui/panels.js';
 // slot:import:w-ear
 //
 //
-// slot:import:w-theory
+import { register as registerTheory, currentLessonQuestion as theoryCurrentQuestion } from './ui/theory.js';
 //
 //
 import { registerHistory } from './ui/history.js';
@@ -1036,7 +1036,7 @@ import { registerHistory } from './ui/history.js';
   // slot:panel:w-ear
   //
   //
-  // slot:panel:w-theory
+  registerTheory(panels);
   //
   //
   registerHistory(panels);
@@ -1101,7 +1101,7 @@ import { registerHistory } from './ui/history.js';
   // slot:hook:w-ear
   //
   //
-  // slot:hook:w-theory
+  if (__DEBUG_HOOK__) Object.assign(hook, { theoryCurrentQuestion: theoryCurrentQuestion });
   //
   //
   // slot:hook:w-history
