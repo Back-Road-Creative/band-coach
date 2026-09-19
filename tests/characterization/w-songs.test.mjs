@@ -208,6 +208,12 @@ test('a real .abc file picked through the file input lands in the library and ap
   await page.waitFor("document.querySelector('.panel-songs-msg').textContent.includes('Uploaded Tune')");
 
   assert.deepEqual(page.exceptions, [], 'no uncaught exceptions while importing the real file');
+  // The "imported" message and the rebuilt row list are two separate async
+  // steps: under load the message lands first, so poll for the row rather
+  // than reading the list once and hoping it has caught up.
+  await page.waitFor(
+    "Array.from(document.querySelectorAll('.panel-songs-row button')).some(b => b.textContent.includes('Uploaded Tune'))"
+  );
   const titles = await page.evaluate(
     "Array.from(document.querySelectorAll('.panel-songs-row button')).map(b => b.textContent)"
   );
