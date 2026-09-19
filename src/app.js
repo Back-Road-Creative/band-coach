@@ -12,7 +12,7 @@ import { toAudioTime, judgeTap, medianLatency } from './core/timing.js';
 //
 // slot:import:chords
 //
-// slot:import:play-in-time
+import { makeGrid, scoreTake, tempoLadder } from './core/groove.js';
 //
 // slot:import:recall
 //
@@ -191,11 +191,12 @@ import { toAudioTime, judgeTap, medianLatency } from './core/timing.js';
   let lastBackupAt = 0; try { lastBackupAt = +localStorage.getItem(BACKUP_AT_KEY) || 0; } catch (e) {}
   let DB, mod = 'kbd', S = null;
   const num = (x, d, lo, hi) => { x = +x; if (!isFinite(x)) x = d; return clamp(x, lo, hi); };
-  const freshModel = () => ({ level: 1, ready: 0.2, item: {}, trans: {}, conf: {}, gain: 0.05, gate: 0.6, offset: 0, acc: {}, cr: {}, tick: 0, judged: 0, promo: { at: -999, level: 0 }, fast: 0 });
+  const freshModel = () => ({ level: 1, ready: 0.2, item: {}, trans: {}, conf: {}, gain: 0.05, gate: 0.6, offset: 0, acc: {}, cr: {}, tick: 0, judged: 0, promo: { at: -999, level: 0 }, fast: 0, grooveBpm: 80 });
   function sanitizeModel(m, v) {
     const s = freshModel(); if (!v || typeof v !== 'object') return s;
     s.level = Math.floor(num(v.level, 1, 1, 80)); s.ready = num(v.ready, 0.2, 0, 1); s.gain = num(v.gain, 0.05, 0.025, 0.09); s.gate = num(v.gate, 0.6, 0.6, 0.75); s.offset = num(v.offset, 0, -0.15, 0.15);
     s.tick = Math.floor(num(v.tick, 0, 0, 1e9)); s.judged = Math.floor(num(v.judged, 0, 0, 1e9)); s.fast = Math.floor(num(v.fast, 0, 0, 3)); if (v.promo) s.promo = { at: num(v.promo.at, -999, -999, 1e9), level: num(v.promo.level, 0, 0, 99) };
+    s.grooveBpm = Math.round(num(v.grooveBpm, 80, 50, 168));
     Object.keys(v.item || {}).forEach(id => { const o = v.item[id]; if (validId(m, id) && o) s.item[id] = { m: num(o.m, 0.4, 0, 1), n: Math.floor(num(o.n, 0, 0, 1e7)), last: num(o.last, 0, 0, 1e14), seen: num(o.seen, 0, 0, 1e9) }; });
     Object.keys(v.trans || {}).forEach(k => { const ab = k.split('>'), o = v.trans[k]; if (ab.length === 2 && validId(m, ab[0]) && validId(m, ab[1]) && o) s.trans[k] = { m: num(o.m, 0.5, 0, 1), n: Math.floor(num(o.n, 0, 0, 1e7)), last: num(o.last, 0, 0, 1e14) }; });
     Object.keys(v.conf || {}).forEach(k => { if (k.length < 40) s.conf[k] = Math.floor(num(v.conf[k], 0, 0, 1e6)); });
@@ -311,6 +312,7 @@ import { toAudioTime, judgeTap, medianLatency } from './core/timing.js';
     let p = '', h = '';
     if (t.kind === 'ear') { p = e.info.kind === 'interval' ? 'Which <b>interval</b>?' : 'Which <b>chord</b>?'; h = 'Listen, then choose. Number keys work too.'; const box = $('choices'); box.innerHTML = ''; t.choices.forEach((id, k) => { const b = document.createElement('button'); b.type = 'button'; b.id = 'ch-' + id; b.textContent = (k + 1) + '. ' + inf(id).label; b.addEventListener('click', () => { b.blur(); answer(id); }); box.appendChild(b); }); playRef(t); }
     else if (t.kind === 'bar') { p = 'Read it, then <b>tap it</b>'; h = 'Four clicks to get ready, then tap the bar in time.'; startBar(); }
+    else if (t.kind === 'groove') { p = 'Get ready — <b>play it in time</b>'; h = 'Four clicks to count in, then play each note on the beat.'; startGroove(); }
     else { const verb = mod === 'voice' ? 'Sing' : 'Play'; p = verb + ' ' + t.els.map((el, k) => (k === t.idx ? '<b>' : '') + el.info.label.split(':')[0] + (k === t.idx ? '</b>' : '')).join(' → '); if (t.kind === 'hold') p = (mod === 'voice' ? 'Hold ' : 'Hold ') + '<b>' + e.info.label + '</b> for two seconds'; h = hintFor(e); playRef(t); }
     $('prompt').innerHTML = p; $('hint').textContent = (t.warm ? 'Warm-up, does not count. ' : '') + h;
   }
@@ -336,6 +338,7 @@ import { toAudioTime, judgeTap, medianLatency } from './core/timing.js';
   function onNote(midi, exact) {
     lastInputAt = now(); pressed[midi] = performance.now(); if (!playing || !task || task.done) return; const e = cur(); if (!e) return; const i = e.info;
     if (MODS[mod].input === 'tap') { onTap(); return; }
+    if (task.kind === 'groove') { grooveOnset(midi); return; }
     if (i.kind === 'chord') { if (!exact) return; held.push({ p: pc(midi), t: now() }); held = held.filter(x => now() - x.t < 1.5); const got = {}; held.forEach(x => { got[x.p] = 1; }); if (i.pcs.indexOf(pc(midi)) < 0) { failEl(nname(midi) + ' is not in ' + i.label + ' (' + i.pcs.map(x => NAMES[x]).join(', ') + ').', e.id + '>x' + pc(midi)); held = []; return; } if (i.pcs.every(x => got[x])) passEl(); return; }
     if (i.kind !== 'note') return;
     const policy = i.anywhere ? 'fold' : (OCTAVE_POLICY[mod] || 'fold');
@@ -417,11 +420,67 @@ import { toAudioTime, judgeTap, medianLatency } from './core/timing.js';
     }
   }
 
+  // ---------- play in time: a count-in, then the shown notes played on the beat (F7) ----------
+  // Only instruments whose note events surface through onNote() (MIDI/keys,
+  // or a mic pluck once its pitch is stable) can be judged this way; voice,
+  // wind and harp are held-pitch ('sustain') with no discrete attack to time.
+  let grooveOn = false, groove = null, grooveLast = null;
+  function groovable(m) { const M = MODS[m]; return !!M && (M.input === 'midi' || M.input === 'pluck'); }
+  // A metronome tick for a groove exercise deliberately does NOT open the
+  // shared deaf window (compare click(), which does): a click that blinds
+  // the mic for its usual 60ms + 250ms tail would make playing ON the beat
+  // unjudgeable for pluck instruments (F7's own bug, moved one level up).
+  // This click is under 35ms, and onPitch's own onset gate already needs
+  // three consecutive 50ms analyser frames of matching pitch (150ms) before
+  // it credits a note, so the transient cannot be mistaken for one; nothing
+  // in onPitch or the shared deaf window needs to change.
+  function grooveClick(at, accent) {
+    if (!actx) return; const o = actx.createOscillator(), v = actx.createGain();
+    o.type = 'square'; o.frequency.value = accent ? 1500 : 1000;
+    v.gain.setValueAtTime(0.0001, at); v.gain.exponentialRampToValueAtTime(0.12, at + 0.002); v.gain.exponentialRampToValueAtTime(0.0001, at + 0.03);
+    o.connect(v); v.connect(actx.destination); o.start(at); o.stop(at + 0.035);
+  }
+  function buildGrooveTask() {
+    const pool = poolFor(D()), len = 4; let from = lastItem; const els = [];
+    for (let i = 0; i < len; i++) { const id = pick(from, pool); S.tick++; it(id).seen = S.tick; els.push({ id: id, info: inf(id), failed: false, t0: 0, rt: 0, reveal: it(id).n < 2 }); from = id; }
+    return { kind: 'groove', els: els, idx: 0, warm: false, limit: 8, ref: 'none', blind: false, t0: now(), done: false };
+  }
+  function startGroove() {
+    const bpm = S.grooveBpm || 80, spb = 60 / bpm, t0 = now() + 0.15, beatsPerBar = task.els.length;
+    const grid = makeGrid({ bpm: bpm, beatsPerBar: beatsPerBar, bars: 1, subdivision: 1, startTime: t0 + beatsPerBar * spb });
+    groove = { bpm: bpm, spb: spb, t0: t0, grid: grid, clicks: 0, onsets: [], judged: false, end: grid[grid.length - 1] + spb * 0.6 };
+  }
+  function grooveOnset(midi) {
+    if (!groove || groove.judged) return; const t = now();
+    if (t < groove.grid[0] - groove.spb * 0.6) return; // before the count-in has handed off, ignore
+    groove.onsets.push({ t: t, midi: midi });
+  }
+  function tickGroove() {
+    if (!groove || !task || task.kind !== 'groove') return; const t = now(), total = task.els.length * 2;
+    while (groove.clicks < total && groove.t0 + groove.clicks * groove.spb < t + 0.12) { const at = groove.t0 + groove.clicks * groove.spb; if (at > t - 0.01) grooveClick(at, groove.clicks % task.els.length === 0); groove.clicks++; }
+    if (!groove.judged && t > groove.end) {
+      groove.judged = true;
+      const fold = ['gtr', 'bass', 'uke'].indexOf(mod) >= 0 || task.els.some(e => e.info.anywhere);
+      const expected = task.els.map((e, i) => ({ beat: i, midi: fold ? pc(e.info.midi) : e.info.midi }));
+      const onsets = groove.onsets.map(o => ({ t: o.t, midi: fold ? pc(o.midi) : o.midi }));
+      const latencyMs = DB.latencyMs != null ? DB.latencyMs : (actx ? (actx.outputLatency || actx.baseLatency || 0) * 1000 : 0);
+      const result = grooveLast = scoreTake({ onsets: onsets, grid: groove.grid, expected: expected, latencyMs: latencyMs, windowMs: 150 });
+      result.notes.forEach((r, i) => { const e = task.els[i]; e.rt = 1; if (r.ok) e.q = clamp(1 - Math.abs(r.errorMs || 0) / 150, 0.6, 1); else { e.q = 0; e.failed = true; } });
+      const passed = result.summary.hitRate >= 0.75 && result.summary.tendency === 'steady' && task.els.every(e => e.q > 0);
+      S.grooveBpm = tempoLadder({ bpm: groove.bpm, passed: passed });
+      const tend = result.summary.tendency;
+      const feel = tend === 'steady' ? 'right on it' : tend === 'rushing' ? 'a little early overall' : tend === 'dragging' ? 'a little late overall' : 'not enough to tell';
+      say(passed ? 'Clean take at ' + groove.bpm + ' bpm, ' + feel + '. Next: ' + S.grooveBpm + ' bpm.' : (tend === 'rushing' ? 'You are rushing it — coming in early.' : tend === 'dragging' ? 'You are dragging — coming in late.' : 'Not quite on the beat yet.') + ' Staying at ' + S.grooveBpm + ' bpm.', passed ? 'ok' : 'no');
+      task.idx = task.els.length; finishTask(); nextTaskAt = now() + 0.4; save();
+    }
+  }
+
   // ---------- the loop ----------
   function tick(dt) {
     sess.active += dt; sess.sinceBreak += dt;
     if (!task || (task.done && now() >= nextTaskAt)) { task = buildTask(); present(); }
     if (task.kind === 'bar') tickBar();
+    else if (task.kind === 'groove') tickGroove();
     else if (!task.done) {
       const e = cur(), el = now() - e.t0, lim = task.limit * (task.kind === 'hold' ? 1.4 : 1);
       $('timeFill').style.width = Math.round(100 * c01(1 - el / lim)) + '%';
@@ -551,6 +610,7 @@ import { toAudioTime, judgeTap, medianLatency } from './core/timing.js';
     if (cap.on) { g.strokeStyle = '#ff6b5e'; g.lineWidth = 2; g.beginPath(); g.moveTo(X(now() - cap.start), H * 0.08); g.lineTo(X(now() - cap.start), H * 0.94); g.stroke(); if (heard && heard.freq) { g.fillStyle = '#e9edf6'; g.beginPath(); g.arc(X(now() - cap.start), Y(clamp(heard.midi, lo, hi)), 6, 0, 7); g.fill(); } }
   }
   function buildTask() {
+    if (grooveOn && groovable(mod)) return buildGrooveTask();
     if (customOn && DB.custom && DB.custom.length) {
       const ids = DB.custom.map(m => customItem(mod, m, DB.prefs)).filter(x => x), n = ids.length; if (n) { if (chunk * 4 >= n) { chunk = 0; coach('That was the whole tune. Back to the top.'); } const part = ids.slice(chunk * 4, chunk * 4 + 4), t = { kind: 'seq', els: [], idx: 0, warm: true, custom: true, limit: 10, ref: 'target', blind: false, t0: now(), done: false };
         part.forEach(id => { S.tick++; it(id).seen = S.tick; t.els.push({ id: id, info: inf(id), failed: false, t0: 0, rt: 0, reveal: true }); }); t.onDone = () => { if (!t.els.some(e => e.failed)) chunk++; else say('Same four notes again until they are clean.', ''); }; return t; }
@@ -622,6 +682,7 @@ import { toAudioTime, judgeTap, medianLatency } from './core/timing.js';
     if (mod === 'rhy') btn('calBtn', calRun ? 'Listening for 8 taps…' : 'Calibrate timing (' + Math.round(DB.latencyMs || 0) + ' ms)', startCalibrate, false);
     if (mod === 'capture') { btn('capGo', cap.on ? 'Stop' : 'Listen', () => { if (cap.on) capStop(); else { ensureAudio(); cap.on = true; cap.notes = []; cap.start = now(); cap.curM = -1; renderOpts(); } }, true); btn('capPlay', 'Play it back', () => { ensureAudio(); const t0 = now() + 0.1; cap.notes.forEach(n => tone(n.m, t0 + n.t - (cap.notes[0] ? cap.notes[0].t : 0), Math.max(0.2, n.d))); }); const lessons = {}; MOD_IDS.filter(m => ['kbd', 'gtr', 'bass', 'uke', 'voice', 'wind', 'harp'].indexOf(m) >= 0).forEach(m => { lessons[m] = [MODS[m].name]; }); sel('capTo', cap.notes.length + ' notes. Practise on', lessons, 'kbd', () => {}); btn('capUse', 'Make it a lesson', () => { if (!cap.notes.length) { say('Nothing captured yet.', 'no'); return; } DB.custom = cap.notes.map(n => n.m).slice(0, 300); save(); const to = $('capTo').value; setMod(to); customOn = true; renderOpts(); showAll(); coach('Your captured tune is loaded: ' + DB.custom.length + ' notes, four at a time. Each group repeats until it is clean. Press Start.'); }); }
     if (MODS[mod] && DB.custom && DB.custom.length && ['kbd', 'gtr', 'bass', 'uke', 'voice', 'wind', 'harp'].indexOf(mod) >= 0) chk('optCustom', 'Practise my captured melody (' + DB.custom.length + ' notes)', customOn, v => { customOn = v; chunk = 0; task = null; showAll(); });
+    if (groovable(mod)) chk('optGroove', 'Play in time (metronome, ' + (S.grooveBpm || 80) + ' bpm)', grooveOn, v => { grooveOn = v; task = null; groove = null; showAll(); });
   }
 
   // ---------- inputs ----------
@@ -654,7 +715,7 @@ import { toAudioTime, judgeTap, medianLatency } from './core/timing.js';
   $('optNames').addEventListener('change', function () { DB.prefs.names = this.checked; save(); });
 
   function setMod(m) {
-    if (sess) endSession(); mod = m; if (MODS[m]) { S = DB.mods[m]; DB.prefs.mod = m; } customOn = false; task = null; bar = null; heard = null; cap.on = false;
+    if (sess) endSession(); mod = m; if (MODS[m]) { S = DB.mods[m]; DB.prefs.mod = m; } customOn = false; grooveOn = false; groove = null; task = null; bar = null; heard = null; cap.on = false;
     document.querySelectorAll('#picker button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.mod === m)));
     $('prompt').textContent = (MODS[m] || TOOLS[m]).name; $('hint').textContent = ''; $('choices').hidden = true; say(''); if (MODS[m]) coach(S.judged ? 'Welcome back. You are on level ' + S.level + ': ' + D().name + '. Press Start.' : 'Press Start. Level 1: ' + D().name + '.');
     renderOpts(); ioRefresh(); showAll(); save();
@@ -710,8 +771,7 @@ import { toAudioTime, judgeTap, medianLatency } from './core/timing.js';
   //
   // slot:hook:chords
   //
-  // slot:hook:play-in-time
-  //
+  if (__DEBUG_HOOK__) Object.assign(hook, { groove: () => groove, grooveLast: () => grooveLast, grooveBpm: () => S.grooveBpm, grooveOn: v => { grooveOn = !!v; task = null; groove = null; }, grooveInject: (midi, atAudioTime) => { const fire = () => { if (audioNow() >= atAudioTime) onNote(midi, true); else setTimeout(fire, 4); }; fire(); } });
   // slot:hook:recall
   //
   // slot:hook:rhythm-vocab
