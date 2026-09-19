@@ -699,7 +699,7 @@ import { toAudioTime, judgeTap, medianLatency } from './core/timing.js';
   const hadSavedProgressAtBoot = (() => { try { return localStorage.getItem(KEY) !== null; } catch (e) { return true; } })();
   loadDB(); if (!Array.isArray(DB.custom)) DB.custom = []; $('optNames').checked = DB.prefs.names; buildPicker(); setMod(mod); requestAnimationFrame(frame);
   if (!hadSavedProgressAtBoot) showBackupNudge('Been here before? Restore a backup.');
-  const hook = { state: () => S, db: () => DB, sess: () => sess, task: () => task, cur: cur, note: onNote, answer: answer, tap: onTap, bar: () => bar, playing: () => playing, setMod: setMod, testSource: testSource, heard: () => heard, yin: yin, cap: () => cap, deaf: () => deafWindow.isDeaf(), exportProgress: doExportProgress, importProgress: doImportProgress, audioNow: audioNow };
+  const hook = !__DEBUG_HOOK__ ? null : { state: () => S, db: () => DB, sess: () => sess, task: () => task, cur: cur, note: onNote, answer: answer, tap: onTap, bar: () => bar, playing: () => playing, setMod: setMod, testSource: testSource, heard: () => heard, yin: yin, cap: () => cap, deaf: () => deafWindow.isDeaf(), exportProgress: doExportProgress, importProgress: doImportProgress, audioNow: audioNow };
   // Debug-hook slots: replace ONLY your own line with
   //   if (__DEBUG_HOOK__) Object.assign(hook, { … });
   // slot:hook:small-fixes
