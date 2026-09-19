@@ -1,3 +1,5 @@
+import { toAudioTime, judgeTap, medianLatency } from './core/timing.js';
+
 (function () {
   'use strict';
   const $ = id => document.getElementById(id);
@@ -172,16 +174,17 @@
     Object.keys(v.acc || {}).forEach(k => { s.acc[k] = num(v.acc[k], 0, 0, 3); }); Object.keys(v.cr || {}).forEach(k => { if (validId(m, k)) s.cr[k] = num(v.cr[k], 0, -80, 80); });
     return s;
   }
-  function sanitizeDB(v) {
+  function sanitizeDB(v, defaultLatencyMs) {
     const d = { v: 1, mods: {}, sessions: [], prefs: { mod: 'kbd', wind: 'bb', voice: 'low', names: true } }; v = (v && typeof v === 'object') ? v : {};
     MOD_IDS.forEach(m => { d.mods[m] = sanitizeModel(m, v.mods && v.mods[m]); });
     if (Array.isArray(v.sessions)) d.sessions = v.sessions.filter(x => x && typeof x.d === 'string' && MODS[x.mod]).slice(-60).map(x => ({ d: x.d.slice(0, 10), mod: x.mod, min: num(x.min, 0, 0, 600), acc: num(x.acc, 0, 0, 1), a1: num(x.a1, 0, 0, 1), a2: num(x.a2, 0, 0, 1), from: num(x.from, 1, 1, 80), to: num(x.to, 1, 1, 80), breaks: num(x.breaks, 0, 0, 99) }));
     const p = v.prefs || {}; if (MODS[p.mod]) d.prefs.mod = p.mod; if (WIND_KINDS[p.wind]) d.prefs.wind = p.wind; if (VOICE_KINDS[p.voice]) d.prefs.voice = p.voice; d.prefs.names = p.names !== false;
     d.custom = Array.isArray(v.custom) ? v.custom.map(x => Math.round(num(x, 60, 20, 110))).slice(0, 300) : [];
+    d.latencyMs = num(v.latencyMs, defaultLatencyMs || 0, 0, 300);
     return d;
   }
   function forget(t) { const f = o => { if (!o.last) return; const days = (t - o.last) / 86400000; if (days > 0.5) { o.m = 0.4 + (o.m - 0.4) * Math.pow(0.5, days / 10); o.last = t; } }; MOD_IDS.forEach(m => { const s = DB.mods[m]; Object.keys(s.item).forEach(k => f(s.item[k])); Object.keys(s.trans).forEach(k => f(s.trans[k])); }); }
-  function loadDB() { let v = null; try { v = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) {} DB = sanitizeDB(v); forget(Date.now()); mod = DB.prefs.mod; S = DB.mods[mod]; }
+  function loadDB() { let v = null; try { v = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) {} DB = sanitizeDB(v, actx ? (actx.outputLatency || actx.baseLatency || 0) * 1000 : 0); forget(Date.now()); mod = DB.prefs.mod; S = DB.mods[mod]; }
   let saveTimer = null;
   function save() { if (saveTimer) return; saveTimer = setTimeout(() => { saveTimer = null; try { DB.mods[mod] = S = sanitizeModel(mod, S); localStorage.setItem(KEY, JSON.stringify(DB)); } catch (e) {} }, 1200); }
   const it = id => S.item[id] || (S.item[id] = { m: 0.4, n: 0, last: 0, seen: 0 });
@@ -339,9 +342,36 @@
   }
 
   // ---------- rhythm reading: a count-in bar, then the bar you tap ----------
-  let bar = null;
+  let bar = null, calRun = null;
   function startBar() { const bpm = D().bpm || 72, spb = 60 / bpm, t0 = now() + 0.15; bar = { spb: spb, t0: t0, playAt: t0 + 4 * spb, end: t0 + 8 * spb, clicks: 0, taps: [], onsets: [], judged: false }; let b = 0; task.els.forEach(e => { e.info.on.forEach(o => bar.onsets.push({ t: bar.playAt + (b + o) * spb, el: e, hit: null })); e.b0 = b; b += e.info.beats; }); }
-  function onTap() { lastInputAt = now(); $('tapPad').classList.add('down'); setTimeout(() => $('tapPad').classList.remove('down'), 90); if (!playing || !task || task.kind !== 'bar' || !bar || bar.judged) return; const lat = actx ? (actx.outputLatency || actx.baseLatency || 0) : 0, t = now() - lat - S.offset; if (t < bar.playAt - 0.25) return; bar.taps.push({ t: t, used: false }); }
+  const audioNow = () => actx ? actx.currentTime : performance.now() / 1000;
+  const tapAudioTime = ev => toAudioTime({ eventTimeStamp: ev && typeof ev.timeStamp === 'number' ? ev.timeStamp : performance.now(), perfNow: performance.now(), audioNow: audioNow() });
+  function startCalibrate() {
+    if (calRun || !ensureAudio()) return;
+    const bpm = 72, spb = 60 / bpm, t0 = now() + 0.15, beats = [];
+    for (let i = 0; i < 8; i++) beats.push(t0 + i * spb);
+    beats.forEach((at, i) => click(at, i % 4 === 0));
+    calRun = { beats: beats };
+    calRun.taps = [];
+    say('Tap along with the eight clicks.', '');
+    renderOpts();
+    setTimeout(() => {
+      const taps = calRun ? calRun.taps : [];
+      if (taps.length >= 4) { DB.latencyMs = medianLatency(taps); say('Timing calibrated: ' + Math.round(DB.latencyMs) + ' ms.', 'ok'); save(); }
+      else say('Not enough taps caught. Try again.', 'no');
+      calRun = null; renderOpts();
+    }, (beats[beats.length - 1] - now() + 0.5) * 1000);
+  }
+  function onTap(ev) {
+    lastInputAt = now(); $('tapPad').classList.add('down'); setTimeout(() => $('tapPad').classList.remove('down'), 90);
+    if (calRun) { const raw = tapAudioTime(ev), v = judgeTap({ tapTime: raw, beatTimes: calRun.beats, latencyMs: 0, windowMs: 1e9 }); if (v.errorMs !== null) calRun.taps.push(v.errorMs); return; }
+    if (!playing || !task || task.kind !== 'bar' || !bar || bar.judged) return;
+    const latencyMs = DB.latencyMs != null ? DB.latencyMs : (actx ? (actx.outputLatency || actx.baseLatency || 0) * 1000 : 0);
+    const win = S.level > MODS.rhy.levels.length ? 0.11 : 0.15;
+    const raw = tapAudioTime(ev) - S.offset, verdict = judgeTap({ tapTime: raw, beatTimes: bar.onsets.map(o => o.t), latencyMs: latencyMs, windowMs: win * 1000 }), t = raw - latencyMs / 1000;
+    if (t < bar.playAt - 0.25) return;
+    bar.taps.push({ t: t, used: false, live: verdict });
+  }
   function tickBar() {
     if (!bar || !task || task.kind !== 'bar') return; const t = now();
     while (bar.clicks < 8 && bar.t0 + bar.clicks * bar.spb < t + 0.12) { const at = bar.t0 + bar.clicks * bar.spb; if (at > t - 0.01) click(at, bar.clicks % 4 === 0); bar.clicks++; }
@@ -559,6 +589,7 @@
     if (mod === 'wind') { sel('optWind', 'My instrument', WIND_KINDS, DB.prefs.wind, v => { DB.prefs.wind = v; task = null; save(); }); chk('optRef', 'Play me the note first', false, () => {}); }
     if (mod === 'voice') sel('optVoice', 'My range', VOICE_KINDS, DB.prefs.voice, v => { DB.prefs.voice = v; task = null; save(); });
     if (mod === 'tuner') { sel('optTune', 'Instrument', TUNINGS, tunerKind, v => { tunerKind = v; tuneSel = -1; }); btn('tuneReset', 'Start over', () => { tuned = {}; }); }
+    if (mod === 'rhy') btn('calBtn', calRun ? 'Listening for 8 taps…' : 'Calibrate timing (' + Math.round(DB.latencyMs || 0) + ' ms)', startCalibrate, false);
     if (mod === 'capture') { btn('capGo', cap.on ? 'Stop' : 'Listen', () => { if (cap.on) capStop(); else { ensureAudio(); cap.on = true; cap.notes = []; cap.start = now(); cap.curM = -1; renderOpts(); } }, true); btn('capPlay', 'Play it back', () => { ensureAudio(); const t0 = now() + 0.1; cap.notes.forEach(n => tone(n.m, t0 + n.t - (cap.notes[0] ? cap.notes[0].t : 0), Math.max(0.2, n.d))); }); const lessons = {}; MOD_IDS.filter(m => ['kbd', 'gtr', 'bass', 'uke', 'voice', 'wind', 'harp'].indexOf(m) >= 0).forEach(m => { lessons[m] = [MODS[m].name]; }); sel('capTo', cap.notes.length + ' notes. Practise on', lessons, 'kbd', () => {}); btn('capUse', 'Make it a lesson', () => { if (!cap.notes.length) { say('Nothing captured yet.', 'no'); return; } DB.custom = cap.notes.map(n => n.m).slice(0, 300); save(); const to = $('capTo').value; setMod(to); customOn = true; renderOpts(); showAll(); coach('Your captured tune is loaded: ' + DB.custom.length + ' notes, four at a time. Each group repeats until it is clean. Press Start.'); }); }
     if (MODS[mod] && DB.custom && DB.custom.length && ['kbd', 'gtr', 'bass', 'uke', 'voice', 'wind', 'harp'].indexOf(mod) >= 0) chk('optCustom', 'Practise my captured melody (' + DB.custom.length + ' notes)', customOn, v => { customOn = v; chunk = 0; task = null; showAll(); });
   }
@@ -576,12 +607,12 @@
   const PCKEYS = { a: 60, w: 61, s: 62, e: 63, d: 64, f: 65, t: 66, g: 67, y: 68, h: 69, u: 70, j: 71, k: 72 };
   document.addEventListener('keydown', ev => {
     if (ev.repeat || ev.ctrlKey || ev.metaKey || ev.altKey) return; const tag = ev.target.tagName; if (tag === 'SELECT' || (tag === 'INPUT' && ev.target.type !== 'checkbox')) return;
-    if (mod === 'rhy' && (ev.key === ' ' || ev.key.length === 1)) { if (tag === 'BUTTON' && ev.key === ' ' && ev.target.id !== 'tapPad') return; ev.preventDefault(); ensureAudio(); onTap(); return; }
+    if (mod === 'rhy' && (ev.key === ' ' || ev.key.length === 1)) { if (tag === 'BUTTON' && ev.key === ' ' && ev.target.id !== 'tapPad') return; ev.preventDefault(); ensureAudio(); onTap(ev); return; }
     if (mod === 'ear' && task && task.choices && /^[1-9]$/.test(ev.key)) { const id = task.choices[+ev.key - 1]; if (id) answer(id); return; }
     if (mod === 'kbd' && PCKEYS[ev.key.toLowerCase()] !== undefined) { ev.preventDefault(); ensureAudio(); const m = PCKEYS[ev.key.toLowerCase()]; tone(m, now() + 0.01, 0.5, 0.15); onNote(m, true); }
   });
   cv.addEventListener('pointerdown', ev => { const r = cv.getBoundingClientRect(), x = (ev.clientX - r.left) * cv.width / r.width, y = (ev.clientY - r.top) * cv.height / r.height; ensureAudio(); if (mod === 'kbd') { const k = keyRects.find(q => x >= q.x && x <= q.x + q.w && y >= q.y && y <= q.y + q.h); if (k) { tone(k.m, now() + 0.01, 0.5, 0.15); onNote(k.m, true); } } if (mod === 'tuner') { const row = rowRects.find(q => x >= q.x && x <= q.x + q.w && y >= q.y && y <= q.y + q.h); if (row) tone(row.m, now() + 0.02, 1.6, 0.2); } });
-  $('tapPad').addEventListener('pointerdown', ev => { ev.preventDefault(); ensureAudio(); onTap(); });
+  $('tapPad').addEventListener('pointerdown', ev => { ev.preventDefault(); ensureAudio(); onTap(ev); });
   $('replayBtn').addEventListener('click', function () { this.blur(); if (task && !task.done) { playRef(task); lastInputAt = now(); } });
   $('playBtn').addEventListener('click', function () { this.blur(); if (!sess) startSession(); else if (paused) resume(); else takeBreak('user'); });
   $('endBtn').addEventListener('click', function () { this.blur(); endSession(); }); $('endBtn2').addEventListener('click', endSession); $('backBtn').addEventListener('click', resume);
@@ -603,6 +634,6 @@
   setInterval(() => { if (!TOOLS[mod] || !micReady || !anTime) return; const buf = new Float32Array(anTime.fftSize); anTime.getFloatTimeDomainData(buf); const r = yin(buf, actx.sampleRate, 36, 1600), fr = { rms: r.rms, freq: r.freq && r.clarity > 0.8 ? r.freq : 0 }; if (fr.freq) fr.midi = fmidi(fr.freq); toolPitch(fr, 0.05); }, 50);
 
   loadDB(); if (!Array.isArray(DB.custom)) DB.custom = []; $('optNames').checked = DB.prefs.names; buildPicker(); setMod(mod); requestAnimationFrame(frame);
-  window.__coach = { state: () => S, db: () => DB, sess: () => sess, task: () => task, cur: cur, note: onNote, answer: answer, tap: onTap, bar: () => bar, playing: () => playing, setMod: setMod, testSource: testSource, heard: () => heard, yin: yin, cap: () => cap };
+  window.__coach = { state: () => S, db: () => DB, sess: () => sess, task: () => task, cur: cur, note: onNote, answer: answer, tap: onTap, bar: () => bar, playing: () => playing, setMod: setMod, testSource: testSource, heard: () => heard, yin: yin, cap: () => cap, audioNow: audioNow };
 
 })();
