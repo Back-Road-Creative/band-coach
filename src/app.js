@@ -6,7 +6,8 @@ import { toAudioTime, judgeTap, medianLatency } from './core/timing.js';
 // slot line, so parallel branches never edit adjacent lines.
 import { recordError, getErrors } from './core/error-log.js';
 //
-// slot:import:worklet
+import { yin } from './audio/yin.js';
+import { createPitchNode } from './audio/pitch-worklet.js';
 //
 import { noiseFloor, gatesFor, meterLevel } from './audio/levels.js';
 //
@@ -60,6 +61,36 @@ import { createFocusTrap } from './ui/dialog-focus.js';
   // ---------- audio ----------
   let actx = null, micStream = null, anTime = null, anFreq = null, micReady = false, testNodes = [];
   let gates = gatesFor(null), micDevices = [];
+  // E3: pitch tracking moved off the main thread onto an AudioWorklet
+  // (src/audio/pitch-worklet.js) when available; pitchWorkletNode stays null
+  // (and listen() below keeps running its setInterval sampling unchanged) on
+  // any browser/context where AudioWorklet is missing or fails to load.
+  let pitchWorkletNode = null, lastAudioSource = null, lastWorkletPitchAt = 0, pitchWorkletPromise = null;
+  // Returns a promise that resolves once the worklet is wired (or has
+  // failed) so a caller that needs the real pipeline settled first — the
+  // testPluck() debug hook below, so its synthetic timings are not a race
+  // against addModule()'s async load — can await it. Real usage (openMic)
+  // fires it without awaiting: nothing about live play depends on the
+  // worklet winning the race against the setInterval fallback.
+  function ensurePitchWorklet() {
+    if (pitchWorkletPromise) return pitchWorkletPromise;
+    if (!actx) return Promise.resolve(null);
+    pitchWorkletPromise = createPitchNode(actx, { fmin: 36, fmax: 1600, rmsGate: gates.pitch }).then(node => {
+      pitchWorkletNode = node;
+      if (lastAudioSource) lastAudioSource.connect(node);
+      const mute = actx.createGain(); mute.gain.value = 0; node.connect(mute); mute.connect(actx.destination); // keeps the worklet in the live render graph without making sound
+      node.port.onmessage = ev => {
+        const d = ev.data, M = MODS[mod]; if (!M || !(M.input === 'pluck' || M.input === 'sustain')) return;
+        const fr = { rms: d.rms, freq: d.freq && d.clarity > 0.8 ? d.freq : 0, onset: d.onset }; if (fr.freq) fr.midi = fmidi(fr.freq);
+        if (task && cur() && cur().info.kind === 'chord') { const db = new Float32Array(anFreq.frequencyBinCount); anFreq.getFloatFrequencyData(db); fr.chroma = chroma(db, actx.sampleRate); }
+        meterUpdate(fr.rms);
+        const t = now(), dt = Math.min(0.2, t - (lastWorkletPitchAt || t)); lastWorkletPitchAt = t;
+        try { onPitch(fr, dt); } catch (e) { errCount++; recordError('onPitch', e); }
+      };
+      return node;
+    }).catch(() => null);
+    return pitchWorkletPromise;
+  }
   function ensureAudio() { if (!actx) { try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { actx = null; } } if (actx && actx.state === 'suspended') actx.resume(); return actx; }
   const now = () => actx ? actx.currentTime : performance.now() / 1000;
   function tone(m, at, dur, vol) {
@@ -72,17 +103,7 @@ import { createFocusTrap } from './ui/dialog-focus.js';
   }
   function click(at, accent) { if (!actx) return; const o = actx.createOscillator(), v = actx.createGain(); o.type = 'square'; o.frequency.value = accent ? 1500 : 1000; v.gain.setValueAtTime(0.0001, at); v.gain.exponentialRampToValueAtTime(0.16, at + 0.002); v.gain.exponentialRampToValueAtTime(0.0001, at + 0.05); o.connect(v); v.connect(actx.destination); o.start(at); o.stop(at + 0.06); deafWindow.open(Math.max(0, (at + 0.06 - now()) * 1000)); }
 
-  // ---------- listening: pitch (YIN) and chord colour (chroma) ----------
-  function yin(buf, sr, fmin, fmax) {
-    const n = buf.length; let rms = 0; for (let i = 0; i < n; i++) rms += buf[i] * buf[i]; rms = Math.sqrt(rms / n); if (rms < gates.pitch) return { rms: rms, freq: 0 };
-    const tauMax = Math.min(Math.floor(sr / fmin), (n >> 1) - 1), tauMin = Math.max(2, Math.floor(sr / fmax)), W = n - tauMax, d = new Float32Array(tauMax + 2);
-    for (let tau = 1; tau <= tauMax + 1; tau++) { let s = 0; for (let i = 0; i < W; i++) { const x = buf[i] - buf[i + tau]; s += x * x; } d[tau] = s; }
-    let run = 0; const c = new Float32Array(tauMax + 2); c[0] = 1; for (let tau = 1; tau <= tauMax + 1; tau++) { run += d[tau]; c[tau] = run ? d[tau] * tau / run : 1; }
-    let best = -1; for (let tau = tauMin; tau <= tauMax; tau++) { if (c[tau] < 0.15) { while (tau + 1 <= tauMax && c[tau + 1] < c[tau]) tau++; best = tau; break; } }
-    if (best < 0) { let mn = 1, at = -1; for (let tau = tauMin; tau <= tauMax; tau++) if (c[tau] < mn) { mn = c[tau]; at = tau; } if (mn > 0.3) return { rms: rms, freq: 0 }; best = at; }
-    const a = c[best - 1], b = c[best], e = c[best + 1], den = a - 2 * b + e, shift = den ? 0.5 * (a - e) / den : 0;
-    return { rms: rms, freq: sr / (best + clamp(shift, -1, 1)), clarity: 1 - c[best] };
-  }
+  // ---------- listening: pitch (YIN, src/audio/yin.js) and chord colour (chroma) ----------
   // chroma() moved to src/audio/chords.js (imported above) — it now peels
   // harmonics of a strong peak out of the spectrum before folding to
   // pitch classes, fixing flaw F6 (a single note's own harmonics reading
@@ -95,7 +116,7 @@ import { createFocusTrap } from './ui/dialog-focus.js';
     try { st = await navigator.mediaDevices.getUserMedia({ audio: wanted }); }
     catch (e) { if (!DB.prefs.inputDeviceId) throw e; st = await navigator.mediaDevices.getUserMedia({ audio: base }); }
     micStream = st; const src = actx.createMediaStreamSource(st); wireAnalysers(src); micReady = true;
-    refreshMicDevices(); return true;
+    ensurePitchWorklet(); refreshMicDevices(); return true;
   }
   async function refreshMicDevices() {
     if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return;
@@ -128,9 +149,33 @@ import { createFocusTrap } from './ui/dialog-focus.js';
       ? 'Your room is quiet.'
       : 'There\'s a lot of background noise — move closer to the mic.';
   }
-  function wireAnalysers(src) { if (!anTime) { anTime = actx.createAnalyser(); anTime.fftSize = 4096; anFreq = actx.createAnalyser(); anFreq.fftSize = 8192; anFreq.smoothingTimeConstant = 0.5; } src.connect(anTime); src.connect(anFreq); }
+  function wireAnalysers(src) { if (!anTime) { anTime = actx.createAnalyser(); anTime.fftSize = 4096; anFreq = actx.createAnalyser(); anFreq.fftSize = 8192; anFreq.smoothingTimeConstant = 0.5; } src.connect(anTime); src.connect(anFreq); lastAudioSource = src; if (pitchWorkletNode) src.connect(pitchWorkletNode); }
   // test hook: feed synthetic notes through the same listening chain
-  function testSource(freqs) { ensureAudio(); testNodes.forEach(o => { try { o.stop(); } catch (e) {} }); testNodes = []; if (!freqs || !freqs.length) return; const mix = actx.createGain(); mix.gain.value = 0.5 / freqs.length; wireAnalysers(mix); micReady = true; freqs.forEach(f => [1, 2, 3].forEach(h => { const o = actx.createOscillator(), gg = actx.createGain(); o.frequency.value = f * h; gg.gain.value = 1 / (h * h); o.connect(gg); gg.connect(mix); o.start(); testNodes.push(o); })); }
+  function testSource(freqs) { ensureAudio(); testNodes.forEach(o => { try { o.stop(); } catch (e) {} }); testNodes = []; if (!freqs || !freqs.length) return; const mix = actx.createGain(); mix.gain.value = 0.5 / freqs.length; wireAnalysers(mix); micReady = true; ensurePitchWorklet(); freqs.forEach(f => [1, 2, 3].forEach(h => { const o = actx.createOscillator(), gg = actx.createGain(); o.frequency.value = f * h; gg.gain.value = 1 / (h * h); o.connect(gg); gg.connect(mix); o.start(); testNodes.push(o); })); }
+  // test hook (F8): testSource() has no decay envelope, so it cannot express
+  // a real pluck ringing out. testPluck(freq, attacksMs) schedules one real
+  // exponentially-decaying attack per entry in attacksMs (offsets in ms from
+  // now), through the same analyser/worklet chain as testSource, so a
+  // characterization test can prove a same-pitch re-pluck re-fires while the
+  // first attack is still ringing above the RMS 0.006 release floor.
+  async function testPluck(freq, attacksMs) {
+    ensureAudio(); testNodes.forEach(o => { try { o.stop(); } catch (e) {} }); testNodes = [];
+    const mix = actx.createGain(); mix.gain.value = 1; wireAnalysers(mix); micReady = true;
+    await ensurePitchWorklet(); // settle the worklet-vs-fallback race before scheduling test audio, not during it
+    const startAt = now() + 0.05;
+    (attacksMs && attacksMs.length ? attacksMs : [0]).forEach(ms => {
+      const at = startAt + ms / 1000;
+      [1, 2, 3].forEach(h => {
+        const o = actx.createOscillator(), gg = actx.createGain();
+        o.frequency.value = freq * h;
+        gg.gain.setValueAtTime(0.0001, at);
+        gg.gain.exponentialRampToValueAtTime(0.5 / (h * h), at + 0.005);
+        gg.gain.exponentialRampToValueAtTime(0.0001, at + 3);
+        o.connect(gg); gg.connect(mix); o.start(at); o.stop(at + 3.05); testNodes.push(o);
+      });
+    });
+    return startAt;
+  }
 
   // ---------- instruments: each is a curriculum plus a way of hearing you ----------
   const N = (...ms) => ms.map(m => 'n' + m), Wn = (...ms) => ms.map(m => 'w' + m), SF = (s, ...fs) => fs.map(f => 's' + s + 'f' + f), V = (...ds) => ds.map(d => 'v' + d);
@@ -438,6 +483,10 @@ import { createFocusTrap } from './ui/dialog-focus.js';
   function onPitch(fr, dt) {
     heard = fr; if (deafWindow.isDeaf()) return; const M = MODS[mod]; if (!playing || !task || task.done) return; const e = cur(); if (!e) return;
     if (M.input === 'pluck') {
+      // F8: an onset detector (src/audio/onset.js) catches a re-pluck of the
+      // SAME note on a still-ringing string, which the RMS-drop/pitch-change
+      // release check below can never see on its own.
+      if (fr.onset) { released = true; stableN = 0; }
       if (e.info.kind === 'chord') { if (fr.rms < gates.chord || !fr.chroma) { holdFor = 0; return; } const j = judgeChord({ chroma: fr.chroma, targetPcs: e.info.pcs }); e.score = j.score; if (j.ok) { holdFor += dt; if (holdFor > 0.18) passEl(undefined, e.info.label + ': that rings true.'); } else holdFor = 0; if (fr.rms > 0.02) lastInputAt = now(); return; }
       if (fr.rms < gates.note || !fr.freq) { if (++stableN > 2 && fr.rms < 0.006) released = true; stableMidi = -1; return; }
       const m = Math.round(fr.midi); if (m === stableMidi) stableN++; else { stableMidi = m; stableN = 1; }
@@ -600,8 +649,9 @@ import { createFocusTrap } from './ui/dialog-focus.js';
   }
   let lastFrame = 0, lastPitchAt = 0;
   function listen() {
+    if (pitchWorkletNode) return; // the worklet's own onmessage handler is feeding onPitch instead
     const M = MODS[mod]; if (!M || !micReady || !anTime || !(M.input === 'pluck' || M.input === 'sustain')) return; const t = now(), dt = Math.min(0.2, t - (lastPitchAt || t)); lastPitchAt = t;
-    const buf = new Float32Array(anTime.fftSize); anTime.getFloatTimeDomainData(buf); const r = yin(buf, actx.sampleRate, M.fmin, M.fmax), fr = { rms: r.rms, freq: r.freq && r.clarity > 0.8 ? r.freq : 0 }; if (fr.freq) fr.midi = fmidi(fr.freq);
+    const buf = new Float32Array(anTime.fftSize); anTime.getFloatTimeDomainData(buf); const r = yin(buf, actx.sampleRate, M.fmin, M.fmax, gates.pitch), fr = { rms: r.rms, freq: r.freq && r.clarity > 0.8 ? r.freq : 0 }; if (fr.freq) fr.midi = fmidi(fr.freq);
     if (task && cur() && cur().info.kind === 'chord') { const db = new Float32Array(anFreq.frequencyBinCount); anFreq.getFloatFrequencyData(db); fr.chroma = chroma(db, actx.sampleRate); }
     meterUpdate(fr.rms);
     try { onPitch(fr, dt); } catch (e) { errCount++; recordError('onPitch', e); }
@@ -899,8 +949,7 @@ import { createFocusTrap } from './ui/dialog-focus.js';
     renderOpts(); ioRefresh(); showAll(); save();
   }
   function buildPicker() { const box = $('picker'); MOD_IDS.concat(Object.keys(TOOLS)).forEach(m => { const o = MODS[m] || TOOLS[m], b = document.createElement('button'); b.type = 'button'; b.dataset.mod = m; b.style.setProperty('--c', o.color); b.setAttribute('aria-pressed', 'false'); b.appendChild(document.createTextNode(o.name)); const sm = document.createElement('small'); sm.textContent = o.tag; b.appendChild(sm); b.addEventListener('click', () => { b.blur(); setMod(m); }); box.appendChild(b); }); }
-  const _listen = listen; // tools listen even without a session
-  setInterval(() => { if (!TOOLS[mod] || !micReady || !anTime) return; const buf = new Float32Array(anTime.fftSize); anTime.getFloatTimeDomainData(buf); const r = yin(buf, actx.sampleRate, 36, 1600), fr = { rms: r.rms, freq: r.freq && r.clarity > 0.8 ? r.freq : 0 }; if (fr.freq) fr.midi = fmidi(fr.freq); meterUpdate(fr.rms); toolPitch(fr, 0.05); }, 50);
+  setInterval(() => { if (!TOOLS[mod] || !micReady || !anTime) return; const buf = new Float32Array(anTime.fftSize); anTime.getFloatTimeDomainData(buf); const r = yin(buf, actx.sampleRate, 36, 1600, gates.pitch), fr = { rms: r.rms, freq: r.freq && r.clarity > 0.8 ? r.freq : 0 }; if (fr.freq) fr.midi = fmidi(fr.freq); toolPitch(fr, 0.05); }, 50);
 
   // ---------- backups: a downloadable copy of the whole DB (E9: db.v now feeds migrateDB) ----------
   function showBackupNudge(text) { $('backupNudgeText').textContent = text; $('backupNudge').hidden = false; }
@@ -944,7 +993,7 @@ import { createFocusTrap } from './ui/dialog-focus.js';
   //   if (__DEBUG_HOOK__) Object.assign(hook, { … });
   if (__DEBUG_HOOK__) Object.assign(hook, { errors: getErrors });
   //
-  // slot:hook:worklet
+  if (__DEBUG_HOOK__) Object.assign(hook, { testPluck: testPluck, pitchWorkletActive: () => !!pitchWorkletNode });
   //
   if (__DEBUG_HOOK__) Object.assign(hook, { gates: () => gates, calibrate: calibrateNoiseFloor, devices: () => micDevices });
   //
