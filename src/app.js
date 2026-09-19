@@ -4,7 +4,7 @@ import { exportProgress as exportProgressFile, importProgress as importProgressF
 import { toAudioTime, judgeTap, medianLatency } from './core/timing.js';
 // Merge slots: a unit in flight adds its imports by replacing ONLY its own
 // slot line, so parallel branches never edit adjacent lines.
-// slot:import:small-fixes
+import { recordError, getErrors } from './core/error-log.js';
 //
 // slot:import:worklet
 //
@@ -438,13 +438,13 @@ import { toAudioTime, judgeTap, medianLatency } from './core/timing.js';
     const M = MODS[mod]; if (!M || !micReady || !anTime || !(M.input === 'pluck' || M.input === 'sustain')) return; const t = now(), dt = Math.min(0.2, t - (lastPitchAt || t)); lastPitchAt = t;
     const buf = new Float32Array(anTime.fftSize); anTime.getFloatTimeDomainData(buf); const r = yin(buf, actx.sampleRate, M.fmin, M.fmax), fr = { rms: r.rms, freq: r.freq && r.clarity > 0.8 ? r.freq : 0 }; if (fr.freq) fr.midi = fmidi(fr.freq);
     if (task && cur() && cur().info.kind === 'chord') { const db = new Float32Array(anFreq.frequencyBinCount); anFreq.getFloatFrequencyData(db); fr.chroma = chroma(db, actx.sampleRate, anFreq.fftSize); }
-    try { onPitch(fr, dt); } catch (e) { errCount++; }
+    try { onPitch(fr, dt); } catch (e) { errCount++; recordError('onPitch', e); }
   }
   setInterval(listen, 50);
   function frame() {
     const t = performance.now(), dt = Math.min(0.1, (t - (lastFrame || t)) / 1000); lastFrame = t;
     try { if (playing) tick(dt); draw(); }
-    catch (e) { errCount++; task = null; try { S = DB.mods[mod] = sanitizeModel(mod, S); } catch (e2) {} if (errCount > 4 && playing) { errCount = 0; takeBreak('error'); } }
+    catch (e) { errCount++; recordError('frame', e); task = null; try { S = DB.mods[mod] = sanitizeModel(mod, S); } catch (e2) {} if (errCount > 4 && playing) { errCount = 0; takeBreak('error'); } }
     if (paused) tickBreak(); requestAnimationFrame(frame);
   }
 
@@ -587,6 +587,7 @@ import { toAudioTime, judgeTap, medianLatency } from './core/timing.js';
   function takeBreak(kind) {
     if (!sess || paused) return; const b = BREAKS[kind]; playing = false; paused = true; pauseInfo = { at: Date.now(), secs: b[2] }; let why = b[1];
     if (kind === 'tired') why = 'Your accuracy slid from ' + Math.round(100 * sess.best30) + '% at your best today to ' + Math.round(100 * mean(sess.w30)) + '%' + (sess.bestRt && sess.rts.length >= 10 && median(sess.rts) > sess.bestRt * 1.3 ? ', and you are getting slower to answer' : '') + '. That pattern is fatigue, not lack of skill. Two minutes away fixes more than two more minutes of pushing.';
+    if (kind === 'error') { const last = getErrors().slice(-1)[0]; if (last) why += ' Last error: ' + last.message; }
     $('breakTitle').textContent = b[0]; $('breakWhy').textContent = why; $('breakClock').hidden = !b[2]; $('snoozeBtn').hidden = !(kind === 'tired' || kind === 'long'); $('breakCard').hidden = false; $('playBtn').textContent = 'Resume'; task = null; bar = null; save(); showAll();
   }
   function tickBreak() { if (!pauseInfo || !pauseInfo.secs) return; const left = Math.max(0, pauseInfo.secs - (Date.now() - pauseInfo.at) / 1000); $('breakClock').textContent = left > 0 ? Math.floor(left / 60) + ':' + ('0' + Math.floor(left % 60)).slice(-2) : 'Ready when you are'; }
@@ -703,7 +704,7 @@ import { toAudioTime, judgeTap, medianLatency } from './core/timing.js';
   const hook = !__DEBUG_HOOK__ ? null : { state: () => S, db: () => DB, sess: () => sess, task: () => task, cur: cur, note: onNote, answer: answer, tap: onTap, bar: () => bar, playing: () => playing, setMod: setMod, testSource: testSource, heard: () => heard, yin: yin, cap: () => cap, deaf: () => deafWindow.isDeaf(), exportProgress: doExportProgress, importProgress: doImportProgress, audioNow: audioNow };
   // Debug-hook slots: replace ONLY your own line with
   //   if (__DEBUG_HOOK__) Object.assign(hook, { … });
-  // slot:hook:small-fixes
+  if (__DEBUG_HOOK__) Object.assign(hook, { errors: getErrors });
   //
   // slot:hook:worklet
   //
