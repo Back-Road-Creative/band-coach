@@ -25,6 +25,7 @@
 // dropped into the worklet's global scope and just work.
 import { yin } from './yin.js';
 import { createOnsetDetector } from './onset.js';
+import { FALLBACK_RANGE } from './range.js';
 
 const PROCESSOR_NAME = 'band-coach-pitch-worklet';
 
@@ -52,8 +53,8 @@ class BandCoachPitchProcessor extends AudioWorkletProcessor {
     const opts = (options && options.processorOptions) || {};
     this.frameSize = opts.frameSize || 2048;
     this.hop = opts.hop || 512;
-    this.fmin = opts.fmin || 60;
-    this.fmax = opts.fmax || 1600;
+    this.fmin = opts.fmin || ${FALLBACK_RANGE.fmin};
+    this.fmax = opts.fmax || ${FALLBACK_RANGE.fmax};
     this.rmsGate = opts.rmsGate || 0.008;
     this.ring = new Float32Array(this.frameSize);
     this.linear = new Float32Array(this.frameSize);
@@ -120,8 +121,8 @@ export function createPitchNode(actx, opts = {}) {
         processorOptions: {
           frameSize: opts.frameSize || 2048,
           hop: opts.hop || 512,
-          fmin: opts.fmin || 60,
-          fmax: opts.fmax || 1600,
+          fmin: opts.fmin || FALLBACK_RANGE.fmin,
+          fmax: opts.fmax || FALLBACK_RANGE.fmax,
           rmsGate: opts.rmsGate || 0.008,
         },
       });

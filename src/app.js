@@ -22,6 +22,7 @@ import * as RHY from './core/rhythm.js';
 import { forInstrument } from './notation/for-instrument.js';
 import { drawPrimitives } from './notation/draw-canvas.js';
 import { byId as instrumentById } from './instruments/index.js';
+import { rangeForInstrument, FALLBACK_RANGE } from './audio/range.js';
 // slot:import:notation-wire
 //
 // slot:import:a11y
@@ -102,7 +103,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
   function ensurePitchWorklet() {
     if (pitchWorkletPromise) return pitchWorkletPromise;
     if (!actx) return Promise.resolve(null);
-    const M0 = MODS[mod], range0 = { fmin: (M0 && M0.fmin) || 36, fmax: (M0 && M0.fmax) || 1600 };
+    const M0 = MODS[mod], range0 = { fmin: (M0 && M0.fmin) || FALLBACK_RANGE.fmin, fmax: (M0 && M0.fmax) || FALLBACK_RANGE.fmax };
     pitchWorkletPromise = createPitchNode(actx, { fmin: range0.fmin, fmax: range0.fmax, rmsGate: gates.pitch }).then(node => {
       pitchWorkletNode = node; lastWorkletRangeSent = range0;
       if (lastAudioSource) lastAudioSource.connect(node);
@@ -991,7 +992,11 @@ import { register as registerPlayalong } from './ui/playalong.js';
     renderOpts(); ioRefresh(); showAll(); save();
   }
   function buildPicker() { const box = $('picker'); MOD_IDS.concat(Object.keys(TOOLS)).forEach(m => { const o = MODS[m] || TOOLS[m], b = document.createElement('button'); b.type = 'button'; b.dataset.mod = m; b.style.setProperty('--c', o.color); b.setAttribute('aria-pressed', 'false'); b.appendChild(document.createTextNode(o.name)); const sm = document.createElement('small'); sm.textContent = o.tag; b.appendChild(sm); b.addEventListener('click', () => { b.blur(); closePanel(); setMod(m); }); box.appendChild(b); }); }
-  setInterval(() => { if (!TOOLS[mod] || !micReady || !anTime) return; const buf = new Float32Array(anTime.fftSize); anTime.getFloatTimeDomainData(buf); const r = yin(buf, actx.sampleRate, 36, 1600, gates.pitch), fr = { rms: r.rms, freq: r.freq && r.clarity > 0.8 ? r.freq : 0 }; if (fr.freq) fr.midi = fmidi(fr.freq); toolPitch(fr, 0.05); }, 50);
+  // The tuner tool knows which instrument's open strings it is listening
+  // for (tunerKind); the melody-capture tool deliberately does not (it hears
+  // anything sung, hummed, whistled or played), so it keeps the generic
+  // fallback range -- see src/audio/range.js.
+  setInterval(() => { if (!TOOLS[mod] || !micReady || !anTime) return; const buf = new Float32Array(anTime.fftSize); anTime.getFloatTimeDomainData(buf); const toolRange = mod === 'tuner' ? rangeForInstrument(instrumentById[tunerKind === 'vln' ? 'violin' : tunerKind]) : FALLBACK_RANGE; const r = yin(buf, actx.sampleRate, toolRange.fmin, toolRange.fmax, gates.pitch), fr = { rms: r.rms, freq: r.freq && r.clarity > 0.8 ? r.freq : 0 }; if (fr.freq) fr.midi = fmidi(fr.freq); toolPitch(fr, 0.05); }, 50);
 
   // ---------- backups: a downloadable copy of the whole DB (E9: db.v now feeds migrateDB) ----------
   function showBackupNudge(text) { $('backupNudgeText').textContent = text; $('backupNudge').hidden = false; }

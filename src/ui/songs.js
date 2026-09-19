@@ -21,6 +21,7 @@
 
 import { yin } from '../audio/yin.js';
 import { createOnsetDetector } from '../audio/onset.js';
+import { rangeForInstrument } from '../audio/range.js';
 import { starterSongs } from '../song/starter/index.js';
 import { createLibrary, memoryStore, indexedDbStore } from '../song/library.js';
 import { validateSong } from '../song/model.js';
@@ -314,7 +315,8 @@ function mountSongsPanel(hostEl, api) {
         analysers.time.getFloatTimeDomainData(buf);
         const o = onset.push(buf);
         if (!o.onset) return;
-        const r = yin(buf, audio.sampleRate, 36, 1600, api.gates().pitch);
+        const toolRange = rangeForInstrument(practice.instrument);
+        const r = yin(buf, audio.sampleRate, toolRange.fmin, toolRange.fmax, api.gates().pitch);
         if (!r.freq || !(r.clarity > 0.7)) return;
         const midi = Math.round(69 + 12 * Math.log2(r.freq / 440));
         practice.playedEvents.push({ midi, atSec: api.now() - practice.recordStartSec });
