@@ -1,8 +1,13 @@
 name: pages
 
+# Triggered by the TAG PUSH, not by `release: published`. release.yml creates
+# the release with GITHUB_TOKEN, and GitHub deliberately does not fire
+# workflow triggers for events created with that token — so a
+# `release: published` trigger here could never run, and never did.
 on:
-  release:
-    types: [published]
+  push:
+    tags:
+      - 'v*'
   workflow_dispatch: {}
 
 permissions:
