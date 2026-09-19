@@ -52,8 +52,31 @@ test('fingerings panel opens, shows a default fretboard diagram, and reacts to a
   assert.ok(options.includes('trombone'));
   assert.ok(options.includes('recorder-descant'));
   assert.ok(options.includes('voice'));
+  assert.ok(options.includes('violin'));
+  assert.ok(options.includes('tin-whistle'));
   assert.ok(!options.includes('kbd'));
   assert.ok(!options.includes('wind'));
+
+  // Bowed instruments are fretless: switching to violin draws a plain
+  // fingerboard with no fret grid, never `.fing-fretboard`.
+  await page.evaluate(`(function () {
+    const sel = document.getElementById('fingInstrument');
+    sel.value = 'violin'; sel.dispatchEvent(new Event('change'));
+  })()`);
+  assert.equal(await page.evaluate("document.querySelectorAll('.fing-fingerboard').length"), 1);
+  assert.equal(await page.evaluate("document.querySelectorAll('.fing-fretboard').length"), 0);
+  const violinDesc = await page.evaluate("document.getElementById('fingDesc').textContent");
+  assert.doesNotMatch(violinDesc, /\bfret \d/);
+
+  // The tin whistle resolves to the whistle fingering table, not the
+  // recorder's, and draws holes like the recorder diagram (no thumb hole).
+  await page.evaluate(`(function () {
+    const sel = document.getElementById('fingInstrument');
+    sel.value = 'tin-whistle'; sel.dispatchEvent(new Event('change'));
+  })()`);
+  const whistleDesc = await page.evaluate("document.getElementById('fingDesc').textContent");
+  assert.match(whistleDesc, /D5/);
+  assert.equal(await page.evaluate("document.querySelectorAll('.fing-recorder .fing-recorder-hole').length"), 6);
 
   // Closing and reopening keeps the panel usable (mount runs once).
   await page.evaluate('window.__coach.closePanel()');

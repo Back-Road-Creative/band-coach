@@ -5,10 +5,17 @@
 //
 // Wiring pass (src/ui/fingerings.js): call `howKindFor(instrument)` to know
 // whether an instrument can be shown at all (only instruments with tuning,
-// a mapped brass preset, the free-reed family, the descant recorder, or the
-// voice family qualify), then `computeHow(instrument, midi, opts)` for the
-// note the learner picked. `opts.key` (0-11) picks the harmonica's key;
-// `opts.maxFret` caps how many frets a fretboard diagram shows.
+// a mapped brass preset, the free-reed family, the descant recorder, the
+// tin whistle, or the voice family qualify), then `computeHow(instrument,
+// midi, opts)` for the note the learner picked. `opts.key` (0-11) picks the
+// harmonica's key; `opts.maxFret` caps how many frets/positions a
+// fretboard or fingerboard diagram shows.
+//
+// A stringed instrument's diagram kind is driven by the record's own
+// `fretted` field (schema.js), never by a hard-coded id list: `fretted:
+// false` (violin, viola, cello, double bass) gets 'fingerboard' — position
+// data with no fret wires — everything else with a `tuning` gets
+// 'fretboard'.
 
 import { fingeringsForValves, fingeringsForSlide, PRESETS as BRASS_PRESETS } from '../../instruments/how/brass.js';
 import { positionsFor } from '../../instruments/how/fretboard.js';
@@ -28,12 +35,15 @@ const BRASS_BY_ID = {
 
 export function howKindFor(instrument) {
   if (!instrument) return null;
-  if (Array.isArray(instrument.tuning) && instrument.tuning.length > 0) return 'fretboard';
+  if (Array.isArray(instrument.tuning) && instrument.tuning.length > 0) {
+    return instrument.fretted === false ? 'fingerboard' : 'fretboard';
+  }
   if (instrument.family === 'brass' && BRASS_BY_ID[instrument.id]) {
     return BRASS_BY_ID[instrument.id].style === 'slide' ? 'brass-slide' : 'brass-valves';
   }
   if (instrument.family === 'free-reed') return 'harmonica';
   if (instrument.id === 'recorder-descant') return 'recorder';
+  if (instrument.id === 'tin-whistle') return 'whistle';
   if (instrument.family === 'voice') return 'voice';
   return null;
 }
@@ -46,6 +56,24 @@ function describeFretboard(instrument, midi, positions) {
   const parts = positions.map(p => {
     const openName = noteName(instrument.tuning[p.stringIndex]);
     const where = p.fret === 0 ? 'open' : 'fret ' + p.fret;
+    return 'string ' + (p.stringIndex + 1) + ' (' + openName + '), ' + where;
+  });
+  return name + ': ' + parts.join('; or ') + '.';
+}
+
+// Fretless: same string/semitone-offset data as a fretted diagram (the
+// physical string doesn't care whether the neck has frets), worded as hand
+// position instead of a fret number, since there is nothing to fret.
+function describeFingerboard(instrument, midi, positions) {
+  const name = noteName(midi);
+  if (positions.length === 0) {
+    return name + ' does not fall within reach of an open string on this fingerboard.';
+  }
+  const parts = positions.map(p => {
+    const openName = noteName(instrument.tuning[p.stringIndex]);
+    const where = p.fret === 0
+      ? 'open string'
+      : p.fret + ' semitone' + (p.fret > 1 ? 's' : '') + ' up (no frets — find it by ear or hand position)';
     return 'string ' + (p.stringIndex + 1) + ' (' + openName + '), ' + where;
   });
   return name + ': ' + parts.join('; or ') + '.';
@@ -110,13 +138,15 @@ export function computeHow(instrument, midi, opts = {}) {
   const kind = howKindFor(instrument);
   if (!kind) return null;
 
-  if (kind === 'fretboard') {
+  if (kind === 'fretboard' || kind === 'fingerboard') {
     const maxFret = opts.maxFret ?? 15;
     const positions = positionsFor(midi, instrument.tuning, { maxFret });
     return {
       kind, tuning: instrument.tuning, positions, maxFret,
       playable: positions.length > 0,
-      description: describeFretboard(instrument, midi, positions)
+      description: kind === 'fretboard'
+        ? describeFretboard(instrument, midi, positions)
+        : describeFingerboard(instrument, midi, positions)
     };
   }
 
@@ -140,13 +170,12 @@ export function computeHow(instrument, midi, opts = {}) {
     };
   }
 
-  if (kind === 'recorder') {
-    const instrumentKind = opts.whistle ? 'whistle' : 'recorder';
-    const entry = fingeringFor(midi, instrumentKind);
+  if (kind === 'recorder' || kind === 'whistle') {
+    const entry = fingeringFor(midi, kind);
     return {
-      kind, instrumentKind, entry,
+      kind, instrumentKind: kind, entry,
       playable: !!entry,
-      description: describeRecorderLike(midi, entry, instrumentKind)
+      description: describeRecorderLike(midi, entry, kind)
     };
   }
 

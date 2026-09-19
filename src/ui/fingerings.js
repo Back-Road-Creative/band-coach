@@ -52,6 +52,28 @@ function fretboardDiagram(instrument, how) {
   return box;
 }
 
+// Fretless string instruments (bowed, `fretted: false`): a plain
+// fingerboard with a position marker, never fret wires — the physical
+// instrument has no frets to draw.
+function fingerboardDiagram(instrument, how) {
+  const strings = instrument.tuning.length;
+  const maxFret = how.maxFret;
+  const box = el('div', { className: 'fing-fingerboard', role: 'img', 'aria-label': how.description });
+  for (let s = strings - 1; s >= 0; s--) {
+    const hit = how.positions.find(p => p.stringIndex === s);
+    const row = el('div', { className: 'fing-fboard-string' });
+    row.appendChild(el('span', { className: 'fing-string-label', text: noteName(instrument.tuning[s]) }));
+    const track = el('div', { className: 'fing-fboard-track' });
+    if (hit) {
+      const pct = Math.min(100, (hit.fret / Math.max(1, maxFret)) * 100);
+      track.appendChild(el('span', { className: 'fing-fboard-marker', style: 'left:' + pct + '%' }));
+    }
+    row.appendChild(track);
+    box.appendChild(row);
+  }
+  return box;
+}
+
 function brassDiagram(instrument, how) {
   const s = how.result.standard;
   const box = el('div', { className: 'fing-brass', role: 'img', 'aria-label': how.description });
@@ -104,9 +126,10 @@ function voiceDiagram(instrument, how) {
 
 function diagramFor(instrument, how) {
   if (how.kind === 'fretboard') return fretboardDiagram(instrument, how);
+  if (how.kind === 'fingerboard') return fingerboardDiagram(instrument, how);
   if (how.kind === 'brass-valves' || how.kind === 'brass-slide') return brassDiagram(instrument, how);
   if (how.kind === 'harmonica') return harmonicaDiagram(instrument, how);
-  if (how.kind === 'recorder') return recorderDiagram(instrument, how);
+  if (how.kind === 'recorder' || how.kind === 'whistle') return recorderDiagram(instrument, how);
   return voiceDiagram(instrument, how);
 }
 

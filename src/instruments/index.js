@@ -25,12 +25,14 @@ import flute from './flute.js';
 import hornF from './horn-f.js';
 import trombone from './trombone.js';
 import recorderDescant from './recorder-descant.js';
+import tinWhistle from './tin-whistle.js';
 
 export const INSTRUMENTS = [
   kbd, gtr, bass, uke, voice, wind, harp,
   violin, viola, cello, doubleBass, mandolin, banjo5String,
   ukuleleBaritone, ukuleleLowG, bass5String,
-  trumpetBb, clarinetBb, saxAltoEb, saxTenorBb, flute, hornF, trombone, recorderDescant
+  trumpetBb, clarinetBb, saxAltoEb, saxTenorBb, flute, hornF, trombone, recorderDescant,
+  tinWhistle
 ];
 
 export const byId = INSTRUMENTS.reduce((acc, rec) => { acc[rec.id] = rec; return acc; }, {});
