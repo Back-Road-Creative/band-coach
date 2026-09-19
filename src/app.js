@@ -16,7 +16,7 @@ import { toAudioTime, judgeTap, medianLatency } from './core/timing.js';
 //
 // slot:import:recall
 //
-// slot:import:rhythm-vocab
+import * as RHY from './core/rhythm.js';
 //
 // slot:import:notation-wire
 //
@@ -127,7 +127,15 @@ import { toAudioTime, judgeTap, medianLatency } from './core/timing.js';
       levels: [
         { name: 'Quarter notes and rests', add: ['rq', 'rqr'], task: 'bar', bpm: 66 }, { name: 'Add pairs of eighths', add: ['ree'], task: 'bar', bpm: 66 }, { name: 'Add half notes', add: ['rh'], task: 'bar', bpm: 72 },
         { name: 'The off-beat eighth', add: ['rree'], task: 'bar', bpm: 72 }, { name: 'Dotted quarter and eighth', add: ['rdqe'], task: 'bar', bpm: 72 }, { name: 'Sixteenth notes', add: ['rssss'], task: 'bar', bpm: 66 },
-        { name: 'Eighth and two sixteenths', add: ['ress', 'rsse'], task: 'bar', bpm: 66 }, { name: 'Syncopation', add: ['reqe'], task: 'bar', bpm: 72 }
+        { name: 'Eighth and two sixteenths', add: ['ress', 'rsse'], task: 'bar', bpm: 66 }, { name: 'Syncopation', add: ['reqe'], task: 'bar', bpm: 72 },
+        { name: 'Rests: halves and wholes', task: 'bar2', metre: '4/4', bpm: 66, bars: [[['q', 'q', 'hr']], [['hr', 'q', 'q']], [['wr']], [['q', 'hr', 'q']]] },
+        { name: 'Ties', task: 'bar2', metre: '4/4', bpm: 66, bars: [[['tqq', 'q', 'q']], [['q', 'tqq', 'q']], [['th', 'q']], [['q', 'q', 'q'], ['q~', 'q', 'q', 'q']]] },
+        { name: 'Dotted eighth and sixteenth', task: 'bar2', metre: '4/4', bpm: 66, bars: [[['des', 'des', 'q', 'q']], [['q', 'des', 'des', 'q']], [['des', 'q', 'des', 'q']]] },
+        { name: 'Triplets', task: 'bar2', metre: '4/4', bpm: 66, bars: [[['et3', 'et3', 'q', 'q']], [['qt3', 'q', 'q']], [['q', 'et3', 'et3', 'q']]] },
+        { name: 'Three-four time', task: 'bar2', metre: '3/4', bpm: 72, bars: [[['q', 'q', 'q']], [['h', 'q']], [['q', 'h']], [['dh.']]] },
+        { name: 'Six-eight time', task: 'bar2', metre: '6/8', bpm: 72, bars: [[['dq', 'dq']], [['e3', 'e3']], [['dq', 'e3']], [['e3', 'dq']], [['dqr', 'dq']]] },
+        { name: 'Swing eighths', task: 'bar2', metre: '4/4', bpm: 96, swing: 1, bars: [[['ee', 'ee', 'q', 'q']], [['q', 'ee', 'ee', 'q']], [['ee', 'ee', 'ee', 'ee']]] },
+        { name: 'Two-bar phrases', task: 'bar2', metre: '4/4', bpm: 72, bars: [[['q', 'q', 'q', 'q'], ['q', 'ee', 'h']], [['h', 'ee', 'q'], ['tqq', 'q', 'q']], [['ee', 'ee', 'q', 'q'], ['q', 'q', 'hr']]] }
       ] }
   };
   MODS.gtr.levels = stringLevels(MODS.gtr.tuning, ['Low E', 'A', 'D', 'G', 'B', 'High E'], 12, ['Em', 'G', 'C', 'D', 'Am', 'E', 'A']);
@@ -289,6 +297,7 @@ import { toAudioTime, judgeTap, medianLatency } from './core/timing.js';
     }
     else if (kind === 'ear') { }
     else if (kind === 'bar') { let left = 4, from = lastItem, guard = 0; while (left > 0 && guard++ < 12) { const fit = pool.filter(id => CELLS[id.slice(1)].b <= left); const id = pick(from, fit.length ? fit : ['rq']); t.els.push(mk(id)); left -= CELLS[id.slice(1)].b; from = id; } if (!t.els.some(e => e.info.on.length)) { t.els[0] = mk('rq'); } }
+    else if (kind === 'bar2') { const variants = d.bars || [[['qr']]], cells = variants[S.tick % variants.length]; S.tick++; t.rCells = cells; t.els = [{ id: 'bar2', info: { label: d.name }, failed: false, t0: 0, rt: 0, reveal: false }]; }
     if (M.input === 'answer') { t.kind = 'ear'; if (!t.els.length) t.els.push(mk(pick(lastItem, pool))); const e = t.els[0], fam = pool.filter(id => id[0] === e.id[0] && (e.id[0] !== 'i' || id.slice(-1) === e.id.slice(-1))); t.choices = fam.slice().sort((a, b) => (inf(a).semi || 0) - (inf(b).semi || 0) || (a < b ? -1 : 1)); t.root = 55 + ((S.tick * 5) % 12); }
     return t;
   }
@@ -311,6 +320,7 @@ import { toAudioTime, judgeTap, medianLatency } from './core/timing.js';
     let p = '', h = '';
     if (t.kind === 'ear') { p = e.info.kind === 'interval' ? 'Which <b>interval</b>?' : 'Which <b>chord</b>?'; h = 'Listen, then choose. Number keys work too.'; const box = $('choices'); box.innerHTML = ''; t.choices.forEach((id, k) => { const b = document.createElement('button'); b.type = 'button'; b.id = 'ch-' + id; b.textContent = (k + 1) + '. ' + inf(id).label; b.addEventListener('click', () => { b.blur(); answer(id); }); box.appendChild(b); }); playRef(t); }
     else if (t.kind === 'bar') { p = 'Read it, then <b>tap it</b>'; h = 'Four clicks to get ready, then tap the bar in time.'; startBar(); }
+    else if (t.kind === 'bar2') { p = 'Read it, then <b>tap it</b>'; h = 'Listen for the count-in, then tap the bar (or bars) in time.'; startBar2(); }
     else { const verb = mod === 'voice' ? 'Sing' : 'Play'; p = verb + ' ' + t.els.map((el, k) => (k === t.idx ? '<b>' : '') + el.info.label.split(':')[0] + (k === t.idx ? '</b>' : '')).join(' → '); if (t.kind === 'hold') p = (mod === 'voice' ? 'Hold ' : 'Hold ') + '<b>' + e.info.label + '</b> for two seconds'; h = hintFor(e); playRef(t); }
     $('prompt').innerHTML = p; $('hint').textContent = (t.warm ? 'Warm-up, does not count. ' : '') + h;
   }
@@ -394,7 +404,7 @@ import { toAudioTime, judgeTap, medianLatency } from './core/timing.js';
   function onTap(ev) {
     lastInputAt = now(); $('tapPad').classList.add('down'); setTimeout(() => $('tapPad').classList.remove('down'), 90);
     if (calRun) { const raw = tapAudioTime(ev), v = judgeTap({ tapTime: raw, beatTimes: calRun.beats, latencyMs: 0, windowMs: 1e9 }); if (v.errorMs !== null) calRun.taps.push(v.errorMs); return; }
-    if (!playing || !task || task.kind !== 'bar' || !bar || bar.judged) return;
+    if (!playing || !task || (task.kind !== 'bar' && task.kind !== 'bar2') || !bar || bar.judged) return;
     const latencyMs = DB.latencyMs != null ? DB.latencyMs : (actx ? (actx.outputLatency || actx.baseLatency || 0) * 1000 : 0);
     const win = S.level > MODS.rhy.levels.length ? 0.11 : 0.15;
     const raw = tapAudioTime(ev) - S.offset, verdict = judgeTap({ tapTime: raw, beatTimes: bar.onsets.map(o => o.t), latencyMs: latencyMs, windowMs: win * 1000 }), t = raw - latencyMs / 1000;
@@ -417,11 +427,38 @@ import { toAudioTime, judgeTap, medianLatency } from './core/timing.js';
     }
   }
 
+  // ---------- rhythm vocabulary bars: rests, ties, triplets, 3/4, 6/8, swing, two-bar phrases ----------
+  function startBar2() {
+    const d = D(), bpm = d.bpm || 72, metre = d.metre || '4/4', M = RHY.METRES[metre];
+    const phrase = RHY.buildPhrase({ metre: metre, cells: task.rCells });
+    const beatSec = (60 / bpm) * (M.beatUnit / RHY.TPQ);
+    const totalSec = RHY.totalTicks(phrase.events) * (60 / bpm) / RHY.TPQ;
+    const t0 = now() + 0.15, playAt = t0 + M.beats * beatSec;
+    const onsets = RHY.onsetsOf(phrase.events, { bpm: bpm, swing: d.swing || 0 }).map(t => ({ t: playAt + t, hit: null }));
+    bar = { spb: beatSec, t0: t0, playAt: playAt, end: playAt + totalSec + 0.3, clicks: 0, countBeats: M.beats, metre: metre, phrase: phrase, onsets: onsets, taps: [], judged: false };
+  }
+  function tickBar2() {
+    if (!bar || !task || task.kind !== 'bar2') return; const t = now();
+    while (bar.clicks < bar.countBeats && bar.t0 + bar.clicks * bar.spb < t + 0.12) { const at = bar.t0 + bar.clicks * bar.spb; if (at > t - 0.01) click(at, bar.clicks === 0); bar.clicks++; }
+    if (!bar.judged && t > bar.end) {
+      bar.judged = true; const win = 0.15, deltas = [];
+      bar.onsets.forEach(o => { let best = null; bar.taps.forEach(tp => { if (tp.used) return; const dd = tp.t - o.t; if (Math.abs(dd) <= win && (!best || Math.abs(dd) < Math.abs(best.t - o.t))) best = tp; }); if (best) { best.used = true; o.hit = best.t - o.t; deltas.push(o.hit); } });
+      const extra = bar.taps.filter(tp => !tp.used), misses = bar.onsets.filter(o => o.hit === null).length, e = cur();
+      e.rt = 1; e.q = misses || extra.length ? 0 : 1; e.failed = !!(misses || extra.length);
+      const bias = deltas.length ? mean(deltas) : 0;
+      say(misses === 0 && !extra.length ? 'Clean bar. Average ' + Math.round(Math.abs(bias) * 1000) + ' ms ' + (bias < 0 ? 'early' : 'late') + '.' : (misses ? misses + ' missed' : '') + (misses && extra.length ? ', ' : '') + (extra.length ? extra.length + ' extra tap' + (extra.length > 1 ? 's' : '') : '') + '.', misses === 0 && !extra.length ? 'ok' : 'no');
+      if (!bar.taps.length) sess.idleBars++; else sess.idleBars = 0;
+      if (sess.idleBars >= 2) { sess.idleBars = 0; task.done = true; takeBreak('away'); return; }
+      task.idx = task.els.length; finishTask(); nextTaskAt = now() + 0.4;
+    }
+  }
+
   // ---------- the loop ----------
   function tick(dt) {
     sess.active += dt; sess.sinceBreak += dt;
     if (!task || (task.done && now() >= nextTaskAt)) { task = buildTask(); present(); }
     if (task.kind === 'bar') tickBar();
+    else if (task.kind === 'bar2') tickBar2();
     else if (!task.done) {
       const e = cur(), el = now() - e.t0, lim = task.limit * (task.kind === 'hold' ? 1.4 : 1);
       $('timeFill').style.width = Math.round(100 * c01(1 - el / lim)) + '%';
@@ -515,12 +552,43 @@ import { toAudioTime, judgeTap, medianLatency } from './core/timing.js';
     if (bar.judged) { bar.onsets.forEach(o => { const beat = (o.t - bar.playAt) / bar.spb; g.fillStyle = o.hit === null ? '#ff6b5e' : Math.abs(o.hit) < 0.06 ? '#5be08a' : '#f3c52f'; g.fillRect(X(beat) - 3 + (o.hit || 0) / bar.spb * bw, y + H * 0.2, 6, H * 0.08); }); bar.taps.filter(tp => !tp.used).forEach(tp => { g.fillStyle = '#ff6b5e'; font(H * 0.07); g.textAlign = 'center'; g.fillText('×', X((tp.t - bar.playAt) / bar.spb), y + H * 0.28); }); }
     if (t < bar.playAt) { const left = Math.ceil((bar.playAt - t) / bar.spb); g.fillStyle = accent(); font(H * 0.22); g.textAlign = 'center'; g.fillText(String(clamp(left, 1, 4)), W * 0.5, H * 0.22); } else if (t < bar.end) { const px = X((t - bar.playAt) / bar.spb - 0); g.strokeStyle = accent(); g.lineWidth = 3; g.beginPath(); g.moveTo(px, y - H * 0.34); g.lineTo(px, y + H * 0.2); g.stroke(); bar.taps.forEach(tp => { g.fillStyle = '#93a0bd'; g.fillRect(X((tp.t - bar.playAt) / bar.spb) - 2, y + H * 0.2, 4, H * 0.06); }); }
   }
+  // rests, ties, triplet brackets, dots and the time signature, for the rhythm-vocabulary bars
+  function drawBar2(W, H) {
+    if (!bar || !task) return; const x0 = W * 0.1, x1 = W * 0.94, y = H * 0.48, t = now(), stem = H * 0.26, nh = H * 0.045;
+    const total = RHY.totalTicks(bar.phrase.events) || 1, X = tick => x0 + (tick / total) * (x1 - x0);
+    g.strokeStyle = '#c9ced9'; g.lineWidth = 2; g.beginPath(); g.moveTo(x0 - 10, y); g.lineTo(x1 + 10, y); g.stroke();
+    bar.phrase.bars.forEach((b, i) => { const bx = i === 0 ? x0 - 10 : X(RHY.totalTicks(bar.phrase.events.slice(0, b.start))); g.lineWidth = i === 0 || i === bar.phrase.bars.length - 1 ? 4 : 2; g.beginPath(); g.moveTo(bx, y - H * 0.2); g.lineTo(bx, y + H * 0.2); g.stroke(); });
+    g.lineWidth = 4; g.beginPath(); g.moveTo(x1 + 10, y - H * 0.2); g.lineTo(x1 + 10, y + H * 0.2); g.stroke();
+    g.fillStyle = '#93a0bd'; font(H * 0.09, 700); g.textAlign = 'center'; g.fillText(bar.metre.split('/')[0], x0 - 25, y - H * 0.06); g.fillText(bar.metre.split('/')[1], x0 - 25, y + H * 0.11);
+    let cursor = 0; const tripletGroups = [];
+    bar.phrase.events.forEach((ev, i) => {
+      const startTick = cursor, col = bar.judged ? (task.els[0].failed ? '#ff6b5e' : '#5be08a') : '#e9edf6'; g.fillStyle = col; g.strokeStyle = col; g.lineWidth = 3;
+      const dotted = ev.dur === 720 || ev.dur === 360 || ev.dur === 1440;
+      if (ev.rest) {
+        if (ev.dur >= 960) { g.fillRect(X(startTick), ev.dur >= 1920 ? y + H * 0.03 : y - H * 0.06, nh * 1.6, H * 0.045); }
+        else { font(H * 0.16, 600); g.textAlign = 'center'; g.fillText('•', X(startTick) + nh, y - H * 0.02); g.beginPath(); g.moveTo(X(startTick) + nh + 3, y - H * 0.05); g.lineTo(X(startTick), y + H * 0.1); g.stroke(); }
+      } else if (!ev.tied) {
+        const hollow = ev.dur >= 960; g.beginPath(); g.ellipse(X(startTick), y, nh * 1.35, nh, -0.35, 0, 7); if (hollow) { g.lineWidth = 4; g.stroke(); g.lineWidth = 3; } else g.fill();
+        if (ev.dur < 1920) { g.beginPath(); g.moveTo(X(startTick) + nh * 1.25, y); g.lineTo(X(startTick) + nh * 1.25, y - stem); g.stroke(); }
+        if (ev.dur <= 240) { g.beginPath(); g.moveTo(X(startTick) + nh * 1.25, y - stem); g.quadraticCurveTo(X(startTick) + nh * 3.4, y - stem * 0.7, X(startTick) + nh * 2.4, y - stem * 0.35); g.stroke(); }
+      }
+      if (dotted) { g.beginPath(); g.arc(X(startTick) + nh * 2.6, ev.rest ? y - H * 0.06 : y, nh * 0.4, 0, 7); g.fill(); }
+      if (ev.triplet) { if (!tripletGroups.length || tripletGroups[tripletGroups.length - 1].last !== i - 1) tripletGroups.push({ first: i, firstTick: startTick, last: i }); else tripletGroups[tripletGroups.length - 1].last = i, tripletGroups[tripletGroups.length - 1].lastTick = startTick; }
+      // a tied event draws a curve from the previous sounding head to here, showing the note continues
+      if (ev.tied) { const px = X(startTick) - (total / 40); g.beginPath(); g.moveTo(px, y - nh * 1.6); g.quadraticCurveTo((px + X(startTick)) / 2, y - nh * 2.6, X(startTick) + nh, y - nh * 1.6); g.stroke(); }
+      cursor += ev.dur;
+    });
+    tripletGroups.forEach(grp => { const x2 = X(grp.lastTick != null ? grp.lastTick : grp.firstTick) + nh * 1.3, x1t = X(grp.firstTick); g.strokeStyle = '#93a0bd'; g.lineWidth = 2; g.beginPath(); g.moveTo(x1t, y - stem * 1.15); g.lineTo(x2, y - stem * 1.15); g.stroke(); g.fillStyle = '#93a0bd'; font(H * 0.06, 700); g.textAlign = 'center'; g.fillText('3', (x1t + x2) / 2, y - stem * 1.25); });
+    if (bar.judged) { bar.onsets.forEach(o => { const tick = Math.round(((o.t - bar.playAt) / (bar.end - 0.3 - bar.playAt)) * total); g.fillStyle = o.hit === null ? '#ff6b5e' : Math.abs(o.hit) < 0.06 ? '#5be08a' : '#f3c52f'; g.fillRect(X(tick) - 3, y + H * 0.2, 6, H * 0.08); }); bar.taps.filter(tp => !tp.used).forEach(tp => { g.fillStyle = '#ff6b5e'; font(H * 0.07); g.textAlign = 'center'; g.fillText('×', X(((tp.t - bar.playAt) / (bar.end - 0.3 - bar.playAt)) * total), y + H * 0.28); }); }
+    if (t < bar.playAt) { const left = Math.ceil((bar.playAt - t) / bar.spb); g.fillStyle = accent(); font(H * 0.22); g.textAlign = 'center'; g.fillText(String(clamp(left, 1, bar.countBeats)), W * 0.5, H * 0.22); }
+    else if (t < bar.end) { const tick = ((t - bar.playAt) / (bar.end - 0.3 - bar.playAt)) * total; g.strokeStyle = accent(); g.lineWidth = 3; g.beginPath(); g.moveTo(X(tick), y - H * 0.34); g.lineTo(X(tick), y + H * 0.2); g.stroke(); }
+  }
   function draw() {
     size(); const W = cv.width, H = cv.height; g.clearRect(0, 0, W, H); rowRects = []; keyRects = [];
     if (TOOLS[mod]) { if (mod === 'tuner') drawTuner(W, H); else drawCapture(W, H); return; }
     const M = MODS[mod], e = playing && task && !task.done ? cur() : null, showE = e || (task && task.done ? task.els[task.els.length - 1] : null);
     if (mod === 'kbd') { const low = activeItems(mod, S.level).some(id => id[0] === 'n' && +id.slice(1) < 60) || customOn; const tg = []; if (e) { if (e.info.kind === 'chord') { if (e.reveal || e.failed) e.info.pcs.forEach(x => tg.push(60 + x)); } else if (e.reveal || e.failed) tg.push(e.info.midi); } const good = performance.now() - flashGood < 300 && task ? task.els.slice(0, task.idx).map(x => x.info.midi).filter(x => x) : []; drawKeys(W * 0.03, H * 0.18, W * 0.94, H * 0.7, low ? 48 : 60, 72, { target: tg, good: good, names: DB.prefs.names }); if (e && e.info.kind === 'chord') { g.fillStyle = '#e9edf6'; font(H * 0.11); g.textAlign = 'center'; g.fillText(e.info.sym, W / 2, H * 0.13); } }
-    else if (M.tuning) drawFret(M, e, W, H); else if (mod === 'voice') drawVoice(e, W, H); else if (mod === 'wind') drawStaff(e, W, H); else if (mod === 'harp') drawHarp(e, W, H); else if (mod === 'ear') drawEar(W, H); else if (mod === 'rhy') drawBar(W, H);
+    else if (M.tuning) drawFret(M, e, W, H); else if (mod === 'voice') drawVoice(e, W, H); else if (mod === 'wind') drawStaff(e, W, H); else if (mod === 'harp') drawHarp(e, W, H); else if (mod === 'ear') drawEar(W, H); else if (mod === 'rhy') { if (task && task.kind === 'bar2') drawBar2(W, H); else drawBar(W, H); }
     if (performance.now() - flashBad < 220) { g.strokeStyle = '#ff6b5e'; g.lineWidth = 8; g.strokeRect(4, 4, W - 8, H - 8); } else if (performance.now() - flashGood < 220) { g.strokeStyle = '#5be08a'; g.lineWidth = 8; g.strokeRect(4, 4, W - 8, H - 8); }
     if (!playing) { g.fillStyle = '#93a0bd'; font(H * 0.08); g.textAlign = 'right'; g.fillText(sess ? 'PAUSED' : 'PRESS START', W * 0.97, H * 0.1); }
   }
