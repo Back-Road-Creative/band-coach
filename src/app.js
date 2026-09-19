@@ -1,3 +1,5 @@
+import { exportProgress as exportProgressFile, importProgress as importProgressFile, migrate as migrateDB } from './core/progress-file.js';
+
 (function () {
   'use strict';
   const $ = id => document.getElementById(id);
@@ -159,6 +161,9 @@
 
   // ---------- saved state: one learner model per instrument, shared session log ----------
   const KEY = 'bandcoach.v1';
+  const APP_VERSION = '0.1.0';
+  const BACKUP_AT_KEY = 'bandcoach.v1.backupAt';
+  let lastBackupAt = 0; try { lastBackupAt = +localStorage.getItem(BACKUP_AT_KEY) || 0; } catch (e) {}
   let DB, mod = 'kbd', S = null;
   const num = (x, d, lo, hi) => { x = +x; if (!isFinite(x)) x = d; return clamp(x, lo, hi); };
   const freshModel = () => ({ level: 1, ready: 0.2, item: {}, trans: {}, conf: {}, gain: 0.05, gate: 0.6, offset: 0, acc: {}, cr: {}, tick: 0, judged: 0, promo: { at: -999, level: 0 }, fast: 0 });
@@ -181,7 +186,7 @@
     return d;
   }
   function forget(t) { const f = o => { if (!o.last) return; const days = (t - o.last) / 86400000; if (days > 0.5) { o.m = 0.4 + (o.m - 0.4) * Math.pow(0.5, days / 10); o.last = t; } }; MOD_IDS.forEach(m => { const s = DB.mods[m]; Object.keys(s.item).forEach(k => f(s.item[k])); Object.keys(s.trans).forEach(k => f(s.trans[k])); }); }
-  function loadDB() { let v = null; try { v = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) {} DB = sanitizeDB(v); forget(Date.now()); mod = DB.prefs.mod; S = DB.mods[mod]; }
+  function loadDB() { let v = null; try { v = migrateDB(JSON.parse(localStorage.getItem(KEY) || 'null')); } catch (e) {} DB = sanitizeDB(v); forget(Date.now()); mod = DB.prefs.mod; S = DB.mods[mod]; }
   let saveTimer = null;
   function save() { if (saveTimer) return; saveTimer = setTimeout(() => { saveTimer = null; try { DB.mods[mod] = S = sanitizeModel(mod, S); localStorage.setItem(KEY, JSON.stringify(DB)); } catch (e) {} }, 1200); }
   const it = id => S.item[id] || (S.item[id] = { m: 0.4, n: 0, last: 0, seen: 0 });
@@ -517,6 +522,7 @@
     if (sess.judged >= 8) { DB.sessions.push({ d: today(), mod: mod, min: Math.round(min * 10) / 10, acc: sess.ok / sess.judged, a1: mean(sess.first), a2: mean(sess.last), from: sess.from, to: S.level, breaks: sess.breaks }); DB.sessions = DB.sessions.slice(-60);
       let up = null, low = null; Object.keys(S.item).forEach(id => { const g0 = S.item[id].m - ((sess.m0[id] || { m: 0.4 }).m); if (up === null || g0 > up.g) up = { id: id, g: g0 }; if (S.item[id].n >= 3 && (low === null || S.item[id].m < S.item[low].m)) low = id; });
       line = 'Session done: ' + Math.round(min) + ' min, ' + Math.round(100 * sess.ok / sess.judged) + '% right, best streak ' + sess.bestStreak + ', level ' + sess.from + ' to ' + S.level + '.' + (up && up.g > 0.05 ? ' Most improved: ' + inf(up.id).short + '.' : '') + (low ? ' Next time starts with extra ' + inf(low).short + '.' : ''); }
+    if (sess.judged >= 1 && Date.now() - lastBackupAt > 7 * 86400000) showBackupNudge('You have been practising a while. Save a backup, just in case.');
     sess = null; playing = false; paused = false; task = null; bar = null; $('breakCard').hidden = true; $('playBtn').textContent = 'Start'; $('endBtn').hidden = true; $('choices').hidden = true; $('prompt').textContent = MODS[mod].name; $('hint').textContent = ''; coach(line); save(); showAll();
   }
   const BREAKS = {
@@ -602,7 +608,42 @@
   const _listen = listen; // tools listen even without a session
   setInterval(() => { if (!TOOLS[mod] || !micReady || !anTime) return; const buf = new Float32Array(anTime.fftSize); anTime.getFloatTimeDomainData(buf); const r = yin(buf, actx.sampleRate, 36, 1600), fr = { rms: r.rms, freq: r.freq && r.clarity > 0.8 ? r.freq : 0 }; if (fr.freq) fr.midi = fmidi(fr.freq); toolPitch(fr, 0.05); }, 50);
 
+  // ---------- backups: a downloadable copy of the whole DB (E9: db.v now feeds migrateDB) ----------
+  function showBackupNudge(text) { $('backupNudgeText').textContent = text; $('backupNudge').hidden = false; }
+  function noteBackupMade(t) { lastBackupAt = t; try { localStorage.setItem(BACKUP_AT_KEY, String(t)); } catch (e) {} }
+  function doExportProgress() { return exportProgressFile(DB, { appVersion: APP_VERSION, now: Date.now }); }
+  function saveBackup() {
+    const env = doExportProgress();
+    const blob = new Blob([JSON.stringify(env, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = 'band-coach-progress.json';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    noteBackupMade(Date.now()); $('backupNudge').hidden = true;
+    coach('Backup saved to your downloads. Keep that file somewhere safe.');
+  }
+  function doImportProgress(text) {
+    const result = importProgressFile(text);
+    if (!result.ok) { coach(result.error); return result; }
+    DB = sanitizeDB(result.db); forget(Date.now()); if (!Array.isArray(DB.custom)) DB.custom = [];
+    $('optNames').checked = DB.prefs.names; setMod(DB.prefs.mod); coach('Backup restored.');
+    return result;
+  }
+  $('backupSaveBtn').addEventListener('click', function () { this.blur(); saveBackup(); });
+  $('backupRestoreInput').addEventListener('change', function () {
+    const file = this.files && this.files[0]; this.value = '';
+    if (!file) return;
+    if (!confirm('Restore this backup? It will replace your current progress.')) return;
+    const reader = new FileReader();
+    reader.onload = () => doImportProgress(String(reader.result));
+    reader.onerror = () => coach('That file could not be read.');
+    reader.readAsText(file);
+  });
+  $('backupNudgeDismiss').addEventListener('click', () => { $('backupNudge').hidden = true; });
+
+  const hadSavedProgressAtBoot = (() => { try { return localStorage.getItem(KEY) !== null; } catch (e) { return true; } })();
   loadDB(); if (!Array.isArray(DB.custom)) DB.custom = []; $('optNames').checked = DB.prefs.names; buildPicker(); setMod(mod); requestAnimationFrame(frame);
-  window.__coach = { state: () => S, db: () => DB, sess: () => sess, task: () => task, cur: cur, note: onNote, answer: answer, tap: onTap, bar: () => bar, playing: () => playing, setMod: setMod, testSource: testSource, heard: () => heard, yin: yin, cap: () => cap };
+  if (!hadSavedProgressAtBoot) showBackupNudge('Been here before? Restore a backup.');
+  window.__coach = { state: () => S, db: () => DB, sess: () => sess, task: () => task, cur: cur, note: onNote, answer: answer, tap: onTap, bar: () => bar, playing: () => playing, setMod: setMod, testSource: testSource, heard: () => heard, yin: yin, cap: () => cap, exportProgress: doExportProgress, importProgress: doImportProgress };
 
 })();
