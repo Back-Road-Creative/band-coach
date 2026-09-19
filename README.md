@@ -128,6 +128,27 @@ played into a fake microphone is actually heard), then publishes that one file a
 on the GitHub release. The job fails the tag if it doesn't match `package.json`'s version, and fails
 the gate if the file exceeds a 1.5 MB size budget.
 
+Two kinds of tests live under `tests/`:
+
+- `tests/import.test.mjs` checks the file stays one self-contained page.
+- `tests/characterization/*.test.mjs` drive the real app in a headless
+  Chromium over the Chrome DevTools Protocol (`tests/helpers/browser.mjs`,
+  Node's built-in `WebSocket`/`fetch`, no npm dependency) and pin its
+  current, as-shipped behaviour — this is what proves a future refactor of
+  `band-coach.html` changes nothing a learner can see.
+
+The helper looks for a browser in this order: the `CHROME_BIN` environment
+variable, a Playwright headless-shell install under
+`~/.cache/ms-playwright/chromium_headless_shell-*`, then `google-chrome`,
+`google-chrome-stable`, `chromium` or `chromium-browser` on `PATH`. Set
+`CHROME_BIN` to point at a specific binary if none of those are found; the
+tests fail loudly (never skip) when no browser turns up.
+
+A few characterization tests are named `CURRENT BEHAVIOUR (flaw ...)`. They
+pin known judging bugs on purpose so a later change to the app is forced to
+touch them deliberately instead of silently inheriting the bug — they are
+not something to "fix" by editing the test.
+
 ## Licence
 
 Apache-2.0 — see `LICENSE`.
