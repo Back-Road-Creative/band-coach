@@ -53,6 +53,16 @@
   /* slot:css:w-theory */
   /* */
   /* */
+  .panel-history { display: flex; flex-direction: column; gap: 14px; max-width: 640px; }
+  .panel-history h2 { font: 700 26px var(--display); text-transform: uppercase; letter-spacing: .02em; margin: 0; }
+  .panel-history h3 { font: 700 16px var(--display); text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 6px 0 0; }
+  .panel-history label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 4px; }
+  .panel-history input[type="text"], .panel-history select, .panel-history textarea { width: 100%; font: 500 15px var(--body); color: var(--text); background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; }
+  .panel-history ul { list-style: none; margin: 4px 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+  .panel-history ul li { display: flex; gap: 6px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; font-size: 13px; }
+  .history-instrument { border: 1px solid var(--line); border-radius: 8px; padding: 10px; margin-top: 8px; }
+  .history-spark { color: var(--accent); margin-top: 4px; }
+  #historyCopyStatus { color: var(--muted); font-size: 14px; min-height: 1.2em; }
   /* slot:css:w-history */
   /* */
   /* */
