@@ -207,22 +207,34 @@ export async function launchPage(htmlPath, options = {}) {
     });
   }
 
-  const loaded = new Promise((resolve) => {
-    const off = () => {};
-    const handler = (msg) => {
-      if (msg.method === 'Page.loadEventFired') {
-        page.listeners.delete(handler);
-        resolve();
-      }
-    };
-    page.listeners.add(handler);
-  });
+  function nextLoad() {
+    return new Promise((resolve) => {
+      const handler = (msg) => {
+        if (msg.method === 'Page.loadEventFired') {
+          page.listeners.delete(handler);
+          resolve();
+        }
+      };
+      page.listeners.add(handler);
+    });
+  }
 
   const url = 'file://' + htmlPath;
+  const loaded = nextLoad();
   await send('Page.navigate', { url });
   await loaded;
   // Let the app's own boot code (loadDB, buildPicker, first draw) settle.
   await new Promise((r) => setTimeout(r, 150));
+
+  // Reload and wait for the NEW page's load event. Polling for window.__coach
+  // after evaluate('location.reload()') can see the OLD page before it
+  // unloads, then read it mid-teardown (CI flake, 2026-09-19, timing.test.mjs).
+  async function reload() {
+    const reloaded = nextLoad();
+    await send('Page.reload', {});
+    await reloaded;
+    await new Promise((r) => setTimeout(r, 150));
+  }
 
   async function evaluate(expression) {
     const result = await send('Runtime.evaluate', {
@@ -267,6 +279,7 @@ export async function launchPage(htmlPath, options = {}) {
 
   return {
     evaluate,
+    reload,
     waitFor,
     close,
     consoleErrors,

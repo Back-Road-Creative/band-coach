@@ -68,7 +68,7 @@ test('CHARACTERIZATION: garbage latencyMs is sanitised on reload (0..300ms)', as
         localStorage.setItem('bandcoach.v1', JSON.stringify(db));
       })()
     `);
-    await page.evaluate('location.reload()');
+    await page.reload();
     await page.waitFor('typeof window.__coach !== "undefined"', 8000);
     await page.waitFor('window.__coach.db().mods.kbd', 5000);
     const got = await page.evaluate('window.__coach.db().latencyMs');

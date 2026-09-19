@@ -48,7 +48,7 @@ test('garbage preloaded into localStorage is sanitised on load', async (t) => {
     prefs: 42,
   });
   await page.evaluate(`localStorage.setItem('bandcoach.v1', ${JSON.stringify(garbage)})`);
-  await page.evaluate('location.reload()');
+  await page.reload();
   await page.waitFor('typeof window.__coach !== "undefined"', 8000);
   await page.waitFor("window.__coach.db().mods.kbd", 5000);
 

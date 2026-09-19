@@ -22,7 +22,7 @@ test('a backup can be exported and restored into a fresh profile', async (t) => 
   const fresh = await launchPage(htmlPath);
   t.after(() => fresh.close());
   await fresh.evaluate("localStorage.clear()");
-  await fresh.evaluate('location.reload()');
+  await fresh.reload();
   await fresh.waitFor('typeof window.__coach !== "undefined"', 8000);
 
   const importResult = await fresh.evaluate(
