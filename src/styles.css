@@ -35,6 +35,36 @@
 
   .main { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 18px; align-items: start; }
   @media (max-width: 860px) { .main { grid-template-columns: minmax(0, 1fr); } }
+
+  /* feature panels */
+  .panel-picker { margin-top: 8px; }
+  .panel-host { margin-top: 18px; }
+  /* */
+  /* */
+  /* slot:css:w-songs */
+  /* */
+  /* */
+  /* slot:css:w-editor */
+  /* */
+  /* */
+  /* slot:css:w-ear */
+  /* */
+  /* */
+  /* slot:css:w-theory */
+  /* */
+  /* */
+  /* slot:css:w-history */
+  /* */
+  /* */
+  /* slot:css:w-fingerings */
+  /* */
+  /* */
+  /* slot:css:w-playalong */
+  /* */
+  /* */
+  /* slot:css:w-fixes */
+  /* */
+  /* */
   .stage { position: relative; background: linear-gradient(#0d111c, #05070c); border: 1px solid var(--line); border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
   #prompt { font: 700 40px/1.05 var(--display); text-transform: uppercase; letter-spacing: .02em; text-wrap: balance; min-height: 1.1em; }
   #prompt b { color: var(--accent); font-weight: 700; }

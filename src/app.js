@@ -28,6 +28,33 @@ import { byId as instrumentById } from './instruments/index.js';
 import { describeTask } from './ui/describe.js';
 import { createWakeLock } from './ui/wake-lock.js';
 import { createFocusTrap } from './ui/dialog-focus.js';
+import { createPanels } from './ui/panels.js';
+//
+//
+// slot:import:w-songs
+//
+//
+// slot:import:w-editor
+//
+//
+// slot:import:w-ear
+//
+//
+// slot:import:w-theory
+//
+//
+// slot:import:w-history
+//
+//
+// slot:import:w-fingerings
+//
+//
+// slot:import:w-playalong
+//
+//
+// slot:import:w-fixes
+//
+//
 
 (function () {
   'use strict';
@@ -948,7 +975,7 @@ import { createFocusTrap } from './ui/dialog-focus.js';
     $('prompt').textContent = (MODS[m] || TOOLS[m]).name; $('hint').textContent = ''; $('choices').hidden = true; say(''); if (MODS[m]) coach(S.judged ? 'Welcome back. You are on level ' + S.level + ': ' + D().name + '. Press Start.' : 'Press Start. Level 1: ' + D().name + '.');
     renderOpts(); ioRefresh(); showAll(); save();
   }
-  function buildPicker() { const box = $('picker'); MOD_IDS.concat(Object.keys(TOOLS)).forEach(m => { const o = MODS[m] || TOOLS[m], b = document.createElement('button'); b.type = 'button'; b.dataset.mod = m; b.style.setProperty('--c', o.color); b.setAttribute('aria-pressed', 'false'); b.appendChild(document.createTextNode(o.name)); const sm = document.createElement('small'); sm.textContent = o.tag; b.appendChild(sm); b.addEventListener('click', () => { b.blur(); setMod(m); }); box.appendChild(b); }); }
+  function buildPicker() { const box = $('picker'); MOD_IDS.concat(Object.keys(TOOLS)).forEach(m => { const o = MODS[m] || TOOLS[m], b = document.createElement('button'); b.type = 'button'; b.dataset.mod = m; b.style.setProperty('--c', o.color); b.setAttribute('aria-pressed', 'false'); b.appendChild(document.createTextNode(o.name)); const sm = document.createElement('small'); sm.textContent = o.tag; b.appendChild(sm); b.addEventListener('click', () => { b.blur(); closePanel(); setMod(m); }); box.appendChild(b); }); }
   setInterval(() => { if (!TOOLS[mod] || !micReady || !anTime) return; const buf = new Float32Array(anTime.fftSize); anTime.getFloatTimeDomainData(buf); const r = yin(buf, actx.sampleRate, 36, 1600, gates.pitch), fr = { rms: r.rms, freq: r.freq && r.clarity > 0.8 ? r.freq : 0 }; if (fr.freq) fr.midi = fmidi(fr.freq); toolPitch(fr, 0.05); }, 50);
 
   // ---------- backups: a downloadable copy of the whole DB (E9: db.v now feeds migrateDB) ----------
@@ -986,7 +1013,57 @@ import { createFocusTrap } from './ui/dialog-focus.js';
   $('backupNudgeDismiss').addEventListener('click', () => { $('backupNudge').hidden = true; });
 
   const hadSavedProgressAtBoot = (() => { try { return localStorage.getItem(KEY) !== null; } catch (e) { return true; } })();
-  loadDB(); if (!Array.isArray(DB.custom)) DB.custom = []; $('optNames').checked = DB.prefs.names; buildPicker(); setMod(mod); requestAnimationFrame(frame);
+  // ---------- feature panels (src/ui/panels.js): songs, ear, theory, history, fingerings, play-along ----------
+  // A panel unit registers ONE panel by replacing its own slot:panel line
+  // below; everything it needs from the app goes through panelApi.
+  const panels = createPanels();
+  const panelApi = {
+    db: () => DB, save: save, mod: () => mod, setMod: m => { closePanel(); setMod(m); }, instrument: id => instrumentById[id || mod],
+    audio: () => { ensureAudio(); return actx; }, openMic: openMic, analysers: () => ({ time: anTime, freq: anFreq }), gates: () => gates,
+    tone: tone, click: click, now: now, say: say, coach: coach, recordError: recordError, close: () => closePanel(),
+  };
+  //
+  //
+  // slot:panel:w-songs
+  //
+  //
+  // slot:panel:w-editor
+  //
+  //
+  // slot:panel:w-ear
+  //
+  //
+  // slot:panel:w-theory
+  //
+  //
+  // slot:panel:w-history
+  //
+  //
+  // slot:panel:w-fingerings
+  //
+  //
+  // slot:panel:w-playalong
+  //
+  //
+  // slot:panel:w-fixes
+  //
+  //
+  function openPanel(id) {
+    if (sess) endSession(); task = null;
+    document.querySelectorAll('#panelPicker button, #picker button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.panel === id)));
+    $('mainArea').hidden = true; $('panelHost').hidden = false;
+    try { panels.open(id, $('panelHost'), panelApi); } catch (e) { recordError('panel:' + id, e); say('That screen could not open.', 'no'); }
+  }
+  function closePanel() {
+    if (!panels.current()) return;
+    panels.close(); $('panelHost').hidden = true; $('mainArea').hidden = false;
+    document.querySelectorAll('#panelPicker button').forEach(b => b.setAttribute('aria-pressed', 'false'));
+  }
+  function buildPanelPicker() {
+    const box = $('panelPicker'); box.hidden = !panels.list().length;
+    panels.list().forEach(p => { const b = document.createElement('button'); b.type = 'button'; b.dataset.panel = p.id; b.style.setProperty('--c', p.color || '#93a0bd'); b.setAttribute('aria-pressed', 'false'); b.appendChild(document.createTextNode(p.name)); const sm = document.createElement('small'); sm.textContent = p.tag || ''; b.appendChild(sm); b.addEventListener('click', () => { b.blur(); openPanel(p.id); }); box.appendChild(b); });
+  }
+  loadDB(); if (!Array.isArray(DB.custom)) DB.custom = []; $('optNames').checked = DB.prefs.names; buildPicker(); buildPanelPicker(); setMod(mod); requestAnimationFrame(frame);
   if (!hadSavedProgressAtBoot) showBackupNudge('Been here before? Restore a backup.');
   const hook = !__DEBUG_HOOK__ ? null : { state: () => S, db: () => DB, sess: () => sess, task: () => task, cur: cur, note: onNote, answer: answer, tap: onTap, bar: () => bar, playing: () => playing, setMod: setMod, testSource: testSource, heard: () => heard, yin: yin, cap: () => cap, deaf: () => deafWindow.isDeaf(), exportProgress: doExportProgress, importProgress: doImportProgress, audioNow: audioNow };
   // Debug-hook slots: replace ONLY your own line with
@@ -1009,6 +1086,33 @@ import { createFocusTrap } from './ui/dialog-focus.js';
   //
   // slot:hook:a11y
   if (__DEBUG_HOOK__) Object.assign(hook, { reducedMotion: () => reducedMotion });
+  if (__DEBUG_HOOK__) Object.assign(hook, { panels: () => panels.list().map(p => p.id), openPanel: openPanel, closePanel: closePanel, panelOpen: () => panels.current(), registerPanel: def => { panels.register(def); $('panelPicker').innerHTML = ''; buildPanelPicker(); } });
+  //
+  //
+  // slot:hook:w-songs
+  //
+  //
+  // slot:hook:w-editor
+  //
+  //
+  // slot:hook:w-ear
+  //
+  //
+  // slot:hook:w-theory
+  //
+  //
+  // slot:hook:w-history
+  //
+  //
+  // slot:hook:w-fingerings
+  //
+  //
+  // slot:hook:w-playalong
+  //
+  //
+  // slot:hook:w-fixes
+  //
+  //
   if (__DEBUG_HOOK__) window.__coach = hook;
 
 })();

@@ -23,8 +23,11 @@
   </header>
 
   <div class="picker" id="picker" role="group" aria-label="Instrument"></div>
+  <div class="picker panel-picker" id="panelPicker" role="group" aria-label="More ways to practise" hidden></div>
 
-  <div class="main">
+  <section class="panel-host" id="panelHost" aria-live="polite" hidden></section>
+
+  <div class="main" id="mainArea">
     <section class="stage" aria-label="Exercise">
       <div class="break" id="breakCard" hidden role="dialog" aria-modal="true" aria-labelledby="breakTitle" tabindex="-1">
         <h2 id="breakTitle">Paused</h2>
