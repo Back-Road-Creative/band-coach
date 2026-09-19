@@ -8,7 +8,7 @@ import { toAudioTime, judgeTap, medianLatency } from './core/timing.js';
 //
 // slot:import:worklet
 //
-// slot:import:device
+import { noiseFloor, gatesFor, meterLevel } from './audio/levels.js';
 //
 // slot:import:chords
 //
@@ -46,6 +46,7 @@ import { toAudioTime, judgeTap, medianLatency } from './core/timing.js';
 
   // ---------- audio ----------
   let actx = null, micStream = null, anTime = null, anFreq = null, micReady = false, testNodes = [];
+  let gates = gatesFor(null), micDevices = [];
   function ensureAudio() { if (!actx) { try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { actx = null; } } if (actx && actx.state === 'suspended') actx.resume(); return actx; }
   const now = () => actx ? actx.currentTime : performance.now() / 1000;
   function tone(m, at, dur, vol) {
@@ -60,7 +61,7 @@ import { toAudioTime, judgeTap, medianLatency } from './core/timing.js';
 
   // ---------- listening: pitch (YIN) and chord colour (chroma) ----------
   function yin(buf, sr, fmin, fmax) {
-    const n = buf.length; let rms = 0; for (let i = 0; i < n; i++) rms += buf[i] * buf[i]; rms = Math.sqrt(rms / n); if (rms < 0.008) return { rms: rms, freq: 0 };
+    const n = buf.length; let rms = 0; for (let i = 0; i < n; i++) rms += buf[i] * buf[i]; rms = Math.sqrt(rms / n); if (rms < gates.pitch) return { rms: rms, freq: 0 };
     const tauMax = Math.min(Math.floor(sr / fmin), (n >> 1) - 1), tauMin = Math.max(2, Math.floor(sr / fmax)), W = n - tauMax, d = new Float32Array(tauMax + 2);
     for (let tau = 1; tau <= tauMax + 1; tau++) { let s = 0; for (let i = 0; i < W; i++) { const x = buf[i] - buf[i + tau]; s += x * x; } d[tau] = s; }
     let run = 0; const c = new Float32Array(tauMax + 2); c[0] = 1; for (let tau = 1; tau <= tauMax + 1; tau++) { run += d[tau]; c[tau] = run ? d[tau] * tau / run : 1; }
@@ -72,8 +73,44 @@ import { toAudioTime, judgeTap, medianLatency } from './core/timing.js';
   function chroma(db, sr, fft) { const out = new Array(12).fill(0), hz = sr / fft; let tot = 0; for (let i = Math.ceil(75 / hz); i < Math.min(db.length, Math.floor(2100 / hz)); i++) { if (db[i] < -75) continue; const p = Math.pow(10, db[i] / 10), k = pc(fmidi(i * hz)); out[k] += p; tot += p; } return tot ? out.map(x => x / tot) : out; }
   async function openMic() {
     ensureAudio(); if (micReady) return true;
-    const st = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
-    micStream = st; const src = actx.createMediaStreamSource(st); wireAnalysers(src); micReady = true; return true;
+    const base = { echoCancellation: false, noiseSuppression: false, autoGainControl: false };
+    const wanted = DB.prefs.inputDeviceId ? { ...base, deviceId: { exact: DB.prefs.inputDeviceId } } : base;
+    let st;
+    try { st = await navigator.mediaDevices.getUserMedia({ audio: wanted }); }
+    catch (e) { if (!DB.prefs.inputDeviceId) throw e; st = await navigator.mediaDevices.getUserMedia({ audio: base }); }
+    micStream = st; const src = actx.createMediaStreamSource(st); wireAnalysers(src); micReady = true;
+    refreshMicDevices(); return true;
+  }
+  async function refreshMicDevices() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return;
+    let list = []; try { list = await navigator.mediaDevices.enumerateDevices(); } catch (e) { return; }
+    micDevices = list.filter(d => d.kind === 'audioinput');
+    const sel = $('micDeviceSelect'); if (!sel) return;
+    const wanted = DB.prefs.inputDeviceId || '';
+    sel.innerHTML = '';
+    const def = document.createElement('option'); def.value = ''; def.textContent = 'Default microphone'; sel.appendChild(def);
+    micDevices.forEach((d, i) => { const o = document.createElement('option'); o.value = d.deviceId; o.textContent = d.label || ('Microphone ' + (i + 1)); sel.appendChild(o); });
+    sel.value = micDevices.some(d => d.deviceId === wanted) ? wanted : '';
+  }
+  function meterUpdate(rms) { const el = $('micLevelFill'); if (el) el.style.width = (meterLevel(rms) * 100) + '%'; }
+  async function calibrateNoiseFloor() {
+    const resultEl = $('calibrateResult');
+    try { await openMic(); } catch (e) { if (resultEl) resultEl.textContent = 'The microphone was blocked, so it could not be checked.'; return; }
+    if (resultEl) resultEl.textContent = 'Listening for 3 seconds — stay quiet…';
+    const samples = [], t0 = performance.now();
+    await new Promise(resolve => {
+      const iv = setInterval(() => {
+        const buf = new Float32Array(anTime.fftSize); anTime.getFloatTimeDomainData(buf);
+        let s = 0; for (let i = 0; i < buf.length; i++) s += buf[i] * buf[i]; samples.push(Math.sqrt(s / buf.length));
+        if (performance.now() - t0 > 3000) { clearInterval(iv); resolve(); }
+      }, 50);
+    });
+    const floor = noiseFloor(samples);
+    DB.prefs.noiseFloor = Number.isFinite(floor) && floor >= 0 ? clamp(floor, 0, 1) : null;
+    gates = gatesFor(DB.prefs.noiseFloor); save();
+    if (resultEl) resultEl.textContent = (DB.prefs.noiseFloor === null || DB.prefs.noiseFloor < 0.003)
+      ? 'Your room is quiet.'
+      : 'There\'s a lot of background noise — move closer to the mic.';
   }
   function wireAnalysers(src) { if (!anTime) { anTime = actx.createAnalyser(); anTime.fftSize = 4096; anFreq = actx.createAnalyser(); anFreq.fftSize = 8192; anFreq.smoothingTimeConstant = 0.5; } src.connect(anTime); src.connect(anFreq); }
   // test hook: feed synthetic notes through the same listening chain
@@ -203,16 +240,18 @@ import { toAudioTime, judgeTap, medianLatency } from './core/timing.js';
     return s;
   }
   function sanitizeDB(v, defaultLatencyMs) {
-    const d = { v: 1, mods: {}, sessions: [], prefs: { mod: 'kbd', wind: 'bb', voice: 'low', names: true } }; v = (v && typeof v === 'object') ? v : {};
+    const d = { v: 1, mods: {}, sessions: [], prefs: { mod: 'kbd', wind: 'bb', voice: 'low', names: true, noiseFloor: null, inputDeviceId: null } }; v = (v && typeof v === 'object') ? v : {};
     MOD_IDS.forEach(m => { d.mods[m] = sanitizeModel(m, v.mods && v.mods[m]); });
     if (Array.isArray(v.sessions)) d.sessions = v.sessions.filter(x => x && typeof x.d === 'string' && MODS[x.mod]).slice(-60).map(x => ({ d: x.d.slice(0, 10), mod: x.mod, min: num(x.min, 0, 0, 600), acc: num(x.acc, 0, 0, 1), a1: num(x.a1, 0, 0, 1), a2: num(x.a2, 0, 0, 1), from: num(x.from, 1, 1, 80), to: num(x.to, 1, 1, 80), breaks: num(x.breaks, 0, 0, 99) }));
     const p = v.prefs || {}; if (MODS[p.mod]) d.prefs.mod = p.mod; if (WIND_KINDS[p.wind]) d.prefs.wind = p.wind; if (VOICE_KINDS[p.voice]) d.prefs.voice = p.voice; d.prefs.names = p.names !== false;
+    d.prefs.noiseFloor = (typeof p.noiseFloor === 'number' && isFinite(p.noiseFloor) && p.noiseFloor >= 0) ? clamp(p.noiseFloor, 0, 1) : null;
+    d.prefs.inputDeviceId = typeof p.inputDeviceId === 'string' && p.inputDeviceId ? p.inputDeviceId : null;
     d.custom = Array.isArray(v.custom) ? v.custom.map(x => Math.round(num(x, 60, 20, 110))).slice(0, 300) : [];
     d.latencyMs = num(v.latencyMs, defaultLatencyMs || 0, 0, 300);
     return d;
   }
   function forget(t) { const f = o => { if (!o.last) return; const days = (t - o.last) / 86400000; if (days > 0.5) { o.m = 0.4 + (o.m - 0.4) * Math.pow(0.5, days / 10); o.last = t; } }; MOD_IDS.forEach(m => { const s = DB.mods[m]; Object.keys(s.item).forEach(k => f(s.item[k])); Object.keys(s.trans).forEach(k => f(s.trans[k])); }); }
-  function loadDB() { let v = null; try { v = migrateDB(JSON.parse(localStorage.getItem(KEY) || 'null')); } catch (e) {} DB = sanitizeDB(v, actx ? (actx.outputLatency || actx.baseLatency || 0) * 1000 : 0); forget(Date.now()); mod = DB.prefs.mod; S = DB.mods[mod]; }
+  function loadDB() { let v = null; try { v = migrateDB(JSON.parse(localStorage.getItem(KEY) || 'null')); } catch (e) {} DB = sanitizeDB(v, actx ? (actx.outputLatency || actx.baseLatency || 0) * 1000 : 0); forget(Date.now()); mod = DB.prefs.mod; S = DB.mods[mod]; gates = gatesFor(DB.prefs.noiseFloor); }
   let saveTimer = null;
   function save() { if (saveTimer) return; saveTimer = setTimeout(() => { saveTimer = null; try { DB.mods[mod] = S = sanitizeModel(mod, S); localStorage.setItem(KEY, JSON.stringify(DB)); } catch (e) {} }, 1200); }
   const it = id => S.item[id] || (S.item[id] = { m: 0.4, n: 0, last: 0, seen: 0 });
@@ -356,14 +395,14 @@ import { toAudioTime, judgeTap, medianLatency } from './core/timing.js';
   function onPitch(fr, dt) {
     heard = fr; if (deafWindow.isDeaf()) return; const M = MODS[mod]; if (!playing || !task || task.done) return; const e = cur(); if (!e) return;
     if (M.input === 'pluck') {
-      if (e.info.kind === 'chord') { if (fr.rms < 0.012 || !fr.chroma) { holdFor = 0; return; } const c = fr.chroma, score = e.info.pcs.reduce((s, x) => s + c[x], 0), each = e.info.pcs.every(x => c[x] > 0.06); e.score = score; if (score > 0.72 && each) { holdFor += dt; if (holdFor > 0.18) passEl(undefined, e.info.label + ': that rings true.'); } else holdFor = 0; if (fr.rms > 0.02) lastInputAt = now(); return; }
-      if (fr.rms < 0.01 || !fr.freq) { if (++stableN > 2 && fr.rms < 0.006) released = true; stableMidi = -1; return; }
+      if (e.info.kind === 'chord') { if (fr.rms < gates.chord || !fr.chroma) { holdFor = 0; return; } const c = fr.chroma, score = e.info.pcs.reduce((s, x) => s + c[x], 0), each = e.info.pcs.every(x => c[x] > 0.06); e.score = score; if (score > 0.72 && each) { holdFor += dt; if (holdFor > 0.18) passEl(undefined, e.info.label + ': that rings true.'); } else holdFor = 0; if (fr.rms > 0.02) lastInputAt = now(); return; }
+      if (fr.rms < gates.note || !fr.freq) { if (++stableN > 2 && fr.rms < 0.006) released = true; stableMidi = -1; return; }
       const m = Math.round(fr.midi); if (m === stableMidi) stableN++; else { stableMidi = m; stableN = 1; }
       if (stableN === 3 && (released || m !== lastFired)) { lastFired = m; released = false; onNote(m, false); }
       return;
     }
     if (M.input === 'sustain') {
-      if (!fr.freq || fr.rms < 0.01) { holdFor = Math.max(0, holdFor - dt * 2); wrongFor = 0; return; } lastInputAt = now();
+      if (!fr.freq || fr.rms < gates.note) { holdFor = Math.max(0, holdFor - dt * 2); wrongFor = 0; return; } lastInputAt = now();
       let cents = (fr.midi - e.info.midi) * 100; const sameName = pc(fr.midi) === pc(e.info.midi); if (!M.exactPitch) cents = ((cents + 600) % 1200 + 1200) % 1200 - 600; fr.cents = cents; const tol = 45, need = task.kind === 'hold' ? 2 : 0.5;
       if (Math.abs(cents) <= tol) { holdFor += dt; holdCents.push(cents); wrongFor = 0; if (holdFor >= need) { const mc = mean(holdCents.map(Math.abs)), bias = mean(holdCents), q = clamp(1 - mc / 90, 0.6, 1); passEl(q, e.info.short + ': held it, ' + (Math.abs(bias) < 8 ? 'dead centre' : Math.round(Math.abs(bias)) + ' cents ' + (bias > 0 ? 'sharp' : 'flat')) + '.'); } }
       else { holdFor = 0; holdCents = []; wrongFor += dt; if (wrongFor > 0.9) { wrongFor = 0; const near = Math.abs(cents) < 100; failEl(M.exactPitch && sameName && !near ? 'Right note name, wrong octave. You want ' + e.info.label + ', which is ' + (cents > 0 ? 'lower' : 'higher') + ' on the instrument.' : near ? 'Close: you are ' + Math.round(Math.abs(cents)) + ' cents ' + (cents > 0 ? 'sharp. Relax it down.' : 'flat. Lift it up.') : 'You are on ' + nname(fr.midi) + ', the note is ' + nname(e.info.midi) + '. Go ' + (cents > 0 ? 'lower' : 'higher') + '.', near ? null : e.id + '>' + nname(fr.midi)); } }
@@ -437,6 +476,7 @@ import { toAudioTime, judgeTap, medianLatency } from './core/timing.js';
     const M = MODS[mod]; if (!M || !micReady || !anTime || !(M.input === 'pluck' || M.input === 'sustain')) return; const t = now(), dt = Math.min(0.2, t - (lastPitchAt || t)); lastPitchAt = t;
     const buf = new Float32Array(anTime.fftSize); anTime.getFloatTimeDomainData(buf); const r = yin(buf, actx.sampleRate, M.fmin, M.fmax), fr = { rms: r.rms, freq: r.freq && r.clarity > 0.8 ? r.freq : 0 }; if (fr.freq) fr.midi = fmidi(fr.freq);
     if (task && cur() && cur().info.kind === 'chord') { const db = new Float32Array(anFreq.frequencyBinCount); anFreq.getFloatFrequencyData(db); fr.chroma = chroma(db, actx.sampleRate, anFreq.fftSize); }
+    meterUpdate(fr.rms);
     try { onPitch(fr, dt); } catch (e) { errCount++; }
   }
   setInterval(listen, 50);
@@ -634,6 +674,13 @@ import { toAudioTime, judgeTap, medianLatency } from './core/timing.js';
     if (!navigator.requestMIDIAccess) { ioState('off', 'This browser cannot read MIDI. Use Chrome or Edge. Screen and computer keys still work.'); return; }
     navigator.requestMIDIAccess().then(a => { const wire = () => { let n = 0; a.inputs.forEach(i => { n++; i.onmidimessage = ev => { const d = ev.data; if (d && d.length >= 3 && (d[0] & 0xf0) === 0x90 && d[2] > 0) onNote(d[1], true); }; }); midiOn = n > 0; ioRefresh(); if (!n) ioState('off', 'No MIDI device found. Plug it in and it will be picked up.'); }; wire(); a.onstatechange = wire; }).catch(() => ioState('off', 'MIDI was blocked here. Open the standalone copy in Chrome. Screen and computer keys still work.'));
   });
+  if ($('micDeviceSelect')) $('micDeviceSelect').addEventListener('change', function () {
+    DB.prefs.inputDeviceId = this.value || null; save();
+    if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; micReady = false; }
+    if (needsMic()) openMic().then(ioRefresh).catch(() => ioState('off', 'That microphone could not be opened.'));
+  });
+  if (navigator.mediaDevices && navigator.mediaDevices.addEventListener) navigator.mediaDevices.addEventListener('devicechange', refreshMicDevices);
+  if ($('calibrateBtn')) $('calibrateBtn').addEventListener('click', function () { this.blur(); calibrateNoiseFloor(); });
   const PCKEYS = { a: 60, w: 61, s: 62, e: 63, d: 64, f: 65, t: 66, g: 67, y: 68, h: 69, u: 70, j: 71, k: 72 };
   document.addEventListener('keydown', ev => {
     if (ev.repeat || ev.ctrlKey || ev.metaKey || ev.altKey) return; const tag = ev.target.tagName; if (tag === 'SELECT' || (tag === 'INPUT' && ev.target.type !== 'checkbox')) return;
@@ -661,7 +708,7 @@ import { toAudioTime, judgeTap, medianLatency } from './core/timing.js';
   }
   function buildPicker() { const box = $('picker'); MOD_IDS.concat(Object.keys(TOOLS)).forEach(m => { const o = MODS[m] || TOOLS[m], b = document.createElement('button'); b.type = 'button'; b.dataset.mod = m; b.style.setProperty('--c', o.color); b.setAttribute('aria-pressed', 'false'); b.appendChild(document.createTextNode(o.name)); const sm = document.createElement('small'); sm.textContent = o.tag; b.appendChild(sm); b.addEventListener('click', () => { b.blur(); setMod(m); }); box.appendChild(b); }); }
   const _listen = listen; // tools listen even without a session
-  setInterval(() => { if (!TOOLS[mod] || !micReady || !anTime) return; const buf = new Float32Array(anTime.fftSize); anTime.getFloatTimeDomainData(buf); const r = yin(buf, actx.sampleRate, 36, 1600), fr = { rms: r.rms, freq: r.freq && r.clarity > 0.8 ? r.freq : 0 }; if (fr.freq) fr.midi = fmidi(fr.freq); toolPitch(fr, 0.05); }, 50);
+  setInterval(() => { if (!TOOLS[mod] || !micReady || !anTime) return; const buf = new Float32Array(anTime.fftSize); anTime.getFloatTimeDomainData(buf); const r = yin(buf, actx.sampleRate, 36, 1600), fr = { rms: r.rms, freq: r.freq && r.clarity > 0.8 ? r.freq : 0 }; if (fr.freq) fr.midi = fmidi(fr.freq); meterUpdate(fr.rms); toolPitch(fr, 0.05); }, 50);
 
   // ---------- backups: a downloadable copy of the whole DB (E9: db.v now feeds migrateDB) ----------
   function showBackupNudge(text) { $('backupNudgeText').textContent = text; $('backupNudge').hidden = false; }
@@ -706,8 +753,7 @@ import { toAudioTime, judgeTap, medianLatency } from './core/timing.js';
   //
   // slot:hook:worklet
   //
-  // slot:hook:device
-  //
+  if (__DEBUG_HOOK__) Object.assign(hook, { gates: () => gates, calibrate: calibrateNoiseFloor, devices: () => micDevices });
   // slot:hook:chords
   //
   // slot:hook:play-in-time
