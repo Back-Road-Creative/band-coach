@@ -12,6 +12,7 @@ export default {
   clefs: ['bass'],
   octavePolicy: 'exact',
   tuning: [36, 43, 50, 57],
+  fretted: false,
   status: 'planned',
   curriculum: []
 };

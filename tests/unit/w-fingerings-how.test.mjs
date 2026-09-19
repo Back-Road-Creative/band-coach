@@ -12,6 +12,8 @@ import gtr from '../../src/instruments/gtr.js';
 import bass from '../../src/instruments/bass.js';
 import uke from '../../src/instruments/uke.js';
 import violin from '../../src/instruments/violin.js';
+import viola from '../../src/instruments/viola.js';
+import cello from '../../src/instruments/cello.js';
 import harp from '../../src/instruments/harp.js';
 import voice from '../../src/instruments/voice.js';
 import kbd from '../../src/instruments/kbd.js';
@@ -20,18 +22,25 @@ import trumpetBb from '../../src/instruments/trumpet-bb.js';
 import hornF from '../../src/instruments/horn-f.js';
 import trombone from '../../src/instruments/trombone.js';
 import recorderDescant from '../../src/instruments/recorder-descant.js';
+import tinWhistle from '../../src/instruments/tin-whistle.js';
 
 test('howKindFor picks the right module per instrument', () => {
   assert.equal(howKindFor(gtr), 'fretboard');
   assert.equal(howKindFor(bass), 'fretboard');
   assert.equal(howKindFor(uke), 'fretboard');
-  assert.equal(howKindFor(violin), 'fretboard');
+  // Bowed instruments are fretless (schema.js's `fretted: false`): they get
+  // a plain fingerboard diagram, never fret wires (defect fix, was
+  // 'fretboard' for every stringed instrument regardless of frets).
+  assert.equal(howKindFor(violin), 'fingerboard');
+  assert.equal(howKindFor(viola), 'fingerboard');
+  assert.equal(howKindFor(cello), 'fingerboard');
   assert.equal(howKindFor(harp), 'harmonica');
   assert.equal(howKindFor(voice), 'voice');
   assert.equal(howKindFor(trumpetBb), 'brass-valves');
   assert.equal(howKindFor(hornF), 'brass-valves');
   assert.equal(howKindFor(trombone), 'brass-slide');
   assert.equal(howKindFor(recorderDescant), 'recorder');
+  assert.equal(howKindFor(tinWhistle), 'whistle');
   assert.equal(howKindFor(kbd), null); // keys: obvious, no fingering module
   assert.equal(howKindFor(wind), null); // an abstraction over 7 transpositions, not one real instrument
   assert.equal(howKindFor(null), null);
@@ -85,6 +94,22 @@ test('harmonica: hole 2 draw bent down one semitone (Db4/C#4)', () => {
   assert.match(how.description, /bent 1 semitone/);
 });
 
+test('fingerboard: open low G string on violin has no fret wires', () => {
+  const how = computeHow(violin, 55); // G3, violin's lowest open string
+  assert.equal(how.kind, 'fingerboard');
+  assert.equal(how.playable, true);
+  assert.deepEqual(how.positions[0], { stringIndex: 0, displayIndex: 0, fret: 0 });
+  assert.match(how.description, /open string/);
+  assert.doesNotMatch(how.description, /\bfret \d/);
+});
+
+test('fingerboard: a stopped note describes semitones up, not a fret number', () => {
+  const how = computeHow(violin, 57); // A3, 2 semitones up the G string
+  assert.equal(how.kind, 'fingerboard');
+  assert.match(how.description, /2 semitones up/);
+  assert.doesNotMatch(how.description, /\bfret \d/);
+});
+
 test('recorder: C5 is all holes covered', () => {
   const how = computeHow(recorderDescant, 72);
   assert.equal(how.kind, 'recorder');
@@ -97,6 +122,19 @@ test('recorder: a pitch outside the short table is reported, not thrown', () => 
   const how = computeHow(recorderDescant, 67); // recorderDescant.range.low, but below the table
   assert.equal(how.playable, false);
   assert.match(how.description, /outside this app's recorder fingering chart/);
+});
+
+test('whistle: D6 (second-octave tonic) is vented, and the description names it', () => {
+  const how = computeHow(tinWhistle, 86);
+  assert.equal(how.kind, 'whistle');
+  assert.equal(how.entry.holes, 'oxxxxx');
+  assert.match(how.description, /hole 1 open/);
+});
+
+test('whistle: a pitch outside the table is reported, not thrown', () => {
+  const how = computeHow(tinWhistle, 75); // D#5, not a diatonic D-major note
+  assert.equal(how.playable, false);
+  assert.match(how.description, /outside this app's whistle fingering chart/);
 });
 
 test('voice: in range vs out of range wording', () => {

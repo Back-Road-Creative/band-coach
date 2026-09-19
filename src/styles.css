@@ -130,6 +130,10 @@
   .panel-fingerings .fing-string-label { width: 3.2em; flex: none; font-size: 12px; color: var(--muted); }
   .panel-fingerings .fing-fret { display: inline-flex; align-items: center; justify-content: center; width: 1.6em; height: 1.6em; border: 1px solid var(--line); font-size: 14px; color: var(--accent); }
   .panel-fingerings .fing-fret.fing-hit { background: #f3c52f; color: #06101d; border-color: #f3c52f; }
+  .panel-fingerings .fing-fingerboard { display: flex; flex-direction: column; gap: 6px; min-width: max-content; }
+  .panel-fingerings .fing-fboard-string { display: flex; align-items: center; gap: 6px; }
+  .panel-fingerings .fing-fboard-track { position: relative; width: 12em; height: 6px; background: var(--panel-2); border-radius: 4px; border: 1px solid var(--line); }
+  .panel-fingerings .fing-fboard-marker { position: absolute; top: -4px; width: 12px; height: 14px; border-radius: 50%; background: #f3c52f; transform: translateX(-6px); }
   .panel-fingerings .fing-brass { display: flex; align-items: center; gap: 8px; }
   .panel-fingerings .fing-valve { display: inline-flex; align-items: center; justify-content: center; width: 2.4em; height: 2.4em; border-radius: 50%; border: 2px solid var(--line); font: 700 16px var(--display); }
   .panel-fingerings .fing-valve.fing-hit { background: #f3c52f; border-color: #f3c52f; color: #06101d; }

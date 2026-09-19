@@ -26,7 +26,8 @@ export const RECORDER_NOTES = [
   { midi: 86, name: 'D6', holes: 'ooxooooo' }
 ];
 
-// D tin whistle, two octaves (D4-D6). Six-hole fingerings repeat between the
+// D tin whistle, two octaves (D5-D7 — WHISTLE_LOW_D below is 74, D5, not
+// D4 as an earlier version of this comment said). Six-hole fingerings repeat between the
 // two octaves; the second octave is the same hole pattern overblown harder,
 // flagged with `overblow: true`. Hole order (6 holes): top to bottom, 1-6.
 const WHISTLE_HOLE_PATTERNS = [

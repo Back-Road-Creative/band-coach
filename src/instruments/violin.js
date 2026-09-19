@@ -12,6 +12,7 @@ export default {
   clefs: ['treble'],
   octavePolicy: 'exact',
   tuning: [55, 62, 69, 76],
+  fretted: false,
   status: 'planned',
   curriculum: []
 };

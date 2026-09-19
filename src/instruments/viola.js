@@ -11,6 +11,7 @@ export default {
   clefs: ['alto'],
   octavePolicy: 'exact',
   tuning: [48, 55, 62, 69],
+  fretted: false,
   status: 'planned',
   curriculum: []
 };
