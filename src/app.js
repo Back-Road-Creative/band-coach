@@ -34,7 +34,7 @@ import { createPanels, sanitizePanelData } from './ui/panels.js';
 // slot:import:w-songs
 //
 //
-// slot:import:w-editor
+import { register as registerEditor, __setDebugFrames, __getDebugSong, __isRecording } from './ui/editor.js';
 //
 //
 // slot:import:w-ear
@@ -1030,7 +1030,7 @@ import { createPanels, sanitizePanelData } from './ui/panels.js';
   // slot:panel:w-songs
   //
   //
-  // slot:panel:w-editor
+  registerEditor(panels);
   //
   //
   // slot:panel:w-ear
@@ -1095,7 +1095,7 @@ import { createPanels, sanitizePanelData } from './ui/panels.js';
   // slot:hook:w-songs
   //
   //
-  // slot:hook:w-editor
+  if (__DEBUG_HOOK__) Object.assign(hook, { editorSetFrames: __setDebugFrames, editorSong: __getDebugSong, editorRecording: __isRecording });
   //
   //
   // slot:hook:w-ear
