@@ -41,7 +41,16 @@ function buildDate() {
   return new Date(ms).toISOString().slice(0, 10);
 }
 
-export async function build({ release = false } = {}) {
+// `outDir` defaults to `dist/` — the real build output. It is a parameter
+// because a DEV build starts by deleting the whole directory (see the rmSync
+// below), and node:test runs test FILES concurrently: one file's dev build
+// would wipe `dist/release/band-coach.html` out from under another file that
+// is reading or serving it. Any caller that is not the real build passes its
+// own throwaway directory, so no two builds can collide by construction.
+export async function build({ release = false, outDir = OUT_DIR } = {}) {
+  const outFile = join(outDir, 'band-coach.html');
+  const releaseDir = join(outDir, 'release');
+  const releaseFile = join(releaseDir, 'band-coach.html');
   const result = await esbuildBuild({
     entryPoints: [SRC_JS],
     bundle: true,
@@ -86,17 +95,17 @@ export async function build({ release = false } = {}) {
       .replace(VERSION_META_PLACEHOLDER, `<meta name="band-coach-version" content="${PKG.version}">`)
       .replace(VERSION_FOOTER_PLACEHOLDER, `<footer id="verFooter" aria-hidden="true">Band Coach v${PKG.version} · built ${date}</footer>`);
 
-    mkdirSync(RELEASE_DIR, { recursive: true });
-    writeFileSync(RELEASE_FILE, html, 'utf8');
-    return RELEASE_FILE;
+    mkdirSync(releaseDir, { recursive: true });
+    writeFileSync(releaseFile, html, 'utf8');
+    return releaseFile;
   }
 
   // A clean dev build so a stray dist/release/ from an earlier `--release`
   // run never leaks into the "dist/ has exactly one file" build tests.
-  rmSync(OUT_DIR, { recursive: true, force: true });
-  mkdirSync(OUT_DIR, { recursive: true });
-  writeFileSync(OUT_FILE, html, 'utf8');
-  return OUT_FILE;
+  rmSync(outDir, { recursive: true, force: true });
+  mkdirSync(outDir, { recursive: true });
+  writeFileSync(outFile, html, 'utf8');
+  return outFile;
 }
 
 const isMain = process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1];

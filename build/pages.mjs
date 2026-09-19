@@ -129,10 +129,9 @@ function injectPwaHead(releaseHtml) {
     '<link rel="manifest" href="./manifest.webmanifest">' +
     `<meta name="theme-color" content="${THEME_COLOR}">` +
     '<link rel="apple-touch-icon" href="./icon-192.png">';
-  if (!releaseHtml.includes('</head>')) {
-    throw new Error('release build is missing </head>; cannot inject PWA metadata');
-  }
-  let html = releaseHtml.replace('</head>', headAdditions + '</head>');
+  // The document's own </head> is the last one that still has the <body> after
+  // it — an occurrence inside the script bundle does not.
+  let html = insertBeforeLast(releaseHtml, '</head>', headAdditions, (tail) => /<body[\s>]/i.test(tail));
 
   // Guarded so this never throws in an insecure context (plain http on a
   // non-loopback host) or a browser with no Service Worker support at all.
@@ -142,11 +141,25 @@ function injectPwaHead(releaseHtml) {
     "window.addEventListener('load', function () { navigator.serviceWorker.register('./sw.js'); });" +
     '}' +
     '</script>';
-  if (!html.includes('</body>')) {
-    throw new Error('release build is missing </body>; cannot inject the service-worker registration');
-  }
-  html = html.replace('</body>', swRegistration + '</body>');
+  // The document's own </body> has nothing after it but </html>.
+  html = insertBeforeLast(html, '</body>', swRegistration, (tail) => tail.replace(/<\/html>/i, '').trim() === '');
   return html;
+}
+
+// The release file is ONE file with the whole app inlined, so `</head>` and
+// `</body>` also occur inside the JavaScript (a panel that builds an HTML
+// string). String.replace takes the FIRST match, which injected the PWA
+// metadata and the service-worker registration into the middle of the script
+// bundle, where they are inert: the page rendered but no service worker was
+// ever registered. The document's own closing tags are the LAST ones.
+function insertBeforeLast(html, tag, addition, tailIsRight) {
+  const at = html.lastIndexOf(tag);
+  if (at === -1) throw new Error(`release build is missing ${tag}; cannot inject the phone-copy additions`);
+  const tail = html.slice(at + tag.length);
+  if (!tailIsRight(tail)) {
+    throw new Error(`the last ${tag} is not the document's own; refusing to inject into the wrong place`);
+  }
+  return html.slice(0, at) + addition + html.slice(at);
 }
 
 /**
@@ -187,9 +200,12 @@ export async function writePagesFiles({ releaseHtml, version, outDir = PAGES_DIR
  * itself (dynamically importing build.mjs) and then writes `dist/pages/`.
  * Never called from build.mjs's own CLI entry point — see the note above.
  */
-export async function buildPages({ outDir } = {}) {
+// `buildDir` is forwarded to build() as ITS output directory — a caller that
+// passes its own `outDir` almost always wants its own build directory too,
+// or it is still sharing `dist/release/` with every other concurrent build.
+export async function buildPages({ outDir, buildDir } = {}) {
   const { build } = await import('./build.mjs');
-  const releaseFile = await build({ release: true });
+  const releaseFile = await build({ release: true, outDir: buildDir });
   const releaseHtml = readFileSync(releaseFile, 'utf8');
   return writePagesFiles({ releaseHtml, version: PKG.version, outDir });
 }

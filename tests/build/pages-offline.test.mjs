@@ -11,19 +11,17 @@
 // pages can never register one. This file borrows the same
 // browser-discovery/CDP technique in miniature, scoped to just what this one
 // test needs (navigate to an http:// URL, evaluate script, reload).
-import { test, after } from 'node:test';
+import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { mkdtempSync, rmSync, existsSync, readdirSync, readFileSync } from 'node:fs';
 import { tmpdir, homedir } from 'node:os';
 import { join, extname } from 'node:path';
 import { createServer } from 'node:http';
-import { build } from '../../build/build.mjs';
 import { buildPages } from '../../build/pages.mjs';
 
-after(async () => {
-  await build();
-});
+// Nothing to restore: this file builds only into its own throwaway
+// directories and never writes dist/, so it cannot disturb another test file.
 
 function findPlaywrightHeadlessShell() {
   const root = join(homedir(), '.cache', 'ms-playwright');
@@ -222,9 +220,28 @@ test('phone-copy service worker activates and the page still renders offline aft
   // by deleting it. Sharing it made this test serve an emptied directory and
   // read back a blank document.title.
   const ownDir = mkdtempSync(join(tmpdir(), 'band-coach-pages-'));
-  t.after(() => rmSync(ownDir, { recursive: true, force: true }));
-  const pagesDir = await buildPages({ outDir: ownDir });
+  const ownBuildDir = mkdtempSync(join(tmpdir(), 'band-coach-build-'));
+  t.after(() => {
+    rmSync(ownDir, { recursive: true, force: true });
+    rmSync(ownBuildDir, { recursive: true, force: true });
+  });
+  const pagesDir = await buildPages({ outDir: ownDir, buildDir: ownBuildDir });
   const server = await serveDirLoopback(pagesDir);
+  // Unconditional cleanup: the test below stops the server on purpose
+  // half-way through, but if any assertion before that point fails the server
+  // stays listening and node can never exit — the run hangs instead of
+  // reporting the failure. closeAllConnections() is required as well as
+  // close(), because the browser holds a keep-alive socket that close() waits
+  // on forever.
+  let serverClosed = false;
+  const closeServer = () =>
+    new Promise((resolve) => {
+      if (serverClosed) return resolve();
+      serverClosed = true;
+      server.closeAllConnections();
+      server.close(resolve);
+    });
+  t.after(closeServer);
   const { port } = server.address();
   const url = `http://127.0.0.1:${port}/`;
 
@@ -247,12 +264,20 @@ test('phone-copy service worker activates and the page still renders offline aft
     if (swState === 'activated') break;
     await new Promise((r) => setTimeout(r, 150));
   }
-  assert.equal(swState, 'activated', 'the service worker should reach the activated state');
+  if (swState !== 'activated') {
+    // Say WHY, not just that it did not happen: register() rejects with the
+    // real reason (a bad MIME type, a parse error in sw.js, a failed
+    // precache fetch), and without this the failure reads as a mystery.
+    const why = await page.evaluate(
+      "navigator.serviceWorker.register('./sw.js').then(() => 'registered ok').catch(e => 'register rejected: ' + e)"
+    );
+    assert.fail(`the service worker should reach the activated state, got "${swState}" — ${why}`);
+  }
 
   const bodyLenOnline = await page.evaluate('document.body.innerHTML.length');
   assert.ok(bodyLenOnline > 1000, 'the app shell rendered while online');
 
-  await new Promise((resolve) => server.close(resolve));
+  await closeServer();
 
   await page.reload();
 

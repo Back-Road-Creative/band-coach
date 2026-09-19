@@ -4,13 +4,15 @@
 // install-and-reload proof lives in tests/build/pages-offline.test.mjs since
 // it needs headless Chromium and a throwaway HTTP server.
 //
-// Order matters here: `build()` (dev mode) `rmSync`s the whole `dist/`
-// directory, so this file always finishes by leaving `dist/` as a plain dev
-// build — the same state tests/build/verbatim.test.mjs and the
-// characterization suite expect — regardless of what it built in between.
+// This file never writes the real `dist/`. `build()` in dev mode `rmSync`s
+// the whole directory, and node:test runs test FILES concurrently, so any
+// build into `dist/` would delete `dist/band-coach.html` out from under the
+// characterization suite that is reading it at that moment. Everything here
+// builds into its own throwaway directories instead.
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync, existsSync } from 'node:fs';
+import { readFileSync, readdirSync, existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 import { build } from '../../build/build.mjs';
@@ -18,14 +20,15 @@ import { buildPages, PRECACHE_FILES, ICON_FILES } from '../../build/pages.mjs';
 import { HTML_PATH } from '../helpers/html-path.mjs';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
-const PAGES_DIR = join(root, 'dist', 'pages');
-const RELEASE_FILE = join(root, 'dist', 'release', 'band-coach.html');
+const OWN_BUILD_DIR = mkdtempSync(join(tmpdir(), 'band-coach-build-'));
+const PAGES_DIR = mkdtempSync(join(tmpdir(), 'band-coach-pages-'));
+const RELEASE_FILE = join(OWN_BUILD_DIR, 'release', 'band-coach.html');
+const pages = () => buildPages({ outDir: PAGES_DIR, buildDir: OWN_BUILD_DIR });
 const PKG = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
 
-// Leave dist/ as a plain dev build for every other test file, whatever ran
-// in between and whatever order node:test picks.
-after(async () => {
-  await build();
+after(() => {
+  rmSync(OWN_BUILD_DIR, { recursive: true, force: true });
+  rmSync(PAGES_DIR, { recursive: true, force: true });
 });
 
 function pngDimensions(buf) {
@@ -44,7 +47,7 @@ function pngDimensions(buf) {
 }
 
 test('pages build produces exactly the expected files', async () => {
-  await buildPages();
+  await pages();
   const entries = readdirSync(PAGES_DIR).sort();
   assert.deepEqual(entries, [
     'icon-192.png',
@@ -57,7 +60,7 @@ test('pages build produces exactly the expected files', async () => {
 });
 
 test('manifest.webmanifest is valid JSON with the required members', async () => {
-  await buildPages();
+  await pages();
   const manifest = JSON.parse(readFileSync(join(PAGES_DIR, 'manifest.webmanifest'), 'utf8'));
   assert.equal(manifest.name, 'Band Coach');
   assert.equal(manifest.short_name, 'Band Coach');
@@ -75,7 +78,7 @@ test('manifest.webmanifest is valid JSON with the required members', async () =>
 });
 
 test('generated icon files are correctly-sized PNGs', async () => {
-  await buildPages();
+  await pages();
   const expected = {
     'icon-192.png': 192,
     'icon-512.png': 512,
@@ -93,7 +96,7 @@ test('generated icon files are correctly-sized PNGs', async () => {
 });
 
 test('sw.js parses and its precache list matches the files on disk', async () => {
-  await buildPages();
+  await pages();
   const src = readFileSync(join(PAGES_DIR, 'sw.js'), 'utf8');
 
   // Parses as a classic (non-module) script, the shape a real
@@ -112,10 +115,10 @@ test('sw.js parses and its precache list matches the files on disk', async () =>
 test('the one-file release build is byte-for-byte unaffected by the pages feature', async () => {
   process.env.SOURCE_DATE_EPOCH = '1700000000';
   try {
-    await build({ release: true });
+    await build({ release: true, outDir: OWN_BUILD_DIR });
     const before = readFileSync(RELEASE_FILE);
 
-    await buildPages();
+    await pages();
     const after = readFileSync(RELEASE_FILE);
 
     assert.ok(before.equals(after), 'dist/release/band-coach.html is unchanged by building the pages edition');
@@ -125,7 +128,7 @@ test('the one-file release build is byte-for-byte unaffected by the pages featur
 });
 
 test('dist/pages/index.html carries the PWA metadata and never mentions dist/band-coach.html behaviour', async () => {
-  await buildPages();
+  await pages();
   const html = readFileSync(join(PAGES_DIR, 'index.html'), 'utf8');
   assert.match(html, /<link rel="manifest" href="\.\/manifest\.webmanifest">/);
   assert.match(html, /<meta name="theme-color" content="#[0-9a-f]{6}">/);
