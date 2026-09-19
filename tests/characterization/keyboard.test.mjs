@@ -3,10 +3,10 @@
 // answer marks it "no" and flags the current element failed.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { fileURLToPath } from 'node:url';
+import { HTML_PATH } from '../helpers/html-path.mjs';
 import { launchPage } from '../helpers/browser.mjs';
 
-const htmlPath = fileURLToPath(new URL('../../band-coach.html', import.meta.url));
+const htmlPath = HTML_PATH;
 
 test('keyboard happy path: right note passes, wrong note fails', async (t) => {
   const page = await launchPage(htmlPath);

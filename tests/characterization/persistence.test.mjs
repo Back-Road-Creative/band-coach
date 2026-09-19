@@ -4,10 +4,10 @@
 // model.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { fileURLToPath } from 'node:url';
+import { HTML_PATH } from '../helpers/html-path.mjs';
 import { launchPage } from '../helpers/browser.mjs';
 
-const htmlPath = fileURLToPath(new URL('../../band-coach.html', import.meta.url));
+const htmlPath = HTML_PATH;
 
 test('answers persist to localStorage under the known key', async (t) => {
   const page = await launchPage(htmlPath);

@@ -4,7 +4,8 @@ One coach, many instruments. Band Coach listens through a microphone or a MIDI k
 every next exercise from your own results, and watches your energy so practice stays fresh.
 Free, no account, and your sound never leaves your computer.
 
-**Status: pre-release.** `band-coach.html` is the original single-file app, imported unchanged.
+**Status: pre-release.** The app is developed as a source tree under `src/` and built into a single
+file, `dist/band-coach.html` — the same one-file-download shape as the original hand-edited page.
 Known judging flaws are being fixed before the first public release.
 
 Band Coach hears pitch and timing. It cannot see posture, breath, bowing or hand position — use a
@@ -12,8 +13,14 @@ teacher or video for those.
 
 ## Run it
 
-Open `band-coach.html` in Chrome or Edge (double-click). Microphone instruments ask for permission;
-a MIDI keyboard is optional.
+```
+npm ci
+npm run build
+```
+
+Then open `dist/band-coach.html` in Chrome or Edge (double-click). That's the one file a learner
+downloads and runs — everything else under `src/` is only needed to build it. Microphone
+instruments ask for permission; a MIDI keyboard is optional.
 
 ## Test
 
@@ -21,16 +28,18 @@ a MIDI keyboard is optional.
 npm test
 ```
 
-Needs Node 22+. Tests use only Node built-ins.
+Needs Node 22+. `pretest` runs the build first, so tests always see a fresh `dist/band-coach.html`.
+Tests use only Node built-ins plus `esbuild` (the one build-time dependency).
 
-Two kinds of tests live under `tests/`:
+Three kinds of tests live under `tests/`:
 
-- `tests/import.test.mjs` checks the file stays one self-contained page.
-- `tests/characterization/*.test.mjs` drive the real app in a headless
+- `tests/import.test.mjs` checks the built file stays one self-contained page.
+- `tests/build/*.test.mjs` check the build itself — one output file, one inlined script.
+- `tests/characterization/*.test.mjs` drive the real, built app in a headless
   Chromium over the Chrome DevTools Protocol (`tests/helpers/browser.mjs`,
   Node's built-in `WebSocket`/`fetch`, no npm dependency) and pin its
-  current, as-shipped behaviour — this is what proves a future refactor of
-  `band-coach.html` changes nothing a learner can see.
+  current, as-shipped behaviour — this is what proves a future change to
+  `src/` changes nothing a learner can see.
 
 The helper looks for a browser in this order: the `CHROME_BIN` environment
 variable, a Playwright headless-shell install under

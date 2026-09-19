@@ -5,10 +5,10 @@
 // take more than one pass over the item pool.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { fileURLToPath } from 'node:url';
+import { HTML_PATH } from '../helpers/html-path.mjs';
 import { launchPage } from '../helpers/browser.mjs';
 
-const htmlPath = fileURLToPath(new URL('../../band-coach.html', import.meta.url));
+const htmlPath = HTML_PATH;
 const MAX_ANSWERS = 200;
 
 test('answering correctly on kbd eventually levels up and resets ready to 0.2', async (t) => {

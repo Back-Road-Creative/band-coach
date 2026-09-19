@@ -3,10 +3,10 @@
 // will deliberately flip each one. Do not "fix" these assertions.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { fileURLToPath } from 'node:url';
+import { HTML_PATH } from '../helpers/html-path.mjs';
 import { launchPage } from '../helpers/browser.mjs';
 
-const htmlPath = fileURLToPath(new URL('../../band-coach.html', import.meta.url));
+const htmlPath = HTML_PATH;
 
 // F1 (band-coach.html:472): for a string/fret item, the judging condition
 // `(i.exact && exact) ? midi === i.midi : pc(midi) === pc(i.midi)` falls

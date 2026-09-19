@@ -23,6 +23,7 @@ jobs:
           node-version: 22
       - name: locate Chrome
         run: echo "CHROME_BIN=$(which google-chrome)" >> "$GITHUB_ENV"
+      - run: npm ci
       - run: npm test
         env:
           CI: true

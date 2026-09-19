@@ -1,0 +1,82 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"></head><body style="margin:0;font-size:14px"><title>Band Coach</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;700&family=Barlow:wght@400;500;600&display=swap">
+<style>
+/*__BAND_COACH_CSS__*/
+</style>
+
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Band <span>Coach</span></h1>
+      <p class="sub">One coach, many instruments. It teaches where things are, then the moves between them, picks every next exercise from your own results, and watches your energy so practice stays fresh.</p>
+    </div>
+    <div class="io">
+      <span class="dot" id="ioDot"></span>
+      <span id="ioText"></span>
+      <button class="primary" id="ioBtn" type="button">Connect</button>
+    </div>
+  </header>
+
+  <div class="picker" id="picker" role="group" aria-label="Instrument"></div>
+
+  <div class="main">
+    <section class="stage" aria-label="Exercise">
+      <div class="break" id="breakCard" hidden role="dialog" aria-labelledby="breakTitle">
+        <h2 id="breakTitle">Paused</h2>
+        <p id="breakWhy"></p>
+        <div id="breakClock" hidden>2:00</div>
+        <div class="row"><button type="button" class="primary" id="backBtn">I'm back, resume</button><button type="button" id="snoozeBtn" hidden>Keep going 5 more minutes</button><button type="button" id="endBtn2">End session</button></div>
+      </div>
+      <div id="prompt">Pick an instrument</div>
+      <div id="hint"></div>
+      <div class="timebar" aria-hidden="true"><div id="timeFill"></div></div>
+      <canvas id="cv" width="960" height="492"></canvas>
+      <div class="choices" id="choices" hidden></div>
+      <button type="button" id="tapPad" hidden>Tap here, or press space</button>
+      <div class="stage-tools">
+        <button type="button" class="small" id="replayBtn" hidden>Hear it again</button>
+        <span class="opts" id="modOpts"></span>
+      </div>
+    </section>
+
+    <aside class="side">
+      <div class="row">
+        <button type="button" class="primary big" id="playBtn">Start</button>
+        <button type="button" id="endBtn" hidden>End session</button>
+      </div>
+      <div class="card">
+        <div class="eyebrow">Your energy this session</div>
+        <div class="meterbox thin" role="progressbar" aria-label="Estimated energy" aria-valuemin="0" aria-valuemax="100" id="energyBar"><div id="energyFill"></div></div>
+        <div id="sessLine">No session yet today.</div>
+      </div>
+      <div class="card">
+        <div class="level-row"><span class="eyebrow" id="levelNum">Level 1</span><span class="eyebrow" id="limitOut"></span></div>
+        <div id="levelName"></div>
+        <div class="meterbox" role="progressbar" aria-label="Progress to next level" aria-valuemin="0" aria-valuemax="100" id="readyBar"><div id="readyFill"></div></div>
+        <div id="coach">Pick an instrument, then press Start.</div>
+        <div class="row" style="margin-top:8px"><button type="button" class="small" id="easierBtn">Make it easier</button><button type="button" class="small" id="harderBtn">Skip ahead</button></div>
+      </div>
+      <div class="card"><div class="eyebrow">Instant feedback</div><div id="feedback" role="status"></div></div>
+      <div class="stats">
+        <div class="stat"><b id="sAcc">0%</b><span>last 20</span></div>
+        <div class="stat"><b id="sStreak">0</b><span>streak</span></div>
+        <div class="stat"><b id="sRt">0.0</b><span id="sRtLabel">sec to answer</span></div>
+      </div>
+      <div class="card weak"><div class="eyebrow">What the coach is leaning on</div><ul id="weakList"></ul></div>
+      <div class="opts">
+        <label for="optNames"><input type="checkbox" id="optNames" checked> Show note names</label>
+        <button type="button" class="small" id="resetBtn">Reset this instrument</button>
+      </div>
+      <div class="help">
+        <p id="helpText"></p>
+        <p><strong>How it decides:</strong> no dice. The next exercise is always the item or move with the largest need score (low knowledge, weak move, not seen lately), so the same results always give the same lesson. Knowledge fades if you stay away, so old material comes back.</p>
+        <p><strong>Drums</strong> have their own page, Kit Coach, with your kit drawn out.</p>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<script>
+/*__BAND_COACH_JS__*/
+</script>
+</body></html>
