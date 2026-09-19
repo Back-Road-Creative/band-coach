@@ -8,10 +8,6 @@
 // test, which is exactly the kind of fragile, environment-dependent
 // assertion this suite avoids.
 //
-// The document-head assertions that depend on fixing E1/E2 (no <link>, no
-// http(s) URL in a src/href attribute, </title> before </head>) are added
-// in the next commit alongside that fix — see tests/characterization/load.test.mjs
-// and the commit that removes the Google Fonts request.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, existsSync, readdirSync } from 'node:fs';
@@ -28,10 +24,21 @@ test('build produces exactly one file in dist/', async () => {
   assert.deepEqual(entries, ['band-coach.html'], 'build should emit exactly one file');
 });
 
-test('the built page has exactly one inline script and no external script', async () => {
+test('the built page is one inlined document with no external refs', async () => {
   await build();
   const html = readFileSync(HTML_PATH, 'utf8');
 
   assert.equal((html.match(/<script\b/g) || []).length, 1, 'exactly one <script');
   assert.doesNotMatch(html, /<script[^>]*\bsrc=/i, 'no src= on the script tag');
+  assert.doesNotMatch(html, /<link\b/i, 'no <link> tags');
+  assert.doesNotMatch(html, /@import/i, 'no CSS @import');
+  assert.doesNotMatch(
+    html,
+    /\b(?:src|href)\s*=\s*["'](?:https?:)?\/\//i,
+    'no http(s) URL inside a src/href attribute'
+  );
+
+  const titleIdx = html.indexOf('</title>');
+  const headIdx = html.indexOf('</head>');
+  assert.ok(titleIdx !== -1 && headIdx !== -1 && titleIdx < headIdx, '</title> appears before </head>');
 });

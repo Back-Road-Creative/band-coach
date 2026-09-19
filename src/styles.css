@@ -2,8 +2,8 @@
   :root {
     --ground: #0a0d14; --panel: #121726; --panel-2: #1a2033; --line: #2a3350;
     --text: #e9edf6; --muted: #93a0bd; --accent: #2f93ee; --good: #5be08a; --warn: #f3c52f; --bad: #ff6b5e;
-    --display: "Barlow Condensed", "Arial Narrow", "Helvetica Neue", Arial, sans-serif;
-    --body: "Barlow", "Segoe UI", system-ui, -apple-system, Arial, sans-serif;
+    --display: "Arial Narrow", "Roboto Condensed", "Segoe UI", system-ui, sans-serif;
+    --body: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   }
   * { box-sizing: border-box; }
   [hidden] { display: none !important; }
