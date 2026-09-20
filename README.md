@@ -4,23 +4,25 @@ One coach, many instruments. Band Coach listens through a microphone or a MIDI k
 every next exercise from your own results, and watches your energy so practice stays fresh.
 Free, no account, and your sound never leaves your computer.
 
-**Status: pre-release.** The app is developed as a source tree under `src/` and built into a single
-file, `dist/band-coach.html` — the same one-file-download shape as the original hand-edited page.
-Known judging flaws are being fixed before the first public release.
-
 Band Coach hears pitch and timing. It cannot see posture, breath, bowing or hand position — use a
 teacher or video for those.
 
-## Run it
+## Get it
 
-```
-npm ci
-npm run build
-```
+Download this one file and double-click it:
 
-Then open `dist/band-coach.html` in Chrome or Edge (double-click). That's the one file a learner
-downloads and runs — everything else under `src/` is only needed to build it. Microphone
-instruments ask for permission; a MIDI keyboard is optional. If you have more than one input
+https://github.com/Back-Road-Creative/band-coach/releases/latest/download/band-coach.html
+
+That is the whole app — one page, nothing to install, no account, and it keeps working with the
+network off. Open it in Chrome or Edge. Microphone instruments ask for permission the first time;
+a MIDI keyboard is optional. To put it away, delete the file.
+
+If your microphone or keyboard is not being heard, the next two sections are the ones to read.
+Everything from "Build it from source" down is for people working on the app itself.
+
+## Setting up your input
+
+If you have more than one input
 (e.g. an audio interface), pick it from the input list next to Connect. "Check my microphone"
 listens for 3 seconds of quiet and tunes the listening thresholds to your room and hardware
 instead of a one-size-fits-all level, including the level the pitch detector itself gates on; a
@@ -36,6 +38,20 @@ page receives, even with no exercise running — useful for telling "the app can
 apart from "the app sees it but has nothing to judge right now". "MIDI details" opens a readout of
 every input's name, connection state and the last few raw messages heard, for tracking down a
 silent keyboard on your own machine.
+
+## Build it from source
+
+Everything from here down is for building Band Coach yourself or working on it. If you only want
+to practise, you are done above.
+
+```
+npm ci
+npm run build
+```
+
+That writes the same page to `dist/band-coach.html`. `npm run build -- --release` writes the
+minified one attached to each release, `dist/release/band-coach.html` (`build/build.mjs:8-9`).
+Everything under `src/` is only needed to build it.
 
 ## Test
 
