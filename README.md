@@ -79,10 +79,12 @@ variable, a Playwright headless-shell install under
 tests fail loudly (never skip) when no browser turns up.
 
 `npm test` caps how many test files (and therefore how many Chromiums) run at
-once: a quiet box keeps one per core, but past that the cap backs off as the
-box's load average climbs, so the suite can't launch more browsers than the
-machine can actually boot in time (`computeTestConcurrency` in
-`tests/helpers/browser.mjs`). If a box is loaded by something the load
+once: a quiet box keeps node's own default (one less than the core count), but
+past that the cap backs off as the box's load average climbs, so the suite
+can't launch more browsers than the machine can actually boot in time
+(`computeTestConcurrency` in `tests/helpers/browser.mjs`). A quiet box is
+deliberately left exactly as it was — raising concurrency even by one starves
+the real-time audio tests. If a box is loaded by something the load
 average doesn't capture, set `BAND_COACH_TEST_CONCURRENCY` to force a lower
 number.
 
