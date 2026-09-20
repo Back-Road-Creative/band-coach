@@ -94,7 +94,11 @@ function spawnBrowser(bin, userDataDir, extraArgs = []) {
     'about:blank',
   ];
   if (process.env.CI) args.splice(1, 0, '--no-sandbox');
-  const child = spawn(bin, args, { stdio: ['ignore', 'ignore', 'pipe'] });
+  // Its own process group (detached), so cleanup can kill the renderer, GPU
+  // and zygote processes too, not just the launched parent: those are
+  // separate processes that a plain child.kill() never touches, and they
+  // survive as orphans (101 observed piled up on the box before this fix).
+  const child = spawn(bin, args, { stdio: ['ignore', 'ignore', 'pipe'], detached: true });
   return new Promise((resolve, reject) => {
     let buf = '';
     const onErr = (err) => reject(err);
@@ -145,6 +149,37 @@ export async function launchPage(htmlPath, options = {}) {
   const userDataDir = mkdtempSync(join(tmpdir(), 'band-coach-cdp-'));
   const extraArgs = fakeAudioFile ? [`--use-file-for-fake-audio-capture=${fakeAudioFile}`] : [];
   const { child, browserWsUrl } = await spawnBrowser(bin, userDataDir, extraArgs);
+
+  // child.pid is the process GROUP id too, since spawnBrowser starts it
+  // detached (group leader). Kills the whole group, not just this one
+  // process — a surviving renderer/GPU/zygote process would otherwise
+  // recreate userDataDir the instant rmSync below removes it.
+  function killGroup() {
+    try {
+      process.kill(-child.pid, 'SIGKILL');
+    } catch (e) {
+      // already gone
+    }
+  }
+
+  // Anything below this point can throw before launchPage returns a handle
+  // whose close() the caller could invoke — a WebSocket that never opens, a
+  // CDP command that rejects, a page that never boots. Without this, that
+  // exception leaves the just-spawned browser (and its whole group) running
+  // forever with nothing left holding a reference to kill it.
+  try {
+    return await finishLaunch();
+  } catch (e) {
+    killGroup();
+    try {
+      rmSync(userDataDir, { recursive: true, force: true });
+    } catch (e2) {
+      // best-effort cleanup
+    }
+    throw e;
+  }
+
+  async function finishLaunch() {
   const browserWs = new WebSocket(browserWsUrl);
   await waitForOpen(browserWs);
   const browser = new DevtoolsClient(browserWs);
@@ -208,15 +243,26 @@ export async function launchPage(htmlPath, options = {}) {
     });
   }
 
-  function nextLoad() {
-    return new Promise((resolve) => {
+  // Timed, not open-ended: under heavy load (e.g. this box's own pile of
+  // stray processes competing for CPU/memory) Chromium can spawn and open
+  // its DevTools socket fine but never actually fire the page's load event —
+  // and with no deadline here, `await nextLoad()` then blocks forever at 0%
+  // CPU (observed: an npm test run hanging 27+ minutes with nothing to show
+  // for it, instead of failing loudly in seconds).
+  function nextLoad(timeoutMs = 30000) {
+    return new Promise((resolve, reject) => {
       const handler = (msg) => {
         if (msg.method === 'Page.loadEventFired') {
           page.listeners.delete(handler);
+          clearTimeout(timer);
           resolve();
         }
       };
       page.listeners.add(handler);
+      const timer = setTimeout(() => {
+        page.listeners.delete(handler);
+        reject(new Error(`timed out after ${timeoutMs}ms waiting for Page.loadEventFired`));
+      }, timeoutMs);
     });
   }
 
@@ -311,7 +357,7 @@ export async function launchPage(htmlPath, options = {}) {
       // already gone
     }
     browserWs.close();
-    child.kill('SIGKILL');
+    killGroup();
     try {
       rmSync(userDataDir, { recursive: true, force: true });
     } catch (e) {
@@ -329,5 +375,7 @@ export async function launchPage(htmlPath, options = {}) {
     exceptions,
     requests,
     binary: bin,
+    pid: child.pid,
   };
+  }
 }
