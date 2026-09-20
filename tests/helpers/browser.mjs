@@ -4,8 +4,44 @@
 // for the precedent this borrows its connection pattern from.
 import { spawn } from 'node:child_process';
 import { mkdtempSync, rmSync, existsSync, readdirSync } from 'node:fs';
-import { tmpdir, homedir } from 'node:os';
+import { tmpdir, homedir, availableParallelism, loadavg } from 'node:os';
 import { join } from 'node:path';
+
+// How many test FILES node:test may run at once — each file launches its own
+// Chromium, so this is really "how many browsers may boot at the same time".
+// With no cap that is NODE_DEFAULT_CONCURRENCY below, which is fine on a quiet
+// box but is exactly what turned a sibling suite's load into a wave of missed
+// 60s boot deadlines (three different characterization files, 2026-09-20 — see
+// tests/unit/test-concurrency.test.mjs). A box at or under its own core count
+// is quiet: keep node's own default, so neither a dev machine nor the small CI
+// runner changes behaviour at all. Past that, concurrency backs off
+// proportionally to how far over the box is loaded, never below 1.
+// BAND_COACH_TEST_CONCURRENCY overrides the computation outright for a box
+// that needs telling to go narrower than the formula would pick.
+//
+// node:test's undocumented-in-`node --help` default is availableParallelism()
+// MINUS ONE — measured on node v22.22.2, 12 cores: 11 files in flight with no
+// flag, 12 with --test-concurrency=12. Returning `cores` here would quietly
+// RAISE concurrency on every quiet box, which is the opposite of the point and
+// cost this change a CI run: on a 4-core runner it meant 4 browsers where node
+// would have used 3, and the extra contention showed up as a tuner test
+// reading 50 cents of spread on a steady 440Hz tone.
+export const NODE_DEFAULT_CONCURRENCY = cores => Math.max(1, cores - 1);
+
+export function computeTestConcurrency({ cores = availableParallelism(), load1 = loadavg()[0] } = {}) {
+  const override = Number(process.env.BAND_COACH_TEST_CONCURRENCY);
+  if (Number.isFinite(override) && override > 0) return Math.floor(override);
+  const base = NODE_DEFAULT_CONCURRENCY(cores);
+  if (!(load1 > cores)) return base;
+  return Math.max(1, Math.round((base * cores) / load1));
+}
+
+// Lets `node tests/helpers/browser.mjs` print the computed concurrency on its
+// own stdout, so package.json's test script can feed it to
+// `--test-concurrency` via command substitution without a second file.
+if (import.meta.url === `file://${process.argv[1]}`) {
+  console.log(computeTestConcurrency());
+}
 
 function findPlaywrightHeadlessShell() {
   const root = join(homedir(), '.cache', 'ms-playwright');
