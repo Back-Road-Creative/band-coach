@@ -106,6 +106,19 @@ test('the captured-melody checkbox is gated on customItem actually mapping this 
     'the optCustom checkbox must gate on hasMasteryScheme(mod), which asks customItem() directly');
 });
 
+// The checkbox and the dropdown are two halves of ONE feature: the capture
+// tool's "Practise on" list chooses where a captured melody goes, and the
+// per-instrument checkbox turns it on once you are there. Gating them on
+// different rules ships the feature broken in the visible direction —
+// the checkbox appears for an instrument the dropdown never offered.
+test('the capture tool\'s "Practise on" list is gated the same way the checkbox is', () => {
+  const src = readFileSync(APP_JS_PATH, 'utf8');
+  assert.doesNotMatch(src, /MOD_IDS\.filter\(m => \['kbd', 'gtr', 'bass', 'uke', 'voice', 'wind', 'harp'\]\.indexOf\(m\) >= 0\)/,
+    'the capTo dropdown must not hand-type the seven original ready instrument ids a third time');
+  assert.match(src, /MOD_IDS\.filter\(m => hasMasteryScheme\(m\)\)/,
+    'the capTo dropdown must offer exactly the mods hasMasteryScheme() accepts');
+});
+
 test('hasMasteryScheme agrees with itemIdForMidi for every mod id, including the six newly-ready instruments', () => {
   const src = readFileSync(APP_JS_PATH, 'utf8');
   assert.match(src, /function hasMasteryScheme\(mod\) \{/, 'app.js must define hasMasteryScheme(mod)');
