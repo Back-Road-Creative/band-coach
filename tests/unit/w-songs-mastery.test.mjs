@@ -81,6 +81,40 @@ test('customItem in src/app.js delegates to itemIdForMidi (single source of trut
     'customItem must delegate to itemIdForMidi rather than re-implementing the instrument-id scheme');
 });
 
+test('tickGroove folds to pitch class for every fretted instrument, not just gtr/bass/uke', () => {
+  const src = readFileSync(APP_JS_PATH, 'utf8');
+  // gtr/bass/uke are mic-only fretted instruments: the mic can hear a
+  // pitch but not which string produced it, so a groove/rhythm take is
+  // scored by pitch class regardless of octave. mandolin, banjo-5-string,
+  // bass-5-string, ukulele-baritone and ukulele-low-g are wired through the
+  // identical stringLevels() curriculum and the same mic ambiguity, so the
+  // old hand-typed ['gtr', 'bass', 'uke'] list silently scored a correct
+  // take on those five as wrong. The predicate must be derived from the
+  // registry's `fretted` flag instead of a second hand-typed instrument-id
+  // list.
+  assert.doesNotMatch(src, /const fold = \['gtr', 'bass', 'uke'\]\.indexOf\(mod\)/,
+    'tickGroove must not hand-type a fretted-instrument id list a second time');
+  assert.match(src, /const fold = \(instrumentById\[mod\] && instrumentById\[mod\]\.fretted\) \|\| task\.els\.some\(e => e\.info\.anywhere\);/,
+    'tickGroove\'s fold predicate must derive from instrumentById[mod].fretted');
+});
+
+test('the captured-melody checkbox is gated on customItem actually mapping this mod, not a hand-typed list', () => {
+  const src = readFileSync(APP_JS_PATH, 'utf8');
+  assert.doesNotMatch(src, /\['kbd', 'gtr', 'bass', 'uke', 'voice', 'wind', 'harp'\]\.indexOf\(mod\) >= 0\) chk\('optCustom'/,
+    'the optCustom checkbox must not hand-type the seven original ready instrument ids a second time');
+  assert.match(src, /if \(MODS\[mod\] && DB\.custom && DB\.custom\.length && hasMasteryScheme\(mod\)\) chk\('optCustom'/,
+    'the optCustom checkbox must gate on hasMasteryScheme(mod), which asks customItem() directly');
+});
+
+test('hasMasteryScheme agrees with itemIdForMidi for every mod id, including the six newly-ready instruments', () => {
+  const src = readFileSync(APP_JS_PATH, 'utf8');
+  assert.match(src, /function hasMasteryScheme\(mod\) \{/, 'app.js must define hasMasteryScheme(mod)');
+  for (const id of ['mandolin', 'banjo-5-string', 'bass-5-string', 'ukulele-baritone', 'ukulele-low-g', 'mallet-percussion']) {
+    const rec = INSTRUMENTS.find(r => r.id === id);
+    assert.notEqual(itemIdForMidi(id, rec.range.low, {}), null, `${id}: itemIdForMidi should map its own range.low`);
+  }
+});
+
 test('voice maps to a scale degree from the preferred tonic', () => {
   assert.equal(itemIdForMidi('voice', 48, { voice: 'low' }), 'v0'); // low Do = C3 = 48
   assert.equal(itemIdForMidi('voice', 55, { voice: 'mid' }), 'v0'); // mid Do = G3 = 55
