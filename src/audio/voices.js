@@ -47,23 +47,45 @@ const BRIGHTNESS = {
 const DEFAULT_BRIGHTNESS = 0.4;
 const BRASS_BRIGHTNESS = 0.9;
 
-// The shortest a rendered buffer is allowed to be per recipe, in seconds --
-// long enough for the recipe's own decay/release shape to read as that
-// instrument rather than being clipped short by a very brief `dur` request.
-const MIN_SECONDS = { pluck: 0.5, struck: 0.9, sustain: 0.18, brass: 0.18 };
+// A rendered buffer is never longer than the `seconds` a caller actually
+// asked for (src/app.js `tone()` sizes the mic's deaf window off the
+// buffer's own length -- see F5, src/audio/deaf-window.js -- so a floor
+// bigger than a real short note, e.g. a fretted play-along's 0.05-0.12s
+// notes, src/ui/editor.js:450 and src/ui/songs.js:302, would make the app
+// stop listening for longer than the arrangement's own note). This
+// EPSILON_SECONDS floor only guards against a zero/negative `seconds`
+// producing a zero-length buffer; it is far below the shortest real
+// duration any caller passes. Instrument character comes from each
+// recipe's relative partial mix and decay/attack SHAPE, not from an
+// absolute minimum ring-out time -- a short arranged note legitimately
+// sounds like a short, damped pluck/strike/sustain, the way a real
+// instrument stopped early would.
+const EPSILON_SECONDS = 0.01;
 
 export function recipeForFamily(family) {
   return FAMILY_RECIPE[family] || 'sustain';
 }
 
 // The ACTUAL length (seconds) of the buffer renderVoice() will produce for
-// this family and requested `seconds`. src/app.js `tone()` calls this (or
-// just reads the rendered buffer's own length) to size the deaf window to
-// the voice's real audible tail, never just the nominal `dur` argument.
+// the requested `seconds`. src/app.js `tone()` calls this (or just reads
+// the rendered buffer's own length) to size the deaf window to the voice's
+// real audible tail -- which by construction is never longer than
+// `seconds` itself, matching the pre-synthesis behaviour where the deaf
+// window was sized off the caller's own `dur`.
 export function voiceDurationSeconds(family, seconds) {
-  const recipe = recipeForFamily(family);
-  const floor = MIN_SECONDS[recipe] !== undefined ? MIN_SECONDS[recipe] : MIN_SECONDS.sustain;
-  return Math.max(seconds || 0, floor);
+  return Math.max(seconds || 0, EPSILON_SECONDS);
+}
+
+// Ramps the LAST `seconds` of a buffer down to 0 -- used by the pluck/struck
+// recipes so cutting the buffer off at the caller's requested duration (no
+// floor to let the natural decay finish) never produces an audible click at
+// the boundary. Fits inside the existing buffer; never extends it.
+function applyTailFade(buf, sampleRate, seconds) {
+  const fadeSamples = Math.min(buf.length, Math.round(seconds * sampleRate));
+  const start = buf.length - fadeSamples;
+  for (let i = 0; i < fadeSamples; i++) {
+    buf[start + i] *= 1 - i / fadeSamples;
+  }
 }
 
 function makeBuffer(seconds, sampleRate) {
@@ -102,6 +124,10 @@ export function renderPluck(freq, sampleRate, seconds, volume = 0.22) {
     }
     buf[i] = s * volume * onsetRamp(t, 0.002);
   }
+  // A short note is cut off before the natural exponential decay reaches
+  // silence (no floor extends it to let that finish) -- fade the tail
+  // instead of truncating hard, so ending the buffer never clicks.
+  applyTailFade(buf, sampleRate, Math.min(0.01, seconds * 0.3));
   return buf;
 }
 
@@ -118,6 +144,7 @@ export function renderStruck(freq, sampleRate, seconds, volume = 0.22) {
     }
     buf[i] = s * volume * onsetRamp(t, 0.004);
   }
+  applyTailFade(buf, sampleRate, Math.min(0.01, seconds * 0.3));
   return buf;
 }
 
@@ -125,8 +152,14 @@ export function renderStruck(freq, sampleRate, seconds, volume = 0.22) {
 // short release. `brightness` controls how much upper-partial energy is
 // mixed in (brass uses a much higher value than the others).
 export function renderSustain(freq, sampleRate, seconds, volume = 0.22, brightness = DEFAULT_BRIGHTNESS) {
-  const attack = 0.05, release = 0.08;
-  const dur = Math.max(seconds, attack + release + 0.05);
+  const dur = Math.max(seconds, EPSILON_SECONDS);
+  // Attack/release scale down for a short note rather than imposing an
+  // absolute floor: a fixed 0.05s attack + 0.08s release used to force
+  // every sustained note to at least 0.18s regardless of what was asked
+  // for, which is exactly the deaf-window-outlives-the-note regression
+  // this module now guards against (see voiceDurationSeconds above).
+  const attack = Math.min(0.05, dur * 0.3);
+  const release = Math.min(0.08, dur * 0.3);
   const buf = makeBuffer(dur, sampleRate);
   const gains = normalize([1, brightness / 2, brightness / 3, brightness / 4]);
   const releaseStart = dur - release;

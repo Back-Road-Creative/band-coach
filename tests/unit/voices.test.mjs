@@ -44,11 +44,41 @@ test('recipeForFamily maps every schema family to a recipe, with a safe fallback
   assert.equal(recipeForFamily(undefined), 'sustain', 'missing family falls back to sustain');
 });
 
-test('voiceDurationSeconds never shrinks the requested duration, and floors short requests per recipe', () => {
-  assert.ok(voiceDurationSeconds('fretted', 0.05) >= 0.5, 'pluck has a floor long enough to read as plucked');
-  assert.ok(voiceDurationSeconds('keys', 0.05) >= 0.9, 'struck has a floor long enough to read as struck');
+test('voiceDurationSeconds never shrinks the requested duration, and never grows it past what a real caller asked for', () => {
+  // F5 (deaf window) regression guard: src/ui/songs.js:302 and
+  // src/ui/editor.js:450 pass a song's own note duration (as short as 0.05s
+  // in the editor, 0.12s on a bpm-driven song phrase) straight into
+  // src/app.js `tone()`, which sizes the mic's deaf window off the RENDERED
+  // BUFFER's length. A family floor bigger than that requested duration
+  // (pluck used to floor at 0.5s, struck at 0.9s) silently makes the deaf
+  // window outlive the note the arrangement chose to be short, so on a
+  // fretted play-along the app stops listening for up to ~3 eighth notes
+  // after a short note plays. The floor must never exceed `seconds`.
+  for (const [family, seconds] of [['fretted', 0.05], ['fretted', 0.12], ['keys', 0.05], ['keys', 0.12], ['bowed', 0.05], ['brass', 0.05]]) {
+    const dur = voiceDurationSeconds(family, seconds);
+    assert.ok(dur <= seconds + 1e-9, `${family} at ${seconds}s: voiceDurationSeconds returned ${dur}, which is longer than the note the caller asked for`);
+  }
   assert.equal(voiceDurationSeconds('voice', 2), 2, 'a long request is never shortened');
   assert.equal(voiceDurationSeconds('wind', 0), voiceDurationSeconds('wind', 0), 'deterministic');
+});
+
+test('renderVoice buffer length (which drives the deaf window) never exceeds the requested duration, for every recipe', () => {
+  // Direct regression test on the actual rendered buffer, not just the pure
+  // duration helper: src/app.js `tone()` opens the deaf window for
+  // `samples.length / sampleRate`, so THIS is the number that must not
+  // exceed the caller's requested `dur`. Shortest real durations observed:
+  // src/ui/editor.js:450 `Math.max(0.05, ...)`, src/ui/songs.js:302
+  // `Math.max(0.12, ...)`.
+  for (const family of ['fretted', 'keys', 'bowed', 'wind', 'free-reed', 'voice', 'brass', 'percussion']) {
+    for (const requested of [0.05, 0.12]) {
+      const buf = renderVoice(family, 220, SR, requested, 0.22);
+      const seconds = buf.length / SR;
+      assert.ok(
+        seconds <= requested + 1e-6,
+        `${family} at requested dur ${requested}s rendered ${seconds}s of audio -- the deaf window would outlive the note`
+      );
+    }
+  }
 });
 
 test('renderVoice never throws on an unregistered family and still produces sound', () => {

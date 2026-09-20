@@ -147,8 +147,14 @@ learners tune to it. Render functions are pure (`(family, freq, sampleRate, seco
 Float32Array`), which is also what lets `tests/unit/voices.test.mjs` assert pitch accuracy with
 the app's own pitch detector (`src/audio/yin.js`) directly in Node, no browser required.
 `tone()` opens the mic's deaf window (`src/audio/deaf-window.js`) for exactly the rendered
-buffer's own length, so a voice with a longer tail than the old fixed tone still keeps the app
-from hearing its own reference note.
+buffer's own length. Crucially, a rendered buffer is never LONGER than the `dur` a caller asked
+for (`voiceDurationSeconds()`'s only floor, `EPSILON_SECONDS`, is far below the shortest real note
+any caller passes — 0.05s on `src/ui/editor.js`'s piano roll, 0.12s on `src/ui/songs.js`'s
+bpm-driven play-along): instrument character comes from each recipe's partial mix and decay
+shape, not from padding a short note out to a longer minimum ring time. A fixed floor that did
+that once made a fretted play-along's short notes hold the mic deaf well past the note itself,
+silently swallowing whatever the learner played next — `tests/unit/voices.test.mjs` guards
+against that regression directly on the rendered buffer length.
 
 ## Rhythm vocabulary
 
