@@ -17,9 +17,18 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { HTML_PATH } from '../helpers/html-path.mjs';
-import { launchPage } from '../helpers/browser.mjs';
+import { launchPage, effectiveWaitMs } from '../helpers/browser.mjs';
 
 const htmlPath = HTML_PATH;
+
+// A manual `while (Date.now() - start < N)` poll loop is NOT routed through
+// `page.waitFor()`'s own floor, so a literal budget here silently ignores
+// `WAIT_FLOOR_MS`/`BAND_COACH_WAIT_FLOOR_MS` the way the old fixed 30s boot
+// deadline used to (tests/helpers/browser.mjs) -- exactly the bug class that
+// made test 2 flake red on a slower CI runner. Every deadline in this file
+// is derived from `effectiveWaitMs()` instead of a literal so CI gets the
+// same floor `waitFor()` itself would give it.
+const POLL_BUDGET_MS = effectiveWaitMs(6000);
 
 // Captures every CanvasRenderingContext2D.fillText call with a timestamp
 // (performance.now(), so later checks need no clock sync with Node), the
@@ -91,7 +100,7 @@ async function openTuner(page) {
     "(() => { const s = document.getElementById('optTune'); s.value = 'uke'; s.dispatchEvent(new Event('change')); })()"
   );
   await page.evaluate("document.getElementById('ioBtn').click()");
-  await page.waitFor("document.getElementById('ioBtn').hidden === true", 5000);
+  await page.waitFor("document.getElementById('ioBtn').hidden === true", effectiveWaitMs(5000));
 }
 
 // Simulates a tap on tuner row `idx` (0-based, top to bottom) by dispatching
@@ -144,11 +153,11 @@ test('a plucked note that decays into silence keeps being DRAWN for at least ~1s
   // Gate on the DRAWN "A" appearing at all, not on any debug hook -- a hook
   // that does not exist (or lies) must not be able to get this test past its
   // starting line.
-  await page.waitFor("(window.__bcCanvasText || []).some((e) => e.text === 'A')", 5000);
+  await page.waitFor("(window.__bcCanvasText || []).some((e) => e.text === 'A')", effectiveWaitMs(5000));
 
   const samples = [];
   const start = Date.now();
-  while (Date.now() - start < 6000) {
+  while (Date.now() - start < POLL_BUDGET_MS) {
     const drawnA = await drawnRecently(page, 'A');
     // The hook (window.__coach.tuner()) is used ONLY as a secondary signal
     // (ageMs, to corroborate the silence really was silence); it is guarded
@@ -188,13 +197,22 @@ test('a steady in-tune tone reaches the "holding" (tuned) state', async (t) => {
   await openTuner(page);
 
   const start = Date.now();
-  let holding = false;
-  while (Date.now() - start < 6000) {
+  let holding = false, last = null;
+  const centsSeen = [];
+  while (Date.now() - start < POLL_BUDGET_MS) {
     const st = await page.evaluate('window.__coach.tuner()');
+    last = st;
+    if (st && typeof st.cents === 'number') centsSeen.push(st.cents);
     if (st && st.phase === 'holding') { holding = true; break; }
     await new Promise((r) => setTimeout(r, 100));
   }
-  assert.ok(holding, 'a steady 440Hz tone should reach the "holding" (tuned) state on the uke A4 string');
+  const spread = centsSeen.length ? Math.max(...centsSeen) - Math.min(...centsSeen) : null;
+  assert.ok(
+    holding,
+    'a steady 440Hz tone should reach the "holding" (tuned) state on the uke A4 string -- ' +
+      `last seen: phase=${last && last.phase}, holdMs=${last && last.holdMs}, cents=${last && last.cents}, ` +
+      `cents spread over the run=${spread}`
+  );
 });
 
 test('locking a string keeps the selection even when a nearer pitch plays, and the lock is DRAWN', async (t) => {
@@ -215,7 +233,7 @@ test('locking a string keeps the selection even when a nearer pitch plays, and t
   // its starting line either.
   await page.waitFor(
     `(window.__bcCanvasText || []).slice(-60).some((e) => e.text.indexOf('LOCKED') !== -1)`,
-    5000
+    effectiveWaitMs(5000)
   );
 
   // Let real pitch detection run for a couple of seconds with the C4 tone.
