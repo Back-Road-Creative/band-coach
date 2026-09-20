@@ -23,7 +23,9 @@ downloads and runs — everything else under `src/` is only needed to build it. 
 instruments ask for permission; a MIDI keyboard is optional. If you have more than one input
 (e.g. an audio interface), pick it from the input list next to Connect. "Check my microphone"
 listens for 3 seconds of quiet and tunes the listening thresholds to your room and hardware
-instead of a one-size-fits-all level; a small meter shows the live input level.
+instead of a one-size-fits-all level, including the level the pitch detector itself gates on; a
+small meter shows the live input level. An instrument plugged into only one channel of a
+2-channel interface is summed into the listening path rather than silenced.
 
 Press "Connect MIDI" to use a keyboard. The status line only says a device is connected once the
 page has actually opened it, so "Keystation found. Press any key on it." means the keyboard is

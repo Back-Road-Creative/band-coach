@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { noiseFloor, gatesFor, meterLevel, DEFAULT_GATES } from '../../src/audio/levels.js';
+import { noiseFloor, gatesFor, meterLevel, DEFAULT_GATES, releaseFloor } from '../../src/audio/levels.js';
 
 // ---------- noiseFloor ----------
 
@@ -97,4 +97,27 @@ test('meterLevel increases monotonically with rms', () => {
   const c = meterLevel(0.2);
   assert.ok(a < b);
   assert.ok(b < c);
+});
+
+// ---------- releaseFloor (VERIFIED DEFECT 2: src/app.js:650's hard-coded
+// 0.006 release RMS ignored the calibrated gates entirely) ----------
+
+test('releaseFloor equals EXACTLY today\'s hard-coded 0.006 at the uncalibrated default gates', () => {
+  assert.equal(releaseFloor(DEFAULT_GATES), 0.006);
+});
+
+test('releaseFloor scales with a calibrated pitch gate, keeping the same ratio', () => {
+  const quiet = gatesFor(0.002); // a quiet mic lowers gates.pitch below default
+  const noisy = gatesFor(0.02); // a noisy mic/room raises it above default
+  assert.ok(Math.abs(releaseFloor(quiet) / quiet.pitch - 0.75) < 1e-9);
+  assert.ok(Math.abs(releaseFloor(noisy) / noisy.pitch - 0.75) < 1e-9);
+  assert.ok(releaseFloor(quiet) < 0.006, 'a quiet mic must get a LOWER release floor than the old hard-coded constant');
+  assert.ok(releaseFloor(noisy) > 0.006, 'a noisy room must get a HIGHER release floor than the old hard-coded constant');
+});
+
+test('releaseFloor falls back to the default pitch gate on a missing/malformed gates object', () => {
+  assert.equal(releaseFloor(null), 0.006);
+  assert.equal(releaseFloor(undefined), 0.006);
+  assert.equal(releaseFloor({}), 0.006);
+  assert.equal(releaseFloor({ pitch: NaN }), 0.006);
 });

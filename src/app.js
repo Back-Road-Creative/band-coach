@@ -12,7 +12,7 @@ import { recordError, getErrors } from './core/error-log.js';
 import { yin } from './audio/yin.js';
 import { createPitchNode } from './audio/pitch-worklet.js';
 //
-import { noiseFloor, gatesFor, meterLevel } from './audio/levels.js';
+import { noiseFloor, gatesFor, meterLevel, releaseFloor } from './audio/levels.js';
 import { diagnoseInput } from './audio/input-diagnosis.js';
 import { createOnsetDetector } from './audio/onset.js';
 //
@@ -96,11 +96,24 @@ import { register as registerPlayalong } from './ui/playalong.js';
   // ---------- audio ----------
   let actx = null, micStream = null, anTime = null, anFreq = null, micReady = false, testNodes = [];
   let gates = gatesFor(null), micDevices = [];
+  // Diagnostic snapshot of monoSum()'s routing decision (RMS + gains), read-only, exposed on the debug hook.
+  let lastMonoRoute = null;
   // E3: pitch tracking moved off the main thread onto an AudioWorklet
   // (src/audio/pitch-worklet.js) when available; pitchWorkletNode stays null
   // (and listen() below keeps running its setInterval sampling unchanged) on
   // any browser/context where AudioWorklet is missing or fails to load.
-  let pitchWorkletNode = null, lastAudioSource = null, lastWorkletPitchAt = 0, pitchWorkletPromise = null, lastWorkletRangeSent = null, lastWorkletFrameSize = null;
+  let pitchWorkletNode = null, lastAudioSource = null, lastWorkletPitchAt = 0, pitchWorkletPromise = null, lastWorkletRangeSent = null, lastWorkletFrameSize = null, lastWorkletGateSent = null;
+  // VERIFIED DEFECT 1 (mic-gate-and-capture): setting `gates` on the main
+  // thread (calibrateNoiseFloor below) used to never reach the worklet's own
+  // rmsGate, which was fixed forever at whatever gates.pitch was when
+  // ensurePitchWorklet() first built it. This is the ONE place `gates` is
+  // reassigned and the worklet told about it, mirroring setMod's existing
+  // range/frameSize re-send (see below) -- same port-message shape, same
+  // applyGateMessage handler in src/audio/pitch-worklet.js.
+  function applyGates(newGates) {
+    gates = newGates;
+    if (pitchWorkletNode && gates.pitch !== lastWorkletGateSent) { lastWorkletGateSent = gates.pitch; pitchWorkletNode.port.postMessage({ type: 'gate', rmsGate: gates.pitch }); }
+  }
   // Returns a promise that resolves once the worklet is wired (or has
   // failed) so a caller that needs the real pipeline settled first — the
   // testPluck() debug hook below, so its synthetic timings are not a race
@@ -112,8 +125,14 @@ import { register as registerPlayalong } from './ui/playalong.js';
     if (!actx) return Promise.resolve(null);
     const M0 = MODS[mod], range0 = { fmin: (M0 && M0.fmin) || FALLBACK_RANGE.fmin, fmax: (M0 && M0.fmax) || FALLBACK_RANGE.fmax };
     const frameSize0 = frameSizeForInstrument(instrumentById[mod], actx.sampleRate);
-    pitchWorkletPromise = createPitchNode(actx, { fmin: range0.fmin, fmax: range0.fmax, rmsGate: gates.pitch, frameSize: frameSize0 }).then(node => {
-      pitchWorkletNode = node; lastWorkletRangeSent = range0; lastWorkletFrameSize = frameSize0;
+    const gate0 = gates.pitch;
+    pitchWorkletPromise = createPitchNode(actx, { fmin: range0.fmin, fmax: range0.fmax, rmsGate: gate0, frameSize: frameSize0 }).then(node => {
+      pitchWorkletNode = node; lastWorkletRangeSent = range0; lastWorkletFrameSize = frameSize0; lastWorkletGateSent = gate0;
+      // calibrateNoiseFloor() can finish (or run again) while addModule() was
+      // still loading -- gates.pitch may already have moved past what this
+      // node was built with by the time the promise settles, in which case
+      // applyGates() above found no worklet yet to post to. Catch up here.
+      if (gates.pitch !== gate0) { lastWorkletGateSent = gates.pitch; node.port.postMessage({ type: 'gate', rmsGate: gates.pitch }); }
       if (lastAudioSource) lastAudioSource.connect(node);
       const mute = actx.createGain(); mute.gain.value = 0; node.connect(mute); mute.connect(actx.destination); // keeps the worklet in the live render graph without making sound
       node.port.onmessage = ev => {
@@ -156,14 +175,69 @@ import { register as registerPlayalong } from './ui/playalong.js';
   // harmonics of a strong peak out of the spectrum before folding to
   // pitch classes, fixing flaw F6 (a single note's own harmonics reading
   // as another note). See that module for detail.
+  // VERIFIED DEFECT 3 (mic-gate-and-capture): a guitar/instrument plugged
+  // into only one side of a 2-channel audio interface used to be handed to
+  // the browser's own default stereo->mono downmix, whatever that happens to
+  // be -- measured (headless Chromium, fake device, no channelCount
+  // constraint) to SILENCE a signal that exists only on the right channel
+  // entirely, not merely halve it. `channelCount: { ideal: 2 }` is an ideal,
+  // never `exact`, so no mono-only device is rejected; monoSum() below then
+  // sums L+R explicitly in the graph so the app's own behaviour never
+  // depends on the browser's implicit downmix.
+  //
+  // Adaptive mono sum: two hardware behaviours are both real and in tension
+  // here -- a genuinely one-sided interface (signal on exactly one channel,
+  // silence on the other) and an interface that duplicates one mono
+  // capsule's signal onto both channels identically. A FIXED 0.5/0.5 sum
+  // fixes the second case perfectly but leaves the first at half a true
+  // mono capture's level -- half level on an already-quiet instrument can
+  // still sit under the gate, so that "fix" is a defect of its own, not a
+  // tradeoff. This routes each case correctly instead of guessing: a brief
+  // per-channel RMS reading, taken after a short settle window and then
+  // re-checked periodically (a cable can be re-patched mid-session), decides
+  // whether one channel is carrying the whole signal (route it alone, at
+  // unity gain -- the same level a true mono capture of it would read) or
+  // both are carrying comparable energy (average them 0.5/0.5, exactly
+  // today's duplicated-mono behaviour, never doubled).
+  function monoSum(src) {
+    if (!src.channelCount || src.channelCount < 2) return src;
+    const splitter = actx.createChannelSplitter(2), sum = actx.createGain(), gL = actx.createGain(), gR = actx.createGain();
+    gL.gain.value = 0.5; gR.gain.value = 0.5; // starting point until the first measurement below routes it
+    const anL = actx.createAnalyser(), anR = actx.createAnalyser();
+    anL.fftSize = 1024; anR.fftSize = 1024;
+    src.connect(splitter); splitter.connect(gL, 0); splitter.connect(gR, 1); splitter.connect(anL, 0); splitter.connect(anR, 1);
+    gL.connect(sum); gR.connect(sum);
+    const bufL = new Float32Array(anL.fftSize), bufR = new Float32Array(anR.fftSize);
+    const chanRms = (an, buf) => { an.getFloatTimeDomainData(buf); let s = 0; for (let i = 0; i < buf.length; i++) s += buf[i] * buf[i]; return Math.sqrt(s / buf.length); };
+    // A channel routes out entirely when its RMS is under this fraction of
+    // the other's -- above ordinary channel-separation crosstalk, below a
+    // genuinely live channel's level.
+    const SILENT_RATIO = 0.1;
+    // Below this absolute RMS, both channels read as "nobody playing yet" --
+    // under levels.js's quietest calibrated gate (gatesFor(MIN_FLOOR) == 0.0045).
+    const MIN_MEASURABLE_RMS = 0.001;
+    function route() {
+      const rL = chanRms(anL, bufL), rR = chanRms(anR, bufR);
+      if (rL < MIN_MEASURABLE_RMS && rR < MIN_MEASURABLE_RMS) { lastMonoRoute = { rL, rR, gL: gL.gain.value, gR: gR.gain.value, t: actx.currentTime, skipped: true }; return; } // nothing playing yet -- keep the current routing rather than guess off noise
+      const at = actx.currentTime;
+      if (rL <= rR * SILENT_RATIO) { gL.gain.setTargetAtTime(0, at, 0.02); gR.gain.setTargetAtTime(1, at, 0.02); }
+      else if (rR <= rL * SILENT_RATIO) { gL.gain.setTargetAtTime(1, at, 0.02); gR.gain.setTargetAtTime(0, at, 0.02); }
+      else { gL.gain.setTargetAtTime(0.5, at, 0.02); gR.gain.setTargetAtTime(0.5, at, 0.02); }
+      lastMonoRoute = { rL, rR, gLTarget: gL.gain.value, gRTarget: gR.gain.value, t: at };
+    }
+    // Settle window, then periodic re-check; wireAnalysers below clears this on source swap.
+    setTimeout(route, 150);
+    sum.__monoRouteInterval = setInterval(route, 300);
+    return sum;
+  }
   async function openMic() {
     ensureAudio(); if (micReady) return true;
-    const base = { echoCancellation: false, noiseSuppression: false, autoGainControl: false };
+    const base = { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: { ideal: 2 } };
     const wanted = DB.prefs.inputDeviceId ? { ...base, deviceId: { exact: DB.prefs.inputDeviceId } } : base;
     let st;
     try { st = await navigator.mediaDevices.getUserMedia({ audio: wanted }); }
     catch (e) { if (!DB.prefs.inputDeviceId) throw e; st = await navigator.mediaDevices.getUserMedia({ audio: base }); }
-    micStream = st; const src = actx.createMediaStreamSource(st); wireAnalysers(src); micReady = true;
+    micStream = st; const src = actx.createMediaStreamSource(st); wireAnalysers(monoSum(src)); micReady = true;
     ensurePitchWorklet(); refreshMicDevices(); return true;
   }
   async function refreshMicDevices() {
@@ -192,12 +266,24 @@ import { register as registerPlayalong } from './ui/playalong.js';
     });
     const floor = noiseFloor(samples);
     DB.prefs.noiseFloor = Number.isFinite(floor) && floor >= 0 ? clamp(floor, 0, 1) : null;
-    gates = gatesFor(DB.prefs.noiseFloor); save();
+    applyGates(gatesFor(DB.prefs.noiseFloor)); save();
     if (resultEl) resultEl.textContent = (DB.prefs.noiseFloor === null || DB.prefs.noiseFloor < 0.003)
       ? 'Your room is quiet.'
       : 'There\'s a lot of background noise — move closer to the mic.';
   }
-  function wireAnalysers(src) { if (!anTime) { anTime = actx.createAnalyser(); anTime.fftSize = 4096; anFreq = actx.createAnalyser(); anFreq.fftSize = 8192; anFreq.smoothingTimeConstant = 0.5; } src.connect(anTime); src.connect(anFreq); lastAudioSource = src; if (pitchWorkletNode) src.connect(pitchWorkletNode); }
+  // VERIFIED DEFECT 4 (mic-gate-and-capture): the micDeviceSelect change
+  // handler re-opened the mic and called wireAnalysers(src) again without
+  // ever disconnecting the PREVIOUS source node -- switching input devices
+  // left the old (now-stopped) stream's source node still wired into
+  // anTime/anFreq/the worklet, piling up dead graph edges on every switch.
+  // This is the one place every caller (openMic, testSource, testPluck)
+  // routes a new source through, so disconnecting the old one here covers
+  // all of them.
+  function wireAnalysers(src) {
+    if (lastAudioSource && lastAudioSource !== src) { if (lastAudioSource.__monoRouteInterval) clearInterval(lastAudioSource.__monoRouteInterval); try { lastAudioSource.disconnect(); } catch (e) {} }
+    if (!anTime) { anTime = actx.createAnalyser(); anTime.fftSize = 4096; anFreq = actx.createAnalyser(); anFreq.fftSize = 8192; anFreq.smoothingTimeConstant = 0.5; }
+    src.connect(anTime); src.connect(anFreq); lastAudioSource = src; if (pitchWorkletNode) src.connect(pitchWorkletNode);
+  }
   // test hook: feed synthetic notes through the same listening chain
   function testSource(freqs) { ensureAudio(); testNodes.forEach(o => { try { o.stop(); } catch (e) {} }); testNodes = []; if (!freqs || !freqs.length) return; const mix = actx.createGain(); mix.gain.value = 0.5 / freqs.length; wireAnalysers(mix); micReady = true; ensurePitchWorklet(); freqs.forEach(f => [1, 2, 3].forEach(h => { const o = actx.createOscillator(), gg = actx.createGain(); o.frequency.value = f * h; gg.gain.value = 1 / (h * h); o.connect(gg); gg.connect(mix); o.start(); testNodes.push(o); })); }
   // test hook (F8): testSource() has no decay envelope, so it cannot express
@@ -663,7 +749,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
       // release check below can never see on its own.
       if (fr.onset) { released = true; stableN = 0; }
       if (e.info.kind === 'chord') { if (fr.rms < gates.chord || !fr.chroma) { holdFor = 0; return; } const j = judgeChord({ chroma: fr.chroma, targetPcs: e.info.pcs }); e.score = j.score; if (j.ok) { holdFor += dt; if (holdFor > 0.18) passEl(undefined, e.info.label + ': that rings true.'); } else holdFor = 0; if (fr.rms > 0.02) lastInputAt = now(); return; }
-      if (fr.rms < gates.note || !fr.freq) { if (++stableN > 2 && fr.rms < 0.006) released = true; stableMidi = -1; return; }
+      if (fr.rms < gates.note || !fr.freq) { if (++stableN > 2 && fr.rms < releaseFloor(gates)) released = true; stableMidi = -1; return; }
       const m = Math.round(fr.midi); if (m === stableMidi) stableN++; else { stableMidi = m; stableN = 1; }
       if (stableN === 3 && (released || m !== lastFired)) { lastFired = m; released = false; onNote(m, false); }
       return;
@@ -1359,7 +1445,14 @@ import { register as registerPlayalong } from './ui/playalong.js';
   //
   if (__DEBUG_HOOK__) Object.assign(hook, { testPluck: testPluck, pitchWorkletActive: () => !!pitchWorkletNode });
   //
-  if (__DEBUG_HOOK__) Object.assign(hook, { gates: () => gates, calibrate: calibrateNoiseFloor, devices: () => micDevices });
+  if (__DEBUG_HOOK__) Object.assign(hook, { gates: () => gates, calibrate: calibrateNoiseFloor, devices: () => micDevices, pitchWorkletGate: () => lastWorkletGateSent, monoRoute: () => lastMonoRoute,
+    // Test-only seam (mic-gate-and-capture): drives the exact same
+    // gatesFor()+applyGates() path calibrateNoiseFloor() uses, without the
+    // real 3-second quiet-room listen -- lets a characterization test set a
+    // known noise floor deterministically and assert on the worklet's own
+    // behaviour (whether a quiet frame's pitch reaches the page), not on
+    // fabricating a pass.
+    setNoiseFloorForTest: floor => { DB.prefs.noiseFloor = floor; applyGates(gatesFor(floor)); save(); } });
   //
   if (__DEBUG_HOOK__) Object.assign(hook, { judgeChord: judgeChord, chroma: chroma });
   if (__DEBUG_HOOK__) Object.assign(hook, { groove: () => groove, grooveLast: () => grooveLast, grooveBpm: () => S.grooveBpm, grooveOn: v => { grooveOn = !!v; task = null; groove = null; }, grooveInject: (midi, atAudioTime) => { const fire = () => { if (audioNow() >= atAudioTime) onNote(midi, true); else setTimeout(fire, 4); }; fire(); } });

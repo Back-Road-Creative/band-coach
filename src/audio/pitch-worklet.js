@@ -68,12 +68,28 @@ export function applyFrameSizeMessage(proc, data) {
   proc.detector = createOnsetDetector({ sampleRate: proc.sampleRate, frameSize: proc.frameSize, hop: proc.hop });
 }
 
+// Counterpart to applyRangeMessage/applyFrameSizeMessage above, for the
+// calibrated loudness gate (src/audio/levels.js's gatesFor()). BUG (mic-gate-
+// and-capture, VERIFIED DEFECT 1): the worklet's own rmsGate was set once at
+// creation from whatever `gates.pitch` was at that moment and never updated
+// -- calibrateNoiseFloor() recomputes `gates` on the main thread, but that
+// recomputation never reached the worklet, so a learner with a quiet mic who
+// runs "Check my microphone" saw no change in what the pitch detector
+// actually gates on. Same shape as applyRangeMessage: { type: 'gate',
+// rmsGate }, self-contained (no free variables) so its source text can be
+// embedded into the worklet string via toString().
+export function applyGateMessage(proc, data) {
+  if (!data || data.type !== 'gate') return;
+  if (typeof data.rmsGate === 'number' && isFinite(data.rmsGate) && data.rmsGate >= 0) proc.rmsGate = data.rmsGate;
+}
+
 function buildProcessorSource() {
   return `
 ${yin.toString()}
 ${createOnsetDetector.toString()}
 ${applyRangeMessage.toString()}
 ${applyFrameSizeMessage.toString()}
+${applyGateMessage.toString()}
 class BandCoachPitchProcessor extends AudioWorkletProcessor {
   constructor(options) {
     super();
@@ -90,7 +106,7 @@ class BandCoachPitchProcessor extends AudioWorkletProcessor {
     this.filled = 0;
     this.sinceHop = 0;
     this.detector = createOnsetDetector({ sampleRate: sampleRate, frameSize: this.frameSize, hop: this.hop });
-    this.port.onmessage = ev => { applyRangeMessage(this, ev.data); applyFrameSizeMessage(this, ev.data); };
+    this.port.onmessage = ev => { applyRangeMessage(this, ev.data); applyFrameSizeMessage(this, ev.data); applyGateMessage(this, ev.data); };
   }
   process(inputs) {
     const input = inputs[0];
