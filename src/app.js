@@ -294,6 +294,21 @@ import { register as registerPlayalong } from './ui/playalong.js';
   const ukeBaritoneRange = rangeForInstrument(instrumentById['ukulele-baritone']);
   MODS['ukulele-baritone'] = { name: instrumentById['ukulele-baritone'].name, tag: 'microphone', color: '#b8863b', input: 'pluck', fmin: ukeBaritoneRange.fmin, fmax: ukeBaritoneRange.fmax, tuning: instrumentById['ukulele-baritone'].tuning, frets: 12, help: 'Baritone ukulele: press Connect to let the page listen. Standard tuning D G B E, the same pitches as the top four guitar strings. On a single-note lesson, play one clean note at a time; if it hears a strum instead it will tell you so rather than staying silent.', levels: null };
   MODS['ukulele-baritone'].levels = stringLevels(MODS['ukulele-baritone'].tuning, ['D', 'G', 'B', 'E'], 12, null);
+  // Mallet percussion (bells/glockenspiel): not fretted, so it does not
+  // reuse stringLevels/drawFret like the six mic instruments above it. It
+  // reuses MODS.kbd's own note-group shape instead (N() item ids, same
+  // rendering via drawKeys in draw() below) because a bell/xylophone bar
+  // row IS a keyboard layout -- see src/instruments/mallet-percussion.js
+  // for the range choice and the mic-detectability measurement behind
+  // status: 'ready'.
+  const malletRange = rangeForInstrument(instrumentById['mallet-percussion']);
+  MODS['mallet-percussion'] = { name: instrumentById['mallet-percussion'].name, tag: 'microphone', color: '#5ec8f0', input: 'pluck', fmin: malletRange.fmin, fmax: malletRange.fmax, help: 'Mallet percussion: press Connect to let the page listen through your microphone or audio interface. Strike one bar at a time and let it ring; a fast re-strike of the same bar is heard as a new note.', levels: null };
+  MODS['mallet-percussion'].levels = [
+    { name: 'C, D and E', add: N(60, 62, 64), limit: 8 }, { name: 'Add F and G', add: N(65, 67), limit: 8 }, { name: 'Add A, B and high C', add: N(69, 71, 72), limit: 8 },
+    { name: 'Sharps and flats: F sharp and B flat', add: N(66, 70), limit: 8 }, { name: 'Sharps and flats: C sharp, E flat, A flat', add: N(61, 63, 68), limit: 8 },
+    { name: 'Moves: two notes', task: 'seq', len: 2, limit: 6 }, { name: 'Moves: three notes', task: 'seq', len: 3, limit: 5 },
+    { name: 'Up an octave', add: N(74, 76, 77, 79, 81, 83, 84), limit: 8 }, { name: 'Five-note runs', task: 'run', limit: 4 }
+  ];
   const MOD_IDS = Object.keys(MODS);
   // Instruments the notation engine (src/notation/) is wired into. Wind
   // already draws its own hand-built staff (drawStaff below); it is not
@@ -934,7 +949,9 @@ import { register as registerPlayalong } from './ui/playalong.js';
     if (TOOLS[mod]) { if (mod === 'tuner') drawTuner(W, H); else drawCapture(W, H); return; }
     const M = MODS[mod], e = playing && task && !task.done ? cur() : null, showE = e || (task && task.done ? task.els[task.els.length - 1] : null);
     if (mod === 'kbd') { const low = activeItems(mod, S.level).some(id => id[0] === 'n' && +id.slice(1) < 60) || customOn; const tg = []; if (e) { if (e.info.kind === 'chord') { if (e.reveal || e.failed) e.info.pcs.forEach(x => tg.push(60 + x)); } else if (e.reveal || e.failed) tg.push(e.info.midi); } const good = performance.now() - flashGood < 300 && task ? task.els.slice(0, task.idx).map(x => x.info.midi).filter(x => x) : []; drawKeys(W * 0.03, H * 0.18, W * 0.94, H * 0.7, low ? 48 : 60, 72, { target: tg, good: good, names: DB.prefs.names }); if (e && e.info.kind === 'chord') { g.fillStyle = '#e9edf6'; font(H * 0.11); g.textAlign = 'center'; g.fillText(e.info.sym, W / 2, H * 0.13); } if (document.activeElement === cv) { const fi = kbdFocusInfo(); if (fi) { g.strokeStyle = '#ffd23f'; g.lineWidth = 4; g.strokeRect(fi.x + 2, fi.y + 2, fi.w - 4, fi.h - 4); } } }
-    else if (M.tuning) drawFret(M, e, W, H); else if (mod === 'voice') drawVoice(e, W, H); else if (mod === 'wind') drawStaff(e, W, H); else if (mod === 'harp') drawHarp(e, W, H); else if (mod === 'ear') drawEar(W, H); else if (mod === 'rhy') { if (task && task.kind === 'bar2') drawBar2(W, H); else drawBar(W, H); }
+    else if (M.tuning) drawFret(M, e, W, H); else if (mod === 'voice') drawVoice(e, W, H); else if (mod === 'wind') drawStaff(e, W, H); else if (mod === 'harp') drawHarp(e, W, H);
+    else if (mod === 'mallet-percussion') { const rec = instrumentById['mallet-percussion'], tg = e && e.info.kind === 'note' && (e.reveal || e.failed) ? [e.info.midi] : []; drawKeys(W * 0.03, H * 0.18, W * 0.94, H * 0.7, rec.range.low, rec.range.high, { target: tg, good: [], names: DB.prefs.names }); }
+    else if (mod === 'ear') drawEar(W, H); else if (mod === 'rhy') { if (task && task.kind === 'bar2') drawBar2(W, H); else drawBar(W, H); }
     if (NOTATE_MOD_IDS.indexOf(mod) >= 0) drawNotation(e, W, H); else lastStaff = null;
     if (!reducedMotion && performance.now() - flashBad < 220) { g.strokeStyle = '#ff6b5e'; g.lineWidth = 8; g.strokeRect(4, 4, W - 8, H - 8); g.fillStyle = '#ff6b5e'; font(H * 0.06, 700); g.textAlign = 'left'; g.fillText('✗', 14, H * 0.09); } else if (!reducedMotion && performance.now() - flashGood < 220) { g.strokeStyle = '#5be08a'; g.lineWidth = 8; g.strokeRect(4, 4, W - 8, H - 8); g.fillStyle = '#5be08a'; font(H * 0.06, 700); g.textAlign = 'left'; g.fillText('✓', 14, H * 0.09); }
     if (!playing) { g.fillStyle = '#93a0bd'; font(H * 0.08); g.textAlign = 'right'; g.fillText(sess ? 'PAUSED' : 'PRESS START', W * 0.97, H * 0.1); }
