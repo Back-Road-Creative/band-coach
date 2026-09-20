@@ -5,26 +5,24 @@
 // Range extends the open strings by 12 frets, same formula/maxFret as
 // bass.js -- a conservative beginner range.
 //
-// The low B string is modeled here for tuning/tab/fingering purposes (it is
-// a real physical string of the instrument) but is DELIBERATELY EXCLUDED
-// from the graded curriculum below: the pitch detector cannot hear it.
-// Measured directly against the actual runtime pipeline (the AudioWorklet
-// path, src/audio/pitch-worklet.js, frameSize 2048 -- not the main-thread
-// fallback's 4096-sample buffer, which does have enough samples), calling
-// yin() on a pure 30.87 Hz sine (B0, midi 23) returns freq: 0 -- no lock at
-// all, because 2048-sample YIN caps its search lag at (frameSize>>1)-1 =
-// 1023 samples, and a genuine 30.87 Hz period needs roughly 1550-1600
-// samples to autocorrelate against at 44.1-48 kHz, well past that cap. (The
-// existing 4-string bass's own open E, 41.2 Hz, sits in the same trap and
-// is measurably misdetected there too -- a pre-existing limitation of
-// bass.js's shipped 'ready' status, not something this record changes.)
-// app.js's MODS['bass-5-string'].levels assignment calls a small
-// string-excluding wrapper around stringLevels(tuning, ['B','E','A','D','G'],
-// 12, null) that drops every item referencing the B string, so no level in
-// this curriculum can ever require crediting a note the mic cannot hear.
-// The resulting 13-level curriculum below is therefore textually identical
-// to bass.js's: same practice ladder, on an instrument that additionally
-// carries an un-graded low string. No chordSet: bass never gets one either.
+// The low B string used to be excluded from the graded curriculum: at the
+// AudioWorklet pipeline's old fixed frameSize (2048, src/audio/pitch-worklet.js),
+// a pure 30.87 Hz sine (B0, midi 23) returned freq: 0 -- no lock at all,
+// because 2048-sample YIN caps its search lag at (frameSize>>1)-1 = 1023
+// samples, and a genuine 30.87 Hz period needs roughly 1550-1600 samples to
+// autocorrelate against at 44.1-48 kHz, well past that cap. (The 4-string
+// bass's own open E, 41.2 Hz, sat in the same trap.)
+//
+// src/audio/range.js's frameSizeForInstrument now derives the worklet's
+// analysis frame size from each instrument's own `range.low` instead of a
+// single hardcoded 2048: at 4096 (the size it picks for both this record and
+// bass.js), (frameSize>>1)-1 = 2047 samples comfortably clears B0's ~1554-1600
+// sample period, and yin() resolves it cleanly (see tests/unit/yin.test.mjs
+// and tests/unit/range.test.mjs). The B string is therefore graded like every
+// other string below; no exclusion wrapper is needed any more (app.js's
+// MODS['bass-5-string'].levels now calls the same plain stringLevels(tuning,
+// ['B','E','A','D','G'], 12, null) the other fretted instruments use). No
+// chordSet: bass never gets one either.
 export default {
   id: 'bass-5-string',
   name: '5-string bass',
@@ -40,17 +38,19 @@ export default {
   status: 'ready',
   curriculum: [
     { level: 1, items: ['The open strings'] },
-    { level: 2, items: ['E string, frets 1 to 5'] },
-    { level: 3, items: ['E string, up the neck'] },
-    { level: 4, items: ['A string, frets 1 to 5'] },
-    { level: 5, items: ['A string, up the neck'] },
-    { level: 6, items: ['D string, frets 1 to 5'] },
-    { level: 7, items: ['D string, up the neck'] },
-    { level: 8, items: ['G string, frets 1 to 5'] },
-    { level: 9, items: ['G string, up the neck'] },
-    { level: 10, items: ['Moves: two notes'] },
-    { level: 11, items: ['Moves: three notes'] },
-    { level: 12, items: ['Find it by name, no dot'] },
-    { level: 13, items: ['Sharps and flats by name'] }
+    { level: 2, items: ['B string, frets 1 to 5'] },
+    { level: 3, items: ['B string, up the neck'] },
+    { level: 4, items: ['E string, frets 1 to 5'] },
+    { level: 5, items: ['E string, up the neck'] },
+    { level: 6, items: ['A string, frets 1 to 5'] },
+    { level: 7, items: ['A string, up the neck'] },
+    { level: 8, items: ['D string, frets 1 to 5'] },
+    { level: 9, items: ['D string, up the neck'] },
+    { level: 10, items: ['G string, frets 1 to 5'] },
+    { level: 11, items: ['G string, up the neck'] },
+    { level: 12, items: ['Moves: two notes'] },
+    { level: 13, items: ['Moves: three notes'] },
+    { level: 14, items: ['Find it by name, no dot'] },
+    { level: 15, items: ['Sharps and flats by name'] }
   ]
 };

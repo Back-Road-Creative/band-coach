@@ -53,3 +53,40 @@ export function rangeForInstrument(rec, marginSemitones = MARGIN_SEMITONES) {
   const fmax = Math.round(midiToHz(high + marginSemitones));
   return { fmin, fmax };
 }
+
+// The pitch detector's OTHER instrument-shaped knob, alongside
+// rangeForInstrument above: how big a buffer yin() (src/audio/yin.js) needs
+// to even see a low note at all. yin's autocorrelation searches lags up to
+// (frameSize >> 1) - 1 samples; a fundamental whose period is longer than
+// that cap can never be found, no matter how tightly fmin/fmax are set.
+// src/audio/pitch-worklet.js used to hardcode frameSize 2048 for every
+// instrument (a 1023-sample cap at 48kHz), silently misdetecting a 4-string
+// bass's open E (41.2 Hz, ~1165-sample period) as a wrong note around its
+// 2nd/3rd-harmonic region, and never locking onto a 5-string bass's open B0
+// (30.87 Hz, ~1555-sample period) at all.
+//
+// The default stays 2048 for everything else on purpose: doubling it to
+// 4096 doubles analysis latency (~42.7ms -> ~85.3ms @48kHz), and this app
+// times attacks as well as pitches, so only an instrument that actually
+// needs the bigger window gets it.
+export const MIN_FRAME_SIZE = 2048;
+
+// Headroom above the raw period-in-samples so a genuine note at an
+// instrument's lowest string isn't sitting right at the search window's
+// edge, the way 2048 left the 4-string bass's open E.
+export const FRAME_SIZE_MARGIN = 1.25;
+
+// rec: an instrument record (or any falsy/malformed value, same contract as
+// rangeForInstrument). sampleRate: the real AudioContext sample rate the
+// frame will actually run at (44.1kHz and 48kHz both matter -- this must not
+// be hardcoded to one of them). Returns the smallest power-of-two frame size
+// at or above MIN_FRAME_SIZE whose search cap comfortably exceeds the period
+// of the instrument's own `range.low`.
+export function frameSizeForInstrument(rec, sampleRate) {
+  const low = rec && rec.range && rec.range.low;
+  if (typeof low !== 'number' || !isFinite(low) || !(sampleRate > 0)) return MIN_FRAME_SIZE;
+  const neededTau = (sampleRate / midiToHz(low)) * FRAME_SIZE_MARGIN;
+  let frameSize = MIN_FRAME_SIZE;
+  while ((frameSize >> 1) - 1 < neededTau) frameSize *= 2;
+  return frameSize;
+}

@@ -8,18 +8,18 @@
 // window.__coach.note(midi, exact), which feeds the judging logic directly
 // rather than through the real mic pipeline).
 //
-// Four of the five (mandolin, banjo-5-string, ukulele-low-g,
-// ukulele-baritone) also get a real-mic-pipeline check with testPluck, the
-// same technique tests/characterization/onset-repluck.test.mjs uses, since
-// every note in their curricula sits comfortably inside the pitch
-// detector's working band. bass-5-string does not get that generic check:
-// its curriculum's open E string (41.2 Hz) sits right at the edge of what
-// the real AudioWorklet pipeline (frameSize 2048) can resolve -- a
-// pre-existing limitation shared with the 4-string bass.js, not something
-// this unit introduces or fixes -- so a random testPluck draw from its
-// level-1 pool would be flaky. Its own two tests below check the thing this
-// unit is actually responsible for: the low B string is excluded from the
-// curriculum, and B0 itself is provably undetectable at the real frame size.
+// All five also get a real-mic-pipeline check with testPluck, the same
+// technique tests/characterization/onset-repluck.test.mjs uses, since every
+// note in their curricula sits comfortably inside the pitch detector's
+// working band. bass-5-string used to be excluded from this generic check:
+// its curriculum's open E string (41.2 Hz) sat right at the edge of what the
+// AudioWorklet pipeline's old fixed frameSize (2048) could resolve, and the
+// open B0 (30.87 Hz) could not be resolved at all. src/audio/range.js's
+// frameSizeForInstrument now derives the worklet's analysis frame size from
+// each instrument's own range.low (4096 for bass-5-string, comfortably
+// covering both its open E and open B0 -- see tests/unit/yin.test.mjs and
+// tests/unit/range.test.mjs), so bass-5-string gets the same generic
+// real-mic check as the others, low B string included.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { HTML_PATH } from '../helpers/html-path.mjs';
@@ -30,7 +30,7 @@ const htmlPath = HTML_PATH;
 const midiToFreq = (m) => 440 * Math.pow(2, (m - 69) / 12);
 
 const NEW_FRETTED_IDS = ['mandolin', 'banjo-5-string', 'bass-5-string', 'ukulele-low-g', 'ukulele-baritone'];
-const MIC_RELIABLE_IDS = ['mandolin', 'banjo-5-string', 'ukulele-low-g', 'ukulele-baritone'];
+const MIC_RELIABLE_IDS = ['mandolin', 'banjo-5-string', 'bass-5-string', 'ukulele-low-g', 'ukulele-baritone'];
 
 for (const id of NEW_FRETTED_IDS) {
   test(`${id}: selectable, and answering the task note correctly credits it`, async (t) => {
@@ -81,37 +81,38 @@ for (const id of MIC_RELIABLE_IDS) {
   });
 }
 
-test('bass-5-string: the registry curriculum never names a B-string level', () => {
+test('bass-5-string: the registry curriculum now names a B-string level', () => {
   const rec = byId['bass-5-string'];
   const hasBStringLevel = rec.curriculum.some((level) => level.items.some((name) => /^B string/.test(name)));
-  assert.equal(hasBStringLevel, false, 'bass-5-string curriculum should never name a B-string level');
+  assert.ok(hasBStringLevel, 'bass-5-string curriculum should name a B-string level now that B0 is detectable');
 });
 
-test('bass-5-string: setMod never hands out a B-string item', async (t) => {
+test('bass-5-string: setMod can hand out a B-string item (string 5)', async (t) => {
   const page = await launchPage(htmlPath);
   t.after(() => page.close());
 
   await page.evaluate("window.__coach.setMod('bass-5-string')");
+  // B string is level 2 (frets 1-5) / level 3 (up the neck) -- jump there so
+  // the drawn item is guaranteed to be a B-string one rather than relying on
+  // level 1's open-strings pool to happen to draw it.
+  await page.evaluate('window.__coach.state().level = 2');
   await page.evaluate("document.getElementById('playBtn').click()");
   await page.waitFor('window.__coach.task()');
 
   const info = await page.evaluate('window.__coach.cur().info');
-  // B string is string 5 in this 5-string tuning (see bass-5-string.js /
-  // stringLevelsExcluding in app.js).
-  if (info.string !== undefined) assert.notEqual(info.string, 5, 'a credited bass-5-string item should never be the B string');
+  if (info.string !== undefined) assert.equal(info.string, 5, 'a level-2 bass-5-string item should be the B string');
 });
 
-test('bass-5-string: the low B string (B0, midi 23) is not detectable at the real worklet frame size, but the G string (midi 43) is', async (t) => {
+test('bass-5-string: the low B string (B0, midi 23) is detectable at the real worklet frame size (4096), same as the G string (midi 43)', async (t) => {
   const page = await launchPage(htmlPath);
   t.after(() => page.close());
 
-  // Confirmed against the real AudioWorklet pipeline (frameSize 2048): a
-  // pure 30.87 Hz (B0, midi 23) sine returns freq: 0, no lock at all -- the
-  // algorithm's search window cannot reach the lag a period that long
-  // requires. See src/instruments/bass-5-string.js's header.
+  // src/audio/range.js's frameSizeForInstrument derives 4096 for
+  // bass-5-string (range.low 23 = B0), not the old fixed 2048 -- see
+  // src/instruments/bass-5-string.js's header and tests/unit/yin.test.mjs.
   const [b0Result, gResult] = await page.evaluate(`
     (function () {
-      const n = 2048, sr = 48000;
+      const n = 4096, sr = 48000;
       function probe(f) {
         const buf = new Float32Array(n);
         for (let i = 0; i < n; i++) buf[i] = 0.5 * Math.sin(2 * Math.PI * f * i / sr);
@@ -120,6 +121,16 @@ test('bass-5-string: the low B string (B0, midi 23) is not detectable at the rea
       return [probe(30.87), probe(98.0)];
     })()
   `);
-  assert.equal(b0Result.freq, 0, 'B0 should not be detectable at the real worklet frame size');
-  assert.ok(Math.abs(gResult.freq - 98.0) / 98.0 < 0.01, 'the G string (highest of the 5), well clear of the floor, should be detected accurately');
+  assert.ok(Math.abs(b0Result.freq - 30.87) / 30.87 < 0.01, 'B0 should be detected accurately at the real worklet frame size');
+  assert.ok(Math.abs(gResult.freq - 98.0) / 98.0 < 0.01, 'the G string (highest of the 5) should still be detected accurately');
+});
+
+test('bass-5-string: the pitch worklet is actually created at frameSize 4096, not the 2048 default', async (t) => {
+  const page = await launchPage(htmlPath);
+  t.after(() => page.close());
+
+  await page.evaluate("window.__coach.setMod('bass-5-string')");
+  await page.evaluate('window.__coach.testPluck(41.2, [0])'); // settles ensurePitchWorklet()
+
+  assert.equal(await page.evaluate('window.__coach.pitchWorkletFrameSize()'), 4096);
 });

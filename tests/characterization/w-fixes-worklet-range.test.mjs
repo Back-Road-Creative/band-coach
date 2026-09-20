@@ -28,3 +28,24 @@ test('setMod sends the new module range to an already-created pitch worklet', as
   const harpRange = await page.evaluate('window.__coach.pitchWorkletRange()');
   assert.deepEqual(harpRange, { fmin: 200, fmax: 2300 }, 'switching modules should re-range the already-created worklet');
 });
+
+// src/audio/range.js's frameSizeForInstrument: the worklet's analysis frame
+// size is instrument-shaped too, not just its fmin/fmax. Switching to an
+// instrument whose lowest string needs a bigger analysis window (bass, open
+// E 41.2 Hz) must resize the already-created worklet, and switching back
+// must shrink it again -- 4096 is not allowed to become the new default for
+// every instrument (see CLAUDE.md-cited latency concern in range.js).
+test('setMod resizes an already-created pitch worklet\'s frameSize per instrument', async (t) => {
+  const page = await launchPage(htmlPath);
+  t.after(() => page.close());
+
+  await page.evaluate("window.__coach.setMod('gtr')");
+  await page.evaluate('window.__coach.testPluck(220, [0])');
+  assert.equal(await page.evaluate('window.__coach.pitchWorkletFrameSize()'), 2048, 'guitar does not need the bigger frame');
+
+  await page.evaluate("window.__coach.setMod('bass')");
+  assert.equal(await page.evaluate('window.__coach.pitchWorkletFrameSize()'), 4096, 'bass\'s open E (41.2 Hz) needs the bigger frame');
+
+  await page.evaluate("window.__coach.setMod('gtr')");
+  assert.equal(await page.evaluate('window.__coach.pitchWorkletFrameSize()'), 2048, 'switching back off bass must shrink the frame again, not leave 4096 as the new default');
+});

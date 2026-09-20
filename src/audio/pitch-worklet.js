@@ -42,11 +42,38 @@ export function applyRangeMessage(proc, data) {
   if (typeof data.fmax === 'number' && isFinite(data.fmax)) proc.fmax = data.fmax;
 }
 
+// Counterpart to applyRangeMessage above, for the OTHER instrument-shaped
+// knob: frameSize (src/audio/range.js's frameSizeForInstrument). The worklet
+// used to be created once with a frameSize fixed for the whole session, so
+// switching from a normal-range instrument to one needing a bigger analysis
+// window (a 4-string bass's open E, a 5-string bass's open B0 -- see
+// range.js) left it permanently unable to resolve the low note. Resizing
+// means reallocating the ring/linear buffers and rebuilding the onset
+// detector (createOnsetDetector, embedded above via toString(), same as the
+// constructor's own use of it) so the processor keeps a consistent frame
+// afterwards instead of reading/writing past a stale buffer length.
+// Self-contained (no free variables of its own) for the same reason
+// applyRangeMessage is: its source text travels into the worklet string via
+// Function.prototype.toString().
+export function applyFrameSizeMessage(proc, data) {
+  if (!data || data.type !== 'frameSize') return;
+  const frameSize = data.frameSize;
+  if (!(frameSize > 0) || (frameSize & (frameSize - 1)) !== 0 || frameSize === proc.frameSize) return;
+  proc.frameSize = frameSize;
+  proc.ring = new Float32Array(frameSize);
+  proc.linear = new Float32Array(frameSize);
+  proc.writeIdx = 0;
+  proc.filled = 0;
+  proc.sinceHop = 0;
+  proc.detector = createOnsetDetector({ sampleRate: proc.sampleRate, frameSize: proc.frameSize, hop: proc.hop });
+}
+
 function buildProcessorSource() {
   return `
 ${yin.toString()}
 ${createOnsetDetector.toString()}
 ${applyRangeMessage.toString()}
+${applyFrameSizeMessage.toString()}
 class BandCoachPitchProcessor extends AudioWorkletProcessor {
   constructor(options) {
     super();
@@ -56,13 +83,14 @@ class BandCoachPitchProcessor extends AudioWorkletProcessor {
     this.fmin = opts.fmin || ${FALLBACK_RANGE.fmin};
     this.fmax = opts.fmax || ${FALLBACK_RANGE.fmax};
     this.rmsGate = opts.rmsGate || 0.008;
+    this.sampleRate = sampleRate;
     this.ring = new Float32Array(this.frameSize);
     this.linear = new Float32Array(this.frameSize);
     this.writeIdx = 0;
     this.filled = 0;
     this.sinceHop = 0;
     this.detector = createOnsetDetector({ sampleRate: sampleRate, frameSize: this.frameSize, hop: this.hop });
-    this.port.onmessage = ev => applyRangeMessage(this, ev.data);
+    this.port.onmessage = ev => { applyRangeMessage(this, ev.data); applyFrameSizeMessage(this, ev.data); };
   }
   process(inputs) {
     const input = inputs[0];
