@@ -128,6 +128,28 @@ window (4096) instead of going undetected or misdetected. Only instruments
 that need it pay the extra ~42ms of analysis latency; everything else stays
 at 2048. See `src/audio/pitch-worklet.js` for how the AudioWorklet pipeline
 resizes on an instrument switch.
+
+## Reference tones sound like the instrument
+
+Every reference/example tone (the note a lesson plays for you to match or tune to) goes through
+`tone()` in `src/app.js`, which renders an instrument-family-shaped voice from
+`src/audio/voices.js` instead of one fixed beep. The voice is picked from the active instrument's
+`family` (`instrumentById[mod].family`, see "Instruments are data" above): plucked/fretted and
+percussion get a fast-decay Karplus-Strong-flavoured pluck, keyboard gets a brighter struck
+envelope, bowed/wind/free-reed/voice get a soft-attack sustained tone, and brass gets the same
+sustain shape with more upper-partial brightness. An instrument whose family isn't one of these
+falls back to the plain sustained voice rather than staying silent.
+
+This is synthesis, not sampling — every sample is computed from exact-integer-multiple sine
+partials at render time (`renderVoice()` and friends), so there is no embedded audio and no extra
+network/file dependency; a fundamental always lands exactly on the requested MIDI pitch, because
+learners tune to it. Render functions are pure (`(family, freq, sampleRate, seconds, volume) ->
+Float32Array`), which is also what lets `tests/unit/voices.test.mjs` assert pitch accuracy with
+the app's own pitch detector (`src/audio/yin.js`) directly in Node, no browser required.
+`tone()` opens the mic's deaf window (`src/audio/deaf-window.js`) for exactly the rendered
+buffer's own length, so a voice with a longer tail than the old fixed tone still keeps the app
+from hearing its own reference note.
+
 ## Rhythm vocabulary
 
 `src/core/rhythm.js` is a pure rhythm-notation module: cells (quarter, eighth pairs, rests, ties,
