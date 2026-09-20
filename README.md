@@ -110,9 +110,18 @@ lesson content isn't written yet; use `status: 'ready'` with a non-empty
 `curriculum` once it is. Run `npm test` — `tests/unit/instruments.test.mjs`
 checks every record against the schema.
 
-As of this writing `src/app.js` still has its own instrument definitions
-(the `MODS` object) and does not yet read `src/instruments/`; that
-switch-over is a separate, later change.
+`src/app.js`'s own trainer definitions (the `MODS` object) read tuning, name
+and mic range for each `'ready'` fretted instrument straight off its
+`src/instruments/` record (`instrumentById`, `rangeForInstrument()`) rather
+than restating them; `MODS`'s built-in keyboard/voice/wind/harp/ear/rhy
+trainers are not backed by an `src/instruments/` record and are unaffected.
+
+Ready fretted instruments as of this writing: guitar (`gtr`), bass (`bass`),
+ukulele (`uke`), mandolin, 5-string banjo, 5-string bass, low-G ukulele and
+baritone ukulele. 5-string bass's low B string is modeled for tuning/tab
+purposes but excluded from its practice curriculum — the pitch detector
+cannot reliably hear a fundamental that low (see
+`src/instruments/bass-5-string.js`).
 ## Rhythm vocabulary
 
 `src/core/rhythm.js` is a pure rhythm-notation module: cells (quarter, eighth pairs, rests, ties,
