@@ -100,7 +100,34 @@ async function launchHttpPage(url) {
   ];
   if (process.env.CI) args.splice(1, 0, '--no-sandbox');
   args.push('about:blank');
-  const child = spawn(bin, args, { stdio: ['ignore', 'ignore', 'pipe'] });
+  // Its own process group (detached), so cleanup can kill the renderer, GPU
+  // and zygote processes too, not just the launched parent: those are
+  // separate processes that a plain child.kill() never touches, and they
+  // survive as orphans piling up on the box.
+  const child = spawn(bin, args, { stdio: ['ignore', 'ignore', 'pipe'], detached: true });
+  // child.pid is the process GROUP id too, since it is spawned detached
+  // (group leader). Kills the whole group, not just this one process.
+  function killGroup() {
+    try {
+      process.kill(-child.pid, 'SIGKILL');
+    } catch (e) {
+      // already gone
+    }
+  }
+
+  try {
+    return await finishLaunch();
+  } catch (e) {
+    killGroup();
+    try {
+      rmSync(userDataDir, { recursive: true, force: true });
+    } catch (e2) {
+      // best-effort cleanup
+    }
+    throw e;
+  }
+
+  async function finishLaunch() {
   const browserWsUrl = await new Promise((resolve, reject) => {
     let buf = '';
     const onErr = (err) => reject(err);
@@ -154,15 +181,24 @@ async function launchHttpPage(url) {
   await send('Runtime.enable', {}, sessionId);
   await send('Page.enable', {}, sessionId);
 
-  function waitForLoad() {
-    return new Promise((resolve) => {
+  // Timed, not open-ended: under heavy load Chromium can spawn and open its
+  // DevTools socket fine but never actually fire the page's load event, and
+  // with no deadline here `await waitForLoad()` then blocks forever at 0%
+  // CPU instead of failing loudly.
+  function waitForLoad(timeoutMs = 30000) {
+    return new Promise((resolve, reject) => {
       const handler = (msg) => {
         if (msg.sessionId === sessionId && msg.method === 'Page.loadEventFired') {
           listeners.delete(handler);
+          clearTimeout(timer);
           resolve();
         }
       };
       listeners.add(handler);
+      const timer = setTimeout(() => {
+        listeners.delete(handler);
+        reject(new Error(`timed out after ${timeoutMs}ms waiting for Page.loadEventFired`));
+      }, timeoutMs);
     });
   }
 
@@ -203,7 +239,7 @@ async function launchHttpPage(url) {
       // already gone
     }
     browserWs.close();
-    child.kill('SIGKILL');
+    killGroup();
     try {
       rmSync(userDataDir, { recursive: true, force: true });
     } catch {
@@ -211,7 +247,8 @@ async function launchHttpPage(url) {
     }
   }
 
-  return { evaluate, reload, close };
+  return { evaluate, reload, close, pid: child.pid };
+  }
 }
 
 test('phone-copy service worker activates and the page still renders offline after a reload', { timeout: 30000 }, async (t) => {
