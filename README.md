@@ -86,6 +86,12 @@ machine can actually boot in time (`computeTestConcurrency` in
 average doesn't capture, set `BAND_COACH_TEST_CONCURRENCY` to force a lower
 number.
 
+The `test` script computes that cap with a `$(...)` command substitution, so it
+needs a POSIX shell. That covers Linux, macOS and WSL, which is everything this
+repo and its CI actually run on. In a bare Windows `cmd.exe` it will not expand:
+run `node --test` yourself with an explicit `--test-concurrency=<n>`, or set
+`BAND_COACH_TEST_CONCURRENCY` and use a shell that supports it.
+
 A few characterization tests are named `CURRENT BEHAVIOUR (flaw ...)`. They
 pin known judging bugs on purpose so a later change to the app is forced to
 touch them deliberately instead of silently inheriting the bug — they are
