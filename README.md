@@ -129,6 +129,22 @@ that need it pay the extra ~42ms of analysis latency; everything else stays
 at 2048. See `src/audio/pitch-worklet.js` for how the AudioWorklet pipeline
 resizes on an instrument switch.
 
+## Piano hands together
+
+The keyboard mod's level 13 is "hands together": the right hand and left hand each play one note
+at the same time, in C-major five-finger position (RH thumb-on-C, fingers 1-2-3-4-5 on C-D-E-F-G;
+LH little-finger-on-C an octave down, fingers 5-4-3-2-1 on the same letter names), moving in
+parallel motion up the position — the standard first two-hand material in beginner method books.
+The curriculum, fingering table and grading are pure logic in `src/core/hands-together.js`
+(`node --test tests/unit/hands-together.test.mjs`), wired into the keyboard mod's `onNote()` in
+`src/app.js`.
+
+A real MIDI keyboard delivers independent note-on events, so both notes are checked together and
+graded exactly (`gradeHandsTogetherExact`); two hands on the computer keys count the same way.
+A single detected pitch — as a monophonic microphone pitch detector would report — can confirm at
+most one of the two notes and never both at once, so that grading is approximate
+(`gradeHandsTogetherApprox`) and the on-screen feedback says so in plain words rather than claiming
+both hands were heard.
 ## Reference tones sound like the instrument
 
 Every reference/example tone (the note a lesson plays for you to match or tune to) goes through

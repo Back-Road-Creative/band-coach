@@ -23,6 +23,7 @@ export default {
     { level: 9, items: ['Five-note runs'] },
     { level: 10, items: ['Chords: C, F and G'] },
     { level: 11, items: ['Chords: A minor, D minor, E minor'] },
-    { level: 12, items: ['Chord changes'] }
+    { level: 12, items: ['Chord changes'] },
+    { level: 13, items: ['Hands together: five-finger position (MIDI exact, mic approximate)'] }
   ]
 };
