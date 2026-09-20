@@ -35,6 +35,7 @@ no paid CI, no paid services anywhere in this path.
   the substitution before electron-builder ever reads the config. With `--require-identity` (or
   `BC_REQUIRE_IDENTITY=1`), it refuses (non-zero exit, naming the missing env vars) to write a
   config that still has any placeholder field — see "Building a Store submission package" below.
+  It also stamps the manifest's version — see "Where the appx version comes from" below.
 - `scripts/generate-icons.mjs` — writes placeholder Store logo PNGs with a hand-rolled PNG
   encoder (`node:zlib` only, no image library) into `build-resources/appx/`. **Replace these with
   real branded art before submitting to the Store.** Required sizes generated:
@@ -66,6 +67,39 @@ no paid CI, no paid services anywhere in this path.
   a UWP/AppX capability declaration the way the microphone is, so there's nothing to add here —
   MIDI access should work in the packaged app without a manifest capability, but this has **not**
   been verified on an actual Windows machine (see "Not verified" below).
+
+## Where the appx version comes from
+
+The manifest's `Identity/@Version` is **never** `store/package.json`'s own `"version"` field —
+that's the Electron shell's private version, nobody ever bumps it, and for a long time every
+`store-package` run silently stamped every appx `0.1.0.0` forever. The Microsoft Store accepts one
+submission per version and rejects every later one at the same version as a duplicate, so that bug
+meant the *second* real release ever uploaded would have failed with no test catching it.
+
+The version stamped on the appx is now derived from the repo-root `package.json`'s own
+`"version"` — the same version that's about to be released as the browser build — via
+`apply-identity.mjs`, which sets `config.extraMetadata.version` in the generated config. That field
+is not decorative: electron-builder deep-merges `config.extraMetadata` onto the packaged app's
+`package.json` metadata before building its internal `AppInfo`
+(`node_modules/app-builder-lib/out/packager.js:277`,
+`deepAssign(this._metadata, configuration.extraMetadata)`), and `AppInfo`'s `version` field is what
+`AppxTarget.js`'s `"version"` macro case reads via `appInfo.getVersionInWeirdWindowsForm(...)`
+(`node_modules/app-builder-lib/out/targets/AppxTarget.js:191-192`) to produce the manifest's
+`Version` string.
+
+AppX identities require **exactly four** numeric parts (`major.minor.patch.revision`); the repo's
+version is three-part semver (e.g. `1.3.0`). The Store reserves the fourth part for itself and
+requires it to be `0` on every upload, so `apply-identity.mjs` always pads with `.0` — `1.3.0`
+becomes `1.3.0.0` — and forces the fourth part to `0` even if the source version somehow already
+had one, rather than trusting it. If the root version is missing or unparseable, the script throws
+instead of falling back to anything (that silent-fallback shape is exactly how the `0.1.0.0` bug
+went unnoticed) — see `computeAppxVersion`/`readRootPackageVersion` in `scripts/apply-identity.mjs`
+and `tests/unit/store-apply-identity.test.mjs`.
+
+**Bumping the appx's Store version means bumping the app's own release version** (the repo-root
+`package.json`) — nothing in this folder needs to change. This has only been verified at the
+config level on Linux (see "What was NOT verified here"); the manifest itself is only provable by
+a `store-package` CI run on Windows.
 
 ## Permission decision
 
@@ -163,3 +197,8 @@ browser profile — nothing in the app code needed to change for this.
   not in this CI job.
 - MIDI device access in the packaged app is unverified for the reason above (no Windows machine
   available here).
+- **The version stamping is only verified at the generated-config level** (`tests/unit/store-apply-
+  identity.test.mjs` checks `config.extraMetadata.version`, and the code path to
+  `AppInfo.getVersionInWeirdWindowsForm()` is read from `app-builder-lib`'s source, not exercised).
+  Whether `AppxManifest.xml`'s actual `Identity/@Version` comes out as `X.Y.Z.0` can only be
+  confirmed by reading the manifest out of a real `store-package` CI artifact.

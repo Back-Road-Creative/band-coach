@@ -21,6 +21,7 @@ const root = dirname(here);
 
 const BASE_CONFIG = join(root, 'electron-builder.json');
 const OUT_CONFIG = join(root, 'electron-builder.generated.json');
+const ROOT_PACKAGE_JSON = join(root, '..', 'package.json');
 
 const OVERRIDES = {
   identityName: 'BC_IDENTITY_NAME',
@@ -28,7 +29,48 @@ const OVERRIDES = {
   publisherDisplayName: 'BC_PUBLISHER_DISPLAY_NAME',
 };
 
-export function applyIdentity(env = process.env) {
+// The appx's Identity/@Version must never come from store/package.json's own
+// "version" field (it's the Electron shell's private version, nobody ever
+// bumps it, and it defaults to "0.1.0" forever — that was the bug: every
+// `store-package` run stamped 0.1.0.0, so the second real release ever
+// submitted to the Store was rejected as a duplicate version). The version
+// that reaches the manifest instead comes from THIS app's own release
+// version, the repo-root package.json, via config.extraMetadata.version:
+// electron-builder deep-merges config.extraMetadata onto the packaged
+// package.json's metadata before building AppInfo (see
+// node_modules/app-builder-lib/out/packager.js:277,
+// `deepAssign(this._metadata, configuration.extraMetadata)`), and
+// AppInfo.getVersionInWeirdWindowsForm() (out/appInfo.js:66) is what
+// AppxTarget.js's "version" macro case calls
+// (out/targets/AppxTarget.js:191-192, `appInfo.getVersionInWeirdWindowsForm(...)`)
+// to produce the manifest's four-part Version string.
+export function readRootPackageVersion(rootPackageJsonPath = ROOT_PACKAGE_JSON) {
+  return JSON.parse(readFileSync(rootPackageJsonPath, 'utf8')).version;
+}
+
+// AppX identities require exactly four numeric parts (major.minor.patch.revision).
+// The repo's own version is three parts (semver). The Store reserves the
+// fourth part for its own use and rejects a submission whose revision isn't
+// 0, so this always pads (or overwrites a stray fourth part) with ".0" rather
+// than trusting anything beyond major.minor.patch. Throws rather than
+// defaulting on anything it can't parse — a silent fallback here is exactly
+// how the original 0.1.0.0 bug shipped forever unnoticed.
+export function computeAppxVersion(rawVersion) {
+  if (typeof rawVersion !== 'string' || rawVersion.trim() === '') {
+    throw new Error('cannot stamp the appx version: the root package.json has no version');
+  }
+  const parts = rawVersion.trim().split('.');
+  if (parts.length < 3 || parts.length > 4) {
+    throw new Error(`cannot stamp the appx version: unparseable version "${rawVersion}" (expected major.minor.patch[.revision])`);
+  }
+  const [major, minor, patch] = parts.slice(0, 3).map(part => Number(part));
+  if (![major, minor, patch].every(part => Number.isInteger(part) && part >= 0)) {
+    throw new Error(`cannot stamp the appx version: unparseable version "${rawVersion}" (expected major.minor.patch[.revision])`);
+  }
+  return `${major}.${minor}.${patch}.0`;
+}
+
+export function applyIdentity(env = process.env, { rootVersion = readRootPackageVersion() } = {}) {
   const config = JSON.parse(readFileSync(BASE_CONFIG, 'utf8'));
   const applied = {};
   for (const [field, envName] of Object.entries(OVERRIDES)) {
@@ -40,6 +82,7 @@ export function applyIdentity(env = process.env) {
       applied[field] = 'placeholder';
     }
   }
+  config.extraMetadata = { ...(config.extraMetadata || {}), version: computeAppxVersion(rootVersion) };
   return { config, applied };
 }
 
