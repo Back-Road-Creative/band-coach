@@ -298,27 +298,31 @@ export async function launchPage(htmlPath, options = {}) {
 
   const url = 'file://' + htmlPath;
 
-  // Poll for the page actually BEING our document, rather than sleeping and
-  // hoping. Two things went wrong with the old fixed 150ms wait: under load
-  // the app's boot code (loadDB, buildPicker, first draw) had not finished,
-  // and `Page.loadEventFired` can be the initial about:blank's rather than
-  // ours — so tests read a document with no #cv at all and failed with
-  // "Cannot read properties of null/undefined". Both are the same bug: a
-  // sleep is not a readiness check.
+  // Poll for the page actually BEING our document AND having finished boot,
+  // rather than sleeping and hoping. Three things went wrong before: under
+  // load the app's boot code (loadDB, buildPicker, first draw) had not
+  // finished; `Page.loadEventFired` can be the initial about:blank's rather
+  // than ours; and the condition used to be `#cv` exists, which is in the
+  // STATIC MARKUP and therefore true before the app script runs a line — so
+  // a11y-dialog-focus died 747ms in on `window.__coach` being undefined with
+  // 29s of budget unspent (2026-09-20). The app sets `data-coach-ready` as
+  // the last act of boot, in the release build too, so that is what we wait
+  // for. A sleep is not a readiness check, and neither is a readiness check
+  // that was already true.
   async function waitForBoot() {
     const deadline = Date.now() + BOOT_DEADLINE_MS;
     let last = null;
     while (Date.now() < deadline) {
       const r = await send('Runtime.evaluate', {
         expression:
-          "(location.href.indexOf('file://') === 0) && document.readyState === 'complete' && !!document.getElementById('cv')",
+          "(location.href.indexOf('file://') === 0) && document.readyState === 'complete' && document.documentElement.getAttribute('data-coach-ready') === '1'",
         returnByValue: true,
       });
       last = r && r.result && r.result.value;
       if (last === true) return;
       await new Promise((r2) => setTimeout(r2, 25));
     }
-    throw new Error(`the page never finished booting (no #cv in a complete file:// document within ${BOOT_DEADLINE_MS}ms)`);
+    throw new Error(`the page never finished booting (no data-coach-ready on a complete file:// document within ${BOOT_DEADLINE_MS}ms)`);
   }
 
   const loaded = nextLoad();
