@@ -94,10 +94,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
   // ---------- audio ----------
   let actx = null, micStream = null, anTime = null, anFreq = null, micReady = false, testNodes = [];
   let gates = gatesFor(null), micDevices = [];
-  // Diagnostic snapshot of monoSum()'s adaptive routing decision -- last
-  // measured per-channel RMS and the gains that were set from it. Read-only,
-  // exposed on the debug hook so a slow/loaded run can be inspected without
-  // guessing from the downstream pitch output alone.
+  // Diagnostic snapshot of monoSum()'s routing decision (RMS + gains), read-only, exposed on the debug hook.
   let lastMonoRoute = null;
   // E3: pitch tracking moved off the main thread onto an AudioWorklet
   // (src/audio/pitch-worklet.js) when available; pitchWorkletNode stays null
@@ -210,17 +207,12 @@ import { register as registerPlayalong } from './ui/playalong.js';
     gL.connect(sum); gR.connect(sum);
     const bufL = new Float32Array(anL.fftSize), bufR = new Float32Array(anR.fftSize);
     const chanRms = (an, buf) => { an.getFloatTimeDomainData(buf); let s = 0; for (let i = 0; i < buf.length; i++) s += buf[i] * buf[i]; return Math.sqrt(s / buf.length); };
-    // A channel is treated as carrying no signal of its own -- routed out
-    // entirely -- when its RMS is under this fraction of the OTHER
-    // channel's: comfortably above ordinary channel-separation noise (a
-    // real interface's "silent" side still picks up a little crosstalk/room
-    // bleed from the live side), comfortably below the level a channel
-    // genuinely carrying its own signal would ever measure at.
+    // A channel routes out entirely when its RMS is under this fraction of
+    // the other's -- above ordinary channel-separation crosstalk, below a
+    // genuinely live channel's level.
     const SILENT_RATIO = 0.1;
-    // Below this absolute RMS, both channels read as "nobody playing yet"
-    // rather than let measurement noise flip the routing on pure silence --
-    // set under levels.js's own quietest calibrated gate (gatesFor(MIN_FLOOR)
-    // == 0.0045), so real, if quiet, playing is never mistaken for silence.
+    // Below this absolute RMS, both channels read as "nobody playing yet" --
+    // under levels.js's quietest calibrated gate (gatesFor(MIN_FLOOR) == 0.0045).
     const MIN_MEASURABLE_RMS = 0.001;
     function route() {
       const rL = chanRms(anL, bufL), rR = chanRms(anR, bufR);
@@ -231,10 +223,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
       else { gL.gain.setTargetAtTime(0.5, at, 0.02); gR.gain.setTargetAtTime(0.5, at, 0.02); }
       lastMonoRoute = { rL, rR, gLTarget: gL.gain.value, gRTarget: gR.gain.value, t: at };
     }
-    // First check after a brief settle window (the very first frames after
-    // opening a mic can be transient), then periodically for the rest of the
-    // session -- see the disconnect-driven cleanup in wireAnalysers below,
-    // which clears this interval whenever this source is replaced.
+    // Settle window, then periodic re-check; wireAnalysers below clears this on source swap.
     setTimeout(route, 150);
     sum.__monoRouteInterval = setInterval(route, 300);
     return sum;

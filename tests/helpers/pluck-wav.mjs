@@ -119,11 +119,17 @@ export function pluck(freq, sampleRate, seconds, opts = {}) {
     // Which channel carries the (only) signal in a stereo fixture — models a
     // guitar plugged into one side of a 2-channel audio interface input.
     channelSide = 'right',
+    // decay:1, brightness:1 makes the loop filter a no-op, so the ring
+    // never changes -- flat RMS from sample 0. For LEVEL-COMPARISON
+    // fixtures only, never gate/calibration or mid-session-switch, where
+    // decay is the point.
+    steady = false,
   } = opts;
+  const ksOpts = steady ? { brightness: 1, decay: 1, seed } : { brightness, decay, seed };
 
   let mono = weakFundamental
-    ? pluckWeakFundamental(freq, sampleRate, seconds, { brightness, decay, seed })
-    : karplusStrong(freq, sampleRate, seconds, { brightness, decay, seed });
+    ? pluckWeakFundamental(freq, sampleRate, seconds, ksOpts)
+    : karplusStrong(freq, sampleRate, seconds, ksOpts);
 
   // Scale to gain relative to the raw KS output's own natural loudness,
   // rather than to a fixed target RMS, so a caller can ask for "half as

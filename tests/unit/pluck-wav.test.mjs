@@ -72,6 +72,19 @@ test('pluck() stereo channelSide "both" duplicates the signal onto both channels
   assert.ok(rms(left) > 0);
 });
 
+// A ratio comparing two independent page loads of a DECAYING pluck
+// silently carries however far each load had decayed by read time (a real
+// CI failure: mono read 0.063 one run, 0.082 another). `steady: true`
+// makes decay a non-factor -- flat level for the whole file.
+test('pluck() steady mode holds a flat amplitude for the whole file', () => {
+  const buf = pluck(220, SR, 1.0, { seed: 4, steady: true });
+  const window = Math.floor(buf.length * 0.1);
+  const early = rms(buf, Math.floor(buf.length * 0.02), window);
+  const late = rms(buf, buf.length - window, window);
+  const ratio = late / early;
+  assert.ok(ratio > 0.98 && ratio < 1.02, `expected steady mode's tail (${late}) to match its attack (${early}), got ratio ${ratio}`);
+});
+
 test('pluckChannelSwitch() puts the signal on one channel, then the other, at the switch point', () => {
   const seconds = 1.0, switchAt = 0.5;
   const { left, right } = pluckChannelSwitch(220, SR, seconds, switchAt, { seed: 1, firstSide: 'left' });

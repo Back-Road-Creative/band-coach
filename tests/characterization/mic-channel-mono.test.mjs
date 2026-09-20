@@ -34,28 +34,31 @@ function writeFixture(path, opts) {
   writePluckWav(path, buf, SR);
 }
 
-// PR #23 CI failure (2026-09-20): a fixed 900ms wait followed by a SINGLE
-// heard() read was fragile under a loaded runner. Diagnosis (src/app.js
-// monoRoute() debug hook, added for this): under simulated CPU load, the
-// adaptive routing itself was correct and fast in every run observed --
-// gL/gR reached exact 1.000/0.000 (or 0.000/1.000) within ~330-560ms of
-// mic-open, and RMS never dropped anywhere near a gate. What blipped was
-// pitch detection itself: `heard().freq` intermittently read exactly 0 for
-// isolated ~100ms samples on EITHER channel under stress, while RMS and
-// gains stayed correct throughout (a transient clarity dropout, not a
-// routing or channel-specific defect -- both left-only and right-only
-// showed the same blips in the same loaded run). A single fixed-time
-// sample can land on exactly one such blip; this is that failure, not a
-// left/right asymmetry.
-//
-// Fixed by polling IN-PAGE (one CDP round trip, avoiding the Node-side
-// poll-loop delay a loaded box adds on top) for freq>0 to hold across two
-// consecutive ~50ms checks before trusting the reading, using the same
-// wait-floor budget (`effectiveWaitMs`, tests/helpers/browser.mjs) the
-// tuner lane already uses for exactly this class of flake (commit
-// 5ed4d54). This does not relax what is asserted -- ratio-to-mono still
-// has to hold -- it only stops a transient zero from being read as "never
-// detected".
+// PR #23's 2nd CI failure: comparing RMS from a DECAYING pluck sampled at
+// different wall-clock moments across two page loads moves the "mono"
+// reference itself (measured: 0.063 one run, 0.082 another) -- no amount
+// of settle-detection fixes an unstable reference. `steady: true` removes
+// decay as a factor: flat level for the whole file. Used ONLY for the
+// three level-comparison tests below; gate/calibration and mid-session
+// switch keep decaying fixtures, where decay is the point.
+function writeSteadyFixture(path, opts) {
+  const buf = pluck(FREQ, SR, 3.0, { seed: 5, steady: true, ...opts });
+  writePluckWav(path, buf, SR);
+}
+
+// Reads a level once, in-page (one CDP round trip, no gap for a fresh blip
+// to land between check and read), gated on TWO things: monoSum()'s
+// routing decision plus its gain ramp (setTargetAtTime, ~20ms time
+// constant) actually converging -- gating on freq>0 alone reads through
+// the ramp, since the default 0.5/0.5 gain is already enough for yin() to
+// detect a pitch (PR #23's 2nd regression, caught here: ratio ~0.5) -- and
+// the pitch reading itself holding stable against a transient clarity
+// dropout under load (PR #23's 1st CI failure). Budgeted via
+// `effectiveWaitMs` (tests/helpers/browser.mjs), the tuner lane's fix for
+// this class of flake (commit 5ed4d54). This only settles ROUTING/DETECTION
+// timing -- callers still need a `steady: true` fixture for any ratio
+// comparison, since a decaying pluck won't hold a stable ratio no matter
+// how the read is gated (PR #23's 2nd CI failure, the reference case).
 async function heardStable(wavPath) {
   const page = await launchPage(htmlPath, { fakeAudioFile: wavPath });
   try {
@@ -63,17 +66,6 @@ async function heardStable(wavPath) {
     await page.evaluate("document.getElementById('ioBtn').click()");
     await page.waitFor('window.__coach.devices().length > 0', 5000);
     const budgetMs = effectiveWaitMs(8000);
-    // A ratio comparison (unlike a plain freq>0 check) needs the gain RAMP
-    // itself to have settled, not just a detectable pitch: monoSum()'s
-    // route() calls setTargetAtTime(..., 0.02) (a ~20ms time constant), and
-    // the DEFAULT 0.5/0.5 gain before the first measurement is already
-    // enough for yin() to report a pitch -- so gating on freq>0 alone read
-    // straight through the ramp and measured ~half level (caught here: an
-    // early version of this fix regressed exactly that way, ratio ~0.5).
-    // Fixed by first waiting for window.__coach.monoRoute() to report a
-    // real (non-"skipped") decision, THEN an additional settle buffer (10x
-    // the 0.02s time constant, comfortably past 99% convergence) before
-    // trusting any reading, on top of the existing freq-stability check.
     return await page.evaluate(`(async () => {
       const start = Date.now();
       let routeSeenAt = null, stable = 0, last = null;
@@ -129,8 +121,8 @@ test('a guitar plugged into only the right channel of a 2-channel interface is h
   const dir = mkdtempSync(join(tmpdir(), 'mic-channel-mono-'));
   const monoPath = join(dir, 'mono.wav');
   const rightPath = join(dir, 'right-only.wav');
-  writeFixture(monoPath, {});
-  writeFixture(rightPath, { channels: 'stereo', channelSide: 'right' });
+  writeSteadyFixture(monoPath, {});
+  writeSteadyFixture(rightPath, { channels: 'stereo', channelSide: 'right' });
 
   const mono = await heardStable(monoPath);
   const right = await heardStable(rightPath);
@@ -143,8 +135,8 @@ test('a guitar plugged into only the left channel of a 2-channel interface is al
   const dir = mkdtempSync(join(tmpdir(), 'mic-channel-mono-'));
   const monoPath = join(dir, 'mono.wav');
   const leftPath = join(dir, 'left-only.wav');
-  writeFixture(monoPath, {});
-  writeFixture(leftPath, { channels: 'stereo', channelSide: 'left' });
+  writeSteadyFixture(monoPath, {});
+  writeSteadyFixture(leftPath, { channels: 'stereo', channelSide: 'left' });
 
   const mono = await heardStable(monoPath);
   const left = await heardStable(leftPath);
@@ -162,8 +154,8 @@ test('a duplicated-mono interface (same signal on both channels) does not get lo
   const dir = mkdtempSync(join(tmpdir(), 'mic-channel-mono-'));
   const monoPath = join(dir, 'mono.wav');
   const dupPath = join(dir, 'duplicated.wav');
-  writeFixture(monoPath, {});
-  writeFixture(dupPath, { channels: 'stereo', channelSide: 'both' });
+  writeSteadyFixture(monoPath, {});
+  writeSteadyFixture(dupPath, { channels: 'stereo', channelSide: 'both' });
 
   const mono = await heardStable(monoPath);
   const dup = await heardStable(dupPath);
