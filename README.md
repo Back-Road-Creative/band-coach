@@ -308,12 +308,18 @@ Total: under 5 minutes with a MIDI keyboard on hand, faster without one.
   `tests/release/gate.test.mjs`): tested continuously, every commit. This is what CI proves.
 - **A real, windowed Chrome or Edge browser:** untested by CI; the "five-minute human check" above
   is the only thing that has ever exercised one on this app's actual release build, and only when
-  someone runs it. Web MIDI (`navigator.requestMIDIAccess`) is a Chromium feature; Chrome and Edge
-  support it, so MIDI keyboards work there.
-- **Firefox, Safari (desktop):** untested. Firefox and Safari do not implement Web MIDI, so a MIDI
-  keyboard will not connect in them — the app detects this and falls back to on-screen keys,
-  computer-keyboard keys, and the microphone instead of failing silently, but nobody has confirmed
-  that fallback, or the microphone path, actually works end-to-end in either browser.
+  someone runs it. Chrome and Edge do provide Web MIDI (`navigator.requestMIDIAccess`), but a
+  browser providing the API is not the same as a given keyboard working — a real keyboard silently
+  delivering no notes in Chrome is precisely the failure that prompted this checklist. Run step 2.
+- **Firefox (desktop):** untested here. Firefox has supported Web MIDI since version 108
+  (December 2022), but unlike Chrome it does not use an inline permission dialog: the first
+  `requestMIDIAccess()` call asks you to install a generated Site Permission Add-On. If you decline
+  it, the app shows "MIDI was blocked here." (`src/app.js:1304`). Nobody has confirmed that flow, or
+  the microphone path, end-to-end in Firefox.
+- **Safari (desktop and iOS):** untested, and Web MIDI is not available — the app detects the
+  missing API and says so, falling back to on-screen keys, computer-keyboard keys and the
+  microphone rather than failing silently (`src/app.js:1289`). That fallback has not been confirmed
+  by hand in Safari.
 - **iPhone/iPad (the "Phone copy" edition):** unmeasured — see "Phone copy" above. Do not tell a
   learner it works on their phone.
 - **Real MIDI keyboards, real instruments through a real microphone:** untested beyond whichever
