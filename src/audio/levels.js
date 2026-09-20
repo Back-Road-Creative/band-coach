@@ -51,6 +51,22 @@ export function gatesFor(floorRms) {
   return { pitch, note: pitch * 1.25, chord: pitch * 1.5 };
 }
 
+// VERIFIED DEFECT 2 (mic-gate-and-capture): src/app.js's onPitch used a raw
+// hard-coded RMS release floor (0.006) to decide when a still-ringing pluck
+// has died down enough to accept a same-note re-pluck, ignoring the
+// calibrated gates entirely -- a quiet mic calibrated down to a lower
+// gates.pitch would never cross 0.006 at all, and a hot mic/noisy room
+// calibrated up past it would treat ordinary room noise as "released."
+// 0.006 / DEFAULT_GATES.pitch (0.008) === 0.75, so releaseFloor() derives
+// the same ratio off whatever gates are active: at the uncalibrated
+// defaults this returns EXACTLY 0.006, keeping today's behaviour untouched.
+export const RELEASE_GATE_RATIO = 0.75;
+
+export function releaseFloor(gatesArg) {
+  const pitchGate = gatesArg && Number.isFinite(gatesArg.pitch) ? gatesArg.pitch : DEFAULT_GATES.pitch;
+  return pitchGate * RELEASE_GATE_RATIO;
+}
+
 // Maps an RMS value onto a 0..1 dB-scaled range for a level meter. Human
 // loudness perception (and mic clipping headroom) is logarithmic, so a
 // linear RMS-to-width mapping would make everything below "shouting" look
