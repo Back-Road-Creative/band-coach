@@ -22,7 +22,7 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { HTML_PATH } from '../helpers/html-path.mjs';
-import { launchPage, effectiveWaitMs } from '../helpers/browser.mjs';
+import { launchPage, effectiveWaitMs, retryFlaky } from '../helpers/browser.mjs';
 import { pluck, pluckChannelSwitch, writePluckWav } from '../helpers/pluck-wav.mjs';
 
 const htmlPath = HTML_PATH;
@@ -59,7 +59,21 @@ function writeSteadyFixture(path, opts) {
 // timing -- callers still need a `steady: true` fixture for any ratio
 // comparison, since a decaying pluck won't hold a stable ratio no matter
 // how the read is gated (PR #23's 2nd CI failure, the reference case).
+// Retries the measurement, not the assertion: a starved runner can deliver
+// silence (`freq 0`) from a file that plainly is not silent, which is how
+// three of this repo's five CI failures in a 38-run window landed here. See
+// the `retryFlaky` note in tests/helpers/browser.mjs. A capture path that is
+// genuinely broken returns freq 0 on every attempt and still fails.
 async function heardStable(wavPath) {
+  return retryFlaky({
+    what: `a stable pitch from ${wavPath.split('/').pop()}`,
+    attempt: () => heardStableOnce(wavPath),
+    accept: (h) => h && h.freq > 0,
+    describe: (h) => (h ? `freq=${h.freq}, rms=${h.rms}` : 'nothing heard at all'),
+  });
+}
+
+async function heardStableOnce(wavPath) {
   const page = await launchPage(htmlPath, { fakeAudioFile: wavPath });
   try {
     await page.evaluate("window.__coach.setMod('gtr')");
@@ -102,19 +116,34 @@ test('channelCount: { ideal: 2 } does not reject or silence a mono-only capture'
   const wavPath = join(dir, 'mono-only.wav');
   writeFixture(wavPath, {}); // mono WAV -- the underlying "device" only has one channel to offer
 
-  const page = await launchPage(htmlPath, { fakeAudioFile: wavPath });
-  try {
-    await page.evaluate("window.__coach.setMod('gtr')");
-    let threw = null;
-    try { await page.evaluate("document.getElementById('ioBtn').click()"); await page.waitFor('window.__coach.devices().length > 0', 5000); }
-    catch (e) { threw = e; }
-    assert.equal(threw, null, 'opening a mono-only capture with channelCount ideal 2 must not throw/reject');
-    await page.waitFor('window.__coach.heard() && window.__coach.heard().freq > 0', 8000);
-    const heard = await page.evaluate('window.__coach.heard()');
-    assert.ok(heard.freq > 0, `expected the mono-only capture to be heard, not silenced, got freq ${heard.freq}`);
-  } finally {
-    await page.close();
-  }
+  // The "must not throw" half is deterministic and is asserted on every
+  // attempt. Only the "is actually heard" half is retried, and only because a
+  // starved runner reports freq 0 from a file that is not silent -- run
+  // 35540082257 failed here exactly that way. A capture that is genuinely
+  // rejected or silenced fails all three attempts.
+  await retryFlaky({
+    what: 'a mono-only capture opened with channelCount ideal 2 being heard, not silenced',
+    accept: (h) => h && h.freq > 0,
+    describe: (h) => (h ? `freq=${h.freq}` : 'nothing heard at all'),
+    attempt: async () => {
+      const page = await launchPage(htmlPath, { fakeAudioFile: wavPath });
+      try {
+        await page.evaluate("window.__coach.setMod('gtr')");
+        let threw = null;
+        try { await page.evaluate("document.getElementById('ioBtn').click()"); await page.waitFor('window.__coach.devices().length > 0', 5000); }
+        catch (e) { threw = e; }
+        assert.equal(threw, null, 'opening a mono-only capture with channelCount ideal 2 must not throw/reject');
+        try {
+          await page.waitFor('window.__coach.heard() && window.__coach.heard().freq > 0', 8000);
+        } catch (e) {
+          return await page.evaluate('window.__coach.heard()');
+        }
+        return await page.evaluate('window.__coach.heard()');
+      } finally {
+        await page.close();
+      }
+    },
+  });
 });
 
 test('a guitar plugged into only the right channel of a 2-channel interface is heard at the SAME level as mono', async () => {
