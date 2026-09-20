@@ -5,6 +5,13 @@ A thin Electron desktop shell around the exact same one-file app the browser bui
 `src/`, `build/` and the root `package.json` are untouched. This folder has its own
 `package.json` so `electron` and `electron-builder` never become dependencies of the app itself.
 
+**`package.json`'s `description` here is published, not internal.** electron-builder copies it
+verbatim into the appx manifest, so it is the sentence a shopper reads in the Microsoft Store
+listing — write it for them, not for whoever maintains this folder. The developer explanation is
+this page. `tests/unit/store-listing-description.test.mjs` fails the suite if maintainer jargon
+gets back into it. The `version` next to it is likewise overwritten at packaging time from the
+app's own release version (`scripts/apply-identity.mjs`); bumping it here does nothing.
+
 The Microsoft Store re-signs whatever `.msix`/`.appx` you submit, for free. So this shell is built
 **unsigned** here and signed by the Store when you upload it — no paid code-signing certificate,
 no paid CI, no paid services anywhere in this path.
