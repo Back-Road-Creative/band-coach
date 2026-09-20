@@ -15,8 +15,10 @@ no paid CI, no paid services anywhere in this path.
   `contextIsolation: true`, `nodeIntegration: false`, `sandbox: true`. Denies all navigation and
   `window.open` away from the app file. Blocks every network request (`session.webRequest`) —
   only `file:`/`blob:`/`data:` are allowed, so the app stays visibly offline. Permission handler
-  grants only `media` (microphone) and `midi`/`midiSysex`, denies everything else. Menu: Quit,
-  Reload, Toggle Full Screen, About.
+  grants only `media` (microphone) and `midi`/`midiSysex`, denies everything else — see
+  "Permission decision" below. Menu: Quit, Reload, Toggle Full Screen, About.
+- `lib/permission-policy.js` — the pure allow/deny decision for `getUserMedia`/Web MIDI requests
+  (no Electron import; see "Permission decision" below).
 - `preload.js` — empty on purpose; nothing is exposed via `contextBridge`.
 - `electron-builder.json` — the `appx` packaging config. Identity fields
   (`identityName`/`publisher`/`publisherDisplayName`) are **safe placeholders**
@@ -30,7 +32,9 @@ no paid CI, no paid services anywhere in this path.
   expand `${env.X}` macros in these fields itself (verified against
   `node_modules/app-builder-lib/out/targets/AppxTarget.js` — it copies `appx.*` straight out of
   the resolved config with no substitution, unlike artifact-name patterns), so this script does
-  the substitution before electron-builder ever reads the config.
+  the substitution before electron-builder ever reads the config. With `--require-identity` (or
+  `BC_REQUIRE_IDENTITY=1`), it refuses (non-zero exit, naming the missing env vars) to write a
+  config that still has any placeholder field — see "Building a Store submission package" below.
 - `scripts/generate-icons.mjs` — writes placeholder Store logo PNGs with a hand-rolled PNG
   encoder (`node:zlib` only, no image library) into `build-resources/appx/`. **Replace these with
   real branded art before submitting to the Store.** Required sizes generated:
@@ -62,6 +66,66 @@ no paid CI, no paid services anywhere in this path.
   a UWP/AppX capability declaration the way the microphone is, so there's nothing to add here —
   MIDI access should work in the packaged app without a manifest capability, but this has **not**
   been verified on an actual Windows machine (see "Not verified" below).
+
+## Permission decision
+
+`getUserMedia` (microphone) and `requestMIDIAccess` (MIDI, including sysex) only work if Electron's
+session grants them. The allow/deny decision lives in `lib/permission-policy.js` — a small pure
+function with no Electron import, `isAllowed({ permission, requestingOrigin, requestingUrl,
+webContentsUrl, appFileUrl })` — unit-tested standalone at
+`tests/unit/store-permission-policy.test.mjs` (`node --test`, no Electron required). `main.js`
+calls it from both `session.setPermissionRequestHandler` and `session.setPermissionCheckHandler`,
+passing every identifying argument Electron gives those handlers.
+
+It allows a request only when:
+
+- `permission` is exactly `media`, `midi`, or `midiSysex` (never a wildcard, never any other
+  permission Electron might ask about — geolocation, notifications, clipboard, etc.), and
+- at least one of `requestingUrl` (from the handler's `details` object) or `webContentsUrl`
+  (`webContents.getURL()`) is present, parses as a `file:` URL, and its host+path exactly match
+  the app's own `band-coach.html` file — and if BOTH are present, they must agree.
+
+It never trusts `requestingOrigin` alone. Per Electron's docs
+(https://www.electronjs.org/docs/latest/api/session#sessetpermissioncheckhandlerhandler,
+`electron` pinned to `44.4.3` in `package.json`), `setPermissionCheckHandler`'s third argument is
+"The origin URL of the permission check", and both handlers can additionally receive a `details`
+object whose `requestingUrl` is "The last URL the requesting frame loaded." The docs do not say how
+Chromium serializes an *origin* for a `file://` page specifically (it can plausibly come through as
+the literal file URL, a bare `file://`/`file:///`, or the opaque string `"null"` — origins for
+non-http(s) schemes are not standardized the way http(s) origins are). Rather than guess which form
+applies on Windows, `requestingOrigin` is used only as a defense-in-depth veto — a request whose
+origin is unambiguously remote (`http:`/`https:`/`ws:`/`wss:`/`ftp:`) is denied immediately, even if
+a URL field were somehow spoofed to match — while the actual allow decision always requires a
+provable full-URL match via `requestingUrl`/`webContentsUrl`. If neither URL field is present, the
+request is denied (fail closed), never granted on origin comparison alone.
+
+**Unverified:** whether Electron 44 on Windows ever reports `requestingUrl`/`webContentsUrl` as
+empty/undefined for a legitimate in-app `getUserMedia()`/`requestMIDIAccess()` call from the loaded
+`file://` page (which would make this handler wrongly deny a real request, i.e. fail safe but
+break the feature) — this can only be confirmed by running the packaged app on Windows and watching
+whether the mic/MIDI prompt behaves as the browser build does. See "What was NOT verified here".
+
+## Building a Store submission package
+
+`npm run dist:appx` (what the tag-triggered `store-package` CI workflow runs) builds successfully
+with the committed placeholder identity when `BC_IDENTITY_NAME`/`BC_PUBLISHER`/
+`BC_PUBLISHER_DISPLAY_NAME` aren't set — that's intentional so CI keeps working before real
+identity values exist.
+
+`npm run dist:appx:submission` is the same build with the identity guard turned on
+(`apply-identity.mjs --require-identity`): it refuses (non-zero exit, naming exactly which of the
+three env vars are missing) to write a config that still has ANY placeholder identity field. Use it
+for a package you actually intend to upload to Partner Center, with the three real values from
+"Getting the real identity values" below set in the environment:
+
+```
+BC_IDENTITY_NAME=<Package/Identity/Name> \
+BC_PUBLISHER=<Package/Identity/Publisher> \
+BC_PUBLISHER_DISPLAY_NAME=<PublisherDisplayName> \
+npm --prefix store run dist:appx:submission
+```
+
+Real identity values come only from Partner Center — never invent or guess one.
 
 ## Progress persistence
 

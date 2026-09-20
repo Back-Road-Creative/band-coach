@@ -17,11 +17,10 @@
 const { app, BrowserWindow, Menu, session, shell } = require('electron');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
+const { isAllowed, ALLOWED_PERMISSIONS } = require('./lib/permission-policy.js');
 
 const APP_HTML_PATH = path.join(__dirname, 'app', 'band-coach.html');
 const APP_FILE_URL = pathToFileURL(APP_HTML_PATH).href;
-
-const ALLOWED_PERMISSIONS = new Set(['media', 'midi', 'midiSysex']);
 
 function isAppUrl(url) {
   return url === APP_FILE_URL;
@@ -53,13 +52,33 @@ function installNetworkBlock(ses) {
 }
 
 function installPermissionHandler(ses) {
-  ses.setPermissionRequestHandler((webContents, permission, callback) => {
-    const requestingUrl = webContents.getURL();
-    callback(ALLOWED_PERMISSIONS.has(permission) && isAppUrl(requestingUrl));
+  // The decision itself lives in the pure, Electron-free
+  // ./lib/permission-policy.js (unit-tested without Electron at
+  // tests/unit/store-permission-policy.test.mjs). Both handlers pass every
+  // identifying argument Electron gives them: `requestingUrl` from
+  // `details` (documented for both handlers) and the WebContents' own
+  // current URL, never `requestingOrigin` alone — Chromium's origin
+  // serialization for file:// pages is not guaranteed by Electron's docs
+  // (see store/README.md, "What was NOT verified here").
+  ses.setPermissionRequestHandler((webContents, permission, callback, details) => {
+    callback(
+      isAllowed({
+        permission,
+        requestingUrl: details && details.requestingUrl,
+        webContentsUrl: webContents && webContents.getURL(),
+        appFileUrl: APP_FILE_URL,
+      })
+    );
   });
   if (typeof ses.setPermissionCheckHandler === 'function') {
-    ses.setPermissionCheckHandler((webContents, permission, requestingOrigin) => {
-      return ALLOWED_PERMISSIONS.has(permission) && requestingOrigin === APP_FILE_URL;
+    ses.setPermissionCheckHandler((webContents, permission, requestingOrigin, details) => {
+      return isAllowed({
+        permission,
+        requestingOrigin,
+        requestingUrl: details && details.requestingUrl,
+        webContentsUrl: webContents && webContents.getURL(),
+        appFileUrl: APP_FILE_URL,
+      });
     });
   }
 }
