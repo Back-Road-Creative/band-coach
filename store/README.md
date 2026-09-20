@@ -150,6 +150,28 @@ browser profile — nothing in the app code needed to change for this.
 6. In Partner Center, upload that `.appx` under **Packages** on your submission. The Store
    re-signs it — no local signing step, no certificate to buy.
 
+## Trying the shell on Windows without packaging it
+
+`scripts/try-shell.ps1` runs this shell **unpackaged** on a real Windows machine. It is the cheapest
+way to check the things neither headless CI nor a Linux box can: a real microphone, a real MIDI
+keyboard, and Electron's permission handlers against a real `file://` page. It needs no code-signing
+certificate and no Windows SDK, because it never builds an `.appx` — it runs the same `main.js` and
+`lib/permission-policy.js` the packaged app runs.
+
+```
+powershell -ExecutionPolicy Bypass -File <repo>\store\scripts\try-shell.ps1
+```
+
+It installs dependencies, builds the one-file app, copies it in with `prepare-app`, prints a
+pass/fail checklist (microphone, MIDI, the tuner's hold-through-decay, progress surviving a restart)
+and launches Electron with `--enable-logging` so the app's console output lands in the terminal —
+the shell's menu deliberately has no developer tools, so that flag is the only way to see an error.
+Pass `-SkipInstall` on later runs to skip the `npm ci` steps.
+
+A failure here is a real failure: if the microphone or MIDI is denied in this mode, it is denied in
+the packaged app too. It does **not** exercise the `.appx` manifest's capability declaration or the
+Store's own install path — see below.
+
 ## What was NOT verified here
 
 - **The package has never been built.** This Linux box cannot run `electron-builder --win appx`
