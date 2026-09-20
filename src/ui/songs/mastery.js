@@ -1,20 +1,43 @@
 // Maps a MIDI note, played on a given instrument, to the SAME per-item id
 // the app's built-in drills use for that instrument's mastery store
 // (src/app.js `it(id)` / `S.item[id]`; id formats read from `info()` /
-// `validId()` at src/app.js:282-295, and the existing "capture a melody"
-// mapper `customItem()` at src/app.js:316-324, which this mirrors exactly
-// so a song credits the identical mastery keys a built-in drill would).
+// `validId()` at src/app.js:282-295). `src/app.js`'s "capture a melody"
+// mapper `customItem()` delegates to this function so the two can never
+// drift apart again (tests/unit/w-songs-mastery.test.mjs asserts the
+// agreement directly).
 // Pure: no DOM, no clock reads, no randomness. `prefs` is the learner's
 // saved preference object (DB.prefs, read via api.db().prefs) for the two
 // instruments whose item id depends on a runtime choice (voice range,
 // wind transposition).
 //
-// Only instruments the app already has a per-item mastery scheme for are
-// mapped: kbd, gtr, bass, uke, voice, wind, harp (the seven
-// status:'ready' records in src/instruments/*.js). Every other instrument
-// id (the planned ones, with no curriculum wired to S.item) returns null —
-// there is nothing to credit yet, and the wiring pass should say so rather
-// than invent a key.
+// voice, wind and harp each need bespoke logic (a runtime-chosen tonic/
+// transposition, or a hole-search order) and are switch-cased explicitly
+// below. Every other instrument's scheme is DERIVED from its
+// src/instruments/*.js registry record rather than hand-typed by id, so a
+// newly `status: 'ready'` record is mapped by construction:
+//   - `fretted: true` records (gtr, bass, uke, mandolin, banjo-5-string,
+//     bass-5-string, ukulele-baritone, ukulele-low-g — every fretted ready
+//     record as of this writing) credit by pitch class, any octave: 'p'+pc.
+//   - `family: 'keys'` or `family: 'percussion'` records (kbd,
+//     mallet-percussion) credit by exact note folded into the record's own
+//     `range`: 'n'+fold(midi, range.low, range.high).
+// A `status: 'ready'` record that fits neither shape returns null and
+// tests/unit/w-songs-mastery.test.mjs's "every ready record maps" check
+// will fail CI, rather than the gap shipping silently — see that test
+// before adding a new instrument family here.
+// Planned instruments (no curriculum wired to S.item) return null: there
+// is nothing to credit yet.
+
+import { byId as instrumentById } from '../../instruments/index.js';
+
+// Registry `family` values whose ready records use the same keyboard-style
+// scheme MODS.kbd pioneered: a fixed, non-transposing note layout folded
+// into the instrument's own beginner range. Currently kbd (family 'keys')
+// and mallet-percussion (family 'percussion') — both mic/MIDI instruments
+// read as one fixed row of notes, unlike the fretted instruments (any
+// string/fret can produce the same pitch class) or voice/wind (a runtime-
+// chosen tonic/transposition).
+const NOTE_FAMILIES = new Set(['keys', 'percussion']);
 
 function pc(m) {
   return ((Math.round(m) % 12) + 12) % 12;
@@ -53,12 +76,6 @@ const HARP_HOLE_ORDER = [4, 5, 6, 7, 3, 2, 1, 8, 9, 10];
 // scheme (yet) to credit.
 export function itemIdForMidi(instrumentId, midi, prefs = {}) {
   switch (instrumentId) {
-    case 'kbd':
-      return 'n' + fold(midi, 48, 72);
-    case 'gtr':
-    case 'bass':
-    case 'uke':
-      return 'p' + pc(midi);
     case 'voice': {
       const base = VOICE_TONIC[prefs.voice] ?? VOICE_TONIC.low;
       return 'v' + (((midi - base) % 12) + 12) % 12;
@@ -75,8 +92,13 @@ export function itemIdForMidi(instrumentId, midi, prefs = {}) {
       }
       return null;
     }
-    default:
+    default: {
+      const rec = instrumentById[instrumentId];
+      if (!rec || rec.status !== 'ready') return null;
+      if (rec.fretted) return 'p' + pc(midi);
+      if (NOTE_FAMILIES.has(rec.family)) return 'n' + fold(midi, rec.range.low, rec.range.high);
       return null;
+    }
   }
 }
 

@@ -37,7 +37,7 @@ import { createPanels, sanitizePanelData } from './ui/panels.js';
 //
 // slot:import:w-songs
 import { register as registerSongs, forwardNote as forwardSongNote } from './ui/songs.js';
-//
+import { itemIdForMidi } from './ui/songs/mastery.js';
 import { register as registerEditor, __setDebugFrames, __getDebugSong, __isRecording } from './ui/editor.js';
 //
 //
@@ -355,15 +355,15 @@ import { register as registerPlayalong } from './ui/playalong.js';
   const _info = info, _valid = validId;
   info = function (m, id, prefs) { if (id[0] === 'h') { const mm = /^h([bd])(\d+)$/.exec(id), dir = mm[1], hole = +mm[2], midi = HARP[dir][hole - 1]; return { kind: 'note', midi: midi, hole: hole, dir: dir, note: nname(midi), label: (dir === 'b' ? 'Blow ' : 'Draw ') + hole + ' (' + nname(midi) + ')', short: (dir === 'b' ? 'Blow ' : 'Draw ') + hole }; } return _info(m, id, prefs); };
   validId = function (m, id) { if (typeof id === 'string' && id[0] === 'h') return /^h[bd]([1-9]|10)$/.test(id); return _valid(m, id); };
-  // turn a heard note into an item this instrument can practise
+  // turn a heard note into an item this instrument can practise. Delegates
+  // to src/ui/songs/mastery.js's itemIdForMidi -- the "capture a melody"
+  // path and a song's mastery crediting must credit the identical item id
+  // for the same (instrument, midi, prefs), so there is one source of
+  // truth for the mapping rather than two hand-typed copies of it (see
+  // tests/unit/w-songs-mastery.test.mjs's "customItem agrees with
+  // itemIdForMidi" check).
   function customItem(m, midi, prefs) {
-    const fold = (x, lo, hi) => { while (x < lo) x += 12; while (x > hi) x -= 12; return x; };
-    if (m === 'kbd') return 'n' + fold(midi, 48, 72);
-    if (m === 'gtr' || m === 'bass' || m === 'uke') return 'p' + pc(midi);
-    if (m === 'voice') { const base = (VOICE_KINDS[prefs.voice] || VOICE_KINDS.low)[1]; return 'v' + (((midi - base) % 12) + 12) % 12; }
-    if (m === 'wind') { const k = WIND_KINDS[prefs.wind] || WIND_KINDS.bb; return 'w' + fold(k[2] === 'bass' ? midi + 19 : midi - k[1], 60, 79); }
-    if (m === 'harp') { const order = [4, 5, 6, 7, 3, 2, 1, 8, 9, 10]; for (const h of order) for (const d of ['b', 'd']) if (pc(HARP[d][h - 1]) === pc(midi)) return 'h' + d + h; return null; }
-    return null;
+    return itemIdForMidi(m, midi, prefs);
   }
 
   // ---------- saved state: one learner model per instrument, shared session log ----------
