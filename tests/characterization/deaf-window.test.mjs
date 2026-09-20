@@ -48,8 +48,22 @@ test('the mic is deaf to the app\'s own reference tone, then hears again once th
 
   // While still inside the deaf window, keep feeding the tone and confirm
   // it is never credited.
-  await new Promise((r) => setTimeout(r, 400));
-  assert.equal(await page.evaluate('window.__coach.deaf()'), true, 'reference tone plus its tail should still be open 400ms in');
+  //
+  // The instant to sample at comes from the window's OWN remaining time, not
+  // a fixed sleep. A voice reference tone runs `at + 0.75s` plus a 250ms tail
+  // (src/app.js playRef(), src/audio/deaf-window.js open()), so the window is
+  // about a second wide -- but the CDP round-trips above spend real wall-clock
+  // before the sleep even starts, and on a loaded CI runner they have spent
+  // enough of it that a hardcoded 400ms landed PAST the close time and failed
+  // an assertion about behaviour that was in fact correct (2026-09-20, run
+  // 35521184205; reproduced locally 1 failure in 5 solo runs). Sampling at the
+  // midpoint of what is actually left cannot overshoot however slow the box is.
+  const until = await page.evaluate('window.__coach.deafUntil()');
+  const sampledAt = await page.evaluate('performance.now()');
+  const remainingMs = until - sampledAt;
+  assert.ok(remainingMs > 0, 'the reference tone should still have deaf window left at this point');
+  await new Promise((r) => setTimeout(r, remainingMs / 2));
+  assert.equal(await page.evaluate('window.__coach.deaf()'), true, 'reference tone plus its tail should still be open halfway through what was left');
   assert.notEqual(
     await page.evaluate("document.getElementById('feedback').className"),
     'ok',
