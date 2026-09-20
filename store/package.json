@@ -9,7 +9,8 @@
   "scripts": {
     "generate-icons": "node scripts/generate-icons.mjs",
     "prepare-app": "node scripts/prepare-app.mjs",
-    "dist:appx": "npm run prepare-app && node scripts/apply-identity.mjs && electron-builder --win appx --config electron-builder.generated.json"
+    "dist:appx": "npm run prepare-app && node scripts/apply-identity.mjs && electron-builder --win appx --config electron-builder.generated.json",
+    "dist:appx:submission": "npm run prepare-app && node scripts/apply-identity.mjs --require-identity && electron-builder --win appx --config electron-builder.generated.json"
   },
   "devDependencies": {
     "electron": "44.4.3",

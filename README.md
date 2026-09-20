@@ -27,6 +27,16 @@ instead of a one-size-fits-all level, including the level the pitch detector its
 small meter shows the live input level. An instrument plugged into only one channel of a
 2-channel interface is summed into the listening path rather than silenced.
 
+Press "Connect MIDI" to use a keyboard. The status line only says a device is connected once the
+page has actually opened it, so "Keystation found. Press any key on it." means the keyboard is
+wired up but the app has not heard a note yet, and "Keystation is working." means it has. If it
+instead says another program may be using the keyboard, close whatever else has it open (another
+tab, a DAW) and press Connect again. A small dot next to Connect blinks on every MIDI byte the
+page receives, even with no exercise running — useful for telling "the app cannot see my keyboard"
+apart from "the app sees it but has nothing to judge right now". "MIDI details" opens a readout of
+every input's name, connection state and the last few raw messages heard, for tracking down a
+silent keyboard on your own machine.
+
 ## Test
 
 ```

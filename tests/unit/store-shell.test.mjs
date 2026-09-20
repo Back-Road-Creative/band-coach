@@ -30,10 +30,21 @@ test('main.js installs a webRequest network block', () => {
 
 test('main.js installs a permission handler naming only media/midi', () => {
   assert.match(mainJs, /setPermissionRequestHandler\s*\(/);
+  assert.match(mainJs, /setPermissionCheckHandler\s*\(/);
+  // main.js delegates the allow/deny decision to the pure policy module —
+  // see store/lib/permission-policy.js and
+  // tests/unit/store-permission-policy.test.mjs for the exhaustive
+  // allow/deny behavior. Here we only confirm main.js actually imports it
+  // and passes every identifying argument through, rather than deciding
+  // itself.
+  assert.match(mainJs, /require\(['"]\.\/lib\/permission-policy\.js['"]\)/);
+  assert.match(mainJs, /isAllowed\s*\(/);
+
   // The allow-list is an explicit, named set — not a wildcard or an
   // inverted deny-list — and it names exactly media/midi/midiSysex.
-  const allowListMatch = mainJs.match(/ALLOWED_PERMISSIONS\s*=\s*new Set\(\[([^\]]+)\]\)/);
-  assert.ok(allowListMatch, 'expected an ALLOWED_PERMISSIONS Set literal in main.js');
+  const policyJs = readFileSync(join(storeRoot, 'lib', 'permission-policy.js'), 'utf8');
+  const allowListMatch = policyJs.match(/ALLOWED_PERMISSIONS\s*=\s*new Set\(\[([^\]]+)\]\)/);
+  assert.ok(allowListMatch, 'expected an ALLOWED_PERMISSIONS Set literal in lib/permission-policy.js');
   const names = allowListMatch[1]
     .split(',')
     .map(s => s.trim().replace(/^['"]|['"]$/g, ''))
@@ -99,6 +110,45 @@ test('scripts/apply-identity.mjs overlays real env values when present', async (
   assert.equal(config.appx.identityName, 'RealPublisher.BandCoach');
   assert.equal(config.appx.publisher, 'CN=RealPublisher');
   assert.equal(config.appx.publisherDisplayName, 'Real Publisher LLC');
+});
+
+test('scripts/apply-identity.mjs assertIdentityComplete is a no-op when every field came from env', async () => {
+  const { applyIdentity, assertIdentityComplete } = await import(join(storeRoot, 'scripts', 'apply-identity.mjs'));
+  const { applied } = applyIdentity({
+    BC_IDENTITY_NAME: 'RealPublisher.BandCoach',
+    BC_PUBLISHER: 'CN=RealPublisher',
+    BC_PUBLISHER_DISPLAY_NAME: 'Real Publisher LLC',
+  });
+  assert.doesNotThrow(() => assertIdentityComplete(applied));
+});
+
+test('scripts/apply-identity.mjs assertIdentityComplete throws naming every missing env var when identity is incomplete', async () => {
+  const { applyIdentity, assertIdentityComplete } = await import(join(storeRoot, 'scripts', 'apply-identity.mjs'));
+  const { applied } = applyIdentity({ BC_IDENTITY_NAME: 'RealPublisher.BandCoach' });
+  assert.throws(() => assertIdentityComplete(applied), err => {
+    assert.match(err.message, /BC_PUBLISHER\b/);
+    assert.match(err.message, /BC_PUBLISHER_DISPLAY_NAME/);
+    assert.doesNotMatch(err.message, /BC_IDENTITY_NAME/);
+    return true;
+  });
+});
+
+test('scripts/apply-identity.mjs assertIdentityComplete throws naming all three when nothing is set', async () => {
+  const { applyIdentity, assertIdentityComplete } = await import(join(storeRoot, 'scripts', 'apply-identity.mjs'));
+  const { applied } = applyIdentity({});
+  assert.throws(() => assertIdentityComplete(applied), err => {
+    assert.match(err.message, /BC_IDENTITY_NAME/);
+    assert.match(err.message, /BC_PUBLISHER\b/);
+    assert.match(err.message, /BC_PUBLISHER_DISPLAY_NAME/);
+    return true;
+  });
+});
+
+test('store/package.json exposes a submission build that requires identity, and the plain build still works with placeholders', () => {
+  const storePkg = JSON.parse(readFileSync(join(storeRoot, 'package.json'), 'utf8'));
+  assert.match(storePkg.scripts['dist:appx:submission'], /--require-identity/);
+  assert.doesNotMatch(storePkg.scripts['dist:appx'], /--require-identity/);
+  assert.doesNotMatch(storePkg.scripts['dist:appx'], /BC_REQUIRE_IDENTITY/);
 });
 
 test('scripts/prepare-app.mjs prefers the release build then falls back to plain', async () => {

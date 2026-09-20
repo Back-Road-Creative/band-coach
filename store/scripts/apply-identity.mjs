@@ -43,9 +43,42 @@ export function applyIdentity(env = process.env) {
   return { config, applied };
 }
 
+// A package meant for real Store SUBMISSION can never ship with placeholder
+// identity — that would fail AppX identity validation (or worse, silently
+// submit a package Partner Center can't tie to the real listing). This is
+// opt-in (BC_REQUIRE_IDENTITY=1, or the --require-identity CLI flag) so the
+// existing tag-triggered CI build keeps working exactly as it does today —
+// unset repo variables there fall back to the committed placeholders, which
+// is the documented, intentional behavior (see store/README.md).
+//
+// Real identity values come ONLY from Partner Center (see store/README.md,
+// "Getting the real identity values") — this function never invents or
+// guesses one; it only refuses to proceed when one is missing.
+export function assertIdentityComplete(applied, envNamesByField = OVERRIDES) {
+  const missingFields = Object.entries(applied)
+    .filter(([, source]) => source === 'placeholder')
+    .map(([field]) => field);
+  if (missingFields.length === 0) {
+    return;
+  }
+  const missingEnvNames = missingFields.map(field => envNamesByField[field]);
+  throw new Error(
+    'refusing to build a Store submission package with placeholder identity; ' +
+      'set: ' +
+      missingEnvNames.join(', ')
+  );
+}
+
+function requireIdentityRequested(argv, env) {
+  return argv.includes('--require-identity') || env.BC_REQUIRE_IDENTITY === '1';
+}
+
 const isMain = process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1];
 if (isMain) {
   const { config, applied } = applyIdentity();
+  if (requireIdentityRequested(process.argv.slice(2), process.env)) {
+    assertIdentityComplete(applied);
+  }
   writeFileSync(OUT_CONFIG, JSON.stringify(config, null, 2) + '\n', 'utf8');
   console.log('wrote ' + OUT_CONFIG);
   for (const [field, source] of Object.entries(applied)) {

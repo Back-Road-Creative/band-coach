@@ -4,6 +4,7 @@ import { exportProgress as exportProgressFile, importProgress as importProgressF
 import { toAudioTime, judgeTap, medianLatency } from './core/timing.js';
 import { DEFAULT_STABILITY_DAYS, MIN_STABILITY_DAYS, MAX_STABILITY_DAYS, GRADE, retrievability, review, due, migrateItem } from './core/srs.js';
 import { handsTogetherById, fingeringLabel, gradeHandsTogetherExact, gradeHandsTogetherApprox } from './core/hands-together.js';
+import { createMidiParser } from './core/midi.js';
 // Merge slots: a unit in flight adds its imports by replacing ONLY its own
 // slot line, so parallel branches never edit adjacent lines.
 import { recordError, getErrors } from './core/error-log.js';
@@ -18,6 +19,7 @@ import { createOnsetDetector } from './audio/onset.js';
 import { chroma, judgeChord } from './audio/chords.js';
 //
 import { makeGrid, scoreTake, tempoLadder } from './core/groove.js';
+import { stepTuner } from './core/tuner.js';
 //
 import { shouldReveal, promptFor, hintFor as coreHintFor } from './core/reveal.js';
 //
@@ -679,19 +681,33 @@ import { register as registerPlayalong } from './ui/playalong.js';
     lastItem = from; nextTaskAt = now() + (anyFail ? 1.5 : 0.7); if (task.kind === 'ear') nextTaskAt = now() + (anyFail ? 2.6 : 1.1); save(); showAll();
   };
   function dirWord(got, want) { let d = ((pc(want) - pc(got)) + 12) % 12; if (d > 6) d -= 12; return d > 0 ? 'higher' : 'lower'; }
-  // a played note (MIDI key, screen key, or a plucked note the microphone recognised)
-  function onNote(midi, exact) {
+  // a played note (MIDI key, screen key, or a plucked note the microphone
+  // recognised); `source` is 'midi' for a real MIDI note-on and left
+  // undefined for every other caller (screen keys, computer keys, the mic
+  // path, the debug hook) -- it only changes (a) the plain-text "heard"
+  // messages below and (b) hands-together grading using the real MIDI
+  // held-note set instead of the note-on timer window, never anything else.
+  function onNote(midi, exact, source) {
     forwardSongNote(midi, exact);
-    lastInputAt = now(); pressed[midi] = performance.now(); if (!playing || !task || task.done) return; const e = cur(); if (!e) return; const i = e.info;
+    lastInputAt = now(); pressed[midi] = performance.now();
+    if (source === 'midi') { const notJudging = !playing || !task || task.done; const outOfView = !notJudging && mod === 'kbd' && (midi < kbdRange()[0] || midi > kbdRange()[1]); if (notJudging) coach(nname(midi) + ' heard' + (playing ? '.' : ' -- start an exercise to see it judged.')); else if (outOfView) coach(nname(midi) + ' heard, but that key is not drawn on screen right now.'); }
+    if (!playing || !task || task.done) return; const e = cur(); if (!e) return; const i = e.info;
     if (MODS[mod].input === 'tap') { onTap(); return; }
     if (task.kind === 'groove') { grooveOnset(midi); return; }
     if (i.kind === 'chord') { if (!exact) return; held.push({ p: pc(midi), t: now() }); held = held.filter(x => now() - x.t < 1.5); const got = {}; held.forEach(x => { got[x.p] = 1; }); if (i.pcs.indexOf(pc(midi)) < 0) { failEl(nname(midi) + ' is not in ' + i.label + ' (' + i.pcs.map(x => NAMES[x]).join(', ') + ').', e.id + '>x' + pc(midi)); held = []; return; } if (i.pcs.every(x => got[x])) passEl(); return; }
     if (i.kind === 'hands-together') {
       const ex = i.ex;
       if (!exact) { const g = gradeHandsTogetherApprox(ex, midi); if (!g.ok) { failEl(nname(midi) + ' is not part of ' + ex.short + ' (approximate: a microphone only hears one note at a time).', e.id + '>xa' + midi); return; } passEl(0.7, 'Approximate (one note heard, microphone): ' + (g.hand === 'rh' ? 'right' : 'left') + ' hand, ' + nname(midi) + '. Connect a MIDI keyboard to grade both hands together.'); return; }
-      held.push({ m: midi, t: now() }); held = held.filter(x => now() - x.t < 0.6);
-      const heldMidis = held.map(x => x.m), g = gradeHandsTogetherExact(ex, heldMidis);
-      if (g.wrong.length) { failEl(nname(midi) + ' is not part of ' + ex.short + ' (' + fingeringLabel(ex) + ').', e.id + '>x' + midi); held = []; return; }
+      // Real MIDI: heldMidis comes from actual note-on/note-off state
+      // (realMidiHeld, kept current by handleMidiMessage below), so holding a
+      // chord for longer than the old 0.6s note-on timer window still
+      // grades correctly. Every other exact-input caller (screen keys,
+      // computer keys, the debug hook) has no note-off to track, so it keeps
+      // the original "recent note-ons" window -- same grading outcomes as
+      // before this change for all of those.
+      const heldMidis = source === 'midi' ? Array.from(realMidiHeld) : (held.push({ m: midi, t: now() }), held = held.filter(x => now() - x.t < 0.6), held.map(x => x.m));
+      const g = gradeHandsTogetherExact(ex, heldMidis);
+      if (g.wrong.length) { failEl(nname(midi) + ' is not part of ' + ex.short + ' (' + fingeringLabel(ex) + ').', e.id + '>x' + midi); if (source !== 'midi') held = []; return; }
       if (g.ok) passEl(undefined, ex.short + ': both hands together. ' + fingeringLabel(ex) + '.');
       return;
     }
@@ -944,7 +960,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
   }
 
   // ---------- drawing ----------
-  const cv = $('cv'), g = cv.getContext('2d'); let keyRects = [], rowRects = [], lastStaff = null;
+  const cv = $('cv'), g = cv.getContext('2d'); let keyRects = [], rowRects = [], playRects = [], lastStaff = null;
   cv.tabIndex = 0; // item 3 (Wave W, w-fixes): keyboard-reachable so a keyboard-only learner can play the on-screen piano
   // item 3 (Wave W, w-fixes): a keyboard-driven focus cursor over the current keyRects, sorted left to right.
   let kbdFocusIdx = 0;
@@ -956,6 +972,10 @@ import { register as registerPlayalong } from './ui/playalong.js';
   const font = (px, w) => { g.font = (w || 700) + ' ' + Math.round(px) + 'px "Barlow Condensed", Arial, sans-serif'; };
   const accent = () => (MODS[mod] || TOOLS[mod]).color;
   const recentPress = m => pressed[m] && performance.now() - pressed[m] < 220;
+  // The [lo, hi] MIDI range the on-screen keyboard is currently drawing (used
+  // both by draw() below and by onNote()'s "heard but not shown" message --
+  // a note outside this range never lights up no matter how it arrived).
+  const kbdRange = () => (activeItems(mod, S.level).some(id => id[0] === 'n' && +id.slice(1) < 60) || customOn) ? [48, 72] : [60, 72];
   function drawKeys(x0, y0, w, h, lo, hi, o) {
     const isW = m => [0, 2, 4, 5, 7, 9, 11].indexOf(pc(m)) >= 0; let nW = 0; for (let m = lo; m <= hi; m++) if (isW(m)) nW++; const kw = w / nW; keyRects = []; let i = 0; const xs = {};
     for (let m = lo; m <= hi; m++) if (isW(m)) { xs[m] = x0 + i * kw; i++; }
@@ -974,7 +994,10 @@ import { register as registerPlayalong } from './ui/playalong.js';
     if (e && e.info.kind === 'note' && (e.reveal || e.failed)) { if (e.info.string) dot(e.info.string, e.info.fret, accent(), DB.prefs.names ? nname(e.info.midi) : '', 1); else for (let s = 1; s <= ns; s++) for (let f = 0; f <= nf; f++) if (pc(M.tuning[ns - s] + f) === pc(e.info.midi)) dot(s, f, accent(), '', 0.85); }
     if (e && e.info.kind === 'chord') { g.fillStyle = '#e9edf6'; font(H * 0.2); g.textAlign = 'center'; g.fillText(e.info.sym, W * 0.5, H * 0.56); if (typeof e.score === 'number') { g.fillStyle = '#05070c'; rr(W * 0.3, H * 0.66, W * 0.4, H * 0.04, 4); g.fill(); g.fillStyle = e.score > 0.5 ? '#5be08a' : accent(); rr(W * 0.3, H * 0.66, W * 0.4 * c01(e.score), H * 0.04, 4); g.fill(); } }
   }
-  function gauge(x, y, w, cents, label) { g.fillStyle = '#05070c'; rr(x, y, w, 16, 8); g.fill(); g.fillStyle = '#5be08a55'; g.fillRect(x + w * 0.5 - w * 0.06, y, w * 0.12, 16); g.strokeStyle = '#e9edf6'; g.lineWidth = 2; g.beginPath(); g.moveTo(x + w / 2, y - 5); g.lineTo(x + w / 2, y + 21); g.stroke(); if (cents !== null) { const px = x + w / 2 + clamp(cents / 50, -1, 1) * w / 2; g.fillStyle = Math.abs(cents) < 10 ? '#5be08a' : Math.abs(cents) < 30 ? '#f3c52f' : '#ff6b5e'; g.beginPath(); g.arc(px, y + 8, 11, 0, 7); g.fill(); } const fs = Math.max(13, cv.width * 0.017); g.fillStyle = '#93a0bd'; font(fs, 600); g.textAlign = 'left'; g.fillText('flat', x, y + 22 + fs); g.textAlign = 'right'; g.fillText('sharp', x + w, y + 22 + fs); g.textAlign = 'center'; g.fillStyle = '#e9edf6'; font(fs * 1.25, 700); g.fillText(label || '', x + w / 2, y - 14); }
+  // `offScale` (a reading beyond +-50 cents) draws a triangle pointing off
+  // the edge instead of the round dot -- shape, not just colour, marks it,
+  // since the dot would otherwise just clamp silently to the rail.
+  function gauge(x, y, w, cents, label, offScale) { g.fillStyle = '#05070c'; rr(x, y, w, 16, 8); g.fill(); g.fillStyle = '#5be08a55'; g.fillRect(x + w * 0.5 - w * 0.06, y, w * 0.12, 16); g.strokeStyle = '#e9edf6'; g.lineWidth = 2; g.beginPath(); g.moveTo(x + w / 2, y - 5); g.lineTo(x + w / 2, y + 21); g.stroke(); if (cents !== null) { const px = x + w / 2 + clamp(cents / 50, -1, 1) * w / 2; g.fillStyle = Math.abs(cents) < 10 ? '#5be08a' : Math.abs(cents) < 30 ? '#f3c52f' : '#ff6b5e'; if (offScale) { const dir = cents > 0 ? 1 : -1; g.beginPath(); g.moveTo(px, y + 8 - 10); g.lineTo(px + dir * 13, y + 8); g.lineTo(px, y + 8 + 10); g.closePath(); g.fill(); } else { g.beginPath(); g.arc(px, y + 8, 11, 0, 7); g.fill(); } } const fs = Math.max(13, cv.width * 0.017); g.fillStyle = '#93a0bd'; font(fs, 600); g.textAlign = 'left'; g.fillText('flat', x, y + 22 + fs); g.textAlign = 'right'; g.fillText('sharp', x + w, y + 22 + fs); g.textAlign = 'center'; g.fillStyle = '#e9edf6'; font(fs * 1.25, 700); g.fillText(label || '', x + w / 2, y - 14); }
   function liveCents(target, exact) { if (!heard || !heard.freq) return null; let c = (heard.midi - target) * 100; if (!exact) c = ((c + 600) % 1200 + 1200) % 1200 - 600; return c; }
   function drawVoice(e, W, H) {
     const base = (VOICE_KINDS[DB.prefs.voice] || VOICE_KINDS.low)[1], rows = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], y = d => H * 0.9 - (H * 0.8) * d / 12;
@@ -1079,7 +1102,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
     size(); const W = cv.width, H = cv.height; g.clearRect(0, 0, W, H); rowRects = []; keyRects = [];
     if (TOOLS[mod]) { if (mod === 'tuner') drawTuner(W, H); else drawCapture(W, H); return; }
     const M = MODS[mod], e = playing && task && !task.done ? cur() : null, showE = e || (task && task.done ? task.els[task.els.length - 1] : null);
-    if (mod === 'kbd') { const low = activeItems(mod, S.level).some(id => id[0] === 'n' && +id.slice(1) < 60) || customOn; const tg = []; if (e) { if (e.info.kind === 'chord') { if (e.reveal || e.failed) e.info.pcs.forEach(x => tg.push(60 + x)); } else if (e.info.kind === 'hands-together') { if (e.reveal || e.failed) tg.push(e.info.ex.rh.midi, e.info.ex.lh.midi); } else if (e.reveal || e.failed) tg.push(e.info.midi); } const good = performance.now() - flashGood < 300 && task ? task.els.slice(0, task.idx).map(x => x.info.midi).filter(x => x) : []; drawKeys(W * 0.03, H * 0.18, W * 0.94, H * 0.7, low ? 48 : 60, 72, { target: tg, good: good, names: DB.prefs.names }); if (e && e.info.kind === 'chord') { g.fillStyle = '#e9edf6'; font(H * 0.11); g.textAlign = 'center'; g.fillText(e.info.sym, W / 2, H * 0.13); } if (document.activeElement === cv) { const fi = kbdFocusInfo(); if (fi) { g.strokeStyle = '#ffd23f'; g.lineWidth = 4; g.strokeRect(fi.x + 2, fi.y + 2, fi.w - 4, fi.h - 4); } } }
+    if (mod === 'kbd') { const kr = kbdRange(); const tg = []; if (e) { if (e.info.kind === 'chord') { if (e.reveal || e.failed) e.info.pcs.forEach(x => tg.push(60 + x)); } else if (e.info.kind === 'hands-together') { if (e.reveal || e.failed) tg.push(e.info.ex.rh.midi, e.info.ex.lh.midi); } else if (e.reveal || e.failed) tg.push(e.info.midi); } const good = performance.now() - flashGood < 300 && task ? task.els.slice(0, task.idx).map(x => x.info.midi).filter(x => x) : []; drawKeys(W * 0.03, H * 0.18, W * 0.94, H * 0.7, kr[0], kr[1], { target: tg, good: good, names: DB.prefs.names }); if (e && e.info.kind === 'chord') { g.fillStyle = '#e9edf6'; font(H * 0.11); g.textAlign = 'center'; g.fillText(e.info.sym, W / 2, H * 0.13); } if (document.activeElement === cv) { const fi = kbdFocusInfo(); if (fi) { g.strokeStyle = '#ffd23f'; g.lineWidth = 4; g.strokeRect(fi.x + 2, fi.y + 2, fi.w - 4, fi.h - 4); } } }
     else if (M.tuning) drawFret(M, e, W, H); else if (mod === 'voice') drawVoice(e, W, H); else if (mod === 'wind') drawStaff(e, W, H); else if (mod === 'harp') drawHarp(e, W, H);
     else if (mod === 'mallet-percussion') { const rec = instrumentById['mallet-percussion'], tg = e && e.info.kind === 'note' && (e.reveal || e.failed) ? [e.info.midi] : []; drawKeys(W * 0.03, H * 0.18, W * 0.94, H * 0.7, rec.range.low, rec.range.high, { target: tg, good: [], names: DB.prefs.names }); }
     else if (mod === 'ear') drawEar(W, H); else if (mod === 'rhy') { if (task && task.kind === 'bar2') drawBar2(W, H); else drawBar(W, H); }
@@ -1089,21 +1112,44 @@ import { register as registerPlayalong } from './ui/playalong.js';
   }
 
   // ---------- tools: tuner and melody capture ----------
-  let tunerKind = 'gtr', tuned = {}, tuneHold = 0, tuneSel = -1, cap = { on: false, notes: [], curM: -1, curN: 0, t0: 0, start: 0 }, customOn = false, chunk = 0;
+  let tunerKind = 'gtr', tuned = {}, tunerState = null, tunerLock = null, cap = { on: false, notes: [], curM: -1, curN: 0, t0: 0, start: 0 }, customOn = false, chunk = 0;
+  // dt is seconds (see the tuner's setInterval poll below), stepTuner wants ms.
   function toolPitch(fr, dt) {
     heard = fr;
-    if (mod === 'tuner') { if (!fr.freq) { tuneHold = 0; return; } const tg = TUNINGS[tunerKind][1]; if (!tg.length) { tuneSel = -1; return; } let bi = 0; tg.forEach((m, i) => { if (Math.abs(fr.midi - m) < Math.abs(fr.midi - tg[bi])) bi = i; }); tuneSel = bi; const c = (fr.midi - tg[bi]) * 100; if (Math.abs(c) <= 5) { tuneHold += dt; if (tuneHold > 0.6) tuned[tunerKind + bi] = true; } else tuneHold = 0; return; }
+    if (mod === 'tuner') {
+      if (deafWindow.isDeaf()) return; // F5: never let the tap-a-row reference tone re-tune itself
+      const tg = TUNINGS[tunerKind][1];
+      tunerState = stepTuner(tunerState, fr.freq ? fr : null, dt * 1000, { targets: tg, lockedIdx: tunerLock, confirmMs: 600, toleranceCents: 5, holdWindowMs: 1500 });
+      if (tunerState.phase === 'holding') { if (tg.length) { if (tunerState.selIdx !== null) tuned[tunerKind + tunerState.selIdx] = true; } else tuned[tunerKind] = true; }
+      return;
+    }
     if (mod === 'capture' && cap.on) {
       const t = now(), m = fr.freq ? Math.round(fr.midi) : -1;
       if (m === cap.curM) cap.curN++; else { if (cap.curM >= 0 && cap.curN >= 2 && cap.notes.length < 300) cap.notes.push({ m: cap.curM, t: cap.t0 - cap.start, d: t - cap.t0 }); cap.curM = m; cap.curN = 1; cap.t0 = t; }
     }
   }
   function capStop() { if (cap.on && cap.curM >= 0 && cap.curN >= 2) cap.notes.push({ m: cap.curM, t: cap.t0 - cap.start, d: now() - cap.t0 }); cap.on = false; cap.curM = -1; const merged = []; cap.notes.forEach(n => { const l = merged[merged.length - 1]; if (l && l.m === n.m && n.t - (l.t + l.d) < 0.12) l.d = n.t + n.d - l.t; else if (n.d >= 0.09) merged.push(n); }); cap.notes = merged; renderOpts(); }
+  // A tap on the row's name area toggles LOCK to that string (tap again to
+  // unlock); a tap on the separate note-icon target plays the reference
+  // tone -- kept apart so the mic hearing that tone back can never re-lock
+  // or re-tune the reading it is itself about to hear (see deafWindow above).
   function drawTuner(W, H) {
-    const tg = TUNINGS[tunerKind][1], n = tg.length; rowRects = [];
-    if (n) tg.forEach((m, i) => { const y = H * 0.1 + i * (H * 0.5 / n), ok = tuned[tunerKind + i], sel = i === tuneSel && heard && heard.freq; rr(W * 0.05, y, W * 0.32, H * 0.5 / n - 8, 8); g.fillStyle = ok ? '#5be08a' : sel ? '#2a3350' : '#121726'; g.fill(); g.fillStyle = ok ? '#04130a' : '#e9edf6'; font(Math.min(H * 0.08, H * 0.34 / n)); g.textAlign = 'left'; g.fillText('String ' + (n - i) + '   ' + nname(m, true) + (ok ? '   in tune' : ''), W * 0.07, y + (H * 0.5 / n) * 0.62); rowRects.push({ x: W * 0.05, y: y, w: W * 0.32, h: H * 0.5 / n - 8, m: m }); });
-    let target = null, label = 'play one string'; if (heard && heard.freq) { target = n && tuneSel >= 0 ? tg[tuneSel] : Math.round(heard.midi); const c = (heard.midi - target) * 100; label = nname(target, true) + ': ' + (Math.abs(c) <= 5 ? 'in tune' : Math.round(Math.abs(c)) + ' cents ' + (c > 0 ? 'sharp, loosen it' : 'flat, tighten it')); g.fillStyle = '#e9edf6'; font(H * 0.3); g.textAlign = 'center'; g.fillText(nname(target), W * 0.7, H * 0.45); gauge(W * 0.45, H * 0.62, W * 0.5, clamp(c, -50, 50), label); }
-    else gauge(W * 0.45, H * 0.62, W * 0.5, null, micReady ? label : 'press Connect first');
+    const tg = TUNINGS[tunerKind][1], n = tg.length, st = tunerState || {}; rowRects = []; playRects = [];
+    const activeIdx = tunerLock !== null ? tunerLock : st.selIdx;
+    if (n) tg.forEach((m, i) => { const y = H * 0.1 + i * (H * 0.5 / n), h = H * 0.5 / n - 8, ok = tuned[tunerKind + i], sel = i === activeIdx && st.phase && st.phase !== 'idle'; const playW = Math.min(W * 0.05, h); const rowW = W * 0.32 - playW - 10; rr(W * 0.05, y, W * 0.32, h, 8); g.fillStyle = ok ? '#5be08a' : sel ? '#2a3350' : '#121726'; g.fill(); g.fillStyle = ok ? '#04130a' : '#e9edf6'; font(Math.min(H * 0.08, H * 0.34 / n)); g.textAlign = 'left'; g.fillText('String ' + (n - i) + '   ' + nname(m, true) + (ok ? '   in tune' : '') + (tunerLock === i ? '   LOCKED' : ''), W * 0.07, y + h * 0.62); g.fillStyle = '#93a0bd44'; rr(W * 0.05 + rowW + 8, y + 4, playW, h - 8, 6); g.fill(); g.fillStyle = '#e9edf6'; g.textAlign = 'center'; font(Math.min(H * 0.06, H * 0.28 / n)); g.fillText('♪', W * 0.05 + rowW + 8 + playW / 2, y + h * 0.6); rowRects.push({ x: W * 0.05, y: y, w: rowW, h: h, m: m, idx: i }); playRects.push({ x: W * 0.05 + rowW + 8, y: y + 4, w: playW, h: h - 8, m: m }); });
+    if (st.phase === 'idle' || st.midi === null || !micReady) { gauge(W * 0.45, H * 0.62, W * 0.5, null, !micReady ? 'press Connect first' : tunerLock !== null && n ? 'locked: play ' + nname(tg[tunerLock], true) : 'play one string'); return; }
+    const target = st.targetMidi, c = st.cents, offScale = Math.abs(c) > 50;
+    const label = (Math.abs(c) <= 5 ? 'in tune' : Math.round(Math.abs(c)) + ' cents ' + (c > 0 ? 'sharp, loosen it' : 'flat, tighten it')) + (offScale ? ' (off scale)' : '');
+    // Age (ms since the last confident reading) fades the readout instead of
+    // blanking it outright -- a dropped poll used to wipe the whole tuner.
+    g.globalAlpha = clamp(1 - (st.ageMs || 0) / 1500, 0.25, 1);
+    g.fillStyle = '#e9edf6'; font(H * 0.3); g.textAlign = 'center'; g.fillText(nname(target), W * 0.7, H * 0.45);
+    gauge(W * 0.45, H * 0.62, W * 0.5, clamp(c, -50, 50), label, offScale);
+    const progress = clamp((st.holdMs || 0) / 600, 0, 1), barY = H * 0.85, barW = W * 0.5;
+    g.fillStyle = '#05070c'; rr(W * 0.45, barY, barW, 10, 5); g.fill();
+    g.fillStyle = st.phase === 'holding' ? '#5be08a' : '#7c8db5'; if (progress > 0) { rr(W * 0.45, barY, Math.max(10, barW * progress), 10, 5); g.fill(); }
+    g.fillStyle = '#93a0bd'; font(Math.max(11, H * 0.03), 600); g.textAlign = 'left'; g.fillText(st.phase === 'holding' ? 'tuned, holding' : Math.round(progress * 100) + '% to confirm', W * 0.45, barY + 10 + H * 0.035);
+    g.globalAlpha = 1;
   }
   function drawCapture(W, H) {
     const ns = cap.notes; g.fillStyle = '#93a0bd'; font(H * 0.06, 600); g.textAlign = 'left';
@@ -1186,7 +1232,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
     if (NOTATE_MOD_IDS.indexOf(mod) >= 0) sel('optNotate', 'Show', { names: ['Note names (today)'], staff: ['Staff'], both: ['Staff and names'] }, DB.prefs.notate[mod], v => { DB.prefs.notate[mod] = v; save(); });
     if (mod === 'wind') { sel('optWind', 'My instrument', WIND_KINDS, DB.prefs.wind, v => { DB.prefs.wind = v; task = null; save(); }); chk('optRef', 'Play me the note first', false, () => {}); }
     if (mod === 'voice') sel('optVoice', 'My range', VOICE_KINDS, DB.prefs.voice, v => { DB.prefs.voice = v; task = null; save(); });
-    if (mod === 'tuner') { sel('optTune', 'Instrument', TUNINGS, tunerKind, v => { tunerKind = v; tuneSel = -1; }); btn('tuneReset', 'Start over', () => { tuned = {}; }); }
+    if (mod === 'tuner') { sel('optTune', 'Instrument', TUNINGS, tunerKind, v => { tunerKind = v; tunerState = null; tunerLock = null; }); btn('tuneReset', 'Start over', () => { tuned = {}; tunerLock = null; }); }
     if (mod === 'rhy') btn('calBtn', calRun ? 'Listening for 8 taps…' : 'Calibrate timing (' + Math.round(DB.latencyMs || 0) + ' ms)', startCalibrate, false);
     if (mod === 'capture') { btn('capGo', cap.on ? 'Stop' : 'Listen', () => { if (cap.on) capStop(); else { ensureAudio(); cap.on = true; cap.notes = []; cap.start = now(); cap.curM = -1; renderOpts(); } }, true); btn('capPlay', 'Play it back', () => { ensureAudio(); const t0 = now() + 0.1; cap.notes.forEach(n => tone(n.m, t0 + n.t - (cap.notes[0] ? cap.notes[0].t : 0), Math.max(0.2, n.d))); }); const lessons = {}; MOD_IDS.filter(m => hasMasteryScheme(m)).forEach(m => { lessons[m] = [MODS[m].name]; }); sel('capTo', cap.notes.length + ' notes. Practise on', lessons, 'kbd', () => {}); btn('capUse', 'Make it a lesson', () => { if (!cap.notes.length) { say('Nothing captured yet.', 'no'); return; } DB.custom = cap.notes.map(n => n.m).slice(0, 300); save(); const to = $('capTo').value; setMod(to); customOn = true; renderOpts(); showAll(); coach('Your captured tune is loaded: ' + DB.custom.length + ' notes, four at a time. Each group repeats until it is clean. Press Start.'); }); }
     if (MODS[mod] && DB.custom && DB.custom.length && hasMasteryScheme(mod)) chk('optCustom', 'Practise my captured melody (' + DB.custom.length + ' notes)', customOn, v => { customOn = v; chunk = 0; task = null; showAll(); });
@@ -1196,12 +1242,66 @@ import { register as registerPlayalong } from './ui/playalong.js';
   // ---------- inputs ----------
   function ioState(cls, text) { $('ioDot').className = 'dot ' + cls; $('ioText').textContent = text; }
   let midiOn = false; const needsMic = () => TOOLS[mod] || MODS[mod].input === 'pluck' || MODS[mod].input === 'sustain';
-  function ioRefresh() { const b = $('ioBtn'); if (needsMic()) { b.hidden = micReady; b.textContent = 'Connect microphone'; ioState(micReady ? 'on' : '', micReady ? 'Listening through your microphone.' : 'This one listens through a microphone or audio interface.'); } else if (mod === 'ear') { b.hidden = true; ioState('on', 'Nothing to connect. Turn your sound up.'); } else { b.hidden = midiOn; b.textContent = 'Connect MIDI'; ioState(midiOn ? 'on' : '', midiOn ? 'MIDI connected.' : (mod === 'rhy' ? 'Space bar or the pad works. MIDI is optional.' : 'Screen keys and computer keys work. MIDI is optional.')); } }
+  // "Connected" is earned, not assumed (field reports: status said connected
+  // while the keyboard sent nothing). midiPorts holds only ports that are
+  // actually state==='connected' AND whose input.open() actually resolved;
+  // midiHeardAny flips true only once a real byte has arrived; midiLog and
+  // realMidiHeld back the "MIDI details" readout and hands-together grading.
+  let midiPorts = [], midiHeardAny = false, midiLog = [], realMidiHeld = new Set(), midiParsers = new Map(), midiBlinkTimer = null;
+  function midiNames() { return midiPorts.filter(p => p.ok).map(p => p.name); }
+  function ioRefresh() {
+    const b = $('ioBtn'), detailsBtn = $('midiDetailsBtn');
+    if (needsMic()) { b.hidden = micReady; b.textContent = 'Connect microphone'; detailsBtn.hidden = true; ioState(micReady ? 'on' : '', micReady ? 'Listening through your microphone.' : 'This one listens through a microphone or audio interface.'); }
+    else if (mod === 'ear') { b.hidden = true; detailsBtn.hidden = true; ioState('on', 'Nothing to connect. Turn your sound up.'); }
+    else {
+      b.hidden = midiOn; b.textContent = 'Connect MIDI'; detailsBtn.hidden = false;
+      if (midiOn) { const names = midiNames(), label = names.length > 1 ? names.join(' and ') : names[0]; ioState('on', label + (midiHeardAny ? (names.length > 1 ? ' are working.' : ' is working.') : (names.length > 1 ? ' found. Press any key on one.' : ' found. Press any key on it.'))); }
+      else ioState('', mod === 'rhy' ? 'Space bar or the pad works. MIDI is optional.' : 'Screen keys and computer keys work. MIDI is optional.');
+    }
+    if (!$('midiDetails').hidden) renderMidiDetails();
+  }
+  // Blinks #midiActDot on ANY MIDI byte -- exercise running or not -- so a
+  // learner whose note is not being judged (nothing running, or heard
+  // outside the drawn octave, see onNote() above) still gets visible proof
+  // the keyboard itself is reaching the page.
+  function midiBlink() { const dot = $('midiActDot'); dot.hidden = false; dot.classList.add('on'); clearTimeout(midiBlinkTimer); midiBlinkTimer = setTimeout(() => dot.classList.remove('on'), 150); }
+  function renderMidiDetails() {
+    const lines = midiPorts.length ? [] : ['No MIDI input has been seen yet.'];
+    midiPorts.forEach(p => lines.push(p.name + ' -- state: ' + p.state + ', connection: ' + p.connection + (p.ok ? ', opened.' : ', open failed: ' + (p.error || 'unknown reason') + '.')));
+    if (midiLog.length) { lines.push(''); lines.push('Last messages heard (hex):'); midiLog.forEach(h => lines.push(h)); }
+    $('midiDetailsText').textContent = lines.join('\n');
+  }
+  $('midiDetailsBtn').addEventListener('click', function () { this.blur(); const el = $('midiDetails'); el.hidden = !el.hidden; if (!el.hidden) renderMidiDetails(); });
+  // One raw MIDI message from an opened port: blink, log it for the details
+  // readout, parse it (createMidiParser keeps running status per port), and
+  // feed note-on/off into onNote()/the real held-note set.
+  function handleMidiMessage(input, ev) {
+    const d = ev.data; if (!d || !d.length) return;
+    midiHeardAny = true; midiBlink();
+    midiLog.unshift(Array.from(d).map(b => b.toString(16).padStart(2, '0')).join(' ')); if (midiLog.length > 8) midiLog.length = 8;
+    ioRefresh();
+    let parser = midiParsers.get(input); if (!parser) { parser = createMidiParser(); midiParsers.set(input, parser); }
+    parser.feed(d).forEach(evt => { if (evt.type === 'on') { realMidiHeld.add(evt.note); onNote(evt.note, true, 'midi'); } else realMidiHeld.delete(evt.note); });
+  }
   $('ioBtn').addEventListener('click', () => {
     ensureAudio();
     if (needsMic()) { if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { ioState('off', 'This browser cannot open a microphone here. Open the standalone copy in Chrome.'); return; } openMic().then(ioRefresh).catch(() => ioState('off', 'The microphone was blocked. Allow it in the browser, or open the standalone copy in Chrome.')); return; }
     if (!navigator.requestMIDIAccess) { ioState('off', 'This browser cannot read MIDI. Use Chrome or Edge. Screen and computer keys still work.'); return; }
-    navigator.requestMIDIAccess().then(a => { const wire = () => { let n = 0; a.inputs.forEach(i => { n++; i.onmidimessage = ev => { const d = ev.data; if (d && d.length >= 3 && (d[0] & 0xf0) === 0x90 && d[2] > 0) onNote(d[1], true); }; }); midiOn = n > 0; ioRefresh(); if (!n) ioState('off', 'No MIDI device found. Plug it in and it will be picked up.'); }; wire(); a.onstatechange = wire; }).catch(() => ioState('off', 'MIDI was blocked here. Open the standalone copy in Chrome. Screen and computer keys still work.'));
+    navigator.requestMIDIAccess().then(a => {
+      const wire = () => {
+        const inputs = []; a.inputs.forEach(i => inputs.push(i));
+        const connected = inputs.filter(i => i.state === 'connected');
+        Promise.all(connected.map(i => i.open().then(() => ({ input: i, ok: true }), e => ({ input: i, ok: false, error: (e && e.message) || 'could not be opened' })))).then(results => {
+          midiPorts = results.map(r => ({ name: r.input.name || 'MIDI device', state: r.input.state, connection: r.input.connection, ok: r.ok, error: r.error }));
+          results.filter(r => r.ok).forEach(r => { r.input.onmidimessage = ev => handleMidiMessage(r.input, ev); });
+          midiOn = results.some(r => r.ok);
+          ioRefresh();
+          if (!inputs.length) ioState('off', 'No MIDI device found. Plug it in and it will be picked up.');
+          else if (!midiOn) ioState('off', 'Another program may be using this keyboard. Close it and press Connect again.');
+        });
+      };
+      wire(); a.onstatechange = wire;
+    }).catch(() => ioState('off', 'MIDI was blocked here. Open the standalone copy in Chrome. Screen and computer keys still work.'));
   });
   if ($('micDeviceSelect')) $('micDeviceSelect').addEventListener('change', function () {
     DB.prefs.inputDeviceId = this.value || null; save();
@@ -1217,7 +1317,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
     if (mod === 'ear' && task && task.choices && /^[1-9]$/.test(ev.key)) { const id = task.choices[+ev.key - 1]; if (id) answer(id); return; }
     if (mod === 'kbd' && PCKEYS[ev.key.toLowerCase()] !== undefined) { ev.preventDefault(); ensureAudio(); const m = PCKEYS[ev.key.toLowerCase()]; tone(m, now() + 0.01, 0.5, 0.15); onNote(m, true); }
   });
-  cv.addEventListener('pointerdown', ev => { const r = cv.getBoundingClientRect(), x = (ev.clientX - r.left) * cv.width / r.width, y = (ev.clientY - r.top) * cv.height / r.height; ensureAudio(); if (mod === 'kbd') { const k = keyRects.find(q => x >= q.x && x <= q.x + q.w && y >= q.y && y <= q.y + q.h); if (k) { tone(k.m, now() + 0.01, 0.5, 0.15); onNote(k.m, true); } } if (mod === 'tuner') { const row = rowRects.find(q => x >= q.x && x <= q.x + q.w && y >= q.y && y <= q.y + q.h); if (row) tone(row.m, now() + 0.02, 1.6, 0.2); } });
+  cv.addEventListener('pointerdown', ev => { const r = cv.getBoundingClientRect(), x = (ev.clientX - r.left) * cv.width / r.width, y = (ev.clientY - r.top) * cv.height / r.height; ensureAudio(); if (mod === 'kbd') { const k = keyRects.find(q => x >= q.x && x <= q.x + q.w && y >= q.y && y <= q.y + q.h); if (k) { tone(k.m, now() + 0.01, 0.5, 0.15); onNote(k.m, true); } } if (mod === 'tuner') { const play = playRects.find(q => x >= q.x && x <= q.x + q.w && y >= q.y && y <= q.y + q.h); if (play) { tone(play.m, now() + 0.02, 1.6, 0.2); return; } const row = rowRects.find(q => x >= q.x && x <= q.x + q.w && y >= q.y && y <= q.y + q.h); if (row) tunerLock = tunerLock === row.idx ? null : row.idx; } });
   // item 3 (Wave W, w-fixes): keyboard path onto the same canvas piano -- arrow keys move the focus cursor, Enter/Space plays the focused key.
   cv.addEventListener('keydown', ev => { if (mod !== 'kbd') return; const order = kbdOrder(); if (!order.length) return; if (ev.key === 'ArrowRight' || ev.key === 'ArrowUp') { ev.preventDefault(); kbdFocusIdx = Math.min(order.length - 1, kbdFocusIdx + 1); } else if (ev.key === 'ArrowLeft' || ev.key === 'ArrowDown') { ev.preventDefault(); kbdFocusIdx = Math.max(0, kbdFocusIdx - 1); } else if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); const k = order[Math.min(kbdFocusIdx, order.length - 1)]; if (k) { ensureAudio(); tone(k.m, now() + 0.01, 0.5, 0.15); onNote(k.m, true); } } });
   $('tapPad').addEventListener('pointerdown', ev => { ev.preventDefault(); ensureAudio(); onTap(ev); });
@@ -1233,7 +1333,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
   $('optNames').addEventListener('change', function () { DB.prefs.names = this.checked; save(); });
 
   function setMod(m) {
-    if (sess) endSession(); mod = m; if (MODS[m]) { S = DB.mods[m]; DB.prefs.mod = m; } customOn = false; grooveOn = false; groove = null; task = null; bar = null; heard = null; cap.on = false; diagInputFrames = []; diagLastState = null;
+    if (sess) endSession(); mod = m; if (MODS[m]) { S = DB.mods[m]; DB.prefs.mod = m; } customOn = false; grooveOn = false; groove = null; task = null; bar = null; heard = null; cap.on = false; tunerState = null; tunerLock = null; diagInputFrames = []; diagLastState = null;
     if (pitchWorkletNode && MODS[m] && MODS[m].fmin && MODS[m].fmax) { lastWorkletRangeSent = { fmin: MODS[m].fmin, fmax: MODS[m].fmax }; pitchWorkletNode.port.postMessage({ type: 'range', fmin: MODS[m].fmin, fmax: MODS[m].fmax }); }
     if (pitchWorkletNode && actx) { const neededFrameSize = frameSizeForInstrument(instrumentById[m], actx.sampleRate); if (neededFrameSize !== lastWorkletFrameSize) { lastWorkletFrameSize = neededFrameSize; pitchWorkletNode.port.postMessage({ type: 'frameSize', frameSize: neededFrameSize }); } }
     document.querySelectorAll('#picker button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.mod === m)));
@@ -1338,7 +1438,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
   }
   loadDB(); if (!Array.isArray(DB.custom)) DB.custom = []; $('optNames').checked = DB.prefs.names; buildPicker(); buildPanelPicker(); setMod(mod); requestAnimationFrame(frame);
   if (!hadSavedProgressAtBoot) showBackupNudge('Been here before? Restore a backup.');
-  const hook = !__DEBUG_HOOK__ ? null : { state: () => S, db: () => DB, sess: () => sess, task: () => task, cur: cur, note: onNote, answer: answer, tap: onTap, bar: () => bar, playing: () => playing, setMod: setMod, testSource: testSource, heard: () => heard, yin: yin, cap: () => cap, deaf: () => deafWindow.isDeaf(), deafUntil: () => deafWindow.until(), exportProgress: doExportProgress, importProgress: doImportProgress, audioNow: audioNow, modelNow: () => modelNow };
+  const hook = !__DEBUG_HOOK__ ? null : { state: () => S, db: () => DB, sess: () => sess, task: () => task, cur: cur, note: onNote, answer: answer, tap: onTap, bar: () => bar, playing: () => playing, setMod: setMod, testSource: testSource, heard: () => heard, yin: yin, cap: () => cap, tuner: () => tunerState, tunerLock: () => tunerLock, deaf: () => deafWindow.isDeaf(), deafUntil: () => deafWindow.until(), exportProgress: doExportProgress, importProgress: doImportProgress, audioNow: audioNow, modelNow: () => modelNow };
   // Debug-hook slots: replace ONLY your own line with
   //   if (__DEBUG_HOOK__) Object.assign(hook, { … });
   if (__DEBUG_HOOK__) Object.assign(hook, { errors: getErrors });
@@ -1358,6 +1458,8 @@ import { register as registerPlayalong } from './ui/playalong.js';
   if (__DEBUG_HOOK__) Object.assign(hook, { groove: () => groove, grooveLast: () => grooveLast, grooveBpm: () => S.grooveBpm, grooveOn: v => { grooveOn = !!v; task = null; groove = null; }, grooveInject: (midi, atAudioTime) => { const fire = () => { if (audioNow() >= atAudioTime) onNote(midi, true); else setTimeout(fire, 4); }; fire(); } });
   //
   if (__DEBUG_HOOK__) Object.assign(hook, { showMe: () => $('showMeBtn').click() });
+  //
+  if (__DEBUG_HOOK__) Object.assign(hook, { midi: () => ({ on: midiOn, ports: midiPorts, log: midiLog.slice(), held: Array.from(realMidiHeld) }) });
   //
   // slot:hook:rhythm-vocab
   //
