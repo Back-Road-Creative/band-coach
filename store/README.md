@@ -36,9 +36,18 @@ no paid CI, no paid services anywhere in this path.
   `BC_REQUIRE_IDENTITY=1`), it refuses (non-zero exit, naming the missing env vars) to write a
   config that still has any placeholder field — see "Building a Store submission package" below.
   It also stamps the manifest's version — see "Where the appx version comes from" below.
-- `scripts/generate-icons.mjs` — writes placeholder Store logo PNGs with a hand-rolled PNG
-  encoder (`node:zlib` only, no image library) into `build-resources/appx/`. **Replace these with
-  real branded art before submitting to the Store.** Required sizes generated:
+- `scripts/generate-icons.mjs` — draws the Store logo PNGs with a hand-rolled PNG encoder
+  (`node:zlib` only, no image library) into `build-resources/appx/`. The mark is a five-bar level
+  meter in the app's own palette: bars on the `#1c1c1c` the tile already declares as its
+  `BackgroundColor`, centre bar in the `#5be08a` the tuner uses for "in tune". Rerun it with
+  `npm run generate-icons` after changing the drawing; the output is committed.
+
+  These were solid `#2563EB` rectangles until 2026-09-20 — one distinct pixel value per file —
+  and shipped that way into a real package, because a flat PNG is a valid PNG and nothing checked.
+  `tests/unit/store-icons.test.mjs` now fails if any slot is a single flat colour, is effectively
+  empty or solid, is the wrong size, or if the 44×44 mark smears into fewer than five bars. It
+  checks the committed files and the generator separately, so hand-drawn replacements are fine —
+  swap the PNGs in and the same gate still holds them to being real images. Required sizes:
   - `StoreLogo.png` — 50×50
   - `Square44x44Logo.png` — 44×44
   - `Square150x150Logo.png` — 150×150
