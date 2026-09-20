@@ -2,13 +2,21 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createPanels } from '../../src/ui/panels.js';
 
-test('a panel mounts once, on first open, and shows every time', () => {
+test('a panel mounts lazily on first open, and remounts fresh after a close', () => {
   const p = createPanels(), log = [];
   p.register({ id: 'songs', name: 'Songs', mount: (el, api) => { log.push('mount:' + el + ':' + api); return { show: () => log.push('show'), hide: () => log.push('hide') }; } });
   assert.deepEqual(log, []);
   p.open('songs', 'EL', 'API'); p.close(); p.open('songs', 'EL', 'API');
-  assert.deepEqual(log, ['mount:EL:API', 'show', 'hide', 'show']);
+  assert.deepEqual(log, ['mount:EL:API', 'show', 'hide', 'mount:EL:API', 'show']);
   assert.equal(p.current(), 'songs');
+});
+
+test('closing a panel runs its destroy hook before the next mount', () => {
+  const p = createPanels(), log = [];
+  p.register({ id: 'songs', name: 'Songs', mount: () => ({ hide: () => log.push('hide'), destroy: () => log.push('destroy') }) });
+  p.open('songs', 'EL', 'API');
+  p.close();
+  assert.deepEqual(log, ['hide', 'destroy']);
 });
 
 test('opening another panel hides the open one', () => {
