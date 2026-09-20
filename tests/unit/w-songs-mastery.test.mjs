@@ -1,6 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
 import { itemIdForMidi, mapMasteryKeys } from '../../src/ui/songs/mastery.js';
+import { INSTRUMENTS } from '../../src/instruments/index.js';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const APP_JS_PATH = join(__dirname, '..', '..', 'src', 'app.js');
 
 test('kbd maps a midi note straight to n<midi> when in range', () => {
   assert.equal(itemIdForMidi('kbd', 60, {}), 'n60');
@@ -15,6 +22,110 @@ test('gtr/bass/uke map to a pitch-class item, any octave', () => {
   assert.equal(itemIdForMidi('gtr', 64, {}), 'p4');
   assert.equal(itemIdForMidi('bass', 40, {}), 'p4');
   assert.equal(itemIdForMidi('uke', 76, {}), 'p4');
+});
+
+test('the five newer fretted instruments map to a pitch-class item, any octave, same as gtr/bass/uke', () => {
+  assert.equal(itemIdForMidi('mandolin', 62, {}), 'p2');
+  assert.equal(itemIdForMidi('banjo-5-string', 50, {}), 'p2');
+  assert.equal(itemIdForMidi('bass-5-string', 23, {}), 'p11');
+  assert.equal(itemIdForMidi('ukulele-baritone', 50, {}), 'p2');
+  assert.equal(itemIdForMidi('ukulele-low-g', 55, {}), 'p7');
+});
+
+test('mallet-percussion maps a midi note straight to n<midi> when in its own 60-84 range', () => {
+  assert.equal(itemIdForMidi('mallet-percussion', 60, {}), 'n60');
+  assert.equal(itemIdForMidi('mallet-percussion', 84, {}), 'n84');
+});
+
+test('mallet-percussion folds an out-of-range note into its own range, not kbd\'s', () => {
+  // 85 is one semitone above mallet-percussion's own high (84): folding
+  // through its own range gives 'n73' (85-12). Folding it through kbd's
+  // 48-72 range instead (the bug this test guards against) would wrongly
+  // give 'n61' (85-12-12).
+  assert.equal(itemIdForMidi('mallet-percussion', 85, {}), 'n73');
+  assert.equal(itemIdForMidi('mallet-percussion', 96, {}), 'n84');
+  assert.equal(itemIdForMidi('mallet-percussion', 49, {}), 'n61');
+});
+
+test('every status:\'ready\' instrument record maps a note in its own range to a non-null id', () => {
+  const ready = INSTRUMENTS.filter(rec => rec.status === 'ready');
+  // Sanity check on the fixture itself: this is the regression this test
+  // exists to catch, so make sure it is actually exercising more than a
+  // couple of records.
+  assert.ok(ready.length >= 13, `expected at least 13 ready records, found ${ready.length}`);
+  for (const rec of ready) {
+    // "a note" (singular), not "every note": harp is a diatonic instrument
+    // whose 10 holes cover only 7 of the 12 pitch classes in its range (its
+    // own middle-C hole, hole 4 blow, is midi 72 -- see mastery.js's
+    // HARP_BLOW/HARP_DRAW) -- the five missing pitch classes legitimately
+    // have no hole and are expected to stay null.
+    const span = rec.range.high - rec.range.low + 1;
+    let mapped = 0;
+    for (let midi = rec.range.low; midi <= rec.range.high; midi++) {
+      if (itemIdForMidi(rec.id, midi, {}) !== null) mapped++;
+    }
+    assert.ok(mapped > 0, `${rec.id} (status ready) mapped nothing across its own range [${rec.range.low}, ${rec.range.high}]`);
+    // Every non-diatonic ready instrument (everything but harp) should map
+    // EVERY note in its own range, not just one.
+    if (rec.id !== 'harp') {
+      assert.equal(mapped, span, `${rec.id} (status ready) mapped only ${mapped}/${span} notes in its own range [${rec.range.low}, ${rec.range.high}]`);
+    }
+  }
+});
+
+test('customItem in src/app.js delegates to itemIdForMidi (single source of truth)', () => {
+  const src = readFileSync(APP_JS_PATH, 'utf8');
+  assert.match(src, /import \{ itemIdForMidi \} from '\.\/ui\/songs\/mastery\.js';/,
+    'app.js must import itemIdForMidi from the mastery module');
+  assert.match(src, /function customItem\(m, midi, prefs\) \{\s*return itemIdForMidi\(m, midi, prefs\);\s*\}/,
+    'customItem must delegate to itemIdForMidi rather than re-implementing the instrument-id scheme');
+});
+
+test('tickGroove folds to pitch class for every fretted instrument, not just gtr/bass/uke', () => {
+  const src = readFileSync(APP_JS_PATH, 'utf8');
+  // gtr/bass/uke are mic-only fretted instruments: the mic can hear a
+  // pitch but not which string produced it, so a groove/rhythm take is
+  // scored by pitch class regardless of octave. mandolin, banjo-5-string,
+  // bass-5-string, ukulele-baritone and ukulele-low-g are wired through the
+  // identical stringLevels() curriculum and the same mic ambiguity, so the
+  // old hand-typed ['gtr', 'bass', 'uke'] list silently scored a correct
+  // take on those five as wrong. The predicate must be derived from the
+  // registry's `fretted` flag instead of a second hand-typed instrument-id
+  // list.
+  assert.doesNotMatch(src, /const fold = \['gtr', 'bass', 'uke'\]\.indexOf\(mod\)/,
+    'tickGroove must not hand-type a fretted-instrument id list a second time');
+  assert.match(src, /const fold = \(instrumentById\[mod\] && instrumentById\[mod\]\.fretted\) \|\| task\.els\.some\(e => e\.info\.anywhere\);/,
+    'tickGroove\'s fold predicate must derive from instrumentById[mod].fretted');
+});
+
+test('the captured-melody checkbox is gated on customItem actually mapping this mod, not a hand-typed list', () => {
+  const src = readFileSync(APP_JS_PATH, 'utf8');
+  assert.doesNotMatch(src, /\['kbd', 'gtr', 'bass', 'uke', 'voice', 'wind', 'harp'\]\.indexOf\(mod\) >= 0\) chk\('optCustom'/,
+    'the optCustom checkbox must not hand-type the seven original ready instrument ids a second time');
+  assert.match(src, /if \(MODS\[mod\] && DB\.custom && DB\.custom\.length && hasMasteryScheme\(mod\)\) chk\('optCustom'/,
+    'the optCustom checkbox must gate on hasMasteryScheme(mod), which asks customItem() directly');
+});
+
+// The checkbox and the dropdown are two halves of ONE feature: the capture
+// tool's "Practise on" list chooses where a captured melody goes, and the
+// per-instrument checkbox turns it on once you are there. Gating them on
+// different rules ships the feature broken in the visible direction —
+// the checkbox appears for an instrument the dropdown never offered.
+test('the capture tool\'s "Practise on" list is gated the same way the checkbox is', () => {
+  const src = readFileSync(APP_JS_PATH, 'utf8');
+  assert.doesNotMatch(src, /MOD_IDS\.filter\(m => \['kbd', 'gtr', 'bass', 'uke', 'voice', 'wind', 'harp'\]\.indexOf\(m\) >= 0\)/,
+    'the capTo dropdown must not hand-type the seven original ready instrument ids a third time');
+  assert.match(src, /MOD_IDS\.filter\(m => hasMasteryScheme\(m\)\)/,
+    'the capTo dropdown must offer exactly the mods hasMasteryScheme() accepts');
+});
+
+test('hasMasteryScheme agrees with itemIdForMidi for every mod id, including the six newly-ready instruments', () => {
+  const src = readFileSync(APP_JS_PATH, 'utf8');
+  assert.match(src, /function hasMasteryScheme\(mod\) \{/, 'app.js must define hasMasteryScheme(mod)');
+  for (const id of ['mandolin', 'banjo-5-string', 'bass-5-string', 'ukulele-baritone', 'ukulele-low-g', 'mallet-percussion']) {
+    const rec = INSTRUMENTS.find(r => r.id === id);
+    assert.notEqual(itemIdForMidi(id, rec.range.low, {}), null, `${id}: itemIdForMidi should map its own range.low`);
+  }
 });
 
 test('voice maps to a scale degree from the preferred tonic', () => {

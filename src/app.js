@@ -39,7 +39,7 @@ import { createPanels, sanitizePanelData } from './ui/panels.js';
 //
 // slot:import:w-songs
 import { register as registerSongs, forwardNote as forwardSongNote } from './ui/songs.js';
-//
+import { itemIdForMidi } from './ui/songs/mastery.js';
 import { register as registerEditor, __setDebugFrames, __getDebugSong, __isRecording } from './ui/editor.js';
 //
 //
@@ -372,15 +372,27 @@ import { register as registerPlayalong } from './ui/playalong.js';
   const _info2 = info, _valid2 = validId;
   info = function (m, id, prefs) { if (typeof id === 'string' && id[0] === 'j' && handsTogetherById(id)) { const ex = handsTogetherById(id); return { kind: 'hands-together', ex: ex, label: ex.label, short: ex.short }; } return _info2(m, id, prefs); };
   validId = function (m, id) { if (typeof id === 'string' && id[0] === 'j') return !!handsTogetherById(id); return _valid2(m, id); };
-  // turn a heard note into an item this instrument can practise
+  // turn a heard note into an item this instrument can practise. Delegates
+  // to src/ui/songs/mastery.js's itemIdForMidi -- the "capture a melody"
+  // path and a song's mastery crediting must credit the identical item id
+  // for the same (instrument, midi, prefs), so there is one source of
+  // truth for the mapping rather than two hand-typed copies of it (see
+  // tests/unit/w-songs-mastery.test.mjs's "customItem agrees with
+  // itemIdForMidi" check).
   function customItem(m, midi, prefs) {
-    const fold = (x, lo, hi) => { while (x < lo) x += 12; while (x > hi) x -= 12; return x; };
-    if (m === 'kbd') return 'n' + fold(midi, 48, 72);
-    if (m === 'gtr' || m === 'bass' || m === 'uke') return 'p' + pc(midi);
-    if (m === 'voice') { const base = (VOICE_KINDS[prefs.voice] || VOICE_KINDS.low)[1]; return 'v' + (((midi - base) % 12) + 12) % 12; }
-    if (m === 'wind') { const k = WIND_KINDS[prefs.wind] || WIND_KINDS.bb; return 'w' + fold(k[2] === 'bass' ? midi + 19 : midi - k[1], 60, 79); }
-    if (m === 'harp') { const order = [4, 5, 6, 7, 3, 2, 1, 8, 9, 10]; for (const h of order) for (const d of ['b', 'd']) if (pc(HARP[d][h - 1]) === pc(midi)) return 'h' + d + h; return null; }
-    return null;
+    return itemIdForMidi(m, midi, prefs);
+  }
+  // Whether a captured melody can be practised on mod `m` at all: probes
+  // customItem() with a real note from the instrument's own registry range
+  // (falling back to 60 for the two pseudo-mods, 'ear' and 'rhy', that have
+  // no registry record and no capture scheme) instead of hand-typing a
+  // second copy of the ready-instrument id list next to customItem's own.
+  // A mod this returns true for gets an id for every note in its range
+  // (see tests/unit/w-songs-mastery.test.mjs's "every ready record maps"
+  // check) except harp, which is diatonic and still maps plenty of notes.
+  function hasMasteryScheme(mod) {
+    const probe = instrumentById[mod] ? instrumentById[mod].range.low : 60;
+    return customItem(mod, probe, DB.prefs) !== null;
   }
 
   // ---------- saved state: one learner model per instrument, shared session log ----------
@@ -762,7 +774,14 @@ import { register as registerPlayalong } from './ui/playalong.js';
     while (groove.clicks < total && groove.t0 + groove.clicks * groove.spb < t + 0.12) { const at = groove.t0 + groove.clicks * groove.spb; if (at > t - 0.01) grooveClick(at, groove.clicks % task.els.length === 0); groove.clicks++; }
     if (!groove.judged && t > groove.end) {
       groove.judged = true;
-      const fold = ['gtr', 'bass', 'uke'].indexOf(mod) >= 0 || task.els.some(e => e.info.anywhere);
+      // Every fretted instrument is mic-only: the mic hears a pitch but not
+      // which string produced it, so a groove/rhythm take is scored by
+      // pitch class regardless of octave. Derived from the registry's
+      // `fretted` flag (src/instruments/*.js) rather than a hand-typed
+      // instrument-id list, same reasoning as itemIdForMidi's fretted
+      // branch (src/ui/songs/mastery.js) -- otherwise a newly-added fretted
+      // instrument silently scores a correct take as wrong.
+      const fold = (instrumentById[mod] && instrumentById[mod].fretted) || task.els.some(e => e.info.anywhere);
       const expected = task.els.map((e, i) => ({ beat: i, midi: fold ? pc(e.info.midi) : e.info.midi }));
       const onsets = groove.onsets.map(o => ({ t: o.t, midi: fold ? pc(o.midi) : o.midi }));
       const latencyMs = DB.latencyMs != null ? DB.latencyMs : (actx ? (actx.outputLatency || actx.baseLatency || 0) * 1000 : 0);
@@ -1083,8 +1102,8 @@ import { register as registerPlayalong } from './ui/playalong.js';
     if (mod === 'voice') sel('optVoice', 'My range', VOICE_KINDS, DB.prefs.voice, v => { DB.prefs.voice = v; task = null; save(); });
     if (mod === 'tuner') { sel('optTune', 'Instrument', TUNINGS, tunerKind, v => { tunerKind = v; tuneSel = -1; }); btn('tuneReset', 'Start over', () => { tuned = {}; }); }
     if (mod === 'rhy') btn('calBtn', calRun ? 'Listening for 8 taps…' : 'Calibrate timing (' + Math.round(DB.latencyMs || 0) + ' ms)', startCalibrate, false);
-    if (mod === 'capture') { btn('capGo', cap.on ? 'Stop' : 'Listen', () => { if (cap.on) capStop(); else { ensureAudio(); cap.on = true; cap.notes = []; cap.start = now(); cap.curM = -1; renderOpts(); } }, true); btn('capPlay', 'Play it back', () => { ensureAudio(); const t0 = now() + 0.1; cap.notes.forEach(n => tone(n.m, t0 + n.t - (cap.notes[0] ? cap.notes[0].t : 0), Math.max(0.2, n.d))); }); const lessons = {}; MOD_IDS.filter(m => ['kbd', 'gtr', 'bass', 'uke', 'voice', 'wind', 'harp'].indexOf(m) >= 0).forEach(m => { lessons[m] = [MODS[m].name]; }); sel('capTo', cap.notes.length + ' notes. Practise on', lessons, 'kbd', () => {}); btn('capUse', 'Make it a lesson', () => { if (!cap.notes.length) { say('Nothing captured yet.', 'no'); return; } DB.custom = cap.notes.map(n => n.m).slice(0, 300); save(); const to = $('capTo').value; setMod(to); customOn = true; renderOpts(); showAll(); coach('Your captured tune is loaded: ' + DB.custom.length + ' notes, four at a time. Each group repeats until it is clean. Press Start.'); }); }
-    if (MODS[mod] && DB.custom && DB.custom.length && ['kbd', 'gtr', 'bass', 'uke', 'voice', 'wind', 'harp'].indexOf(mod) >= 0) chk('optCustom', 'Practise my captured melody (' + DB.custom.length + ' notes)', customOn, v => { customOn = v; chunk = 0; task = null; showAll(); });
+    if (mod === 'capture') { btn('capGo', cap.on ? 'Stop' : 'Listen', () => { if (cap.on) capStop(); else { ensureAudio(); cap.on = true; cap.notes = []; cap.start = now(); cap.curM = -1; renderOpts(); } }, true); btn('capPlay', 'Play it back', () => { ensureAudio(); const t0 = now() + 0.1; cap.notes.forEach(n => tone(n.m, t0 + n.t - (cap.notes[0] ? cap.notes[0].t : 0), Math.max(0.2, n.d))); }); const lessons = {}; MOD_IDS.filter(m => hasMasteryScheme(m)).forEach(m => { lessons[m] = [MODS[m].name]; }); sel('capTo', cap.notes.length + ' notes. Practise on', lessons, 'kbd', () => {}); btn('capUse', 'Make it a lesson', () => { if (!cap.notes.length) { say('Nothing captured yet.', 'no'); return; } DB.custom = cap.notes.map(n => n.m).slice(0, 300); save(); const to = $('capTo').value; setMod(to); customOn = true; renderOpts(); showAll(); coach('Your captured tune is loaded: ' + DB.custom.length + ' notes, four at a time. Each group repeats until it is clean. Press Start.'); }); }
+    if (MODS[mod] && DB.custom && DB.custom.length && hasMasteryScheme(mod)) chk('optCustom', 'Practise my captured melody (' + DB.custom.length + ' notes)', customOn, v => { customOn = v; chunk = 0; task = null; showAll(); });
     if (groovable(mod)) chk('optGroove', 'Play in time (metronome, ' + (S.grooveBpm || 80) + ' bpm)', grooveOn, v => { grooveOn = v; task = null; groove = null; showAll(); });
   }
 
