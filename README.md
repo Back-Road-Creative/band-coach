@@ -78,6 +78,22 @@ variable, a Playwright headless-shell install under
 `CHROME_BIN` to point at a specific binary if none of those are found; the
 tests fail loudly (never skip) when no browser turns up.
 
+`npm test` caps how many test files (and therefore how many Chromiums) run at
+once: a quiet box keeps node's own default (one less than the core count), but
+past that the cap backs off as the box's load average climbs, so the suite
+can't launch more browsers than the machine can actually boot in time
+(`computeTestConcurrency` in `tests/helpers/browser.mjs`). A quiet box is
+deliberately left exactly as it was — raising concurrency even by one starves
+the real-time audio tests. If a box is loaded by something the load
+average doesn't capture, set `BAND_COACH_TEST_CONCURRENCY` to force a lower
+number.
+
+The `test` script computes that cap with a `$(...)` command substitution, so it
+needs a POSIX shell. That covers Linux, macOS and WSL, which is everything this
+repo and its CI actually run on. In a bare Windows `cmd.exe` it will not expand:
+run `node --test` yourself with an explicit `--test-concurrency=<n>`, or set
+`BAND_COACH_TEST_CONCURRENCY` and use a shell that supports it.
+
 A few characterization tests are named `CURRENT BEHAVIOUR (flaw ...)`. They
 pin known judging bugs on purpose so a later change to the app is forced to
 touch them deliberately instead of silently inheriting the bug — they are

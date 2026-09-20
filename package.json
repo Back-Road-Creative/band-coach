@@ -12,7 +12,7 @@
     "build": "node build/build.mjs",
     "pages": "node build/build.mjs --pages",
     "pretest": "npm run build",
-    "test": "node --test \"tests/*.test.mjs\" \"tests/build/*.test.mjs\" \"tests/characterization/*.test.mjs\" \"tests/unit/*.test.mjs\" \"tests/unit/notation/*.test.mjs\"",
+    "test": "node --test --test-concurrency=$(node tests/helpers/browser.mjs) \"tests/*.test.mjs\" \"tests/build/*.test.mjs\" \"tests/characterization/*.test.mjs\" \"tests/unit/*.test.mjs\" \"tests/unit/notation/*.test.mjs\"",
     "posttest": "npm run gate",
     "gate": "node build/build.mjs --release && node --test \"tests/release/*.test.mjs\""
   },
