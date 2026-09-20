@@ -25,6 +25,16 @@ instruments ask for permission; a MIDI keyboard is optional. If you have more th
 listens for 3 seconds of quiet and tunes the listening thresholds to your room and hardware
 instead of a one-size-fits-all level; a small meter shows the live input level.
 
+Press "Connect MIDI" to use a keyboard. The status line only says a device is connected once the
+page has actually opened it, so "Keystation found. Press any key on it." means the keyboard is
+wired up but the app has not heard a note yet, and "Keystation is working." means it has. If it
+instead says another program may be using the keyboard, close whatever else has it open (another
+tab, a DAW) and press Connect again. A small dot next to Connect blinks on every MIDI byte the
+page receives, even with no exercise running — useful for telling "the app cannot see my keyboard"
+apart from "the app sees it but has nothing to judge right now". "MIDI details" opens a readout of
+every input's name, connection state and the last few raw messages heard, for tracking down a
+silent keyboard on your own machine.
+
 ## Test
 
 ```
