@@ -94,6 +94,11 @@ import { register as registerPlayalong } from './ui/playalong.js';
   // ---------- audio ----------
   let actx = null, micStream = null, anTime = null, anFreq = null, micReady = false, testNodes = [];
   let gates = gatesFor(null), micDevices = [];
+  // Diagnostic snapshot of monoSum()'s adaptive routing decision -- last
+  // measured per-channel RMS and the gains that were set from it. Read-only,
+  // exposed on the debug hook so a slow/loaded run can be inspected without
+  // guessing from the downstream pitch output alone.
+  let lastMonoRoute = null;
   // E3: pitch tracking moved off the main thread onto an AudioWorklet
   // (src/audio/pitch-worklet.js) when available; pitchWorkletNode stays null
   // (and listen() below keeps running its setInterval sampling unchanged) on
@@ -219,11 +224,12 @@ import { register as registerPlayalong } from './ui/playalong.js';
     const MIN_MEASURABLE_RMS = 0.001;
     function route() {
       const rL = chanRms(anL, bufL), rR = chanRms(anR, bufR);
-      if (rL < MIN_MEASURABLE_RMS && rR < MIN_MEASURABLE_RMS) return; // nothing playing yet -- keep the current routing rather than guess off noise
+      if (rL < MIN_MEASURABLE_RMS && rR < MIN_MEASURABLE_RMS) { lastMonoRoute = { rL, rR, gL: gL.gain.value, gR: gR.gain.value, t: actx.currentTime, skipped: true }; return; } // nothing playing yet -- keep the current routing rather than guess off noise
       const at = actx.currentTime;
       if (rL <= rR * SILENT_RATIO) { gL.gain.setTargetAtTime(0, at, 0.02); gR.gain.setTargetAtTime(1, at, 0.02); }
       else if (rR <= rL * SILENT_RATIO) { gL.gain.setTargetAtTime(1, at, 0.02); gR.gain.setTargetAtTime(0, at, 0.02); }
       else { gL.gain.setTargetAtTime(0.5, at, 0.02); gR.gain.setTargetAtTime(0.5, at, 0.02); }
+      lastMonoRoute = { rL, rR, gLTarget: gL.gain.value, gRTarget: gR.gain.value, t: at };
     }
     // First check after a brief settle window (the very first frames after
     // opening a mic can be transient), then periodically for the rest of the
@@ -1350,7 +1356,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
   //
   if (__DEBUG_HOOK__) Object.assign(hook, { testPluck: testPluck, pitchWorkletActive: () => !!pitchWorkletNode });
   //
-  if (__DEBUG_HOOK__) Object.assign(hook, { gates: () => gates, calibrate: calibrateNoiseFloor, devices: () => micDevices, pitchWorkletGate: () => lastWorkletGateSent,
+  if (__DEBUG_HOOK__) Object.assign(hook, { gates: () => gates, calibrate: calibrateNoiseFloor, devices: () => micDevices, pitchWorkletGate: () => lastWorkletGateSent, monoRoute: () => lastMonoRoute,
     // Test-only seam (mic-gate-and-capture): drives the exact same
     // gatesFor()+applyGates() path calibrateNoiseFloor() uses, without the
     // real 3-second quiet-room listen -- lets a characterization test set a

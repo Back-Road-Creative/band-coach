@@ -22,7 +22,7 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { HTML_PATH } from '../helpers/html-path.mjs';
-import { launchPage } from '../helpers/browser.mjs';
+import { launchPage, effectiveWaitMs } from '../helpers/browser.mjs';
 import { pluck, pluckChannelSwitch, writePluckWav } from '../helpers/pluck-wav.mjs';
 
 const htmlPath = HTML_PATH;
@@ -34,19 +34,64 @@ function writeFixture(path, opts) {
   writePluckWav(path, buf, SR);
 }
 
-// Reads window.__coach.heard() a fixed 900ms after the mic opens: long
-// enough for monoSum()'s 150ms settle window PLUS at least one 300ms
-// periodic re-check to have run and converged (measured directly -- see
-// this file's FINAL REPORT numbers), short enough that the fixture (3s,
-// decay 0.9999) is still comfortably above every gate.
-async function heardAt900ms(wavPath) {
+// PR #23 CI failure (2026-09-20): a fixed 900ms wait followed by a SINGLE
+// heard() read was fragile under a loaded runner. Diagnosis (src/app.js
+// monoRoute() debug hook, added for this): under simulated CPU load, the
+// adaptive routing itself was correct and fast in every run observed --
+// gL/gR reached exact 1.000/0.000 (or 0.000/1.000) within ~330-560ms of
+// mic-open, and RMS never dropped anywhere near a gate. What blipped was
+// pitch detection itself: `heard().freq` intermittently read exactly 0 for
+// isolated ~100ms samples on EITHER channel under stress, while RMS and
+// gains stayed correct throughout (a transient clarity dropout, not a
+// routing or channel-specific defect -- both left-only and right-only
+// showed the same blips in the same loaded run). A single fixed-time
+// sample can land on exactly one such blip; this is that failure, not a
+// left/right asymmetry.
+//
+// Fixed by polling IN-PAGE (one CDP round trip, avoiding the Node-side
+// poll-loop delay a loaded box adds on top) for freq>0 to hold across two
+// consecutive ~50ms checks before trusting the reading, using the same
+// wait-floor budget (`effectiveWaitMs`, tests/helpers/browser.mjs) the
+// tuner lane already uses for exactly this class of flake (commit
+// 5ed4d54). This does not relax what is asserted -- ratio-to-mono still
+// has to hold -- it only stops a transient zero from being read as "never
+// detected".
+async function heardStable(wavPath) {
   const page = await launchPage(htmlPath, { fakeAudioFile: wavPath });
   try {
     await page.evaluate("window.__coach.setMod('gtr')");
     await page.evaluate("document.getElementById('ioBtn').click()");
     await page.waitFor('window.__coach.devices().length > 0', 5000);
-    await page.evaluate('new Promise(r => setTimeout(r, 900))');
-    return await page.evaluate('window.__coach.heard()');
+    const budgetMs = effectiveWaitMs(8000);
+    // A ratio comparison (unlike a plain freq>0 check) needs the gain RAMP
+    // itself to have settled, not just a detectable pitch: monoSum()'s
+    // route() calls setTargetAtTime(..., 0.02) (a ~20ms time constant), and
+    // the DEFAULT 0.5/0.5 gain before the first measurement is already
+    // enough for yin() to report a pitch -- so gating on freq>0 alone read
+    // straight through the ramp and measured ~half level (caught here: an
+    // early version of this fix regressed exactly that way, ratio ~0.5).
+    // Fixed by first waiting for window.__coach.monoRoute() to report a
+    // real (non-"skipped") decision, THEN an additional settle buffer (10x
+    // the 0.02s time constant, comfortably past 99% convergence) before
+    // trusting any reading, on top of the existing freq-stability check.
+    return await page.evaluate(`(async () => {
+      const start = Date.now();
+      let routeSeenAt = null, stable = 0, last = null;
+      while (Date.now() - start < ${budgetMs}) {
+        const route = window.__coach.monoRoute();
+        if (route && !route.skipped && routeSeenAt === null) routeSeenAt = Date.now();
+        const rampSettled = routeSeenAt !== null && (Date.now() - routeSeenAt) >= 200;
+        const h = window.__coach.heard();
+        if (rampSettled && h && h.freq > 0) {
+          stable++; last = h;
+          if (stable >= 3) return last;
+        } else {
+          stable = 0;
+        }
+        await new Promise(r => setTimeout(r, 50));
+      }
+      return last || window.__coach.heard();
+    })()`);
   } finally {
     await page.close();
   }
@@ -87,8 +132,8 @@ test('a guitar plugged into only the right channel of a 2-channel interface is h
   writeFixture(monoPath, {});
   writeFixture(rightPath, { channels: 'stereo', channelSide: 'right' });
 
-  const mono = await heardAt900ms(monoPath);
-  const right = await heardAt900ms(rightPath);
+  const mono = await heardStable(monoPath);
+  const right = await heardStable(rightPath);
   assert.ok(right.freq > 0, `expected a detected pitch from the right-only channel, got freq ${right.freq}`);
   const ratio = right.rms / mono.rms;
   assert.ok(ratio > 0.75 && ratio < 1.3, `expected the right-only capture's level to match mono (ratio ~1), got ratio ${ratio} (mono ${mono.rms}, right-only ${right.rms})`);
@@ -101,8 +146,8 @@ test('a guitar plugged into only the left channel of a 2-channel interface is al
   writeFixture(monoPath, {});
   writeFixture(leftPath, { channels: 'stereo', channelSide: 'left' });
 
-  const mono = await heardAt900ms(monoPath);
-  const left = await heardAt900ms(leftPath);
+  const mono = await heardStable(monoPath);
+  const left = await heardStable(leftPath);
   assert.ok(left.freq > 0, `expected a detected pitch from the left-only channel, got freq ${left.freq}`);
   const ratio = left.rms / mono.rms;
   assert.ok(ratio > 0.75 && ratio < 1.3, `expected the left-only capture's level to match mono (ratio ~1), got ratio ${ratio} (mono ${mono.rms}, left-only ${left.rms})`);
@@ -120,8 +165,8 @@ test('a duplicated-mono interface (same signal on both channels) does not get lo
   writeFixture(monoPath, {});
   writeFixture(dupPath, { channels: 'stereo', channelSide: 'both' });
 
-  const mono = await heardAt900ms(monoPath);
-  const dup = await heardAt900ms(dupPath);
+  const mono = await heardStable(monoPath);
+  const dup = await heardStable(dupPath);
   const ratio = dup.rms / mono.rms;
   assert.ok(ratio > 0.75 && ratio < 1.3, `expected duplicated-mono to read the SAME as mono (ratio ~1), got ratio ${ratio} (mono ${mono.rms}, duplicated ${dup.rms}) -- a ratio near 2 would mean the sum doubled it`);
 });
@@ -140,18 +185,53 @@ test('routing recovers when the live channel switches mid-session (a cable re-pa
     await page.evaluate("window.__coach.setMod('gtr')");
     await page.evaluate("document.getElementById('ioBtn').click()");
     await page.waitFor('window.__coach.devices().length > 0', 5000);
+    const t1 = Date.now();
 
-    // Before the 3s switch point: routed off the left channel.
-    await page.evaluate('new Promise(r => setTimeout(r, 1500))');
-    const before = await page.evaluate('window.__coach.heard()');
+    // Before the 3s switch point: routed off the left channel. Polls
+    // in-page (same reasoning as heardStable above -- a single fixed-time
+    // read can land on a transient clarity-zero blip under load) but the
+    // budget is a fixed 2000ms, NOT effectiveWaitMs: this has to stay
+    // comfortably under the fixture's own 3s switch point regardless of
+    // how high the wait floor is raised for a slow box, or it would end up
+    // reading the POST-switch channel instead.
+    const before = await page.evaluate(`(async () => {
+      const start = Date.now();
+      let stable = 0, last = null;
+      while (Date.now() - start < 2000) {
+        const h = window.__coach.heard();
+        if (h && h.freq > 0) { stable++; last = h; if (stable >= 2) return last; }
+        else { stable = 0; }
+        await new Promise(r => setTimeout(r, 50));
+      }
+      return last || window.__coach.heard();
+    })()`);
     assert.ok(before.freq > 0, `expected the left channel to be heard before the switch, got freq ${before.freq}`);
 
-    // Past the switch point (3s) plus enough time for the periodic re-check
-    // (every 300ms) to notice the left channel went silent and route the
-    // right channel instead.
-    await page.evaluate('new Promise(r => setTimeout(r, 2200))'); // now ~3.7s into the fixture
-    await page.waitFor('window.__coach.heard() && window.__coach.heard().freq > 0', 5000);
-    const after = await page.evaluate('window.__coach.heard()');
+    // Past the switch point (3s): wait until at least 3.6s has ELAPSED
+    // SINCE MIC-OPEN (measured, not guessed -- the before-poll above can
+    // itself take anywhere from ~0ms to 2000ms depending on load, so a
+    // fixed follow-up wait would either undershoot the switch point on a
+    // slow run or needlessly oversleep on a fast one) before trusting any
+    // reading to the right channel: solidly past both the 3s switch and at
+    // least one 300ms periodic re-check. Then poll+read in ONE call
+    // (rather than waitFor followed by a separate evaluate) so there is no
+    // round-trip gap in which a fresh transient blip could land between
+    // the check and the read.
+    const elapsedMs = Date.now() - t1;
+    const remainingMs = Math.max(0, 3600 - elapsedMs);
+    if (remainingMs > 0) await page.evaluate(`new Promise(r => setTimeout(r, ${remainingMs}))`);
+    const afterBudgetMs = effectiveWaitMs(5000);
+    const after = await page.evaluate(`(async () => {
+      const start = Date.now();
+      let stable = 0, last = null;
+      while (Date.now() - start < ${afterBudgetMs}) {
+        const h = window.__coach.heard();
+        if (h && h.freq > 0) { stable++; last = h; if (stable >= 2) return last; }
+        else { stable = 0; }
+        await new Promise(r => setTimeout(r, 50));
+      }
+      return last || window.__coach.heard();
+    })()`);
     assert.ok(after.freq > 0, `expected routing to recover onto the right channel after the switch, got freq ${after.freq} (rms ${after.rms})`);
   } finally {
     await page.close();
