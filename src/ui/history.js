@@ -5,19 +5,23 @@
 // teacher report, ranking items by how well they will be remembered) lives
 // in src/core/history.js and src/core/srs.js — this module is the DOM glue.
 import { summarize, sparkline, toTeacherSummary } from '../core/history.js';
-import { due, migrateItem } from '../core/srs.js';
+import { due } from '../core/srs.js';
 import { itemLabel } from './history/item-label.js';
 import { sanitizeHistoryStore } from './history/store.js';
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const pct = (x) => Math.round((typeof x === 'number' && isFinite(x) ? x : 0) * 100) + '%';
 
-/** Items this instrument has actually been practised on at least once. */
-function practicedItems(model, now) {
+/** Items this instrument has actually been practised on at least once.
+ * `model.item` is already in the new srs.js shape by the time it reaches
+ * here — app.js migrates old `{m,n,last,seen}` records via `migrateItem()`
+ * at load time (see sanitizeModel in src/app.js), so no re-migration is
+ * needed, only the `reps` field replacing the old `.n`. */
+function practicedItems(model) {
   if (!model || !model.item) return [];
   return Object.keys(model.item)
-    .filter((id) => model.item[id] && model.item[id].n > 0)
-    .map((id) => Object.assign({ id }, migrateItem(model.item[id], now)));
+    .filter((id) => model.item[id] && model.item[id].reps > 0)
+    .map((id) => Object.assign({ id }, model.item[id]));
 }
 
 /** Builds a tiny inline sparkline SVG (decorative; the numbers are in the caption). */
@@ -79,7 +83,7 @@ export function registerHistory(panels) {
 
       function renderItemsFor(modId, db, now) {
         const box = el.querySelector('#historyItems');
-        const items = practicedItems(db.mods && db.mods[modId], now);
+        const items = practicedItems(db.mods && db.mods[modId]);
         if (!items.length) { box.innerHTML = '<p>Nothing practised yet on this instrument.</p>'; return; }
         const ranked = due(items, now);
         const weakest = ranked[0];
@@ -122,7 +126,7 @@ export function registerHistory(panels) {
 
         const modIds = Array.from(new Set([].concat(
           s.perInstrument.map((m) => m.mod),
-          Object.keys(db.mods || {}).filter((m) => practicedItems(db.mods[m], now).length),
+          Object.keys(db.mods || {}).filter((m) => practicedItems(db.mods[m]).length),
         )));
         const current = modSelect.value && modIds.indexOf(modSelect.value) >= 0 ? modSelect.value : (modIds.indexOf(api.mod()) >= 0 ? api.mod() : modIds[0]);
         modSelect.innerHTML = modIds.map((m) => `<option value="${esc(m)}">${esc((api.instrument(m) || {}).name || m)}</option>`).join('');
