@@ -29,13 +29,15 @@ import hornF from './horn-f.js';
 import trombone from './trombone.js';
 import recorderDescant from './recorder-descant.js';
 import tinWhistle from './tin-whistle.js';
+import oboe from './oboe.js';
+import malletPercussion from './mallet-percussion.js';
 
 export const INSTRUMENTS = [
   kbd, gtr, bass, uke, voice, wind, harp,
   violin, viola, cello, doubleBass, mandolin, banjo5String,
   ukuleleBaritone, ukuleleLowG, bass5String,
   trumpetBb, clarinetBb, saxAltoEb, saxTenorBb, flute, hornF, trombone, recorderDescant,
-  tinWhistle
+  tinWhistle, oboe, malletPercussion
 ];
 
 export const byId = INSTRUMENTS.reduce((acc, rec) => { acc[rec.id] = rec; return acc; }, {});

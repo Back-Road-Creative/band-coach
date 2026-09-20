@@ -128,6 +128,24 @@ window (4096) instead of going undetected or misdetected. Only instruments
 that need it pay the extra ~42ms of analysis latency; everything else stays
 at 2048. See `src/audio/pitch-worklet.js` for how the AudioWorklet pipeline
 resizes on an instrument switch.
+
+Ready mallet percussion (`mallet-percussion`, "bells"/glockenspiel) reuses
+`MODS.kbd`'s own keyboard rendering (`drawKeys()`) rather than the
+fretted/plucked instruments' fretboard diagram — a bell/xylophone bar row is
+a keyboard layout, not a fretboard — and MODS input `'pluck'` (3 stable
+frames plus onset re-strike detection) rather than `'sustain'`, since a
+struck bar does not ring long enough to hold a steady pitch. Its
+`src/instruments/mallet-percussion.js` record documents the mic
+detectability measurement (a synthesized inharmonic bar tone through
+`yin()`) that justified shipping it `status: 'ready'` rather than `'planned'`.
+
+Oboe (`src/instruments/oboe.js`) ships `status: 'planned'`: it is already
+nameable through the existing generic wind mod's concert-pitch group
+(`WIND_KINDS.c` in `src/app.js` already lists "flute, oboe, violin"), so it
+needs no new MODS entry, but it has no curriculum yet and no fingering
+data — this repo's `src/instruments/how/` fingering-chart helpers only cover
+open/closed-hole instruments (recorder, tin whistle) and valve/slide brass,
+neither of which fits a keyed woodwind like oboe.
 ## Rhythm vocabulary
 
 `src/core/rhythm.js` is a pure rhythm-notation module: cells (quarter, eighth pairs, rests, ties,
