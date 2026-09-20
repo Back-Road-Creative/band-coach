@@ -279,6 +279,69 @@ played into a fake microphone is actually heard), then publishes that one file a
 on the GitHub release. The job fails the tag if it doesn't match `package.json`'s version, and fails
 the gate if the file exceeds a 1.5 MB size budget.
 
+## Before announcing a release: a five-minute human check
+
+Automated tests run headless and cannot plug in a real MIDI keyboard, play a real guitar into a
+real microphone, or open a real (non-headless) browser. Before telling anyone a release is ready,
+download the actual release file (`dist/release/band-coach.html`, or the one attached to the
+GitHub release) and run through this by hand. Each step names what failure looks like — do not
+mark a step passed just because nothing looked obviously wrong.
+
+1. **Open the file (30s).** Double-click it. **Fail** if the page does not load, or the browser
+   console (F12) shows red errors.
+2. **MIDI keyboard, if you have one (1 min).** Plug it in, press "Connect MIDI". The status line
+   should change to "*device name* found. Press any key on it." — this only means the app opened
+   the port, not that it has heard anything yet. Press a key on the keyboard. **Pass** only once
+   the status line changes to "*device name* is working." and the small dot beside "Connect MIDI"
+   blinks on every key press. **Fail** if the status line stays on "found. Press any key on it."
+   after you have pressed several keys (the app opened the device but the keyboard's notes are not
+   reaching it), or if it says "Another program may be using this keyboard" (close other apps and
+   press Connect again). Open "MIDI details" and confirm your keyboard is listed with
+   "opened." — if it says "open failed", that's a fail too. No physical keyboard on hand? Note
+   that as untested for this release rather than skipping it silently.
+3. **Microphone instrument, e.g. guitar (1.5 min).** Pick guitar (or your instrument), press
+   "Connect microphone" and allow access, then press "Check my microphone" and stay quiet for the
+   3-second countdown. Play one note into the mic. **Pass** if the exercise reacts to the note
+   (advances, marks it, or otherwise visibly responds). **Fail** if the small input-level meter
+   never moves while you play (the mic is not picking up sound) or nothing on screen ever responds
+   to a clearly-played, in-tune note.
+4. **Tuner — the exact bug this checklist exists for (1 min).** Switch to Tuner, press Connect,
+   pick your instrument, and pluck one open string once (do not keep replaying it). Watch the
+   reading after the string starts to decay. **Pass** only if the needle/reading stays on screen
+   through the decay and the string turns green ("in tune") if it was in tune, without you having
+   to pluck it again to keep the reading alive. **Fail** if the reading disappears or resets to
+   "play a note" while the string is still ringing out.
+5. **Progress survives a reload (1 min).** Play a couple of exercises so something is recorded,
+   reload the page (F5), and open the same instrument again. **Pass** if your recent result is
+   still there. **Fail** if progress is back to zero. (Reminder: this only works from the exact
+   same file path/location each time — see "Backups" above.)
+
+Total: under 5 minutes with a MIDI keyboard on hand, faster without one.
+
+## Browser and device support — what has actually been tested
+
+- **Headless Chromium, via this repo's automated test suite** (`tests/characterization/`,
+  `tests/release/gate.test.mjs`): tested continuously, every commit. This is what CI proves.
+- **A real, windowed Chrome or Edge browser:** untested by CI; the "five-minute human check" above
+  is the only thing that has ever exercised one on this app's actual release build, and only when
+  someone runs it. Chrome and Edge do provide Web MIDI (`navigator.requestMIDIAccess`), but a
+  browser providing the API is not the same as a given keyboard working — a real keyboard silently
+  delivering no notes in Chrome is precisely the failure that prompted this checklist. Run step 2.
+- **Firefox (desktop):** untested here. Firefox has supported Web MIDI since version 108
+  (December 2022), but unlike Chrome it does not use an inline permission dialog: the first
+  `requestMIDIAccess()` call asks you to install a generated Site Permission Add-On. If you decline
+  it, the app shows "MIDI was blocked here." (`src/app.js:1304`). Nobody has confirmed that flow, or
+  the microphone path, end-to-end in Firefox.
+- **Safari (desktop and iOS):** untested, and Web MIDI is not available — the app detects the
+  missing API and says so, falling back to on-screen keys, computer-keyboard keys and the
+  microphone rather than failing silently (`src/app.js:1289`). That fallback has not been confirmed
+  by hand in Safari.
+- **iPhone/iPad (the "Phone copy" edition):** unmeasured — see "Phone copy" above. Do not tell a
+  learner it works on their phone.
+- **Real MIDI keyboards, real instruments through a real microphone:** untested beyond whichever
+  specific hardware someone last ran the checklist above on — never claim broader hardware
+  coverage than that.
+
 ## Licence
 
 Apache-2.0 — see `LICENSE`.
