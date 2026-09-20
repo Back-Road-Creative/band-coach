@@ -26,6 +26,7 @@ import { forInstrument } from './notation/for-instrument.js';
 import { drawPrimitives } from './notation/draw-canvas.js';
 import { byId as instrumentById } from './instruments/index.js';
 import { rangeForInstrument, FALLBACK_RANGE, frameSizeForInstrument } from './audio/range.js';
+import { renderVoice } from './audio/voices.js';
 // slot:import:notation-wire
 //
 // slot:import:a11y
@@ -126,13 +127,24 @@ import { register as registerPlayalong } from './ui/playalong.js';
   }
   function ensureAudio() { if (!actx) { try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { actx = null; } } if (actx && actx.state === 'suspended') actx.resume(); return actx; }
   const now = () => actx ? actx.currentTime : performance.now() / 1000;
+  // Instrument-family-shaped reference tone (src/audio/voices.js): a
+  // pre-rendered buffer, computed by pure JS synthesis, never an embedded
+  // recording. `mod` (the active instrument id) selects the family via
+  // instrumentById; an instrument this build does not recognise falls back
+  // to a plain sustained tone rather than throwing or staying silent. The
+  // deaf window is opened for the BUFFER'S OWN length, so it always covers
+  // exactly what will actually play, however long that family's tail runs.
   function tone(m, at, dur, vol) {
-    if (!actx) return; const o = actx.createOscillator(), o2 = actx.createOscillator(), v = actx.createGain();
-    o.type = 'triangle'; o2.type = 'sine'; o.frequency.value = mfreq(m); o2.frequency.value = mfreq(m) * 2;
-    const g2 = actx.createGain(); g2.gain.value = 0.25; o2.connect(g2); g2.connect(v); o.connect(v); v.connect(actx.destination);
-    v.gain.setValueAtTime(0.0001, at); v.gain.exponentialRampToValueAtTime(vol || 0.22, at + 0.015); v.gain.exponentialRampToValueAtTime(0.0001, at + dur);
-    o.start(at); o2.start(at); o.stop(at + dur + 0.05); o2.stop(at + dur + 0.05);
-    deafWindow.open(Math.max(0, (at + dur - now()) * 1000));
+    if (!actx) return;
+    const family = instrumentById[mod] && instrumentById[mod].family;
+    const samples = renderVoice(family, mfreq(m), actx.sampleRate, dur, vol || 0.22);
+    const buffer = actx.createBuffer(1, samples.length, actx.sampleRate);
+    buffer.getChannelData(0).set(samples);
+    const src = actx.createBufferSource(), v = actx.createGain();
+    src.buffer = buffer; v.gain.value = 1; src.connect(v); v.connect(actx.destination);
+    src.start(at);
+    const seconds = samples.length / actx.sampleRate;
+    deafWindow.open(Math.max(0, (at + seconds - now()) * 1000));
   }
   function click(at, accent) { if (!actx) return; const o = actx.createOscillator(), v = actx.createGain(); o.type = 'square'; o.frequency.value = accent ? 1500 : 1000; v.gain.setValueAtTime(0.0001, at); v.gain.exponentialRampToValueAtTime(0.16, at + 0.002); v.gain.exponentialRampToValueAtTime(0.0001, at + 0.05); o.connect(v); v.connect(actx.destination); o.start(at); o.stop(at + 0.06); deafWindow.open(Math.max(0, (at + 0.06 - now()) * 1000)); }
 
