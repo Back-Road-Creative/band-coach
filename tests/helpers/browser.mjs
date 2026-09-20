@@ -136,6 +136,36 @@ function spawnBrowser(bin, userDataDir, extraArgs = []) {
  *
  * Throws — never silently skips — if no browser binary can be found.
  */
+
+// The shortest a page.waitFor() is allowed to give up in. A wait that is too
+// LONG costs seconds, and only on a run that is failing anyway; a wait that is
+// too SHORT marks correct code as broken at random. On 2026-09-20 three
+// different characterization tests went red on three consecutive full runs on
+// a box also running two other suites and a CI runner, each passing 3/3 solo
+// straight after — w-history's was `waitFor timed out after 3000ms` for a
+// localStorage write that is synchronous in the page. Floored here rather than
+// at ~40 call sites so a new test cannot reintroduce the same flake.
+// BAND_COACH_WAIT_FLOOR_MS overrides it (a smaller value makes a genuinely
+// failing run give up sooner while iterating locally).
+export const WAIT_FLOOR_MS = Number(process.env.BAND_COACH_WAIT_FLOOR_MS) > 0
+  ? Number(process.env.BAND_COACH_WAIT_FLOOR_MS)
+  : 20000;
+
+// The timeout a waitFor() call actually gets: what it asked for, or the floor,
+// whichever is longer. A missing or unparseable request is the floor, never 0.
+export function effectiveWaitMs(requestedMs) {
+  const n = Number(requestedMs);
+  return Number.isFinite(n) && n > WAIT_FLOOR_MS ? n : WAIT_FLOOR_MS;
+}
+
+// How long launchPage() waits for the page to finish booting. This is the
+// flake that bit most often — `the page never finished booting (no #cv in a
+// complete file:// document within 30s)` — and it is a different budget from
+// waitFor()'s: it covers Chromium starting up, not the app reaching a state,
+// so it scales off the floor rather than sharing it. At load average 9.6 a
+// boot that normally takes under a second overran 30s.
+export const BOOT_DEADLINE_MS = Math.max(30000, WAIT_FLOOR_MS * 3);
+
 export async function launchPage(htmlPath, options = {}) {
   const { fakeAudioFile, initScript } = options;
   const bin = findBrowserBinary();
@@ -268,27 +298,31 @@ export async function launchPage(htmlPath, options = {}) {
 
   const url = 'file://' + htmlPath;
 
-  // Poll for the page actually BEING our document, rather than sleeping and
-  // hoping. Two things went wrong with the old fixed 150ms wait: under load
-  // the app's boot code (loadDB, buildPicker, first draw) had not finished,
-  // and `Page.loadEventFired` can be the initial about:blank's rather than
-  // ours — so tests read a document with no #cv at all and failed with
-  // "Cannot read properties of null/undefined". Both are the same bug: a
-  // sleep is not a readiness check.
+  // Poll for the page actually BEING our document AND having finished boot,
+  // rather than sleeping and hoping. Three things went wrong before: under
+  // load the app's boot code (loadDB, buildPicker, first draw) had not
+  // finished; `Page.loadEventFired` can be the initial about:blank's rather
+  // than ours; and the condition used to be `#cv` exists, which is in the
+  // STATIC MARKUP and therefore true before the app script runs a line — so
+  // a11y-dialog-focus died 747ms in on `window.__coach` being undefined with
+  // 29s of budget unspent (2026-09-20). The app sets `data-coach-ready` as
+  // the last act of boot, in the release build too, so that is what we wait
+  // for. A sleep is not a readiness check, and neither is a readiness check
+  // that was already true.
   async function waitForBoot() {
-    const deadline = Date.now() + 30000;
+    const deadline = Date.now() + BOOT_DEADLINE_MS;
     let last = null;
     while (Date.now() < deadline) {
       const r = await send('Runtime.evaluate', {
         expression:
-          "(location.href.indexOf('file://') === 0) && document.readyState === 'complete' && !!document.getElementById('cv')",
+          "(location.href.indexOf('file://') === 0) && document.readyState === 'complete' && document.documentElement.getAttribute('data-coach-ready') === '1'",
         returnByValue: true,
       });
       last = r && r.result && r.result.value;
       if (last === true) return;
       await new Promise((r2) => setTimeout(r2, 25));
     }
-    throw new Error('the page never finished booting (no #cv in a complete file:// document within 30s)');
+    throw new Error(`the page never finished booting (no data-coach-ready on a complete file:// document within ${BOOT_DEADLINE_MS}ms)`);
   }
 
   const loaded = nextLoad();
@@ -338,7 +372,8 @@ export async function launchPage(htmlPath, options = {}) {
     );
   }
 
-  async function waitFor(expression, timeoutMs = 5000) {
+  async function waitFor(expression, timeoutMs = WAIT_FLOOR_MS) {
+    timeoutMs = effectiveWaitMs(timeoutMs);
     const start = Date.now();
     for (;;) {
       const ok = await evaluate(`Boolean(${expression})`);

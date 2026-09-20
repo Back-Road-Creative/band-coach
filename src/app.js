@@ -1300,4 +1300,11 @@ import { register as registerPlayalong } from './ui/playalong.js';
   if (__DEBUG_HOOK__) Object.assign(hook, { flash: () => ({ bad: flashBad, good: flashGood }), pitchWorkletRange: () => lastWorkletRangeSent, pitchWorkletFrameSize: () => lastWorkletFrameSize, kbdFocus: kbdFocusInfo });
   if (__DEBUG_HOOK__) window.__coach = hook;
 
+  // Boot is over. Announce it so anything driving the page has a condition to
+  // wait on instead of a guess: the markup (#cv and friends) is present long
+  // before this line runs, so "the document loaded" never meant "the app is
+  // ready". Set in the release build too — the download is driven by the
+  // release gate the same way.
+  document.documentElement.setAttribute('data-coach-ready', '1');
+
 })();

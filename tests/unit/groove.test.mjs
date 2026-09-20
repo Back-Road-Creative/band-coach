@@ -187,3 +187,20 @@ test('tempoLadder: defaults are sane when only bpm and passed are given', () => 
   assert.ok(up > 80);
   assert.ok(down < 80);
 });
+
+// The ladder is symmetric, so a miss followed by a clean take lands back on
+// exactly where it started. That is correct behaviour, and it is also the
+// hole that made tests/characterization/play-in-time.test.mjs fail a working
+// app: that test retried the take up to five times but compared the final
+// tempo against the tempo it had read BEFORE the first attempt, so any run
+// whose first attempt missed reported "tempo should rise after a clean take:
+// 80 -> 80". A clean take's rise has to be measured from the tempo that take
+// was played at.
+test('tempoLadder: a miss then a clean take returns to exactly the starting tempo', () => {
+  const start = 80;
+  const afterMiss = tempoLadder({ bpm: start, passed: false });
+  const afterClean = tempoLadder({ bpm: afterMiss, passed: true });
+  assert.equal(afterMiss, 74);
+  assert.equal(afterClean, start, 'a round trip is a no-op, so it cannot be used as evidence of a rise');
+  assert.ok(afterClean > afterMiss, 'measured from the take that was actually clean, the tempo did rise');
+});

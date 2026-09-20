@@ -29,7 +29,9 @@ async function waitForFreshGrooveTask(page, afterT0) {
 }
 
 // Plays one groove take with every note offset by `offsetSec` from its grid
-// time, and returns { className, summary, t0 } once it has been judged.
+// time, and returns { className, summary, t0, bpm } once it has been judged.
+// `bpm` is the tempo THIS take was played at, which is what the ladder steps
+// from — see the retry note below for why the starting tempo will not do.
 async function playGrooveTake(page, offsetSec) {
   const t = await page.evaluate('window.__coach.task()');
   const g = await page.evaluate('window.__coach.groove()');
@@ -41,7 +43,7 @@ async function playGrooveTake(page, offsetSec) {
   await page.waitFor('window.__coach.task().done === true', 10000);
   const className = await page.evaluate("document.getElementById('feedback').className");
   const summary = await page.evaluate('window.__coach.grooveLast().summary');
-  return { className, summary, t0: g.t0 };
+  return { className, summary, t0: g.t0, bpm: g.bpm };
 }
 
 test('play in time: on-beat notes pass, a consistent drag is reported late, and tempo rises after a clean take', async (t) => {
@@ -53,7 +55,6 @@ test('play in time: on-beat notes pass, a consistent drag is reported late, and 
   await page.evaluate('window.__coach.grooveOn(true)');
   await page.waitFor("window.__coach.task() && window.__coach.task().kind === 'groove'", 5000);
 
-  const bpmBefore = await page.evaluate('window.__coach.grooveBpm()');
   let t0 = await page.evaluate('window.__coach.groove().t0');
 
   // Round 1: every note dead on the beat. Retried a few times because this
@@ -67,9 +68,16 @@ test('play in time: on-beat notes pass, a consistent drag is reported late, and 
   }
   assert.equal(clean.className, 'ok', `notes landing on the beat should be credited as a clean take: ${JSON.stringify(clean.summary)}`);
   const bpmAfterClean = await page.evaluate('window.__coach.grooveBpm()');
+  // Against the tempo the CLEAN take was played at, not the tempo the test
+  // started at. The ladder steps 6 bpm each way (src/core/groove.js
+  // tempoLadder), so a retry that missed once and then played clean walks
+  // 80 -> 74 -> 80 and lands back exactly on the starting value: comparing
+  // against `bpmBefore` failed a correct app on any run the first attempt
+  // did not pass. The invariant is unchanged and still strict — a clean
+  // take must move the tempo UP a step.
   assert.ok(
-    bpmAfterClean > bpmBefore,
-    `tempo should rise after a clean take: ${bpmBefore} -> ${bpmAfterClean}`
+    bpmAfterClean > clean.bpm,
+    `tempo should rise after a clean take: ${clean.bpm} -> ${bpmAfterClean}`
   );
 
   // Round 2: a fresh groove task, every note a consistent 120ms late.
