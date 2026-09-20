@@ -118,10 +118,16 @@ trainers are not backed by an `src/instruments/` record and are unaffected.
 
 Ready fretted instruments as of this writing: guitar (`gtr`), bass (`bass`),
 ukulele (`uke`), mandolin, 5-string banjo, 5-string bass, low-G ukulele and
-baritone ukulele. 5-string bass's low B string is modeled for tuning/tab
-purposes but excluded from its practice curriculum — the pitch detector
-cannot reliably hear a fundamental that low (see
-`src/instruments/bass-5-string.js`).
+baritone ukulele. The pitch detector's analysis frame size (how many samples
+`yin()`, `src/audio/yin.js`, gets to autocorrelate against) is derived
+per-instrument from each record's own `range.low` by
+`frameSizeForInstrument()` (`src/audio/range.js`), not a single fixed size —
+a low string whose fundamental period would not fit inside the default
+2048-sample window (bass's open E, 5-string bass's open B0) gets a bigger
+window (4096) instead of going undetected or misdetected. Only instruments
+that need it pay the extra ~42ms of analysis latency; everything else stays
+at 2048. See `src/audio/pitch-worklet.js` for how the AudioWorklet pipeline
+resizes on an instrument switch.
 ## Rhythm vocabulary
 
 `src/core/rhythm.js` is a pure rhythm-notation module: cells (quarter, eighth pairs, rests, ties,

@@ -5,9 +5,12 @@
 // that instrument instead.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { rangeForInstrument, FALLBACK_RANGE, midiToHz } from '../../src/audio/range.js';
+import { rangeForInstrument, FALLBACK_RANGE, midiToHz, frameSizeForInstrument, MIN_FRAME_SIZE } from '../../src/audio/range.js';
 import doubleBass from '../../src/instruments/double-bass.js';
 import flute from '../../src/instruments/flute.js';
+import bass from '../../src/instruments/bass.js';
+import bass5String from '../../src/instruments/bass-5-string.js';
+import gtr from '../../src/instruments/gtr.js';
 import { createRecorder } from '../../src/ui/editor/record.js';
 
 test('midiToHz matches the standard A440 reference', () => {
@@ -81,4 +84,44 @@ test('an explicit fmin/fmax override still wins over the instrument-derived rang
   t.after(() => rec.stop());
   await rec.start();
   assert.deepEqual(rec.range, { fmin: 1, fmax: 2 });
+});
+
+// frameSizeForInstrument: the analysis-frame-size bug. src/audio/yin.js caps
+// its lag search at (frameSize >> 1) - 1 samples, so a genuine low
+// fundamental needs a big enough frame to autocorrelate against at all.
+// src/audio/pitch-worklet.js defaults every instrument to frameSize 2048
+// regardless of how low it plays -- at 48 kHz that caps the search at 1023
+// samples, well short of the ~1165 samples a 4-string bass's open E
+// (41.2 Hz, bass.js range.low 28) or the ~1555 samples a 5-string bass's
+// open B (30.87 Hz, bass-5-string.js range.low 23) actually need.
+test('frameSizeForInstrument stays at the 2048 default for an ordinary-range instrument', () => {
+  assert.equal(frameSizeForInstrument(flute, 48000), MIN_FRAME_SIZE);
+  assert.equal(frameSizeForInstrument(gtr, 48000), MIN_FRAME_SIZE);
+});
+
+test('frameSizeForInstrument doubles to 4096 for the 4-string bass (open E, 41.2 Hz)', () => {
+  assert.equal(frameSizeForInstrument(bass, 48000), 4096);
+});
+
+test('frameSizeForInstrument doubles to 4096 for the 5-string bass (open B0, 30.87 Hz)', () => {
+  assert.equal(frameSizeForInstrument(bass5String, 48000), 4096);
+});
+
+test('frameSizeForInstrument scales with the real sample rate, not a hardcoded 48kHz', () => {
+  // At 44.1kHz a given period is *fewer* samples than at 48kHz for the same
+  // Hz, so 4096 must still comfortably cover it -- this is not a coincidence
+  // of one particular sample rate.
+  assert.equal(frameSizeForInstrument(bass5String, 44100), 4096);
+});
+
+test('frameSizeForInstrument falls back to the 2048 default with no record or a bad sample rate', () => {
+  assert.equal(frameSizeForInstrument(null, 48000), MIN_FRAME_SIZE);
+  assert.equal(frameSizeForInstrument(bass5String, 0), MIN_FRAME_SIZE);
+  assert.equal(frameSizeForInstrument(bass5String, undefined), MIN_FRAME_SIZE);
+});
+
+test('frameSizeForInstrument never returns a global default above 2048 for a high instrument (latency guard)', () => {
+  // Only instruments that actually need it get bumped -- 4096 must not
+  // become the blanket default (it doubles analysis latency to ~85ms @48kHz).
+  assert.equal(frameSizeForInstrument(flute, 48000), MIN_FRAME_SIZE);
 });

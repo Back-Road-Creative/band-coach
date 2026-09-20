@@ -44,3 +44,45 @@ test('yin takes the calibrated quiet-room gate, defaulting to the original 0.008
   assert.ok(yin(buf, sr, 60, 1600).freq > 0, 'heard at the default gate');
   assert.equal(yin(buf, sr, 60, 1600, 0.03).freq, 0, 'a noisy room raises the gate above this note');
 });
+
+// The frameSize bug: yin's own lag search is capped at (buf.length >> 1) - 1
+// samples (src/audio/yin.js), so a low fundamental whose period is longer
+// than that cap can never be found. src/audio/pitch-worklet.js used to
+// hardcode every instrument to a 2048-sample frame regardless of how low it
+// plays. bass.js's open E (41.2 Hz, MIDI 28, ~1165-sample period at 48kHz)
+// needs more than 2048 gives it (a 1023-sample cap); the frame size
+// src/audio/range.js's frameSizeForInstrument now derives for the 4-string
+// bass, 4096, resolves it cleanly.
+const SAMPLE_RATE_48K = 48000;
+
+test('a 4-string bass open E (41.2 Hz) is NOT reliably found at the old fixed frameSize 2048', () => {
+  const buf = sine(41.2, 2048, SAMPLE_RATE_48K);
+  const r = yin(buf, SAMPLE_RATE_48K, 25, 1500);
+  // Either no lock at all, or a lock so far off it reads as a different
+  // note (wrong-octave/harmonic confusion) -- either way, not the real 41.2Hz.
+  const cents = r.freq ? 1200 * Math.log2(r.freq / 41.2) : null;
+  const misdetected = !r.freq || Math.abs(cents) > 50;
+  assert.ok(misdetected, `expected 2048 to fail on 41.2Hz, got freq ${r.freq}`);
+});
+
+test('a 4-string bass open E (41.2 Hz) IS found within a few cents at the derived frameSize 4096', () => {
+  const buf = sine(41.2, 4096, SAMPLE_RATE_48K);
+  const r = yin(buf, SAMPLE_RATE_48K, 25, 1500);
+  assert.ok(r.freq > 0, 'a clean 41.2Hz tone should be detected at frameSize 4096');
+  const cents = 1200 * Math.log2(r.freq / 41.2);
+  assert.ok(Math.abs(cents) < 10, `expected within 10 cents of 41.2Hz, got ${r.freq}Hz (${cents.toFixed(1)} cents)`);
+});
+
+test('a 5-string bass open B0 (30.87 Hz) is NOT found at all at the old fixed frameSize 2048', () => {
+  const buf = sine(30.87, 2048, SAMPLE_RATE_48K);
+  const r = yin(buf, SAMPLE_RATE_48K, 20, 1500);
+  assert.equal(r.freq, 0, 'B0 should not lock at all at frameSize 2048');
+});
+
+test('a 5-string bass open B0 (30.87 Hz) IS found within a few cents at the derived frameSize 4096', () => {
+  const buf = sine(30.87, 4096, SAMPLE_RATE_48K);
+  const r = yin(buf, SAMPLE_RATE_48K, 20, 1500);
+  assert.ok(r.freq > 0, 'B0 should lock at frameSize 4096');
+  const cents = 1200 * Math.log2(r.freq / 30.87);
+  assert.ok(Math.abs(cents) < 10, `expected within 10 cents of 30.87Hz, got ${r.freq}Hz (${cents.toFixed(1)} cents)`);
+});
