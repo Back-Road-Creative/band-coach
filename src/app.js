@@ -221,6 +221,22 @@ import { register as registerPlayalong } from './ui/playalong.js';
     if (chordSet) { L.push({ name: 'First chords (listening is experimental)', add: chordSet.slice(0, 3).map(c => 'c' + c), task: 'chord', pool: 'c', limit: 14 }); L.push({ name: 'More chords', add: chordSet.slice(3).map(c => 'c' + c), task: 'chord', pool: 'c', limit: 12 }); L.push({ name: 'Chord changes', task: 'seq', len: 2, pool: 'c', limit: 10 }); }
     return L;
   }
+  // Same as stringLevels, but drops every item that names a given string
+  // number (1-based, counted from the highest-pitched string down, matching
+  // the 's'+string+'f'+fret item ids the generator itself produces) from
+  // every level's `add` list, then drops any level left with an empty
+  // `add`. Exists for one instrument: bass-5-string's low B open string
+  // measures as undetectable by the real pitch-tracking pipeline (see
+  // src/instruments/bass-5-string.js's header) -- this keeps that string
+  // out of the graded curriculum, so no exercise ever needs a credit the
+  // mic cannot give, while the record's own `tuning` still carries the
+  // physical string for tab/fingering display.
+  function stringLevelsExcluding(tuning, names, maxFret, chordSet, excludeStringNum) {
+    const prefix = 's' + excludeStringNum + 'f';
+    return stringLevels(tuning, names, maxFret, chordSet)
+      .map(L => (L.add ? Object.assign({}, L, { add: L.add.filter(id => id.indexOf(prefix) !== 0) }) : L))
+      .filter(L => !(L.add && L.add.length === 0));
+  }
   const MODS = {
     kbd: { name: 'Keyboard', tag: 'MIDI or on-screen keys', color: '#2f93ee', input: 'midi', help: 'Keyboard: plug in a MIDI keyboard and press Connect, or click the keys on screen, or use the computer keys A W S E D F T G Y H U J K for C up to high C. New keys light up the first two times; after that you find them yourself.',
       levels: [
@@ -271,6 +287,28 @@ import { register as registerPlayalong } from './ui/playalong.js';
   MODS.gtr.levels = stringLevels(MODS.gtr.tuning, ['Low E', 'A', 'D', 'G', 'B', 'High E'], 12, ['Em', 'G', 'C', 'D', 'Am', 'E', 'A']);
   MODS.bass.levels = stringLevels(MODS.bass.tuning, ['E', 'A', 'D', 'G'], 12, null);
   MODS.uke.levels = stringLevels(MODS.uke.tuning, ['G', 'C', 'E', 'A'], 7, ['C', 'Am', 'F', 'G7']);
+  // Five more fretted mic instruments, added straight from the instruments
+  // registry (src/instruments/index.js) rather than restating each one's
+  // tuning/name/range a second time here: tuning and name come off the
+  // registry record, and fmin/fmax come from rangeForInstrument() on that
+  // same record's `range` -- one source of truth for all three. See each
+  // record's own file for why its curriculum and chordSet look the way
+  // they do (fret-count choices, the bass-5-string B-string exclusion).
+  const mandolinRange = rangeForInstrument(instrumentById.mandolin);
+  MODS.mandolin = { name: instrumentById.mandolin.name, tag: 'microphone', color: '#7fd1ae', input: 'pluck', fmin: mandolinRange.fmin, fmax: mandolinRange.fmax, tuning: instrumentById.mandolin.tuning, frets: 12, help: 'Mandolin: press Connect to let the page listen through your microphone or audio interface. Standard tuning G D A E. On a single-note lesson, play one clean note at a time; if it hears a strum instead it will tell you so rather than staying silent.', levels: null };
+  MODS.mandolin.levels = stringLevels(MODS.mandolin.tuning, ['G', 'D', 'A', 'E'], 12, null);
+  const banjoRange = rangeForInstrument(instrumentById['banjo-5-string']);
+  MODS['banjo-5-string'] = { name: instrumentById['banjo-5-string'].name, tag: 'microphone', color: '#caa04d', input: 'pluck', fmin: banjoRange.fmin, fmax: banjoRange.fmax, tuning: instrumentById['banjo-5-string'].tuning, frets: 12, help: '5-string banjo: press Connect to let the page listen through your microphone or audio interface. Standard open-G tuning, 5th string included. On a single-note lesson, play one clean note at a time; if it hears a strum instead it will tell you so rather than staying silent.', levels: null };
+  MODS['banjo-5-string'].levels = stringLevels(MODS['banjo-5-string'].tuning, ['G', 'D', 'G', 'B', 'D'], 12, null);
+  const bass5Range = rangeForInstrument(instrumentById['bass-5-string']);
+  MODS['bass-5-string'] = { name: instrumentById['bass-5-string'].name, tag: 'microphone', color: '#c2453a', input: 'pluck', fmin: bass5Range.fmin, fmax: bass5Range.fmax, tuning: instrumentById['bass-5-string'].tuning, frets: 12, help: '5-string bass: press Connect to let the page listen. Play one clean note at a time and let it ring for a moment. The low B string is not tested here -- the microphone cannot reliably hear it -- so lessons practise the same E A D G ladder as 4-string bass.', levels: null };
+  MODS['bass-5-string'].levels = stringLevelsExcluding(MODS['bass-5-string'].tuning, ['B', 'E', 'A', 'D', 'G'], 12, null, 5);
+  const ukeLowGRange = rangeForInstrument(instrumentById['ukulele-low-g']);
+  MODS['ukulele-low-g'] = { name: instrumentById['ukulele-low-g'].name, tag: 'microphone', color: '#e6c34a', input: 'pluck', fmin: ukeLowGRange.fmin, fmax: ukeLowGRange.fmax, tuning: instrumentById['ukulele-low-g'].tuning, frets: 7, help: 'Low-G ukulele: press Connect to let the page listen. Standard tuning G C E A with a low, non-re-entrant G. On a single-note lesson, play one clean note at a time; if it hears a strum instead it will tell you so rather than staying silent. Chord listening is experimental.', levels: null };
+  MODS['ukulele-low-g'].levels = stringLevels(MODS['ukulele-low-g'].tuning, ['G', 'C', 'E', 'A'], 7, ['C', 'Am', 'F', 'G7']);
+  const ukeBaritoneRange = rangeForInstrument(instrumentById['ukulele-baritone']);
+  MODS['ukulele-baritone'] = { name: instrumentById['ukulele-baritone'].name, tag: 'microphone', color: '#b8863b', input: 'pluck', fmin: ukeBaritoneRange.fmin, fmax: ukeBaritoneRange.fmax, tuning: instrumentById['ukulele-baritone'].tuning, frets: 12, help: 'Baritone ukulele: press Connect to let the page listen. Standard tuning D G B E, the same pitches as the top four guitar strings. On a single-note lesson, play one clean note at a time; if it hears a strum instead it will tell you so rather than staying silent.', levels: null };
+  MODS['ukulele-baritone'].levels = stringLevels(MODS['ukulele-baritone'].tuning, ['D', 'G', 'B', 'E'], 12, null);
   const MOD_IDS = Object.keys(MODS);
   // Instruments the notation engine (src/notation/) is wired into. Wind
   // already draws its own hand-built staff (drawStaff below); it is not

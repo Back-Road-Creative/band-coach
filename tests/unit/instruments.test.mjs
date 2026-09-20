@@ -111,6 +111,9 @@ test('READY instrument ids match the instrument ids in today\'s MODS', () => {
   for (const m of modsBlock.matchAll(/^ {4}(\w+): \{/gm)) topLevelIds.add(m[1]);
   // Instruments added onto MODS after the initial literal (e.g. MODS.harp = {...}).
   for (const m of src.matchAll(/^\s*MODS\.(\w+) = \{/gm)) topLevelIds.add(m[1]);
+  // Hyphenated ids (e.g. bass-5-string) cannot be dot-notation properties, so
+  // those are added as MODS['id'] = {...} -- same convention, bracket syntax.
+  for (const m of src.matchAll(/^\s*MODS\['([\w-]+)'\] = \{/gm)) topLevelIds.add(m[1]);
 
   assert.ok(topLevelIds.size > 0, 'found no MODS keys to compare against');
 

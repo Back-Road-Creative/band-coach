@@ -1,6 +1,9 @@
 // Instruments-as-data: every record here is validated by schema.js's
-// validateInstrument (see tests/unit/instruments.test.mjs). Nothing in
-// src/app.js reads this module yet -- that switch-over is a later unit.
+// validateInstrument (see tests/unit/instruments.test.mjs). src/app.js reads
+// this module directly (`import { byId as instrumentById } from
+// './instruments/index.js'`) for notation, mic range and the "how to play
+// it" panel; the MODS trainer entries for each 'ready' record derive their
+// tuning/name/mic range from here rather than restating them.
 import kbd from './kbd.js';
 import gtr from './gtr.js';
 import bass from './bass.js';
