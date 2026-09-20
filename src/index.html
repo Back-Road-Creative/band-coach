@@ -14,12 +14,15 @@
       <span class="dot" id="ioDot"></span>
       <span id="ioText"></span>
       <button class="primary" id="ioBtn" type="button">Connect</button>
+      <span class="dot" id="midiActDot" hidden aria-hidden="true"></span>
+      <button type="button" class="small" id="midiDetailsBtn" hidden>MIDI details</button>
       <label for="micDeviceSelect" class="small">Input</label>
       <select id="micDeviceSelect" aria-label="Input device"><option value="">Default microphone</option></select>
       <button type="button" class="small" id="calibrateBtn">Check my microphone</button>
       <div class="meterbox thin mic-meter" role="progressbar" aria-label="Microphone level" aria-valuemin="0" aria-valuemax="100"><div id="micLevelFill"></div></div>
       <span id="calibrateResult" role="status"></span>
     </div>
+    <div class="midi-details" id="midiDetails" hidden role="status"><pre id="midiDetailsText"></pre></div>
   </header>
 
   <div class="picker" id="picker" role="group" aria-label="Instrument"></div>
