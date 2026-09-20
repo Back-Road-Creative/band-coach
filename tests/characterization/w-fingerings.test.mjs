@@ -78,7 +78,7 @@ test('fingerings panel opens, shows a default fretboard diagram, and reacts to a
   assert.match(whistleDesc, /D5/);
   assert.equal(await page.evaluate("document.querySelectorAll('.fing-recorder .fing-recorder-hole').length"), 6);
 
-  // Closing and reopening keeps the panel usable (mount runs once).
+  // Closing and reopening keeps the panel usable (mount tears down and remounts fresh).
   await page.evaluate('window.__coach.closePanel()');
   await page.evaluate("window.__coach.openPanel('fingerings')");
   assert.equal(await page.evaluate('window.__coach.panelOpen()'), 'fingerings');

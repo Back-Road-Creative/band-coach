@@ -220,9 +220,10 @@ function mountPlayalong(el, api) {
     const { start, end } = clampLoopSelection(dragStart, cur, recording.duration);
     applyLoop(start, end);
   });
-  window.addEventListener('pointerup', () => {
+  function onWindowPointerUp() {
     dragStart = null;
-  });
+  }
+  window.addEventListener('pointerup', onWindowPointerUp);
 
   playheadInput.addEventListener('input', () => {
     playheadTimeEl.textContent = formatTime(playheadSeconds());
@@ -393,6 +394,9 @@ function mountPlayalong(el, api) {
     },
     hide() {
       stopLoop();
+    },
+    destroy() {
+      window.removeEventListener('pointerup', onWindowPointerUp);
     },
   };
 }

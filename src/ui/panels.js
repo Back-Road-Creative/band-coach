@@ -3,14 +3,20 @@
 // its own src/ui/<id>.js and registers one panel; app.js owns the switching.
 //
 //   const panels = createPanels();
-//   panels.register({ id, name, tag, color, mount(el, api) -> { show?(), hide?() } });
+//   panels.register({ id, name, tag, color, mount(el, api) -> { show?(), hide?(), destroy?() } });
 //   panels.list()          -> registered panels in registration order
-//   panels.open(id, el, api) mounts once (lazily, on first open), then calls show()
-//   panels.close()         calls hide() on the open panel
+//   panels.open(id, el, api) mounts fresh into its own container under el, then calls show()
+//   panels.close()         calls hide() then destroy() on the open panel and removes its DOM
 //   panels.current()       -> the open panel's id, or null
 //
-// mount() runs once, the first time a panel opens, so a panel costs nothing
-// until a learner asks for it.
+// mount() runs every time a panel opens (a panel costs nothing until a
+// learner asks for it, same as before) and is torn down on close: its
+// container element is removed from the shared host, and its optional
+// destroy() hook runs first for any cleanup beyond DOM removal (a timer, a
+// window/document listener, an audio node — anything mount() held that
+// closing the DOM node alone would not release). Saved panel data
+// (DB.panels[<id>], via api.store) lives outside this lifecycle, so it
+// survives a close/reopen even though the mounted instance does not.
 
 export function createPanels() {
   const defs = [], mounted = new Map();
@@ -26,16 +32,32 @@ export function createPanels() {
       const def = defs.find(d => d.id === id);
       if (!def) throw new Error('no panel "' + id + '"');
       if (open && open !== id) this.close();
-      if (!mounted.has(id)) mounted.set(id, def.mount(el, api) || {});
+      if (!mounted.has(id)) {
+        // A real DOM el owns a document we can make this panel's own
+        // container in, so closing it later removes exactly this panel's
+        // DOM and nothing else's. A plain-object el (as in the unit tests,
+        // which mount() never touches) has no ownerDocument, so mount()
+        // just gets el itself, unchanged from before.
+        const doc = el && el.ownerDocument;
+        const container = doc ? doc.createElement('div') : null;
+        if (container) el.appendChild(container);
+        mounted.set(id, { inst: def.mount(container || el, api) || {}, container });
+      }
       open = id;
-      const inst = mounted.get(id);
-      if (inst.show) inst.show();
+      const entry = mounted.get(id);
+      if (entry.inst.show) entry.inst.show();
     },
     close() {
       if (!open) return;
-      const inst = mounted.get(open);
+      const entry = mounted.get(open);
+      const id = open;
       open = null;
-      if (inst && inst.hide) inst.hide();
+      if (entry) {
+        if (entry.inst.hide) entry.inst.hide();
+        if (entry.inst.destroy) entry.inst.destroy();
+        if (entry.container) entry.container.remove();
+        mounted.delete(id);
+      }
     },
     current() { return open; },
   };
