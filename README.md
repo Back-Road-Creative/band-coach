@@ -129,6 +129,49 @@ that need it pay the extra ~42ms of analysis latency; everything else stays
 at 2048. See `src/audio/pitch-worklet.js` for how the AudioWorklet pipeline
 resizes on an instrument switch.
 
+## Piano hands together
+
+The keyboard mod's level 13 is "hands together": the right hand and left hand each play one note
+at the same time, in C-major five-finger position (RH thumb-on-C, fingers 1-2-3-4-5 on C-D-E-F-G;
+LH little-finger-on-C an octave down, fingers 5-4-3-2-1 on the same letter names), moving in
+parallel motion up the position — the standard first two-hand material in beginner method books.
+The curriculum, fingering table and grading are pure logic in `src/core/hands-together.js`
+(`node --test tests/unit/hands-together.test.mjs`), wired into the keyboard mod's `onNote()` in
+`src/app.js`.
+
+A real MIDI keyboard delivers independent note-on events, so both notes are checked together and
+graded exactly (`gradeHandsTogetherExact`); two hands on the computer keys count the same way.
+A single detected pitch — as a monophonic microphone pitch detector would report — can confirm at
+most one of the two notes and never both at once, so that grading is approximate
+(`gradeHandsTogetherApprox`) and the on-screen feedback says so in plain words rather than claiming
+both hands were heard.
+## Reference tones sound like the instrument
+
+Every reference/example tone (the note a lesson plays for you to match or tune to) goes through
+`tone()` in `src/app.js`, which renders an instrument-family-shaped voice from
+`src/audio/voices.js` instead of one fixed beep. The voice is picked from the active instrument's
+`family` (`instrumentById[mod].family`, see "Instruments are data" above): plucked/fretted and
+percussion get a fast-decay Karplus-Strong-flavoured pluck, keyboard gets a brighter struck
+envelope, bowed/wind/free-reed/voice get a soft-attack sustained tone, and brass gets the same
+sustain shape with more upper-partial brightness. An instrument whose family isn't one of these
+falls back to the plain sustained voice rather than staying silent.
+
+This is synthesis, not sampling — every sample is computed from exact-integer-multiple sine
+partials at render time (`renderVoice()` and friends), so there is no embedded audio and no extra
+network/file dependency; a fundamental always lands exactly on the requested MIDI pitch, because
+learners tune to it. Render functions are pure (`(family, freq, sampleRate, seconds, volume) ->
+Float32Array`), which is also what lets `tests/unit/voices.test.mjs` assert pitch accuracy with
+the app's own pitch detector (`src/audio/yin.js`) directly in Node, no browser required.
+`tone()` opens the mic's deaf window (`src/audio/deaf-window.js`) for exactly the rendered
+buffer's own length. Crucially, a rendered buffer is never LONGER than the `dur` a caller asked
+for (`voiceDurationSeconds()`'s only floor, `EPSILON_SECONDS`, is far below the shortest real note
+any caller passes — 0.05s on `src/ui/editor.js`'s piano roll, 0.12s on `src/ui/songs.js`'s
+bpm-driven play-along): instrument character comes from each recipe's partial mix and decay
+shape, not from padding a short note out to a longer minimum ring time. A fixed floor that did
+that once made a fretted play-along's short notes hold the mic deaf well past the note itself,
+silently swallowing whatever the learner played next — `tests/unit/voices.test.mjs` guards
+against that regression directly on the rendered buffer length.
+
 Ready mallet percussion (`mallet-percussion`, "bells"/glockenspiel) reuses
 `MODS.kbd`'s own keyboard rendering (`drawKeys()`) rather than the
 fretted/plucked instruments' fretboard diagram — a bell/xylophone bar row is
