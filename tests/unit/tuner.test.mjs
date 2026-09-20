@@ -142,15 +142,25 @@ function wobbler(centre, cents, seed = 1) {
   };
 }
 
-test('stepTuner: a player wobbling inside a few cents still reaches "holding"', () => {
+test('stepTuner: a player wobbling inside a few cents reads as tuned, not just once', () => {
+  // "Did it EVER reach holding" is far too weak an assertion: the old
+  // zero-on-excursion code still stumbled into 12 consecutive in-tune ticks
+  // now and then, so a bare `everHeld` check passed against the very bug this
+  // pins. What a player actually experiences is the PROPORTION of the time
+  // the readout says tuned. Old code at this wobble: 5 ticks in 120. New: 96.
   const next = wobbler(69, 12);
   let s;
-  let everHeld = false;
-  for (let t = 0; t < 4000; t += 50) {
+  let held = 0;
+  const TICKS = 120;
+  for (let i = 0; i < TICKS; i++) {
     s = stepTuner(s, frame(next()), 50, { targets: UKE, confirmMs: 600, toleranceCents: 5 });
-    if (s.phase === 'holding') { everHeld = true; break; }
+    if (s.phase === 'holding') held++;
   }
-  assert.ok(everHeld, 'a +/-12 cent wobble centred on the target should confirm as in tune');
+  assert.ok(
+    held / TICKS > 0.6,
+    `a +/-12 cent wobble centred on the target read as tuned on only ${held}/${TICKS} ticks; ` +
+      'a player holding a note this well should see "tuned" most of the time',
+  );
 });
 
 test('stepTuner: a mild excursion decays the hold instead of wiping it', () => {
