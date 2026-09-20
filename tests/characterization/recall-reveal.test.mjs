@@ -108,7 +108,7 @@ test('Show me: reveals the current item and marks it assisted so mastery cannot 
   await page.waitFor('window.__coach.task()');
 
   const e = await driveToUnrevealed(page);
-  const before = await page.evaluate(`window.__coach.state().item['${e.id}'].m`);
+  const before = await page.evaluate(`window.__coach.state().item['${e.id}']`);
 
   await page.evaluate('window.__coach.showMe()');
 
@@ -123,6 +123,17 @@ test('Show me: reveals the current item and marks it assisted so mastery cannot 
   await page.evaluate(`window.__coach.note(${midi}, true)`);
   await page.waitFor('window.__coach.task() && window.__coach.task().done', 5000);
 
-  const after = await page.evaluate(`window.__coach.state().item['${e.id}'].m`);
-  assert.ok(after <= before, `an assisted answer must not raise mastery: before=${before} after=${after}`);
+  const after = await page.evaluate(`window.__coach.state().item['${e.id}']`);
+  // Under the srs.js retrievability model (src/core/srs.js), ANY review —
+  // including this assisted one — sets lastSeen to "now", so raw
+  // retrievability reads back as 1 immediately afterward regardless of
+  // grade (see retrievability()'s own "is 1 right at lastSeen" behaviour in
+  // tests/unit/srs-history-srs.test.mjs); comparing it before/after a
+  // review is therefore not a meaningful check any more. What must not
+  // happen is the *lasting* effect of a lapse: credit() sees e.q === 0 for
+  // an assisted answer (same failed-element path as a genuine miss), so
+  // this must be graded exactly like one — stability must not grow, and
+  // lapses must increase — per review(item, { grade: GRADE.LAPSE }).
+  assert.ok(after.stability <= before.stability, `an assisted answer must not grow stability: before=${before.stability} after=${after.stability}`);
+  assert.equal(after.lapses, before.lapses + 1, 'an assisted answer is graded as a lapse');
 });

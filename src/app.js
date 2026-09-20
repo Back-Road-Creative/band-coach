@@ -2,6 +2,7 @@ import { judgePitch, OCTAVE_POLICY } from './core/judge.js';
 import { createDeafWindow } from './audio/deaf-window.js';
 import { exportProgress as exportProgressFile, importProgress as importProgressFile, migrate as migrateDB } from './core/progress-file.js';
 import { toAudioTime, judgeTap, medianLatency } from './core/timing.js';
+import { DEFAULT_STABILITY_DAYS, MIN_STABILITY_DAYS, MAX_STABILITY_DAYS, GRADE, retrievability, review, due, migrateItem } from './core/srs.js';
 // Merge slots: a unit in flight adds its imports by replacing ONLY its own
 // slot line, so parallel branches never edit adjacent lines.
 import { recordError, getErrors } from './core/error-log.js';
@@ -333,23 +334,42 @@ import { register as registerPlayalong } from './ui/playalong.js';
   const BACKUP_AT_KEY = 'bandcoach.v1.backupAt';
   let lastBackupAt = 0; try { lastBackupAt = +localStorage.getItem(BACKUP_AT_KEY) || 0; } catch (e) {}
   let DB, mod = 'kbd', S = null;
+  // Frozen once per page load (loadDB()) / import, never re-sampled during
+  // play: every retrievability/review computation for the life of this tab
+  // uses this single value, so choice never depends on how much real wall
+  // time a script takes to run (see tests/characterization/determinism.test.mjs).
+  // A page that stays open for days only sees fresh decay on its next load,
+  // matching the old flat model's forget()-at-load-only behaviour exactly.
+  let modelNow = Date.now();
   const num = (x, d, lo, hi) => { x = +x; if (!isFinite(x)) x = d; return clamp(x, lo, hi); };
   const freshModel = () => ({ level: 1, ready: 0.2, item: {}, trans: {}, conf: {}, gain: 0.05, gate: 0.6, offset: 0, acc: {}, cr: {}, tick: 0, judged: 0, promo: { at: -999, level: 0 }, fast: 0, grooveBpm: 80 });
-  function sanitizeModel(m, v) {
+  // Converts a raw stored record (either the OLD flat-mastery shape
+  // { m, n, last } or an already-new-shape { stability, difficulty,
+  // lastSeen, reps, lapses }) into the new shape, via migrateItem() when it
+  // is still the old shape (or corrupt/partial, which migrateItem is
+  // already defensive against). `defaultM` lets a transition ('trans')
+  // record keep its own old default (0.5) distinct from an item's (0.4)
+  // when the stored `.m` itself is missing.
+  function toNewItem(raw, defaultM, modelNow) {
+    if (raw && typeof raw.stability === 'number') return raw;
+    const o = raw || {};
+    return migrateItem({ m: typeof o.m === 'number' ? o.m : defaultM, n: o.n, last: o.last }, modelNow);
+  }
+  function sanitizeModel(m, v, modelNow) {
     const s = freshModel(); if (!v || typeof v !== 'object') return s;
     s.level = Math.floor(num(v.level, 1, 1, 80)); s.ready = num(v.ready, 0.2, 0, 1); s.gain = num(v.gain, 0.05, 0.025, 0.09); s.gate = num(v.gate, 0.6, 0.6, 0.75); s.offset = num(v.offset, 0, -0.15, 0.15);
     s.tick = Math.floor(num(v.tick, 0, 0, 1e9)); s.judged = Math.floor(num(v.judged, 0, 0, 1e9)); s.fast = Math.floor(num(v.fast, 0, 0, 3)); if (v.promo) s.promo = { at: num(v.promo.at, -999, -999, 1e9), level: num(v.promo.level, 0, 0, 99) };
     s.grooveBpm = Math.round(num(v.grooveBpm, 80, 50, 168));
-    Object.keys(v.item || {}).forEach(id => { const o = v.item[id]; if (validId(m, id) && o) s.item[id] = { m: num(o.m, 0.4, 0, 1), n: Math.floor(num(o.n, 0, 0, 1e7)), last: num(o.last, 0, 0, 1e14), seen: num(o.seen, 0, 0, 1e9) }; });
-    Object.keys(v.trans || {}).forEach(k => { const ab = k.split('>'), o = v.trans[k]; if (ab.length === 2 && validId(m, ab[0]) && validId(m, ab[1]) && o) s.trans[k] = { m: num(o.m, 0.5, 0, 1), n: Math.floor(num(o.n, 0, 0, 1e7)), last: num(o.last, 0, 0, 1e14) }; });
+    Object.keys(v.item || {}).forEach(id => { const raw = v.item[id]; if (validId(m, id) && raw) { const base = toNewItem(raw, 0.4, modelNow); s.item[id] = { stability: num(base.stability, DEFAULT_STABILITY_DAYS, MIN_STABILITY_DAYS, MAX_STABILITY_DAYS), difficulty: num(base.difficulty, 0.3, 0, 1), lastSeen: num(base.lastSeen, modelNow, 0, 1e15), reps: Math.floor(num(base.reps, 0, 0, 1e7)), lapses: Math.floor(num(base.lapses, 0, 0, 1e7)), seen: Math.floor(num(raw.seen, 0, 0, 1e9)) }; } });
+    Object.keys(v.trans || {}).forEach(k => { const ab = k.split('>'), raw = v.trans[k]; if (ab.length === 2 && validId(m, ab[0]) && validId(m, ab[1]) && raw) { const base = toNewItem(raw, 0.5, modelNow); s.trans[k] = { stability: num(base.stability, DEFAULT_STABILITY_DAYS, MIN_STABILITY_DAYS, MAX_STABILITY_DAYS), difficulty: num(base.difficulty, 0.3, 0, 1), lastSeen: num(base.lastSeen, modelNow, 0, 1e15), reps: Math.floor(num(base.reps, 0, 0, 1e7)), lapses: Math.floor(num(base.lapses, 0, 0, 1e7)) }; } });
     Object.keys(v.conf || {}).forEach(k => { if (k.length < 40) s.conf[k] = Math.floor(num(v.conf[k], 0, 0, 1e6)); });
     Object.keys(v.acc || {}).forEach(k => { s.acc[k] = num(v.acc[k], 0, 0, 3); }); Object.keys(v.cr || {}).forEach(k => { if (validId(m, k)) s.cr[k] = num(v.cr[k], 0, -80, 80); });
     return s;
   }
-  function sanitizeDB(v, defaultLatencyMs) {
+  function sanitizeDB(v, defaultLatencyMs, modelNow) {
     const notate = {}; NOTATE_MOD_IDS.forEach(m => { notate[m] = 'names'; });
     const d = { v: 1, mods: {}, sessions: [], prefs: { mod: 'kbd', wind: 'bb', voice: 'low', names: true, noiseFloor: null, inputDeviceId: null, notate: notate } }; v = (v && typeof v === 'object') ? v : {};
-    MOD_IDS.forEach(m => { d.mods[m] = sanitizeModel(m, v.mods && v.mods[m]); });
+    MOD_IDS.forEach(m => { d.mods[m] = sanitizeModel(m, v.mods && v.mods[m], modelNow); });
     if (Array.isArray(v.sessions)) d.sessions = v.sessions.filter(x => x && typeof x.d === 'string' && MODS[x.mod]).slice(-60).map(x => ({ d: x.d.slice(0, 10), mod: x.mod, min: num(x.min, 0, 0, 600), acc: num(x.acc, 0, 0, 1), a1: num(x.a1, 0, 0, 1), a2: num(x.a2, 0, 0, 1), from: num(x.from, 1, 1, 80), to: num(x.to, 1, 1, 80), breaks: num(x.breaks, 0, 0, 99) }));
     const p = v.prefs || {}; if (MODS[p.mod]) d.prefs.mod = p.mod; if (WIND_KINDS[p.wind]) d.prefs.wind = p.wind; if (VOICE_KINDS[p.voice]) d.prefs.voice = p.voice; d.prefs.names = p.names !== false;
     d.prefs.noiseFloor = (typeof p.noiseFloor === 'number' && isFinite(p.noiseFloor) && p.noiseFloor >= 0) ? clamp(p.noiseFloor, 0, 1) : null;
@@ -363,22 +383,23 @@ import { register as registerPlayalong } from './ui/playalong.js';
     d.panels = sanitizePanelData(v.panels);
     return d;
   }
-  function forget(t) { const f = o => { if (!o.last) return; const days = (t - o.last) / 86400000; if (days > 0.5) { o.m = 0.4 + (o.m - 0.4) * Math.pow(0.5, days / 10); o.last = t; } }; MOD_IDS.forEach(m => { const s = DB.mods[m]; Object.keys(s.item).forEach(k => f(s.item[k])); Object.keys(s.trans).forEach(k => f(s.trans[k])); }); }
-  function loadDB() { let v = null; try { v = migrateDB(JSON.parse(localStorage.getItem(KEY) || 'null')); } catch (e) {} DB = sanitizeDB(v, actx ? (actx.outputLatency || actx.baseLatency || 0) * 1000 : 0); forget(Date.now()); mod = DB.prefs.mod; S = DB.mods[mod]; gates = gatesFor(DB.prefs.noiseFloor); }
+  function loadDB() { modelNow = Date.now(); let v = null; try { v = migrateDB(JSON.parse(localStorage.getItem(KEY) || 'null')); } catch (e) {} DB = sanitizeDB(v, actx ? (actx.outputLatency || actx.baseLatency || 0) * 1000 : 0, modelNow); mod = DB.prefs.mod; S = DB.mods[mod]; gates = gatesFor(DB.prefs.noiseFloor); }
   let saveTimer = null;
-  function save() { if (saveTimer) return; saveTimer = setTimeout(() => { saveTimer = null; try { if (MODS[mod]) DB.mods[mod] = S = sanitizeModel(mod, S); localStorage.setItem(KEY, JSON.stringify(DB)); } catch (e) {} }, 1200); }
-  const it = id => S.item[id] || (S.item[id] = { m: 0.4, n: 0, last: 0, seen: 0 });
-  const tr = (a, b) => { const k = a + '>' + b; return S.trans[k] || (S.trans[k] = { m: 0.5, n: 0, last: 0 }); };
-  const upd = (o, q) => { o.m = o.m * 0.75 + q * 0.25; o.n++; o.last = Date.now(); };
+  function save() { if (saveTimer) return; saveTimer = setTimeout(() => { saveTimer = null; try { if (MODS[mod]) DB.mods[mod] = S = sanitizeModel(mod, S, modelNow); localStorage.setItem(KEY, JSON.stringify(DB)); } catch (e) {} }, 1200); }
+  // `now` is always the caller's `modelNow` (frozen per page load/import,
+  // never Date.now() read live) — see the comment on `modelNow` above.
+  const it = (id, now) => S.item[id] || (S.item[id] = Object.assign(migrateItem({ m: 0.4 }, now), { seen: 0 }));
+  const tr = (a, b, now) => { const k = a + '>' + b; return S.trans[k] || (S.trans[k] = migrateItem({ m: 0.5 }, now)); };
+  const GRADE_FOR_Q = q => !(q > 0) ? GRADE.LAPSE : q < 0.75 ? GRADE.HARD : q < 0.95 ? GRADE.GOOD : GRADE.EASY;
   const gate = (name, prob) => { const a = (S.acc[name] || 0) + prob; if (a >= 1) { S.acc[name] = a - 1; return true; } S.acc[name] = a; return false; };
   const D = () => levelDef(mod, S.level);
   const inf = id => info(mod, id, DB.prefs);
 
   // ---------- deterministic choice: smooth weighted round-robin over need scores ----------
   function poolFor(d) { const act = activeItems(mod, S.level); let p = d.pool; if (!p) { if (d.task === 'chord') p = 'c'; } let out = p ? act.filter(id => id[0] === p) : act.filter(id => id[0] !== 'c' && id[0] !== 'p'); if (d.sfx) out = out.filter(id => id.slice(-1) === d.sfx); if (!out.length) out = act; return out; }
-  function weight(id, from) { const o = it(id); let w = 0.15 + 0.6 * (1 - o.m) + 0.3 * Math.min(1, (S.tick - o.seen) / 40); if (from) w += 0.7 * (1 - tr(from, id).m); if (id === from) w *= 0.2; return w; }
-  function pick(from, pool) { let tot = 0, best = null; pool.forEach(id => { const w = weight(id, from); tot += w; S.cr[id] = (S.cr[id] || 0) + w; if (best === null || S.cr[id] > S.cr[best] + 1e-9) best = id; }); S.cr[best] -= tot; return best; }
-  const byStrength = pool => pool.slice().sort((a, c) => (it(c).m - it(a).m) || (a < c ? -1 : 1));
+  function weight(id, from, now) { const o = it(id, now), r = retrievability(o, now); let w = 0.15 + 0.6 * (1 - r) + 0.3 * Math.min(1, (S.tick - o.seen) / 40); if (from) w += 0.7 * (1 - retrievability(tr(from, id, now), now)); if (id === from) w *= 0.2; return w; }
+  function pick(from, pool, now) { let tot = 0, best = null; pool.forEach(id => { const w = weight(id, from, now); tot += w; S.cr[id] = (S.cr[id] || 0) + w; if (best === null || S.cr[id] > S.cr[best] + 1e-9) best = id; }); S.cr[best] -= tot; return best; }
+  const byStrength = (pool, now) => pool.slice().sort((a, c) => (retrievability(it(c, now), now) - retrievability(it(a, now), now)) || (a < c ? -1 : 1));
 
   // ---------- session monitor: fatigue, frustration, breaks ----------
   let sess = null, playing = false, paused = false, pauseInfo = null, task = null, lastItem = null, recent = [], streak = 0, errCount = 0, lastInputAt = 0, nextTaskAt = 0;
@@ -390,7 +411,9 @@ import { register as registerPlayalong } from './ui/playalong.js';
     sess.F = 0.45 * drop + 0.25 * slow + 0.2 * c01((sess.sinceBreak / 60 - 12) / 18) + 0.1 * c01(sess.downs / 3); return sess.F;
   }
   function credit(id, q, from, warm, rt) {
-    upd(it(id), q); if (from && from !== id) upd(tr(from, id), q);
+    const grade = GRADE_FOR_Q(q), before = it(id, modelNow);
+    S.item[id] = Object.assign({ seen: before.seen }, review(before, { grade, now: modelNow }));
+    if (from && from !== id) S.trans[from + '>' + id] = review(tr(from, id, modelNow), { grade, now: modelNow });
     recent.push(q > 0 ? 1 : 0); if (recent.length > 20) recent.shift(); streak = q > 0 ? streak + 1 : 0;
     if (warm) return;
     S.judged++; S.ready = clamp(S.ready + (q > 0 ? S.gain * q : -0.08), 0, 1);
@@ -406,8 +429,8 @@ import { register as registerPlayalong } from './ui/playalong.js';
   }
   function evaluate() {
     if (S.ready >= 1) {
-      let hold = null; poolFor(D()).forEach(id => { const o = it(id); if ((o.n < 2 || o.m < S.gate) && (!hold || o.m < it(hold).m)) hold = id; });
-      if (hold) { S.ready = 1; coach('Holding at this level: ' + inf(hold).short + ' is at ' + Math.round(it(hold).m * 100) + '%. It needs ' + Math.round(S.gate * 100) + '% before we move on, so expect more of it.'); }
+      let hold = null, holdR = 1; poolFor(D()).forEach(id => { const o = it(id, modelNow), r = retrievability(o, modelNow); if ((o.reps < 2 || r < S.gate) && (!hold || r < holdR)) { hold = id; holdR = r; } });
+      if (hold) { S.ready = 1; coach('Holding at this level: ' + inf(hold).short + ' is at ' + Math.round(holdR * 100) + '%. It needs ' + Math.round(S.gate * 100) + '% before we move on, so expect more of it.'); }
       else {
         const clean = recent.length >= 12 && mean(recent) >= 0.95; S.fast = clean ? S.fast + 1 : 0; let note = '';
         if (S.fast >= 3) { S.gain = Math.min(0.09, S.gain * 1.15); S.fast = 0; note = ' You keep clearing levels cleanly, so I am speeding up the pace.'; }
@@ -428,21 +451,21 @@ import { register as registerPlayalong } from './ui/playalong.js';
     if (kind === 'mix') { kind = mixKind(); }
     const dd = Object.assign({}, d, { task: kind }); if (d.task === 'mix') { if (kind === 'chord') dd.pool = 'c'; if (kind === 'seq' && !dd.len) dd.len = 3; }
     pool = poolFor(dd);
-    if (sess.warm > 0) { sess.warm--; warm = true; const base = kind === 'bar' ? 'bar' : kind === 'chord' ? 'chord' : 'one'; kind = base; pool = byStrength(pool).slice(0, Math.max(2, Math.ceil(pool.length / 2))); }
+    if (sess.warm > 0) { sess.warm--; warm = true; const base = kind === 'bar' ? 'bar' : kind === 'chord' ? 'chord' : 'one'; kind = base; pool = byStrength(pool, modelNow).slice(0, Math.max(2, Math.ceil(pool.length / 2))); }
     const t = { kind: kind, els: [], idx: 0, warm: warm, limit: d.limit || 8, ref: d.ref || 'none', blind: !!d.blind, t0: now(), done: false, revealed: false };
-    const mk = id => { S.tick++; it(id).seen = S.tick; return { id: id, info: inf(id), failed: false, t0: 0, rt: 0, reveal: shouldReveal({ exposures: it(id).n }) && !d.blind }; };
-    if (kind === 'one' || kind === 'chord' || kind === 'hold') t.els.push(mk(pick(lastItem, pool)));
-    else if (kind === 'seq') { let from = lastItem; for (let i = 0; i < (d.len || 2); i++) { const id = pick(from, pool); t.els.push(mk(id)); from = id; } }
+    const mk = id => { S.tick++; it(id, modelNow).seen = S.tick; return { id: id, info: inf(id), failed: false, t0: 0, rt: 0, reveal: shouldReveal({ exposures: it(id, modelNow).reps }) && !d.blind }; };
+    if (kind === 'one' || kind === 'chord' || kind === 'hold') t.els.push(mk(pick(lastItem, pool, modelNow)));
+    else if (kind === 'seq') { let from = lastItem; for (let i = 0; i < (d.len || 2); i++) { const id = pick(from, pool, modelNow); t.els.push(mk(id)); from = id; } }
     else if (kind === 'run') {
-      const notes = pool.filter(id => id[0] === 'n' || id[0] === 'w'), start = pick(lastItem, notes), pre = start[0], all = notes.map(id => +id.slice(1)).sort((a, b) => a - b), lo = all[0], hi = all[all.length - 1], white = [0, 2, 4, 5, 7, 9, 11];
+      const notes = pool.filter(id => id[0] === 'n' || id[0] === 'w'), start = pick(lastItem, notes, modelNow), pre = start[0], all = notes.map(id => +id.slice(1)).sort((a, b) => a - b), lo = all[0], hi = all[all.length - 1], white = [0, 2, 4, 5, 7, 9, 11];
       let m = +start.slice(1), dir = gate('runDir', 0.5) ? 1 : -1; if (white.indexOf(pc(m)) < 0) m++; const seq = [m];
       for (let i = 0; i < 4; i++) { let nx = m + dir; while (white.indexOf(pc(nx)) < 0) nx += dir; if (nx > hi || nx < lo) { dir = -dir; nx = m + dir; while (white.indexOf(pc(nx)) < 0) nx += dir; } m = nx; seq.push(m); }
       seq.forEach(x => t.els.push(mk(pre + x)));
     }
     else if (kind === 'ear') { }
-    else if (kind === 'bar') { let left = 4, from = lastItem, guard = 0; while (left > 0 && guard++ < 12) { const fit = pool.filter(id => CELLS[id.slice(1)].b <= left); const id = pick(from, fit.length ? fit : ['rq']); t.els.push(mk(id)); left -= CELLS[id.slice(1)].b; from = id; } if (!t.els.some(e => e.info.on.length)) { t.els[0] = mk('rq'); } }
+    else if (kind === 'bar') { let left = 4, from = lastItem, guard = 0; while (left > 0 && guard++ < 12) { const fit = pool.filter(id => CELLS[id.slice(1)].b <= left); const id = pick(from, fit.length ? fit : ['rq'], modelNow); t.els.push(mk(id)); left -= CELLS[id.slice(1)].b; from = id; } if (!t.els.some(e => e.info.on.length)) { t.els[0] = mk('rq'); } }
     else if (kind === 'bar2') { const variants = d.bars || [[['qr']]], cells = variants[S.tick % variants.length]; S.tick++; t.rCells = cells; t.els = [{ id: 'bar2', info: { label: d.name }, failed: false, t0: 0, rt: 0, reveal: false }]; }
-    if (M.input === 'answer') { t.kind = 'ear'; if (!t.els.length) t.els.push(mk(pick(lastItem, pool))); const e = t.els[0], fam = pool.filter(id => id[0] === e.id[0] && (e.id[0] !== 'i' || id.slice(-1) === e.id.slice(-1))); t.choices = fam.slice().sort((a, b) => (inf(a).semi || 0) - (inf(b).semi || 0) || (a < b ? -1 : 1)); t.root = 55 + ((S.tick * 5) % 12); }
+    if (M.input === 'answer') { t.kind = 'ear'; if (!t.els.length) t.els.push(mk(pick(lastItem, pool, modelNow))); const e = t.els[0], fam = pool.filter(id => id[0] === e.id[0] && (e.id[0] !== 'i' || id.slice(-1) === e.id.slice(-1))); t.choices = fam.slice().sort((a, b) => (inf(a).semi || 0) - (inf(b).semi || 0) || (a < b ? -1 : 1)); t.root = 55 + ((S.tick * 5) % 12); }
     return t;
   }
 
@@ -657,7 +680,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
   }
   function buildGrooveTask() {
     const pool = poolFor(D()), len = 4; let from = lastItem; const els = [];
-    for (let i = 0; i < len; i++) { const id = pick(from, pool); S.tick++; it(id).seen = S.tick; els.push({ id: id, info: inf(id), failed: false, t0: 0, rt: 0, reveal: it(id).n < 2 }); from = id; }
+    for (let i = 0; i < len; i++) { const id = pick(from, pool, modelNow); S.tick++; it(id, modelNow).seen = S.tick; els.push({ id: id, info: inf(id), failed: false, t0: 0, rt: 0, reveal: it(id, modelNow).reps < 2 }); from = id; }
     return { kind: 'groove', els: els, idx: 0, warm: false, limit: 8, ref: 'none', blind: false, t0: now(), done: false };
   }
   function startGroove() {
@@ -747,7 +770,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
   function frame() {
     const t = performance.now(), dt = Math.min(0.1, (t - (lastFrame || t)) / 1000); lastFrame = t;
     try { if (playing) tick(dt); draw(); }
-    catch (e) { errCount++; recordError('frame', e); task = null; try { S = DB.mods[mod] = sanitizeModel(mod, S); } catch (e2) {} if (errCount > 4 && playing) { errCount = 0; takeBreak('error'); } }
+    catch (e) { errCount++; recordError('frame', e); task = null; try { S = DB.mods[mod] = sanitizeModel(mod, S, modelNow); } catch (e2) {} if (errCount > 4 && playing) { errCount = 0; takeBreak('error'); } }
     if (paused) tickBreak(); requestAnimationFrame(frame);
   }
 
@@ -923,7 +946,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
     if (grooveOn && groovable(mod)) return buildGrooveTask();
     if (customOn && DB.custom && DB.custom.length) {
       const ids = DB.custom.map(m => customItem(mod, m, DB.prefs)).filter(x => x), n = ids.length; if (n) { if (chunk * 4 >= n) { chunk = 0; coach('That was the whole tune. Back to the top.'); } const part = ids.slice(chunk * 4, chunk * 4 + 4), t = { kind: 'seq', els: [], idx: 0, warm: true, custom: true, limit: 10, ref: 'target', blind: false, t0: now(), done: false };
-        part.forEach(id => { S.tick++; it(id).seen = S.tick; t.els.push({ id: id, info: inf(id), failed: false, t0: 0, rt: 0, reveal: true }); }); t.onDone = () => { if (!t.els.some(e => e.failed)) chunk++; else say('Same four notes again until they are clean.', ''); }; return t; }
+        part.forEach(id => { S.tick++; it(id, modelNow).seen = S.tick; t.els.push({ id: id, info: inf(id), failed: false, t0: 0, rt: 0, reveal: true }); }); t.onDone = () => { if (!t.els.some(e => e.failed)) chunk++; else say('Same four notes again until they are clean.', ''); }; return t; }
     }
     return buildLevelTask();
   }
@@ -944,7 +967,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
   function endSession() {
     if (!sess) return; const min = sess.active / 60; let line = 'Session ended. Too short to log.';
     if (sess.judged >= 8) { DB.sessions.push({ d: today(), mod: mod, min: Math.round(min * 10) / 10, acc: sess.ok / sess.judged, a1: mean(sess.first), a2: mean(sess.last), from: sess.from, to: S.level, breaks: sess.breaks }); DB.sessions = DB.sessions.slice(-60);
-      let up = null, low = null; Object.keys(S.item).forEach(id => { const g0 = S.item[id].m - ((sess.m0[id] || { m: 0.4 }).m); if (up === null || g0 > up.g) up = { id: id, g: g0 }; if (S.item[id].n >= 3 && (low === null || S.item[id].m < S.item[low].m)) low = id; });
+      let up = null, low = null, lowR = 1; Object.keys(S.item).forEach(id => { const cur = S.item[id], r1 = retrievability(cur, modelNow), r0 = retrievability(sess.m0[id] || cur, modelNow), g0 = r1 - r0; if (up === null || g0 > up.g) up = { id: id, g: g0 }; if (cur.reps >= 3 && (low === null || r1 < lowR)) { low = id; lowR = r1; } });
       line = 'Session done: ' + Math.round(min) + ' min, ' + Math.round(100 * sess.ok / sess.judged) + '% right, best streak ' + sess.bestStreak + ', level ' + sess.from + ' to ' + S.level + '.' + (up && up.g > 0.05 ? ' Most improved: ' + inf(up.id).short + '.' : '') + (low ? ' Next time starts with extra ' + inf(low).short + '.' : ''); }
     if (sess.judged >= 1 && Date.now() - lastBackupAt > 7 * 86400000) showBackupNudge('You have been practising a while. Save a backup, just in case.');
     sess = null; playing = false; paused = false; task = null; bar = null; breakTrap.deactivate(); $('breakCard').hidden = true; $('playBtn').textContent = 'Start'; $('endBtn').hidden = true; $('choices').hidden = true; $('prompt').textContent = MODS[mod].name; $('hint').textContent = ''; coach(line); save(); showAll(); wakeLock.release();
@@ -978,10 +1001,11 @@ import { register as registerPlayalong } from './ui/playalong.js';
     const e = sess ? 1 - sess.F : 1, ep = Math.round(e * 100); $('energyFill').style.width = ep + '%'; $('energyFill').style.background = e < 0.4 ? 'var(--bad)' : e < 0.65 ? 'var(--warn)' : 'var(--good)'; $('energyBar').setAttribute('aria-valuenow', ep);
     const ds = dayStreak(), lastS = DB.sessions.filter(x => x.mod === mod).slice(-1)[0]; $('sessLine').textContent = (sess ? Math.floor(sess.active / 60) + ' min this session, ' + sess.breaks + ' break' + (sess.breaks === 1 ? '' : 's') + ' · ' : '') + Math.round(todayMinutes()) + ' min today' + (ds > 1 ? ' · ' + ds + ' days in a row' : '') + (lastS ? ' · last ' + MODS[mod].name.toLowerCase() + ' session ' + Math.round(100 * lastS.acc) + '%' : '');
     $('sAcc').textContent = recent.length ? Math.round(100 * mean(recent)) + '%' : '0%'; $('sStreak').textContent = streak; $('sRt').textContent = sess && sess.rts.length ? median(sess.rts).toFixed(1) : '0.0';
-    const act = activeItems(mod, S.level), rows = []; act.forEach(id => { const o = S.item[id]; if (o && o.n >= 2 && o.m < 0.7) rows.push({ m: o.m, label: inf(id).short }); });
-    Object.keys(S.trans).forEach(k => { const o = S.trans[k], ab = k.split('>'); if (o.n >= 2 && o.m < 0.7 && act.indexOf(ab[0]) >= 0 && act.indexOf(ab[1]) >= 0) rows.push({ m: o.m, label: inf(ab[0]).short + ' → ' + inf(ab[1]).short }); });
-    rows.sort((a, b) => a.m - b.m); const ul = $('weakList'); ul.innerHTML = ''; const li = (a, b, cls) => { const l = document.createElement('li'), s1 = document.createElement('span'), s2 = document.createElement('span'); if (cls) l.className = cls; s1.textContent = a; s2.textContent = b; l.appendChild(s1); l.appendChild(s2); ul.appendChild(l); };
-    rows.slice(0, 4).forEach(r => li(r.label, Math.round(r.m * 100) + '%')); let top = null; Object.keys(S.conf).forEach(k => { if (S.conf[k] >= 3 && k.indexOf('>x') < 0 && (!top || S.conf[k] > S.conf[top])) top = k; });
+    const act = activeItems(mod, S.level), weakEntries = []; act.forEach(id => { const o = S.item[id]; if (o && o.reps >= 2) weakEntries.push(Object.assign({}, o, { id: 'i:' + id, label: inf(id).short })); });
+    Object.keys(S.trans).forEach(k => { const o = S.trans[k], ab = k.split('>'); if (o.reps >= 2 && act.indexOf(ab[0]) >= 0 && act.indexOf(ab[1]) >= 0) weakEntries.push(Object.assign({}, o, { id: 't:' + k, label: inf(ab[0]).short + ' → ' + inf(ab[1]).short })); });
+    const rows = due(weakEntries, modelNow).filter(e => e.r < 0.7);
+    const ul = $('weakList'); ul.innerHTML = ''; const li = (a, b, cls) => { const l = document.createElement('li'), s1 = document.createElement('span'), s2 = document.createElement('span'); if (cls) l.className = cls; s1.textContent = a; s2.textContent = b; l.appendChild(s1); l.appendChild(s2); ul.appendChild(l); };
+    rows.slice(0, 4).forEach(r => li(r.label, Math.round(r.r * 100) + '%')); let top = null; Object.keys(S.conf).forEach(k => { if (S.conf[k] >= 3 && k.indexOf('>x') < 0 && (!top || S.conf[k] > S.conf[top])) top = k; });
     if (top) { const ab = top.split('>'); li('Mix-up: ' + (validId(mod, ab[0]) ? inf(ab[0]).short : ab[0]) + ' answered as ' + (validId(mod, ab[1]) ? inf(ab[1]).short : ab[1]), S.conf[top] + ' times'); } if (!ul.children.length) li('Nothing weak yet. Misses and slow answers show up here, and the coach sends more of them.', '', 'none');
   }
   function renderOpts() {
@@ -1069,7 +1093,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
     const result = importProgressFile(text);
     if (!result.ok) { coach(result.error); return result; }
     const priorLatencyMs = DB && DB.latencyMs;
-    DB = sanitizeDB(result.db); DB.latencyMs = num(priorLatencyMs, DB.latencyMs, 0, 300); forget(Date.now()); if (!Array.isArray(DB.custom)) DB.custom = [];
+    modelNow = Date.now(); DB = sanitizeDB(result.db, undefined, modelNow); DB.latencyMs = num(priorLatencyMs, DB.latencyMs, 0, 300); if (!Array.isArray(DB.custom)) DB.custom = [];
     $('optNames').checked = DB.prefs.names; setMod(DB.prefs.mod); coach('Backup restored.');
     return result;
   }
@@ -1142,7 +1166,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
   }
   loadDB(); if (!Array.isArray(DB.custom)) DB.custom = []; $('optNames').checked = DB.prefs.names; buildPicker(); buildPanelPicker(); setMod(mod); requestAnimationFrame(frame);
   if (!hadSavedProgressAtBoot) showBackupNudge('Been here before? Restore a backup.');
-  const hook = !__DEBUG_HOOK__ ? null : { state: () => S, db: () => DB, sess: () => sess, task: () => task, cur: cur, note: onNote, answer: answer, tap: onTap, bar: () => bar, playing: () => playing, setMod: setMod, testSource: testSource, heard: () => heard, yin: yin, cap: () => cap, deaf: () => deafWindow.isDeaf(), exportProgress: doExportProgress, importProgress: doImportProgress, audioNow: audioNow };
+  const hook = !__DEBUG_HOOK__ ? null : { state: () => S, db: () => DB, sess: () => sess, task: () => task, cur: cur, note: onNote, answer: answer, tap: onTap, bar: () => bar, playing: () => playing, setMod: setMod, testSource: testSource, heard: () => heard, yin: yin, cap: () => cap, deaf: () => deafWindow.isDeaf(), exportProgress: doExportProgress, importProgress: doImportProgress, audioNow: audioNow, modelNow: () => modelNow };
   // Debug-hook slots: replace ONLY your own line with
   //   if (__DEBUG_HOOK__) Object.assign(hook, { … });
   if (__DEBUG_HOOK__) Object.assign(hook, { errors: getErrors });
