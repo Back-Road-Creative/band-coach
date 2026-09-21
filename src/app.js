@@ -403,7 +403,21 @@ import { register as registerPlayalong } from './ui/playalong.js';
         { name: 'Moves: two notes', task: 'seq', len: 2, limit: 10 }, { name: 'F sharp and B flat', add: Wn(66, 70), limit: 12 }, { name: 'Long tones: two steady seconds', task: 'hold', limit: 14 },
         { name: 'Moves: three notes', task: 'seq', len: 3, limit: 9 }, { name: 'Five-note runs', task: 'run', limit: 8 }, { name: 'The upper notes', add: Wn(76, 77, 79), limit: 12 }
       ] },
-    ear: { name: 'Ear training', tag: 'listen and answer', color: '#35c9c0', input: 'answer', help: 'Ear training: listen, then pick the answer with the buttons or the number keys. Hear it again as often as you like. After each answer the keyboard shows you what was played.',
+    // Named "Ear training: quick drill" rather than plain "Ear training" so
+    // its picker button never collides with the #panelPicker "Ear training"
+    // panel (src/ui/ear.js, registerEar()) -- read both before touching
+    // this: they are genuinely different features, not one duplicated
+    // twice. This pseudo-mod is a single interval/chord-ID drill woven into
+    // the normal instrument session (streak, level, timer, mastery, the 1-9
+    // number-key shortcut at the top-level keydown handler). The panel is a
+    // separate standalone screen with eight distinct exercise types (scale
+    // degrees, melodic/rhythm dictation, progressions, scales & modes,
+    // inversions, intonation, sing-back), each with its own five-level
+    // adaptive difficulty and accuracy tracking -- a broader, more complete
+    // ear-training suite that does not fit the per-instrument session loop.
+    // Keeping both and renaming (rather than deleting either) is the U3
+    // finding's explicit fallback for "genuinely different features".
+    ear: { name: 'Ear training: quick drill', tag: 'listen and answer', color: '#35c9c0', input: 'answer', help: 'Ear training: listen, then pick the answer with the buttons or the number keys. Hear it again as often as you like. After each answer the keyboard shows you what was played.',
       levels: [
         { name: 'Second, third or fifth (going up)', add: ['i2a', 'i4a', 'i7a'], pool: 'i', limit: 14 }, { name: 'Add the fourth and the octave', add: ['i5a', 'i12a'], pool: 'i', limit: 14 }, { name: 'Add the minor third and minor second', add: ['i3a', 'i1a'], pool: 'i', limit: 14 },
         { name: 'Add the sixths, tritone and sevenths', add: ['i9a', 'i8a', 'i6a', 'i10a', 'i11a'], pool: 'i', limit: 14 }, { name: 'Going down', add: ['i2d', 'i4d', 'i7d', 'i5d', 'i3d', 'i12d'], pool: 'i', sfx: 'd', limit: 14 },
@@ -507,6 +521,12 @@ import { register as registerPlayalong } from './ui/playalong.js';
     tuner: { name: 'Tuner', tag: 'tool', color: '#93a0bd', help: 'Tuner: press Connect, pick your instrument, and play one open string at a time. The needle shows how far off you are; the string turns green when it has been in tune for a moment. Click a string to hear the note it should be.' },
     capture: { name: 'Capture a melody', tag: 'tool', color: '#93a0bd', help: 'Capture: press Connect, then Listen, and play, sing, hum or whistle a tune, or hold the microphone to a recording of one instrument playing one note at a time. It writes down the notes it hears, and you can turn them into a lesson on any instrument here. It hears one note at a time: it cannot pull separate parts out of a full band recording.' }
   };
+  // 'ear' and 'rhy' are the two pseudo-mods declared above alongside MODS
+  // (see the comment at MODS.ear/MODS.rhy) -- they run through the same
+  // session/level machinery as a real instrument, so they stay in MODS/
+  // MOD_IDS untouched, but the picker groups them with TOOLS below because
+  // to a learner they read as "a tool", not "an instrument to pick up".
+  const TOOL_MOD_IDS = ['ear', 'rhy'];
   const TUNINGS = { gtr: ['Guitar', [40, 45, 50, 55, 59, 64]], bass: ['Bass', [28, 33, 38, 43]], uke: ['Ukulele', [67, 60, 64, 69]], vln: ['Violin', [55, 62, 69, 76]], chrom: ['Any note (chromatic)', []] };
   const _info = info, _valid = validId;
   info = function (m, id, prefs) { if (id[0] === 'h') { const mm = /^h([bd])(\d+)$/.exec(id), dir = mm[1], hole = +mm[2], midi = HARP[dir][hole - 1]; return { kind: 'note', midi: midi, hole: hole, dir: dir, note: nname(midi), label: (dir === 'b' ? 'Blow ' : 'Draw ') + hole + ' (' + nname(midi) + ')', short: (dir === 'b' ? 'Blow ' : 'Draw ') + hole }; } return _info(m, id, prefs); };
@@ -1421,7 +1441,24 @@ import { register as registerPlayalong } from './ui/playalong.js';
     $('prompt').textContent = (MODS[m] || TOOLS[m]).name; $('hint').textContent = ''; $('choices').hidden = true; say(''); if (MODS[m]) coach(S.judged ? 'Welcome back. You are on level ' + S.level + ': ' + D().name + '. Press Start.' : 'Press Start. Level 1: ' + D().name + '.');
     renderOpts(); ioRefresh(); showAll(); save();
   }
-  function buildPicker() { const box = $('picker'); MOD_IDS.concat(Object.keys(TOOLS)).forEach(m => { const o = MODS[m] || TOOLS[m], b = document.createElement('button'); b.type = 'button'; b.dataset.mod = m; b.style.setProperty('--c', o.color); b.setAttribute('aria-pressed', 'false'); b.appendChild(document.createTextNode(o.name)); const sm = document.createElement('small'); sm.textContent = o.tag; b.appendChild(sm); b.addEventListener('click', () => { b.blur(); closePanel(); setMod(m); }); box.appendChild(b); }); }
+  // Two visual tiers inside the one #picker container (kept as a single id
+  // so every existing `#picker button` selector -- setMod's aria-pressed
+  // sync, openPanel/closePanel's cross-picker clearing -- still finds every
+  // button with no change there): real instruments render straight into
+  // #picker as before, most prominent; TOOLS (Tuner, Capture a melody) plus
+  // the two pseudo-mods that read as tools to a learner rather than
+  // instruments to pick up (TOOL_MOD_IDS: 'ear', 'rhy') render into a
+  // quieter nested .picker-tools group instead, under its own "Tools"
+  // sub-heading (see .picker-tools in styles.css).
+  function buildPickerButton(m, o) { const b = document.createElement('button'); b.type = 'button'; b.dataset.mod = m; b.style.setProperty('--c', o.color); b.setAttribute('aria-pressed', 'false'); b.appendChild(document.createTextNode(o.name)); const sm = document.createElement('small'); sm.textContent = o.tag; b.appendChild(sm); b.addEventListener('click', () => { b.blur(); closePanel(); setMod(m); }); return b; }
+  function buildPicker() {
+    const box = $('picker'), instrumentIds = MOD_IDS.filter(m => TOOL_MOD_IDS.indexOf(m) < 0), toolIds = TOOL_MOD_IDS.concat(Object.keys(TOOLS));
+    instrumentIds.forEach(m => box.appendChild(buildPickerButton(m, MODS[m])));
+    const toolsGroup = document.createElement('div'); toolsGroup.className = 'picker-tools'; toolsGroup.setAttribute('role', 'group'); toolsGroup.setAttribute('aria-label', 'Tools');
+    const heading = document.createElement('span'); heading.className = 'picker-tools-label'; heading.textContent = 'Tools'; toolsGroup.appendChild(heading);
+    toolIds.forEach(m => toolsGroup.appendChild(buildPickerButton(m, MODS[m] || TOOLS[m])));
+    box.appendChild(toolsGroup);
+  }
   // The tuner tool knows which instrument's open strings it is listening
   // for (tunerKind); the melody-capture tool deliberately does not (it hears
   // anything sung, hummed, whistled or played), so it keeps the generic
