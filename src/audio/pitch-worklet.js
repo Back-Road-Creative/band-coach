@@ -83,13 +83,37 @@ export function applyGateMessage(proc, data) {
   if (typeof data.rmsGate === 'number' && isFinite(data.rmsGate) && data.rmsGate >= 0) proc.rmsGate = data.rmsGate;
 }
 
+// Each helper is emitted as an assignment to a name THIS file chooses, never
+// as the bare declaration its own source text carries.
+//
+// THE BUG THIS EXISTS FOR (shipped in v1.4.0, found by hand): splicing
+// `${yin.toString()}` emits whatever name the compiler gave that function,
+// while the class body below calls it as literal text — `yin(...)`. Only
+// `--release` minifies (build/build.mjs), so esbuild renamed the definitions
+// to `Dt`, `bn` and so on, the call sites kept saying `yin`, and the
+// processor threw a ReferenceError in its constructor on the audio thread.
+// Every microphone exercise went dead in the downloaded file while the dev
+// build, and therefore every browser test, stayed green.
+//
+// Binding through an alias makes that class of failure unrepresentable: the
+// name the class body calls is the name this line creates, whatever the
+// compiler did to the original. It is also indifferent to the FORM of the
+// emitted source — `function Dt(){}`, `(a)=>{}` and a named function
+// expression are all valid on the right of an assignment, whereas splicing a
+// bare declaration stops working the moment esbuild emits anything else.
+// (A named function expression keeps its own name bound inside its body, so
+// a helper that recurses still finds itself.)
+function declareAs(alias, fn) {
+  return `const ${alias} = ${fn.toString()};`;
+}
+
 function buildProcessorSource() {
   return `
-${yin.toString()}
-${createOnsetDetector.toString()}
-${applyRangeMessage.toString()}
-${applyFrameSizeMessage.toString()}
-${applyGateMessage.toString()}
+${declareAs('yin', yin)}
+${declareAs('createOnsetDetector', createOnsetDetector)}
+${declareAs('applyRangeMessage', applyRangeMessage)}
+${declareAs('applyFrameSizeMessage', applyFrameSizeMessage)}
+${declareAs('applyGateMessage', applyGateMessage)}
 class BandCoachPitchProcessor extends AudioWorkletProcessor {
   constructor(options) {
     super();
