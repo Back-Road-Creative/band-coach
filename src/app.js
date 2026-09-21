@@ -1438,6 +1438,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
     if (pitchWorkletNode && MODS[m] && MODS[m].fmin && MODS[m].fmax) { lastWorkletRangeSent = { fmin: MODS[m].fmin, fmax: MODS[m].fmax }; pitchWorkletNode.port.postMessage({ type: 'range', fmin: MODS[m].fmin, fmax: MODS[m].fmax }); }
     if (pitchWorkletNode && actx) { const neededFrameSize = frameSizeForInstrument(instrumentById[m], actx.sampleRate); if (neededFrameSize !== lastWorkletFrameSize) { lastWorkletFrameSize = neededFrameSize; pitchWorkletNode.port.postMessage({ type: 'frameSize', frameSize: neededFrameSize }); } }
     document.querySelectorAll('#picker button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.mod === m)));
+    const toolsGroup = $('pickerTools'); if (toolsGroup && TOOL_MOD_IDS.concat(Object.keys(TOOLS)).indexOf(m) >= 0) toolsGroup.open = true;
     $('prompt').textContent = (MODS[m] || TOOLS[m]).name; $('hint').textContent = ''; $('choices').hidden = true; say(''); if (MODS[m]) coach(S.judged ? 'Welcome back. You are on level ' + S.level + ': ' + D().name + '. Press Start.' : 'Press Start. Level 1: ' + D().name + '.');
     renderOpts(); ioRefresh(); showAll(); save();
   }
@@ -1448,15 +1449,21 @@ import { register as registerPlayalong } from './ui/playalong.js';
   // #picker as before, most prominent; TOOLS (Tuner, Capture a melody) plus
   // the two pseudo-mods that read as tools to a learner rather than
   // instruments to pick up (TOOL_MOD_IDS: 'ear', 'rhy') render into a
-  // quieter nested .picker-tools group instead, under its own "Tools"
-  // sub-heading (see .picker-tools in styles.css).
+  // quieter nested .picker-tools group instead (U6: now a <details> --
+  // shut on first paint, one native disclosure instead of four permanent
+  // buttons, no JS needed to toggle it, contents stay real DOM nodes so
+  // every existing `#picker button[data-mod=...]` selector still finds
+  // them -- see .picker-tools in styles.css). setMod() below forces it back
+  // open whenever the selected mod lives inside it, so a returning learner
+  // never loses sight of where they are.
   function buildPickerButton(m, o) { const b = document.createElement('button'); b.type = 'button'; b.dataset.mod = m; b.style.setProperty('--c', o.color); b.setAttribute('aria-pressed', 'false'); b.appendChild(document.createTextNode(o.name)); const sm = document.createElement('small'); sm.textContent = o.tag; b.appendChild(sm); b.addEventListener('click', () => { b.blur(); closePanel(); setMod(m); }); return b; }
   function buildPicker() {
     const box = $('picker'), instrumentIds = MOD_IDS.filter(m => TOOL_MOD_IDS.indexOf(m) < 0), toolIds = TOOL_MOD_IDS.concat(Object.keys(TOOLS));
     instrumentIds.forEach(m => box.appendChild(buildPickerButton(m, MODS[m])));
-    const toolsGroup = document.createElement('div'); toolsGroup.className = 'picker-tools'; toolsGroup.setAttribute('role', 'group'); toolsGroup.setAttribute('aria-label', 'Tools');
-    const heading = document.createElement('span'); heading.className = 'picker-tools-label'; heading.textContent = 'Tools'; toolsGroup.appendChild(heading);
+    const toolsGroup = document.createElement('details'); toolsGroup.className = 'picker-tools'; toolsGroup.id = 'pickerTools';
+    const summary = document.createElement('summary'); summary.textContent = 'More tools: tuner, capture a melody, interval drill, rhythm reading'; toolsGroup.appendChild(summary);
     toolIds.forEach(m => toolsGroup.appendChild(buildPickerButton(m, MODS[m] || TOOLS[m])));
+    if (toolIds.indexOf(mod) >= 0) toolsGroup.open = true;
     box.appendChild(toolsGroup);
   }
   // The tuner tool knows which instrument's open strings it is listening
@@ -1568,6 +1575,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
   //
   function openPanel(id) {
     if (sess) endSession(); task = null;
+    const panelDisclosure = $('panelPickerDisclosure'); if (panelDisclosure) panelDisclosure.open = true;
     document.querySelectorAll('#panelPicker button, #picker button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.panel === id)));
     $('mainArea').hidden = true; $('panelHost').hidden = false; $('panelSay').textContent = ''; $('panelSay').hidden = false;
     try { panels.open(id, $('panelHost'), panelApi); } catch (e) { recordError('panel:' + id, e); say('That screen could not open.', 'no'); }

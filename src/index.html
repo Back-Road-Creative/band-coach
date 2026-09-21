@@ -26,7 +26,10 @@
   </header>
 
   <div class="picker" id="picker" role="group" aria-label="Instrument"></div>
-  <div class="picker panel-picker" id="panelPicker" role="group" aria-label="More ways to practise" hidden></div>
+  <details class="panel-picker-disclosure" id="panelPickerDisclosure">
+    <summary>More ways to practise</summary>
+    <div class="picker panel-picker" id="panelPicker" role="group" aria-label="More ways to practise" hidden></div>
+  </details>
 
   <p class="panel-say" id="panelSay" role="status" hidden></p>
   <section class="panel-host" id="panelHost" aria-live="polite" hidden></section>
