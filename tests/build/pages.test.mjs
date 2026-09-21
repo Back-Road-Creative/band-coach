@@ -16,7 +16,7 @@ import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 import { build } from '../../build/build.mjs';
-import { buildPages, PRECACHE_FILES, ICON_FILES } from '../../build/pages.mjs';
+import { buildPages, PRECACHE_FILES, ICON_FILES, WRITTEN_FILES } from '../../build/pages.mjs';
 import { HTML_PATH } from '../helpers/html-path.mjs';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
@@ -56,6 +56,7 @@ test('pages build produces exactly the expected files', async () => {
     'index.html',
     'manifest.webmanifest',
     'sw.js',
+    'version.json',
   ]);
 });
 
@@ -107,9 +108,20 @@ test('sw.js parses and its precache list matches the files on disk', async () =>
   assert.ok(match, 'sw.js declares a PRECACHE array');
   const precache = JSON.parse(match[1]);
 
-  const onDisk = readdirSync(PAGES_DIR).filter((f) => f !== 'sw.js').sort();
-  assert.deepEqual([...precache].sort(), onDisk, 'precache list matches dist/pages/ minus sw.js itself');
+  // version.json is written alongside the precached files but must never be
+  // precached itself (see build/pages.mjs) — so it's excluded from the "on
+  // disk minus sw.js" set the precache list is compared against, and
+  // checked separately in tests/unit/pages-version-json.test.mjs.
+  const onDisk = readdirSync(PAGES_DIR)
+    .filter((f) => f !== 'sw.js' && f !== 'version.json')
+    .sort();
+  assert.deepEqual([...precache].sort(), onDisk, 'precache list matches dist/pages/ minus sw.js and version.json');
   assert.deepEqual([...precache].sort(), [...PRECACHE_FILES].sort());
+  assert.deepEqual(
+    readdirSync(PAGES_DIR).filter((f) => f !== 'sw.js').sort(),
+    [...WRITTEN_FILES].sort(),
+    'WRITTEN_FILES matches everything buildPages writes besides sw.js itself'
+  );
 });
 
 test('the one-file release build is byte-for-byte unaffected by the pages feature', async () => {

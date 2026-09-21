@@ -263,6 +263,12 @@ changes `dist/release/band-coach.html` or `dist/band-coach.html` — those stay 
 zero-network, one-file downloads they've always been (`tests/build/pages.test.mjs` proves the
 release file is byte-for-byte identical whether or not the pages edition is built).
 
+It also writes `dist/pages/version.json` (`{ version, released, download }`) — the current
+version, its release date and the download URL above — deliberately excluded from the service
+worker's precache list so it always answers with the live version, never a cached one. This is
+what lets a downloaded `band-coach.html`, which can never auto-update itself, ask whether it's
+stale.
+
 **iPhone microphone behaviour is unmeasured.** This edition has only been proven in headless
 Chromium against a loopback test server (`tests/build/pages-offline.test.mjs`) — that it installs,
 its service worker activates, and it renders after going offline. Whether Safari on an actual
