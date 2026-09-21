@@ -17,6 +17,14 @@ That is the whole app — one page, nothing to install, no account, and it keeps
 network off. Open it in Chrome or Edge. Microphone instruments ask for permission the first time;
 a MIDI keyboard is optional. To put it away, delete the file.
 
+A downloaded file cannot update itself — that's a browser security boundary, not a missing
+feature — so the footer carries a "Check for updates" button instead. Press it and it asks the
+Band Coach website for the current version number (nothing about your playing is sent) and
+answers right there: up to date, a newer version is out with a link to get it, or it couldn't
+reach the server, also with a link to get the current file. It never checks on its own — only on
+a press — and a development build (one you built yourself rather than downloaded) says so instead
+of checking, since there is nothing meaningful to compare.
+
 If your microphone or keyboard is not being heard, the next two sections are the ones to read.
 Everything from "Build it from source" down is for people working on the app itself.
 
