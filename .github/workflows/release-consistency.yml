@@ -35,7 +35,63 @@ jobs:
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
 
-      - name: the release download URL every download link uses must resolve
+      # release.yml is triggered by the same tag push and runs concurrently
+      # with this workflow -- it is not done building and attaching the asset
+      # by the time this job starts. Checking "releases/latest/download/"
+      # right away would silently check the PREVIOUS release's asset instead
+      # (measured live on v1.4.0: this job finished, release.yml was still
+      # in_progress, and `gh release view` still reported v1.3.0), which
+      # would pass even if this tag's asset never gets attached at all. So
+      # this looks up the release FOR THIS TAG by name, not "latest", and
+      # rides out release.yml still running with the same retry idiom as the
+      # version.json check below.
+      - name: the release for this tag must publish the band-coach.html asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          attempts=10
+          delay=30
+          for i in $(seq 1 "$attempts"); do
+            json="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft,assets 2>/dev/null || true)"
+            if [ -n "$json" ]; then
+              isDraft="$(node -e "process.stdout.write(String(JSON.parse(process.argv[1]).isDraft))" "$json" 2>/dev/null || true)"
+              hasAsset="$(node -e "process.stdout.write(String(JSON.parse(process.argv[1]).assets.some((a) => a.name === 'band-coach.html')))" "$json" 2>/dev/null || true)"
+              if [ "$isDraft" = "false" ] && [ "$hasAsset" = "true" ]; then
+                echo "release $TAG is published with band-coach.html attached"
+                exit 0
+              fi
+              echo "attempt $i/$attempts: release $TAG found but isDraft=$isDraft hasAsset=$hasAsset -- retrying in ${delay}s"
+            else
+              echo "attempt $i/$attempts: release $TAG not visible yet -- retrying in ${delay}s"
+            fi
+            sleep "$delay"
+          done
+          echo "::error::release $TAG never published with the band-coach.html asset attached after $attempts attempts over $((attempts * delay))s. Check that release.yml finished for this exact tag, that the release was not left as a draft, and that the asset is still named band-coach.html." >&2
+          exit 1
+
+      # Now that the step above has confirmed THIS tag's release is
+      # published, check that "latest" -- what every download link in the app
+      # and README actually resolves through -- is this tag. Two things are
+      # checked, because neither alone is enough:
+      #
+      #   1. The URL still returns 200, so the link is not broken.
+      #   2. The release GitHub calls "latest" IS this tag, via the API.
+      #
+      # Deliberately NOT done by following the redirect and reading
+      # url_effective. Measured against the real v1.4.0 release: the first
+      # hop's Location is
+      # https://github.com/<repo>/releases/download/v1.4.0/band-coach.html,
+      # but `curl -sIL` keeps going and lands on a SIGNED BLOB URL on
+      # release-assets.githubusercontent.com carrying neither the tag nor the
+      # word "releases". Comparing url_effective against this tag's download
+      # path therefore fails on a perfectly good release -- it would have
+      # broken every release from here on. The API answers the question
+      # directly and cannot be thrown off by how many hops the CDN adds.
+      - name: the release download URL every download link uses must resolve to this tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.tag.outputs.tag }}
         run: |
           url="https://github.com/${GITHUB_REPOSITORY}/releases/latest/download/band-coach.html"
           status="$(curl -sIL -o /dev/null -w '%{http_code}' "$url")"
@@ -43,6 +99,12 @@ jobs:
             echo "::error::$url returned HTTP $status, not 200. Every download link in the app and README points at this exact URL -- check that the release is published (not left as a draft), that the attached asset is still named band-coach.html, and that the repo has not been renamed." >&2
             exit 1
           fi
+          latest="$(gh api "repos/${GITHUB_REPOSITORY}/releases/latest" --jq .tag_name 2>/dev/null || true)"
+          if [ "$latest" != "$TAG" ]; then
+            echo "::error::$url returns 200, but the release GitHub reports as 'latest' is '$latest', not '$TAG'. A download link would hand users that other release. Check that release.yml finished publishing $TAG and that no newer release exists." >&2
+            exit 1
+          fi
+          echo "latest resolves to $TAG, and its download URL returns 200"
 
       # GitHub Pages deployment lags the tag push -- pages.yml has to build
       # dist/pages, upload the artifact, and let deploy-pages roll it out to
