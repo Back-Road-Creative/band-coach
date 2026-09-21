@@ -403,11 +403,14 @@ import { register as registerPlayalong } from './ui/playalong.js';
         { name: 'Moves: two notes', task: 'seq', len: 2, limit: 10 }, { name: 'F sharp and B flat', add: Wn(66, 70), limit: 12 }, { name: 'Long tones: two steady seconds', task: 'hold', limit: 14 },
         { name: 'Moves: three notes', task: 'seq', len: 3, limit: 9 }, { name: 'Five-note runs', task: 'run', limit: 8 }, { name: 'The upper notes', add: Wn(76, 77, 79), limit: 12 }
       ] },
-    // Named "Ear training: quick drill" rather than plain "Ear training" so
-    // its picker button never collides with the #panelPicker "Ear training"
-    // panel (src/ui/ear.js, registerEar()) -- read both before touching
-    // this: they are genuinely different features, not one duplicated
-    // twice. This pseudo-mod is a single interval/chord-ID drill woven into
+    // Named "Interval drill" rather than "Ear training" so its picker button
+    // never collides with the #panelPicker "Ear training" panel
+    // (src/ui/ear.js, registerEar()) -- read both before touching this: they
+    // are genuinely different features, not one duplicated twice. The name
+    // says what this one actually is; calling it a variant of "Ear training"
+    // ("Ear training: quick drill", the first attempt) still read as a second
+    // door to the same room to anyone who does not know the internals.
+    // This pseudo-mod is a single interval/chord-ID drill woven into
     // the normal instrument session (streak, level, timer, mastery, the 1-9
     // number-key shortcut at the top-level keydown handler). The panel is a
     // separate standalone screen with eight distinct exercise types (scale
@@ -417,7 +420,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
     // ear-training suite that does not fit the per-instrument session loop.
     // Keeping both and renaming (rather than deleting either) is the U3
     // finding's explicit fallback for "genuinely different features".
-    ear: { name: 'Ear training: quick drill', tag: 'listen and answer', color: '#35c9c0', input: 'answer', help: 'Ear training: listen, then pick the answer with the buttons or the number keys. Hear it again as often as you like. After each answer the keyboard shows you what was played.',
+    ear: { name: 'Interval drill', tag: 'listen and answer', color: '#35c9c0', input: 'answer', help: 'Ear training: listen, then pick the answer with the buttons or the number keys. Hear it again as often as you like. After each answer the keyboard shows you what was played.',
       levels: [
         { name: 'Second, third or fifth (going up)', add: ['i2a', 'i4a', 'i7a'], pool: 'i', limit: 14 }, { name: 'Add the fourth and the octave', add: ['i5a', 'i12a'], pool: 'i', limit: 14 }, { name: 'Add the minor third and minor second', add: ['i3a', 'i1a'], pool: 'i', limit: 14 },
         { name: 'Add the sixths, tritone and sevenths', add: ['i9a', 'i8a', 'i6a', 'i10a', 'i11a'], pool: 'i', limit: 14 }, { name: 'Going down', add: ['i2d', 'i4d', 'i7d', 'i5d', 'i3d', 'i12d'], pool: 'i', sfx: 'd', limit: 14 },
@@ -708,7 +711,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
   // #feedback lives inside #mainArea, which is hidden while a panel is open,
   // so a panel's say() would be invisible. Mirror it into the panel's own
   // status line whenever one is open.
-  const say = (t, cls) => { const f = $('feedback'); f.textContent = t; f.className = cls || ''; const p = $('panelSay'); if (p) { p.textContent = panels.current() ? t : ''; p.className = 'panel-say ' + (cls || ''); } };
+  const say = (t, cls) => { const f = $('feedback'); f.textContent = t; f.className = cls || ''; $('feedbackCard').hidden = !t; const p = $('panelSay'); if (p) { p.textContent = panels.current() ? t : ''; p.className = 'panel-say ' + (cls || ''); } };
   const coach = t => { $('coach').textContent = t; };
   const cur = () => task && task.els[task.idx];
   let pressed = {}, heard = null, held = [], holdFor = 0, holdCents = [], wrongFor = 0, lastFired = -1, stableN = 0, stableMidi = -1, released = true, flashBad = -1e12, flashGood = -1e12;
@@ -1297,13 +1300,17 @@ import { register as registerPlayalong } from './ui/playalong.js';
     const pct = Math.round(S.ready * 100); $('readyFill').style.width = pct + '%'; $('readyFill').style.background = S.ready < 0.25 ? 'var(--bad)' : S.ready < 0.6 ? 'var(--warn)' : 'var(--good)'; $('readyBar').setAttribute('aria-valuenow', pct);
     const e = sess ? 1 - sess.F : 1, ep = Math.round(e * 100); $('energyFill').style.width = ep + '%'; $('energyFill').style.background = e < 0.4 ? 'var(--bad)' : e < 0.65 ? 'var(--warn)' : 'var(--good)'; $('energyBar').setAttribute('aria-valuenow', ep);
     const ds = dayStreak(), lastS = DB.sessions.filter(x => x.mod === mod).slice(-1)[0]; $('sessLine').textContent = (sess ? Math.floor(sess.active / 60) + ' min this session, ' + sess.breaks + ' break' + (sess.breaks === 1 ? '' : 's') + ' · ' : '') + Math.round(todayMinutes()) + ' min today' + (ds > 1 ? ' · ' + ds + ' days in a row' : '') + (lastS ? ' · last ' + MODS[mod].name.toLowerCase() + ' session ' + Math.round(100 * lastS.acc) + '%' : '');
-    $('sAcc').textContent = recent.length ? Math.round(100 * mean(recent)) + '%' : '0%'; $('sStreak').textContent = streak; $('sRt').textContent = sess && sess.rts.length ? median(sess.rts).toFixed(1) : '0.0';
+    $('sAcc').textContent = recent.length ? Math.round(100 * mean(recent)) + '%' : '0%'; $('sStreak').textContent = streak; $('sRt').textContent = sess && sess.rts.length ? median(sess.rts).toFixed(1) : '0.0'; $('statsBlock').hidden = !recent.length;
     const act = activeItems(mod, S.level), weakEntries = []; act.forEach(id => { const o = S.item[id]; if (o && o.reps >= 2) weakEntries.push(Object.assign({}, o, { id: 'i:' + id, label: inf(id).short })); });
     Object.keys(S.trans).forEach(k => { const o = S.trans[k], ab = k.split('>'); if (o.reps >= 2 && act.indexOf(ab[0]) >= 0 && act.indexOf(ab[1]) >= 0) weakEntries.push(Object.assign({}, o, { id: 't:' + k, label: inf(ab[0]).short + ' → ' + inf(ab[1]).short })); });
     const rows = due(weakEntries, modelNow).filter(e => e.r < 0.7);
     const ul = $('weakList'); ul.innerHTML = ''; const li = (a, b, cls) => { const l = document.createElement('li'), s1 = document.createElement('span'), s2 = document.createElement('span'); if (cls) l.className = cls; s1.textContent = a; s2.textContent = b; l.appendChild(s1); l.appendChild(s2); ul.appendChild(l); };
     rows.slice(0, 4).forEach(r => li(r.label, Math.round(r.r * 100) + '%')); let top = null; Object.keys(S.conf).forEach(k => { if (S.conf[k] >= 3 && k.indexOf('>x') < 0 && (!top || S.conf[k] > S.conf[top])) top = k; });
-    if (top) { const ab = top.split('>'); li('Mix-up: ' + (validId(mod, ab[0]) ? inf(ab[0]).short : ab[0]) + ' answered as ' + (validId(mod, ab[1]) ? inf(ab[1]).short : ab[1]), S.conf[top] + ' times'); } if (!ul.children.length) li('Nothing weak yet. Misses and slow answers show up here, and the coach sends more of them.', '', 'none');
+    if (top) { const ab = top.split('>'); li('Mix-up: ' + (validId(mod, ab[0]) ? inf(ab[0]).short : ab[0]) + ' answered as ' + (validId(mod, ab[1]) ? inf(ab[1]).short : ab[1]), S.conf[top] + ' times'); }
+    // The card itself, not a placeholder row, is the "nothing weak yet"
+    // signal now -- an empty rail box says more than a row reading "nothing
+    // weak yet" ever did (band-coach-ui-declutter-plan, U4).
+    $('weakCard').hidden = !ul.children.length;
   }
   function renderOpts() {
     const box = $('modOpts'); box.innerHTML = ''; const sel = (id, label, opts, val, on) => { const l = document.createElement('label'); l.htmlFor = id; l.textContent = label + ' '; const s = document.createElement('select'); s.id = id; Object.keys(opts).forEach(k => { const o = document.createElement('option'); o.value = k; o.textContent = opts[k][0]; s.appendChild(o); }); s.value = val; s.addEventListener('change', () => on(s.value)); l.appendChild(s); box.appendChild(l); };
@@ -1404,6 +1411,13 @@ import { register as registerPlayalong } from './ui/playalong.js';
       wire(); a.onstatechange = wire;
     }).catch(() => ioState('off', 'MIDI was blocked here. Open the standalone copy in Chrome. Screen and computer keys still work.'));
   });
+  // "Set up input" reveals the whole io strip (Connect, the Input select,
+  // Check my microphone, MIDI details, the level meter). #ioBtn and the rest
+  // stay in the DOM and clickable while the sheet is closed -- this only
+  // toggles [hidden] on the wrapper, never removes or recreates the controls
+  // -- so a test (or a learner already mid-flow) that reaches #ioBtn directly
+  // still works with the sheet collapsed.
+  $('setupBtn').addEventListener('click', function () { this.blur(); const el = $('setupSheet'), open = el.hidden; el.hidden = !open; this.setAttribute('aria-expanded', String(open)); });
   if ($('micDeviceSelect')) $('micDeviceSelect').addEventListener('change', function () {
     DB.prefs.inputDeviceId = this.value || null; save();
     if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; micReady = false; }
@@ -1536,7 +1550,6 @@ import { register as registerPlayalong } from './ui/playalong.js';
     });
   })();
 
-  const hadSavedProgressAtBoot = (() => { try { return localStorage.getItem(KEY) !== null; } catch (e) { return true; } })();
   // ---------- feature panels (src/ui/panels.js): songs, ear, theory, history, fingerings, play-along ----------
   // A panel unit registers ONE panel by replacing its own slot:panel line
   // below; everything it needs from the app goes through panelApi.
@@ -1598,7 +1611,6 @@ import { register as registerPlayalong } from './ui/playalong.js';
     panels.list().forEach(p => { const b = document.createElement('button'); b.type = 'button'; b.dataset.panel = p.id; b.style.setProperty('--c', p.color || '#93a0bd'); b.setAttribute('aria-pressed', 'false'); b.appendChild(document.createTextNode(p.name)); const sm = document.createElement('small'); sm.textContent = p.tag || ''; b.appendChild(sm); b.addEventListener('click', () => { b.blur(); openPanel(p.id); }); box.appendChild(b); });
   }
   loadDB(); if (!Array.isArray(DB.custom)) DB.custom = []; $('optNames').checked = DB.prefs.names; buildPicker(); buildPanelPicker(); setMod(mod); requestAnimationFrame(frame);
-  if (!hadSavedProgressAtBoot) showBackupNudge('Been here before? Restore a backup.');
   const hook = !__DEBUG_HOOK__ ? null : { state: () => S, db: () => DB, sess: () => sess, task: () => task, cur: cur, note: onNote, answer: answer, tap: onTap, bar: () => bar, playing: () => playing, setMod: setMod, testSource: testSource, heard: () => heard, yin: yin, cap: () => cap, tuner: () => tunerState, tunerLock: () => tunerLock, deaf: () => deafWindow.isDeaf(), deafUntil: () => deafWindow.until(), exportProgress: doExportProgress, importProgress: doImportProgress, audioNow: audioNow, modelNow: () => modelNow };
   // Debug-hook slots: replace ONLY your own line with
   //   if (__DEBUG_HOOK__) Object.assign(hook, { … });
