@@ -47,11 +47,11 @@ function buildDate() {
 // would wipe `dist/release/band-coach.html` out from under another file that
 // is reading or serving it. Any caller that is not the real build passes its
 // own throwaway directory, so no two builds can collide by construction.
-export async function build({ release = false, outDir = OUT_DIR } = {}) {
-  const outFile = join(outDir, 'band-coach.html');
-  const releaseDir = join(outDir, 'release');
-  const releaseFile = join(releaseDir, 'band-coach.html');
-  const result = await esbuildBuild({
+// One source of truth for how the app is bundled. `bundleStats()` below
+// measures with these EXACT options, so a size budget can never drift away
+// from the build it claims to be measuring.
+function esbuildOptions(release) {
+  return {
     entryPoints: [SRC_JS],
     bundle: true,
     format: 'iife',
@@ -60,7 +60,37 @@ export async function build({ release = false, outDir = OUT_DIR } = {}) {
     sourcemap: false,
     write: false,
     define: { __DEBUG_HOOK__: release ? 'false' : 'true' },
-  });
+  };
+}
+
+// How many bytes each source module contributes to the bundle, from esbuild's
+// own metafile. This is what a per-module budget has to measure: the size of
+// the built FILE minus a historical baseline charges every unrelated change
+// since that baseline to whichever module the budget happens to name.
+export async function bundleStats({ release = false } = {}) {
+  const result = await esbuildBuild({ ...esbuildOptions(release), metafile: true });
+  const [output] = Object.values(result.metafile.outputs);
+  return output.inputs;
+}
+
+// Bytes contributed by one source file, keyed as esbuild keys it (a path
+// relative to the working directory, e.g. `src/audio/voices.js`). Throws
+// rather than returning 0 for an unknown path, so a budget cannot silently
+// pass because the module was renamed out from under it.
+export async function moduleBytes(relPath, { release = false } = {}) {
+  const inputs = await bundleStats({ release });
+  const hit = Object.entries(inputs).find(([key]) => key === relPath || key.endsWith('/' + relPath));
+  if (!hit) {
+    throw new Error(`${relPath} is not in the bundle; known inputs: ${Object.keys(inputs).join(', ')}`);
+  }
+  return hit[1].bytesInOutput;
+}
+
+export async function build({ release = false, outDir = OUT_DIR } = {}) {
+  const outFile = join(outDir, 'band-coach.html');
+  const releaseDir = join(outDir, 'release');
+  const releaseFile = join(releaseDir, 'band-coach.html');
+  const result = await esbuildBuild(esbuildOptions(release));
 
   const [out] = result.outputFiles;
   if (!out) {
