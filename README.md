@@ -30,6 +30,10 @@ Everything from "Build it from source" down is for people working on the app its
 
 ## Setting up your input
 
+Press "Set up input" to open Connect, the input list, "Check my microphone" and "MIDI details" —
+they stay tucked away until you need them, so the status line (whether the app is hearing you) and
+the MIDI activity dot are the only things shown up front.
+
 If you have more than one input
 (e.g. an audio interface), pick it from the input list next to Connect. "Check my microphone"
 listens for 3 seconds of quiet and tunes the listening thresholds to your room and hardware
