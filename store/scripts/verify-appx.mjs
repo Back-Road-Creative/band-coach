@@ -30,8 +30,13 @@ const DEFAULT_ELECTRON_BUILDER_CONFIG = join(STORE_ROOT, 'electron-builder.json'
 const DEFAULT_JARGON_SOURCE = join(REPO_ROOT, 'tests', 'unit', 'store-listing-description.test.mjs');
 
 const EOCD_SIGNATURE = 0x06054b50;
+const ZIP64_EOCD_LOCATOR_SIGNATURE = 0x07064b50;
+const ZIP64_EOCD_SIGNATURE = 0x06064b50;
 const CENTRAL_DIR_SIGNATURE = 0x02014b50;
 const LOCAL_HEADER_SIGNATURE = 0x04034b50;
+const ZIP64_EXTRA_FIELD_ID = 0x0001;
+const ZIP64_SENTINEL_32 = 0xffffffff;
+const ZIP64_SENTINEL_16 = 0xffff;
 const MANIFEST_ENTRY_NAME = 'AppxManifest.xml';
 
 // Scans backward for the End Of Central Directory record. A ZIP comment (up
@@ -50,14 +55,88 @@ function findEndOfCentralDirectory(buf) {
   return -1;
 }
 
+// electron-builder's appx writer (the real `Band Coach 1.3.0.0.appx`, 79
+// entries) always writes ZIP64: the classic EOCD's entry count/size/offset
+// are all the 0xffffffff/0xffff sentinel, a ZIP64 EOCD locator sits
+// immediately before the classic EOCD, and it points at a ZIP64 EOCD record
+// carrying the real 64-bit count/size/offset. A reader that takes the
+// sentinel literally (as this script originally did) fails on every real
+// package while still passing against a small hand-built ZIP -- which is
+// exactly the shape of ZIP the tests must build to catch this. See
+// https://pkware.cachefly.net/webdocs/casestudies/APPNOTE.TXT section 4.3.15.
+function locateCentralDirectory(buf, eocdOffset) {
+  const classicTotalEntries = buf.readUInt16LE(eocdOffset + 10);
+  const classicCdSize = buf.readUInt32LE(eocdOffset + 12);
+  const classicCdOffset = buf.readUInt32LE(eocdOffset + 16);
+
+  const needsZip64 =
+    classicTotalEntries === ZIP64_SENTINEL_16 ||
+    classicCdSize === ZIP64_SENTINEL_32 ||
+    classicCdOffset === ZIP64_SENTINEL_32;
+
+  if (!needsZip64) {
+    return { centralDirOffset: classicCdOffset, totalEntries: classicTotalEntries };
+  }
+
+  const locatorOffset = eocdOffset - 20;
+  if (locatorOffset < 0 || buf.readUInt32LE(locatorOffset) !== ZIP64_EOCD_LOCATOR_SIGNATURE) {
+    throw new Error(
+      'the classic end-of-central-directory record uses the ZIP64 sentinel value but no ZIP64 ' +
+        'end-of-central-directory locator was found immediately before it',
+    );
+  }
+  const zip64EocdOffset = Number(buf.readBigUInt64LE(locatorOffset + 8));
+
+  if (buf.readUInt32LE(zip64EocdOffset) !== ZIP64_EOCD_SIGNATURE) {
+    throw new Error('the ZIP64 end-of-central-directory locator points at a record with the wrong signature');
+  }
+  const totalEntries = Number(buf.readBigUInt64LE(zip64EocdOffset + 32));
+  const centralDirOffset = Number(buf.readBigUInt64LE(zip64EocdOffset + 48));
+  return { centralDirOffset, totalEntries };
+}
+
+// A central directory entry that hit the ZIP64 sentinel in one of
+// uncompressed size / compressed size / local header offset / disk number
+// carries the real 64-bit values in a "Zip64 extended information" extra
+// field (header id 0x0001) -- present ONLY for the fields that were actually
+// sentinel, in that fixed order. AppxManifest.xml itself is a few hundred
+// bytes, but electron-builder's writer stamps the sentinel on every entry in
+// a ZIP64 archive regardless of that entry's own size, so this override has
+// to run for every entry, not just ones that look individually huge.
+function readZip64ExtraOverrides(buf, extraStart, extraLength, { uncompressedSize, compressedSize, localHeaderOffset }) {
+  let cursor = extraStart;
+  const extraEnd = extraStart + extraLength;
+  while (cursor + 4 <= extraEnd) {
+    const fieldId = buf.readUInt16LE(cursor);
+    const fieldSize = buf.readUInt16LE(cursor + 2);
+    if (fieldId === ZIP64_EXTRA_FIELD_ID) {
+      let p = cursor + 4;
+      if (uncompressedSize === ZIP64_SENTINEL_32) {
+        uncompressedSize = Number(buf.readBigUInt64LE(p));
+        p += 8;
+      }
+      if (compressedSize === ZIP64_SENTINEL_32) {
+        compressedSize = Number(buf.readBigUInt64LE(p));
+        p += 8;
+      }
+      if (localHeaderOffset === ZIP64_SENTINEL_32) {
+        localHeaderOffset = Number(buf.readBigUInt64LE(p));
+        p += 8;
+      }
+      break;
+    }
+    cursor += 4 + fieldSize;
+  }
+  return { uncompressedSize, compressedSize, localHeaderOffset };
+}
+
 function readZipEntry(appxPath, entryName) {
   const buf = readFileSync(appxPath);
   const eocdOffset = findEndOfCentralDirectory(buf);
   if (eocdOffset === -1) {
     throw new Error(`${appxPath} does not look like a ZIP file (no end-of-central-directory record found)`);
   }
-  const centralDirOffset = buf.readUInt32LE(eocdOffset + 16);
-  const totalEntries = buf.readUInt16LE(eocdOffset + 10);
+  const { centralDirOffset, totalEntries } = locateCentralDirectory(buf, eocdOffset);
 
   let cursor = centralDirOffset;
   for (let i = 0; i < totalEntries; i++) {
@@ -65,12 +144,26 @@ function readZipEntry(appxPath, entryName) {
       throw new Error(`${appxPath}'s central directory is malformed (bad signature at entry ${i})`);
     }
     const compressionMethod = buf.readUInt16LE(cursor + 10);
-    const compressedSize = buf.readUInt32LE(cursor + 20);
+    let compressedSize = buf.readUInt32LE(cursor + 20);
+    let uncompressedSize = buf.readUInt32LE(cursor + 24);
     const fileNameLength = buf.readUInt16LE(cursor + 28);
     const extraFieldLength = buf.readUInt16LE(cursor + 30);
     const fileCommentLength = buf.readUInt16LE(cursor + 32);
-    const localHeaderOffset = buf.readUInt32LE(cursor + 42);
+    let localHeaderOffset = buf.readUInt32LE(cursor + 42);
     const fileName = buf.toString('ascii', cursor + 46, cursor + 46 + fileNameLength);
+
+    if (
+      compressedSize === ZIP64_SENTINEL_32 ||
+      uncompressedSize === ZIP64_SENTINEL_32 ||
+      localHeaderOffset === ZIP64_SENTINEL_32
+    ) {
+      ({ compressedSize, uncompressedSize, localHeaderOffset } = readZip64ExtraOverrides(
+        buf,
+        cursor + 46 + fileNameLength,
+        extraFieldLength,
+        { compressedSize, uncompressedSize, localHeaderOffset },
+      ));
+    }
 
     if (fileName === entryName) {
       return extractEntryData(buf, localHeaderOffset, compressionMethod, compressedSize);
