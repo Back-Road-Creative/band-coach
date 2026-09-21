@@ -46,6 +46,53 @@ test('it checks the latest-download URL every download link depends on', () => {
   );
 });
 
+test('the asset check is pinned to the tag that triggered this run, not whatever release is currently latest', () => {
+  const text = workflow();
+  assert.match(
+    text,
+    /gh release view\s+"\$TAG"/,
+    'workflow must look up the release for the specific triggering tag (gh release view "$TAG"), not the latest release with no argument',
+  );
+  assert.match(text, /isDraft/, 'the tag-pinned check must confirm the release for this tag is not left as a draft');
+  assert.match(
+    text,
+    /assets/,
+    'the tag-pinned check must confirm the band-coach.html asset is actually attached to this tag\'s release',
+  );
+});
+
+test('the tag-pinned asset check retries instead of failing on the first miss, and still fails after its budget', () => {
+  const text = workflow();
+  const section = text.match(/release for this tag[\s\S]*?\n\s*exit 1\n/);
+  assert.ok(section, 'expected a step verifying the tag-pinned asset that can itself fail the job');
+  assert.match(section[0], /attempts=\d+/, 'the tag-pinned asset check should retry a bounded number of times, riding out release.yml still publishing');
+  assert.match(section[0], /sleep\s+"?\$?\{?delay\}?"?/, 'the tag-pinned asset check should sleep between attempts');
+  assert.match(section[0], /exit 1/, 'the tag-pinned asset check must still fail the job if the budget runs out without the asset ever appearing');
+});
+
+test('the latest-download check verifies the redirect lands on this tag, not just an HTTP 200', () => {
+  const text = workflow();
+  assert.match(
+    text,
+    /url_effective/,
+    'the latest-download check must inspect where the redirect actually lands, not just its status code, or it would pass identically for any other tag\'s asset',
+  );
+  assert.match(
+    text,
+    /releases\/download\/"?\$TAG"?\/band-coach\.html/,
+    "the resolved redirect must be compared against this tag's own download path, not merely be non-empty",
+  );
+});
+
+test('the asset checks reuse the single resolved tag output rather than a second lookup of the tag name', () => {
+  const text = workflow();
+  const tagOutputRefs = (text.match(/steps\.tag\.outputs\.tag/g) || []).length;
+  assert.ok(
+    tagOutputRefs >= 2,
+    'the tag resolved once in the "resolve the tag" step should be reused by the asset checks and the version check, not re-derived from gh release view with no tag',
+  );
+});
+
 test('it checks the deployed Pages version.json against the tag', () => {
   const text = workflow();
   assert.match(text, /version\.json/, 'workflow must fetch version.json from the deployed Pages site');
