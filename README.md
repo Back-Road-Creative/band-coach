@@ -301,6 +301,14 @@ played into a fake microphone is actually heard), then publishes that one file a
 on the GitHub release. The job fails the tag if it doesn't match `package.json`'s version, and fails
 the gate if the file exceeds a 1.5 MB size budget.
 
+release.yml, pages.yml and store-package.yml each only prove their own artifact built -- none of
+them checks that the three still agree once the tag has finished rolling out.
+`.github/workflows/release-consistency.yml` runs after the same tag push and closes that gap: it
+confirms the `releases/latest/download/band-coach.html` URL above still resolves, retries against
+the deployed Pages `version.json` (deployment lags the tag by a few minutes) until it reports the
+new version, and opens a `Store submission for vX.Y.Z` issue so the manual Partner Center
+submission step is tracked instead of relied on to be remembered.
+
 ## Before announcing a release: a five-minute human check
 
 Automated tests run headless and cannot plug in a real MIDI keyboard, play a real guitar into a
