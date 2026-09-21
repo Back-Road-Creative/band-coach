@@ -12,6 +12,10 @@
 //   icon-192.png, icon-512.png, icon-512-maskable.png
 //                         generated at build time by build/pages/png.mjs —
 //                         no binary asset is committed, no dependency added
+//   version.json          the current version, release date and download
+//                         URL, so a downloaded band-coach.html — which can
+//                         never auto-update itself — can ask whether it's
+//                         stale. Deliberately NOT precached by sw.js.
 //
 // Nothing here is cross-origin: the release build is one self-contained
 // file with zero network requests, so the app shell has nothing to fetch
@@ -39,11 +43,22 @@ const THEME_COLOR = '#2563eb';
 const BACKGROUND_COLOR = '#ffffff';
 
 export const ICON_FILES = ['icon-192.png', 'icon-512.png', 'icon-512-maskable.png'];
-// Every file the service worker precaches, and every file `buildPages`
-// writes into `dist/pages/` besides `sw.js` itself — kept as one list so a
-// test can assert the two never drift apart.
+// Every file the service worker precaches — kept as its own list so a test
+// can assert it matches sw.js's runtime PRECACHE array exactly.
 export const PRECACHE_FILES = ['index.html', 'manifest.webmanifest', ...ICON_FILES];
+// Written into `dist/pages/` alongside the precached files, but deliberately
+// NOT precached: version.json exists so a downloaded band-coach.html (which
+// can never auto-update itself) can ask whether it's stale. If the service
+// worker cached it, a stale copy would just be told its own stale version is
+// current, defeating the file's entire purpose.
+export const WRITTEN_NOT_PRECACHED_FILES = ['version.json'];
+// Every file `buildPages` writes into `dist/pages/` besides `sw.js` itself —
+// PRECACHE_FILES plus WRITTEN_NOT_PRECACHED_FILES — kept as one list so a
+// test can assert the file set on disk never drifts from what this module
+// claims to write.
+export const WRITTEN_FILES = [...PRECACHE_FILES, ...WRITTEN_NOT_PRECACHED_FILES];
 export const CACHE_PREFIX = 'band-coach-pages-v';
+export const DOWNLOAD_URL = 'https://github.com/Back-Road-Creative/band-coach/releases/latest/download/band-coach.html';
 
 function drawIcon(size, { maskable }) {
   const bg = [0x25, 0x63, 0xeb, 0xff]; // theme blue, opaque
@@ -184,6 +199,15 @@ export async function writePagesFiles({ releaseHtml, version, outDir = PAGES_DIR
   writeFileSync(join(outDir, 'index.html'), pagesHtml, 'utf8');
   writeFileSync(join(outDir, 'manifest.webmanifest'), JSON.stringify(buildManifest(), null, 2) + '\n', 'utf8');
   writeFileSync(join(outDir, 'sw.js'), buildServiceWorkerSource(version), 'utf8');
+  writeFileSync(
+    join(outDir, 'version.json'),
+    JSON.stringify(
+      { version, released: new Date().toISOString(), download: DOWNLOAD_URL },
+      null,
+      2
+    ) + '\n',
+    'utf8'
+  );
   for (const { name, size, maskable } of [
     { name: 'icon-192.png', size: 192, maskable: false },
     { name: 'icon-512.png', size: 512, maskable: false },
