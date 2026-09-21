@@ -1,8 +1,14 @@
 name: ci
 
+# A PR branch is proven by its `pull_request` run; `main` is proven by its own
+# push run, which is what the autoland barrier reads on the integration head.
+# Triggering push on every branch as well ran the whole suite TWICE per push,
+# and because a push and a pull_request carry different `github.ref` the
+# concurrency group below could not collapse them -- the two runs simply raced
+# for the same shared box and lost to `timeout-minutes: 10`.
 on:
   push:
-    branches: ['**']
+    branches: [main]
   pull_request:
 
 permissions:
