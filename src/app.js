@@ -1461,7 +1461,10 @@ import { register as registerPlayalong } from './ui/playalong.js';
     const box = $('picker'), instrumentIds = MOD_IDS.filter(m => TOOL_MOD_IDS.indexOf(m) < 0), toolIds = TOOL_MOD_IDS.concat(Object.keys(TOOLS));
     instrumentIds.forEach(m => box.appendChild(buildPickerButton(m, MODS[m])));
     const toolsGroup = document.createElement('details'); toolsGroup.className = 'picker-tools'; toolsGroup.id = 'pickerTools';
-    const summary = document.createElement('summary'); summary.textContent = 'More tools: tuner, capture a melody, interval drill, rhythm reading'; toolsGroup.appendChild(summary);
+    // The label names what is inside, but is BUILT from the tool names
+    // rather than repeating them: a hand-written list silently goes stale
+    // the first time a tool is renamed or added, and this one already had.
+    const summary = document.createElement('summary'); summary.textContent = 'More tools: ' + toolIds.map(m => (MODS[m] || TOOLS[m]).name).join(', '); toolsGroup.appendChild(summary);
     toolIds.forEach(m => toolsGroup.appendChild(buildPickerButton(m, MODS[m] || TOOLS[m])));
     if (toolIds.indexOf(mod) >= 0) toolsGroup.open = true;
     box.appendChild(toolsGroup);
@@ -1586,7 +1589,12 @@ import { register as registerPlayalong } from './ui/playalong.js';
     document.querySelectorAll('#panelPicker button').forEach(b => b.setAttribute('aria-pressed', 'false'));
   }
   function buildPanelPicker() {
-    const box = $('panelPicker'); box.hidden = !panels.list().length;
+    // U6: the empty-state guard has to move OUT to the disclosure that now
+    // wraps this row. Hiding only #panelPicker would leave a "More ways to
+    // practise" control that opens onto nothing -- including in the failure
+    // mode where the page boots but no panel registers.
+    const box = $('panelPicker'); const empty = !panels.list().length;
+    box.hidden = empty; const disclosure = $('panelPickerDisclosure'); if (disclosure) disclosure.hidden = empty;
     panels.list().forEach(p => { const b = document.createElement('button'); b.type = 'button'; b.dataset.panel = p.id; b.style.setProperty('--c', p.color || '#93a0bd'); b.setAttribute('aria-pressed', 'false'); b.appendChild(document.createTextNode(p.name)); const sm = document.createElement('small'); sm.textContent = p.tag || ''; b.appendChild(sm); b.addEventListener('click', () => { b.blur(); openPanel(p.id); }); box.appendChild(b); });
   }
   loadDB(); if (!Array.isArray(DB.custom)) DB.custom = []; $('optNames').checked = DB.prefs.names; buildPicker(); buildPanelPicker(); setMod(mod); requestAnimationFrame(frame);

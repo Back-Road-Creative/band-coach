@@ -41,7 +41,10 @@
      shut by default, opened natively by click/keyboard, forced open by
      setMod() whenever the selected mod lives inside it. */
   .picker-tools { flex-basis: 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 4px; padding-top: 8px; border-top: 1px solid var(--line); }
-  .picker-tools > summary { cursor: pointer; list-style: none; font: 600 12px var(--body); text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+  /* Sentence case, not the old uppercase TOOLS heading: the label is now a
+     full sentence naming four tools, and 60-odd uppercase characters across
+     the row reads louder than the buttons it replaced. */
+  .picker-tools > summary { cursor: pointer; list-style: none; font: 600 12px var(--body); color: var(--muted); }
   .picker-tools > summary::-webkit-details-marker { display: none; }
   .picker-tools > summary::before { content: '\25b8  '; }
   .picker-tools[open] > summary { color: var(--text); margin-bottom: 6px; }
