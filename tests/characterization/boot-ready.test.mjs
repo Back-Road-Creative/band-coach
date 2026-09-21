@@ -22,47 +22,24 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { HTML_PATH } from '../helpers/html-path.mjs';
-import { BOOT_DEADLINE_CODE, launchPage, retryFlaky } from '../helpers/browser.mjs';
+import { launchPage } from '../helpers/browser.mjs';
 
-// One independent attempt: its own browser, closed before it returns, so no
-// attempt can contaminate the next. A boot that runs out of budget is returned
-// as a RESULT rather than thrown, because that is the transient this retry
-// exists for; every other error still propagates and aborts immediately, so a
-// genuine break in boot is never retried into silence.
-async function attemptBoot() {
-  let page;
-  try {
-    page = await launchPage(HTML_PATH);
-  } catch (err) {
-    if (err && err.code === BOOT_DEADLINE_CODE) return { bootTimedOut: true, ready: null, hook: null };
-    throw err;
-  }
-  try {
-    return {
-      bootTimedOut: false,
-      ready: await page.evaluate("document.documentElement.getAttribute('data-coach-ready')"),
-      hook: await page.evaluate('typeof window.__coach'),
-    };
-  } finally {
-    await page.close();
-  }
-}
-
-test('launchPage does not hand back a page until the app has finished booting', async () => {
-  const seen = await retryFlaky({
-    attempt: attemptBoot,
-    accept: (r) => !r.bootTimedOut,
-    describe: (r) => (r.bootTimedOut ? 'boot ran out of budget' : `ready=${r.ready} hook=${r.hook}`),
-    what: 'booting the page',
-  });
+// No retry wrapper here any more: launchPage retries a boot that runs out of
+// budget itself (see retryOnBootDeadline), so this test -- and every other
+// browser test, including ones not yet written -- gets that for free. The
+// wrapper this file used to carry only ever protected this one test, while
+// deaf-window.test.mjs hit the identical failure unprotected.
+test('launchPage does not hand back a page until the app has finished booting', async (t) => {
+  const page = await launchPage(HTML_PATH);
+  t.after(() => page.close());
 
   assert.equal(
-    seen.ready,
+    await page.evaluate("document.documentElement.getAttribute('data-coach-ready')"),
     '1',
     'boot must mark the document ready as its last act'
   );
   assert.equal(
-    seen.hook,
+    await page.evaluate('typeof window.__coach'),
     'object',
     'the debug hook is installed on that same last line, so a ready page always has it'
   );

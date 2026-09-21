@@ -220,7 +220,39 @@ export function bootDeadlineError(ms) {
   return err;
 }
 
-export async function launchPage(htmlPath, options = {}) {
+// Retry policy for a launch that ran out of boot budget. It lives here, around
+// every launch, rather than at individual call sites: the thing that overruns
+// is the launch, so ANY browser test can hit it -- boot-ready did, and so did
+// deaf-window, which nothing had wrapped. A per-test wrap would have to be
+// remembered by every future test; this cannot be forgotten.
+//
+// Only BOOT_DEADLINE is retried. Every other error propagates on the first
+// attempt: a missing browser binary or a CDP protocol failure is not a flake,
+// and retrying it would turn one clear message into three slow identical ones.
+// launchPageOnce already kills the browser group and removes its user-data dir
+// before it rethrows (see the try/catch around finishLaunch), so an abandoned
+// attempt leaks neither a process nor a directory.
+export async function retryOnBootDeadline(launch, { attempts = 3 } = {}) {
+  let last;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await launch(i);
+    } catch (err) {
+      if (!err || err.code !== BOOT_DEADLINE_CODE) throw err;
+      last = err;
+    }
+  }
+  const err = bootDeadlineError(BOOT_DEADLINE_MS);
+  err.message = `${last ? last.message : err.message} -- and again in ${attempts} attempts, each with a fresh browser. Failing every time points at the app or the build, not at a busy runner.`;
+  err.attempts = attempts;
+  throw err;
+}
+
+export function launchPage(htmlPath, options = {}) {
+  return retryOnBootDeadline(() => launchPageOnce(htmlPath, options));
+}
+
+async function launchPageOnce(htmlPath, options = {}) {
   const { fakeAudioFile, initScript } = options;
   const bin = findBrowserBinary();
   if (!bin) {
