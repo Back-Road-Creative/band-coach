@@ -45,6 +45,21 @@ jobs:
           BC_PUBLISHER: ${{ vars.BC_PUBLISHER }}
           BC_PUBLISHER_DISPLAY_NAME: ${{ vars.BC_PUBLISHER_DISPLAY_NAME }}
 
+      - name: verify the built appx manifest
+        # Reads AppxManifest.xml out of the .appx electron-builder just wrote
+        # and fails the run if it doesn't match what was supposed to ship
+        # (wrong/unstamped version, leftover placeholder identity, or
+        # maintainer jargon in the Store-facing Description) -- the same two
+        # defects that have previously reached a real artifact and were only
+        # caught by a human unzipping it by hand. Runs before the upload step
+        # on purpose: an upstream gate here means a bad manifest never
+        # produces an artifact that looks finished.
+        working-directory: store
+        shell: bash
+        run: |
+          appx=$(ls release/*.appx)
+          node scripts/verify-appx.mjs "$appx"
+
       - name: upload appx artifact
         uses: actions/upload-artifact@v4
         with:
