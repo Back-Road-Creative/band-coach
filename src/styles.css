@@ -68,6 +68,20 @@
   .picker-variant-group > .variant-toggle[open] > summary::before { content: '\25be  '; }
   .picker-variant-group > .variant-toggle > .variant-buttons { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; padding-left: 10px; border-left: 2px solid var(--line); }
   .picker-variant-group > .variant-toggle > .variant-buttons button { padding: 6px 10px; font-size: 13px; }
+  /* U5: once a returning learner has a saved instrument, the whole row
+     collapses behind this one disclosure -- reusing .picker-tools' own
+     idiom (triangle marker, muted summary, shut by default) rather than a
+     third look, but sized like the top-level heading it now stands in for:
+     14px, same weight as "More ways to practise", not the quieter 12px
+     .picker-tools label. Its own class, never `.picker-tools`, since a
+     first-time visitor gets no wrapper here at all -- see buildPicker(). */
+  .picker-collapse { flex-basis: 100%; }
+  .picker-collapse > summary { cursor: pointer; list-style: none; font: 600 14px var(--body); color: var(--muted); }
+  .picker-collapse > summary::-webkit-details-marker { display: none; }
+  .picker-collapse > summary::before { content: '\25b8  '; }
+  .picker-collapse[open] > summary { color: var(--text); margin-bottom: 8px; }
+  .picker-collapse[open] > summary::before { content: '\25be  '; }
+  .picker-collapse > .picker-full { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-start; }
 
   .main { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 18px; align-items: start; }
   @media (max-width: 860px) { .main { grid-template-columns: minmax(0, 1fr); } }
