@@ -8,7 +8,8 @@ import { createMidiParser } from './core/midi.js';
 // Merge slots: a unit in flight adds its imports by replacing ONLY its own
 // slot line, so parallel branches never edit adjacent lines.
 import { recordError, getErrors } from './core/error-log.js';
-import { resolveAppVersion } from './core/version.js';
+import { resolveAppVersion, DEV_VERSION } from './core/version.js';
+import { checkForUpdate, FALLBACK_DOWNLOAD_URL } from './core/update-check.js';
 //
 import { yin } from './audio/yin.js';
 import { createPitchNode } from './audio/pitch-worklet.js';
@@ -1387,6 +1388,33 @@ import { register as registerPlayalong } from './ui/playalong.js';
     reader.readAsText(file);
   });
   $('backupNudgeDismiss').addEventListener('click', () => { $('backupNudge').hidden = true; });
+
+  // ---------- check for updates: a file:// copy can never rewrite or replace itself (browser
+  // security, not a missing feature), so the honest alternative is a button that ASKS and answers
+  // in place -- never on load, on a timer, on focus, or otherwise unprompted (src/core/update-check.js
+  // carries the comparison/fetch policy and is unit-tested on its own; this only wires the button).
+  (function () {
+    const updBtn = $('updateCheckBtn'), updResult = $('updateCheckResult');
+    if (!updBtn || !updResult) return;
+    function appendUpdateLink(href) {
+      const a = document.createElement('a'); a.href = href; a.rel = 'noopener'; a.textContent = 'Download the current version'; updResult.appendChild(a);
+    }
+    function renderUpdateResult(r) {
+      updResult.textContent = '';
+      if (r.status === 'dev') { updResult.textContent = 'This is a development build (' + DEV_VERSION + ').'; return; }
+      if (r.status === 'up-to-date') { updResult.textContent = 'You\'re running the latest version (' + r.latestVersion + ').'; return; }
+      if (r.status === 'behind') { updResult.textContent = 'Version ' + r.latestVersion + ' is out. '; appendUpdateLink(r.downloadUrl); return; }
+      updResult.textContent = 'Couldn\'t reach the update server. '; appendUpdateLink(r.downloadUrl);
+    }
+    updBtn.addEventListener('click', function () {
+      this.blur();
+      if (updBtn.disabled) return; // a second press while one is in flight must not start another request
+      updBtn.disabled = true; updResult.textContent = 'Checking…';
+      checkForUpdate({ currentVersion: APP_VERSION, fetchImpl: typeof fetch === 'function' ? fetch : undefined })
+        .then(renderUpdateResult, () => renderUpdateResult({ status: 'error', downloadUrl: FALLBACK_DOWNLOAD_URL }))
+        .then(() => { updBtn.disabled = false; });
+    });
+  })();
 
   const hadSavedProgressAtBoot = (() => { try { return localStorage.getItem(KEY) !== null; } catch (e) { return true; } })();
   // ---------- feature panels (src/ui/panels.js): songs, ear, theory, history, fingerings, play-along ----------

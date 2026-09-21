@@ -225,3 +225,6 @@
   .visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
   #verFooter { color: var(--muted); font-size: 12px; text-align: center; padding-top: 4px; }
   #verFooter:empty { display: none; }
+  .update-check { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; justify-content: center; color: var(--muted); font-size: 12px; padding: 4px 0 10px; }
+  .update-check-help { margin: 0; max-width: 46ch; }
+  .update-check a { color: var(--accent); }
