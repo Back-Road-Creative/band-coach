@@ -10,23 +10,27 @@
       <h1>Band <span>Coach</span></h1>
       <p class="sub">One coach, many instruments. It teaches where things are, then the moves between them, picks every next exercise from your own results, and watches your energy so practice stays fresh.</p>
     </div>
-    <div class="io">
-      <span class="dot" id="ioDot"></span>
-      <span id="ioText"></span>
-      <button class="primary" id="ioBtn" type="button">Connect</button>
-      <span class="dot" id="midiActDot" hidden aria-hidden="true"></span>
-      <button type="button" class="small" id="midiDetailsBtn" hidden>MIDI details</button>
-      <label for="micDeviceSelect" class="small">Input</label>
-      <select id="micDeviceSelect" aria-label="Input device"><option value="">Default microphone</option></select>
-      <button type="button" class="small" id="calibrateBtn">Check my microphone</button>
-      <div class="meterbox thin mic-meter" role="progressbar" aria-label="Microphone level" aria-valuemin="0" aria-valuemax="100"><div id="micLevelFill"></div></div>
-      <span id="calibrateResult" role="status"></span>
-    </div>
-    <div class="midi-details" id="midiDetails" hidden role="status"><pre id="midiDetailsText"></pre></div>
   </header>
 
   <div class="picker" id="picker" role="group" aria-label="Instrument"></div>
   <div class="picker panel-picker" id="panelPicker" role="group" aria-label="More ways to practise" hidden></div>
+
+  <div class="io">
+    <span class="dot" id="ioDot"></span>
+    <span id="ioText"></span>
+    <span class="dot" id="midiActDot" hidden aria-hidden="true"></span>
+    <button type="button" class="small" id="setupBtn" aria-expanded="false" aria-controls="setupSheet">Set up input</button>
+  </div>
+  <div class="setup-sheet" id="setupSheet" hidden>
+    <button class="primary" id="ioBtn" type="button">Connect</button>
+    <button type="button" class="small" id="midiDetailsBtn" hidden>MIDI details</button>
+    <label for="micDeviceSelect" class="small">Input</label>
+    <select id="micDeviceSelect" aria-label="Input device"><option value="">Default microphone</option></select>
+    <button type="button" class="small" id="calibrateBtn">Check my microphone</button>
+    <div class="meterbox thin mic-meter" role="progressbar" aria-label="Microphone level" aria-valuemin="0" aria-valuemax="100"><div id="micLevelFill"></div></div>
+    <span id="calibrateResult" role="status"></span>
+  </div>
+  <div class="midi-details" id="midiDetails" hidden role="status"><pre id="midiDetailsText"></pre></div>
 
   <p class="panel-say" id="panelSay" role="status" hidden></p>
   <section class="panel-host" id="panelHost" aria-live="polite" hidden></section>

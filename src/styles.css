@@ -212,6 +212,7 @@
   #readyFill, #energyFill, #micLevelFill { height: 100%; width: 0; background: var(--good); transition: width .1s, background .25s; }
   .mic-meter { width: 90px; margin-block: 0; flex: none; }
   #calibrateResult { font-size: 13px; color: var(--muted); }
+  .setup-sheet { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; margin-top: -4px; }
   #coach { font-weight: 500; min-height: 2.9em; }
   #sessLine { font-size: 14px; color: var(--muted); font-variant-numeric: tabular-nums; }
   #feedback { min-height: 2.9em; font-weight: 600; }

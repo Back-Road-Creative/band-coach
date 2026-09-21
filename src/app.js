@@ -1404,6 +1404,13 @@ import { register as registerPlayalong } from './ui/playalong.js';
       wire(); a.onstatechange = wire;
     }).catch(() => ioState('off', 'MIDI was blocked here. Open the standalone copy in Chrome. Screen and computer keys still work.'));
   });
+  // "Set up input" reveals the whole io strip (Connect, the Input select,
+  // Check my microphone, MIDI details, the level meter). #ioBtn and the rest
+  // stay in the DOM and clickable while the sheet is closed -- this only
+  // toggles [hidden] on the wrapper, never removes or recreates the controls
+  // -- so a test (or a learner already mid-flow) that reaches #ioBtn directly
+  // still works with the sheet collapsed.
+  $('setupBtn').addEventListener('click', function () { this.blur(); const el = $('setupSheet'), open = el.hidden; el.hidden = !open; this.setAttribute('aria-expanded', String(open)); });
   if ($('micDeviceSelect')) $('micDeviceSelect').addEventListener('change', function () {
     DB.prefs.inputDeviceId = this.value || null; save();
     if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; micReady = false; }
