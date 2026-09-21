@@ -12,6 +12,7 @@ import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { launchPage } from '../tests/helpers/browser.mjs';
+import { build } from './build.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = dirname(here);
@@ -55,8 +56,29 @@ export async function captureShots({ htmlPath = HTML_PATH, outDir = OUT_DIR } = 
   return written;
 }
 
+/**
+ * Build, then capture. This is what `npm run shots` runs, and it exists so a
+ * screenshot cannot depict a stale bundle.
+ *
+ * `captureShots` only checks that the built file EXISTS, and a stale one
+ * exists -- so shooting whatever happened to be in dist/ succeeded silently
+ * against a build from hours earlier. A screenshot is the one artefact whose
+ * entire job is to be believed, and on 2026-09-21 an out-of-date one showing
+ * none of that day's UI work was nearly reported as a regression in shipped
+ * code. Checking freshness here would only turn that into a late failure;
+ * building first removes the stale-input state altogether.
+ *
+ * `build` and `shots` stay separate npm SCRIPTS for the reason given at the
+ * top of this file -- building should not boot a browser. That argument is
+ * about `build` not shooting, and says nothing against `shots` building.
+ */
+export async function shoot({ outDir = OUT_DIR } = {}) {
+  const htmlPath = await build({ outDir });
+  return captureShots({ htmlPath, outDir });
+}
+
 const isMain = process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1];
 if (isMain) {
-  const written = await captureShots();
+  const written = await shoot();
   for (const path of written) console.log(`wrote ${path}`);
 }
