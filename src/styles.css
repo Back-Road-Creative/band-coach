@@ -37,8 +37,18 @@
      the real instruments above them -- smaller type, muted border, no
      colour dot -- and get their own row via flex-basis: 100% so they never
      interleave with the instrument buttons in the wrap. */
+  /* U6: the tools tier collapses behind its own <summary> disclosure --
+     shut by default, opened natively by click/keyboard, forced open by
+     setMod() whenever the selected mod lives inside it. */
   .picker-tools { flex-basis: 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 4px; padding-top: 8px; border-top: 1px solid var(--line); }
-  .picker-tools-label { font: 600 12px var(--body); text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin-right: 2px; }
+  /* Sentence case, not the old uppercase TOOLS heading: the label is now a
+     full sentence naming four tools, and 60-odd uppercase characters across
+     the row reads louder than the buttons it replaced. */
+  .picker-tools > summary { cursor: pointer; list-style: none; font: 600 12px var(--body); color: var(--muted); }
+  .picker-tools > summary::-webkit-details-marker { display: none; }
+  .picker-tools > summary::before { content: '\25b8  '; }
+  .picker-tools[open] > summary { color: var(--text); margin-bottom: 6px; }
+  .picker-tools[open] > summary::before { content: '\25be  '; }
   .picker-tools button { border-left-color: var(--line); padding: 6px 10px; font-size: 13px; }
   .picker-tools button[aria-pressed="true"] { border-left-color: var(--c); }
   .picker-tools small { font-size: 11px; }
@@ -47,6 +57,16 @@
   @media (max-width: 860px) { .main { grid-template-columns: minmax(0, 1fr); } }
 
   /* feature panels */
+  /* U6: the "more ways to practise" row (Songs, Record a tune, Ear
+     training, Music theory, My progress, How to play it, Play Along)
+     collapses behind one disclosure the same way .picker-tools does;
+     openPanel() forces it back open when one of its panels is selected. */
+  .panel-picker-disclosure { margin-top: 8px; }
+  .panel-picker-disclosure > summary { cursor: pointer; list-style: none; font: 600 14px var(--body); color: var(--muted); }
+  .panel-picker-disclosure > summary::-webkit-details-marker { display: none; }
+  .panel-picker-disclosure > summary::before { content: '\25b8  '; }
+  .panel-picker-disclosure[open] > summary { color: var(--text); margin-bottom: 8px; }
+  .panel-picker-disclosure[open] > summary::before { content: '\25be  '; }
   .panel-picker { margin-top: 8px; }
   .panel-host { margin-top: 18px; }
   /* */

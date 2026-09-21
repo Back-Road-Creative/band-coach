@@ -13,7 +13,10 @@
   </header>
 
   <div class="picker" id="picker" role="group" aria-label="Instrument"></div>
-  <div class="picker panel-picker" id="panelPicker" role="group" aria-label="More ways to practise" hidden></div>
+  <details class="panel-picker-disclosure" id="panelPickerDisclosure" hidden>
+    <summary>More ways to practise</summary>
+    <div class="picker panel-picker" id="panelPicker" role="group" aria-label="More ways to practise" hidden></div>
+  </details>
 
   <div class="io">
     <span class="dot" id="ioDot"></span>
