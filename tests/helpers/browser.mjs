@@ -450,3 +450,43 @@ export async function launchPage(htmlPath, options = {}) {
   };
   }
 }
+
+// Bounded retry for a browser measurement that a starved runner can spoil.
+//
+// The audio characterization tests were the single biggest source of red on
+// this repo: of the five ci.yml failures in a 38-run window on 2026-09-20,
+// ALL FIVE were audio tests (the tuner confirming a steady tone, and three
+// mic-routing tests), and none was a code defect. The decisive evidence:
+// runs 35543924762 (red) and 35543940885 (green) were the same commit,
+// 662dab55e, on a PR touching only store/ and one unrelated unit test.
+//
+// These tests drive a real AudioContext fed by Chrome's fake-audio-file path.
+// When the box is oversubscribed the frames arrive late and jittery, and the
+// measurement reads as silence or as a wildly wandering pitch.
+//
+// Retry is the right instrument here and a widened tolerance is not. A wide
+// cents spread, or a freq of 0, is ALSO what a genuine regression in the
+// capture or detection path would produce — so loosening the assertion, or
+// skipping when the input looks bad, would blind the test to the one class of
+// bug it exists to catch. A bounded retry does not make that trade: a
+// deterministic regression fails every attempt, while transient starvation
+// does not survive three fresh browsers.
+//
+// `attempt` must be self-contained — its own page, closed before it returns —
+// so attempts cannot contaminate each other. Every attempt's description is
+// kept and reported together on failure, because "which attempts failed and
+// how" is the difference between diagnosing the runner and diagnosing the app.
+export async function retryFlaky({ attempts = 3, attempt, accept, describe, what }) {
+  const seen = [];
+  for (let i = 0; i < attempts; i++) {
+    const result = await attempt(i);
+    if (accept(result)) return result;
+    seen.push(`attempt ${i + 1}: ${describe ? describe(result) : JSON.stringify(result)}`);
+  }
+  const err = new Error(
+    `${what} did not succeed in ${attempts} independent attempts -- ${seen.join('; ')}. ` +
+      'Failing on EVERY attempt points at the app; failing on one points at a starved runner.',
+  );
+  err.attempts = seen;
+  throw err;
+}

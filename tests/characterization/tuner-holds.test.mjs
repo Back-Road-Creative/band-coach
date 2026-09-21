@@ -17,7 +17,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { HTML_PATH } from '../helpers/html-path.mjs';
-import { launchPage, effectiveWaitMs } from '../helpers/browser.mjs';
+import { launchPage, effectiveWaitMs, retryFlaky } from '../helpers/browser.mjs';
 
 const htmlPath = HTML_PATH;
 
@@ -188,31 +188,44 @@ test('a plucked note that decays into silence keeps being DRAWN for at least ~1s
   assert.ok(bestMaxAge >= 900, `expected "A" to stay drawn through >=900ms of real silence (ageMs), best was ${bestMaxAge}ms`);
 });
 
-test('a steady in-tune tone reaches the "holding" (tuned) state', async (t) => {
+// One attempt: fresh page, fresh fake-audio stream, poll until the tuner
+// confirms or the budget runs out. Returns what it saw either way.
+async function attemptHold(htmlFile, wavPath) {
+  const page = await launchPage(htmlFile, { fakeAudioFile: wavPath });
+  try {
+    await openTuner(page);
+    const start = Date.now();
+    let holding = false, last = null;
+    const centsSeen = [];
+    while (Date.now() - start < POLL_BUDGET_MS) {
+      const st = await page.evaluate('window.__coach.tuner()');
+      last = st;
+      if (st && typeof st.cents === 'number') centsSeen.push(st.cents);
+      if (st && st.phase === 'holding') { holding = true; break; }
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    const spread = centsSeen.length ? Math.max(...centsSeen) - Math.min(...centsSeen) : null;
+    return { holding, last, spread, samples: centsSeen.length };
+  } finally {
+    await page.close();
+  }
+}
+
+// One of the two tests that made this file the repo's biggest source of CI
+// red; see the `retryFlaky` note in tests/helpers/browser.mjs for the
+// measurement and for why a retry is the right instrument and a widened
+// tolerance is not.
+test('a steady in-tune tone reaches the "holding" (tuned) state', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'band-coach-tuner-wav-'));
   const wavPath = writeSteadyWav(join(dir, 'steady-a4.wav'));
-  const page = await launchPage(htmlPath, { fakeAudioFile: wavPath });
-  t.after(() => page.close());
-
-  await openTuner(page);
-
-  const start = Date.now();
-  let holding = false, last = null;
-  const centsSeen = [];
-  while (Date.now() - start < POLL_BUDGET_MS) {
-    const st = await page.evaluate('window.__coach.tuner()');
-    last = st;
-    if (st && typeof st.cents === 'number') centsSeen.push(st.cents);
-    if (st && st.phase === 'holding') { holding = true; break; }
-    await new Promise((r) => setTimeout(r, 100));
-  }
-  const spread = centsSeen.length ? Math.max(...centsSeen) - Math.min(...centsSeen) : null;
-  assert.ok(
-    holding,
-    'a steady 440Hz tone should reach the "holding" (tuned) state on the uke A4 string -- ' +
-      `last seen: phase=${last && last.phase}, holdMs=${last && last.holdMs}, cents=${last && last.cents}, ` +
-      `cents spread over the run=${spread}`
-  );
+  await retryFlaky({
+    what: 'a steady 440Hz tone reaching the "holding" (tuned) state on the uke A4 string',
+    attempt: () => attemptHold(htmlPath, wavPath),
+    accept: (r) => r.holding,
+    describe: (r) =>
+      `phase=${r.last && r.last.phase}, holdMs=${r.last && r.last.holdMs}, ` +
+      `cents=${r.last && r.last.cents}, spread=${r.spread}, samples=${r.samples}`,
+  });
 });
 
 test('locking a string keeps the selection even when a nearer pitch plays, and the lock is DRAWN', async (t) => {
