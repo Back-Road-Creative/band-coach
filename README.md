@@ -41,7 +41,9 @@ Press "Connect MIDI" to use a keyboard. The status line only says a device is co
 page has actually opened it, so "Keystation found. Press any key on it." means the keyboard is
 wired up but the app has not heard a note yet, and "Keystation is working." means it has. If it
 instead says another program may be using the keyboard, close whatever else has it open (another
-tab, a DAW) and press Connect again. A small dot next to Connect blinks on every MIDI byte the
+tab, a DAW) and press Connect again — though it is worth pressing a key first, because the app
+listens to every port whether or not it managed to open it, and a note actually arriving is taken
+as better proof than opening the port was. A small dot next to Connect blinks on every MIDI byte the
 page receives, even with no exercise running — useful for telling "the app cannot see my keyboard"
 apart from "the app sees it but has nothing to judge right now". "MIDI details" opens a readout of
 every input's name, connection state and the last few raw messages heard, for tracking down a
@@ -348,9 +350,10 @@ mark a step passed just because nothing looked obviously wrong.
    the status line changes to "*device name* is working." and the small dot beside "Connect MIDI"
    blinks on every key press. **Fail** if the status line stays on "found. Press any key on it."
    after you have pressed several keys (the app opened the device but the keyboard's notes are not
-   reaching it), or if it says "Another program may be using this keyboard" (close other apps and
-   press Connect again). Open "MIDI details" and confirm your keyboard is listed with
-   "opened." — if it says "open failed", that's a fail too. No physical keyboard on hand? Note
+   reaching it), or if it says "Another program may be using this keyboard" and pressing keys
+   still produces no blink (close other apps and press Connect again). Open "MIDI details" and
+   confirm your keyboard is listed, with either "opened." or "open failed … but it is sending
+   messages anyway." — "open failed" with nothing arriving is a fail. No physical keyboard on hand? Note
    that as untested for this release rather than skipping it silently.
 3. **Microphone instrument, e.g. guitar (1.5 min).** Pick guitar (or your instrument), press
    "Connect microphone" and allow access, then press "Check my microphone" and stay quiet for the
