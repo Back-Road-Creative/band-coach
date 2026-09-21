@@ -1303,12 +1303,19 @@ import { register as registerPlayalong } from './ui/playalong.js';
   function ioState(cls, text) { $('ioDot').className = 'dot ' + cls; $('ioText').textContent = text; }
   let midiOn = false; const needsMic = () => TOOLS[mod] || MODS[mod].input === 'pluck' || MODS[mod].input === 'sustain';
   // "Connected" is earned, not assumed (field reports: status said connected
-  // while the keyboard sent nothing). midiPorts holds only ports that are
-  // actually state==='connected' AND whose input.open() actually resolved;
-  // midiHeardAny flips true only once a real byte has arrived; midiLog and
+  // while the keyboard sent nothing). But earning it governs what the app
+  // SAYS, never what it listens to -- see the ioBtn handler below. midiPorts
+  // holds every state==='connected' port with what open() reported about it;
+  // midiHeard holds the ports that have actually delivered a byte, which is
+  // better proof than open() and can promote a port open() gave up on.
+  // midiHeardAny flips true once any real byte has arrived; midiLog and
   // realMidiHeld back the "MIDI details" readout and hands-together grading.
-  let midiPorts = [], midiHeardAny = false, midiLog = [], realMidiHeld = new Set(), midiParsers = new Map(), midiBlinkTimer = null;
-  function midiNames() { return midiPorts.filter(p => p.ok).map(p => p.name); }
+  let midiPorts = [], midiPortInputs = [], midiHeardAny = false, midiHeard = new Set(), midiLog = [], realMidiHeld = new Set(), midiParsers = new Map(), midiBlinkTimer = null;
+  // midiPortInputs is kept parallel to midiPorts rather than held on the port
+  // objects themselves: midiPorts is handed to the debug hook and crosses the
+  // page boundary by value, and a live MIDIInput does not survive that trip.
+  function midiWorks(i) { return midiPorts[i].ok || midiHeard.has(midiPortInputs[i]); }
+  function midiNames() { return midiPorts.filter((p, i) => midiWorks(i)).map(p => p.name); }
   function ioRefresh() {
     const b = $('ioBtn'), detailsBtn = $('midiDetailsBtn');
     if (needsMic()) { b.hidden = micReady; b.textContent = 'Connect microphone'; detailsBtn.hidden = true; ioState(micReady ? 'on' : '', micReady ? 'Listening through your microphone.' : 'This one listens through a microphone or audio interface.'); }
@@ -1327,7 +1334,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
   function midiBlink() { const dot = $('midiActDot'); dot.hidden = false; dot.classList.add('on'); clearTimeout(midiBlinkTimer); midiBlinkTimer = setTimeout(() => dot.classList.remove('on'), 150); }
   function renderMidiDetails() {
     const lines = midiPorts.length ? [] : ['No MIDI input has been seen yet.'];
-    midiPorts.forEach(p => lines.push(p.name + ' -- state: ' + p.state + ', connection: ' + p.connection + (p.ok ? ', opened.' : ', open failed: ' + (p.error || 'unknown reason') + '.')));
+    midiPorts.forEach((p, i) => lines.push(p.name + ' -- state: ' + p.state + ', connection: ' + p.connection + (p.ok ? ', opened.' : ', open failed: ' + (p.error || 'unknown reason') + (midiHeard.has(midiPortInputs[i]) ? ', but it is sending messages anyway.' : '.'))));
     if (midiLog.length) { lines.push(''); lines.push('Last messages heard (hex):'); midiLog.forEach(h => lines.push(h)); }
     $('midiDetailsText').textContent = lines.join('\n');
   }
@@ -1338,6 +1345,10 @@ import { register as registerPlayalong } from './ui/playalong.js';
   function handleMidiMessage(input, ev) {
     const d = ev.data; if (!d || !d.length) return;
     midiHeardAny = true; midiBlink();
+    // A byte arriving is the ground truth open() was only ever a proxy for.
+    // Whatever open() reported, this port is demonstrably delivering, so stop
+    // warning about a program that plainly is not in the way.
+    midiHeard.add(input); if (midiPortInputs.indexOf(input) !== -1) midiOn = true;
     midiLog.unshift(Array.from(d).map(b => b.toString(16).padStart(2, '0')).join(' ')); if (midiLog.length > 8) midiLog.length = 8;
     ioRefresh();
     let parser = midiParsers.get(input); if (!parser) { parser = createMidiParser(); midiParsers.set(input, parser); }
@@ -1350,11 +1361,21 @@ import { register as registerPlayalong } from './ui/playalong.js';
     navigator.requestMIDIAccess().then(a => {
       const wire = () => {
         const inputs = []; a.inputs.forEach(i => inputs.push(i));
+        // Listen to EVERY input, whatever open() goes on to report. Web MIDI
+        // opens a port implicitly when onmidimessage is assigned, so this is
+        // how the app heard keyboards before open() was introduced, and a port
+        // that genuinely cannot deliver simply never fires -- a listener on it
+        // costs nothing. Gating the listener on open() instead lost real
+        // keyboards: MIDI ports are exclusive on Windows, so a DAW or the
+        // keyboard's own utility holding the note port of a multi-port device
+        // left the app opening only the idle sibling, reporting "found", and
+        // hearing nothing. open() below decides only what the status SAYS.
+        inputs.forEach(i => { i.onmidimessage = ev => handleMidiMessage(i, ev); });
         const connected = inputs.filter(i => i.state === 'connected');
         Promise.all(connected.map(i => i.open().then(() => ({ input: i, ok: true }), e => ({ input: i, ok: false, error: (e && e.message) || 'could not be opened' })))).then(results => {
           midiPorts = results.map(r => ({ name: r.input.name || 'MIDI device', state: r.input.state, connection: r.input.connection, ok: r.ok, error: r.error }));
-          results.filter(r => r.ok).forEach(r => { r.input.onmidimessage = ev => handleMidiMessage(r.input, ev); });
-          midiOn = results.some(r => r.ok);
+          midiPortInputs = results.map(r => r.input);
+          midiOn = results.some((r, i) => r.ok || midiWorks(i));
           ioRefresh();
           if (!inputs.length) ioState('off', 'No MIDI device found. Plug it in and it will be picked up.');
           else if (!midiOn) ioState('off', 'Another program may be using this keyboard. Close it and press Connect again.');
