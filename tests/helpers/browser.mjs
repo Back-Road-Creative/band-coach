@@ -3,9 +3,9 @@
 // node:os). No npm dependency — see site-headlessmode/scripts/preview-overflow.mjs
 // for the precedent this borrows its connection pattern from.
 import { spawn } from 'node:child_process';
-import { mkdtempSync, rmSync, existsSync, readdirSync } from 'node:fs';
+import { mkdtempSync, rmSync, existsSync, readdirSync, writeFileSync, mkdirSync } from 'node:fs';
 import { tmpdir, homedir, availableParallelism, loadavg } from 'node:os';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
 
 // How many test FILES node:test may run at once — each file launches its own
 // Chromium, so this is really "how many browsers may boot at the same time".
@@ -458,6 +458,30 @@ async function launchPageOnce(htmlPath, options = {}) {
     );
   }
 
+  // Overrides the rendered viewport size, the same Emulation domain
+  // `reducedMotion` above already uses -- headless Chrome has no real window
+  // to resize, so this (not a `--window-size` launch flag, which only sets
+  // the OS-level window and is fixed for the browser's whole lifetime) is
+  // how a single already-running page is made to render as a phone or a
+  // desktop between screenshots. `mobile: true` also flips the CSS
+  // `(pointer: coarse)`/viewport-meta handling Chrome applies for touch
+  // devices, so a phone capture matches what a phone actually renders, not a
+  // desktop page merely squeezed narrower.
+  async function setViewport({ width, height, mobile = false, deviceScaleFactor = 1 }) {
+    await send('Emulation.setDeviceMetricsOverride', { width, height, mobile, deviceScaleFactor, screenWidth: width, screenHeight: height });
+  }
+
+  // Captures the current viewport as a PNG and writes it to `outputPath`,
+  // creating any missing parent directory (dist/ may not exist yet on a
+  // clean checkout). `Page.captureScreenshot` returns base64; there is no
+  // streaming form over CDP, so the whole image is held in memory once --
+  // fine at the sizes this app ever renders at.
+  async function screenshot(outputPath) {
+    const { data } = await send('Page.captureScreenshot', { format: 'png' });
+    mkdirSync(dirname(outputPath), { recursive: true });
+    writeFileSync(outputPath, Buffer.from(data, 'base64'));
+  }
+
   async function waitFor(expression, timeoutMs = WAIT_FLOOR_MS) {
     timeoutMs = effectiveWaitMs(timeoutMs);
     const start = Date.now();
@@ -491,6 +515,8 @@ async function launchPageOnce(htmlPath, options = {}) {
     reload,
     waitFor,
     setFileInput,
+    setViewport,
+    screenshot,
     close,
     consoleErrors,
     exceptions,

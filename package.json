@@ -11,6 +11,7 @@
   "scripts": {
     "build": "node build/build.mjs",
     "pages": "node build/build.mjs --pages",
+    "shots": "node build/shots.mjs",
     "pretest": "npm run build",
     "test": "node --test --test-concurrency=$(node tests/helpers/browser.mjs) \"tests/*.test.mjs\" \"tests/build/*.test.mjs\" \"tests/characterization/*.test.mjs\" \"tests/unit/*.test.mjs\" \"tests/unit/notation/*.test.mjs\"",
     "posttest": "npm run gate",

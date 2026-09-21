@@ -68,6 +68,12 @@ That writes the same page to `dist/band-coach.html`. `npm run build -- --release
 minified one attached to each release, `dist/release/band-coach.html` (`build/build.mjs:8-9`).
 Everything under `src/` is only needed to build it.
 
+Run `npm run build && npm run shots` to actually LOOK at the UI: it drives the built app in the
+same headless Chromium the tests use and writes `dist/screenshot-desktop.png` (1440x900) and
+`dist/screenshot-phone.png` (390x844, phone viewport emulation on) — so a UI change can be checked
+visually without a human pasting an ad hoc shell command, and `tests/build/shots.test.mjs` proves
+the capability itself still works.
+
 ## Test
 
 ```
