@@ -121,7 +121,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
   // (src/audio/pitch-worklet.js) when available; pitchWorkletNode stays null
   // (and listen() below keeps running its setInterval sampling unchanged) on
   // any browser/context where AudioWorklet is missing or fails to load.
-  let pitchWorkletNode = null, lastAudioSource = null, lastWorkletPitchAt = 0, pitchWorkletPromise = null, lastWorkletRangeSent = null, lastWorkletFrameSize = null, lastWorkletGateSent = null;
+  let pitchWorkletNode = null, lastAudioSource = null, lastWorkletPitchAt = 0, pitchWorkletPromise = null, lastWorkletRangeSent = null, lastWorkletFrameSize = null, lastWorkletGateSent = null, lastWorkletMessageAt = 0;
   // VERIFIED DEFECT 1 (mic-gate-and-capture): setting `gates` on the main
   // thread (calibrateNoiseFloor below) used to never reach the worklet's own
   // rmsGate, which was fixed forever at whatever gates.pitch was when
@@ -146,7 +146,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
     const frameSize0 = frameSizeForInstrument(instrumentById[mod], actx.sampleRate);
     const gate0 = gates.pitch;
     pitchWorkletPromise = createPitchNode(actx, { fmin: range0.fmin, fmax: range0.fmax, rmsGate: gate0, frameSize: frameSize0 }).then(node => {
-      pitchWorkletNode = node; lastWorkletRangeSent = range0; lastWorkletFrameSize = frameSize0; lastWorkletGateSent = gate0;
+      pitchWorkletNode = node; lastWorkletRangeSent = range0; lastWorkletFrameSize = frameSize0; lastWorkletGateSent = gate0; lastWorkletMessageAt = now();
       // calibrateNoiseFloor() can finish (or run again) while addModule() was
       // still loading -- gates.pitch may already have moved past what this
       // node was built with by the time the promise settles, in which case
@@ -155,6 +155,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
       if (lastAudioSource) lastAudioSource.connect(node);
       const mute = actx.createGain(); mute.gain.value = 0; node.connect(mute); mute.connect(actx.destination); // keeps the worklet in the live render graph without making sound
       node.port.onmessage = ev => {
+        lastWorkletMessageAt = now(); // watchdog liveness signal below -- updated regardless of `mod`, so the watchdog reflects the worklet actually running, not whether its output happens to be used right now
         const d = ev.data, M = MODS[mod]; if (!M || !(M.input === 'pluck' || M.input === 'sustain')) return;
         const fr = { rms: d.rms, freq: d.freq && d.clarity > 0.8 ? d.freq : 0, onset: d.onset, clarity: d.clarity }; if (fr.freq) fr.midi = fmidi(fr.freq);
         if (task && cur() && cur().info.kind === 'chord') { const db = new Float32Array(anFreq.frequencyBinCount); anFreq.getFloatFrequencyData(db); fr.chroma = chroma(db, actx.sampleRate); }
@@ -166,6 +167,40 @@ import { register as registerPlayalong } from './ui/playalong.js';
     }).catch(() => null);
     return pitchWorkletPromise;
   }
+  // WORKLET WATCHDOG (VERIFIED DEFECT 2, mic-gate-and-capture): a processor
+  // whose constructor throws surfaces asynchronously -- addModule() still
+  // resolves and `new AudioWorkletNode(...)` still succeeds (createPitchNode
+  // above), so pitchWorkletNode looks healthy while process() never ran and
+  // no message ever arrives. Because pitchWorkletNode is then non-null,
+  // listen() below stands down forever -- the fallback is switched off by
+  // exactly the failure it exists to cover. A 'processorerror' event is not
+  // a usable signal here either (measured against the actual broken build:
+  // it never reached the page). The only trustworthy signal is whether
+  // frames are actually ARRIVING.
+  //
+  // Grace period arithmetic: the worklet's process() (src/audio/
+  // pitch-worklet.js) posts nothing until its ring buffer fills
+  // (this.filled >= this.frameSize), then one message per hop. The largest
+  // frameSize any instrument needs (frameSizeForInstrument, src/audio/
+  // range.js) is 4096 -- the 5-string bass's open B0 (30.87Hz, ~1785-sample
+  // period at 44.1kHz once FRAME_SIZE_MARGIN is applied) is the first note
+  // whose period clears 2048's (2048>>1)-1 = 1023-sample search cap, so it
+  // doubles to 4096 ((4096>>1)-1 = 2047). Worst-case initial fill is
+  // therefore 4096 / 44100 ~= 92.9ms; hop stays 512 regardless of frameSize,
+  // so every message after that first one is ~512/44100 ~= 11.6ms apart. 5x
+  // the worst-case fill (~465ms) covers a dropped render quantum plus
+  // ordinary scheduling jitter without ever tripping on a genuinely live
+  // worklet, so the grace period below is 500ms.
+  const WORKLET_WATCHDOG_GRACE_S = 0.5;
+  const WORKLET_WATCHDOG_POLL_MS = 100;
+  function checkWorkletWatchdog() {
+    if (!pitchWorkletNode) return;
+    if (now() - lastWorkletMessageAt < WORKLET_WATCHDOG_GRACE_S) return;
+    const dead = pitchWorkletNode; pitchWorkletNode = null; // listen() below picks up the very next tick of its own setInterval
+    try { dead.disconnect(); } catch (e) {} // takes it out of the render graph so a late/queued message can never reach onmessage after this
+    recordError('worklet-watchdog', new Error('The pitch worklet produced no frames for ' + WORKLET_WATCHDOG_GRACE_S + 's; switched to the main-thread listener.'));
+  }
+  setInterval(checkWorkletWatchdog, WORKLET_WATCHDOG_POLL_MS);
   function ensureAudio() { if (!actx) { try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { actx = null; } } if (actx && actx.state === 'suspended') actx.resume(); return actx; }
   const now = () => actx ? actx.currentTime : performance.now() / 1000;
   // Instrument-family-shaped reference tone (src/audio/voices.js): a

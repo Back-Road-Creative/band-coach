@@ -181,6 +181,16 @@ that need it pay the extra ~42ms of analysis latency; everything else stays
 at 2048. See `src/audio/pitch-worklet.js` for how the AudioWorklet pipeline
 resizes on an instrument switch.
 
+A processor that throws inside its own constructor fails silently from the app's point of view:
+`addModule()` still resolves and `new AudioWorkletNode(...)` still succeeds, so `src/app.js` would
+otherwise hold a worklet that looks connected but never posts a single frame — and because it looks
+connected, the main-thread fallback (`listen()`, the same `setInterval` path used when
+`AudioWorklet` is unavailable at all) would never take over. A liveness watchdog in `src/app.js`
+guards against exactly this: if 0.5 seconds pass with no message from a worklet the app believes is
+live, it is disconnected and discarded, `listen()` picks up on its next tick, and the event is
+recorded through `recordError()` (visible via the debug hook's `errors()`) rather than silently
+dropped.
+
 ## Piano hands together
 
 The keyboard mod's level 13 is "hands together": the right hand and left hand each play one note
