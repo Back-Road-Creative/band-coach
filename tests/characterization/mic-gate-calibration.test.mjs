@@ -20,6 +20,7 @@ import { join } from 'node:path';
 import { HTML_PATH } from '../helpers/html-path.mjs';
 import { launchPage } from '../helpers/browser.mjs';
 import { pluck, writePluckWav } from '../helpers/pluck-wav.mjs';
+import { waitForHeardSnapshot } from '../helpers/audio-heard.mjs';
 
 const htmlPath = HTML_PATH;
 const SR = 48000;
@@ -48,16 +49,28 @@ test('a quiet pluck the stock gate misses registers once "Check my microphone" l
   await page.evaluate("document.getElementById('ioBtn').click()");
   await page.waitFor('window.__coach.devices().length > 0', 5000);
 
-  // Give the worklet a moment to see the fixture ring down past the STOCK
-  // default gate (crosses 0.008 around 800ms in, then settles in a
-  // ~0.006-0.0075 band for several seconds — see writeQuietPluck above),
-  // and confirm it does not report a pitch there — this is the "before"
-  // half of the characterization, not an assumption.
-  await page.waitFor('window.__coach.heard() && window.__coach.heard().rms > 0.005 && window.__coach.heard().rms < 0.0075', 8000);
-  const beforeGate = await page.evaluate('window.__coach.pitchWorkletGate()');
-  assert.equal(beforeGate, 0.008, 'the worklet must start at the stock default rmsGate');
-  const before = await page.evaluate('window.__coach.heard()');
-  assert.equal(before.freq, 0, `expected no pitch at the stock gate (rms ${before.rms} is below 0.008), got freq ${before.freq}`);
+  // Wait for the fixture to ring down into the STOCK default gate's band
+  // (crosses 0.008 around 800ms in, then settles in a ~0.006-0.0075 band for
+  // several seconds — see writeQuietPluck above), and read the gate, rms and
+  // freq that qualified the wait TOGETHER, in one round-trip -- so the
+  // assertion below is made against the exact instant the wait found, never
+  // a later frame reached by a second, separate evaluate(). This is the
+  // "before" half of the characterization, not an assumption.
+  const before = await waitForHeardSnapshot(
+    page,
+    (s) => s.rms > 0.005 && s.rms < 0.0075,
+    { timeoutMs: 8000 },
+  );
+  assert.equal(before.gate, 0.008, 'the worklet must start at the stock default rmsGate');
+  // The sampled band (0.005-0.0075) is entirely below the stock gate
+  // (0.008), so this implication is never vacuous here -- it is the same
+  // "quiet pluck at the stock gate produces no pitch" claim, stated so a
+  // future failure message cannot again print a number that contradicts the
+  // claim it is making.
+  assert.ok(
+    !(before.rms < before.gate) || before.freq === 0,
+    `expected no pitch when rms (${before.rms}) is below the sampled gate (${before.gate}), got freq ${before.freq}`,
+  );
 
   // setNoiseFloorForTest drives the exact gatesFor()+applyGates() path
   // calibrateNoiseFloor() uses (see src/app.js), skipping only the real
@@ -67,8 +80,7 @@ test('a quiet pluck the stock gate misses registers once "Check my microphone" l
   const gateAfter = await page.evaluate('window.__coach.pitchWorkletGate()');
   assert.ok(gateAfter < 0.008, `expected the worklet's own gate to drop below the stock default, got ${gateAfter}`);
 
-  await page.waitFor('window.__coach.heard() && window.__coach.heard().freq > 0', 5000);
-  const after = await page.evaluate('window.__coach.heard()');
+  const after = await waitForHeardSnapshot(page, (s) => s.freq > 0, { timeoutMs: 5000 });
   const cents = 1200 * Math.log2(after.freq / 110);
   assert.ok(Math.abs(cents) < 50, `expected the worklet to report ~110 Hz once its own gate was lowered, got ${after.freq} Hz`);
 });
