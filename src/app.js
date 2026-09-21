@@ -305,7 +305,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
     micDevices.forEach((d, i) => { const o = document.createElement('option'); o.value = d.deviceId; o.textContent = d.label || ('Microphone ' + (i + 1)); sel.appendChild(o); });
     sel.value = micDevices.some(d => d.deviceId === wanted) ? wanted : '';
   }
-  function meterUpdate(rms) { const el = $('micLevelFill'); if (el) el.style.width = (meterLevel(rms) * 100) + '%'; }
+  function meterUpdate(rms) { const el = $('micLevelFill'); if (!el) return; const pct = meterLevel(rms) * 100; el.style.width = pct + '%'; const box = el.closest('[role="progressbar"]'); if (box) box.setAttribute('aria-valuenow', String(Math.round(pct))); }
   async function calibrateNoiseFloor() {
     const resultEl = $('calibrateResult');
     try { await openMic(); } catch (e) { if (resultEl) resultEl.textContent = 'The microphone was blocked, so it could not be checked.'; return; }
@@ -1583,7 +1583,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
   // for (tunerKind); the melody-capture tool deliberately does not (it hears
   // anything sung, hummed, whistled or played), so it keeps the generic
   // fallback range -- see src/audio/range.js.
-  setInterval(() => { if (!TOOLS[mod] || !micReady || !anTime) return; const buf = new Float32Array(anTime.fftSize); anTime.getFloatTimeDomainData(buf); const toolRange = mod === 'tuner' ? rangeForInstrument(instrumentById[tunerKind === 'vln' ? 'violin' : tunerKind]) : FALLBACK_RANGE; const r = yin(buf, actx.sampleRate, toolRange.fmin, toolRange.fmax, gates.pitch), fr = { rms: r.rms, freq: r.freq && r.clarity > 0.8 ? r.freq : 0 }; if (r.rms > AUDIO_HEARD_RMS_FLOOR) audioHeardTicks++; if (fr.freq) fr.midi = fmidi(fr.freq); toolPitch(fr, 0.05); }, 50);
+  setInterval(() => { if (!TOOLS[mod] || !micReady || !anTime) return; const buf = new Float32Array(anTime.fftSize); anTime.getFloatTimeDomainData(buf); const toolRange = mod === 'tuner' ? rangeForInstrument(instrumentById[tunerKind === 'vln' ? 'violin' : tunerKind]) : FALLBACK_RANGE; const r = yin(buf, actx.sampleRate, toolRange.fmin, toolRange.fmax, gates.pitch), fr = { rms: r.rms, freq: r.freq && r.clarity > 0.8 ? r.freq : 0 }; if (r.rms > AUDIO_HEARD_RMS_FLOOR) audioHeardTicks++; if (fr.freq) fr.midi = fmidi(fr.freq); meterUpdate(fr.rms); toolPitch(fr, 0.05); }, 50);
 
   // ---------- backups: a downloadable copy of the whole DB (E9: db.v now feeds migrateDB) ----------
   function showBackupNudge(text) { $('backupNudgeText').textContent = text; $('backupNudge').hidden = false; }
