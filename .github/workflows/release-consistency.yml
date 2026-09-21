@@ -71,33 +71,40 @@ jobs:
           exit 1
 
       # Now that the step above has confirmed THIS tag's release is
-      # published, check that "latest/download" -- the URL every download
-      # link in the app and README actually uses -- resolves to it. Checking
-      # only the HTTP status here would prove nothing: a stale "latest"
-      # pointing at the previous release also returns 200. So this follows
-      # the redirect and compares where it actually lands against this tag's
-      # own asset path.
+      # published, check that "latest" -- what every download link in the app
+      # and README actually resolves through -- is this tag. Two things are
+      # checked, because neither alone is enough:
+      #
+      #   1. The URL still returns 200, so the link is not broken.
+      #   2. The release GitHub calls "latest" IS this tag, via the API.
+      #
+      # Deliberately NOT done by following the redirect and reading
+      # url_effective. Measured against the real v1.4.0 release: the first
+      # hop's Location is
+      # https://github.com/<repo>/releases/download/v1.4.0/band-coach.html,
+      # but `curl -sIL` keeps going and lands on a SIGNED BLOB URL on
+      # release-assets.githubusercontent.com carrying neither the tag nor the
+      # word "releases". Comparing url_effective against this tag's download
+      # path therefore fails on a perfectly good release -- it would have
+      # broken every release from here on. The API answers the question
+      # directly and cannot be thrown off by how many hops the CDN adds.
       - name: the release download URL every download link uses must resolve to this tag
         env:
+          GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.tag.outputs.tag }}
         run: |
           url="https://github.com/${GITHUB_REPOSITORY}/releases/latest/download/band-coach.html"
-          result="$(curl -sIL -o /dev/null -w '%{http_code} %{url_effective}' "$url")"
-          status="${result%% *}"
-          effective="${result#* }"
+          status="$(curl -sIL -o /dev/null -w '%{http_code}' "$url")"
           if [ "$status" != "200" ]; then
             echo "::error::$url returned HTTP $status, not 200. Every download link in the app and README points at this exact URL -- check that the release is published (not left as a draft), that the attached asset is still named band-coach.html, and that the repo has not been renamed." >&2
             exit 1
           fi
-          case "$effective" in
-            */releases/download/"$TAG"/band-coach.html)
-              echo "latest resolves to $TAG: $effective"
-              ;;
-            *)
-              echo "::error::$url resolved to $effective, not releases/download/$TAG/band-coach.html. 'latest' is pointing at a different release than the one that triggered this run -- check that release.yml has finished publishing $TAG and that no other release is newer." >&2
-              exit 1
-              ;;
-          esac
+          latest="$(gh api "repos/${GITHUB_REPOSITORY}/releases/latest" --jq .tag_name 2>/dev/null || true)"
+          if [ "$latest" != "$TAG" ]; then
+            echo "::error::$url returns 200, but the release GitHub reports as 'latest' is '$latest', not '$TAG'. A download link would hand users that other release. Check that release.yml finished publishing $TAG and that no newer release exists." >&2
+            exit 1
+          fi
+          echo "latest resolves to $TAG, and its download URL returns 200"
 
       # GitHub Pages deployment lags the tag push -- pages.yml has to build
       # dist/pages, upload the artifact, and let deploy-pages roll it out to

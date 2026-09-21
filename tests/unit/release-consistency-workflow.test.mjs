@@ -70,17 +70,43 @@ test('the tag-pinned asset check retries instead of failing on the first miss, a
   assert.match(section[0], /exit 1/, 'the tag-pinned asset check must still fail the job if the budget runs out without the asset ever appearing');
 });
 
-test('the latest-download check verifies the redirect lands on this tag, not just an HTTP 200', () => {
+test('the latest-download check verifies that "latest" IS this tag, not just an HTTP 200', () => {
   const text = workflow();
+  // The property, not the mechanism: whatever this step does, it has to
+  // decide something about $TAG. A bare 200 passes identically when "latest"
+  // is still the PREVIOUS release, which is the hole this exists to close.
+  const section = text.match(/download URL every download link uses[\s\S]*?\n\n/);
+  assert.ok(section, 'expected a step checking the download URL every link uses');
   assert.match(
-    text,
-    /url_effective/,
-    'the latest-download check must inspect where the redirect actually lands, not just its status code, or it would pass identically for any other tag\'s asset',
+    section[0],
+    /releases\/latest/,
+    'the check must ask GitHub which release is currently "latest"',
   );
   assert.match(
-    text,
-    /releases\/download\/"?\$TAG"?\/band-coach\.html/,
-    "the resolved redirect must be compared against this tag's own download path, not merely be non-empty",
+    section[0],
+    /"\$TAG"|\$\{TAG\}/,
+    'the answer must be compared against the triggering tag, or the step proves nothing about this release',
+  );
+});
+
+// Regression guard, from a real measurement rather than a guess. An earlier
+// draft of this step followed the redirect with `curl -sIL` and compared
+// `url_effective` against releases/download/$TAG/band-coach.html. That is
+// wrong: GitHub's first hop does carry the tag-pinned URL, but -L keeps
+// going and ends on a signed blob URL at release-assets.githubusercontent.com
+// that contains neither the tag nor "releases". The comparison would have
+// failed on every healthy release. Pin that it does not come back.
+test('the latest check does not compare the fully-followed redirect against a tag path', () => {
+  // Comment lines are stripped first: the workflow explains this trap in
+  // prose right above the step, and a guard that fired on its own
+  // explanation would be unfixable without deleting the explanation.
+  const code = workflow()
+    .split('\n')
+    .filter((line) => !/^\s*#/.test(line))
+    .join('\n');
+  assert.ok(
+    !/url_effective[\s\S]{0,400}releases\/download/.test(code),
+    'url_effective ends at a signed CDN blob URL, not at releases/download/<tag>/ -- comparing them fails on a good release',
   );
 });
 
