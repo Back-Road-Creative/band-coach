@@ -18,7 +18,15 @@ export const VERSION_CHECK_URL = 'https://back-road-creative.github.io/band-coac
 // Used both when version.json's own "download" field is missing/malformed
 // AND whenever the check itself failed and there is nothing else to point
 // the "behind" link at.
-export const FALLBACK_DOWNLOAD_URL = 'https://back-road-creative.github.io/band-coach/';
+//
+// This MUST be the release asset, not the web app: the person reading that
+// link has a downloaded file in front of them and pressed a button labelled
+// "check for updates", so sending them to the hosted version answers a
+// question they did not ask. GitHub resolves "latest" at request time, so
+// this URL cannot go stale the way a version-pinned one would -- it is the
+// same URL the site's own download link uses.
+export const FALLBACK_DOWNLOAD_URL =
+  'https://github.com/Back-Road-Creative/band-coach/releases/latest/download/band-coach.html';
 
 // ~5s: long enough for a slow connection, short enough that a learner who
 // pressed the button gets an answer instead of a spinner that never ends.

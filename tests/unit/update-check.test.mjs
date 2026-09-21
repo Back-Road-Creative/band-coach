@@ -58,6 +58,16 @@ test('reports "behind" with the published version number and its download link',
   assert.equal(result.downloadUrl, 'https://example.test/get-the-file');
 });
 
+// The tests below assert the fallback link symbolically, so on their own they
+// would stay green if the constant were pointed at anything at all -- including
+// the hosted web app, which is NOT an answer for someone holding a downloaded
+// file. Pin the value itself: whatever the fallback is, it has to be a release
+// asset that downloads the file, resolved as "latest" so it cannot go stale.
+test('the fallback link downloads the file rather than opening the web app', () => {
+  assert.match(FALLBACK_DOWNLOAD_URL, /^https:\/\/github\.com\/Back-Road-Creative\/band-coach\/releases\/latest\/download\//);
+  assert.ok(FALLBACK_DOWNLOAD_URL.endsWith('band-coach.html'));
+});
+
 test('a network rejection is reported as "couldn\'t reach", with the fallback link, never thrown', async () => {
   const fetchImpl = async () => { throw new TypeError('Failed to fetch'); };
   const result = await checkForUpdate({ currentVersion: '1.3.0', fetchImpl });
