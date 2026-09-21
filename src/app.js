@@ -97,6 +97,23 @@ import { register as registerPlayalong } from './ui/playalong.js';
   // ---------- audio ----------
   let actx = null, micStream = null, anTime = null, anFreq = null, micReady = false, testNodes = [];
   let gates = gatesFor(null), micDevices = [];
+  // Counts ticks of the pitch-analysis setInterval (below) where the buffer
+  // it read actually carried signal, not silence or a freshly-connected
+  // AnalyserNode's zero-padding. micReady flips true (and #ioBtn.hidden with
+  // it) synchronously, BEFORE any synthetic audio has flowed through the
+  // analyser (testSource() wires it and sets micReady, then only afterwards
+  // starts the oscillators) -- so a test that starts asserting on pitch the
+  // moment #ioBtn hides can land inside that ~85ms (fftSize/sampleRate)
+  // window and see a corrupted/zero yin() result. This counter is the
+  // evidence a test can wait on instead: exposed read-only via __coach.
+  let audioHeardTicks = 0;
+  // AUDIO_HEARD_RMS_FLOOR: silence/zero-padding reads as rms === 0 exactly
+  // (a zeroed Float32Array), and the default uncalibrated pitch gate
+  // (DEFAULT_GATES.pitch, src/audio/levels.js) is 0.008 -- 0.02 sits clearly
+  // above both, while testSource()'s synthetic tones (oscillator plus
+  // 1/h^2 harmonics, summed and only mildly attenuated) read far louder
+  // than that in practice, so real test audio never fails this floor.
+  const AUDIO_HEARD_RMS_FLOOR = 0.02;
   // Diagnostic snapshot of monoSum()'s routing decision (RMS + gains), read-only, exposed on the debug hook.
   let lastMonoRoute = null;
   // E3: pitch tracking moved off the main thread onto an AudioWorklet
@@ -1352,7 +1369,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
   // for (tunerKind); the melody-capture tool deliberately does not (it hears
   // anything sung, hummed, whistled or played), so it keeps the generic
   // fallback range -- see src/audio/range.js.
-  setInterval(() => { if (!TOOLS[mod] || !micReady || !anTime) return; const buf = new Float32Array(anTime.fftSize); anTime.getFloatTimeDomainData(buf); const toolRange = mod === 'tuner' ? rangeForInstrument(instrumentById[tunerKind === 'vln' ? 'violin' : tunerKind]) : FALLBACK_RANGE; const r = yin(buf, actx.sampleRate, toolRange.fmin, toolRange.fmax, gates.pitch), fr = { rms: r.rms, freq: r.freq && r.clarity > 0.8 ? r.freq : 0 }; if (fr.freq) fr.midi = fmidi(fr.freq); toolPitch(fr, 0.05); }, 50);
+  setInterval(() => { if (!TOOLS[mod] || !micReady || !anTime) return; const buf = new Float32Array(anTime.fftSize); anTime.getFloatTimeDomainData(buf); const toolRange = mod === 'tuner' ? rangeForInstrument(instrumentById[tunerKind === 'vln' ? 'violin' : tunerKind]) : FALLBACK_RANGE; const r = yin(buf, actx.sampleRate, toolRange.fmin, toolRange.fmax, gates.pitch), fr = { rms: r.rms, freq: r.freq && r.clarity > 0.8 ? r.freq : 0 }; if (r.rms > AUDIO_HEARD_RMS_FLOOR) audioHeardTicks++; if (fr.freq) fr.midi = fmidi(fr.freq); toolPitch(fr, 0.05); }, 50);
 
   // ---------- backups: a downloadable copy of the whole DB (E9: db.v now feeds migrateDB) ----------
   function showBackupNudge(text) { $('backupNudgeText').textContent = text; $('backupNudge').hidden = false; }
@@ -1500,6 +1517,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
   //
   //
   if (__DEBUG_HOOK__) Object.assign(hook, { flash: () => ({ bad: flashBad, good: flashGood }), pitchWorkletRange: () => lastWorkletRangeSent, pitchWorkletFrameSize: () => lastWorkletFrameSize, kbdFocus: kbdFocusInfo });
+  if (__DEBUG_HOOK__) Object.assign(hook, { audioHeardTicks: () => audioHeardTicks });
   if (__DEBUG_HOOK__) window.__coach = hook;
 
   // Boot is over. Announce it so anything driving the page has a condition to

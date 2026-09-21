@@ -18,6 +18,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { HTML_PATH } from '../helpers/html-path.mjs';
 import { launchPage, effectiveWaitMs, retryFlaky } from '../helpers/browser.mjs';
+import { waitForAudioHeard } from '../helpers/audio-heard.mjs';
 
 const htmlPath = HTML_PATH;
 
@@ -101,6 +102,12 @@ async function openTuner(page) {
   );
   await page.evaluate("document.getElementById('ioBtn').click()");
   await page.waitFor("document.getElementById('ioBtn').hidden === true", effectiveWaitMs(5000));
+  // ioBtn.hidden flips as soon as micReady is set, which (for both the real
+  // mic path and testSource()) happens BEFORE any synthetic audio has
+  // actually flowed through the AnalyserNode -- wait for the app to have
+  // actually read a real-signal buffer before any test starts asserting on
+  // pitch (see tests/helpers/audio-heard.mjs).
+  await waitForAudioHeard(page);
 }
 
 // Simulates a tap on tuner row `idx` (0-based, top to bottom) by dispatching
