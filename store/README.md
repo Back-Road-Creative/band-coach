@@ -157,12 +157,12 @@ whether the mic/MIDI prompt behaves as the browser build does. See "What was NOT
 
 ## Building a Store submission package
 
-`npm run dist:appx` (what the tag-triggered `store-package` CI workflow runs) builds successfully
-with the committed placeholder identity when `BC_IDENTITY_NAME`/`BC_PUBLISHER`/
-`BC_PUBLISHER_DISPLAY_NAME` aren't set — that's intentional so CI keeps working before real
-identity values exist.
+`npm run dist:appx` builds successfully with the committed placeholder identity when
+`BC_IDENTITY_NAME`/`BC_PUBLISHER`/`BC_PUBLISHER_DISPLAY_NAME` aren't set. That fallback exists so a
+local build works before real identity values exist — it is **not** what CI runs.
 
-`npm run dist:appx:submission` is the same build with the identity guard turned on
+`npm run dist:appx:submission` is what the tag-triggered `store-package` CI workflow runs. It is the
+same build with the identity guard turned on
 (`apply-identity.mjs --require-identity`): it refuses (non-zero exit, naming exactly which of the
 three env vars are missing) to write a config that still has ANY placeholder identity field. Use it
 for a package you actually intend to upload to Partner Center, with the three real values from
@@ -195,8 +195,13 @@ browser profile — nothing in the app code needed to change for this.
    `BC_PUBLISHER_DISPLAY_NAME`. (These are public manifest values, not secrets — that's why they're
    repository *variables*, not secrets.)
 4. Run the `store-package` workflow (**Actions → store-package → Run workflow**), or push a
-   `v*` tag.
-5. Download the `band-coach-appx` artifact from the finished run.
+   `v*` tag. Actions reads repository variables at **run time**, so only a run started *after*
+   step 3 sees them — use the run you started, not an earlier one that happens to be newer than
+   the tag. A run missing any of the three now fails at the packaging step rather than producing
+   a placeholder package.
+5. Download the `band-coach-appx` artifact from the finished run, and read `AppxManifest.xml` out
+   of the `.appx` (it is a ZIP) to confirm `Identity/Name`, `Identity/Publisher` and `Version`
+   before uploading.
 6. In Partner Center, upload that `.appx` under **Packages** on your submission. The Store
    re-signs it — no local signing step, no certificate to buy.
 

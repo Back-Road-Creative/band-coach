@@ -31,10 +31,15 @@ jobs:
       - name: package the appx
         working-directory: store
         # BC_IDENTITY_NAME / BC_PUBLISHER / BC_PUBLISHER_DISPLAY_NAME are
-        # repository VARIABLES (public manifest values, not secrets). When
-        # unset, apply-identity.mjs falls back to the safe placeholders
-        # already committed in electron-builder.json.
-        run: npm run dist:appx
+        # repository VARIABLES (public manifest values, not secrets).
+        #
+        # The :submission target passes --require-identity, so a missing or
+        # empty variable FAILS this step instead of quietly falling back to the
+        # placeholders committed in electron-builder.json. Actions reads
+        # variables at run time, so a run started before a variable was added
+        # sees nothing -- and a placeholder Identity/Publisher is only caught on
+        # upload, after the artifact looks finished. Fail here instead.
+        run: npm run dist:appx:submission
         env:
           BC_IDENTITY_NAME: ${{ vars.BC_IDENTITY_NAME }}
           BC_PUBLISHER: ${{ vars.BC_PUBLISHER }}
