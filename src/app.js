@@ -530,6 +530,16 @@ import { register as registerPlayalong } from './ui/playalong.js';
   // MOD_IDS untouched, but the picker groups them with TOOLS below because
   // to a learner they read as "a tool", not "an instrument to pick up".
   const TOOL_MOD_IDS = ['ear', 'rhy'];
+  // U2: the only two genuine variant families -- a mod that is the same
+  // instrument as another mod, just a different build of it, rather than a
+  // separate instrument. Keyed variant id -> parent id. This mapping is
+  // hand-declared because nothing else in the codebase records it: MODS'
+  // own 'name'/'tag' fields and the instruments registry's 'family' field
+  // (src/instruments/*.js) both describe a broader instrument category
+  // (e.g. 'fretted'), not "is a variant of". Every id below keeps its own
+  // MODS entry and its own DB.mods[id] progress untouched -- grouping is
+  // purely visual, buildPicker()/setMod() below.
+  const VARIANT_PARENTS = { 'bass-5-string': 'bass', 'ukulele-low-g': 'uke', 'ukulele-baritone': 'uke' };
   const TUNINGS = { gtr: ['Guitar', [40, 45, 50, 55, 59, 64]], bass: ['Bass', [28, 33, 38, 43]], uke: ['Ukulele', [67, 60, 64, 69]], vln: ['Violin', [55, 62, 69, 76]], chrom: ['Any note (chromatic)', []] };
   const _info = info, _valid = validId;
   info = function (m, id, prefs) { if (id[0] === 'h') { const mm = /^h([bd])(\d+)$/.exec(id), dir = mm[1], hole = +mm[2], midi = HARP[dir][hole - 1]; return { kind: 'note', midi: midi, hole: hole, dir: dir, note: nname(midi), label: (dir === 'b' ? 'Blow ' : 'Draw ') + hole + ' (' + nname(midi) + ')', short: (dir === 'b' ? 'Blow ' : 'Draw ') + hole }; } return _info(m, id, prefs); };
@@ -1453,6 +1463,11 @@ import { register as registerPlayalong } from './ui/playalong.js';
     if (pitchWorkletNode && actx) { const neededFrameSize = frameSizeForInstrument(instrumentById[m], actx.sampleRate); if (neededFrameSize !== lastWorkletFrameSize) { lastWorkletFrameSize = neededFrameSize; pitchWorkletNode.port.postMessage({ type: 'frameSize', frameSize: neededFrameSize }); } }
     document.querySelectorAll('#picker button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.mod === m)));
     const toolsGroup = $('pickerTools'); if (toolsGroup && TOOL_MOD_IDS.concat(Object.keys(TOOLS)).indexOf(m) >= 0) toolsGroup.open = true;
+    // U2: a returning learner whose saved mod is a variant (e.g.
+    // 'ukulele-low-g') lands with that variant's family disclosure already
+    // open and the variant itself pressed, mirroring the toolsGroup line
+    // above -- never with the variant hidden and only the parent visible.
+    if (VARIANT_PARENTS[m]) { const variantGroup = document.querySelector('.picker-variant-group[data-mod-group="' + VARIANT_PARENTS[m] + '"] .variant-toggle'); if (variantGroup) variantGroup.open = true; }
     $('prompt').textContent = (MODS[m] || TOOLS[m]).name; $('hint').textContent = ''; $('choices').hidden = true; say(''); if (MODS[m]) coach(S.judged ? 'Welcome back. You are on level ' + S.level + ': ' + D().name + '. Press Start.' : 'Press Start. Level 1: ' + D().name + '.');
     renderOpts(); ioRefresh(); showAll(); save();
   }
@@ -1471,9 +1486,36 @@ import { register as registerPlayalong } from './ui/playalong.js';
   // open whenever the selected mod lives inside it, so a returning learner
   // never loses sight of where they are.
   function buildPickerButton(m, o) { const b = document.createElement('button'); b.type = 'button'; b.dataset.mod = m; b.style.setProperty('--c', o.color); b.setAttribute('aria-pressed', 'false'); b.appendChild(document.createTextNode(o.name)); const sm = document.createElement('small'); sm.textContent = o.tag; b.appendChild(sm); b.addEventListener('click', () => { b.blur(); closePanel(); setMod(m); }); return b; }
+  // U2: children[parentId] lists the variant ids grouped under it, built
+  // from VARIANT_PARENTS rather than a second hand-written map, so the two
+  // stay impossible to drift apart.
+  function variantChildrenByParent() { const out = {}; Object.keys(VARIANT_PARENTS).forEach(v => { const p = VARIANT_PARENTS[v]; (out[p] = out[p] || []).push(v); }); return out; }
   function buildPicker() {
-    const box = $('picker'), instrumentIds = MOD_IDS.filter(m => TOOL_MOD_IDS.indexOf(m) < 0), toolIds = TOOL_MOD_IDS.concat(Object.keys(TOOLS));
-    instrumentIds.forEach(m => box.appendChild(buildPickerButton(m, MODS[m])));
+    const box = $('picker'), instrumentIds = MOD_IDS.filter(m => TOOL_MOD_IDS.indexOf(m) < 0), toolIds = TOOL_MOD_IDS.concat(Object.keys(TOOLS)), children = variantChildrenByParent();
+    // Each variant family renders as ONE top-level control (the parent
+    // button, always visible and independently selectable -- e.g. "Ukulele"
+    // still reaches mod 'uke') plus a quiet <details> disclosure beside it
+    // holding the variant buttons, shut by default so the ten real
+    // instrument choices stay the thing a learner sees first. A variant id
+    // is skipped from the flat top-level loop entirely (VARIANT_PARENTS[m]
+    // check) -- it only ever renders inside its family's disclosure.
+    instrumentIds.filter(m => !VARIANT_PARENTS[m]).forEach(m => {
+      const kids = children[m];
+      if (!kids) { box.appendChild(buildPickerButton(m, MODS[m])); return; }
+      const group = document.createElement('span'); group.className = 'picker-variant-group'; group.dataset.modGroup = m;
+      group.appendChild(buildPickerButton(m, MODS[m]));
+      const toggle = document.createElement('details'); toggle.className = 'variant-toggle';
+      // Same "build the label from the data" rule as the tools summary
+      // below: naming the variants by hand would go stale the first time
+      // one is renamed or a third is added.
+      const summary = document.createElement('summary'); summary.textContent = 'Variants: ' + kids.map(v => MODS[v].name).join(', '); toggle.appendChild(summary);
+      const list = document.createElement('div'); list.className = 'variant-buttons';
+      kids.forEach(v => list.appendChild(buildPickerButton(v, MODS[v])));
+      toggle.appendChild(list);
+      if (kids.indexOf(mod) >= 0) toggle.open = true;
+      group.appendChild(toggle);
+      box.appendChild(group);
+    });
     const toolsGroup = document.createElement('details'); toolsGroup.className = 'picker-tools'; toolsGroup.id = 'pickerTools';
     // The label names what is inside, but is BUILT from the tool names
     // rather than repeating them: a hand-written list silently goes stale
