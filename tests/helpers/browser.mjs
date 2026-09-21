@@ -202,6 +202,24 @@ export function effectiveWaitMs(requestedMs) {
 // boot that normally takes under a second overran 30s.
 export const BOOT_DEADLINE_MS = Math.max(30000, WAIT_FLOOR_MS * 3);
 
+// The one error a caller is allowed to retry. `retryFlaky` aborts on a thrown
+// error by design -- a crash is not a flake -- but a boot that ran out of
+// budget on a starved runner IS the flake, and a fresh browser usually clears
+// it. Callers catch this by `err.code`, never by matching the message: the
+// wording is diagnostic and should stay free to improve, while the code is a
+// contract (see tests/unit/boot-deadline-error.test.mjs). Raising
+// BOOT_DEADLINE_MS is NOT the fix -- a boot that never completes is also what
+// a genuine regression looks like, so a longer wait would only hide it later.
+export const BOOT_DEADLINE_CODE = 'BOOT_DEADLINE';
+
+export function bootDeadlineError(ms) {
+  const err = new Error(
+    `the page never finished booting (no data-coach-ready on a complete file:// document within ${ms}ms)`,
+  );
+  err.code = BOOT_DEADLINE_CODE;
+  return err;
+}
+
 export async function launchPage(htmlPath, options = {}) {
   const { fakeAudioFile, initScript } = options;
   const bin = findBrowserBinary();
@@ -358,7 +376,7 @@ export async function launchPage(htmlPath, options = {}) {
       if (last === true) return;
       await new Promise((r2) => setTimeout(r2, 25));
     }
-    throw new Error(`the page never finished booting (no data-coach-ready on a complete file:// document within ${BOOT_DEADLINE_MS}ms)`);
+    throw bootDeadlineError(BOOT_DEADLINE_MS);
   }
 
   const loaded = nextLoad();
