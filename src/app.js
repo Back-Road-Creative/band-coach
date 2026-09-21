@@ -8,6 +8,7 @@ import { createMidiParser } from './core/midi.js';
 // Merge slots: a unit in flight adds its imports by replacing ONLY its own
 // slot line, so parallel branches never edit adjacent lines.
 import { recordError, getErrors } from './core/error-log.js';
+import { resolveAppVersion } from './core/version.js';
 //
 import { yin } from './audio/yin.js';
 import { createPitchNode } from './audio/pitch-worklet.js';
@@ -485,7 +486,13 @@ import { register as registerPlayalong } from './ui/playalong.js';
 
   // ---------- saved state: one learner model per instrument, shared session log ----------
   const KEY = 'bandcoach.v1';
-  const APP_VERSION = '0.1.0';
+  // Read once at startup, not on every export: the build (build/build.mjs)
+  // stamps the real package.json version into this meta tag's content
+  // attribute; an unbuilt dev page leaves it empty, and resolveAppVersion()
+  // turns that into DEV_VERSION so an exported progress file never claims a
+  // release version it isn't.
+  const versionMeta = document.querySelector('meta[name="band-coach-version"]');
+  const APP_VERSION = resolveAppVersion(versionMeta && versionMeta.content);
   const BACKUP_AT_KEY = 'bandcoach.v1.backupAt';
   let lastBackupAt = 0; try { lastBackupAt = +localStorage.getItem(BACKUP_AT_KEY) || 0; } catch (e) {}
   let DB, mod = 'kbd', S = null;
