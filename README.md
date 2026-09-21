@@ -358,6 +358,16 @@ mark a step passed just because nothing looked obviously wrong.
    reload the page (F5), and open the same instrument again. **Pass** if your recent result is
    still there. **Fail** if progress is back to zero. (Reminder: this only works from the exact
    same file path/location each time — see "Backups" above.)
+6. **Check for updates (30s).** Scroll to the footer and press "Check for updates". This is the
+   only real network request the app ever makes, and it is made from a `file://` page, so nothing
+   in the automated suite can stand in for it — the unit tests inject a fake fetch and the browser
+   tests run a dev build, which the button deliberately refuses to check. **Pass** if it answers
+   "You're running the latest version (*x.y.z*)." with the version you just released. **Fail** if
+   it says "Couldn't reach the update server." (the deployed `version.json` is missing or blocked
+   — the release-consistency workflow should have caught that, so check it), if it names a version
+   other than the one you released, or if it still says "Checking…" after a few seconds. If it
+   reports "This is a development build", you are testing the wrong file: use the one attached to
+   the GitHub release, not `dist/band-coach.html`.
 
 Total: under 5 minutes with a MIDI keyboard on hand, faster without one.
 
