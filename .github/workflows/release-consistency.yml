@@ -1,0 +1,95 @@
+name: release-consistency
+
+# release.yml, pages.yml and store-package.yml each prove their own artifact
+# built; none of them prove the three still agree once the tag has finished
+# rolling out. This workflow runs after the same tag push and checks the two
+# things that fail silently otherwise: the one download URL every link in
+# this repo depends on, and the deployed Pages copy's own version.json. It
+# also opens a tracked issue for the manual Microsoft Store submission step,
+# which has no automated signal of its own.
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: resolve the tag being checked
+        id: tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ -n "$GITHUB_REF_NAME" ] && [[ "$GITHUB_REF_NAME" == v* ]]; then
+            tag="$GITHUB_REF_NAME"
+          else
+            tag="$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName -q .tagName)"
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
+
+      - name: the release download URL every download link uses must resolve
+        run: |
+          url="https://github.com/${GITHUB_REPOSITORY}/releases/latest/download/band-coach.html"
+          status="$(curl -sIL -o /dev/null -w '%{http_code}' "$url")"
+          if [ "$status" != "200" ]; then
+            echo "::error::$url returned HTTP $status, not 200. Every download link in the app and README points at this exact URL -- check that the release is published (not left as a draft), that the attached asset is still named band-coach.html, and that the repo has not been renamed." >&2
+            exit 1
+          fi
+
+      # GitHub Pages deployment lags the tag push -- pages.yml has to build
+      # dist/pages, upload the artifact, and let deploy-pages roll it out to
+      # the CDN, which is normally a couple of minutes but is not
+      # instantaneous. 10 attempts x 30s = 5 minutes of total wait, well
+      # inside this job's 15-minute timeout and generous next to pages.yml's
+      # own 10+5 minute step budget, so a healthy deploy always has time to
+      # land before this gives up.
+      - name: the deployed Pages version.json must match this tag
+        env:
+          EXPECTED_VERSION: ${{ steps.tag.outputs.version }}
+        run: |
+          url="https://back-road-creative.github.io/band-coach/version.json"
+          attempts=10
+          delay=30
+          for i in $(seq 1 "$attempts"); do
+            body="$(curl -sf "$url" || true)"
+            if [ -n "$body" ]; then
+              actual="$(node -e "process.stdout.write(JSON.parse(process.argv[1]).version)" "$body" 2>/dev/null || true)"
+              if [ "$actual" = "$EXPECTED_VERSION" ]; then
+                echo "version.json matches: $actual"
+                exit 0
+              fi
+              echo "attempt $i/$attempts: version.json reports version '$actual', want '$EXPECTED_VERSION' -- retrying in ${delay}s"
+            else
+              echo "attempt $i/$attempts: $url not reachable yet -- retrying in ${delay}s"
+            fi
+            sleep "$delay"
+          done
+          echo "::error::$url never reported version '$EXPECTED_VERSION' after $attempts attempts over $((attempts * delay))s. Check that pages.yml actually ran for this tag and that dist/pages/version.json was deployed with the new version -- a missing or stale version.json means the Pages copy is out of sync with this release." >&2
+          exit 1
+
+      - name: record the manual Store submission step
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          title="Store submission for $TAG"
+          existing="$(gh issue list --repo "$GITHUB_REPOSITORY" --state all --search "\"$title\" in:title" --json title -q ".[] | select(.title == \"$title\") | .title")"
+          if [ -n "$existing" ]; then
+            echo "issue '$title' already exists, not creating a duplicate"
+            exit 0
+          fi
+          body="Manual checklist. Partner Center submission is not automated here -- it needs Azure AD credentials, which are handled separately.
+
+          - [ ] Build/refresh the .appx via the store-package workflow for $TAG
+          - [ ] Upload the .appx to Partner Center
+          - [ ] Submit for certification
+          - [ ] Confirm certification passed and the Store listing shows $TAG"
+          gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --body "$body"
