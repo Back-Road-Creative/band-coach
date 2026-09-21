@@ -44,16 +44,31 @@ test('Ear training appears as exactly one control labelled exactly "Ear training
   const page = await launchPage(htmlPath);
   t.after(() => page.close());
 
-  // Exact-text match, not substring: the mod-picker's quick interval/chord
-  // drill and the #panelPicker's eight-exercise suite are genuinely
-  // different features (see MODS.ear's comment in src/app.js), so the
-  // fix keeps both and disambiguates the picker one's label to "Ear
-  // training: quick drill" rather than deleting either. What must be
-  // unique is the plain "Ear training" label a learner would look for.
-  const count = await page.evaluate(
+  // The mod-picker's interval/chord drill and the #panelPicker's
+  // eight-exercise suite are genuinely different features (see MODS.ear's
+  // comment in src/app.js), so the fix keeps both and names the picker one
+  // for what it actually is, "Interval drill", rather than deleting either.
+  //
+  // Checked two ways, and the SUBSTRING check is the one that matters. An
+  // earlier attempt named it "Ear training: quick drill", which passes an
+  // exact-match check while still showing a learner two buttons that both
+  // begin "Ear training" — the duplication this test exists to prevent.
+  // Only a substring check catches that, so if someone renames it back to
+  // any "Ear training ..." variant, this goes red.
+  const exact = await page.evaluate(
     "Array.from(document.querySelectorAll('button')).filter(b => (b.firstChild && b.firstChild.textContent || '').trim() === 'Ear training').length"
   );
-  assert.equal(count, 1, 'exactly one control should be labelled exactly "Ear training"');
+  assert.equal(exact, 1, 'exactly one control should be labelled exactly "Ear training"');
+
+  const containing = await page.evaluate(
+    "Array.from(document.querySelectorAll('button')).filter(b => ((b.firstChild && b.firstChild.textContent) || '').indexOf('Ear training') !== -1).length"
+  );
+  assert.equal(
+    containing,
+    1,
+    'exactly one control\'s label should mention "Ear training" at all — two buttons whose labels ' +
+      'both start with it read as duplication whatever the suffix says',
+  );
 });
 
 test('clicking a grouped tool button still selects that mod unchanged', async (t) => {

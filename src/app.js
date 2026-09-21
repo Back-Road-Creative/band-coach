@@ -403,11 +403,14 @@ import { register as registerPlayalong } from './ui/playalong.js';
         { name: 'Moves: two notes', task: 'seq', len: 2, limit: 10 }, { name: 'F sharp and B flat', add: Wn(66, 70), limit: 12 }, { name: 'Long tones: two steady seconds', task: 'hold', limit: 14 },
         { name: 'Moves: three notes', task: 'seq', len: 3, limit: 9 }, { name: 'Five-note runs', task: 'run', limit: 8 }, { name: 'The upper notes', add: Wn(76, 77, 79), limit: 12 }
       ] },
-    // Named "Ear training: quick drill" rather than plain "Ear training" so
-    // its picker button never collides with the #panelPicker "Ear training"
-    // panel (src/ui/ear.js, registerEar()) -- read both before touching
-    // this: they are genuinely different features, not one duplicated
-    // twice. This pseudo-mod is a single interval/chord-ID drill woven into
+    // Named "Interval drill" rather than "Ear training" so its picker button
+    // never collides with the #panelPicker "Ear training" panel
+    // (src/ui/ear.js, registerEar()) -- read both before touching this: they
+    // are genuinely different features, not one duplicated twice. The name
+    // says what this one actually is; calling it a variant of "Ear training"
+    // ("Ear training: quick drill", the first attempt) still read as a second
+    // door to the same room to anyone who does not know the internals.
+    // This pseudo-mod is a single interval/chord-ID drill woven into
     // the normal instrument session (streak, level, timer, mastery, the 1-9
     // number-key shortcut at the top-level keydown handler). The panel is a
     // separate standalone screen with eight distinct exercise types (scale
@@ -417,7 +420,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
     // ear-training suite that does not fit the per-instrument session loop.
     // Keeping both and renaming (rather than deleting either) is the U3
     // finding's explicit fallback for "genuinely different features".
-    ear: { name: 'Ear training: quick drill', tag: 'listen and answer', color: '#35c9c0', input: 'answer', help: 'Ear training: listen, then pick the answer with the buttons or the number keys. Hear it again as often as you like. After each answer the keyboard shows you what was played.',
+    ear: { name: 'Interval drill', tag: 'listen and answer', color: '#35c9c0', input: 'answer', help: 'Ear training: listen, then pick the answer with the buttons or the number keys. Hear it again as often as you like. After each answer the keyboard shows you what was played.',
       levels: [
         { name: 'Second, third or fifth (going up)', add: ['i2a', 'i4a', 'i7a'], pool: 'i', limit: 14 }, { name: 'Add the fourth and the octave', add: ['i5a', 'i12a'], pool: 'i', limit: 14 }, { name: 'Add the minor third and minor second', add: ['i3a', 'i1a'], pool: 'i', limit: 14 },
         { name: 'Add the sixths, tritone and sevenths', add: ['i9a', 'i8a', 'i6a', 'i10a', 'i11a'], pool: 'i', limit: 14 }, { name: 'Going down', add: ['i2d', 'i4d', 'i7d', 'i5d', 'i3d', 'i12d'], pool: 'i', sfx: 'd', limit: 14 },
