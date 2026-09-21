@@ -643,7 +643,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
     d.panels = sanitizePanelData(v.panels);
     return d;
   }
-  function loadDB() { modelNow = Date.now(); let v = null; try { v = migrateDB(JSON.parse(localStorage.getItem(KEY) || 'null')); } catch (e) {} hasSavedMod = !!(v && v.prefs && MODS[v.prefs.mod] && TOOL_MOD_IDS.indexOf(v.prefs.mod) < 0 && !VARIANT_PARENTS[v.prefs.mod]); DB = sanitizeDB(v, actx ? (actx.outputLatency || actx.baseLatency || 0) * 1000 : 0, modelNow); mod = DB.prefs.mod; S = DB.mods[mod]; gates = gatesFor(DB.prefs.noiseFloor); }
+  function loadDB() { modelNow = Date.now(); let v = null; try { v = migrateDB(JSON.parse(localStorage.getItem(KEY) || 'null')); } catch (e) {} hasSavedMod = !!(v && v.prefs && MODS[v.prefs.mod] && TOOL_MOD_IDS.indexOf(v.prefs.mod) < 0); DB = sanitizeDB(v, actx ? (actx.outputLatency || actx.baseLatency || 0) * 1000 : 0, modelNow); mod = DB.prefs.mod; S = DB.mods[mod]; gates = gatesFor(DB.prefs.noiseFloor); }
   let saveTimer = null;
   function save() { if (saveTimer) return; saveTimer = setTimeout(() => { saveTimer = null; try { if (MODS[mod]) DB.mods[mod] = S = sanitizeModel(mod, S, modelNow); localStorage.setItem(KEY, JSON.stringify(DB)); } catch (e) {} }, 1200); }
   // `now` is always the caller's `modelNow` (frozen per page load/import,

@@ -112,16 +112,30 @@ test('variant groups: the variant buttons are hidden until their family group is
   }
 });
 
-test('variant groups: a saved variant mod boots with its family group open and that variant pressed', async (t) => {
+test('variant groups: a saved variant mod collapses too, names itself (not its parent) in the summary, and reopens with its family group open and that variant pressed', async (t) => {
   const initScript = "localStorage.setItem('bandcoach.v1', JSON.stringify({ prefs: { mod: 'ukulele-low-g' } }));";
   const page = await launchPage(htmlPath, { initScript });
   t.after(() => page.close());
 
+  // U9: a saved variant is now hasSavedMod too, so it gets the exact same
+  // collapsed-picker treatment as any other saved instrument (see
+  // collapse-after-choice.test.mjs) -- no more meeting the full uncollapsed
+  // row just because the saved choice happens to be a variant.
+  const collapseShut = await page.evaluate("document.getElementById('pickerCollapse').open");
+  assert.equal(collapseShut, false, 'the picker collapse starts shut for a returning learner whose saved mod is a variant');
+
+  const summaryText = await page.evaluate("document.querySelector('#pickerCollapse > summary').textContent");
+  assert.match(summaryText, /low-g ukulele/i, 'the collapsed summary names the variant itself, not its parent "Ukulele": ' + JSON.stringify(summaryText));
+  assert.doesNotMatch(summaryText, /^ukulele\s/i, 'the summary is not just the parent family name: ' + JSON.stringify(summaryText));
+
+  await page.evaluate("document.querySelector('#pickerCollapse > summary').click()");
+  await page.waitFor("document.getElementById('pickerCollapse').open === true");
+
   const visible = await page.evaluate(isVisible('#picker button[data-mod="ukulele-low-g"]'));
-  assert.equal(visible, true, 'the saved variant\'s family group is already open on boot, so the variant itself is visible');
+  assert.equal(visible, true, 'once reopened, the saved variant\'s family group is already open, so the variant itself is visible');
 
   const pressed = await page.evaluate("document.querySelector('#picker button[data-mod=\"ukulele-low-g\"]').getAttribute('aria-pressed')");
-  assert.equal(pressed, 'true', 'the saved variant reports pressed on boot');
+  assert.equal(pressed, 'true', 'the saved variant reports pressed once the collapse is reopened');
 });
 
 test('variant groups: restoring a backup saved on a variant mod (setMod called after boot, not just at boot) opens that family group', async (t) => {
