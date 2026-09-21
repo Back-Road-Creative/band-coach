@@ -106,9 +106,37 @@ export function stepTuner(state, frame, dtMs, opts = {}) {
   const cents = (smoothed - targetMidi) * 100;
   const inTune = Math.abs(cents) <= toleranceCents;
   const sameTarget = s.targetMidi === targetMidi;
-  const holdMs = inTune ? (sameTarget ? num(s.holdMs, 0) : 0) + dt : 0;
+  // A player holding a note is not a signal generator: fretted and bowed
+  // instruments wobble by ten cents or more while sounding perfectly in tune
+  // to a listener. Zeroing the hold on the first reading outside tolerance
+  // meant confirmMs had to be cleared with NO excursion at all, so a real
+  // player never reached "tuned" -- measured before this change: at a +/-8
+  // cent wobble the tuner reported tuned on 38 of 120 ticks, at +/-12 cents 5
+  // of 120, and at +/-20 cents never. The dropped-frame path four lines up
+  // already decays rather than zeroes, for exactly this reason; a wobble is
+  // the same kind of event and now gets the same treatment.
+  //
+  // The decay is deliberately SLOWER than the gain (opts.decayRatio, default
+  // half speed): a player who is inside tolerance more often than not is in
+  // tune, and should converge on "tuned" rather than stall. A genuinely
+  // different note is not a wobble, so a gross excursion still zeroes the
+  // hold at once and drops out of "holding" -- the readout must never claim
+  // tuned while somebody is a semitone away.
+  const grossCents = Math.max(toleranceCents, num(opts.grossCents, toleranceCents * 4));
+  const decayRatio = Math.max(0, num(opts.decayRatio, 0.5));
+  const prevHold = num(s.holdMs, 0);
+  let holdMs;
+  if (!sameTarget) holdMs = inTune ? dt : 0;
+  else if (inTune) holdMs = Math.min(confirmMs, prevHold + dt);
+  else if (Math.abs(cents) > grossCents) holdMs = 0;
+  else holdMs = Math.max(0, prevHold - dt * decayRatio);
+  // Hysteresis: leaving "holding" takes a sustained excursion, not one tick.
+  // Capping holdMs at confirmMs bounds that grace to confirmMs of wobble, so
+  // a long steady note cannot bank ten seconds of credit against going
+  // genuinely out of tune later.
+  const phase = holdMs >= confirmMs || (s.phase === 'holding' && holdMs > 0) ? 'holding' : 'tracking';
   return {
-    phase: holdMs >= confirmMs ? 'holding' : 'tracking',
+    phase,
     history, midi: smoothed, targetMidi, cents,
     selIdx, candidateIdx, candidateN,
     holdMs, ageMs: 0, silenceMs: 0,

@@ -120,3 +120,104 @@ test('stepTuner: chromatic mode (empty targets) confirms against the nearest sem
   assert.equal(s.targetMidi, 61);
   assert.equal(s.phase, 'holding');
 });
+
+// ---------- holding survives a wobble, but not a wrong note ----------
+//
+// A player holding a note is not a signal generator. Before this group
+// existed, `holdMs` was zeroed by the FIRST reading outside tolerance, so
+// confirmMs had to be cleared with no excursion whatsoever and a real player
+// never saw "tuned". Measured against the old code with a deterministic
+// wobble over 120 ticks: +/-8 cents held on 38 ticks, +/-12 cents on 5,
+// +/-20 cents on none. The same measurement after the fix: 102, 96 and 46,
+// with a +/-35 cent wobble still never holding -- somebody that far off is
+// not in tune and must not be told they are.
+
+// A deterministic wobble, so a failure here is reproducible rather than a
+// coin flip. Returns midi values centred on `centre`, within +/-cents.
+function wobbler(centre, cents, seed = 1) {
+  let x = seed;
+  return () => {
+    x = (x * 1103515245 + 12345) % 2147483648;
+    return centre + ((x / 2147483648 - 0.5) * 2 * cents) / 100;
+  };
+}
+
+test('stepTuner: a player wobbling inside a few cents reads as tuned, not just once', () => {
+  // "Did it EVER reach holding" is far too weak an assertion: the old
+  // zero-on-excursion code still stumbled into 12 consecutive in-tune ticks
+  // now and then, so a bare `everHeld` check passed against the very bug this
+  // pins. What a player actually experiences is the PROPORTION of the time
+  // the readout says tuned. Old code at this wobble: 5 ticks in 120. New: 96.
+  const next = wobbler(69, 12);
+  let s;
+  let held = 0;
+  const TICKS = 120;
+  for (let i = 0; i < TICKS; i++) {
+    s = stepTuner(s, frame(next()), 50, { targets: UKE, confirmMs: 600, toleranceCents: 5 });
+    if (s.phase === 'holding') held++;
+  }
+  assert.ok(
+    held / TICKS > 0.6,
+    `a +/-12 cent wobble centred on the target read as tuned on only ${held}/${TICKS} ticks; ` +
+      'a player holding a note this well should see "tuned" most of the time',
+  );
+});
+
+test('stepTuner: a mild excursion decays the hold instead of wiping it', () => {
+  const OPTS = { targets: UKE, confirmMs: 600, toleranceCents: 5 };
+  let s;
+  for (let i = 0; i < 8; i++) s = stepTuner(s, frame(69.0), 50, OPTS);
+  assert.ok(s.holdMs > 0, 'hold accumulated while in tune');
+
+  // A SINGLE bad reading is not an excursion at all: the median of five
+  // ignores it, which is the whole point of smoothing. Prove that first, so
+  // this test cannot pass for the wrong reason.
+  const beforeBlip = s.holdMs;
+  s = stepTuner(s, frame(69.1), 50, OPTS);
+  assert.equal(s.cents, 0, 'one stray reading is absorbed by the median, not treated as out of tune');
+  assert.ok(s.holdMs > beforeBlip, 'an absorbed blip still counts as in tune');
+
+  // Three of the last five readings 10 cents sharp DOES move the median:
+  // outside the 5 cent tolerance, well inside the gross bound.
+  for (let i = 0; i < 2; i++) s = stepTuner(s, frame(69.1), 50, OPTS);
+  assert.ok(Math.abs(s.cents) > 5, 'a sustained wobble does move the smoothed reading out of tolerance');
+  const before = s.holdMs;
+  assert.ok(before > 0, 'the hold survived the excursion starting');
+  s = stepTuner(s, frame(69.1), 50, OPTS);
+  assert.ok(s.holdMs > 0, 'a mild excursion must not wipe the hold');
+  assert.ok(s.holdMs < before, 'a mild excursion must still cost something');
+});
+
+test('stepTuner: a gross excursion wipes the hold and leaves "holding" at once', () => {
+  let s;
+  for (let t = 0; t < 900; t += 50) s = stepTuner(s, frame(69.0), 50, { targets: UKE, confirmMs: 600, toleranceCents: 5 });
+  assert.equal(s.phase, 'holding', 'steady in-tune input reaches holding');
+  // Half a semitone off the A string: a different note, not a wobble. The
+  // median needs a few readings to follow it over.
+  for (let i = 0; i < 5; i++) s = stepTuner(s, frame(69.5), 50, { targets: UKE, confirmMs: 600, toleranceCents: 5, grossCents: 20 });
+  assert.equal(s.holdMs, 0, 'a gross excursion zeroes the hold');
+  assert.equal(s.phase, 'tracking', 'the readout must not claim "tuned" while half a semitone off');
+});
+
+test('stepTuner: the hold is capped at confirmMs, so a long note banks no credit', () => {
+  let s;
+  for (let t = 0; t < 8000; t += 50) s = stepTuner(s, frame(69.0), 50, { targets: UKE, confirmMs: 600, toleranceCents: 5 });
+  assert.equal(s.phase, 'holding');
+  assert.ok(
+    s.holdMs <= 600,
+    `hold banked ${s.holdMs}ms against a 600ms confirm; going out of tune later would take that long to register`,
+  );
+});
+
+test('stepTuner: a sustained mild excursion does eventually leave "holding"', () => {
+  let s;
+  for (let t = 0; t < 900; t += 50) s = stepTuner(s, frame(69.0), 50, { targets: UKE, confirmMs: 600, toleranceCents: 5 });
+  assert.equal(s.phase, 'holding');
+  // 10 cents flat, held there. Hysteresis grants a grace period; it must end.
+  let left = false;
+  for (let t = 0; t < 3000; t += 50) {
+    s = stepTuner(s, frame(68.9), 50, { targets: UKE, confirmMs: 600, toleranceCents: 5 });
+    if (s.phase !== 'holding') { left = true; break; }
+  }
+  assert.ok(left, 'the grace period must be bounded, not indefinite');
+});
