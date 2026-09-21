@@ -688,7 +688,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
   // #feedback lives inside #mainArea, which is hidden while a panel is open,
   // so a panel's say() would be invisible. Mirror it into the panel's own
   // status line whenever one is open.
-  const say = (t, cls) => { const f = $('feedback'); f.textContent = t; f.className = cls || ''; const p = $('panelSay'); if (p) { p.textContent = panels.current() ? t : ''; p.className = 'panel-say ' + (cls || ''); } };
+  const say = (t, cls) => { const f = $('feedback'); f.textContent = t; f.className = cls || ''; $('feedbackCard').hidden = !t; const p = $('panelSay'); if (p) { p.textContent = panels.current() ? t : ''; p.className = 'panel-say ' + (cls || ''); } };
   const coach = t => { $('coach').textContent = t; };
   const cur = () => task && task.els[task.idx];
   let pressed = {}, heard = null, held = [], holdFor = 0, holdCents = [], wrongFor = 0, lastFired = -1, stableN = 0, stableMidi = -1, released = true, flashBad = -1e12, flashGood = -1e12;
@@ -1277,13 +1277,17 @@ import { register as registerPlayalong } from './ui/playalong.js';
     const pct = Math.round(S.ready * 100); $('readyFill').style.width = pct + '%'; $('readyFill').style.background = S.ready < 0.25 ? 'var(--bad)' : S.ready < 0.6 ? 'var(--warn)' : 'var(--good)'; $('readyBar').setAttribute('aria-valuenow', pct);
     const e = sess ? 1 - sess.F : 1, ep = Math.round(e * 100); $('energyFill').style.width = ep + '%'; $('energyFill').style.background = e < 0.4 ? 'var(--bad)' : e < 0.65 ? 'var(--warn)' : 'var(--good)'; $('energyBar').setAttribute('aria-valuenow', ep);
     const ds = dayStreak(), lastS = DB.sessions.filter(x => x.mod === mod).slice(-1)[0]; $('sessLine').textContent = (sess ? Math.floor(sess.active / 60) + ' min this session, ' + sess.breaks + ' break' + (sess.breaks === 1 ? '' : 's') + ' · ' : '') + Math.round(todayMinutes()) + ' min today' + (ds > 1 ? ' · ' + ds + ' days in a row' : '') + (lastS ? ' · last ' + MODS[mod].name.toLowerCase() + ' session ' + Math.round(100 * lastS.acc) + '%' : '');
-    $('sAcc').textContent = recent.length ? Math.round(100 * mean(recent)) + '%' : '0%'; $('sStreak').textContent = streak; $('sRt').textContent = sess && sess.rts.length ? median(sess.rts).toFixed(1) : '0.0';
+    $('sAcc').textContent = recent.length ? Math.round(100 * mean(recent)) + '%' : '0%'; $('sStreak').textContent = streak; $('sRt').textContent = sess && sess.rts.length ? median(sess.rts).toFixed(1) : '0.0'; $('statsBlock').hidden = !recent.length;
     const act = activeItems(mod, S.level), weakEntries = []; act.forEach(id => { const o = S.item[id]; if (o && o.reps >= 2) weakEntries.push(Object.assign({}, o, { id: 'i:' + id, label: inf(id).short })); });
     Object.keys(S.trans).forEach(k => { const o = S.trans[k], ab = k.split('>'); if (o.reps >= 2 && act.indexOf(ab[0]) >= 0 && act.indexOf(ab[1]) >= 0) weakEntries.push(Object.assign({}, o, { id: 't:' + k, label: inf(ab[0]).short + ' → ' + inf(ab[1]).short })); });
     const rows = due(weakEntries, modelNow).filter(e => e.r < 0.7);
     const ul = $('weakList'); ul.innerHTML = ''; const li = (a, b, cls) => { const l = document.createElement('li'), s1 = document.createElement('span'), s2 = document.createElement('span'); if (cls) l.className = cls; s1.textContent = a; s2.textContent = b; l.appendChild(s1); l.appendChild(s2); ul.appendChild(l); };
     rows.slice(0, 4).forEach(r => li(r.label, Math.round(r.r * 100) + '%')); let top = null; Object.keys(S.conf).forEach(k => { if (S.conf[k] >= 3 && k.indexOf('>x') < 0 && (!top || S.conf[k] > S.conf[top])) top = k; });
-    if (top) { const ab = top.split('>'); li('Mix-up: ' + (validId(mod, ab[0]) ? inf(ab[0]).short : ab[0]) + ' answered as ' + (validId(mod, ab[1]) ? inf(ab[1]).short : ab[1]), S.conf[top] + ' times'); } if (!ul.children.length) li('Nothing weak yet. Misses and slow answers show up here, and the coach sends more of them.', '', 'none');
+    if (top) { const ab = top.split('>'); li('Mix-up: ' + (validId(mod, ab[0]) ? inf(ab[0]).short : ab[0]) + ' answered as ' + (validId(mod, ab[1]) ? inf(ab[1]).short : ab[1]), S.conf[top] + ' times'); }
+    // The card itself, not a placeholder row, is the "nothing weak yet"
+    // signal now -- an empty rail box says more than a row reading "nothing
+    // weak yet" ever did (band-coach-ui-declutter-plan, U4).
+    $('weakCard').hidden = !ul.children.length;
   }
   function renderOpts() {
     const box = $('modOpts'); box.innerHTML = ''; const sel = (id, label, opts, val, on) => { const l = document.createElement('label'); l.htmlFor = id; l.textContent = label + ' '; const s = document.createElement('select'); s.id = id; Object.keys(opts).forEach(k => { const o = document.createElement('option'); o.value = k; o.textContent = opts[k][0]; s.appendChild(o); }); s.value = val; s.addEventListener('change', () => on(s.value)); l.appendChild(s); box.appendChild(l); };
@@ -1489,7 +1493,6 @@ import { register as registerPlayalong } from './ui/playalong.js';
     });
   })();
 
-  const hadSavedProgressAtBoot = (() => { try { return localStorage.getItem(KEY) !== null; } catch (e) { return true; } })();
   // ---------- feature panels (src/ui/panels.js): songs, ear, theory, history, fingerings, play-along ----------
   // A panel unit registers ONE panel by replacing its own slot:panel line
   // below; everything it needs from the app goes through panelApi.
@@ -1545,7 +1548,6 @@ import { register as registerPlayalong } from './ui/playalong.js';
     panels.list().forEach(p => { const b = document.createElement('button'); b.type = 'button'; b.dataset.panel = p.id; b.style.setProperty('--c', p.color || '#93a0bd'); b.setAttribute('aria-pressed', 'false'); b.appendChild(document.createTextNode(p.name)); const sm = document.createElement('small'); sm.textContent = p.tag || ''; b.appendChild(sm); b.addEventListener('click', () => { b.blur(); openPanel(p.id); }); box.appendChild(b); });
   }
   loadDB(); if (!Array.isArray(DB.custom)) DB.custom = []; $('optNames').checked = DB.prefs.names; buildPicker(); buildPanelPicker(); setMod(mod); requestAnimationFrame(frame);
-  if (!hadSavedProgressAtBoot) showBackupNudge('Been here before? Restore a backup.');
   const hook = !__DEBUG_HOOK__ ? null : { state: () => S, db: () => DB, sess: () => sess, task: () => task, cur: cur, note: onNote, answer: answer, tap: onTap, bar: () => bar, playing: () => playing, setMod: setMod, testSource: testSource, heard: () => heard, yin: yin, cap: () => cap, tuner: () => tunerState, tunerLock: () => tunerLock, deaf: () => deafWindow.isDeaf(), deafUntil: () => deafWindow.until(), exportProgress: doExportProgress, importProgress: doImportProgress, audioNow: audioNow, modelNow: () => modelNow };
   // Debug-hook slots: replace ONLY your own line with
   //   if (__DEBUG_HOOK__) Object.assign(hook, { … });

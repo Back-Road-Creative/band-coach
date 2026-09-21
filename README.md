@@ -18,7 +18,8 @@ network off. Open it in Chrome or Edge. Microphone instruments ask for permissio
 a MIDI keyboard is optional. To put it away, delete the file.
 
 A downloaded file cannot update itself — that's a browser security boundary, not a missing
-feature — so the footer carries a "Check for updates" button instead. Press it and it asks the
+feature — so the "More options" menu in the side rail carries a "Check for updates" button
+instead. Press it and it asks the
 Band Coach website for the current version number (nothing about your playing is sent) and
 answers right there: up to date, a newer version is out with a link to get it, or it couldn't
 reach the server, also with a link to get the current file. It never checks on its own — only on
@@ -128,9 +129,11 @@ not something to "fix" by editing the test.
 ## Backups
 
 Progress is saved in the browser, keyed to the exact file path Band Coach was opened from — moving
-or re-downloading the file can lose it, since browsers do not share that storage across paths. Use
-"Save a backup" in the app to download `band-coach-progress.json`, and "Restore a backup" to load
-one back in. A quiet reminder appears on a fresh profile and after a while without a backup.
+or re-downloading the file can lose it, since browsers do not share that storage across paths. Open
+the "More options" menu in the side rail for "Save a backup", which downloads
+`band-coach-progress.json`, and "Restore a backup", which loads one back in. A quiet reminder
+appears once you have actually practised a while without one — never on a fresh profile, since
+there is nothing yet to lose.
 ## Notation engine
 
 `src/notation/` is a pure layout engine for standard notation and tab: given
@@ -371,8 +374,9 @@ mark a step passed just because nothing looked obviously wrong.
    reload the page (F5), and open the same instrument again. **Pass** if your recent result is
    still there. **Fail** if progress is back to zero. (Reminder: this only works from the exact
    same file path/location each time — see "Backups" above.)
-6. **Check for updates (30s).** Scroll to the footer and press "Check for updates". This is the
-   only real network request the app ever makes, and it is made from a `file://` page, so nothing
+6. **Check for updates (30s).** Open the "More options" menu in the side rail and press "Check for
+   updates". This is the only real network request the app ever makes, and it is made from a
+   `file://` page, so nothing
    in the automated suite can stand in for it — the unit tests inject a fake fetch and the browser
    tests run a dev build, which the button deliberately refuses to check. **Pass** if it answers
    "You're running the latest version (*x.y.z*)." with the version you just released. **Fail** if
