@@ -199,9 +199,20 @@ browser profile — nothing in the app code needed to change for this.
    step 3 sees them — use the run you started, not an earlier one that happens to be newer than
    the tag. A run missing any of the three now fails at the packaging step rather than producing
    a placeholder package.
-5. Download the `band-coach-appx` artifact from the finished run, and read `AppxManifest.xml` out
-   of the `.appx` (it is a ZIP) to confirm `Identity/Name`, `Identity/Publisher` and `Version`
-   before uploading.
+5. `store-package` now checks this itself: a `verify the built appx manifest` step
+   (`scripts/verify-appx.mjs`) reads `AppxManifest.xml` out of the `.appx` after packaging and
+   fails the run if `Identity/Version` isn't the app's release version, `Identity/Name` /
+   `Identity/Publisher` / `PublisherDisplayName` are still the placeholders from
+   `electron-builder.json`, or `Description` is empty or carries maintainer jargon — before the
+   artifact is ever uploaded. It reads the ZIP by hand with `node:zlib` rather than shelling out to
+   `unzip`, which isn't confirmed present on the `windows-latest` runner. Download the
+   `band-coach-appx` artifact from the finished run and double-check by hand the same way before
+   uploading:
+   ```
+   node store/scripts/verify-appx.mjs path/to/downloaded.appx
+   ```
+   or read the raw XML yourself with `unzip -p path/to/downloaded.appx AppxManifest.xml` if you
+   have `unzip` on your own machine.
 6. In Partner Center, upload that `.appx` under **Packages** on your submission. The Store
    re-signs it — no local signing step, no certificate to buy.
 
