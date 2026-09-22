@@ -76,6 +76,13 @@ const HARP_HOLE_ORDER = [4, 5, 6, 7, 3, 2, 1, 8, 9, 10];
 // scheme (yet) to credit.
 export function itemIdForMidi(instrumentId, midi, prefs = {}) {
   switch (instrumentId) {
+    // Recorder and tin whistle drill plain N() note ids at sounding pitch
+    // (src/app.js MODS entries), folded into the record's own range.
+    case 'recorder-descant':
+    case 'tin-whistle': {
+      const rec = instrumentById[instrumentId];
+      return 'n' + fold(midi, rec.range.low, rec.range.high);
+    }
     case 'voice': {
       const base = VOICE_TONIC[prefs.voice] ?? VOICE_TONIC.low;
       return 'v' + (((midi - base) % 12) + 12) % 12;
