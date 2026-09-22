@@ -7,10 +7,14 @@
 // and how many milliseconds it was held, from a slide that starts
 // comfortable and moves outward) to `estimateRange(samples)` to get a
 // `{ low, high }` comfortable range. `classify(range)` turns that into a
-// plain-language nearest-voice-type HINT (never a diagnosis). Replace the
-// three fixed voice.js ranges (VOICE_KINDS in src/app.js:111) with
-// `exerciseRangeFor(range)`, which pulls a safety margin in from both ends
-// so warm-up exercises never ask for the singer's absolute extremes.
+// plain-language nearest-voice-type HINT (never a diagnosis). Wired in:
+// src/app.js's "Find my range" flow (voice options) drives a real
+// low-then-high sing-and-hold through the mic, calls `estimateRange`, and
+// saves the result as `prefs.voiceRange`. That saved range becomes a fourth
+// 'mine' choice alongside the three fixed VOICE_KINDS entries, its tonic
+// picked by `tonicFromRange(exerciseRangeFor(range))` -- `exerciseRangeFor`
+// pulls a safety margin in from both ends so warm-up exercises never ask for
+// the singer's absolute extremes.
 
 const MIN_SUSTAIN_MS = 400;
 
@@ -78,4 +82,16 @@ export function exerciseRangeFor(range, margin = 3) {
   if (low < high) return { low, high };
   const mid = Math.round((range.low + range.high) / 2);
   return { low: mid, high: mid };
+}
+
+// Where to put the movable tonic (Do) once a "find my range" test has
+// produced an exercise range: its low end, so the 0-12 scale degrees the
+// voice exercises already use (src/app.js's 'v' item kind) climb through the
+// whole comfortable span the singer actually has. A margin-trimmed range
+// under an octave (12 semitones) cannot fit that span no matter where the
+// tonic sits -- `stretch` flags that case so the caller can say plainly that
+// the exercises will ask for a little more than was sung, rather than
+// silently clamping degree 12 down to something the singer never produced.
+export function tonicFromRange(exerciseRange) {
+  return { tonic: Math.round(exerciseRange.low), stretch: (exerciseRange.high - exerciseRange.low) < 12 };
 }

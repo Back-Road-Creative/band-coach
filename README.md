@@ -136,6 +136,13 @@ pin known judging bugs on purpose so a later change to the app is forced to
 touch them deliberately instead of silently inheriting the bug — they are
 not something to "fix" by editing the test.
 
+`tests/characterization/a11y-axe.test.mjs` runs [axe-core](https://github.com/dequelabs/axe-core)
+(an exact-pinned devDependency, the one runtime npm package the app itself never ships) over the
+built `dist/band-coach.html` in its main states — first load, an instrument selected and a lesson
+started, each side panel open, and the settings sheet — and fails on any WCAG 2/2.1 A/AA
+violation. It is a real scanner check, not a hand-picked list of rules, so it catches whatever the
+other a11y characterization tests above were not written to look for.
+
 ## Backups
 
 Progress is saved in the browser, keyed to the exact file path Band Coach was opened from — moving
@@ -157,6 +164,9 @@ through the same check-list step before anything can be practised or saved. Like
 app's pitch tracking, it is monophonic only: a chord or a second voice reads as whichever single
 pitch the detector locks onto, not as separate notes — so this writes down one melody line at a
 time, from a file the same as from the mic.
+capture — so a file-import panel can be wired up later without teaching transcribe.js anything
+new. Like the rest of this app's pitch tracking, it is monophonic only: a chord or a second voice
+reads as whichever single pitch the detector locks onto, not as separate notes.
 
 ## Notation engine
 
@@ -196,6 +206,17 @@ and mic range for each `'ready'` fretted instrument straight off its
 `src/instruments/` record (`instrumentById`, `rangeForInstrument()`) rather
 than restating them; `MODS`'s built-in keyboard/voice/wind/harp/ear/rhy
 trainers are not backed by an `src/instruments/` record and are unaffected.
+
+A `MODS` entry that is really a variant of another one — the same
+instrument, just a different build (5-string bass, low-G or baritone
+ukulele) — groups under its parent in the picker instead of showing as its
+own top-level button, by giving that entry a `parent: '<mod id>'` field
+naming the parent's own `MODS` id. `variantParentsFrom()` in `src/app.js`
+collects every such field automatically, so joining an existing family is
+one field on the new instrument's own entry, not a second hand-edit to a
+shared list; a `parent` naming a mod id that doesn't exist, or naming
+itself, is ignored and the instrument stays top-level. Each variant keeps
+its own progress (`DB.mods[id]`) — the grouping is purely visual.
 
 Ready fretted instruments as of this writing: guitar (`gtr`), bass (`bass`),
 ukulele (`uke`), mandolin, 5-string banjo, 5-string bass, low-G ukulele and
@@ -288,6 +309,22 @@ integer-tick durations, so triplets and swing are exact fractions rather than ro
 `buildPhrase`/`onsetsOf`/`validateBar` are unit-tested in isolation under `tests/unit/rhythm.test.mjs`.
 Rhythm reading (`rhy`) gains eight further levels built on it, after the original ten-cell levels:
 rests, ties, dotted-eighth figures, triplets, 3/4, 6/8, swing, and two-bar phrases.
+
+## Find your own singing range
+
+The Voice screen offers three fixed ranges (Lower/Middle/Higher voice) plus a fourth, "Find my
+range," built from a short guided test rather than a guess. Press Connect, choose Voice, then
+press "Find my range": sing your lowest comfortable note and hold it, press "Got it — now the
+highest," sing your highest comfortable note and hold it, then press "Got it — done." The app
+listens through the real pitch detector the whole time and shows exactly what it is hearing, so
+nothing is assumed from the microphone being open alone. `src/instruments/how/voice-range.js`
+turns the held notes into a range (dropping brief blips, then trimming statistical outliers),
+picks the nearest voice type as a plain-language hint — never a diagnosis — and pulls a small
+safety margin in from both ends before placing the exercises' tonic at the low end of that
+margin-trimmed range. If what was sung is under an octave, the exercises still get a usable
+tonic; the app says plainly that they will ask for a little more than was actually sung, rather
+than silently clamping the top note down. The result is saved and offered again next time as "My
+range (found by test)," alongside the three fixed choices, until the test is run again.
 
 ## Windows Store edition
 

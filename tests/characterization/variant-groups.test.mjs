@@ -1,19 +1,37 @@
-// U2: 13 top-level instrument buttons in #picker used to include five-string
-// bass and the two extra ukuleles as flat peers of Bass/Ukulele, with nothing
-// telling a learner they were closely-related variants rather than separate
-// instruments. This groups the two genuine variant families -- Bass (plus
-// 5-string bass) and Ukulele (plus low-G and baritone) -- under their parent,
-// dropping the visible instrument count from 13 to 10, while every one of the
-// 13 mod ids stays reachable and keeps calling setMod with its own id: no id
-// is merged, renamed or aliased (progress is keyed per mod id, see
-// DB.mods[mod] in loadDB()/save() in src/app.js).
+// U2: some top-level instrument buttons in #picker are variants of another
+// instrument (five-string bass under Bass, low-G/baritone ukulele under
+// Ukulele) rather than separate instruments in their own right. This groups
+// every genuine variant family under its parent, so a learner sees fewer,
+// clearer top-level choices while every mod id -- variant or parent -- stays
+// reachable and keeps calling setMod with its own id: no id is merged,
+// renamed or aliased (progress is keyed per mod id, see DB.mods[mod] in
+// loadDB()/save() in src/app.js).
+//
+// U-parent: how many instruments are grouped, and under which parent, is no
+// longer hand-counted here. A MODS entry can now name its own group parent
+// via `parent: '<mod id>'` (src/app.js's variantParentsFrom()), so nothing
+// in this file may hardcode a total instrument count or a fixed id list that
+// a future instrument joining an existing family would silently break --
+// every count and every "which ids are grouped" question below is derived
+// from the real rendered picker DOM, not restated by hand. The one
+// exception the spec for this unit calls for keeping explicit: the four
+// instruments known on main to stay top-level (mandolin, banjo-5-string,
+// mallet-percussion, harp) and the three known variants (bass-5-string,
+// ukulele-low-g, ukulele-baritone) and their parents (bass, uke) -- adding a
+// ninth top-level instrument or a fourth variant does not change what those
+// specific ids do, so asserting on them by name is not the kind of count
+// this unit exists to stop hardcoding.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { HTML_PATH } from '../helpers/html-path.mjs';
 import { launchPage } from '../helpers/browser.mjs';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const APP_JS_PATH = join(__dirname, '..', '..', 'src', 'app.js');
 
 // A minimal, valid band-coach-progress backup naming a variant mod as the
 // saved selection -- written to a temp file rather than a tracked fixture,
@@ -36,33 +54,45 @@ const htmlPath = HTML_PATH;
 // (animatable height) rather than display:none on the child itself.
 const isVisible = (sel) => `(function(){ var el = document.querySelector(${JSON.stringify(sel)}); return !!el && el.checkVisibility(); })()`;
 
-const ALL_INSTRUMENT_IDS = [
-  'kbd', 'gtr', 'bass', 'uke', 'voice', 'wind', 'mandolin', 'banjo-5-string',
-  'bass-5-string', 'ukulele-low-g', 'ukulele-baritone', 'mallet-percussion', 'harp',
-];
-const NON_VARIANT_TOP_LEVEL_IDS = ['mandolin', 'banjo-5-string', 'mallet-percussion', 'harp'];
-const VARIANT_IDS = ['bass-5-string', 'ukulele-low-g', 'ukulele-baritone'];
+// Every real instrument mod id currently rendered into #picker (top-level or
+// nested inside a variant-family disclosure), and the subset of those ids
+// that are grouped variants -- both read straight off the DOM so a future
+// instrument joining or leaving a family changes these lists without
+// touching this file.
+const allInstrumentIds = () =>
+  "Array.from(document.querySelectorAll('#picker button[data-mod]')).filter(b => !b.closest('.picker-tools')).map(b => b.dataset.mod)";
+const groupedVariantIds = () =>
+  "Array.from(document.querySelectorAll('#picker .variant-toggle button[data-mod]')).map(b => b.dataset.mod)";
 
-test('variant groups: exactly ten instrument controls are directly visible on first paint', async (t) => {
+const KNOWN_NON_VARIANT_TOP_LEVEL_IDS = ['mandolin', 'banjo-5-string', 'mallet-percussion', 'harp'];
+const KNOWN_VARIANT_PARENTS = { 'bass-5-string': 'bass', 'ukulele-low-g': 'uke', 'ukulele-baritone': 'uke' };
+
+test('variant groups: visible instrument controls equal every instrument id minus the grouped variants', async (t) => {
   const page = await launchPage(htmlPath);
   t.after(() => page.close());
 
-  const count = await page.evaluate(
+  const total = await page.evaluate(allInstrumentIds());
+  const grouped = await page.evaluate(groupedVariantIds());
+  const visibleCount = await page.evaluate(
     "Array.from(document.querySelectorAll('#picker button[data-mod]')).filter(b => !b.closest('.picker-tools') && b.checkVisibility()).length"
   );
-  assert.equal(count, 10, 'ten visible instrument controls (13 mod ids minus the 3 grouped variants) on first paint');
+  assert.equal(visibleCount, total.length - grouped.length,
+    `visible instrument controls (${visibleCount}) should be every instrument id (${total.length}) minus the ` +
+    `${grouped.length} grouped variants (${JSON.stringify(grouped)})`);
+  // Sanity on the fixture itself: this file's whole point is to stop the
+  // count from being hand-typed, so make sure there is still something
+  // meaningful being counted.
+  assert.ok(total.length >= 10, `expected at least 10 instrument ids, found ${total.length}`);
 });
 
-test('variant groups: every one of the 13 instrument mod ids is reachable and still calls setMod with its own id', async (t) => {
+test('variant groups: every rendered instrument mod id is reachable and still calls setMod with its own id', async (t) => {
   const page = await launchPage(htmlPath);
   t.after(() => page.close());
 
-  for (const id of ALL_INSTRUMENT_IDS) {
-    const exists = await page.evaluate(`Boolean(document.querySelector('#picker button[data-mod="${id}"]'))`);
-    assert.equal(exists, true, `a button for mod "${id}" exists somewhere in #picker`);
-  }
+  const total = await page.evaluate(allInstrumentIds());
+  const grouped = await page.evaluate(groupedVariantIds());
 
-  for (const id of VARIANT_IDS) {
+  for (const id of grouped) {
     // Variant buttons live inside a closed group; open it via the real
     // <details> toggle (native affordance) rather than a debug hook, then
     // click the real button exactly as a sighted user would.
@@ -73,40 +103,40 @@ test('variant groups: every one of the 13 instrument mod ids is reachable and st
     assert.equal(pressed, 'true', `clicking the variant button for "${id}" selects that exact mod id`);
   }
 
-  // The two family parents also stay independently selectable.
-  for (const id of ['bass', 'uke']) {
+  const topLevel = total.filter(id => grouped.indexOf(id) < 0);
+  for (const id of topLevel) {
     await page.evaluate(`document.querySelector('#picker button[data-mod="${id}"]').click()`);
     await page.waitFor(`document.querySelector('#picker button[data-mod="${id}"]').getAttribute('aria-pressed') === 'true'`);
     const pressed = await page.evaluate(`document.querySelector('#picker button[data-mod="${id}"]').getAttribute('aria-pressed')`);
-    assert.equal(pressed, 'true', `clicking the parent button for "${id}" selects the parent's own mod id`);
+    assert.equal(pressed, 'true', `clicking the top-level button for "${id}" selects that exact mod id`);
   }
 });
 
-test('variant groups: the four non-variant instruments stay top-level and directly visible on first paint', async (t) => {
+test('variant groups: the known non-variant instruments stay top-level and directly visible on first paint', async (t) => {
   const page = await launchPage(htmlPath);
   t.after(() => page.close());
 
-  for (const id of NON_VARIANT_TOP_LEVEL_IDS) {
+  for (const id of KNOWN_NON_VARIANT_TOP_LEVEL_IDS) {
     const visible = await page.evaluate(isVisible(`#picker button[data-mod="${id}"]`));
     assert.equal(visible, true, `"${id}" is directly visible on first paint, not tucked behind a variant toggle`);
-    const grouped = await page.evaluate(`Boolean(document.querySelector('#picker button[data-mod="${id}"]').closest('.picker-variant-group details[open], .picker-variant-group details:not([open])'))`);
-    // More directly: it must not sit inside ANY variant-toggle details at all.
     const insideVariantToggle = await page.evaluate(`Boolean(document.querySelector('#picker button[data-mod="${id}"]').closest('.variant-toggle'))`);
     assert.equal(insideVariantToggle, false, `"${id}" is not nested inside a variant-family disclosure`);
   }
 });
 
-test('variant groups: the variant buttons are hidden until their family group is opened', async (t) => {
+test('variant groups: the known variants are grouped under their known parent and hidden until the family group is opened', async (t) => {
   const page = await launchPage(htmlPath);
   t.after(() => page.close());
 
-  for (const id of VARIANT_IDS) {
+  for (const [id, parent] of Object.entries(KNOWN_VARIANT_PARENTS)) {
     const visible = await page.evaluate(isVisible(`#picker button[data-mod="${id}"]`));
     assert.equal(visible, false, `"${id}" starts hidden inside its shut family group`);
+    const groupParent = await page.evaluate(`(function(){ var b = document.querySelector('#picker button[data-mod="${id}"]'); var g = b.closest('.picker-variant-group'); return g && g.dataset.modGroup; })()`);
+    assert.equal(groupParent, parent, `"${id}" is grouped under "${parent}"`);
   }
 
   await page.evaluate("document.querySelectorAll('#picker .variant-toggle').forEach(d => d.open = true)");
-  for (const id of VARIANT_IDS) {
+  for (const id of Object.keys(KNOWN_VARIANT_PARENTS)) {
     const visible = await page.evaluate(isVisible(`#picker button[data-mod="${id}"]`));
     assert.equal(visible, true, `"${id}" becomes visible once its family group is opened`);
   }
@@ -184,4 +214,36 @@ test('variant groups: mod ids are never merged, renamed or aliased -- each famil
   await page.waitFor("document.querySelector('#picker button[data-mod=\"uke\"]').getAttribute('aria-pressed') === 'true'");
   const ukeLevel = await page.evaluate("window.__coach.db().mods.uke.level");
   assert.equal(ukeLevel, 1, 'the plain ukulele mod keeps its own separate, untouched level after the low-G variant was advanced');
+});
+
+// U-parent: proves the `parent` field itself -- rather than just the three
+// hand-declared pairs -- feeds VARIANT_PARENTS. There is no MODS entry using
+// `parent` on main yet, so this cannot be driven through a real click; it
+// instead extracts the actual pure build function (variantParentsFrom) out
+// of src/app.js's source and executes it directly, following the same
+// extract-and-run-with-`new Function`-precedent as
+// tests/unit/wsola.test.mjs's "processorSource evaluates to an engine
+// identical to the module" test and tests/unit/pages-sw-cache-invalidates.test.mjs.
+test('variant groups: a MODS entry\'s own `parent` field joins VARIANT_PARENTS without a second hand-edit', () => {
+  const src = readFileSync(APP_JS_PATH, 'utf8');
+  const match = /function variantParentsFrom\(mods, staticPairs\) \{.*\}/.exec(src);
+  assert.ok(match, 'app.js must define variantParentsFrom(mods, staticPairs)');
+  assert.match(src, /const VARIANT_PARENTS = variantParentsFrom\(MODS, \{[^}]*\}\);/,
+    'VARIANT_PARENTS must be built by calling variantParentsFrom(MODS, <the hand-declared pairs>), not hand-typed on its own');
+
+  // eslint-disable-next-line no-new-func
+  const variantParentsFrom = new Function(`${match[0]}\nreturn variantParentsFrom;`)();
+
+  const staticPairs = { a: 'x' };
+  const mods = {
+    x: { name: 'X' },
+    y: { name: 'Y', parent: 'x' }, // a real, valid parent -- must be picked up
+    z: { name: 'Z', parent: 'nope' }, // names a mod that does not exist -- must be ignored
+    w: { name: 'W', parent: 'w' }, // names itself -- must be ignored
+  };
+  const out = variantParentsFrom(mods, staticPairs);
+  assert.equal(out.a, 'x', 'the hand-declared static pairs still come through');
+  assert.equal(out.y, 'x', 'a MODS entry naming a real, different mod as its parent is picked up automatically');
+  assert.equal(out.z, undefined, 'a `parent` naming a mod id that does not exist falls back to top-level');
+  assert.equal(out.w, undefined, 'a `parent` naming itself falls back to top-level');
 });
