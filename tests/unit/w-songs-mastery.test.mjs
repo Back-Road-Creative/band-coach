@@ -154,9 +154,9 @@ test('harp maps a concert pitch to the first matching hole in search order 4,5,6
 });
 
 test('planned instruments with no drill curriculum return null', () => {
-  assert.equal(itemIdForMidi('violin', 60, {}), null);
-  // trumpet-bb is 'ready' as of this unit (see the dedicated brass test
-  // below); clarinet-bb stays 'planned' and stands in for it here.
+  assert.equal(itemIdForMidi('flute', 60, {}), null);
+  // trumpet-bb is 'ready' (see the dedicated brass test below); clarinet-bb
+  // stays 'planned' and stands in for it here.
   assert.equal(itemIdForMidi('clarinet-bb', 60, {}), null);
   assert.equal(itemIdForMidi('nonexistent-instrument', 60, {}), null);
 });
@@ -180,5 +180,5 @@ test('mapMasteryKeys converts creditFor()-shaped keys and drops unmapped ones', 
     { id: 'n60', hit: true },
     { id: 'n64', hit: false },
   ]);
-  assert.deepEqual(mapMasteryKeys(masteryKeys, 'violin', {}), []);
+  assert.deepEqual(mapMasteryKeys(masteryKeys, 'flute', {}), []);
 });

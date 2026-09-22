@@ -116,7 +116,9 @@ export function itemIdForMidi(instrumentId, midi, prefs = {}) {
     default: {
       const rec = instrumentById[instrumentId];
       if (!rec || rec.status !== 'ready') return null;
-      if (rec.fretted) return 'p' + pc(midi);
+      // Any record with a tuning (fretted OR bowed) drills pitch classes
+      // through stringLevels' 'p' ids, so both credit the same way.
+      if (Array.isArray(rec.tuning) && rec.tuning.length) return 'p' + pc(midi);
       if (NOTE_FAMILIES.has(rec.family)) return 'n' + fold(midi, rec.range.low, rec.range.high);
       return null;
     }
