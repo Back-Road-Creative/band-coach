@@ -530,16 +530,23 @@ import { register as registerPlayalong } from './ui/playalong.js';
   // MOD_IDS untouched, but the picker groups them with TOOLS below because
   // to a learner they read as "a tool", not "an instrument to pick up".
   const TOOL_MOD_IDS = ['ear', 'rhy'];
-  // U2: the only two genuine variant families -- a mod that is the same
-  // instrument as another mod, just a different build of it, rather than a
-  // separate instrument. Keyed variant id -> parent id. This mapping is
-  // hand-declared because nothing else in the codebase records it: MODS'
-  // own 'name'/'tag' fields and the instruments registry's 'family' field
-  // (src/instruments/*.js) both describe a broader instrument category
-  // (e.g. 'fretted'), not "is a variant of". Every id below keeps its own
-  // MODS entry and its own DB.mods[id] progress untouched -- grouping is
-  // purely visual, buildPicker()/setMod() below.
-  const VARIANT_PARENTS = { 'bass-5-string': 'bass', 'ukulele-low-g': 'uke', 'ukulele-baritone': 'uke' };
+  // U2/U-parent: keyed variant id -> parent id, for the same-instrument
+  // groupings the picker collapses under one parent (buildPicker()/setMod()
+  // below). Two sources feed it: a hand-declared pair for the two families
+  // that predate the `parent` field (bass-5-string/ukulele-low-g/baritone --
+  // nothing else in the codebase records "is a variant of": MODS' own
+  // 'name'/'tag' fields and the instruments registry's 'family' field,
+  // src/instruments/*.js, both describe a broader instrument category, e.g.
+  // 'fretted', not this), and any MODS entry that names its own parent with
+  // a `parent: '<mod id>'` field, so a newly-added instrument joins an
+  // existing family by adding that one field to its own MODS entry rather
+  // than a second edit here. A `parent` naming a mod id that does not exist,
+  // or naming itself, is ignored (falls back to top-level) rather than
+  // corrupting the picker. Every id, hand-declared or `parent`-derived,
+  // keeps its own MODS entry and its own DB.mods[id] progress untouched --
+  // grouping is purely visual.
+  function variantParentsFrom(mods, staticPairs) { const out = Object.assign({}, staticPairs); Object.keys(mods).forEach(id => { const p = mods[id] && mods[id].parent; if (p && p !== id && mods[p]) out[id] = p; }); return out; }
+  const VARIANT_PARENTS = variantParentsFrom(MODS, { 'bass-5-string': 'bass', 'ukulele-low-g': 'uke', 'ukulele-baritone': 'uke' });
   const TUNINGS = { gtr: ['Guitar', [40, 45, 50, 55, 59, 64]], bass: ['Bass', [28, 33, 38, 43]], uke: ['Ukulele', [67, 60, 64, 69]], vln: ['Violin', [55, 62, 69, 76]], chrom: ['Any note (chromatic)', []] };
   const _info = info, _valid = validId;
   info = function (m, id, prefs) { if (id[0] === 'h') { const mm = /^h([bd])(\d+)$/.exec(id), dir = mm[1], hole = +mm[2], midi = HARP[dir][hole - 1]; return { kind: 'note', midi: midi, hole: hole, dir: dir, note: nname(midi), label: (dir === 'b' ? 'Blow ' : 'Draw ') + hole + ' (' + nname(midi) + ')', short: (dir === 'b' ? 'Blow ' : 'Draw ') + hole }; } return _info(m, id, prefs); };
