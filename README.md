@@ -339,7 +339,8 @@ press "Find my range": sing your lowest comfortable note and hold it, press "Got
 highest," sing your highest comfortable note and hold it, then press "Got it — done." The app
 listens through the real pitch detector the whole time and shows exactly what it is hearing, so
 nothing is assumed from the microphone being open alone. `src/instruments/how/voice-range.js`
-turns the held notes into a range (dropping brief blips, then trimming statistical outliers),
+turns the held notes into a range (dropping brief blips, then trimming statistical outliers
+within each half, so the low end comes only from the low note and the high end only from the high one),
 picks the nearest voice type as a plain-language hint — never a diagnosis — and pulls a small
 safety margin in from both ends before placing the exercises' tonic at the low end of that
 margin-trimmed range. If what was sung is under an octave, the exercises still get a usable
