@@ -18,6 +18,7 @@
     "gate": "node build/build.mjs --release && node --test \"tests/release/*.test.mjs\""
   },
   "devDependencies": {
+    "axe-core": "4.13.0",
     "esbuild": "0.28.2"
   }
 }
