@@ -39,7 +39,7 @@ import { describeTask } from './ui/describe.js';
 import { createWakeLock } from './ui/wake-lock.js';
 import { createFocusTrap } from './ui/dialog-focus.js';
 import { createPanels, sanitizePanelData } from './ui/panels.js';
-//
+import { estimateRange, classify, exerciseRangeFor, tonicFromRange } from './instruments/how/voice-range.js';
 //
 // slot:import:w-songs
 import { register as registerSongs, forwardNote as forwardSongNote } from './ui/songs.js';
@@ -502,7 +502,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
     if (k === 's') { const mm = /^(\d+)f(\d+)$/.exec(rest), s = +mm[1], f = +mm[2], ns = M.tuning.length, m = M.tuning[ns - s] + f; return { kind: 'note', midi: m, string: s, fret: f, label: nname(m) + ': string ' + s + (f ? ', fret ' + f : ', open'), short: nname(m) + ' (string ' + s + ')' }; }
     if (k === 'p') { const p = +rest; return { kind: 'note', midi: 60 + p, anywhere: true, label: NAMES[p] + ', anywhere', short: NAMES[p] + ' by name' }; }
     if (k === 'c') return { kind: 'chord', pcs: CHORDS[rest], label: CHORD_NAMES[rest], short: CHORD_NAMES[rest], sym: rest };
-    if (k === 'v') { const d = +rest, base = (VOICE_KINDS[prefs.voice || 'low'] || VOICE_KINDS.low)[1]; return { kind: 'note', midi: base + d, degree: d, tonic: base, label: (SOLFA[d] || nname(base + d)) + ' (' + nname(base + d) + ')', short: SOLFA[d] || nname(base + d) }; }
+    if (k === 'v') { const d = +rest, VKv = Object.assign({}, VOICE_KINDS, prefs.voiceRange ? { mine: ['My range (found by test)', tonicFromRange(exerciseRangeFor(prefs.voiceRange)).tonic] } : {}), base = (VKv[prefs.voice || 'low'] || VKv.low)[1]; return { kind: 'note', midi: base + d, degree: d, tonic: base, label: (SOLFA[d] || nname(base + d)) + ' (' + nname(base + d) + ')', short: SOLFA[d] || nname(base + d) }; }
     if (k === 'i') { const mm = /^(\d+)([adh])$/.exec(rest), semi = +mm[1], dir = mm[2]; return { kind: 'interval', semi: semi, dir: dir, label: INTERVALS[semi], short: INTERVALS[semi] + (dir === 'd' ? ' down' : dir === 'h' ? ' together' : '') }; }
     if (k === 'q') return { kind: 'quality', pcs: QUALS[rest][1], label: QUALS[rest][0], short: QUALS[rest][0] };
     if (k === 'r') return { kind: 'cell', cell: rest, beats: CELLS[rest].b, on: CELLS[rest].on, label: CELLS[rest].say, short: CELLS[rest].say };
@@ -631,7 +631,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
     const d = { v: 1, mods: {}, sessions: [], prefs: { mod: 'kbd', wind: 'bb', voice: 'low', names: true, noiseFloor: null, inputDeviceId: null, notate: notate } }; v = (v && typeof v === 'object') ? v : {};
     MOD_IDS.forEach(m => { d.mods[m] = sanitizeModel(m, v.mods && v.mods[m], modelNow); });
     if (Array.isArray(v.sessions)) d.sessions = v.sessions.filter(x => x && typeof x.d === 'string' && MODS[x.mod]).slice(-60).map(x => ({ d: x.d.slice(0, 10), mod: x.mod, min: num(x.min, 0, 0, 600), acc: num(x.acc, 0, 0, 1), a1: num(x.a1, 0, 0, 1), a2: num(x.a2, 0, 0, 1), from: num(x.from, 1, 1, 80), to: num(x.to, 1, 1, 80), breaks: num(x.breaks, 0, 0, 99) }));
-    const p = v.prefs || {}; if (MODS[p.mod]) d.prefs.mod = p.mod; if (WIND_KINDS[p.wind]) d.prefs.wind = p.wind; if (VOICE_KINDS[p.voice]) d.prefs.voice = p.voice; d.prefs.names = p.names !== false;
+    const p = v.prefs || {}; if (MODS[p.mod]) d.prefs.mod = p.mod; if (WIND_KINDS[p.wind]) d.prefs.wind = p.wind; d.prefs.voiceRange = (p.voiceRange && typeof p.voiceRange === 'object' && Number.isFinite(p.voiceRange.low) && Number.isFinite(p.voiceRange.high) && p.voiceRange.low < p.voiceRange.high) ? { low: clamp(Math.round(p.voiceRange.low), 24, 96), high: clamp(Math.round(p.voiceRange.high), 24, 96) } : null; const VKp = Object.assign({}, VOICE_KINDS, d.prefs.voiceRange ? { mine: ['My range (found by test)', tonicFromRange(exerciseRangeFor(d.prefs.voiceRange)).tonic] } : {}); if (VKp[p.voice]) d.prefs.voice = p.voice; d.prefs.names = p.names !== false;
     d.prefs.noiseFloor = (typeof p.noiseFloor === 'number' && isFinite(p.noiseFloor) && p.noiseFloor >= 0) ? clamp(p.noiseFloor, 0, 1) : null;
     d.prefs.inputDeviceId = typeof p.inputDeviceId === 'string' && p.inputDeviceId ? p.inputDeviceId : null;
     // "Show: staff / names / both" is per-instrument and defaults to 'names',
@@ -1105,10 +1105,16 @@ import { register as registerPlayalong } from './ui/playalong.js';
   function gauge(x, y, w, cents, label, offScale) { g.fillStyle = '#05070c'; rr(x, y, w, 16, 8); g.fill(); g.fillStyle = '#5be08a55'; g.fillRect(x + w * 0.5 - w * 0.06, y, w * 0.12, 16); g.strokeStyle = '#e9edf6'; g.lineWidth = 2; g.beginPath(); g.moveTo(x + w / 2, y - 5); g.lineTo(x + w / 2, y + 21); g.stroke(); if (cents !== null) { const px = x + w / 2 + clamp(cents / 50, -1, 1) * w / 2; g.fillStyle = Math.abs(cents) < 10 ? '#5be08a' : Math.abs(cents) < 30 ? '#f3c52f' : '#ff6b5e'; if (offScale) { const dir = cents > 0 ? 1 : -1; g.beginPath(); g.moveTo(px, y + 8 - 10); g.lineTo(px + dir * 13, y + 8); g.lineTo(px, y + 8 + 10); g.closePath(); g.fill(); } else { g.beginPath(); g.arc(px, y + 8, 11, 0, 7); g.fill(); } } const fs = Math.max(13, cv.width * 0.017); g.fillStyle = '#93a0bd'; font(fs, 600); g.textAlign = 'left'; g.fillText('flat', x, y + 22 + fs); g.textAlign = 'right'; g.fillText('sharp', x + w, y + 22 + fs); g.textAlign = 'center'; g.fillStyle = '#e9edf6'; font(fs * 1.25, 700); g.fillText(label || '', x + w / 2, y - 14); }
   function liveCents(target, exact) { if (!heard || !heard.freq) return null; let c = (heard.midi - target) * 100; if (!exact) c = ((c + 600) % 1200 + 1200) % 1200 - 600; return c; }
   function drawVoice(e, W, H) {
-    const base = (VOICE_KINDS[DB.prefs.voice] || VOICE_KINDS.low)[1], rows = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], y = d => H * 0.9 - (H * 0.8) * d / 12;
+    const VKd = Object.assign({}, VOICE_KINDS, DB.prefs.voiceRange ? { mine: ['My range (found by test)', tonicFromRange(exerciseRangeFor(DB.prefs.voiceRange)).tonic] } : {}), base = (VKd[DB.prefs.voice] || VKd.low)[1], rows = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], y = d => H * 0.9 - (H * 0.8) * d / 12;
     rows.forEach(d => { const dia = SOLFA[d] !== undefined, tgt = e && e.info.degree === d; g.fillStyle = tgt ? accent() + '55' : dia ? '#ffffff0d' : '#00000000'; g.fillRect(W * 0.16, y(d) - H * 0.03, W * 0.8, H * 0.06); if (dia || tgt) { g.fillStyle = tgt ? accent() : '#93a0bd'; font(H * 0.055, tgt ? 700 : 600); g.textAlign = 'right'; g.fillText((SOLFA[d] || '') + (DB.prefs.names ? ' ' + nname(base + d) : ''), W * 0.15, y(d) + H * 0.02); } });
     if (heard && heard.freq) { let dd = heard.midi - base; dd = ((dd % 12) + 12) % 12; if (e && e.info.degree === 12 && dd < 1) dd += 12; g.fillStyle = '#e9edf6'; g.beginPath(); g.arc(W * 0.56, y(dd), H * 0.03, 0, 7); g.fill(); g.strokeStyle = '#e9edf6'; g.lineWidth = 2; g.beginPath(); g.moveTo(W * 0.16, y(dd)); g.lineTo(W * 0.96, y(dd)); g.stroke(); }
     if (e) { const need = task.kind === 'hold' ? 2 : 0.5; g.fillStyle = '#5be08a'; g.fillRect(W * 0.16, H * 0.965, W * 0.8 * c01(holdFor / need), H * 0.02); }
+    // "Find my range" runs entirely through this per-frame draw call (its
+    // only hook into the real per-frame `heard` signal) rather than a
+    // polling loop: handleRangeTest('tick', ...) records held-note samples,
+    // and the learner sees exactly what the mic is hearing right now, never
+    // a state that just says "connected" with nothing behind it.
+    if (rangeTest) { handleRangeTest('tick', heard); const heldS = rangeTest.curMidi !== null ? Math.round((performance.now() - rangeTest.curSince) / 100) / 10 : 0; const label = heard && heard.freq ? 'Hearing ' + nname(Math.round(heard.midi)) + (heldS >= 0.4 ? ', held ' + heldS + 's' : '') : 'Listening for your voice...'; g.fillStyle = '#e9edf6'; font(H * 0.05, 600); g.textAlign = 'center'; g.fillText((rangeTest.stage === 'low' ? 'Sing your lowest note -- ' : 'Sing your highest note -- ') + label, W * 0.5, H * 0.06); }
   }
   function drawStaff(e, W, H) {
     const clef = e ? e.info.clef : 'treble', sp = H * 0.075, yb = H * 0.62, x0 = W * 0.08, x1 = W * 0.6, bottomStep = clef === 'bass' ? 18 : 30;
@@ -1334,13 +1340,37 @@ import { register as registerPlayalong } from './ui/playalong.js';
     // weak yet" ever did (band-coach-ui-declutter-plan, U4).
     $('weakCard').hidden = !ul.children.length;
   }
+  // "Find my range": a guided low-then-high sing-and-hold through the REAL
+  // pitch detector, driven entirely through actions rather than a scatter of
+  // small handlers, so the whole flow is the one new function this unit adds
+  // (drawVoice above only calls it, on 'tick'). `rangeTest` is the flow's
+  // state (null when idle); it has to live outside renderOpts, which rebuilds
+  // its DOM box from scratch on every call and remembers nothing itself.
+  // Samples are collected once, across both halves of the slide, as
+  // `{ midi, ms }` -- how long each held note lasted before the pitch moved
+  // to a new one -- and handed to voice-range.js's estimateRange() a single
+  // time at the end; its own IQR trim is what guards against one bad frame,
+  // so this code does not try to filter samples itself.
+  let rangeTest = null;
+  function handleRangeTest(action, fr) {
+    if (action === 'start') { rangeTest = { stage: 'low', samples: [], curMidi: null, curSince: 0 }; coach('Sing your lowest comfortable note and hold it, then press "Got it -- now the highest".'); return; }
+    if (!rangeTest) return;
+    if (action === 'tick') { if (!fr || !fr.freq) return; const m = Math.round(fr.midi), t = performance.now(); if (rangeTest.curMidi === null) { rangeTest.curMidi = m; rangeTest.curSince = t; } else if (m !== rangeTest.curMidi) { rangeTest.samples.push({ midi: rangeTest.curMidi, ms: t - rangeTest.curSince }); rangeTest.curMidi = m; rangeTest.curSince = t; } return; }
+    if (action === 'flush') { if (rangeTest.curMidi !== null) rangeTest.samples.push({ midi: rangeTest.curMidi, ms: performance.now() - rangeTest.curSince }); rangeTest.curMidi = null; return; }
+    if (action === 'next') { handleRangeTest('flush'); rangeTest.stage = 'high'; coach('Now sing your highest comfortable note and hold it, then press "Got it -- done".'); return; }
+    if (action === 'cancel') { rangeTest = null; return; }
+    if (action === 'finish') { handleRangeTest('flush'); const range = estimateRange(rangeTest.samples); rangeTest = null; if (!range) { coach("I didn't catch a held note either time -- make sure the mic is connected, sing clearly and hold each note for at least half a second, then try again."); return; } const clamped = { low: clamp(range.low, 24, 96), high: clamp(range.high, 24, 96) }; DB.prefs.voiceRange = clamped; DB.prefs.voice = 'mine'; task = null; save(); const t = tonicFromRange(exerciseRangeFor(clamped)), hint = classify(clamped); coach(hint.wording + (t.stretch ? ' That is a little under an octave, so the exercises will stretch a bit past what you just sang.' : ' Exercises are set from your range now.')); return; }
+  }
   function renderOpts() {
     const box = $('modOpts'); box.innerHTML = ''; const sel = (id, label, opts, val, on) => { const l = document.createElement('label'); l.htmlFor = id; l.textContent = label + ' '; const s = document.createElement('select'); s.id = id; Object.keys(opts).forEach(k => { const o = document.createElement('option'); o.value = k; o.textContent = opts[k][0]; s.appendChild(o); }); s.value = val; s.addEventListener('change', () => on(s.value)); l.appendChild(s); box.appendChild(l); };
     const btn = (id, text, on, primary) => { const b = document.createElement('button'); b.type = 'button'; b.id = id; b.className = 'small' + (primary ? ' primary' : ''); b.textContent = text; b.addEventListener('click', () => { b.blur(); on(); }); box.appendChild(b); return b; };
     const chk = (id, text, val, on) => { const l = document.createElement('label'); l.htmlFor = id; const c = document.createElement('input'); c.type = 'checkbox'; c.id = id; c.checked = val; c.addEventListener('change', () => on(c.checked)); l.appendChild(c); l.appendChild(document.createTextNode(' ' + text)); box.appendChild(l); };
     if (NOTATE_MOD_IDS.indexOf(mod) >= 0) sel('optNotate', 'Show', { names: ['Note names (today)'], staff: ['Staff'], both: ['Staff and names'] }, DB.prefs.notate[mod], v => { DB.prefs.notate[mod] = v; save(); });
     if (mod === 'wind') { sel('optWind', 'My instrument', WIND_KINDS, DB.prefs.wind, v => { DB.prefs.wind = v; task = null; save(); }); chk('optRef', 'Play me the note first', false, () => {}); }
-    if (mod === 'voice') sel('optVoice', 'My range', VOICE_KINDS, DB.prefs.voice, v => { DB.prefs.voice = v; task = null; save(); });
+    if (mod === 'voice') sel('optVoice', 'My range', Object.assign({}, VOICE_KINDS, DB.prefs.voiceRange ? { mine: ['My range (found by test)', tonicFromRange(exerciseRangeFor(DB.prefs.voiceRange)).tonic] } : {}), DB.prefs.voice, v => { DB.prefs.voice = v; task = null; save(); });
+    if (mod === 'voice' && !rangeTest) btn('optRangeStart', DB.prefs.voiceRange ? 'Find my range again' : 'Find my range', () => { handleRangeTest('start'); renderOpts(); });
+    if (mod === 'voice' && rangeTest && rangeTest.stage === 'low') { btn('optRangeNext', 'Got it -- now the highest', () => { handleRangeTest('next'); renderOpts(); }, true); btn('optRangeCancel', 'Cancel', () => { handleRangeTest('cancel'); renderOpts(); }); }
+    if (mod === 'voice' && rangeTest && rangeTest.stage === 'high') { btn('optRangeDone', 'Got it -- done', () => { handleRangeTest('finish'); renderOpts(); }, true); btn('optRangeCancel2', 'Cancel', () => { handleRangeTest('cancel'); renderOpts(); }); }
     if (mod === 'tuner') { sel('optTune', 'Instrument', TUNINGS, tunerKind, v => { tunerKind = v; tunerState = null; tunerLock = null; }); btn('tuneReset', 'Start over', () => { tuned = {}; tunerLock = null; }); }
     if (mod === 'rhy') btn('calBtn', calRun ? 'Listening for 8 taps…' : 'Calibrate timing (' + Math.round(DB.latencyMs || 0) + ' ms)', startCalibrate, false);
     if (mod === 'capture') { btn('capGo', cap.on ? 'Stop' : 'Listen', () => { if (cap.on) capStop(); else { ensureAudio(); cap.on = true; cap.notes = []; cap.start = now(); cap.curM = -1; renderOpts(); } }, true); btn('capPlay', 'Play it back', () => { ensureAudio(); const t0 = now() + 0.1; cap.notes.forEach(n => tone(n.m, t0 + n.t - (cap.notes[0] ? cap.notes[0].t : 0), Math.max(0.2, n.d))); }); const lessons = {}; MOD_IDS.filter(m => hasMasteryScheme(m)).forEach(m => { lessons[m] = [MODS[m].name]; }); sel('capTo', cap.notes.length + ' notes. Practise on', lessons, 'kbd', () => {}); btn('capUse', 'Make it a lesson', () => { if (!cap.notes.length) { say('Nothing captured yet.', 'no'); return; } DB.custom = cap.notes.map(n => n.m).slice(0, 300); save(); const to = $('capTo').value; setMod(to); customOn = true; renderOpts(); showAll(); coach('Your captured tune is loaded: ' + DB.custom.length + ' notes, four at a time. Each group repeats until it is clean. Press Start.'); }); }

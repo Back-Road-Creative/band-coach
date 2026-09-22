@@ -275,6 +275,22 @@ integer-tick durations, so triplets and swing are exact fractions rather than ro
 Rhythm reading (`rhy`) gains eight further levels built on it, after the original ten-cell levels:
 rests, ties, dotted-eighth figures, triplets, 3/4, 6/8, swing, and two-bar phrases.
 
+## Find your own singing range
+
+The Voice screen offers three fixed ranges (Lower/Middle/Higher voice) plus a fourth, "Find my
+range," built from a short guided test rather than a guess. Press Connect, choose Voice, then
+press "Find my range": sing your lowest comfortable note and hold it, press "Got it — now the
+highest," sing your highest comfortable note and hold it, then press "Got it — done." The app
+listens through the real pitch detector the whole time and shows exactly what it is hearing, so
+nothing is assumed from the microphone being open alone. `src/instruments/how/voice-range.js`
+turns the held notes into a range (dropping brief blips, then trimming statistical outliers),
+picks the nearest voice type as a plain-language hint — never a diagnosis — and pulls a small
+safety margin in from both ends before placing the exercises' tonic at the low end of that
+margin-trimmed range. If what was sung is under an octave, the exercises still get a usable
+tonic; the app says plainly that they will ask for a little more than was actually sung, rather
+than silently clamping the top note down. The result is saved and offered again next time as "My
+range (found by test)," alongside the three fixed choices, until the test is run again.
+
 ## Windows Store edition
 
 `store/` packages the same built `dist/band-coach.html` into an unsigned Windows App Package
