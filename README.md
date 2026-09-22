@@ -183,6 +183,17 @@ and mic range for each `'ready'` fretted instrument straight off its
 than restating them; `MODS`'s built-in keyboard/voice/wind/harp/ear/rhy
 trainers are not backed by an `src/instruments/` record and are unaffected.
 
+A `MODS` entry that is really a variant of another one — the same
+instrument, just a different build (5-string bass, low-G or baritone
+ukulele) — groups under its parent in the picker instead of showing as its
+own top-level button, by giving that entry a `parent: '<mod id>'` field
+naming the parent's own `MODS` id. `variantParentsFrom()` in `src/app.js`
+collects every such field automatically, so joining an existing family is
+one field on the new instrument's own entry, not a second hand-edit to a
+shared list; a `parent` naming a mod id that doesn't exist, or naming
+itself, is ignored and the instrument stays top-level. Each variant keeps
+its own progress (`DB.mods[id]`) — the grouping is purely visual.
+
 Ready fretted instruments as of this writing: guitar (`gtr`), bass (`bass`),
 ukulele (`uke`), mandolin, 5-string banjo, 5-string bass, low-G ukulele and
 baritone ukulele. The pitch detector's analysis frame size (how many samples
