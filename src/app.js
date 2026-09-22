@@ -507,14 +507,14 @@ import { register as registerPlayalong } from './ui/playalong.js';
   // acoustic frequencies.
   const transposedMicRange = rec => rangeForInstrument({ range: { low: rec.range.low + rec.transposition, high: rec.range.high + rec.transposition } });
   const trumpetBbMicRange = transposedMicRange(instrumentById['trumpet-bb']);
-  MODS['trumpet-bb'] = { name: instrumentById['trumpet-bb'].name, tag: 'microphone', color: '#d1592f', input: 'sustain', windKind: 'bb', staff: true, fmin: trumpetBbMicRange.fmin, fmax: trumpetBbMicRange.fmax, help: 'Trumpet (B flat): press Connect to let the page listen through your microphone or audio interface. Hold each note steady for about half a second. Written notes always read for B flat trumpet here, whatever you last chose on Wind and brass.',
+  MODS['trumpet-bb'] = { name: instrumentById['trumpet-bb'].name, parent: 'wind', tag: 'microphone', color: '#d1592f', input: 'sustain', windKind: 'bb', staff: true, fmin: trumpetBbMicRange.fmin, fmax: trumpetBbMicRange.fmax, help: 'Trumpet (B flat): press Connect to let the page listen through your microphone or audio interface. Hold each note steady for about half a second. Written notes always read for B flat trumpet here, whatever you last chose on Wind and brass.',
     levels: [
       { name: 'Written C, D and E', add: Wn(60, 62, 64), limit: 12 }, { name: 'Add F and G', add: Wn(65, 67), limit: 12 }, { name: 'Add A, B and high C', add: Wn(69, 71, 72), limit: 12 },
       { name: 'Sharps and flats: F sharp and B flat', add: Wn(66, 70), limit: 12 },
       { name: 'Moves: two notes', task: 'seq', len: 2, limit: 10 }, { name: 'Moves: three notes', task: 'seq', len: 3, limit: 9 }, { name: 'Five-note runs', task: 'run', limit: 8 }
     ] };
   const hornFMicRange = transposedMicRange(instrumentById['horn-f']);
-  MODS['horn-f'] = { name: instrumentById['horn-f'].name, tag: 'microphone', color: '#c9a15a', input: 'sustain', windKind: 'f', staff: true, fmin: hornFMicRange.fmin, fmax: hornFMicRange.fmax, help: 'French horn (F): press Connect to let the page listen through your microphone or audio interface. Hold each note steady for about half a second. Written notes always read for F horn here, whatever you last chose on Wind and brass.',
+  MODS['horn-f'] = { name: instrumentById['horn-f'].name, parent: 'wind', tag: 'microphone', color: '#c9a15a', input: 'sustain', windKind: 'f', staff: true, fmin: hornFMicRange.fmin, fmax: hornFMicRange.fmax, help: 'French horn (F): press Connect to let the page listen through your microphone or audio interface. Hold each note steady for about half a second. Written notes always read for F horn here, whatever you last chose on Wind and brass.',
     levels: [
       { name: 'Written G, A and B', add: Wn(55, 57, 59), limit: 12 }, { name: 'Add C and D', add: Wn(60, 62), limit: 12 }, { name: 'Add E, F and high G', add: Wn(64, 65, 67), limit: 12 },
       { name: 'Sharps and flats: C sharp and F sharp', add: Wn(61, 66), limit: 12 },
@@ -524,7 +524,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
   // Trombone's 'w' item numbers are written pitch + 19 (WIND_KINDS.bc's bass-
   // clef register shift, info() 'w' branch below), so Wn(59, 61, ...) below
   // plays written/sounding 40, 42, ... -- this record's own range.
-  MODS.trombone = { name: instrumentById.trombone.name, tag: 'microphone', color: '#8f8fbd', input: 'sustain', windKind: 'bc', staff: true, fmin: tromboneMicRange.fmin, fmax: tromboneMicRange.fmax, help: 'Trombone: press Connect to let the page listen through your microphone or audio interface. Hold each note steady for about half a second.',
+  MODS.trombone = { name: instrumentById.trombone.name, parent: 'wind', tag: 'microphone', color: '#8f8fbd', input: 'sustain', windKind: 'bc', staff: true, fmin: tromboneMicRange.fmin, fmax: tromboneMicRange.fmax, help: 'Trombone: press Connect to let the page listen through your microphone or audio interface. Hold each note steady for about half a second.',
     levels: [
       { name: 'First three notes', add: Wn(59, 61, 63), limit: 12 }, { name: 'Two more, going up', add: Wn(64, 66), limit: 12 }, { name: 'Up to the top', add: Wn(68, 70, 71), limit: 12 },
       { name: 'Moves: two notes', task: 'seq', len: 2, limit: 10 }, { name: 'Moves: three notes', task: 'seq', len: 3, limit: 9 }, { name: 'Five-note runs', task: 'run', limit: 8 }
