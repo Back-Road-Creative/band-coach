@@ -32,7 +32,10 @@ export function eventsToNotes(frames, opts = {}) {
   const { onsets = [], minNoteMs = 60, glitchWindow = 5, glitchMaxRunMs = 90 } = opts;
   const fr = (Array.isArray(frames) ? frames : [])
     .filter((f) => f && typeof f.t === 'number' && typeof f.midi === 'number')
-    .slice()
+    // A live pitch track is a float that wobbles by cents on a steady note
+    // (src/ui/editor/record.js); snap to the nearest semitone so grouping and
+    // glitch folding compare notes, not cents.
+    .map((f) => ({ ...f, midi: Math.round(f.midi) }))
     .sort((a, b) => a.t - b.t);
   if (!fr.length) return [];
 
