@@ -107,7 +107,8 @@ test('double bass: the pitch worklet runs at a frame size bigger than the 2048 d
 
   await page.evaluate("window.__coach.setMod('double-bass')");
   await page.evaluate('window.__coach.testSource([41.2])'); // settles ensurePitchWorklet()
-  await page.waitFor('window.__coach.pitchWorkletFrameSize() !== undefined');
+  // null until ensurePitchWorklet() has sized the node; wait for the number.
+  await page.waitFor("typeof window.__coach.pitchWorkletFrameSize() === 'number'");
 
   const frameSize = await page.evaluate('window.__coach.pitchWorkletFrameSize()');
   assert.ok(frameSize > 2048, `expected a bigger-than-default frame size for double-bass's open E1, got ${frameSize}`);
