@@ -504,7 +504,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
   // reads them (src/app.js drawStaff/draw dispatch); until then they are
   // inert extra fields, harmless to the rest of MODS.
   const recorderRange = rangeForInstrument(instrumentById['recorder-descant']);
-  MODS['recorder-descant'] = { name: instrumentById['recorder-descant'].name, tag: 'microphone', color: '#d98fd9', input: 'sustain', fmin: recorderRange.fmin, fmax: recorderRange.fmax, staff: true, writtenOffset: -12, help: 'Descant recorder: press Connect to let the page listen through your microphone. Hold each note steady for about half a second. Starts on B, A and G, the first three notes most method books teach.', levels: null };
+  MODS['recorder-descant'] = { name: instrumentById['recorder-descant'].name, parent: 'wind', tag: 'microphone', color: '#d98fd9', input: 'sustain', fmin: recorderRange.fmin, fmax: recorderRange.fmax, staff: true, writtenOffset: -12, help: 'Descant recorder: press Connect to let the page listen through your microphone. Hold each note steady for about half a second. Starts on B, A and G, the first three notes most method books teach.', levels: null };
   MODS['recorder-descant'].levels = [
     { name: 'First three notes: B, A, G', add: N(83, 81, 79), limit: 12 }, { name: 'Two more, going up: high C and D', add: N(84, 86), limit: 12 },
     { name: 'Going down: E', add: N(76), limit: 12 }, { name: 'Down to low D and C', add: N(74, 72), limit: 12 },
@@ -513,7 +513,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
     { name: 'Five-note runs', task: 'run', limit: 8 }
   ];
   const whistleRange = rangeForInstrument(instrumentById['tin-whistle']);
-  MODS['tin-whistle'] = { name: instrumentById['tin-whistle'].name, tag: 'microphone', color: '#8fd9a0', input: 'sustain', fmin: whistleRange.fmin, fmax: whistleRange.fmax, staff: true, writtenOffset: -12, help: 'Tin whistle (D): press Connect to let the page listen through your microphone. Hold each note steady for about half a second. Starts on D, E and F sharp, the bottom of the D-major scale, and works up one octave.', levels: null };
+  MODS['tin-whistle'] = { name: instrumentById['tin-whistle'].name, parent: 'wind', tag: 'microphone', color: '#8fd9a0', input: 'sustain', fmin: whistleRange.fmin, fmax: whistleRange.fmax, staff: true, writtenOffset: -12, help: 'Tin whistle (D): press Connect to let the page listen through your microphone. Hold each note steady for about half a second. Starts on D, E and F sharp, the bottom of the D-major scale, and works up one octave.', levels: null };
   MODS['tin-whistle'].levels = [
     { name: 'First three notes: D, E, F sharp', add: N(74, 76, 78), limit: 12 }, { name: 'Two more, going up: G and A', add: N(79, 81), limit: 12 },
     { name: 'Finishing the octave: B and C sharp', add: N(83, 85), limit: 12 }, { name: 'The top of the octave: high D', add: N(86), limit: 12 },
