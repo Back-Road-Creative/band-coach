@@ -17,10 +17,43 @@ import assert from 'node:assert/strict';
 import { statSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { build, moduleBytes } from '../../build/build.mjs';
+import { build, moduleBytes, bundleBreakdown } from '../../build/build.mjs';
 
 const VOICES = 'src/audio/voices.js';
 const VOICE_BUDGET_BYTES = 40 * 1024;
+
+// The breakdown is what makes a ceiling failure actionable: without it, "the
+// bundle is 41 KB over" names no culprit. These are unit tests on the real
+// dev bundle -- the SAME bundle the ceiling test below measures -- because a
+// breakdown computed from anything else could disagree with what the ceiling
+// is actually enforcing.
+test('bundleBreakdown sorts modules biggest-first and rolls up by directory', async () => {
+  const { modules, total, byDirectory } = await bundleBreakdown();
+
+  assert.ok(modules.length > 0, 'expected at least one module in the bundle');
+  for (let i = 1; i < modules.length; i++) {
+    assert.ok(
+      modules[i - 1].bytes >= modules[i].bytes,
+      `modules not sorted descending at index ${i}: ${modules[i - 1].path} (${modules[i - 1].bytes}) `
+        + `before ${modules[i].path} (${modules[i].bytes})`,
+    );
+  }
+
+  const directorySum = Object.values(byDirectory).reduce((sum, n) => sum + n, 0);
+  assert.equal(directorySum, total, 'the directory rollup must sum to the same total as the per-module list');
+
+  const moduleTotal = modules.reduce((sum, m) => sum + m.bytes, 0);
+  assert.equal(moduleTotal, total, 'the reported total must equal the sum of the per-module bytes');
+
+  assert.ok(
+    modules.some((m) => m.path === VOICES),
+    `expected ${VOICES} to be present in the breakdown`,
+  );
+  assert.ok(
+    'src/audio' in byDirectory,
+    'expected the src/audio rollup (voices.js\'s directory) to be present',
+  );
+});
 
 test('synthesized instrument voices cost at most 40KB of the bundle', async () => {
   const bytes = await moduleBytes(VOICES);
@@ -56,7 +89,23 @@ test('the built single-file app stays under its total size ceiling', async () =>
   try {
     const outFile = await build({ outDir });
     const bytes = statSync(outFile).size;
-    console.log(`dist/band-coach.html: ${bytes} bytes (ceiling ${TOTAL_BUDGET_BYTES})`);
+
+    // Printed unconditionally (not only on failure): the whole point of a
+    // breakdown is that a future ceiling failure already has the "where did
+    // the bytes go" answer sitting in the log that ran right before it went
+    // red, not a number to go re-derive by hand under time pressure.
+    const { modules, byDirectory } = await bundleBreakdown();
+    console.log('--- bundle breakdown: top 15 modules ---');
+    for (const m of modules.slice(0, 15)) {
+      console.log(`  ${m.bytes.toString().padStart(7)}  ${m.path}`);
+    }
+    console.log('--- bundle breakdown: by directory ---');
+    for (const [dir, dirBytes] of Object.entries(byDirectory).sort((a, b) => b[1] - a[1])) {
+      console.log(`  ${dirBytes.toString().padStart(7)}  ${dir}`);
+    }
+    console.log(`dist/band-coach.html: ${bytes} bytes (ceiling ${TOTAL_BUDGET_BYTES}, `
+      + `headroom ${TOTAL_BUDGET_BYTES - bytes} bytes)`);
+
     assert.ok(
       bytes <= TOTAL_BUDGET_BYTES,
       `the built app is ${bytes} bytes, ceiling is ${TOTAL_BUDGET_BYTES} -- `
