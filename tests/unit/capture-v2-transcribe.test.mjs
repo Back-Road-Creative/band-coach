@@ -311,3 +311,21 @@ test('transcribe with no frames returns an empty song and says so', () => {
   assert.equal(report.notesCaptured, 0);
   assert.ok(report.needsCheck.some((s) => /No notes/.test(s)));
 });
+
+// The live recorder (src/ui/editor/record.js) reports each frame's pitch as
+// 69 + 12*log2(freq/440) -- a float that wobbles by a few cents from frame to
+// frame even on a steady note. Grouping must treat a wobbling C4 as one C4,
+// not as a run of one-frame notes that minNoteMs then throws away.
+test('eventsToNotes groups a real, cent-wobbly pitch track into whole notes', () => {
+  const rng = makeLcg(7);
+  const frames = [];
+  const spec = [{ midi: 60, from: 0, to: 0.4 }, { midi: 62, from: 0.4, to: 0.8 }];
+  for (const s of spec) {
+    for (let t = s.from; t < s.to - 1e-9; t += 0.005) {
+      frames.push({ t, midi: s.midi + (rng() - 0.5) * 0.3, rms: 0.1, confidence: 0.9 });
+    }
+  }
+  const notes = eventsToNotes(frames);
+  assert.deepEqual(notes.map((n) => n.midi), [60, 62]);
+  assert.ok(notes[0].end - notes[0].start > 0.35, 'the first note spans its whole 0.4 s');
+});
