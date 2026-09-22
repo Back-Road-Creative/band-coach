@@ -54,6 +54,10 @@ apart from "the app sees it but has nothing to judge right now". "MIDI details" 
 every input's name, connection state and the last few raw messages heard, for tracking down a
 silent keyboard on your own machine.
 
+The pure scheduling and sending logic for "play it for me" — a song's notes sent out to a
+connected MIDI keyboard so it plays itself — lives in `src/core/midi.js` (`scheduleSong`,
+`playOnOutput`, `stopAll`, `describeOutputs`); there is no button wired to it yet.
+
 ## Build it from source
 
 Everything from here down is for building Band Coach yourself or working on it. If you only want
