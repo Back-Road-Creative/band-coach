@@ -270,6 +270,25 @@ struck bar does not ring long enough to hold a steady pitch. Its
 detectability measurement (a synthesized inharmonic bar tone through
 `yin()`) that justified shipping it `status: 'ready'` rather than `'planned'`.
 
+Ready beginner brass (`trumpet-bb`, `horn-f`, `trombone`) each get their own
+MODS entry instead of reusing the generic `MODS.wind` trainer: `MODS.wind`'s
+transposition comes from the learner's saved `prefs.wind`, which is right for
+a single "choose your instrument" trainer but wrong for a dedicated
+trumpet/horn/trombone mod, where the written notes must always read in that
+instrument's own key. Each entry carries a fixed `windKind` (`'bb'`, `'f'`,
+`'bc'`) that `info()`'s `'w'`-id branch in `src/app.js` prefers over
+`prefs.wind` when present, so switching a learner's Wind-and-brass preference
+never bends a dedicated brass mod's own transposition. `MODS.trombone`'s
+curriculum items sit at written-pitch-plus-19 (`WIND_KINDS.bc`'s bass-clef
+register shift for the shared `'w'` item-id space — a display convention, not
+a pitch transposition; `trombone.js`'s own `transposition` stays `0`).
+Drawing is shared, not duplicated: `drawStaff()` now dispatches off a generic
+`M.staff` flag (set on `MODS.wind` and all three brass entries) instead of
+`mod === 'wind'` by name, and `src/ui/songs/mastery.js` gets three matching
+`itemIdForMidi()` cases — each folding into the record's own written range,
+never reading `prefs.wind` — so a captured or sung melody credits the right
+brass item too.
+
 Oboe (`src/instruments/oboe.js`) ships `status: 'planned'`: it is already
 nameable through the existing generic wind mod's concert-pitch group
 (`WIND_KINDS.c` in `src/app.js` already lists "flute, oboe, violin"), so it

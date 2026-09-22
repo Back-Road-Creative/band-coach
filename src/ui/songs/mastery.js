@@ -80,6 +80,27 @@ export function itemIdForMidi(instrumentId, midi, prefs = {}) {
       const base = VOICE_TONIC[prefs.voice] ?? VOICE_TONIC.low;
       return 'v' + (((midi - base) % 12) + 12) % 12;
     }
+    // Each of these three brass instruments has its own fixed transposition
+    // (src/instruments/trumpet-bb.js / horn-f.js / trombone.js) and its own
+    // MODS entry with a fixed windKind (src/app.js), unlike 'wind' below
+    // whose transposition comes from a runtime preference -- so credit here
+    // never reads prefs.wind, and folds into the record's own written range
+    // (its curriculum's Wn(...) id space) rather than the shared 60-79
+    // MODS.wind range.
+    case 'trumpet-bb': {
+      const written = midi + 2; // sounding = written - 2
+      return 'w' + fold(written, 60, 72);
+    }
+    case 'horn-f': {
+      const written = midi + 7; // sounding = written - 7
+      return 'w' + fold(written, 55, 67);
+    }
+    case 'trombone': {
+      // Non-transposing (written = sounding); the 'w' id space stores
+      // written + 19, the same bass-clef register shift WIND_KINDS.bc uses
+      // in src/app.js's info() 'w' branch, so this must match that.
+      return 'w' + fold(midi + 19, 59, 71);
+    }
     case 'wind': {
       const off = WIND_OFFSET[prefs.wind] ?? WIND_OFFSET.bb;
       const written = WIND_BASS_CLEF.has(prefs.wind) ? midi + 19 : midi - off;
