@@ -7,7 +7,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { howKindFor, computeHow, defaultNoteFor } from '../../src/ui/fingerings/how.js';
+import { howKindFor, computeHow, defaultNoteFor, alternateTuningsFor } from '../../src/ui/fingerings/how.js';
 import gtr from '../../src/instruments/gtr.js';
 import bass from '../../src/instruments/bass.js';
 import uke from '../../src/instruments/uke.js';
@@ -182,6 +182,51 @@ test('voice: in range vs out of range wording', () => {
   const outOfRange = computeHow(voice, 20);
   assert.equal(outOfRange.playable, false);
   assert.match(outOfRange.description, /outside the range/);
+});
+
+test('alternateTuningsFor: guitar has named alternates, bass and violin do not', () => {
+  const gtrAlts = alternateTuningsFor(gtr);
+  assert.ok(Array.isArray(gtrAlts));
+  assert.ok(gtrAlts.includes('standard'));
+  assert.ok(gtrAlts.includes('drop-d'));
+  assert.ok(gtrAlts.includes('dadgad'));
+  assert.equal(alternateTuningsFor(bass), null); // 4-string, but not a named alternate set
+  assert.equal(alternateTuningsFor(violin), null); // fingerboard, not fretboard
+});
+
+test('fretboard: a capo shifts fret numbers and is named in the description', () => {
+  const how = computeHow(gtr, 42, { capo: 2 }); // F#3, capo 2 -> open low string
+  assert.equal(how.capo, 2);
+  assert.deepEqual(how.positions[0], { stringIndex: 0, displayIndex: 0, fret: 0 });
+  assert.match(how.description, /capo/);
+});
+
+test('fretboard: a note below the capo cannot be shown, and says so plainly', () => {
+  const how = computeHow(gtr, 40, { capo: 2 }); // open low E, now behind the capo
+  assert.equal(how.playable, false);
+  assert.match(how.description, /below the capo/);
+});
+
+test('fretboard: a named alternate tuning changes which strings sound which notes', () => {
+  const standard = computeHow(gtr, 38, {}); // D2 is not on standard tuning's open strings
+  assert.equal(standard.playable, false);
+  const dropD = computeHow(gtr, 38, { tuning: 'drop-d' });
+  assert.equal(dropD.playable, true);
+  assert.deepEqual(dropD.positions[0], { stringIndex: 0, displayIndex: 0, fret: 0 });
+});
+
+test('fretboard: leftHanded mirrors displayIndex without changing the fret or pitch', () => {
+  const normal = computeHow(gtr, 40, {});
+  const mirrored = computeHow(gtr, 40, { leftHanded: true });
+  assert.equal(normal.positions[0].fret, mirrored.positions[0].fret);
+  assert.equal(normal.positions[0].stringIndex, mirrored.positions[0].stringIndex);
+  assert.equal(mirrored.positions[0].displayIndex, gtr.tuning.length - 1 - normal.positions[0].stringIndex);
+});
+
+test('fingerboard: capo and tuning opts are ignored (fretless instruments have neither)', () => {
+  const how = computeHow(violin, 55, { capo: 2, tuning: 'drop-d' });
+  assert.equal(how.capo, 0);
+  assert.deepEqual(how.positions[0], { stringIndex: 0, displayIndex: 0, fret: 0 });
 });
 
 test('defaultNoteFor picks a note the table actually covers', () => {

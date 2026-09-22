@@ -52,3 +52,32 @@ test('exerciseRangeFor falls back to a single midpoint for a too-narrow range', 
   assert.equal(ex.low, ex.high);
   assert.equal(ex.low, 61);
 });
+
+// "Find my range" tags each sample with the stage it was sung in. A learner
+// who breathes a few times on the low note makes many low samples and one
+// high one; pooled, the interquartile rule threw the high note away as an
+// outlier and saved {low: 48, high: 48} (CI, main 84c360c). Each stage's
+// samples now only ever speak to their own end of the range.
+test('estimateRange takes the low from the low stage and the high from the high stage', () => {
+  const samples = [
+    { midi: 48, ms: 900, stage: 'low' },
+    { midi: 48, ms: 700, stage: 'low' },
+    { midi: 48, ms: 500, stage: 'low' },
+    { midi: 48, ms: 800, stage: 'low' },
+    { midi: 48, ms: 600, stage: 'low' },
+    { midi: 72, ms: 900, stage: 'high' }
+  ];
+  assert.deepEqual(estimateRange(samples), { low: 48, high: 72 });
+});
+
+test('estimateRange still trims a glitch within one stage', () => {
+  const samples = [
+    { midi: 48, ms: 600, stage: 'low' },
+    { midi: 72, ms: 600, stage: 'high' },
+    { midi: 71, ms: 600, stage: 'high' },
+    { midi: 72, ms: 600, stage: 'high' },
+    { midi: 73, ms: 600, stage: 'high' },
+    { midi: 96, ms: 600, stage: 'high' } // sustained octave-jump glitch
+  ];
+  assert.deepEqual(estimateRange(samples), { low: 48, high: 73 });
+});

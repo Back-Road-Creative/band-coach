@@ -9,7 +9,11 @@
 // tin whistle, or the voice family qualify), then `computeHow(instrument,
 // midi, opts)` for the note the learner picked. `opts.key` (0-11) picks the
 // harmonica's key; `opts.maxFret` caps how many frets/positions a
-// fretboard or fingerboard diagram shows.
+// fretboard or fingerboard diagram shows. `opts.leftHanded` mirrors a
+// fretboard or fingerboard diagram; `opts.capo` and `opts.tuning` (one of
+// fretboard.js's named TUNINGS keys, see `alternateTuningsFor` below) apply
+// only to a 'fretboard' kind and are ignored for 'fingerboard' (fretless
+// instruments have neither).
 //
 // A stringed instrument's diagram kind is driven by the record's own
 // `fretted` field (schema.js), never by a hard-coded id list: `fretted:
@@ -18,7 +22,7 @@
 // 'fretboard'.
 
 import { fingeringsForValves, fingeringsForSlide, PRESETS as BRASS_PRESETS } from '../../instruments/how/brass.js';
-import { positionsFor } from '../../instruments/how/fretboard.js';
+import { positionsFor, tuningFor } from '../../instruments/how/fretboard.js';
 import { holesFor } from '../../instruments/how/harmonica.js';
 import { fingeringFor } from '../../instruments/how/recorder-whistle.js';
 import { keyedFingeringFor } from '../../instruments/how/keyed-woodwind.js';
@@ -46,6 +50,24 @@ const KEYED_WOODWIND_CHART_BY_ID = {
   'sax-tenor-bb': 'sax'
 };
 
+// Which named alternate tunings (fretboard.js's TUNINGS) apply to a fretted
+// instrument, keyed by instrument id — explicit, never guessed from string
+// count: a 4-string tuning is not interchangeable between unrelated
+// instruments (standard ukulele and bass are both 4 strings but nothing
+// alike), and every named alternate in fretboard.js besides the ukulele/bass
+// ones is a variant of the SAME 6-string guitar (gtr.js). 'standard' is
+// listed first so it always appears as the no-op / "back to normal" choice.
+const ALT_TUNINGS_BY_ID = {
+  gtr: ['standard', 'drop-d', 'dadgad', 'open-g', 'open-d', 'half-step-down']
+};
+
+// The list of named tuning keys (fretboard.js's tuningFor) a learner can
+// pick for this instrument, or null when none is defined — most fretted
+// instruments in this app have only their one real-world tuning.
+export function alternateTuningsFor(instrument) {
+  return (instrument && ALT_TUNINGS_BY_ID[instrument.id]) || null;
+}
+
 export function howKindFor(instrument) {
   if (!instrument) return null;
   if (Array.isArray(instrument.tuning) && instrument.tuning.length > 0) {
@@ -62,29 +84,41 @@ export function howKindFor(instrument) {
   return null;
 }
 
-function describeFretboard(instrument, midi, positions) {
+// `tuning` and `capo` are the EFFECTIVE ones (an alternate tuning if the
+// learner picked one, else the instrument's own) — string labels and "open"
+// pitches must follow what the learner actually chose, not the instrument's
+// factory tuning. A capo shifts every open string up and becomes the new
+// nut (fretboard.js's own rule), so a pitch below every capo'd open string
+// physically cannot be played there; that is told plainly rather than
+// folded into the generic "doesn't fall on this fretboard" wording.
+function describeFretboard(midi, positions, tuning, capo) {
   const name = noteName(midi);
   if (positions.length === 0) {
+    if (capo > 0 && midi < Math.min(...tuning) + capo) {
+      return name + ' is below the capo (fret ' + capo + ') — no open string can reach it with the capo there.';
+    }
     return name + ' does not fall on this fretboard within the frets shown.';
   }
   const parts = positions.map(p => {
-    const openName = noteName(instrument.tuning[p.stringIndex]);
+    const openName = noteName(tuning[p.stringIndex] + capo);
     const where = p.fret === 0 ? 'open' : 'fret ' + p.fret;
     return 'string ' + (p.stringIndex + 1) + ' (' + openName + '), ' + where;
   });
-  return name + ': ' + parts.join('; or ') + '.';
+  const capoNote = capo > 0 ? ' (frets counted from the capo at fret ' + capo + ')' : '';
+  return name + ': ' + parts.join('; or ') + '.' + capoNote;
 }
 
 // Fretless: same string/semitone-offset data as a fretted diagram (the
 // physical string doesn't care whether the neck has frets), worded as hand
-// position instead of a fret number, since there is nothing to fret.
-function describeFingerboard(instrument, midi, positions) {
+// position instead of a fret number, since there is nothing to fret. No
+// capo (bowed instruments this app models don't have one).
+function describeFingerboard(midi, positions, tuning) {
   const name = noteName(midi);
   if (positions.length === 0) {
     return name + ' does not fall within reach of an open string on this fingerboard.';
   }
   const parts = positions.map(p => {
-    const openName = noteName(instrument.tuning[p.stringIndex]);
+    const openName = noteName(tuning[p.stringIndex]);
     const where = p.fret === 0
       ? 'open string'
       : p.fret + ' semitone' + (p.fret > 1 ? 's' : '') + ' up (no frets — find it by ear or hand position)';
@@ -162,13 +196,19 @@ export function computeHow(instrument, midi, opts = {}) {
 
   if (kind === 'fretboard' || kind === 'fingerboard') {
     const maxFret = opts.maxFret ?? 15;
-    const positions = positionsFor(midi, instrument.tuning, { maxFret });
+    const leftHanded = !!opts.leftHanded;
+    // Capo and named alternate tunings are a fretted-guitar-family concept;
+    // a fingerboard (bowed, fretless) instrument has neither, so those opts
+    // are silently ignored rather than producing an invalid diagram.
+    const capo = kind === 'fretboard' ? (opts.capo || 0) : 0;
+    const tuning = (kind === 'fretboard' && opts.tuning) ? tuningFor(opts.tuning) : instrument.tuning;
+    const positions = positionsFor(midi, tuning, { maxFret, capo, leftHanded });
     return {
-      kind, tuning: instrument.tuning, positions, maxFret,
+      kind, tuning, positions, maxFret, capo, leftHanded,
       playable: positions.length > 0,
       description: kind === 'fretboard'
-        ? describeFretboard(instrument, midi, positions)
-        : describeFingerboard(instrument, midi, positions)
+        ? describeFretboard(midi, positions, tuning, capo)
+        : describeFingerboard(midi, positions, tuning)
     };
   }
 

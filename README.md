@@ -151,6 +151,16 @@ the "More options" menu in the side rail for "Save a backup", which downloads
 `band-coach-progress.json`, and "Restore a backup", which loads one back in. A quiet reminder
 appears once you have actually practised a while without one — never on a fresh profile, since
 there is nothing yet to lose.
+
+## Turning an audio file into notes
+
+`src/audio/file-frames.js` is a pure function, `framesFromPCM`, that walks a decoded mono audio
+clip (a plain `Float32Array` of samples plus its real sample rate) and produces the same
+`frames`/`onsets` shape `src/song/transcribe.js` already reads from a live "Record a tune" mic
+capture — so a file-import panel can be wired up later without teaching transcribe.js anything
+new. Like the rest of this app's pitch tracking, it is monophonic only: a chord or a second voice
+reads as whichever single pitch the detector locks onto, not as separate notes.
+
 ## Notation engine
 
 `src/notation/` is a pure layout engine for standard notation and tab: given
@@ -237,6 +247,34 @@ guards against exactly this: if 0.5 seconds pass with no message from a worklet 
 live, it is disconnected and discarded, `listen()` picks up on its next tick, and the event is
 recorded through `recordError()` (visible via the debug hook's `errors()`) rather than silently
 dropped.
+
+## Capo, alternate tunings and a left-handed view
+
+The "How to play it" panel's fretted-instrument diagrams (guitar, bass, ukulele, mandolin,
+banjo) can show a capo, a named alternate tuning where one is defined, and a left-handed
+mirrored diagram; bowed fretless instruments (violin, viola, cello, double bass) get the
+left-handed mirror only, since they have no capo or fret-based tuning to switch. The controls
+appear only for instrument kinds that make sense for them and reset to standard/no-capo/
+right-handed whenever a different instrument is picked.
+
+- Capo: a number input, counting frets from the capo, not the physical nut — a capo becomes the
+  new "open string" position (`src/instruments/how/fretboard.js`'s own rule). A note that falls
+  behind the capo cannot be shown; the description says so in plain words instead of just
+  reporting the pitch as not found.
+- Alternate tuning: only guitar (`gtr`) currently has named alternates defined (drop D, DADGAD,
+  open G, open D, half-step down, in `fretboard.js`'s `TUNINGS`) — the picker only appears where
+  `src/ui/fingerings/how.js`'s `alternateTuningsFor(instrument)` returns a real list, never
+  guessed from string count (a 4-string ukulele tuning is not interchangeable with a 4-string
+  bass tuning).
+- Left-handed: mirrors which side of the diagram each string is drawn on (`fretboard.js`'s
+  `leftHanded` option); the underlying pitches, strings and frets never change, only the
+  drawing order.
+
+This choice is session-only: it lives in the fingerings panel's own module state, not in the
+app's saved-preferences database (`src/app.js`'s `DB.prefs`), so it resets on reload. Wiring a
+persistent capo/tuning/handedness preference into that database is a follow-up, not part of this
+change. Mirroring the trainer's own fretboard canvas (the practice view drawn in `src/app.js`,
+separate from this reference panel) and capo-aware trainer tasks are also out of scope here.
 
 ## Piano hands together
 
@@ -330,6 +368,13 @@ notes (every sharp/flat, and the oboe's top three half-hole notes) most need
 a musician's check. Alto and tenor sax both start their written range at
 Bb3 (midi 58), the horn's actual lowest written note — a saxophone has
 nothing written below it, and `SAX_NOTES` has no entries for 55-57.
+Oboe (`src/instruments/oboe.js`) ships `status: 'planned'`: it is already
+nameable through the existing generic wind mod's concert-pitch group
+(`WIND_KINDS.c` in `src/app.js` already lists "flute, oboe, violin"), so it
+needs no new MODS entry, but it has no curriculum yet and no fingering
+data — this repo's `src/instruments/how/` fingering-chart helpers only cover
+open/closed-hole instruments (recorder, tin whistle) and valve/slide brass,
+neither of which fits a keyed woodwind like oboe.
 
 Descant recorder (`src/instruments/recorder-descant.js`) and tin whistle
 (`src/instruments/tin-whistle.js`) ship `status: 'ready'` with their own
@@ -356,6 +401,23 @@ integer-tick durations, so triplets and swing are exact fractions rather than ro
 `buildPhrase`/`onsetsOf`/`validateBar` are unit-tested in isolation under `tests/unit/rhythm.test.mjs`.
 Rhythm reading (`rhy`) gains eight further levels built on it, after the original ten-cell levels:
 rests, ties, dotted-eighth figures, triplets, 3/4, 6/8, swing, and two-bar phrases.
+
+## Find your own singing range
+
+The Voice screen offers three fixed ranges (Lower/Middle/Higher voice) plus a fourth, "Find my
+range," built from a short guided test rather than a guess. Press Connect, choose Voice, then
+press "Find my range": sing your lowest comfortable note and hold it, press "Got it — now the
+highest," sing your highest comfortable note and hold it, then press "Got it — done." The app
+listens through the real pitch detector the whole time and shows exactly what it is hearing, so
+nothing is assumed from the microphone being open alone. `src/instruments/how/voice-range.js`
+turns the held notes into a range (dropping brief blips, then trimming statistical outliers
+within each half, so the low end comes only from the low note and the high end only from the high one),
+picks the nearest voice type as a plain-language hint — never a diagnosis — and pulls a small
+safety margin in from both ends before placing the exercises' tonic at the low end of that
+margin-trimmed range. If what was sung is under an octave, the exercises still get a usable
+tonic; the app says plainly that they will ask for a little more than was actually sung, rather
+than silently clamping the top note down. The result is saved and offered again next time as "My
+range (found by test)," alongside the three fixed choices, until the test is run again.
 
 ## Windows Store edition
 
