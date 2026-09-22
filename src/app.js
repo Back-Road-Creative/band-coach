@@ -1354,16 +1354,17 @@ import { register as registerPlayalong } from './ui/playalong.js';
   // state (null when idle); it has to live outside renderOpts, which rebuilds
   // its DOM box from scratch on every call and remembers nothing itself.
   // Samples are collected once, across both halves of the slide, as
-  // `{ midi, ms }` -- how long each held note lasted before the pitch moved
-  // to a new one -- and handed to voice-range.js's estimateRange() a single
-  // time at the end; its own IQR trim is what guards against one bad frame,
-  // so this code does not try to filter samples itself.
+  // `{ midi, ms, stage }` -- how long each held note lasted before the pitch
+  // moved to a new one, and which half it was sung in -- and handed to
+  // voice-range.js's estimateRange() a single time at the end; its own
+  // per-stage IQR trim is what guards against one bad frame, so this code
+  // does not try to filter samples itself.
   let rangeTest = null;
   function handleRangeTest(action, fr) {
     if (action === 'start') { rangeTest = { stage: 'low', samples: [], curMidi: null, curSince: 0 }; coach('Sing your lowest comfortable note and hold it, then press "Got it -- now the highest".'); return; }
     if (!rangeTest) return;
-    if (action === 'tick') { if (!fr || !fr.freq) return; const m = Math.round(fr.midi), t = performance.now(); if (rangeTest.curMidi === null) { rangeTest.curMidi = m; rangeTest.curSince = t; } else if (m !== rangeTest.curMidi) { rangeTest.samples.push({ midi: rangeTest.curMidi, ms: t - rangeTest.curSince }); rangeTest.curMidi = m; rangeTest.curSince = t; } return; }
-    if (action === 'flush') { if (rangeTest.curMidi !== null) rangeTest.samples.push({ midi: rangeTest.curMidi, ms: performance.now() - rangeTest.curSince }); rangeTest.curMidi = null; return; }
+    if (action === 'tick') { if (!fr || !fr.freq) return; const m = Math.round(fr.midi), t = performance.now(); if (rangeTest.curMidi === null) { rangeTest.curMidi = m; rangeTest.curSince = t; } else if (m !== rangeTest.curMidi) { rangeTest.samples.push({ midi: rangeTest.curMidi, ms: t - rangeTest.curSince, stage: rangeTest.stage }); rangeTest.curMidi = m; rangeTest.curSince = t; } return; }
+    if (action === 'flush') { if (rangeTest.curMidi !== null) rangeTest.samples.push({ midi: rangeTest.curMidi, ms: performance.now() - rangeTest.curSince, stage: rangeTest.stage }); rangeTest.curMidi = null; return; }
     if (action === 'next') { handleRangeTest('flush'); rangeTest.stage = 'high'; coach('Now sing your highest comfortable note and hold it, then press "Got it -- done".'); return; }
     if (action === 'cancel') { rangeTest = null; return; }
     if (action === 'finish') { handleRangeTest('flush'); const range = estimateRange(rangeTest.samples); rangeTest = null; if (!range) { coach("I didn't catch a held note either time -- make sure the mic is connected, sing clearly and hold each note for at least half a second, then try again."); return; } const clamped = { low: clamp(range.low, 24, 96), high: clamp(range.high, 24, 96) }; DB.prefs.voiceRange = clamped; DB.prefs.voice = 'mine'; task = null; save(); const t = tonicFromRange(exerciseRangeFor(clamped)), hint = classify(clamped); coach(hint.wording + (t.stretch ? ' That is a little under an octave, so the exercises will stretch a bit past what you just sang.' : ' Exercises are set from your range now.')); return; }
@@ -1800,6 +1801,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
   //
   if (__DEBUG_HOOK__) Object.assign(hook, { flash: () => ({ bad: flashBad, good: flashGood }), pitchWorkletRange: () => lastWorkletRangeSent, pitchWorkletFrameSize: () => lastWorkletFrameSize, kbdFocus: kbdFocusInfo });
   if (__DEBUG_HOOK__) Object.assign(hook, { audioHeardTicks: () => audioHeardTicks });
+  if (__DEBUG_HOOK__) Object.assign(hook, { rangeHeld: () => rangeTest && rangeTest.curMidi !== null ? { stage: rangeTest.stage, midi: rangeTest.curMidi, ms: performance.now() - rangeTest.curSince } : null });
   if (__DEBUG_HOOK__) window.__coach = hook;
 
   // Boot is over. Announce it so anything driving the page has a condition to
