@@ -1801,6 +1801,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
   //
   if (__DEBUG_HOOK__) Object.assign(hook, { flash: () => ({ bad: flashBad, good: flashGood }), pitchWorkletRange: () => lastWorkletRangeSent, pitchWorkletFrameSize: () => lastWorkletFrameSize, kbdFocus: kbdFocusInfo });
   if (__DEBUG_HOOK__) Object.assign(hook, { audioHeardTicks: () => audioHeardTicks });
+  if (__DEBUG_HOOK__) Object.assign(hook, { rangeHeld: () => rangeTest && rangeTest.curMidi !== null ? { stage: rangeTest.stage, midi: rangeTest.curMidi, ms: performance.now() - rangeTest.curSince } : null });
   if (__DEBUG_HOOK__) window.__coach = hook;
 
   // Boot is over. Announce it so anything driving the page has a condition to

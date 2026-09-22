@@ -13,7 +13,6 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { HTML_PATH } from '../helpers/html-path.mjs';
 import { launchPage, effectiveWaitMs } from '../helpers/browser.mjs';
-import { waitForSteadyMidi } from '../helpers/steady-midi.mjs';
 
 const htmlPath = HTML_PATH;
 
@@ -46,12 +45,28 @@ function writeAlternatingWav(path) {
 
 // Voice is a MOD (input: 'sustain'), not a TOOL, so `window.__coach.audioHeardTicks()`
 // never advances for it (src/app.js's setInterval(listen, 50) tick counter that
-// feeds it is gated to `TOOLS[mod]` only) -- the first waitForSteadyMidi() call
+// feeds it is gated to `TOOLS[mod]` only) -- the first waitForHeldNote() call
 // in each test is this flow's own readiness gate instead.
 async function openVoice(page) {
   await page.evaluate("document.querySelector('#picker button[data-mod=\"voice\"]').click()");
   await page.evaluate("document.getElementById('ioBtn').click()");
   await page.waitFor("document.getElementById('ioBtn').hidden === true", effectiveWaitMs(5000));
+}
+
+// Waits until the range test ITSELF has been timing `targetMidi` in `stage`
+// for `holdMs` (window.__coach.rangeHeld(), the note handleRangeTest('tick')
+// is currently timing) -- so the Next/Done click that follows is known to
+// flush a sustained sample for that stage. Polling heard() instead raced the
+// app's own per-frame timer under CI load: the test saw a steady pitch the
+// app had not yet counted, and the range saved as {low: 48, high: 48}.
+async function waitForHeldNote(page, stage, targetMidi, holdMs, timeoutMs = 8000) {
+  const expr = `(() => { const h = window.__coach.rangeHeld(); return !!h && h.stage === ${JSON.stringify(stage)} && h.midi === ${targetMidi} && h.ms >= ${holdMs}; })()`;
+  try {
+    await page.waitFor(expr, effectiveWaitMs(timeoutMs));
+  } catch (err) {
+    const last = await page.evaluate('JSON.stringify(window.__coach.rangeHeld())');
+    throw new Error(`waitForHeldNote: wanted the ${stage} stage holding midi ${targetMidi} for ${holdMs}ms, last saw ${last} (${err.message})`);
+  }
 }
 
 test('Find my range: singing low then high through the real mic saves a range and picks it as the voice', async (t) => {
@@ -70,7 +85,7 @@ test('Find my range: singing low then high through the real mic saves a range an
     '"Find my range" should disappear once the flow has started (replaced by the Next/Cancel pair)'
   );
 
-  await waitForSteadyMidi(page, 48, 700);
+  await waitForHeldNote(page, 'low', 48, 700);
   await page.evaluate("document.getElementById('optRangeNext').click()");
   assert.match(
     await page.evaluate("document.getElementById('coach').textContent"),
@@ -78,7 +93,7 @@ test('Find my range: singing low then high through the real mic saves a range an
     'the on-screen coach line should tell the learner to sing the highest note next'
   );
 
-  await waitForSteadyMidi(page, 72, 700);
+  await waitForHeldNote(page, 'high', 72, 700);
   await page.evaluate("document.getElementById('optRangeDone').click()");
 
   await page.waitFor("document.getElementById('optRangeDone') === null", effectiveWaitMs(3000));
