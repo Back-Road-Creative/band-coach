@@ -154,9 +154,21 @@ test('harp maps a concert pitch to the first matching hole in search order 4,5,6
 });
 
 test('planned instruments with no drill curriculum return null', () => {
-  assert.equal(itemIdForMidi('violin', 60, {}), null);
-  assert.equal(itemIdForMidi('trumpet-bb', 60, {}), null);
+  assert.equal(itemIdForMidi('flute', 60, {}), null);
+  // trumpet-bb is 'ready' (see the dedicated brass test below); clarinet-bb
+  // stays 'planned' and stands in for it here.
+  assert.equal(itemIdForMidi('clarinet-bb', 60, {}), null);
   assert.equal(itemIdForMidi('nonexistent-instrument', 60, {}), null);
+});
+
+test('trumpet-bb/horn-f/trombone map a concert-pitch midi note to their own fixed-transposition written item, never reading prefs.wind', () => {
+  // trumpet-bb: sounding = written - 2, so written = concert + 2.
+  assert.equal(itemIdForMidi('trumpet-bb', 60, {}), 'w62');
+  assert.equal(itemIdForMidi('trumpet-bb', 60, { wind: 'f' }), 'w62', 'trumpet-bb must not read the generic wind preference');
+  // horn-f: sounding = written - 7, so written = concert + 7.
+  assert.equal(itemIdForMidi('horn-f', 55, {}), 'w62');
+  // trombone: non-transposing, bass-clef 'w' id space is written + 19.
+  assert.equal(itemIdForMidi('trombone', 40, {}), 'w59');
 });
 
 test('mapMasteryKeys converts creditFor()-shaped keys and drops unmapped ones', () => {
@@ -168,5 +180,5 @@ test('mapMasteryKeys converts creditFor()-shaped keys and drops unmapped ones', 
     { id: 'n60', hit: true },
     { id: 'n64', hit: false },
   ]);
-  assert.deepEqual(mapMasteryKeys(masteryKeys, 'violin', {}), []);
+  assert.deepEqual(mapMasteryKeys(masteryKeys, 'flute', {}), []);
 });

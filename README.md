@@ -224,6 +224,20 @@ that need it pay the extra ~42ms of analysis latency; everything else stays
 at 2048. See `src/audio/pitch-worklet.js` for how the AudioWorklet pipeline
 resizes on an instrument switch.
 
+Ready bowed instruments as of this writing: violin, viola, cello and double
+bass. They are fretless, so their trainer entries (`MODS.violin`, etc.) carry
+a `fretless: true` flag and `input: 'sustain'` (a note is held and matched by
+pitch, the same judging voice and wind already use, not plucked). `drawFret()`
+checks that flag to draw a plain fingerboard with a nut but no fret wires,
+and an `info`/`validId` override rewrites the string+fret item labels those
+six fretted instruments already use (`stringLevels()`, with a `posWord`
+argument of `'position'` instead of `'fret'`) so a learner is never told to
+find a "fret" that is not there — the hint and the "time's up" text say the
+same thing. Each record's curriculum stops at exactly first position (5
+semitones above each open string): the instrument's own beginner
+`range.high` is built from its highest open string plus 5, so no item ever
+asks for a note outside the range the mic is tuned to listen for.
+
 A processor that throws inside its own constructor fails silently from the app's point of view:
 `addModule()` still resolves and `new AudioWorkletNode(...)` still succeeds, so `src/app.js` would
 otherwise hold a worklet that looks connected but never posts a single frame — and because it looks
@@ -315,6 +329,25 @@ struck bar does not ring long enough to hold a steady pitch. Its
 detectability measurement (a synthesized inharmonic bar tone through
 `yin()`) that justified shipping it `status: 'ready'` rather than `'planned'`.
 
+Ready beginner brass (`trumpet-bb`, `horn-f`, `trombone`) each get their own
+MODS entry instead of reusing the generic `MODS.wind` trainer: `MODS.wind`'s
+transposition comes from the learner's saved `prefs.wind`, which is right for
+a single "choose your instrument" trainer but wrong for a dedicated
+trumpet/horn/trombone mod, where the written notes must always read in that
+instrument's own key. Each entry carries a fixed `windKind` (`'bb'`, `'f'`,
+`'bc'`) that `info()`'s `'w'`-id branch in `src/app.js` prefers over
+`prefs.wind` when present, so switching a learner's Wind-and-brass preference
+never bends a dedicated brass mod's own transposition. `MODS.trombone`'s
+curriculum items sit at written-pitch-plus-19 (`WIND_KINDS.bc`'s bass-clef
+register shift for the shared `'w'` item-id space — a display convention, not
+a pitch transposition; `trombone.js`'s own `transposition` stays `0`).
+Drawing is shared, not duplicated: `drawStaff()` now dispatches off a generic
+`M.staff` flag (set on `MODS.wind` and all three brass entries) instead of
+`mod === 'wind'` by name, and `src/ui/songs/mastery.js` gets three matching
+`itemIdForMidi()` cases — each folding into the record's own written range,
+never reading `prefs.wind` — so a captured or sung melody credits the right
+brass item too.
+
 Oboe (`src/instruments/oboe.js`) ships `status: 'planned'`: it is already
 nameable through the existing generic wind mod's concert-pitch group
 (`WIND_KINDS.c` in `src/app.js` already lists "flute, oboe, violin"), so it
@@ -322,6 +355,24 @@ needs no new MODS entry, but it has no curriculum yet and no fingering
 data — this repo's `src/instruments/how/` fingering-chart helpers only cover
 open/closed-hole instruments (recorder, tin whistle) and valve/slide brass,
 neither of which fits a keyed woodwind like oboe.
+
+Descant recorder (`src/instruments/recorder-descant.js`) and tin whistle
+(`src/instruments/tin-whistle.js`) ship `status: 'ready'` with their own
+`MODS['recorder-descant']`/`MODS['tin-whistle']` entries (`src/app.js`), input
+`'sustain'` like `MODS.wind`/`MODS.harp` above — a blown note is held, not
+struck. Both records are written an octave below what they sound (the same
+octave-only notation gap `writtenOctaveUp` documents for guitar/bass, just in
+the other direction): a descant recorder's lowest written note is middle C
+but it actually sounds C5, and a D tin whistle's lowest written note sounds
+D5, so each record's `transposition` is `+12` and its `range` is the SOUNDING
+pitch the microphone actually hears, not the printed page. Their MODS entries
+carry `staff: true` and `writtenOffset: -12` for the notation drawing pass to
+pick up once it honours those fields; until then the fields are inert. Each
+curriculum introduces notes in beginner method-book order — recorder: B, A, G
+first, then the high C and D above them, then the low E, D and C below G,
+then the forked-fingering F; whistle: the D-major scale, first octave, D E
+F# G A B C# D — rather than chromatic or alphabetical order.
+
 ## Rhythm vocabulary
 
 `src/core/rhythm.js` is a pure rhythm-notation module: cells (quarter, eighth pairs, rests, ties,
