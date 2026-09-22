@@ -7,10 +7,14 @@
 // and how many milliseconds it was held, from a slide that starts
 // comfortable and moves outward) to `estimateRange(samples)` to get a
 // `{ low, high }` comfortable range. `classify(range)` turns that into a
-// plain-language nearest-voice-type HINT (never a diagnosis). Replace the
-// three fixed voice.js ranges (VOICE_KINDS in src/app.js:111) with
-// `exerciseRangeFor(range)`, which pulls a safety margin in from both ends
-// so warm-up exercises never ask for the singer's absolute extremes.
+// plain-language nearest-voice-type HINT (never a diagnosis). Wired in:
+// src/app.js's "Find my range" flow (voice options) drives a real
+// low-then-high sing-and-hold through the mic, calls `estimateRange`, and
+// saves the result as `prefs.voiceRange`. That saved range becomes a fourth
+// 'mine' choice alongside the three fixed VOICE_KINDS entries, its tonic
+// picked by `tonicFromRange(exerciseRangeFor(range))` -- `exerciseRangeFor`
+// pulls a safety margin in from both ends so warm-up exercises never ask for
+// the singer's absolute extremes.
 
 const MIN_SUSTAIN_MS = 400;
 
@@ -18,11 +22,30 @@ const MIN_SUSTAIN_MS = 400;
 // statistical outliers (spurious single-frame pitch-detector glitches) with
 // the standard interquartile rule, so one bad reading can't blow the range
 // out by an octave.
+//
+// Samples tagged `stage: 'low'` / `stage: 'high'` (the "Find my range"
+// sing-low-then-high flow) are trimmed per stage: the low comes only from the
+// low stage and the high only from the high stage. Pooled, a learner who took
+// a few breaths on the low note outnumbered the high samples and the rule
+// threw the high note away as an outlier. Untagged samples (one slide) are
+// trimmed together, as before.
 export function estimateRange(samples) {
-  const sustained = samples.filter(s => s.ms >= MIN_SUSTAIN_MS).map(s => s.midi);
+  const sustained = samples.filter(s => s.ms >= MIN_SUSTAIN_MS);
   if (sustained.length === 0) return null;
 
-  const sorted = [...sustained].sort((a, b) => a - b);
+  const lowStage = trimOutliers(sustained.filter(s => s.stage === 'low').map(s => s.midi));
+  const highStage = trimOutliers(sustained.filter(s => s.stage === 'high').map(s => s.midi));
+  if (lowStage.length > 0 && highStage.length > 0) {
+    return { low: Math.min(...lowStage), high: Math.max(...highStage) };
+  }
+
+  const kept = trimOutliers(sustained.map(s => s.midi));
+  return { low: Math.min(...kept), high: Math.max(...kept) };
+}
+
+function trimOutliers(midis) {
+  if (midis.length === 0) return midis;
+  const sorted = [...midis].sort((a, b) => a - b);
   const quartile = p => {
     const idx = (sorted.length - 1) * p;
     const lo = Math.floor(idx);
@@ -35,9 +58,7 @@ export function estimateRange(samples) {
   const lowerFence = q1 - 1.5 * iqr;
   const upperFence = q3 + 1.5 * iqr;
   const trimmed = sorted.filter(m => m >= lowerFence && m <= upperFence);
-  const kept = trimmed.length > 0 ? trimmed : sorted;
-
-  return { low: Math.min(...kept), high: Math.max(...kept) };
+  return trimmed.length > 0 ? trimmed : sorted;
 }
 
 // Approximate comfortable ranges for the standard voice types, used only to
@@ -78,4 +99,16 @@ export function exerciseRangeFor(range, margin = 3) {
   if (low < high) return { low, high };
   const mid = Math.round((range.low + range.high) / 2);
   return { low: mid, high: mid };
+}
+
+// Where to put the movable tonic (Do) once a "find my range" test has
+// produced an exercise range: its low end, so the 0-12 scale degrees the
+// voice exercises already use (src/app.js's 'v' item kind) climb through the
+// whole comfortable span the singer actually has. A margin-trimmed range
+// under an octave (12 semitones) cannot fit that span no matter where the
+// tonic sits -- `stretch` flags that case so the caller can say plainly that
+// the exercises will ask for a little more than was sung, rather than
+// silently clamping degree 12 down to something the singer never produced.
+export function tonicFromRange(exerciseRange) {
+  return { tonic: Math.round(exerciseRange.low), stretch: (exerciseRange.high - exerciseRange.low) < 12 };
 }
