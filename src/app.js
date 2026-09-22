@@ -493,6 +493,33 @@ import { register as registerPlayalong } from './ui/playalong.js';
   const ukeBaritoneRange = rangeForInstrument(instrumentById['ukulele-baritone']);
   MODS['ukulele-baritone'] = { name: instrumentById['ukulele-baritone'].name, tag: 'microphone', color: '#b8863b', input: 'pluck', fmin: ukeBaritoneRange.fmin, fmax: ukeBaritoneRange.fmax, tuning: instrumentById['ukulele-baritone'].tuning, frets: 12, help: 'Baritone ukulele: press Connect to let the page listen. Standard tuning D G B E, the same pitches as the top four guitar strings. On a single-note lesson, play one clean note at a time; if it hears a strum instead it will tell you so rather than staying silent.', levels: null };
   MODS['ukulele-baritone'].levels = stringLevels(MODS['ukulele-baritone'].tuning, ['D', 'G', 'B', 'E'], 12, null);
+  // Descant recorder and tin whistle: held-pitch wind instruments like
+  // MODS.wind/MODS.harp above (input 'sustain', not 'pluck' -- a blown note
+  // is held, not struck), so their levels use plain N() note ids at SOUNDING
+  // pitch straight off each record's own curriculum (src/instruments/
+  // recorder-descant.js, tin-whistle.js -- see those files for why sounding
+  // pitch is a full octave above what a beginner method book prints, and why
+  // octavePolicy stays exact). `staff: true` and `writtenOffset: -12` record
+  // the same octave gap for the notation drawing pass to honour once it
+  // reads them (src/app.js drawStaff/draw dispatch); until then they are
+  // inert extra fields, harmless to the rest of MODS.
+  const recorderRange = rangeForInstrument(instrumentById['recorder-descant']);
+  MODS['recorder-descant'] = { name: instrumentById['recorder-descant'].name, tag: 'microphone', color: '#d98fd9', input: 'sustain', fmin: recorderRange.fmin, fmax: recorderRange.fmax, staff: true, writtenOffset: -12, help: 'Descant recorder: press Connect to let the page listen through your microphone. Hold each note steady for about half a second. Starts on B, A and G, the first three notes most method books teach.', levels: null };
+  MODS['recorder-descant'].levels = [
+    { name: 'First three notes: B, A, G', add: N(83, 81, 79), limit: 12 }, { name: 'Two more, going up: high C and D', add: N(84, 86), limit: 12 },
+    { name: 'Going down: E', add: N(76), limit: 12 }, { name: 'Down to low D and C', add: N(74, 72), limit: 12 },
+    { name: 'Moves: two notes', task: 'seq', len: 2, limit: 10 }, { name: 'The tricky note: F (forked fingering)', add: N(77), limit: 12 },
+    { name: 'Long tones: two steady seconds', task: 'hold', limit: 14 }, { name: 'Moves: three notes', task: 'seq', len: 3, limit: 9 },
+    { name: 'Five-note runs', task: 'run', limit: 8 }
+  ];
+  const whistleRange = rangeForInstrument(instrumentById['tin-whistle']);
+  MODS['tin-whistle'] = { name: instrumentById['tin-whistle'].name, tag: 'microphone', color: '#8fd9a0', input: 'sustain', fmin: whistleRange.fmin, fmax: whistleRange.fmax, staff: true, writtenOffset: -12, help: 'Tin whistle (D): press Connect to let the page listen through your microphone. Hold each note steady for about half a second. Starts on D, E and F sharp, the bottom of the D-major scale, and works up one octave.', levels: null };
+  MODS['tin-whistle'].levels = [
+    { name: 'First three notes: D, E, F sharp', add: N(74, 76, 78), limit: 12 }, { name: 'Two more, going up: G and A', add: N(79, 81), limit: 12 },
+    { name: 'Finishing the octave: B and C sharp', add: N(83, 85), limit: 12 }, { name: 'The top of the octave: high D', add: N(86), limit: 12 },
+    { name: 'Moves: two notes', task: 'seq', len: 2, limit: 10 }, { name: 'Long tones: two steady seconds', task: 'hold', limit: 14 },
+    { name: 'Moves: three notes', task: 'seq', len: 3, limit: 9 }, { name: 'Five-note runs', task: 'run', limit: 8 }
+  ];
   // Mallet percussion (bells/glockenspiel): not fretted, so it does not
   // reuse stringLevels/drawFret like the six mic instruments above it. It
   // reuses MODS.kbd's own note-group shape instead (N() item ids, same

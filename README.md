@@ -310,6 +310,24 @@ needs no new MODS entry, but it has no curriculum yet and no fingering
 data — this repo's `src/instruments/how/` fingering-chart helpers only cover
 open/closed-hole instruments (recorder, tin whistle) and valve/slide brass,
 neither of which fits a keyed woodwind like oboe.
+
+Descant recorder (`src/instruments/recorder-descant.js`) and tin whistle
+(`src/instruments/tin-whistle.js`) ship `status: 'ready'` with their own
+`MODS['recorder-descant']`/`MODS['tin-whistle']` entries (`src/app.js`), input
+`'sustain'` like `MODS.wind`/`MODS.harp` above — a blown note is held, not
+struck. Both records are written an octave below what they sound (the same
+octave-only notation gap `writtenOctaveUp` documents for guitar/bass, just in
+the other direction): a descant recorder's lowest written note is middle C
+but it actually sounds C5, and a D tin whistle's lowest written note sounds
+D5, so each record's `transposition` is `+12` and its `range` is the SOUNDING
+pitch the microphone actually hears, not the printed page. Their MODS entries
+carry `staff: true` and `writtenOffset: -12` for the notation drawing pass to
+pick up once it honours those fields; until then the fields are inert. Each
+curriculum introduces notes in beginner method-book order — recorder: B, A, G
+first, then the high C and D above them, then the low E, D and C below G,
+then the forked-fingering F; whistle: the D-major scale, first octave, D E
+F# G A B C# D — rather than chromatic or alphabetical order.
+
 ## Rhythm vocabulary
 
 `src/core/rhythm.js` is a pure rhythm-notation module: cells (quarter, eighth pairs, rests, ties,
