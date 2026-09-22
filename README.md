@@ -136,6 +136,13 @@ pin known judging bugs on purpose so a later change to the app is forced to
 touch them deliberately instead of silently inheriting the bug — they are
 not something to "fix" by editing the test.
 
+`tests/characterization/a11y-axe.test.mjs` runs [axe-core](https://github.com/dequelabs/axe-core)
+(an exact-pinned devDependency, the one runtime npm package the app itself never ships) over the
+built `dist/band-coach.html` in its main states — first load, an instrument selected and a lesson
+started, each side panel open, and the settings sheet — and fails on any WCAG 2/2.1 A/AA
+violation. It is a real scanner check, not a hand-picked list of rules, so it catches whatever the
+other a11y characterization tests above were not written to look for.
+
 ## Backups
 
 Progress is saved in the browser, keyed to the exact file path Band Coach was opened from — moving
