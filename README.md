@@ -157,6 +157,13 @@ there is nothing yet to lose.
 `src/audio/file-frames.js` is a pure function, `framesFromPCM`, that walks a decoded mono audio
 clip (a plain `Float32Array` of samples plus its real sample rate) and produces the same
 `frames`/`onsets` shape `src/song/transcribe.js` already reads from a live "Record a tune" mic
+capture — so it feeds transcribe.js exactly the way a live capture does, teaching that module
+nothing new. The "Record a tune" panel wires this in directly: alongside Listen/Stop, "Or choose
+an audio file" lets a learner pick a recording instead of using the microphone, and it goes
+through the same check-list step before anything can be practised or saved. Like the rest of this
+app's pitch tracking, it is monophonic only: a chord or a second voice reads as whichever single
+pitch the detector locks onto, not as separate notes — so this writes down one melody line at a
+time, from a file the same as from the mic.
 capture — so a file-import panel can be wired up later without teaching transcribe.js anything
 new. Like the rest of this app's pitch tracking, it is monophonic only: a chord or a second voice
 reads as whichever single pitch the detector locks onto, not as separate notes.
