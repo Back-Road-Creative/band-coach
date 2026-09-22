@@ -206,6 +206,34 @@ live, it is disconnected and discarded, `listen()` picks up on its next tick, an
 recorded through `recordError()` (visible via the debug hook's `errors()`) rather than silently
 dropped.
 
+## Capo, alternate tunings and a left-handed view
+
+The "How to play it" panel's fretted-instrument diagrams (guitar, bass, ukulele, mandolin,
+banjo) can show a capo, a named alternate tuning where one is defined, and a left-handed
+mirrored diagram; bowed fretless instruments (violin, viola, cello, double bass) get the
+left-handed mirror only, since they have no capo or fret-based tuning to switch. The controls
+appear only for instrument kinds that make sense for them and reset to standard/no-capo/
+right-handed whenever a different instrument is picked.
+
+- Capo: a number input, counting frets from the capo, not the physical nut — a capo becomes the
+  new "open string" position (`src/instruments/how/fretboard.js`'s own rule). A note that falls
+  behind the capo cannot be shown; the description says so in plain words instead of just
+  reporting the pitch as not found.
+- Alternate tuning: only guitar (`gtr`) currently has named alternates defined (drop D, DADGAD,
+  open G, open D, half-step down, in `fretboard.js`'s `TUNINGS`) — the picker only appears where
+  `src/ui/fingerings/how.js`'s `alternateTuningsFor(instrument)` returns a real list, never
+  guessed from string count (a 4-string ukulele tuning is not interchangeable with a 4-string
+  bass tuning).
+- Left-handed: mirrors which side of the diagram each string is drawn on (`fretboard.js`'s
+  `leftHanded` option); the underlying pitches, strings and frets never change, only the
+  drawing order.
+
+This choice is session-only: it lives in the fingerings panel's own module state, not in the
+app's saved-preferences database (`src/app.js`'s `DB.prefs`), so it resets on reload. Wiring a
+persistent capo/tuning/handedness preference into that database is a follow-up, not part of this
+change. Mirroring the trainer's own fretboard canvas (the practice view drawn in `src/app.js`,
+separate from this reference panel) and capo-aware trainer tasks are also out of scope here.
+
 ## Piano hands together
 
 The keyboard mod's level 13 is "hands together": the right hand and left hand each play one note
