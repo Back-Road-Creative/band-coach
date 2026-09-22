@@ -65,7 +65,7 @@ const groupedVariantIds = () =>
   "Array.from(document.querySelectorAll('#picker .variant-toggle button[data-mod]')).map(b => b.dataset.mod)";
 
 const KNOWN_NON_VARIANT_TOP_LEVEL_IDS = ['mandolin', 'banjo-5-string', 'mallet-percussion', 'harp'];
-const KNOWN_VARIANT_PARENTS = { 'bass-5-string': 'bass', 'ukulele-low-g': 'uke', 'ukulele-baritone': 'uke', 'trumpet-bb': 'wind', 'horn-f': 'wind', trombone: 'wind' };
+const KNOWN_VARIANT_PARENTS = { 'bass-5-string': 'bass', 'ukulele-low-g': 'uke', 'ukulele-baritone': 'uke', 'trumpet-bb': 'wind', 'horn-f': 'wind', trombone: 'wind', viola: 'violin', cello: 'violin', 'double-bass': 'violin' };
 
 test('variant groups: visible instrument controls equal every instrument id minus the grouped variants', async (t) => {
   const page = await launchPage(htmlPath);
