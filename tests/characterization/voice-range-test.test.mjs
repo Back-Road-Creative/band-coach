@@ -13,6 +13,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { HTML_PATH } from '../helpers/html-path.mjs';
 import { launchPage, effectiveWaitMs } from '../helpers/browser.mjs';
+import { waitForSteadyMidi } from '../helpers/steady-midi.mjs';
 
 const htmlPath = HTML_PATH;
 
@@ -51,33 +52,6 @@ async function openVoice(page) {
   await page.evaluate("document.querySelector('#picker button[data-mod=\"voice\"]').click()");
   await page.evaluate("document.getElementById('ioBtn').click()");
   await page.waitFor("document.getElementById('ioBtn').hidden === true", effectiveWaitMs(5000));
-}
-
-// Waits for a snapshot of `window.__coach.heard()` whose rounded midi is
-// within `tolerance` of `targetMidi`, then keeps that same pitch steady for
-// `holdMs` more (polling) before returning -- so a click that follows is
-// known to land after the flow has actually accumulated a sustained sample,
-// not on the very first frame that happened to match.
-async function waitForSteadyMidi(page, targetMidi, holdMs, timeoutMs = 8000) {
-  const budget = effectiveWaitMs(timeoutMs);
-  const start = Date.now();
-  let steadySince = null;
-  for (;;) {
-    const midi = await page.evaluate(
-      "(() => { const h = window.__coach.heard(); return h && h.freq ? Math.round(h.midi) : null; })()"
-    );
-    const now = Date.now();
-    if (midi === targetMidi) {
-      if (steadySince === null) steadySince = now;
-      if (now - steadySince >= holdMs) return;
-    } else {
-      steadySince = null;
-    }
-    if (now - start > budget) {
-      throw new Error(`waitForSteadyMidi timed out after ${budget}ms: wanted midi ${targetMidi} steady for ${holdMs}ms, last saw ${midi}`);
-    }
-    await new Promise((r) => setTimeout(r, 50));
-  }
 }
 
 test('Find my range: singing low then high through the real mic saves a range and picks it as the voice', async (t) => {
