@@ -23,6 +23,11 @@ import hornF from '../../src/instruments/horn-f.js';
 import trombone from '../../src/instruments/trombone.js';
 import recorderDescant from '../../src/instruments/recorder-descant.js';
 import tinWhistle from '../../src/instruments/tin-whistle.js';
+import flute from '../../src/instruments/flute.js';
+import clarinetBb from '../../src/instruments/clarinet-bb.js';
+import oboe from '../../src/instruments/oboe.js';
+import saxAlto from '../../src/instruments/sax-alto-eb.js';
+import saxTenor from '../../src/instruments/sax-tenor-bb.js';
 
 test('howKindFor picks the right module per instrument', () => {
   assert.equal(howKindFor(gtr), 'fretboard');
@@ -41,9 +46,42 @@ test('howKindFor picks the right module per instrument', () => {
   assert.equal(howKindFor(trombone), 'brass-slide');
   assert.equal(howKindFor(recorderDescant), 'recorder');
   assert.equal(howKindFor(tinWhistle), 'whistle');
+  assert.equal(howKindFor(flute), 'keyed-woodwind');
+  assert.equal(howKindFor(clarinetBb), 'keyed-woodwind');
+  assert.equal(howKindFor(oboe), 'keyed-woodwind');
+  assert.equal(howKindFor(saxAlto), 'keyed-woodwind');
+  assert.equal(howKindFor(saxTenor), 'keyed-woodwind');
   assert.equal(howKindFor(kbd), null); // keys: obvious, no fingering module
   assert.equal(howKindFor(wind), null); // an abstraction over 7 transpositions, not one real instrument
   assert.equal(howKindFor(null), null);
+});
+
+test('keyed-woodwind: flute writes the low C fingering, described in words', () => {
+  const how = computeHow(flute, 60); // C4, flute.range.low
+  assert.equal(how.kind, 'keyed-woodwind');
+  assert.equal(how.playable, true);
+  assert.match(how.description, /footjoint: low C/);
+});
+
+test('keyed-woodwind: oboe D5 is flagged half-hole and the description names it', () => {
+  const how = computeHow(oboe, 74); // D5, oboe.range.high
+  assert.equal(how.kind, 'keyed-woodwind');
+  assert.equal(how.playable, true);
+  assert.match(how.description, /half-hole/);
+});
+
+test('keyed-woodwind: sax Bb3 (the horn\'s lowest written note) is playable', () => {
+  const how = computeHow(saxAlto, 58); // Bb3, saxAlto.range.low after the range fix
+  assert.equal(how.kind, 'keyed-woodwind');
+  assert.equal(how.playable, true);
+  assert.match(how.description, /low Bb key/);
+});
+
+test('keyed-woodwind: a pitch outside the chart is reported plainly, not thrown', () => {
+  const how = computeHow(clarinetBb, 40); // far below clarinet.range.low
+  assert.equal(how.kind, 'keyed-woodwind');
+  assert.equal(how.playable, false);
+  assert.match(how.description, /no fingering shown/);
 });
 
 test('fretboard: open low E string on guitar', () => {

@@ -582,6 +582,50 @@ import { register as registerPlayalong } from './ui/playalong.js';
       { name: 'First three notes', add: Wn(59, 61, 63), limit: 12 }, { name: 'Two more, going up', add: Wn(64, 66), limit: 12 }, { name: 'Up to the top', add: Wn(68, 70, 71), limit: 12 },
       { name: 'Moves: two notes', task: 'seq', len: 2, limit: 10 }, { name: 'Moves: three notes', task: 'seq', len: 3, limit: 9 }, { name: 'Five-note runs', task: 'run', limit: 8 }
     ] };
+  // Five keyed woodwinds (flute, clarinet, oboe, alto sax, tenor sax): same
+  // pattern as the brass trio above -- own MODS entry, own fixed windKind so
+  // written notes always read in that instrument's own key regardless of
+  // the learner's generic Wind and brass preference, `staff: true` for the
+  // shared hand-built staff. Level notes match each record's own
+  // src/instruments/*.js curriculum (see those files' comments for the note
+  // choices), and Wn(...) note ids are checked against
+  // src/instruments/how/keyed-woodwind.js by
+  // tests/unit/computed-instruments-keyed-woodwind.test.mjs.
+  const fluteMicRange = transposedMicRange(instrumentById.flute);
+  MODS.flute = { name: instrumentById.flute.name, parent: 'wind', tag: 'microphone', color: '#5ab4d9', input: 'sustain', windKind: 'c', staff: true, fmin: fluteMicRange.fmin, fmax: fluteMicRange.fmax, help: 'Flute: press Connect to let the page listen through your microphone. Hold each note steady for about half a second. Written notes always read at concert pitch here, whatever you last chose on Wind and brass.',
+    levels: [
+      { name: 'Written C, D and E', add: Wn(60, 62, 64), limit: 12 }, { name: 'Add F and G', add: Wn(65, 67), limit: 12 }, { name: 'Add A, B and high C', add: Wn(69, 71, 72), limit: 12 },
+      { name: 'Sharps and flats: F sharp and B flat', add: Wn(66, 70), limit: 12 },
+      { name: 'Moves: two notes', task: 'seq', len: 2, limit: 10 }, { name: 'Moves: three notes', task: 'seq', len: 3, limit: 9 }, { name: 'Five-note runs', task: 'run', limit: 8 }
+    ] };
+  const oboeMicRange = transposedMicRange(instrumentById.oboe);
+  MODS.oboe = { name: instrumentById.oboe.name, parent: 'wind', tag: 'microphone', color: '#d9975a', input: 'sustain', windKind: 'c', staff: true, fmin: oboeMicRange.fmin, fmax: oboeMicRange.fmax, help: 'Oboe: press Connect to let the page listen through your microphone. Hold each note steady for about half a second. Written notes always read at concert pitch here, whatever you last chose on Wind and brass.',
+    levels: [
+      { name: 'Written D, E and F sharp', add: Wn(62, 64, 66), limit: 12 }, { name: 'Add G and A', add: Wn(67, 69), limit: 12 }, { name: 'Add B, C sharp and high D', add: Wn(71, 73, 74), limit: 12 },
+      { name: 'Sharps and flats: E flat and G sharp', add: Wn(63, 68), limit: 12 },
+      { name: 'Moves: two notes', task: 'seq', len: 2, limit: 10 }, { name: 'Moves: three notes', task: 'seq', len: 3, limit: 9 }, { name: 'Five-note runs', task: 'run', limit: 8 }
+    ] };
+  const clarinetBbMicRange = transposedMicRange(instrumentById['clarinet-bb']);
+  MODS['clarinet-bb'] = { name: instrumentById['clarinet-bb'].name, parent: 'wind', tag: 'microphone', color: '#7a5ad9', input: 'sustain', windKind: 'bb', staff: true, fmin: clarinetBbMicRange.fmin, fmax: clarinetBbMicRange.fmax, help: 'Clarinet (B flat): press Connect to let the page listen through your microphone. Hold each note steady for about half a second. Written notes always read for B flat clarinet here, whatever you last chose on Wind and brass.',
+    levels: [
+      { name: 'Written G, A and B', add: Wn(55, 57, 59), limit: 12 }, { name: 'Add C and D', add: Wn(60, 62), limit: 12 }, { name: 'Add E, F and high G', add: Wn(64, 65, 67), limit: 12 },
+      { name: 'Sharps and flats: A flat and C sharp', add: Wn(56, 61), limit: 12 },
+      { name: 'Moves: two notes', task: 'seq', len: 2, limit: 10 }, { name: 'Moves: three notes', task: 'seq', len: 3, limit: 9 }, { name: 'Five-note runs', task: 'run', limit: 8 }
+    ] };
+  const saxAltoEbMicRange = transposedMicRange(instrumentById['sax-alto-eb']);
+  MODS['sax-alto-eb'] = { name: instrumentById['sax-alto-eb'].name, parent: 'wind', tag: 'microphone', color: '#d95a8f', input: 'sustain', windKind: 'eb', staff: true, fmin: saxAltoEbMicRange.fmin, fmax: saxAltoEbMicRange.fmax, help: 'Alto sax (E flat): press Connect to let the page listen through your microphone. Hold each note steady for about half a second. Written notes always read for E flat alto sax here, whatever you last chose on Wind and brass.',
+    levels: [
+      { name: 'Written B flat, B and C', add: Wn(58, 59, 60), limit: 12 }, { name: 'Add D and E', add: Wn(62, 64), limit: 12 }, { name: 'Add F, F sharp and high G', add: Wn(65, 66, 67), limit: 12 },
+      { name: 'Sharps and flats: E flat and C sharp', add: Wn(63, 61), limit: 12 },
+      { name: 'Moves: two notes', task: 'seq', len: 2, limit: 10 }, { name: 'Moves: three notes', task: 'seq', len: 3, limit: 9 }, { name: 'Five-note runs', task: 'run', limit: 8 }
+    ] };
+  const saxTenorBbMicRange = transposedMicRange(instrumentById['sax-tenor-bb']);
+  MODS['sax-tenor-bb'] = { name: instrumentById['sax-tenor-bb'].name, parent: 'wind', tag: 'microphone', color: '#5ad9c2', input: 'sustain', windKind: 'bbt', staff: true, fmin: saxTenorBbMicRange.fmin, fmax: saxTenorBbMicRange.fmax, help: 'Tenor sax (B flat): press Connect to let the page listen through your microphone. Hold each note steady for about half a second. Written notes always read for B flat tenor sax here, whatever you last chose on Wind and brass.',
+    levels: [
+      { name: 'Written B flat, B and C', add: Wn(58, 59, 60), limit: 12 }, { name: 'Add D and E', add: Wn(62, 64), limit: 12 }, { name: 'Add F, F sharp and high G', add: Wn(65, 66, 67), limit: 12 },
+      { name: 'Sharps and flats: E flat and C sharp', add: Wn(63, 61), limit: 12 },
+      { name: 'Moves: two notes', task: 'seq', len: 2, limit: 10 }, { name: 'Moves: three notes', task: 'seq', len: 3, limit: 9 }, { name: 'Five-note runs', task: 'run', limit: 8 }
+    ] };
   const MOD_IDS = Object.keys(MODS);
   // Instruments the notation engine (src/notation/) is wired into. Wind
   // already draws its own hand-built staff (drawStaff below); it is not

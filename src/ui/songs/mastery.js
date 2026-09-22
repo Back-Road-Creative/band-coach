@@ -108,6 +108,16 @@ export function itemIdForMidi(instrumentId, midi, prefs = {}) {
       // in src/app.js's info() 'w' branch, so this must match that.
       return 'w' + fold(midi + 19, 59, 71);
     }
+    // The five keyed woodwinds (src/instruments/flute.js/clarinet-bb.js/
+    // oboe.js/sax-alto-eb.js/sax-tenor-bb.js), each with its own fixed
+    // transposition and MODS entry (fixed windKind), same reasoning as
+    // trumpet-bb/horn-f/trombone above: written = sounding - transposition,
+    // folded into the record's own written range.
+    case 'flute': { const written = midi; return 'w' + fold(written, 60, 72); } // transposition 0
+    case 'oboe': { const written = midi; return 'w' + fold(written, 62, 74); } // transposition 0
+    case 'clarinet-bb': { const written = midi + 2; return 'w' + fold(written, 55, 67); } // sounding = written - 2
+    case 'sax-alto-eb': { const written = midi + 9; return 'w' + fold(written, 58, 67); } // sounding = written - 9
+    case 'sax-tenor-bb': { const written = midi + 14; return 'w' + fold(written, 58, 67); } // sounding = written - 14
     case 'wind': {
       const off = WIND_OFFSET[prefs.wind] ?? WIND_OFFSET.bb;
       const written = WIND_BASS_CLEF.has(prefs.wind) ? midi + 19 : midi - off;
