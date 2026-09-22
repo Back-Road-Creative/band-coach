@@ -207,6 +207,20 @@ that need it pay the extra ~42ms of analysis latency; everything else stays
 at 2048. See `src/audio/pitch-worklet.js` for how the AudioWorklet pipeline
 resizes on an instrument switch.
 
+Ready bowed instruments as of this writing: violin, viola, cello and double
+bass. They are fretless, so their trainer entries (`MODS.violin`, etc.) carry
+a `fretless: true` flag and `input: 'sustain'` (a note is held and matched by
+pitch, the same judging voice and wind already use, not plucked). `drawFret()`
+checks that flag to draw a plain fingerboard with a nut but no fret wires,
+and an `info`/`validId` override rewrites the string+fret item labels those
+six fretted instruments already use (`stringLevels()`, with a `posWord`
+argument of `'position'` instead of `'fret'`) so a learner is never told to
+find a "fret" that is not there — the hint and the "time's up" text say the
+same thing. Each record's curriculum stops at exactly first position (5
+semitones above each open string): the instrument's own beginner
+`range.high` is built from its highest open string plus 5, so no item ever
+asks for a note outside the range the mic is tuned to listen for.
+
 A processor that throws inside its own constructor fails silently from the app's point of view:
 `addModule()` still resolves and `new AudioWorkletNode(...)` still succeeds, so `src/app.js` would
 otherwise hold a worklet that looks connected but never posts a single frame — and because it looks

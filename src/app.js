@@ -367,10 +367,15 @@ import { register as registerPlayalong } from './ui/playalong.js';
 
   // ---------- instruments: each is a curriculum plus a way of hearing you ----------
   const N = (...ms) => ms.map(m => 'n' + m), Wn = (...ms) => ms.map(m => 'w' + m), SF = (s, ...fs) => fs.map(f => 's' + s + 'f' + f), V = (...ds) => ds.map(d => 'v' + d);
-  function stringLevels(tuning, names, maxFret, chordSet) {
-    const L = [], ns = tuning.length, natural = (s, lo, hi) => { const out = []; for (let f = lo; f <= hi; f++) if ([0, 2, 4, 5, 7, 9, 11].indexOf(pc(tuning[s] + f)) >= 0) out.push(f); return out; };
+  // posWord names the positional unit in each per-string level's label:
+  // 'fret' for every fretted instrument (frets 1 to N, a fingerboard dot the
+  // player can feel), 'position' for the bowed instruments (violin, viola,
+  // cello, double-bass -- fretless, so there is nothing to feel for, only a
+  // pitch to match; see MODS.violin etc.'s fretless flag in this same file).
+  function stringLevels(tuning, names, maxFret, chordSet, posWord) {
+    const w = posWord || 'fret', L = [], ns = tuning.length, natural = (s, lo, hi) => { const out = []; for (let f = lo; f <= hi; f++) if ([0, 2, 4, 5, 7, 9, 11].indexOf(pc(tuning[s] + f)) >= 0) out.push(f); return out; };
     L.push({ name: 'The open strings', add: tuning.map((t, i) => 's' + (ns - i) + 'f0'), limit: 9 });
-    for (let i = 0; i < ns; i++) { const sn = ns - i, mid = Math.min(5, maxFret); L.push({ name: names[i] + ' string, frets 1 to ' + mid, add: SF(sn, ...natural(i, 1, mid)), limit: 9 }); if (maxFret > 5) L.push({ name: names[i] + ' string, up the neck', add: SF(sn, ...natural(i, 6, maxFret)), limit: 9 }); }
+    for (let i = 0; i < ns; i++) { const sn = ns - i, mid = Math.min(5, maxFret); L.push({ name: names[i] + ' string, ' + w + 's 1 to ' + mid, add: SF(sn, ...natural(i, 1, mid)), limit: 9 }); if (maxFret > 5) L.push({ name: names[i] + ' string, up the neck', add: SF(sn, ...natural(i, 6, maxFret)), limit: 9 }); }
     L.push({ name: 'Moves: two notes', task: 'seq', len: 2, limit: 8 }); L.push({ name: 'Moves: three notes', task: 'seq', len: 3, limit: 7 });
     L.push({ name: 'Find it by name, no dot', add: [0, 2, 4, 5, 7, 9, 11].map(k => 'p' + k), pool: 'p', limit: 9, blind: true });
     L.push({ name: 'Sharps and flats by name', add: [1, 3, 6, 8, 10].map(k => 'p' + k), pool: 'p', limit: 9, blind: true });
@@ -461,6 +466,27 @@ import { register as registerPlayalong } from './ui/playalong.js';
   const bass5Range = rangeForInstrument(instrumentById['bass-5-string']);
   MODS['bass-5-string'] = { name: instrumentById['bass-5-string'].name, tag: 'microphone', color: '#c2453a', input: 'pluck', fmin: bass5Range.fmin, fmax: bass5Range.fmax, tuning: instrumentById['bass-5-string'].tuning, frets: 12, help: '5-string bass: press Connect to let the page listen. Play one clean note at a time and let it ring for a moment, including the low B string.', levels: null };
   MODS['bass-5-string'].levels = stringLevels(MODS['bass-5-string'].tuning, ['B', 'E', 'A', 'D', 'G'], 12, null);
+  // Four bowed instruments: fretless, so `fretless: true` tells drawFret()
+  // not to draw fret wires (a plain fingerboard, position dots instead) and
+  // the info/validId override below (see the _info3/_valid3 pair) not to
+  // label a position "fret N" the way the fretted six above do. 'sustain'
+  // (not 'pluck') because a bowed note is held, not plucked -- the same
+  // input voice/wind/harp already use, judged the same intonation-first way
+  // (onPitch's M.input === 'sustain' branch: exact-pitch cents against
+  // e.info.midi, shown live on the same cents gauge). `frets: 5` sets
+  // drawFret's position-dot spacing to match each record's own maxFret 5.
+  const violinRange = rangeForInstrument(instrumentById.violin);
+  MODS.violin = { name: instrumentById.violin.name, tag: 'microphone', color: '#d97b5f', input: 'sustain', fmin: violinRange.fmin, fmax: violinRange.fmax, tuning: instrumentById.violin.tuning, frets: 5, fretless: true, help: 'Violin: press Connect to let the page listen through your microphone or audio interface. Standard tuning G D A E. There are no frets to feel for, so hold each note steady for about half a second and let the gauge tell you how sharp or flat you are; the dot marks roughly where your finger should land.', levels: null };
+  MODS.violin.levels = stringLevels(MODS.violin.tuning, ['G', 'D', 'A', 'E'], 5, null, 'position');
+  const violaRange = rangeForInstrument(instrumentById.viola);
+  MODS.viola = { name: instrumentById.viola.name, tag: 'microphone', color: '#c2654f', input: 'sustain', fmin: violaRange.fmin, fmax: violaRange.fmax, tuning: instrumentById.viola.tuning, frets: 5, fretless: true, help: 'Viola: press Connect to let the page listen through your microphone or audio interface. Standard tuning C G D A. There are no frets to feel for, so hold each note steady for about half a second and let the gauge tell you how sharp or flat you are; the dot marks roughly where your finger should land.', levels: null };
+  MODS.viola.levels = stringLevels(MODS.viola.tuning, ['C', 'G', 'D', 'A'], 5, null, 'position');
+  const celloRange = rangeForInstrument(instrumentById.cello);
+  MODS.cello = { name: instrumentById.cello.name, tag: 'microphone', color: '#a8503f', input: 'sustain', fmin: celloRange.fmin, fmax: celloRange.fmax, tuning: instrumentById.cello.tuning, frets: 5, fretless: true, help: 'Cello: press Connect to let the page listen through your microphone or audio interface. Standard tuning C G D A, an octave below viola. There are no frets to feel for, so hold each note steady for about half a second and let the gauge tell you how sharp or flat you are; the dot marks roughly where your finger should land.', levels: null };
+  MODS.cello.levels = stringLevels(MODS.cello.tuning, ['C', 'G', 'D', 'A'], 5, null, 'position');
+  const doubleBassRange = rangeForInstrument(instrumentById['double-bass']);
+  MODS['double-bass'] = { name: instrumentById['double-bass'].name, tag: 'microphone', color: '#8a3f33', input: 'sustain', fmin: doubleBassRange.fmin, fmax: doubleBassRange.fmax, tuning: instrumentById['double-bass'].tuning, frets: 5, fretless: true, help: 'Double bass: press Connect to let the page listen through your microphone or audio interface. Standard tuning E A D G. There are no frets to feel for, so hold each note steady for about half a second and let the gauge tell you how sharp or flat you are; the low open E takes the mic a little longer to lock onto.', levels: null };
+  MODS['double-bass'].levels = stringLevels(MODS['double-bass'].tuning, ['E', 'A', 'D', 'G'], 5, null, 'position');
   const ukeLowGRange = rangeForInstrument(instrumentById['ukulele-low-g']);
   MODS['ukulele-low-g'] = { name: instrumentById['ukulele-low-g'].name, tag: 'microphone', color: '#e6c34a', input: 'pluck', fmin: ukeLowGRange.fmin, fmax: ukeLowGRange.fmax, tuning: instrumentById['ukulele-low-g'].tuning, frets: 7, help: 'Low-G ukulele: press Connect to let the page listen. Standard tuning G C E A with a low, non-re-entrant G. On a single-note lesson, play one clean note at a time; if it hears a strum instead it will tell you so rather than staying silent. Chord listening is experimental.', levels: null };
   MODS['ukulele-low-g'].levels = stringLevels(MODS['ukulele-low-g'].tuning, ['G', 'C', 'E', 'A'], 7, ['C', 'Am', 'F', 'G7']);
@@ -601,6 +627,17 @@ import { register as registerPlayalong } from './ui/playalong.js';
   const _info2 = info, _valid2 = validId;
   info = function (m, id, prefs) { if (typeof id === 'string' && id[0] === 'j' && handsTogetherById(id)) { const ex = handsTogetherById(id); return { kind: 'hands-together', ex: ex, label: ex.label, short: ex.short }; } return _info2(m, id, prefs); };
   validId = function (m, id) { if (typeof id === 'string' && id[0] === 'j') return !!handsTogetherById(id); return _valid2(m, id); };
+  // Bowed instruments (violin, viola, cello, double-bass) reuse the 's'
+  // string+fret item id scheme (stringLevels above) so the fingerings panel
+  // and drawFret's dot placement keep working unchanged, but they have no
+  // frets: the label the base info() built at :502 ("string 1, fret 3")
+  // would be a false claim of a fret the player cannot feel. Rewrites the
+  // label/short for any MODS[m].fretless mod's 's' item to name a plain
+  // position (semitones above the open string) instead -- see the honest
+  // wording in hintFor and the "time's up" text below for the same reason.
+  const _info3 = info, _valid3 = validId;
+  info = function (m, id, prefs) { const r = _info3(m, id, prefs); if (r && r.kind === 'note' && r.string !== undefined && MODS[m] && MODS[m].fretless) { const pos = r.fret ? r.fret + ' semitone' + (r.fret > 1 ? 's' : '') + ' up' : 'open'; return Object.assign({}, r, { label: nname(r.midi) + ': string ' + r.string + ', ' + pos, short: nname(r.midi) + ' (string ' + r.string + ')' }); } return r; };
+  validId = _valid3;
   // turn a heard note into an item this instrument can practise. Delegates
   // to src/ui/songs/mastery.js's itemIdForMidi -- the "capture a melody"
   // path and a song's mastery crediting must credit the identical item id
@@ -819,7 +856,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
     else { const verb = mod === 'voice' ? 'Sing' : 'Play'; p = verb + ' ' + t.els.map((el, k) => (k === t.idx ? '<b>' : '') + promptFor(el.info, el.reveal) + (k === t.idx ? '</b>' : '')).join(' → '); if (t.kind === 'hold') p = (mod === 'voice' ? 'Hold ' : 'Hold ') + '<b>' + e.info.label + '</b> for two seconds'; h = hintFor(e); playRef(t); }
     $('prompt').innerHTML = p; $('hint').textContent = (t.warm ? 'Warm-up, does not count. ' : '') + h; updateDesc();
   }
-  function hintFor(e) { const i = e.info; if (i.string) return coreHintFor(i, e.reveal); if (i.anywhere) return 'Any string, any octave.'; if (i.kind === 'chord') return 'All the notes together: ' + i.pcs.map(x => NAMES[x]).join(', ') + '.'; if (i.kind === 'hands-together') return fingeringLabel(i.ex) + ' (' + nname(i.ex.rh.midi) + ' right hand, ' + nname(i.ex.lh.midi) + ' left hand). A MIDI keyboard or two hands on the computer keys grades both notes exactly; a microphone only hears one note at a time, so that grading is approximate.'; if (mod === 'voice') return task.ref === 'target' ? 'You heard the note. Sing it back in any octave and hold it.' : 'You heard Do. Find ' + i.short + ' from it.'; if (mod === 'wind') return 'Written ' + i.label + '. Hold it steady.'; return e.reveal ? 'New key: it is lit up this time.' : ''; }
+  function hintFor(e) { const i = e.info; if (i.string && MODS[mod].fretless) return (e.reveal ? i.label + '. The dot shows the position.' : 'Find this pitch on the string.') + ' There is no fret to feel for — match the pitch, and the gauge shows sharp or flat.'; if (i.string) return coreHintFor(i, e.reveal); if (i.anywhere) return 'Any string, any octave.'; if (i.kind === 'chord') return 'All the notes together: ' + i.pcs.map(x => NAMES[x]).join(', ') + '.'; if (i.kind === 'hands-together') return fingeringLabel(i.ex) + ' (' + nname(i.ex.rh.midi) + ' right hand, ' + nname(i.ex.lh.midi) + ' left hand). A MIDI keyboard or two hands on the computer keys grades both notes exactly; a microphone only hears one note at a time, so that grading is approximate.'; if (mod === 'voice') return task.ref === 'target' ? 'You heard the note. Sing it back in any octave and hold it.' : 'You heard Do. Find ' + i.short + ' from it.'; if (mod === 'wind') return 'Written ' + i.label + '. Hold it steady.'; return e.reveal ? 'New key: it is lit up this time.' : ''; }
   function refreshPrompt() { if (!task || task.kind === 'ear' || task.kind === 'bar' || task.kind === 'hold') return; const verb = mod === 'voice' ? 'Sing' : 'Play'; $('prompt').innerHTML = verb + ' ' + task.els.map((el, k) => (k === task.idx ? '<b>' : '') + promptFor(el.info, el.reveal) + (k === task.idx ? '</b>' : '')).join(' → '); const e = cur(); if (e) $('hint').textContent = (task.warm ? 'Warm-up, does not count. ' : '') + hintFor(e); updateDesc(); }
   // text mirror of the canvas for the visually-hidden #cvDesc element (unit 7.7 item 1):
   // revealed mirrors the current element's own reveal/failed flag, never invents one.
@@ -1067,7 +1104,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
     else if (!task.done) {
       const e = cur(), el = now() - e.t0, lim = task.limit * (task.kind === 'hold' ? 1.4 : 1);
       $('timeFill').style.width = Math.round(100 * c01(1 - el / lim)) + '%';
-      if (el > lim && !e.failed) { failEl(task.kind === 'ear' ? '' : 'Time. ' + (e.info.string ? 'It is on string ' + e.info.string + (e.info.fret ? ', fret ' + e.info.fret : ', open') + '. ' : '') + 'It is shown now: play it to move on.', null); if (task.kind === 'ear') { answer('timeout'); } else if (mod === 'voice') tone(e.info.midi, now() + 0.05, 0.9); }
+      if (el > lim && !e.failed) { failEl(task.kind === 'ear' ? '' : 'Time. ' + (e.info.string ? 'It is on string ' + e.info.string + (MODS[mod].fretless ? (e.info.fret ? ', ' + e.info.fret + ' semitone' + (e.info.fret > 1 ? 's' : '') + ' up' : ', open') : (e.info.fret ? ', fret ' + e.info.fret : ', open')) + '. ' : '') + 'It is shown now: play it to move on.', null); if (task.kind === 'ear') { answer('timeout'); } else if (mod === 'voice') tone(e.info.midi, now() + 0.05, 0.9); }
       if (now() - lastInputAt > 30 && el > lim + 8) { if (e.failed && !task.warm) { /* this one does not count: nobody was there */ e.failed = false; } task.done = true; task = null; takeBreak('away'); return; }
     }
     if (sess.sinceBreak > 25 * 60 && Date.now() > sess.snoozeUntil) { takeBreak('long'); return; }
@@ -1146,7 +1183,12 @@ import { register as registerPlayalong } from './ui/playalong.js';
     const ns = M.tuning.length, nf = M.frets, x0 = W * 0.15, x1 = W * 0.97, y0 = H * 0.16, y1 = H * 0.84, fx = f => f === 0 ? x0 - W * 0.035 : x0 + (x1 - x0) * ((f - 0.5) / nf), sy = s => y0 + (y1 - y0) * ((s - 1) / (ns - 1));
     rr(x0, y0 - H * 0.05, x1 - x0, y1 - y0 + H * 0.1, 6); g.fillStyle = '#2a1c12'; g.fill();
     [3, 5, 7, 9, 12].forEach(f => { if (f > nf) return; g.fillStyle = '#ffffff22'; g.beginPath(); g.arc(fx(f), (y0 + y1) / 2 + (f === 12 ? -H * 0.12 : 0), H * 0.022, 0, 7); g.fill(); if (f === 12) { g.beginPath(); g.arc(fx(f), (y0 + y1) / 2 + H * 0.12, H * 0.022, 0, 7); g.fill(); } });
-    for (let f = 0; f <= nf; f++) { const x = x0 + (x1 - x0) * f / nf; g.strokeStyle = f === 0 ? '#e9edf6' : '#8a8f99'; g.lineWidth = f === 0 ? 6 : 2; g.beginPath(); g.moveTo(x, y0 - H * 0.05); g.lineTo(x, y1 + H * 0.05); g.stroke(); if (f > 0) { g.fillStyle = '#93a0bd'; font(H * 0.05, 600); g.textAlign = 'center'; g.fillText(String(f), fx(f), H * 0.97); } }
+    // Fretless (bowed) fingerboards draw only the nut, not a grid of fret
+    // wires that do not exist: the dot() calls below still place notes at
+    // the same fx(f) x-coordinates (f is a semitone position, not a real
+    // fret), just with nothing drawn under them to claim a fret is there.
+    if (M.fretless) { const x = x0; g.strokeStyle = '#e9edf6'; g.lineWidth = 6; g.beginPath(); g.moveTo(x, y0 - H * 0.05); g.lineTo(x, y1 + H * 0.05); g.stroke(); }
+    else for (let f = 0; f <= nf; f++) { const x = x0 + (x1 - x0) * f / nf; g.strokeStyle = f === 0 ? '#e9edf6' : '#8a8f99'; g.lineWidth = f === 0 ? 6 : 2; g.beginPath(); g.moveTo(x, y0 - H * 0.05); g.lineTo(x, y1 + H * 0.05); g.stroke(); if (f > 0) { g.fillStyle = '#93a0bd'; font(H * 0.05, 600); g.textAlign = 'center'; g.fillText(String(f), fx(f), H * 0.97); } }
     for (let s = 1; s <= ns; s++) { g.strokeStyle = '#c9ced9'; g.lineWidth = 1 + (s / ns) * 3; g.beginPath(); g.moveTo(x0 - W * 0.06, sy(s)); g.lineTo(x1, sy(s)); g.stroke(); g.fillStyle = '#93a0bd'; font(H * 0.055, 600); g.textAlign = 'right'; g.fillText(s + (DB.prefs.names ? '  ' + nname(M.tuning[ns - s]) : ''), x0 - W * 0.07, sy(s) + H * 0.02); }
     const dot = (s, f, col, txt, a) => { g.globalAlpha = a; g.fillStyle = col; g.beginPath(); g.arc(fx(f), sy(s), H * 0.05, 0, 7); g.fill(); g.globalAlpha = 1; if (txt) { g.fillStyle = '#06101d'; font(H * 0.05); g.textAlign = 'center'; g.fillText(txt, fx(f), sy(s) + H * 0.018); } };
     if (heard && heard.freq && MODS[mod].input === 'pluck') { const p = pc(heard.midi); for (let s = 1; s <= ns; s++) for (let f = 0; f <= nf; f++) if (pc(M.tuning[ns - s] + f) === p) dot(s, f, '#9fb4d8', '', 0.25); }
