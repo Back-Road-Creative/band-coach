@@ -150,7 +150,10 @@ or re-downloading the file can lose it, since browsers do not share that storage
 the "More options" menu in the side rail for "Save a backup", which downloads
 `band-coach-progress.json`, and "Restore a backup", which loads one back in. A quiet reminder
 appears once you have actually practised a while without one — never on a fresh profile, since
-there is nothing yet to lose.
+there is nothing yet to lose. The "My progress" panel also shows a practice calendar (minutes and
+level changes, one cell per day, for the last 8 weeks) and a daily minutes goal with a streak — the
+practice log itself only keeps the most recent 60 sessions, so days older than that say "earlier
+sessions not kept" rather than a false zero.
 
 ## Turning an audio file into notes
 
