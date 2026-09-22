@@ -4,8 +4,18 @@
 // computation lives in src/ui/fingerings/how.js (pure, unit tested); this
 // file is just DOM.
 import { INSTRUMENTS } from '../instruments/index.js';
-import { howKindFor, computeHow, defaultNoteFor } from './fingerings/how.js';
+import { howKindFor, computeHow, defaultNoteFor, alternateTuningsFor } from './fingerings/how.js';
 import { noteName, chromaticRange } from './fingerings/notes.js';
+
+// Human-readable labels for fretboard.js's named-tuning keys (alternateTuningsFor).
+const TUNING_LABELS = {
+  standard: 'Standard',
+  'drop-d': 'Drop D',
+  dadgad: 'DADGAD',
+  'open-g': 'Open G',
+  'open-d': 'Open D',
+  'half-step-down': 'Half-step down'
+};
 
 // Only instruments this app can actually show a "how" diagram for.
 const PLAYABLE = INSTRUMENTS.filter(rec => howKindFor(rec));
@@ -35,20 +45,30 @@ function rangeBar(range, midi) {
   return wrap;
 }
 
+// Row draw order, highest-pitched string at the top like a real diagram —
+// reversed for a left-handed player (fretboard.js's `leftHanded` mirrors
+// which side of the diagram each string is drawn on; the pitches, strings
+// and frets underneath never change, only this visual order does).
+function stringRowOrder(count, leftHanded) {
+  const order = [];
+  for (let s = count - 1; s >= 0; s--) order.push(s);
+  return leftHanded ? order.reverse() : order;
+}
+
 function fretboardDiagram(instrument, how) {
-  const strings = instrument.tuning.length;
+  const tuning = how.tuning;
+  const strings = tuning.length;
   const maxFret = how.maxFret;
   const box = el('div', { className: 'fing-fretboard', role: 'img', 'aria-label': how.description });
-  // Draw highest-pitched string at the top, like a real fretboard diagram.
-  for (let s = strings - 1; s >= 0; s--) {
+  stringRowOrder(strings, how.leftHanded).forEach(s => {
     const row = el('div', { className: 'fing-string' });
-    row.appendChild(el('span', { className: 'fing-string-label', text: noteName(instrument.tuning[s]) }));
+    row.appendChild(el('span', { className: 'fing-string-label', text: noteName(tuning[s] + how.capo) }));
     for (let f = 0; f <= maxFret; f++) {
       const hit = how.positions.find(p => p.stringIndex === s && p.fret === f);
       row.appendChild(el('span', { className: 'fing-fret' + (hit ? ' fing-hit' : ''), text: hit ? '●' : '' }));
     }
     box.appendChild(row);
-  }
+  });
   return box;
 }
 
@@ -56,13 +76,14 @@ function fretboardDiagram(instrument, how) {
 // fingerboard with a position marker, never fret wires — the physical
 // instrument has no frets to draw.
 function fingerboardDiagram(instrument, how) {
-  const strings = instrument.tuning.length;
+  const tuning = how.tuning;
+  const strings = tuning.length;
   const maxFret = how.maxFret;
   const box = el('div', { className: 'fing-fingerboard', role: 'img', 'aria-label': how.description });
-  for (let s = strings - 1; s >= 0; s--) {
+  stringRowOrder(strings, how.leftHanded).forEach(s => {
     const hit = how.positions.find(p => p.stringIndex === s);
     const row = el('div', { className: 'fing-fboard-string' });
-    row.appendChild(el('span', { className: 'fing-string-label', text: noteName(instrument.tuning[s]) }));
+    row.appendChild(el('span', { className: 'fing-string-label', text: noteName(tuning[s]) }));
     const track = el('div', { className: 'fing-fboard-track' });
     if (hit) {
       const pct = Math.min(100, (hit.fret / Math.max(1, maxFret)) * 100);
@@ -70,7 +91,7 @@ function fingerboardDiagram(instrument, how) {
     }
     row.appendChild(track);
     box.appendChild(row);
-  }
+  });
   return box;
 }
 
@@ -142,12 +163,27 @@ export function registerFingerings(panels) {
     mount(hostEl, api) {
       let instrument = null;
       let midi = null;
+      // Capo, alternate tuning and left-handed are per-instrument, session-
+      // only choices (no persistence layer reaches this file without
+      // touching src/app.js — out of scope here): they reset whenever the
+      // learner switches instruments below.
+      let capo = 0;
+      let tuningName = null;
+      let leftHanded = false;
 
       const title = el('h2', { text: 'How to play it' });
       const help = el('p', { className: 'small', text: 'Pick an instrument and a note to see how to play it, drawn clearly with a plain-text description underneath.' });
       const instrLabel = el('label', { htmlFor: 'fingInstrument', text: 'Instrument' });
       const instrSelect = el('select', { id: 'fingInstrument' });
       PLAYABLE.forEach(rec => instrSelect.appendChild(el('option', { value: rec.id, text: rec.name })));
+
+      const capoLabel = el('label', { htmlFor: 'fingCapo', text: 'Capo' });
+      const capoInput = el('input', { id: 'fingCapo', type: 'number', min: '0', max: '11', value: '0' });
+      const tuningLabel = el('label', { htmlFor: 'fingTuning', text: 'Tuning' });
+      const tuningSelect = el('select', { id: 'fingTuning' });
+      const leftHandedLabel = el('label', { htmlFor: 'fingLeftHanded', text: 'Left-handed' });
+      const leftHandedInput = el('input', { id: 'fingLeftHanded', type: 'checkbox' });
+      const controlsHost = el('div', { className: 'fing-row fing-how-controls' });
 
       const rangeHost = el('div', { className: 'fing-range-host' });
       const notesHost = el('div', { className: 'fing-notes', role: 'group', 'aria-label': 'Notes' });
@@ -157,8 +193,36 @@ export function registerFingerings(panels) {
       hostEl.appendChild(el('div', { className: 'panel-fingerings' }, [
         title, help,
         el('div', { className: 'fing-row' }, [instrLabel, instrSelect]),
+        controlsHost,
         rangeHost, notesHost, diagramHost, descHost
       ]));
+
+      // Which of the capo/tuning/left-handed controls apply depends on the
+      // diagram kind: a capo and a named alternate tuning are a fretted
+      // guitar-family concept ('fretboard' only); left-handed mirroring
+      // applies to any string diagram, fretted or fretless.
+      function renderControls() {
+        controlsHost.innerHTML = '';
+        const kind = howKindFor(instrument);
+        if (kind === 'fretboard') {
+          capoInput.value = String(capo);
+          controlsHost.appendChild(capoLabel);
+          controlsHost.appendChild(capoInput);
+          const alts = alternateTuningsFor(instrument);
+          if (alts) {
+            tuningSelect.innerHTML = '';
+            alts.forEach(name => tuningSelect.appendChild(el('option', { value: name, text: TUNING_LABELS[name] || name })));
+            tuningSelect.value = tuningName || alts[0];
+            controlsHost.appendChild(tuningLabel);
+            controlsHost.appendChild(tuningSelect);
+          }
+        }
+        if (kind === 'fretboard' || kind === 'fingerboard') {
+          leftHandedInput.checked = leftHanded;
+          controlsHost.appendChild(leftHandedLabel);
+          controlsHost.appendChild(leftHandedInput);
+        }
+      }
 
       function renderNotePicker() {
         notesHost.innerHTML = '';
@@ -177,7 +241,7 @@ export function registerFingerings(panels) {
         rangeHost.innerHTML = '';
         rangeHost.appendChild(rangeBar(instrument.range, midi));
         Array.from(notesHost.children).forEach(b => b.setAttribute('aria-pressed', String(b.textContent === noteName(midi))));
-        const how = computeHow(instrument, midi, {});
+        const how = computeHow(instrument, midi, { capo, tuning: tuningName, leftHanded });
         diagramHost.innerHTML = '';
         diagramHost.appendChild(diagramFor(instrument, how));
         descHost.textContent = how.description;
@@ -186,12 +250,19 @@ export function registerFingerings(panels) {
       function selectInstrument(id) {
         instrument = api.instrument(id) || PLAYABLE.find(r => r.id === id) || PLAYABLE[0];
         instrSelect.value = instrument.id;
+        capo = 0;
+        tuningName = null;
+        leftHanded = false;
+        renderControls();
         midi = defaultNoteFor(instrument, {});
         renderNotePicker();
         render();
       }
 
       instrSelect.addEventListener('change', () => selectInstrument(instrSelect.value));
+      capoInput.addEventListener('change', () => { capo = Math.max(0, Math.round(Number(capoInput.value)) || 0); render(); });
+      tuningSelect.addEventListener('change', () => { tuningName = tuningSelect.value; render(); });
+      leftHandedInput.addEventListener('change', () => { leftHanded = leftHandedInput.checked; render(); });
 
       const current = api.instrument();
       const startId = current && howKindFor(current) ? current.id : (PLAYABLE[0] && PLAYABLE[0].id);

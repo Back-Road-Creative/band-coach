@@ -83,3 +83,95 @@ test('fingerings panel opens, shows a default fretboard diagram, and reacts to a
   await page.evaluate("window.__coach.openPanel('fingerings')");
   assert.equal(await page.evaluate('window.__coach.panelOpen()'), 'fingerings');
 });
+
+test('fingerings panel: capo, alternate tuning and left-handed controls', async (t) => {
+  const page = await launchPage(HTML_PATH);
+  t.after(() => page.close());
+
+  await page.evaluate("window.__coach.openPanel('fingerings')");
+  await page.evaluate(`(function () {
+    const sel = document.getElementById('fingInstrument');
+    sel.value = 'gtr'; sel.dispatchEvent(new Event('change'));
+  })()`);
+
+  // Guitar has a capo input and a named-alternate-tuning select.
+  assert.equal(await page.evaluate("!!document.getElementById('fingCapo')"), true);
+  const tuningOptions = await page.evaluate("[...document.getElementById('fingTuning').options].map(o => o.value)");
+  assert.ok(tuningOptions.includes('standard'));
+  assert.ok(tuningOptions.includes('drop-d'));
+
+  // Standard tuning: the lowest string reads E2. Selecting drop-D (a real
+  // entry point: select + change event) changes what that same string is,
+  // reflected in both the diagram's string label and the description.
+  const standardLowString = await page.evaluate("document.querySelectorAll('.fing-fretboard .fing-string-label')[5].textContent");
+  assert.equal(standardLowString, 'E2');
+  await page.evaluate(`(function () {
+    const sel = document.getElementById('fingTuning');
+    sel.value = 'drop-d'; sel.dispatchEvent(new Event('change'));
+  })()`);
+  const dropDLowString = await page.evaluate("document.querySelectorAll('.fing-fretboard .fing-string-label')[5].textContent");
+  assert.equal(dropDLowString, 'D2');
+
+  // Setting a capo re-describes the same note relative to the capo.
+  await page.evaluate(`(function () {
+    const sel = document.getElementById('fingTuning');
+    sel.value = 'standard'; sel.dispatchEvent(new Event('change'));
+  })()`);
+  await page.evaluate(`(function () {
+    const btns = [...document.querySelectorAll('.fing-note-btn')];
+    const target = btns.find(b => b.textContent === 'F♯3');
+    target.click();
+  })()`);
+  await page.evaluate(`(function () {
+    const capo = document.getElementById('fingCapo');
+    capo.value = '2'; capo.dispatchEvent(new Event('change'));
+  })()`);
+  const capoDesc = await page.evaluate("document.getElementById('fingDesc').textContent");
+  assert.match(capoDesc, /capo/);
+
+  // A note behind the capo says so plainly instead of just "not found".
+  await page.evaluate(`(function () {
+    const btns = [...document.querySelectorAll('.fing-note-btn')];
+    const target = btns.find(b => b.textContent === 'E2');
+    target.click();
+  })()`);
+  const belowCapoDesc = await page.evaluate("document.getElementById('fingDesc').textContent");
+  assert.match(belowCapoDesc, /below the capo/);
+
+  // Left-handed mirrors the fret diagram's string order.
+  await page.evaluate(`(function () {
+    const capo = document.getElementById('fingCapo');
+    capo.value = '0'; capo.dispatchEvent(new Event('change'));
+  })()`);
+  const rightHandedOrder = await page.evaluate("[...document.querySelectorAll('.fing-fretboard .fing-string-label')].map(el => el.textContent)");
+  await page.evaluate(`(function () {
+    document.getElementById('fingLeftHanded').click();
+  })()`);
+  const leftHandedOrder = await page.evaluate("[...document.querySelectorAll('.fing-fretboard .fing-string-label')].map(el => el.textContent)");
+  assert.deepEqual(leftHandedOrder, [...rightHandedOrder].reverse());
+
+  // Left-handed also applies to a fretless fingerboard instrument, but the
+  // fingerboard has neither a capo nor a tuning picker.
+  await page.evaluate(`(function () {
+    const sel = document.getElementById('fingInstrument');
+    sel.value = 'violin'; sel.dispatchEvent(new Event('change'));
+  })()`);
+  assert.equal(await page.evaluate("!!document.getElementById('fingCapo')"), false);
+  assert.equal(await page.evaluate("!!document.getElementById('fingTuning')"), false);
+  assert.equal(await page.evaluate("!!document.getElementById('fingLeftHanded')"), true);
+  const violinRight = await page.evaluate("[...document.querySelectorAll('.fing-fingerboard .fing-string-label')].map(el => el.textContent)");
+  await page.evaluate(`(function () {
+    document.getElementById('fingLeftHanded').click();
+  })()`);
+  const violinLeft = await page.evaluate("[...document.querySelectorAll('.fing-fingerboard .fing-string-label')].map(el => el.textContent)");
+  assert.deepEqual(violinLeft, [...violinRight].reverse());
+
+  // A harmonica has none of these controls at all.
+  await page.evaluate(`(function () {
+    const sel = document.getElementById('fingInstrument');
+    sel.value = 'harp'; sel.dispatchEvent(new Event('change'));
+  })()`);
+  assert.equal(await page.evaluate("!!document.getElementById('fingCapo')"), false);
+  assert.equal(await page.evaluate("!!document.getElementById('fingTuning')"), false);
+  assert.equal(await page.evaluate("!!document.getElementById('fingLeftHanded')"), false);
+});
