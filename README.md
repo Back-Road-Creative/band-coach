@@ -151,6 +151,16 @@ the "More options" menu in the side rail for "Save a backup", which downloads
 `band-coach-progress.json`, and "Restore a backup", which loads one back in. A quiet reminder
 appears once you have actually practised a while without one — never on a fresh profile, since
 there is nothing yet to lose.
+
+## Turning an audio file into notes
+
+`src/audio/file-frames.js` is a pure function, `framesFromPCM`, that walks a decoded mono audio
+clip (a plain `Float32Array` of samples plus its real sample rate) and produces the same
+`frames`/`onsets` shape `src/song/transcribe.js` already reads from a live "Record a tune" mic
+capture — so a file-import panel can be wired up later without teaching transcribe.js anything
+new. Like the rest of this app's pitch tracking, it is monophonic only: a chord or a second voice
+reads as whichever single pitch the detector locks onto, not as separate notes.
+
 ## Notation engine
 
 `src/notation/` is a pure layout engine for standard notation and tab: given
@@ -343,6 +353,22 @@ integer-tick durations, so triplets and swing are exact fractions rather than ro
 `buildPhrase`/`onsetsOf`/`validateBar` are unit-tested in isolation under `tests/unit/rhythm.test.mjs`.
 Rhythm reading (`rhy`) gains eight further levels built on it, after the original ten-cell levels:
 rests, ties, dotted-eighth figures, triplets, 3/4, 6/8, swing, and two-bar phrases.
+
+## Find your own singing range
+
+The Voice screen offers three fixed ranges (Lower/Middle/Higher voice) plus a fourth, "Find my
+range," built from a short guided test rather than a guess. Press Connect, choose Voice, then
+press "Find my range": sing your lowest comfortable note and hold it, press "Got it — now the
+highest," sing your highest comfortable note and hold it, then press "Got it — done." The app
+listens through the real pitch detector the whole time and shows exactly what it is hearing, so
+nothing is assumed from the microphone being open alone. `src/instruments/how/voice-range.js`
+turns the held notes into a range (dropping brief blips, then trimming statistical outliers),
+picks the nearest voice type as a plain-language hint — never a diagnosis — and pulls a small
+safety margin in from both ends before placing the exercises' tonic at the low end of that
+margin-trimmed range. If what was sung is under an octave, the exercises still get a usable
+tonic; the app says plainly that they will ask for a little more than was actually sung, rather
+than silently clamping the top note down. The result is saved and offered again next time as "My
+range (found by test)," alongside the three fixed choices, until the test is run again.
 
 ## Windows Store edition
 
