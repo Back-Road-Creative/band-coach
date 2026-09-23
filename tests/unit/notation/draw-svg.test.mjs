@@ -99,6 +99,14 @@ test('drawSVG: a whole rest and an eighth rest render different glyphs, with and
   assert.notEqual(fallbackSvgWhole, fallbackSvgEighth);
 });
 
+test('drawSVG: every rest length layout.js can emit (whole down to 32nd) gets its own symbol', () => {
+  const bases = [4, 2, 1, 0.5, 0.25, 0.125];
+  for (const glyphFont of ['"Noto Music"', null]) {
+    const drawn = bases.map((base) => drawSVG([{ type: 'rest', x: 0, y: 0, base }], { glyphFont }, { width: 50, height: 50 }));
+    assert.equal(new Set(drawn).size, bases.length, `glyphFont=${glyphFont}: two rest lengths share a symbol`);
+  }
+});
+
 test('drawSVG: draws every primitive of a real measure without throwing, well-formed output', () => {
   const { primitives } = layoutMeasure({
     clef: 'grand', key: 'D', time: [4, 4], width: 400,

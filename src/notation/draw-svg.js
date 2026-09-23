@@ -9,10 +9,10 @@ const ACCIDENTAL_GLYPH = { '#': '♯', b: '♭', '': '♮' };
 const ACCIDENTAL_FALLBACK = { '#': '#', b: 'b', '': 'n' };
 // Keyed by the rest's undotted duration in whole notes (layout.js's durationInfo `base`).
 // Glyphs are the Unicode musical-symbol rests; fallbacks are one-letter mnemonics
-// (W)hole/(H)alf/(Q)uarter/(E)ighth/(S)ixteenth so a no-glyph-font rest still reads
+// (W)hole/(H)alf/(Q)uarter/(E)ighth/(S)ixteenth/(T)hirty-second so a no-glyph-font rest still reads
 // as "how long", not just "silence". An unrecognized/missing base falls back to quarter.
-const REST_GLYPH = { 4: '\u{1D13B}', 2: '\u{1D13C}', 1: '\u{1D13D}', 0.5: '\u{1D13E}', 0.25: '\u{1D13F}' };
-const REST_LETTER_FALLBACK = { 4: 'W', 2: 'H', 1: 'Q', 0.5: 'E', 0.25: 'S' };
+const REST_GLYPH = { 4: '\u{1D13B}', 2: '\u{1D13C}', 1: '\u{1D13D}', 0.5: '\u{1D13E}', 0.25: '\u{1D13F}', 0.125: '\u{1D140}' };
+const REST_LETTER_FALLBACK = { 4: 'W', 2: 'H', 1: 'Q', 0.5: 'E', 0.25: 'S', 0.125: 'T' };
 
 // Escapes the five characters XML text content and quoted attribute values reserve.
 export function escapeXML(text) {
