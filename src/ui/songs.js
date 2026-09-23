@@ -89,6 +89,15 @@ export function centsFromFreq(freq, midi) {
   return (fractionalMidi - midi) * 100;
 }
 
+// One mic-detected note as a played event. durSec starts at one capture
+// tick (50 ms), so a note heard once and gone is judged as clipped short
+// rather than skipped as "unmeasured"; the capture loop stretches it while
+// the same pitch keeps sounding.
+export const MIC_TICK_SEC = 0.05;
+export function playedEventFrom(freq, midi, atSec) {
+  return { midi, atSec, durSec: MIC_TICK_SEC, cents: centsFromFreq(freq, midi) };
+}
+
 function onMidiNote(fn) {
   noteListeners.push(fn);
   return () => {
@@ -722,12 +731,14 @@ function mountSongsPanel(hostEl, api) {
         const buf = new Float32Array(analysers.time.fftSize);
         analysers.time.getFloatTimeDomainData(buf);
         const o = onset.push(buf);
+        // No onset and nothing still sounding: skip YIN entirely this tick.
+        if (!o.onset && !openEvent) return;
         const toolRange = rangeForInstrument(practice.instrument);
         const r = yin(buf, audio.sampleRate, toolRange.fmin, toolRange.fmax, api.gates().pitch);
         const nowSec = api.now() - practice.recordStartSec;
         if (!o.onset) {
           if (openEvent && r.freq && r.clarity > 0.5 && Math.round(69 + 12 * Math.log2(r.freq / 440)) === openEvent.midi) {
-            openEvent.durSec = nowSec - openEvent.atSec;
+            openEvent.durSec = Math.max(MIC_TICK_SEC, nowSec - openEvent.atSec);
           } else {
             openEvent = null;
           }
@@ -735,7 +746,7 @@ function mountSongsPanel(hostEl, api) {
         }
         if (!r.freq || !(r.clarity > 0.7)) { openEvent = null; return; }
         const midi = Math.round(69 + 12 * Math.log2(r.freq / 440));
-        const event = { midi, atSec: nowSec, durSec: null, cents: centsFromFreq(r.freq, midi) };
+        const event = playedEventFrom(r.freq, midi, nowSec);
         practice.playedEvents.push(event);
         openEvent = event;
         updateCount();

@@ -153,3 +153,12 @@ test('centsFromFreq reads positive cents for a sharp frequency and negative for 
   assert.ok(centsFromFreq(sharp, 60) > 15 && centsFromFreq(sharp, 60) < 25);
   assert.ok(centsFromFreq(flat, 60) < -15 && centsFromFreq(flat, 60) > -25);
 });
+
+test('a mic note heard for a single tick is judged as clipped short, not skipped as unmeasured', async () => {
+  const { playedEventFrom } = await import('../../src/ui/songs.js');
+  const ev = playedEventFrom(261.63, 60, 1.0);
+  assert.equal(ev.midi, 60);
+  assert.equal(ev.atSec, 1.0);
+  assert.ok(ev.durSec > 0, 'durSec must be a real (short) length, never null');
+  assert.ok(Math.abs(ev.cents) < 1);
+});
