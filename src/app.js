@@ -296,15 +296,26 @@ import { register as registerPlayalong } from './ui/playalong.js';
     sum.__monoRouteInterval = setInterval(route, 300);
     return sum;
   }
+  // #ioBtn stays visible (ioRefresh) until micReady flips true, so an
+  // impatient double-click -- easy while waiting on the permission prompt --
+  // used to fire getUserMedia() twice concurrently: the loser's MediaStream
+  // was dropped with its tracks never stopped, leaving the OS mic indicator
+  // lit until the tab closed. Sharing one in-flight promise across
+  // concurrent callers means only one getUserMedia() call is ever made.
+  let openMicPromise = null;
   async function openMic() {
     ensureAudio(); if (micReady) return true;
+    if (openMicPromise) return openMicPromise;
     const base = { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: { ideal: 2 } };
     const wanted = DB.prefs.inputDeviceId ? { ...base, deviceId: { exact: DB.prefs.inputDeviceId } } : base;
-    let st;
-    try { st = await navigator.mediaDevices.getUserMedia({ audio: wanted }); }
-    catch (e) { if (!DB.prefs.inputDeviceId) throw e; st = await navigator.mediaDevices.getUserMedia({ audio: base }); }
-    micStream = st; const src = actx.createMediaStreamSource(st); wireAnalysers(monoSum(src)); micReady = true;
-    ensurePitchWorklet(); refreshMicDevices(); return true;
+    openMicPromise = (async () => {
+      let st;
+      try { st = await navigator.mediaDevices.getUserMedia({ audio: wanted }); }
+      catch (e) { if (!DB.prefs.inputDeviceId) throw e; st = await navigator.mediaDevices.getUserMedia({ audio: base }); }
+      micStream = st; const src = actx.createMediaStreamSource(st); wireAnalysers(monoSum(src)); micReady = true;
+      ensurePitchWorklet(); refreshMicDevices(); return true;
+    })();
+    try { return await openMicPromise; } finally { openMicPromise = null; }
   }
   async function refreshMicDevices() {
     if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return;
