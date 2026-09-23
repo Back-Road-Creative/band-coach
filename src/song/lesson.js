@@ -1,4 +1,5 @@
 import { BLOW_STEPS, DRAW_STEPS } from '../instruments/how/harmonica.js';
+import { phraseDifficulty } from './phrase-difficulty.js';
 
 // Lesson generator (plan unit 5.2, F9 "song practice never counts").
 //
@@ -245,25 +246,34 @@ export function buildLessonPlan(song, partId, instrument, opts = {}) {
   const bpm = song.bpm;
   const slowBpm = Math.round(bpm * 0.55);
 
+  const bt = beatTicks(fittedSong);
+
   const steps = [];
   phrases.forEach((phrase, pi) => {
     const notes = phrase.notes;
-    steps.push({ kind: 'listen', phraseIndex: pi, bars: phrase.bars, bpm, notes, passRule: null });
+    // Difficulty (plan unit "phrase difficulty on steps"): one score per
+    // phrase, shared by every per-phrase step kind so the learner sees the
+    // same "Easy/Medium/Hard" word from the first listen through the top of
+    // the tempo ladder. Chain and whole-piece steps span more than one
+    // phrase and are left without a `difficulty` -- a single phrase's score
+    // would misrepresent them.
+    const difficulty = phraseDifficulty(phrase, { beatTicks: bt, key: song.key }).score;
+    steps.push({ kind: 'listen', phraseIndex: pi, bars: phrase.bars, bpm, notes, passRule: null, difficulty });
     steps.push({
-      kind: 'rhythm', phraseIndex: pi, bars: phrase.bars, bpm, notes,
+      kind: 'rhythm', phraseIndex: pi, bars: phrase.bars, bpm, notes, difficulty,
       passRule: { hitRate: hitRateFor(level, 0.8), maxMeanErrorMs: 120 }
     });
     steps.push({
-      kind: 'pitches', phraseIndex: pi, bars: phrase.bars, bpm: 0, notes,
+      kind: 'pitches', phraseIndex: pi, bars: phrase.bars, bpm: 0, notes, difficulty,
       passRule: { hitRate: hitRateFor(level, 0.8), maxMeanErrorMs: null }
     });
     steps.push({
-      kind: 'phrase-slow', phraseIndex: pi, bars: phrase.bars, bpm: slowBpm, notes,
+      kind: 'phrase-slow', phraseIndex: pi, bars: phrase.bars, bpm: slowBpm, notes, difficulty,
       passRule: { hitRate: hitRateFor(level, 0.8), maxMeanErrorMs: 150 }
     });
     LADDER_FRACTIONS.forEach(fraction => {
       steps.push({
-        kind: 'tempo-ladder', phraseIndex: pi, bars: phrase.bars, bpm: Math.round(bpm * fraction), notes,
+        kind: 'tempo-ladder', phraseIndex: pi, bars: phrase.bars, bpm: Math.round(bpm * fraction), notes, difficulty,
         passRule: { hitRate: hitRateFor(level, 0.85), maxMeanErrorMs: 100 }
       });
     });

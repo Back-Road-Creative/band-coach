@@ -200,7 +200,10 @@ sessions; a song counts as passed once its practice lesson has been played throu
 can pass along to another student, entirely by file exchange — no account, no server, no network
 call involved. Each song in the list also has a "Save as…" control to download it on its own, as
 MIDI (`.mid`), MusicXML (`.musicxml`) or ABC (`.abc`), using the pure exporters in
-`src/song/export-midi.js`, `src/song/export-musicxml.js` and `src/song/export-abc.js`.
+`src/song/export-midi.js`, `src/song/export-musicxml.js` and `src/song/export-abc.js`. Each phrase
+step also shows a plain-word Easy/Medium/Hard difficulty (`src/song/phrase-difficulty.js`), and
+after a judged try the panel draws a small bar-by-bar strip (`src/song/bar-heat.js`) naming which
+bars went well and which need another pass.
 ## Play along with a recording
 
 The "Play Along" panel (`src/ui/playalong.js`) opens an audio file of a song, works out its
