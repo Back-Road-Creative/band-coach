@@ -303,7 +303,7 @@ export function registerFingerings(panels) {
       }
 
       instrSelect.addEventListener('change', () => selectInstrument(instrSelect.value));
-      capoInput.addEventListener('change', () => { capo = Math.max(0, Math.round(Number(capoInput.value)) || 0); rememberCurrent(); render(); });
+      capoInput.addEventListener('change', () => { capo = Math.min(11, Math.max(0, Math.round(Number(capoInput.value)) || 0)); capoInput.value = String(capo); rememberCurrent(); render(); });
       tuningSelect.addEventListener('change', () => { tuningName = tuningSelect.value; rememberCurrent(); render(); });
       leftHandedInput.addEventListener('change', () => { leftHanded = leftHandedInput.checked; rememberCurrent(); render(); });
 

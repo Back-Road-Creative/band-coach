@@ -232,3 +232,22 @@ test('fingerings panel: capo, tuning and left-handed are remembered per instrume
   })()`);
   assert.equal(await page.evaluate("document.getElementById('fingLeftHanded').checked"), false, 'an untouched instrument should not inherit another one’s remembered value');
 });
+
+test('fingerings panel: a capo typed past the 11th fret is kept as 11, not silently forgotten', async (t) => {
+  const page = await launchPage(HTML_PATH);
+  t.after(() => page.close());
+
+  await page.evaluate("window.__coach.openPanel('fingerings')");
+  const pick = id => page.evaluate(`(function () {
+    const sel = document.getElementById('fingInstrument');
+    sel.value = '${id}'; sel.dispatchEvent(new Event('change'));
+  })()`);
+  await pick('gtr');
+  await page.evaluate(`(function () {
+    const capo = document.getElementById('fingCapo');
+    capo.value = '15'; capo.dispatchEvent(new Event('change'));
+  })()`);
+  await pick('violin');
+  await pick('gtr');
+  assert.equal(await page.evaluate("document.getElementById('fingCapo').value"), '11');
+});
