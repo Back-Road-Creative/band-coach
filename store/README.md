@@ -30,7 +30,15 @@ no paid CI, no paid services anywhere in this path.
 - `electron-builder.json` — the `appx` packaging config. Identity fields
   (`identityName`/`publisher`/`publisherDisplayName`) are **safe placeholders**
   (`PLACEHOLDER.BandCoach` / `CN=PLACEHOLDER` / `PLACEHOLDER PUBLISHER`); real values come from
-  environment variables (below), never hard-coded here.
+  environment variables (below), never hard-coded here. Its `files` list is an **allow-list**:
+  app-builder-lib adds the default `**/*` only when `files` is empty or all-ignores
+  (`node_modules/app-builder-lib/out/fileMatcher.js`, "add default patterns"), so anything
+  `main.js` requires that is not on it is left out of `app.asar` and the packaged app dies at
+  launch with "A JavaScript error occurred in the main process". That is how v1.3.0–v1.6.0
+  shipped: `lib/permission-policy.js` came in PR #20 without a `files` entry, and the Store's
+  certification run (policy 10.1.2.10, 2026-09-23) was the first launch of the packaged app.
+  `tests/unit/store-shell.test.mjs` now walks `main.js`'s local `require`s and fails if any is
+  not matched by `files`.
 - `scripts/prepare-app.mjs` — stages the built app into `store/app/band-coach.html`, preferring
   `../dist/release/band-coach.html` and falling back to `../dist/band-coach.html`.
 - `scripts/apply-identity.mjs` — overlays `BC_IDENTITY_NAME` / `BC_PUBLISHER` /
@@ -243,9 +251,12 @@ Store's own install path — see below.
 - **The package has never been built.** This Linux box cannot run `electron-builder --win appx`
   (it needs `makeappx.exe`/`makepri.exe` from the Windows SDK). The first real proof this all
   works is the first `store-package` workflow run on `windows-latest`.
-- **The package has never been installed or launched**, so the window, menu, permission prompts
-  and network block have only been checked by reading `main.js`'s source
-  (`tests/unit/store-shell.test.mjs` at the repo root) — never by running the packaged app.
+- **The package had never been installed or launched by us** before the Store's certification
+  run on 2026-09-23, which crashed at launch on every device (see `electron-builder.json` above).
+  The window, menu, permission prompts and network block are still only checked by reading
+  `main.js`'s source (`tests/unit/store-shell.test.mjs` at the repo root). Run
+  `scripts/try-shell.ps1` on a Windows machine before the next submission — it is the same
+  `main.js` the package runs, and a launch crash shows up there in seconds.
 - **The Windows App Certification Kit has not been run.** Partner Center requires (or strongly
   recommends) passing the WACK before submission; that has to be run on a real Windows machine,
   not in this CI job.
