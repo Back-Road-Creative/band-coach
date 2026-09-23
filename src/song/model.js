@@ -11,6 +11,7 @@
 export const SCHEMA = 'song/1';
 export const TICKS_PER_QUARTER = 480;
 export const MODES = ['major', 'minor'];
+export const ROLES = ['melody', 'bass', 'inner', 'percussion'];
 const VALID_DENOMINATORS = [1, 2, 4, 8, 16, 32, 64];
 
 function isFiniteNumber(x) { return typeof x === 'number' && Number.isFinite(x); }
@@ -48,6 +49,11 @@ function validateNote(note, index, prev, path, errors) {
       errors.push(path + '.confidence must be a number between 0 and 1 (got ' + JSON.stringify(note.confidence) + ')');
     }
   }
+  if ('velocity' in note) {
+    if (!isInt(note.velocity) || note.velocity < 1 || note.velocity > 127) {
+      errors.push(path + '.velocity must be an integer 1-127 (got ' + JSON.stringify(note.velocity) + ')');
+    }
+  }
   if (index > 0 && isNonNegInt(note.start) && prev && isNonNegInt(prev.start)) {
     if (note.start < prev.start) {
       errors.push(path + ': notes must be sorted by start (got ' + note.start + ' after ' + prev.start + ')');
@@ -76,6 +82,12 @@ function validatePart(part, pIndex, errors) {
   if (!isNonEmptyString(part.name)) {
     errors.push(path + '.name must be a non-empty string');
   }
+  if ('role' in part && !ROLES.includes(part.role)) {
+    errors.push(path + '.role must be one of ' + ROLES.join('|') + ' (got ' + JSON.stringify(part.role) + ')');
+  }
+  if ('instrumentHint' in part && typeof part.instrumentHint !== 'string') {
+    errors.push(path + '.instrumentHint must be a string (got ' + JSON.stringify(part.instrumentHint) + ')');
+  }
   if (!Array.isArray(part.notes)) {
     errors.push(path + '.notes must be an array');
     return;
@@ -85,6 +97,58 @@ function validatePart(part, pIndex, errors) {
     validateNote(note, i, prev, path + '.notes[' + i + ']', errors);
     if (isPlainObject(note)) prev = note;
   });
+}
+
+// Validates one entry of an optional sorted-by-tick change list (tempoMap,
+// metreChanges, keyChanges). `checkFields` validates the entry's own fields
+// beyond tick/sortedness and pushes onto `errors`.
+function validateTickList(list, name, checkFields, errors) {
+  if (list === undefined) return;
+  if (!Array.isArray(list)) {
+    errors.push(name + ' must be an array');
+    return;
+  }
+  let prevTick;
+  list.forEach((entry, i) => {
+    const path = name + '[' + i + ']';
+    if (!isPlainObject(entry)) {
+      errors.push(path + ' is not an object');
+      return;
+    }
+    if (!isNonNegInt(entry.tick)) {
+      errors.push(path + '.tick must be a non-negative integer (got ' + JSON.stringify(entry.tick) + ')');
+    } else {
+      if (i > 0 && isNonNegInt(prevTick) && entry.tick < prevTick) {
+        errors.push(name + ' must be sorted by tick (got ' + entry.tick + ' after ' + prevTick + ')');
+      }
+      prevTick = entry.tick;
+    }
+    checkFields(entry, path, errors);
+  });
+}
+
+function checkTempoFields(entry, path, errors) {
+  if (!isFiniteNumber(entry.bpm) || entry.bpm <= 0) {
+    errors.push(path + '.bpm must be a positive number (got ' + JSON.stringify(entry.bpm) + ')');
+  }
+}
+
+function checkMetreFields(entry, path, errors) {
+  if (!isInt(entry.num) || entry.num < 1) {
+    errors.push(path + '.num must be a positive integer (got ' + JSON.stringify(entry.num) + ')');
+  }
+  if (!VALID_DENOMINATORS.includes(entry.den)) {
+    errors.push(path + '.den must be one of ' + VALID_DENOMINATORS.join('|') + ' (got ' + JSON.stringify(entry.den) + ')');
+  }
+}
+
+function checkKeyFields(entry, path, errors) {
+  if (!isInt(entry.tonic) || entry.tonic < 0 || entry.tonic > 11) {
+    errors.push(path + '.tonic must be an integer 0-11 (got ' + JSON.stringify(entry.tonic) + ')');
+  }
+  if (!MODES.includes(entry.mode)) {
+    errors.push(path + '.mode must be one of ' + MODES.join('|') + ' (got ' + JSON.stringify(entry.mode) + ')');
+  }
 }
 
 function validateChord(chord, index, errors) {
@@ -173,6 +237,10 @@ export function validateSong(song) {
     song.chords.forEach((chord, i) => validateChord(chord, i, errors));
   }
 
+  validateTickList(song.tempoMap, 'tempoMap', checkTempoFields, errors);
+  validateTickList(song.metreChanges, 'metreChanges', checkMetreFields, errors);
+  validateTickList(song.keyChanges, 'keyChanges', checkKeyFields, errors);
+
   return { ok: errors.length === 0, errors };
 }
 
@@ -195,6 +263,12 @@ function normalizeNote(raw, path) {
   };
   if (raw.tieFromPrev === true) note.tieFromPrev = true;
   if (isFiniteNumber(raw.confidence)) note.confidence = clamp(raw.confidence, 0, 1);
+  if ('velocity' in raw) {
+    if (!isInt(raw.velocity) || raw.velocity < 1 || raw.velocity > 127) {
+      throw new Error(path + '.velocity must be an integer 1-127');
+    }
+    note.velocity = raw.velocity;
+  }
   return note;
 }
 
@@ -218,11 +292,24 @@ function normalizePart(raw, index) {
     if (!valid) delete notes[i].tieFromPrev;
   }
 
-  return {
+  const part = {
     id: isNonEmptyString(raw.id) ? raw.id : 'part-' + (index + 1),
     name: isNonEmptyString(raw.name) ? raw.name : 'Part ' + (index + 1),
     notes
   };
+  if ('role' in raw) {
+    if (!ROLES.includes(raw.role)) {
+      throw new Error('parts[' + index + '].role must be one of ' + ROLES.join('|'));
+    }
+    part.role = raw.role;
+  }
+  if ('instrumentHint' in raw) {
+    if (typeof raw.instrumentHint !== 'string') {
+      throw new Error('parts[' + index + '].instrumentHint must be a string');
+    }
+    part.instrumentHint = raw.instrumentHint;
+  }
+  return part;
 }
 
 function normalizeChord(raw, index) {
@@ -236,6 +323,60 @@ function normalizeChord(raw, index) {
     throw new Error('chords[' + index + '].symbol is missing or empty');
   }
   return { start: Math.max(0, Math.round(raw.start)), symbol: raw.symbol };
+}
+
+// Normalizes an optional sorted-by-tick change list (tempoMap, metreChanges,
+// keyChanges). Absent input yields `undefined` (the key is omitted from the
+// song entirely, so a song without the field normalizes unchanged). Present
+// but malformed input throws -- there is no safe default for "what tempo did
+// you mean here", so guessing would be worse than refusing.
+function normalizeTickList(raw, name, normalizeFields) {
+  if (raw === undefined) return undefined;
+  if (!Array.isArray(raw)) {
+    throw new Error(name + ' must be an array');
+  }
+  let prevTick;
+  return raw.map((entry, i) => {
+    const path = name + '[' + i + ']';
+    if (!isPlainObject(entry)) {
+      throw new Error(path + ' must be an object');
+    }
+    if (!isNonNegInt(entry.tick)) {
+      throw new Error(path + '.tick must be a non-negative integer');
+    }
+    if (i > 0 && entry.tick < prevTick) {
+      throw new Error(name + ' must be sorted by tick');
+    }
+    prevTick = entry.tick;
+    return { tick: entry.tick, ...normalizeFields(entry, path) };
+  });
+}
+
+function normalizeTempoFields(entry, path) {
+  if (!isFiniteNumber(entry.bpm) || entry.bpm <= 0) {
+    throw new Error(path + '.bpm must be a positive number');
+  }
+  return { bpm: entry.bpm };
+}
+
+function normalizeMetreFields(entry, path) {
+  if (!isInt(entry.num) || entry.num < 1) {
+    throw new Error(path + '.num must be a positive integer');
+  }
+  if (!VALID_DENOMINATORS.includes(entry.den)) {
+    throw new Error(path + '.den must be one of ' + VALID_DENOMINATORS.join('|'));
+  }
+  return { num: entry.num, den: entry.den };
+}
+
+function normalizeKeyFields(entry, path) {
+  if (!isInt(entry.tonic) || entry.tonic < 0 || entry.tonic > 11) {
+    throw new Error(path + '.tonic must be an integer 0-11');
+  }
+  if (!MODES.includes(entry.mode)) {
+    throw new Error(path + '.mode must be "major" or "minor"');
+  }
+  return { tonic: entry.tonic, mode: entry.mode };
 }
 
 // Turns anything into a valid Song, or throws an Error whose `.message` is
@@ -275,6 +416,10 @@ export function normalizeSong(raw) {
     ? raw.chords.map(normalizeChord).sort((a, b) => a.start - b.start)
     : [];
 
+  const tempoMap = normalizeTickList(raw.tempoMap, 'tempoMap', normalizeTempoFields);
+  const metreChanges = normalizeTickList(raw.metreChanges, 'metreChanges', normalizeMetreFields);
+  const keyChanges = normalizeTickList(raw.keyChanges, 'keyChanges', normalizeKeyFields);
+
   const song = {
     schema: SCHEMA,
     id: raw.id,
@@ -289,6 +434,9 @@ export function normalizeSong(raw) {
     parts,
     chords
   };
+  if (tempoMap !== undefined) song.tempoMap = tempoMap;
+  if (metreChanges !== undefined) song.metreChanges = metreChanges;
+  if (keyChanges !== undefined) song.keyChanges = keyChanges;
 
   const { ok, errors } = validateSong(song);
   if (!ok) {
@@ -368,14 +516,19 @@ export function transpose(song, semitones) {
   if (!isInt(semitones)) {
     throw new Error('semitones must be an integer');
   }
-  return {
+  const shiftTonic = tonic => ((tonic + semitones) % 12 + 12) % 12;
+  const result = {
     ...song,
-    key: song.key ? { tonic: ((song.key.tonic + semitones) % 12 + 12) % 12, mode: song.key.mode } : null,
+    key: song.key ? { tonic: shiftTonic(song.key.tonic), mode: song.key.mode } : null,
     parts: song.parts.map(part => ({
       ...part,
       notes: part.notes.map(note => ({ ...note, midi: clamp(note.midi + semitones, 0, 127) }))
     }))
   };
+  if (song.keyChanges) {
+    result.keyChanges = song.keyChanges.map(kc => ({ ...kc, tonic: shiftTonic(kc.tonic) }));
+  }
+  return result;
 }
 
 // Converts a tick offset to wall-clock seconds at the given tempo.
