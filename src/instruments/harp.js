@@ -1,7 +1,10 @@
-// Extracted from src/app.js MODS.harp (app.js:134-139), for a 10-hole diatonic
-// harmonica in the key of C. Range 60-96 is the min/max of HARP.b and HARP.d
-// (app.js:132). Harmonica holes sound one fixed pitch each, no octave choice,
-// so octavePolicy is exact.
+// A 10-hole diatonic harmonica in any of the 12 keys. The learner picks the
+// key (DB.prefs.harpKey, 0 = C) and src/app.js MODS.harp derives the hole
+// layout (src/instruments/how/harmonica.js layoutFor) and the mic's search
+// window from it.
+// The static range below, 60-96, is the C harp's; other keys sound a
+// shifted range that MODS.harp computes at runtime. Harmonica holes sound one
+// fixed pitch each, no octave choice, so octavePolicy is exact.
 export default {
   id: 'harp',
   name: 'Harmonica',
