@@ -8,6 +8,7 @@ import * as degrees from './degrees.js';
 import * as melodicDictation from './melodic-dictation.js';
 import * as songDictation from './song-dictation.js';
 import * as rhythmDictation from './rhythm-dictation.js';
+import * as songRhythm from './song-rhythm.js';
 import * as progressions from './progressions.js';
 import * as scalesModes from './scales-modes.js';
 import * as inversions from './inversions.js';
@@ -23,6 +24,7 @@ export const EAR_EXERCISES = {
   'melodic-dictation': entry(melodicDictation, 'Melodic dictation'),
   'song-dictation': entry(songDictation, 'Dictation from songs'),
   'rhythm-dictation': entry(rhythmDictation, 'Rhythm dictation'),
+  'song-rhythm': entry(songRhythm, 'Rhythms from songs'),
   progressions: entry(progressions, 'Chord progressions'),
   'scales-modes': entry(scalesModes, 'Scales and modes'),
   inversions: entry(inversions, 'Chord inversions'),

@@ -1,18 +1,22 @@
 // The shared Song shape -> MusicXML (uncompressed, score-partwise).
 //
 // Wiring: `exportMusicXml(song) -> string` produces the full text of a
-// `.musicxml` file. One <part> per song part; measures come from the same
-// bar boundaries a coach UI would draw (song.model.js barsOf/notesInBar), so
-// a note that runs past a barline is written as two-or-more tied notes
-// rather than one overlong duration -- that is what real notation software
-// (and importMusicXml, which walks measure-by-measure) expects. Deterministic:
-// the same Song always produces byte-identical XML. No I/O, no DOM/global --
-// the caller writes the string to a file or a download.
+// `.musicxml` file. One <part> per song part; measures come from bar
+// boundaries computed locally (boundariesOf, below) rather than
+// song.model.js's barsOf/notesInBar, because those assume one fixed bar
+// width for the whole song -- this module honours song.metreChanges, so
+// bars can change width partway through. A note that runs past a barline
+// is written as two-or-more tied notes rather than one overlong duration --
+// that is what real notation software (and importMusicXml, which walks
+// measure-by-measure) expects. song.tempoMap/keyChanges entries are written
+// as extra <sound tempo>/<attributes><key> at the measure where they fall.
+// Deterministic: the same Song always produces byte-identical XML. No I/O,
+// no DOM/global -- the caller writes the string to a file or a download.
 //
 // Pairs with src/song/import-musicxml.js; see tests/unit/export-musicxml.test.mjs
 // for the round-trip proof against every starter song.
 
-import { TICKS_PER_QUARTER, barsOf, notesInBar, partRange } from './model.js';
+import { TICKS_PER_QUARTER, songDurationTicks, partRange } from './model.js';
 import { spellMidi } from '../notation/spell.js';
 
 // Same letter -> natural pitch-class table as import-musicxml.js's STEP_PC
@@ -112,11 +116,72 @@ function noteXml(seg, keyName) {
   return xml;
 }
 
+// Ticks in one bar of `metre` ({ num, den }). Mirrors model.js's private
+// barTicksOf, which only ever sees the song's single initial metre.
+function barTicksFor(metre) {
+  return metre.num * (4 / metre.den) * TICKS_PER_QUARTER;
+}
+
+// Bar boundaries in ticks, honouring song.metreChanges: each entry starts a
+// new run of bars at its own width, from its tick onward. With no
+// metreChanges this produces exactly the array model.js's barsOf would
+// (same formula, same "always at least one bar" rule for an empty song), so
+// a song with no mid-song changes exports byte-identical XML to before.
+function boundariesOf(song) {
+  const segments = [{ tick: 0, metre: song.metre }, ...(song.metreChanges ?? [])
+    .map((c) => ({ tick: c.tick, metre: { num: c.num, den: c.den } }))];
+  const duration = songDurationTicks(song);
+  const boundaries = [0];
+  segments.forEach((seg, s) => {
+    const barTicks = barTicksFor(seg.metre);
+    const nextTick = s + 1 < segments.length ? segments[s + 1].tick : undefined;
+    let b = seg.tick;
+    if (nextTick !== undefined) {
+      while (b + barTicks <= nextTick) { b += barTicks; boundaries.push(b); }
+      if (b < nextTick) boundaries.push(nextTick); // metre change not bar-aligned: close out the partial bar
+    } else if (duration > seg.tick) {
+      while (b < duration) { b += barTicks; boundaries.push(b); }
+    } else {
+      boundaries.push(seg.tick + barTicks); // always at least one bar, even for an empty tail
+    }
+  });
+  return boundaries;
+}
+
+// The active `metre` for the bar starting at `boundaries[i]`.
+function metreAt(song, boundaries, i) {
+  const mStart = boundaries[i];
+  let metre = song.metre;
+  for (const c of song.metreChanges ?? []) {
+    if (c.tick <= mStart) metre = { num: c.num, den: c.den };
+  }
+  return metre;
+}
+
+// The active `key` ({ tonic, mode }) for the bar starting at `boundaries[i]`.
+function keyAt(song, boundaries, i) {
+  const mStart = boundaries[i];
+  let key = song.key ?? { tonic: 0, mode: 'major' };
+  for (const c of song.keyChanges ?? []) {
+    if (c.tick <= mStart) key = { tonic: c.tonic, mode: c.mode };
+  }
+  return key;
+}
+
+// The measure index `i` such that `boundaries[i] <= tick < boundaries[i+1]`
+// (clamped into the last measure for a tick at or past the song's end).
+function measureIndexForTick(boundaries, tick) {
+  for (let i = 0; i < boundaries.length - 1; i++) {
+    if (tick >= boundaries[i] && tick < boundaries[i + 1]) return i;
+  }
+  return boundaries.length - 2;
+}
+
 // Splits the notes starting in measure `i` (plus any tied continuation
 // carried in from the previous measure) into position-grouped segments
 // clipped to this measure's length, and reports what still needs to carry
 // into the next measure.
-function buildMeasure(song, part, boundaries, i, carryIn) {
+function buildMeasure(part, boundaries, i, carryIn) {
   const mStart = boundaries[i];
   const mEnd = boundaries[i + 1];
   const mLen = mEnd - mStart;
@@ -129,9 +194,10 @@ function buildMeasure(song, part, boundaries, i, carryIn) {
     }));
   }
 
-  const newNotes = notesInBar(song, i)
-    .filter((entry) => entry.partId === part.id)
-    .map((entry) => entry.note);
+  // Bar boundaries can be non-uniform (a metre change mid-song), so notes
+  // are matched directly against this measure's own [mStart, mEnd) range
+  // rather than via model.js's notesInBar, which assumes one fixed width.
+  const newNotes = part.notes.filter((note) => note.start >= mStart && note.start < mEnd);
   for (const note of newNotes) {
     const pos = note.start - mStart;
     const available = mLen - pos;
@@ -169,10 +235,10 @@ function groupsToNotesXml(groups, mLen, keyName) {
   return xml;
 }
 
-function attributesXml(song, keyName, fifths, mode, clef) {
+function attributesXml(metre, fifths, mode, clef) {
   return '<attributes><divisions>' + TICKS_PER_QUARTER + '</divisions>' +
     '<key><fifths>' + fifths + '</fifths><mode>' + mode + '</mode></key>' +
-    '<time><beats>' + song.metre.num + '</beats><beat-type>' + song.metre.den + '</beat-type></time>' +
+    '<time><beats>' + metre.num + '</beats><beat-type>' + metre.den + '</beat-type></time>' +
     '<clef><sign>' + clef.sign + '</sign><line>' + clef.line + '</line></clef>' +
     '</attributes>';
 }
@@ -186,17 +252,28 @@ function clefFor(part) {
   return mid < 60 ? { sign: 'F', line: 4 } : { sign: 'G', line: 2 };
 }
 
-function partXml(song, part, boundaries, keyName, fifths, mode, includeTempo) {
+// Note spelling (spellMidi's keyName) stays fixed at the song's initial key
+// throughout -- only the written <attributes>/<key> that a reader sees
+// changes per segment; re-spelling every note per key segment is a bigger
+// change than "don't drop the mid-song changes" calls for.
+function partXml(song, part, boundaries, keyName, fifths, mode, includeTempo, changeMeasures, tempoByMeasure) {
   const clef = clefFor(part);
   let carry = [];
   const measures = [];
   for (let i = 0; i < boundaries.length - 1; i++) {
-    const { mLen, groups, carryOut } = buildMeasure(song, part, boundaries, i, carry);
+    const { mLen, groups, carryOut } = buildMeasure(part, boundaries, i, carry);
     carry = carryOut;
     let body = '';
     if (i === 0) {
-      body += attributesXml(song, keyName, fifths, mode, clef);
-      if (includeTempo) body += '<sound tempo="' + song.bpm + '"/>';
+      body += attributesXml(song.metre, fifths, mode, clef);
+    } else if (changeMeasures.has(i)) {
+      const metre = metreAt(song, boundaries, i);
+      const key = keyAt(song, boundaries, i);
+      body += attributesXml(metre, fifthsFor(key.tonic, key.mode), key.mode, clef);
+    }
+    if (includeTempo) {
+      if (i === 0) body += '<sound tempo="' + song.bpm + '"/>';
+      for (const bpm of tempoByMeasure.get(i) ?? []) body += '<sound tempo="' + bpm + '"/>';
     }
     body += groupsToNotesXml(groups, mLen, keyName);
     measures.push('<measure number="' + (i + 1) + '">' + body + '</measure>');
@@ -212,16 +289,36 @@ function identificationXml(song) {
 }
 
 export function exportMusicXml(song) {
-  const boundaries = barsOf(song);
+  const boundaries = boundariesOf(song);
   const keyInfo = song.key ?? { tonic: 0, mode: 'major' };
   const fifths = fifthsFor(keyInfo.tonic, keyInfo.mode);
   const keyName = keyNameFor(keyInfo.tonic, keyInfo.mode);
+
+  // Which measures need a fresh <attributes> block (a metre and/or key
+  // change lands there), and which need extra <sound tempo> elements --
+  // computed once, from tick to measure index, and shared by every part.
+  const changeMeasures = new Set();
+  for (const c of song.metreChanges ?? []) {
+    const i = measureIndexForTick(boundaries, c.tick);
+    if (i > 0) changeMeasures.add(i);
+  }
+  for (const c of song.keyChanges ?? []) {
+    const i = measureIndexForTick(boundaries, c.tick);
+    if (i > 0) changeMeasures.add(i);
+  }
+  const tempoByMeasure = new Map();
+  for (const t of song.tempoMap ?? []) {
+    const i = measureIndexForTick(boundaries, t.tick);
+    if (i === 0) continue; // measure 1's tempo is always song.bpm
+    if (!tempoByMeasure.has(i)) tempoByMeasure.set(i, []);
+    tempoByMeasure.get(i).push(t.bpm);
+  }
 
   const partListXml = song.parts
     .map((p) => '<score-part id="' + escapeXml(p.id) + '"><part-name>' + escapeXml(p.name) + '</part-name></score-part>')
     .join('');
   const partsXml = song.parts
-    .map((part, idx) => partXml(song, part, boundaries, keyName, fifths, keyInfo.mode, idx === 0))
+    .map((part, idx) => partXml(song, part, boundaries, keyName, fifths, keyInfo.mode, idx === 0, changeMeasures, tempoByMeasure))
     .join('');
 
   return '<?xml version="1.0" encoding="UTF-8"?>\n' +

@@ -117,7 +117,7 @@ function waitForOpen(ws) {
 // Spawns the browser and resolves once "DevTools listening on ws://..." is
 // seen on stderr, extracting the port that was actually bound (we always ask
 // for port 0 so parallel test files never collide).
-function spawnBrowser(bin, userDataDir, extraArgs = []) {
+export function spawnBrowser(bin, userDataDir, extraArgs = [], { launchTimeoutMs = 15000 } = {}) {
   const args = [
     '--headless',
     '--remote-debugging-port=0',
@@ -137,22 +137,45 @@ function spawnBrowser(bin, userDataDir, extraArgs = []) {
   const child = spawn(bin, args, { stdio: ['ignore', 'ignore', 'pipe'], detached: true });
   return new Promise((resolve, reject) => {
     let buf = '';
-    const onErr = (err) => reject(err);
+    // A launch that fails before resolving has handed nobody a child to kill,
+    // so it must clean up here: kill the whole detached group and release the
+    // stderr pipe. Either one left alive keeps the test process from exiting
+    // -- main run 35817336881 hung until its 10-minute job timeout that way.
+    // Settles once: after a successful launch the startup timer and the exit
+    // handler must never reach back and kill the browser a caller now owns.
+    let settled = false;
+    let timer;
+    const fail = (err) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      try {
+        process.kill(-child.pid, 'SIGKILL');
+      } catch (e) {
+        // already gone, or never started
+      }
+      child.stderr.destroy();
+      err.child = child;
+      reject(err);
+    };
+    const onErr = (err) => fail(err);
     child.once('error', onErr);
     child.stderr.on('data', (chunk) => {
       buf += chunk.toString();
       const m = buf.match(/DevTools listening on (ws:\/\/[^\s]+)/);
-      if (m) {
+      if (m && !settled) {
+        settled = true;
+        clearTimeout(timer);
         child.off('error', onErr);
         resolve({ child, browserWsUrl: m[1] });
       }
     });
     child.once('exit', (code) => {
       if (!buf.includes('DevTools listening')) {
-        reject(new Error(`browser exited (code ${code}) before DevTools was ready. stderr:\n${buf}`));
+        fail(new Error(`browser exited (code ${code}) before DevTools was ready. stderr:\n${buf}`));
       }
     });
-    setTimeout(() => reject(new Error('timed out waiting for DevTools listening line')), 15000).unref();
+    timer = setTimeout(() => fail(new Error('timed out waiting for DevTools listening line')), launchTimeoutMs).unref();
   });
 }
 

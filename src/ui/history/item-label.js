@@ -6,12 +6,13 @@
 // range) that this pure module is never given, so they are left for the
 // caller to show as a raw code instead. Pure, no DOM.
 //
-// Note-name spelling matches src/app.js's own NAMES array (app.js:72) and
-// its `nname()` helper (app.js:75: NAMES[pc(m)] + (Math.floor(m / 12) - 1))
-// exactly, so a keyboard item here reads the same as it does in the trainer.
-const NAMES = ['C', 'C♯', 'D', 'E♭', 'E', 'F', 'F♯', 'G', 'A♭', 'A', 'B♭', 'B'];
+// Note-name spelling routes through src/core/note-names.js, the same module
+// src/app.js's own `nname()` uses (see setNoteNaming there), so a keyboard
+// item here always reads the same as it does in the trainer, in whichever
+// naming system/accidentals the learner picked.
+import { name as noteNameFor } from '../../core/note-names.js';
 const pc = (m) => ((Math.round(m) % 12) + 12) % 12;
-const nname = (m) => NAMES[pc(m)] + (Math.floor(m / 12) - 1);
+const nname = (m) => noteNameFor(m, true);
 
 /**
  * Returns a short plain-words label for `id`, or null when this module has
@@ -23,7 +24,7 @@ export function itemLabel(id) {
   const k = id[0];
   const rest = id.slice(1);
   if (k === 'n' && /^\d{1,3}$/.test(rest)) return nname(+rest);
-  if (k === 'p' && /^\d{1,2}$/.test(rest)) { const p = +rest; return p >= 0 && p < 12 ? NAMES[p] + ' (any octave)' : null; }
+  if (k === 'p' && /^\d{1,2}$/.test(rest)) { const p = +rest; return p >= 0 && p < 12 ? noteNameFor(p, false) + ' (any octave)' : null; }
   if (k === 'h') {
     const m = /^([bd])(\d{1,2})$/.exec(rest);
     if (!m) return null;
