@@ -43,3 +43,19 @@ test('print block keeps the notation/content area visible and sets black-on-whit
   assert.match(block, /color:\s*#000/i, 'print block should set black text');
   assert.match(block, /background(?:-color)?:\s*#fff/i, 'print block should set a white background');
 });
+
+// Two print modes share one stylesheet: printing the page (G3, the notation) and printing the
+// weekly report (src/ui/history.js). The report's "hide everything but me" rule must apply only
+// while the report is being printed, or every ordinary print comes out blank.
+test('the weekly report\'s hide-everything print rule is scoped to body.printing-report', () => {
+  const unscoped = css.match(/(^|[,}\s])body\s+\*\s*\{[^}]*visibility:\s*hidden/m);
+  assert.equal(unscoped, null, 'a bare `body * { visibility: hidden }` blanks every non-report print');
+  assert.match(css, /body\.printing-report\s+\*\s*\{[^}]*visibility:\s*hidden/, 'the report print rule should key off body.printing-report');
+});
+
+test('printing the report does not also hide the report via the page-print chrome rules', () => {
+  // the page-print rules hide buttons, the side rail, etc.; they must not apply in report mode,
+  // or an ancestor of the report could be display:none and the report prints empty.
+  const block = printBlock();
+  assert.match(block, /body:not\(\.printing-report\)\s+header/, 'page-print chrome rules should be scoped to body:not(.printing-report)');
+});

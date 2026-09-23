@@ -26,7 +26,7 @@ reach the server, also with a link to get the current file. It never checks on i
 a press — and a development build (one you built yourself rather than downloaded) says so instead
 of checking, since there is nothing meaningful to compare.
 
-The app follows your system's light/dark setting automatically, or pick Light/Dark yourself from the Theme control next to "Show note names" in the side rail.
+The app follows your system's light/dark setting automatically, or pick Light/Dark yourself from the Theme control next to "Show note names" in the side rail. Two more controls next to Theme let you pick how notes are named -- letters, German (H/B), or fixed-do solfege (Do, Re, Mi...) -- and whether the black keys are spelled with sharps, flats, or today's mixed spelling.
 
 If your microphone or keyboard is not being heard, the next two sections are the ones to read.
 Everything from "Build it from source" down is for people working on the app itself.
@@ -159,7 +159,8 @@ appears once you have actually practised a while without one — never on a fres
 there is nothing yet to lose. The "My progress" panel also shows a practice calendar (minutes and
 level changes, one cell per day, for the last 8 weeks) and a daily minutes goal with a streak — the
 practice log itself only keeps the most recent 60 sessions, so days older than that say "earlier
-sessions not kept" rather than a false zero.
+sessions not kept" rather than a false zero. "Print this week's report" turns the last 7 days into a
+one-page, printer-friendly summary for a teacher or parent.
 
 ## Turning an audio file into notes
 
@@ -170,12 +171,11 @@ capture — so it feeds transcribe.js exactly the way a live capture does, teach
 nothing new. The "Record a tune" panel wires this in directly: alongside Listen/Stop, "Or choose
 an audio file" lets a learner pick a recording instead of using the microphone, and it goes
 through the same check-list step before anything can be practised or saved. Like the rest of this
-app's pitch tracking, it is monophonic only: a chord or a second voice reads as whichever single
-pitch the detector locks onto, not as separate notes — so this writes down one melody line at a
-time, from a file the same as from the mic.
-capture — so a file-import panel can be wired up later without teaching transcribe.js anything
-new. Like the rest of this app's pitch tracking, it is monophonic only: a chord or a second voice
-reads as whichever single pitch the detector locks onto, not as separate notes.
+app's pitch tracking, it is monophonic by default: a chord or a second voice reads as whichever
+single pitch the detector locks onto, not as separate notes — so this writes down one melody line
+at a time, from a file the same as from the mic — unless "More than one note at a time" is
+checked, in which case a multipitch detector (`src/audio/analysis/multipitch.js`) splits the file
+into a melody/bass/inner part per voice it hears, each shown as its own labelled lane.
 
 ## Songs
 
@@ -457,6 +457,22 @@ first, then the high C and D above them, then the low E, D and C below G,
 then the forked-fingering F; whistle: the D-major scale, first octave, D E
 F# G A B C# D — rather than chromatic or alphabetical order.
 
+`fitToInstrument` (`src/song/lesson.js`) fits a song part's range against
+each transposing instrument's *written* pitch when its `range` is written
+(clarinet, trumpet, alto/tenor sax, French horn — `transposition` not a
+multiple of 12), not the sounding pitch the mic actually hears, so a song's
+notes land where the learner's printed part says, not just where a real
+instrument could reach; `src/song/arrange/transposing.js` computes a part's
+written notes and written key signature for display.
+
+`src/song/feasibility.js`'s `feasibility(song, partId, instrument)` turns
+`fitToInstrument`'s own result into a plain-language badge -- "Fits as
+written", "Transposed to G", "3 notes skipped" -- never a guessed score.
+The songs panel (`src/ui/songs.js`) shows one "Play it on…" card per ready
+instrument, badge included, on a lesson's first (listen) step, before the
+learner has attempted anything; picking a card starts that same song on the
+chosen instrument without leaving the panel.
+
 ## Rhythm vocabulary
 
 `src/core/rhythm.js` is a pure rhythm-notation module: cells (quarter, eighth pairs, rests, ties,
@@ -468,11 +484,14 @@ rests, ties, dotted-eighth figures, triplets, 3/4, 6/8, swing, and two-bar phras
 
 ## Ear training
 
-The Ear training screen (`src/core/ear/*`, wired in `src/ui/ear.js`) has nine listen-and-answer
+The Ear training screen (`src/core/ear/*`, wired in `src/ui/ear.js`) has ten listen-and-answer
 exercises, each leveling up or down on its own: scale degrees, melodic dictation, dictation from
 real song phrases (a 1-3 bar phrase pulled straight out of a starter song's melody -- which song
-it was is only revealed after grading, never before), rhythm dictation, chord progressions,
-scales and modes, chord inversions, in-tune-or-not intonation discrimination, and sing-it-back.
+it was is only revealed after grading, never before), rhythm dictation, rhythms from songs (a bar,
+two at higher levels, of a starter song's own note durations and rests, pitch dropped -- the song
+title is shown up front, since this is a sight-reading drill rather than a by-ear one, and it
+grades with rhythm dictation's own checker unchanged), chord progressions, scales and modes,
+chord inversions, in-tune-or-not intonation discrimination, and sing-it-back.
 
 ## Find your own singing range
 

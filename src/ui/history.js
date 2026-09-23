@@ -4,7 +4,7 @@
 // (aggregating sessions, downsampling a trend into a sparkline, wording the
 // teacher report, ranking items by how well they will be remembered) lives
 // in src/core/history.js and src/core/srs.js — this module is the DOM glue.
-import { summarize, sparkline, toTeacherSummary, ledger } from '../core/history.js';
+import { summarize, sparkline, toTeacherSummary, ledger, weeklyReport } from '../core/history.js';
 import { due } from '../core/srs.js';
 import { itemLabel } from './history/item-label.js';
 import { sanitizeHistoryStore } from './history/store.js';
@@ -65,6 +65,30 @@ function calendarHtml(l) {
   return `${banner}<div class="ledger-grid" role="img" aria-label="Practice calendar, last ${l.weeks} weeks">${cells}</div>`;
 }
 
+/** Renders a weeklyReport() result (src/core/history.js) into the printable
+ * section's markup: a plain-words week summary a teacher or parent can hold
+ * on paper. `api.instrument` turns a mod id into its display name the same
+ * way the rest of this panel does; every piece of user or instrument text
+ * goes through esc() first — a learner name is free text they typed. */
+function weeklyReportHtml(w, api) {
+  const instRows = w.perInstrument.length
+    ? w.perInstrument
+        .map((m) => `<li>${esc((api.instrument(m.mod) || {}).name || m.mod)}: ${m.minutes} min across ${m.sessions} session${m.sessions === 1 ? '' : 's'}</li>`)
+        .join('')
+    : '<li>Nothing practised this week.</li>';
+  const truncatedNote = w.truncated
+    ? '<p>Some earlier days this week are not shown because the practice log only keeps the most recent sessions — those days are unknown, not zero.</p>'
+    : '';
+  return `
+    <h1>${esc(w.name)}'s week in Band Coach</h1>
+    <p>${esc(w.weekStart)} to ${esc(w.weekEnd)}</p>
+    <p>${w.totalMinutes} minute${w.totalMinutes === 1 ? '' : 's'} total, practised on ${w.daysPractised} of 7 days, hit the ${w.goalMin}-minute goal on ${w.daysGoalMet} day${w.daysGoalMet === 1 ? '' : 's'}.</p>
+    <h2>What was practised</h2>
+    <ul>${instRows}</ul>
+    ${truncatedNote}
+  `;
+}
+
 export function registerHistory(panels) {
   panels.register({
     id: 'history',
@@ -97,6 +121,10 @@ export function registerHistory(panels) {
           <p role="status" id="historyCopyStatus"></p>
           <label for="historyCopyText" id="historyCopyTextLabel" hidden>Report text (selected — press Ctrl+C or Cmd+C)</label>
           <textarea id="historyCopyText" readonly hidden rows="8"></textarea>
+          <div>
+            <button type="button" id="historyPrintBtn">Print this week's report</button>
+          </div>
+          <div class="history-print-report" id="historyPrintReport" aria-hidden="true"></div>
         </div>`;
 
       const nameInput = el.querySelector('#historyNameInput');
@@ -106,6 +134,8 @@ export function registerHistory(panels) {
       const copyStatus = el.querySelector('#historyCopyStatus');
       const copyLabel = el.querySelector('#historyCopyTextLabel');
       const copyText = el.querySelector('#historyCopyText');
+      const printBtn = el.querySelector('#historyPrintBtn');
+      const printReport = el.querySelector('#historyPrintReport');
 
       function renderItemsFor(modId, db, now) {
         const box = el.querySelector('#historyItems');
@@ -205,6 +235,17 @@ export function registerHistory(panels) {
         } else {
           showSelected();
         }
+      });
+
+      printBtn.addEventListener('click', () => {
+        const store = sanitizeHistoryStore(api.store('history').get());
+        const w = weeklyReport(api.db(), { now: Date.now(), learnerName: store.learnerName || undefined, goalMin: store.goalMin });
+        printReport.innerHTML = weeklyReportHtml(w, api);
+        // Report mode (styles.css body.printing-report) stays on until the dialog closes;
+        // print() does not block in every browser, so afterprint is what ends it.
+        document.body.classList.add('printing-report');
+        window.addEventListener('afterprint', () => document.body.classList.remove('printing-report'), { once: true });
+        window.print();
       });
 
       return { show: render };

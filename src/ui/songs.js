@@ -39,10 +39,17 @@ import { importMidi } from '../song/import-midi.js';
 import { importAbc } from '../song/import-abc.js';
 import { importMusicXml } from '../song/import-musicxml.js';
 import { buildLessonPlan, nextStep, creditFor } from '../song/lesson.js';
+import { feasibility } from '../song/feasibility.js';
+import { INSTRUMENTS } from '../instruments/index.js';
 import { routeImportFile } from './songs/import-route.js';
 import { judgeAttempt, passesRule } from './songs/practice.js';
 import { mapMasteryKeys } from './songs/mastery.js';
 import { parseChallenge, buildChallenge } from '../song/challenge.js';
+
+// Every playable ('ready') instrument record, for the "Play it on…" row --
+// same source src/app.js reads for notation/mic-range/how-to-play, so this
+// panel never invents an instrument list of its own.
+const READY_INSTRUMENTS = INSTRUMENTS.filter((i) => i.status === 'ready');
 
 // ---------------------------------------------------------------------------
 // onNote() forwarding (the one permitted src/app.js line)
@@ -327,10 +334,16 @@ function mountSongsPanel(hostEl, api) {
     }
   }
 
-  function startPractice(song, partId) {
+  // `instrumentOverride`, when given (a "Play it on…" card was clicked),
+  // starts the lesson on THAT instrument instead of the learner's current
+  // main-screen instrument -- picking a card never calls api.setMod(), which
+  // would close this panel and jump back to the main screen; it only swaps
+  // which instrument this song's lesson (and its saved songId/partId/
+  // instrumentId, restored on the panel's next open) is built for.
+  function startPractice(song, partId, instrumentOverride) {
     stopRecording();
-    const instrumentId = api.mod();
-    const instrument = api.instrument(instrumentId);
+    const instrumentId = instrumentOverride ? instrumentOverride.id : api.mod();
+    const instrument = instrumentOverride || api.instrument(instrumentId);
     if (!instrument) {
       practiceSection.innerHTML = '';
       practiceSection.appendChild(el('p', { text: 'Pick an instrument on the main screen first, then come back here to practise.' }));
@@ -342,6 +355,41 @@ function mountSongsPanel(hostEl, api) {
     practice = { song, partId, instrument, instrumentId, plan, results: [], stepIndex: 0, recording: false, playedEvents: [], recordStartSec: 0, stop: null };
     store.set({ songId: song.id, partId, instrumentId, level });
     renderPractice();
+  }
+
+  // "Play it on…" row (plan D8): one card per ready instrument with a
+  // feasibility badge (src/song/feasibility.js -- itself built only on
+  // fitToInstrument()'s real result, never a guessed score). Shown only on
+  // the very first (listen) step of a lesson, before the learner has
+  // attempted anything, so the badge is always seen before they commit to
+  // an instrument. Computed lazily here, only for the song actually open --
+  // never for the whole library up front.
+  function renderPlayItOn(song, partId, currentInstrumentId) {
+    const section = el('section', { class: 'panel-songs-play-on', 'aria-label': 'Play it on…' });
+    section.appendChild(el('h5', { text: 'Play it on…' }));
+    const list = el('ul', { class: 'panel-songs-play-on-list' });
+    READY_INSTRUMENTS.forEach((instrument) => {
+      const f = feasibility(song, partId, instrument);
+      const isCurrent = instrument.id === currentInstrumentId;
+      const card = el('li', {
+        class: 'panel-songs-instrument-card' + (isCurrent ? ' panel-songs-instrument-card-current' : ''),
+      });
+      const btn = el('button', {
+        type: 'button',
+        class: 'panel-songs-instrument-btn',
+        title: f.detail,
+        // Picking a card starts (or restarts) this song's lesson on that
+        // instrument; see startPractice()'s instrumentOverride comment for
+        // why this never calls api.setMod().
+        onclick: () => startPractice(song, partId, instrument),
+      });
+      btn.appendChild(el('span', { class: 'panel-songs-instrument-name', text: instrument.name }));
+      btn.appendChild(el('span', { class: 'panel-songs-badge', 'data-feasibility': f.level, text: f.label }));
+      card.appendChild(btn);
+      list.appendChild(card);
+    });
+    section.appendChild(list);
+    return section;
   }
 
   function updateCount() {
@@ -370,6 +418,9 @@ function mountSongsPanel(hostEl, api) {
     }
     if (plan.fit.changes.length) {
       practiceSection.appendChild(el('p', { text: 'This song was ' + plan.fit.changes.join('; ') + ' to fit your instrument.' }));
+    }
+    if (stepIndex === 0) {
+      practiceSection.appendChild(renderPlayItOn(practice.song, practice.partId, practice.instrumentId));
     }
     practiceSection.appendChild(el('h4', { text: stepTitle(step) + ' (bars ' + (step.bars[0] + 1) + '-' + (step.bars[1] + 1) + ')' }));
     practiceSection.appendChild(el('p', { text: stepHint(step) }));
