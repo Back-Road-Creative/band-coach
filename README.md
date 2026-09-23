@@ -446,6 +446,14 @@ integer-tick durations, so triplets and swing are exact fractions rather than ro
 Rhythm reading (`rhy`) gains eight further levels built on it, after the original ten-cell levels:
 rests, ties, dotted-eighth figures, triplets, 3/4, 6/8, swing, and two-bar phrases.
 
+## Ear training
+
+The Ear training screen (`src/core/ear/*`, wired in `src/ui/ear.js`) has nine listen-and-answer
+exercises, each leveling up or down on its own: scale degrees, melodic dictation, dictation from
+real song phrases (a 1-3 bar phrase pulled straight out of a starter song's melody -- which song
+it was is only revealed after grading, never before), rhythm dictation, chord progressions,
+scales and modes, chord inversions, in-tune-or-not intonation discrimination, and sing-it-back.
+
 ## Find your own singing range
 
 The Voice screen offers three fixed ranges (Lower/Middle/Higher voice) plus a fourth, "Find my

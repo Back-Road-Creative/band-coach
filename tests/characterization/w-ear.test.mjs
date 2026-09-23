@@ -23,7 +23,7 @@ async function selectExercise(page, id) {
   await page.waitFor(`window.__coach.ear().getExerciseId() === ${JSON.stringify(id)}`);
 }
 
-test('the ear panel opens, lists all eight exercises in plain words, and plays a question', async (t) => {
+test('the ear panel opens, lists all nine exercises in plain words, and plays a question', async (t) => {
   const page = await launchPage(htmlPath);
   t.after(() => page.close());
   await openEar(page);
@@ -34,6 +34,7 @@ test('the ear panel opens, lists all eight exercises in plain words, and plays a
   assert.deepEqual(labels, [
     'Scale degrees',
     'Melodic dictation',
+    'Dictation from songs',
     'Rhythm dictation',
     'Chord progressions',
     'Scales and modes',
@@ -119,6 +120,29 @@ test('melodic dictation: entering the exact heard notes on the on-screen keys gr
     })()`);
   }
   await page.waitFor("document.getElementById('earFeedback').className === 'ear-feedback ok'");
+});
+
+test('song dictation: entering the exact heard notes grades ok and does not name the song beforehand', async (t) => {
+  const page = await launchPage(htmlPath);
+  t.after(() => page.close());
+  await openEar(page);
+  await selectExercise(page, 'song-dictation');
+  await page.waitFor('window.__coach.ear().getQuestion()');
+
+  assert.ok(await page.evaluate("document.getElementById('earExplain').hidden"), 'the song title is not shown before an answer or reveal');
+
+  const answer = await page.evaluate('window.__coach.ear().getQuestion().answer');
+  for (const midi of answer) {
+    await page.evaluate(`(function () {
+      const names = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+      const pc = (((${midi}) % 12) + 12) % 12, octave = Math.floor((${midi}) / 12) - 1;
+      const label = names[pc] + octave;
+      const btn = Array.from(document.querySelectorAll('.ear-note-entry button')).find(b => b.textContent === label);
+      btn.click();
+    })()`);
+  }
+  await page.waitFor("document.getElementById('earFeedback').className === 'ear-feedback ok'");
+  assert.ok(await page.evaluate("document.getElementById('earExplain').textContent").then((t) => t.startsWith('From "')), 'the song is named only after grading');
 });
 
 test('rhythm dictation: tapping the exact onset spacing back grades ok', async (t) => {
