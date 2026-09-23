@@ -260,13 +260,18 @@ Store's own install path — see below.
   permission prompts or network block, which are still only checked by reading `main.js`'s
   source (`tests/unit/store-shell.test.mjs`). `scripts/try-shell.ps1` on a real Windows machine
   still covers the microphone and MIDI.
-- **The Windows App Certification Kit has not been run.** Partner Center requires (or strongly
-  recommends) passing the WACK before submission; that has to be run on a real Windows machine,
-  not in this CI job.
+- The Windows App Certification Kit now runs in `store-package.yml` on every build
+  (`scripts/run-wack.ps1` installs a throwaway-signed copy of the `.appx`;
+  `scripts/wack-verdict.mjs` fails the job on a FAIL report; the XML report is uploaded as the
+  `wack-report` artifact). First run (store-package run 35930449615, 2026-09-23): overall PASS,
+  23 of 24 tests passed; the one failure is the OPTIONAL "Blocked executables" test, which flags
+  `CreateProcessW` and blocked-executable name strings inside the Electron binary. Optional
+  failures are warnings Partner Center accepts. What WACK does not cover: Microsoft's own
+  certification also has human testers and policy review, so a WACK pass does not guarantee
+  Store approval.
 - MIDI device access in the packaged app is unverified for the reason above (no Windows machine
   available here).
-- **The version stamping is only verified at the generated-config level** (`tests/unit/store-apply-
-  identity.test.mjs` checks `config.extraMetadata.version`, and the code path to
-  `AppInfo.getVersionInWeirdWindowsForm()` is read from `app-builder-lib`'s source, not exercised).
-  Whether `AppxManifest.xml`'s actual `Identity/@Version` comes out as `X.Y.Z.0` can only be
-  confirmed by reading the manifest out of a real `store-package` CI artifact.
+- The version stamping is checked on the real artifact: `scripts/verify-appx.mjs` reads
+  `AppxManifest.xml` out of every `store-package` build and fails the run unless
+  `Identity/@Version` is `X.Y.Z.0` for the root `package.json` version (the v1.7.0 tag build
+  carried `1.7.0.0`).
