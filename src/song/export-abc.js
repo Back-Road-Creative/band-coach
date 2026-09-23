@@ -189,7 +189,12 @@ export function exportAbc(song) {
   lines.push(`K:${fieldText}`);
 
   song.parts.forEach((part, i) => {
-    if (song.parts.length > 1) lines.push(`V:${part.id}`);
+    // name="..." lets import-abc.js give the part its name back; ABC has no
+    // escape for a quote inside it, and the voice id is one token.
+    if (song.parts.length > 1) {
+      const id = String(part.id).replace(/\s+/g, '-');
+      lines.push(part.name ? `V:${id} name="${String(part.name).replace(/"/g, "'")}"` : `V:${id}`);
+    }
     const barTexts = partBars[i].map((bar) => renderBar(bar, keySigAcc, preferFlats, gcdTicks));
     lines.push(barTexts.join(' | ') + ' |');
   });

@@ -143,7 +143,7 @@ test('a tie across a barline is written with "-" and round-trips as two tied not
   );
 });
 
-test('a multi-part song emits one V: voice header per part (structure only -- this importer does not understand multi-voice ABC)', () => {
+test('a multi-part song emits one V: voice header per part with its name', () => {
   const song = {
     schema: 'song/1',
     id: 'two-voice',
@@ -162,6 +162,29 @@ test('a multi-part song emits one V: voice header per part (structure only -- th
     chords: [],
   };
   const abc = exportAbc(song);
-  assert.match(abc, /\nV:melody\n/);
-  assert.match(abc, /\nV:harmony\n/);
+  assert.match(abc, /\nV:melody name="Melody"\n/);
+  assert.match(abc, /\nV:harmony name="Harmony"\n/);
+});
+
+test('a multi-part song round-trips through ABC: each part comes back as its own part with its notes and name', () => {
+  const song = {
+    schema: 'song/1', id: 'two-voice', title: 'Two Voices', composer: null, licence: null, source: null,
+    key: { tonic: 0, mode: 'major' }, metre: { num: 4, den: 4 }, bpm: 100, ticksPerQuarter: 480,
+    parts: [
+      { id: 'melody', name: 'Melody', notes: [
+        { start: 0, dur: 480, midi: 72 }, { start: 480, dur: 480, midi: 74 }, { start: 960, dur: 960, midi: 76 },
+        { start: 1920, dur: 1920, midi: 77 },
+      ] },
+      { id: 'bass', name: 'Bass line', notes: [
+        { start: 0, dur: 1920, midi: 48 }, { start: 1920, dur: 960, midi: 43 }, { start: 2880, dur: 960, midi: 45 },
+      ] },
+    ],
+    chords: [],
+  };
+  const { song: back } = importAbc(exportAbc(song));
+  assert.equal(back.parts.length, 2);
+  assert.deepEqual(back.parts.map((p) => p.name), ['Melody', 'Bass line']);
+  song.parts.forEach((part, i) => {
+    assert.deepEqual(noteTuples(back.parts[i].notes), noteTuples(part.notes), `${part.id}: notes must round-trip`);
+  });
 });
