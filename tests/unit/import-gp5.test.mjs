@@ -5,18 +5,27 @@ import { validateSong } from '../../src/song/model.js';
 
 // --- tiny GP5 byte-writer helper, local to this test file (no binary fixtures) ---
 //
-// This writer emits the same self-authored binary layout `import-gp5.js`
-// reads (see the comment block at the top of that file). It is NOT a real
-// Guitar Pro 5 file writer -- these fixtures exist only to exercise the
-// parser's own format, so parity with real .gp5 files produced by the
-// actual application is unverified.
+// This writer emits the real Guitar Pro 5.1 ("v5.10") container layout that
+// `import-gp5.js` reads, verified against real .gp5 files in
+// tests/fixtures/gp5/ (see import-gp5-real.test.mjs) and against the
+// PyGuitarPro project's independent reader. It only ever fills in the
+// fields this parser actually looks at; every other field (page setup,
+// RSE master effect, lyrics, ...) is written as zero bytes, which is a
+// valid empty encoding the parser skips over unconditionally.
 
 function u8(n) {
   return [n & 0xff];
 }
+function i16(n) {
+  const v = n < 0 ? n + 0x10000 : n;
+  return [v & 0xff, (v >>> 8) & 0xff];
+}
 function i32(n) {
   const v = n < 0 ? n + 0x100000000 : n;
   return [v & 0xff, (v >>> 8) & 0xff, (v >>> 16) & 0xff, (v >>> 24) & 0xff];
+}
+function zeros(n) {
+  return new Array(n).fill(0);
 }
 function bytesOf(str) {
   return [...str].map((c) => c.charCodeAt(0));
@@ -27,7 +36,7 @@ function fixedBlock(str, size) {
   for (let i = 0; i < b.length && i < size; i++) out[i] = b[i];
   return [u8(b.length)[0], ...out];
 }
-function infoString(str) {
+function infoString(str = '') {
   const b = bytesOf(str);
   return [...i32(b.length + 1), ...u8(b.length), ...b];
 }
@@ -52,92 +61,132 @@ function infoBlock({ title = '', subtitle = '', artist = '', album = '', words =
   ];
 }
 
-function tempoKeyBlock({ tempoName = '', tempo = 120, keySf = 0, keyMode = 0 } = {}) {
-  return [...infoString(tempoName), ...i32(tempo), ...u8(keySf < 0 ? keySf + 256 : keySf), ...u8(keyMode)];
+function lyricsBlock() {
+  return [...i32(0), ...zeros(5 * (4 + 4))]; // bound track + 5 x (starting measure + empty int-size-string)
+}
+
+function rseMasterEffectBlock() {
+  return zeros(4 + 4 + 11); // volume, reserved, 11-knob equalizer
+}
+
+function pageSetupBlock() {
+  const out = [...zeros(6 * 4), ...i32(100), ...i16(0)];
+  for (let i = 0; i < 10; i++) out.push(...infoString(''));
+  return out;
+}
+
+function tempoKeyBlock({ tempoName = '', tempo = 120, keySf = 0 } = {}) {
+  return [...infoString(tempoName), ...i32(tempo), u8(0)[0], ...u8(keySf < 0 ? keySf + 256 : keySf), ...i32(0)];
 }
 
 function channelTable(overrides = {}) {
   const bytes = [];
   for (let i = 0; i < 64; i++) {
     const instrument = overrides[i] ?? 24;
-    bytes.push(...i32(instrument), ...u8(0), ...u8(0), ...u8(0), ...u8(0), ...u8(0), ...u8(0), ...u8(0), ...u8(0));
+    bytes.push(...i32(instrument), ...zeros(8));
   }
   return bytes;
 }
 
-// flags: 0x01 numerator present, 0x02 denominator present, 0x20 marker present, 0x40 key change present
-function measureHeader({ num, den, marker, keyChange } = {}) {
+// flags: 0x01 numerator, 0x02 denominator, 0x08 repeat close, 0x10 alt ending,
+// 0x20 marker, 0x40 key change.
+function measureHeader({ num, den, marker, keyChange, repeatClose, altEnding } = {}, isFirst) {
   let flags = 0;
   if (num !== undefined) flags |= 0x01;
   if (den !== undefined) flags |= 0x02;
+  if (repeatClose !== undefined) flags |= 0x08;
+  if (altEnding !== undefined) flags |= 0x10;
   if (marker !== undefined) flags |= 0x20;
   if (keyChange !== undefined) flags |= 0x40;
-  const out = [u8(flags)[0]];
+  const out = [];
+  if (!isFirst) out.push(0); // separator before every header but the first
+  out.push(flags);
   if (num !== undefined) out.push(u8(num)[0]);
   if (den !== undefined) out.push(u8(den)[0]);
+  if (repeatClose !== undefined) out.push(u8(repeatClose)[0]);
   if (marker !== undefined) out.push(...infoString(marker), 0, 0, 0, 0);
   if (keyChange !== undefined) out.push(u8(keyChange.sf < 0 ? keyChange.sf + 256 : keyChange.sf)[0], u8(keyChange.mode)[0]);
-  if (num !== undefined || den !== undefined) out.push(0, 0, 0, 0);
+  if (altEnding !== undefined) out.push(u8(altEnding)[0]);
+  if (num !== undefined || den !== undefined) out.push(0, 0, 0, 0); // beam grouping
+  if (altEnding === undefined) out.push(0); // separator when there's no alt-ending block
   out.push(0); // triplet feel byte
   return out;
 }
 
-function trackHeader({ name, tuning, channelIndex = 0 }) {
-  return [
-    ...fixedBlock(name, 40),
-    ...i32(tuning.length),
-    ...tuning.flatMap((t) => i32(t)),
-    ...i32(channelIndex),
-    ...i32(0), // effects channel
-    ...i32(24), // fret count
-    ...i32(0), // capo
-    0, 0, 0, 0, // color
-  ];
-}
-
-// duration values: -2 whole, -1 half, 0 quarter, 1 eighth, 2 sixteenth
-function note({ string, fret, tie = false, dead = false, velocity }) {
-  let flags = 0;
-  if (tie) flags |= 0x01;
-  if (dead) flags |= 0x02;
-  if (velocity !== undefined) flags |= 0x04;
-  flags |= 0x08; // has fret
-  const out = [string, u8(flags)[0]];
-  if (velocity !== undefined) out.push(u8(velocity)[0]);
-  out.push(u8(fret < 0 ? fret + 256 : fret)[0]);
+function trackHeader({ name, tuning, channelIndex = 0 }, isFirst) {
+  const out = [];
+  if (isFirst) out.push(0); // separator byte
+  out.push(0); // track flags
+  out.push(...fixedBlock(name, 40));
+  out.push(...i32(tuning.length));
+  for (let i = 0; i < 7; i++) out.push(...i32(i < tuning.length ? tuning[i] : 0));
+  out.push(...i32(0)); // MIDI port
+  out.push(...i32(channelIndex + 1)); // channel is 1-based on disk
+  out.push(...i32(0)); // effects channel
+  out.push(...i32(24)); // fret count
+  out.push(...i32(0)); // capo
+  out.push(...zeros(4)); // colour
+  out.push(...i16(0)); // notation display flags
+  out.push(...zeros(3)); // auto-accentuation, MIDI bank, humanize
+  out.push(...i32(0), ...i32(0), ...i32(0)); // clef transpose x2, unknown
+  out.push(...zeros(12)); // unknown
+  out.push(...i32(0), ...i32(0), ...i32(0)); // RSE instrument/unknown/sound bank
+  out.push(...i32(0)); // RSE effect number
+  out.push(...zeros(4)); // 3-band equalizer
+  out.push(...infoString(''), ...infoString('')); // RSE effect name/category
   return out;
 }
 
-function beat({ duration = 0, dotted = false, tuplet, rest = false, notes = [] }) {
+// duration values: -2 whole, -1 half, 0 quarter, 1 eighth, 2 sixteenth
+function note({ string, fret, tie = false, dead = false }) {
+  const type = dead ? 3 : tie ? 2 : 1;
+  return [0x20, u8(type)[0], u8(fret < 0 ? fret + 256 : fret)[0], 0]; // flags, type, fret, flags2
+}
+
+function beat({ duration = 0, dotted = false, tuplet, rest = false, empty = false, notes = [] }) {
   let flags = 0;
   if (dotted) flags |= 0x01;
   if (tuplet) flags |= 0x20;
   flags |= 0x40; // beat status present
-  const out = [u8(flags)[0], u8(rest ? 1 : 0)[0], u8(duration < 0 ? duration + 256 : duration)[0]];
+  const status = empty ? 0 : rest ? 2 : 1;
+  const out = [u8(flags)[0], u8(status)[0], u8(duration < 0 ? duration + 256 : duration)[0]];
   if (tuplet) out.push(...i32(tuplet));
-  if (!rest) {
-    let stringMask = 0;
-    for (const n of notes) stringMask |= 1 << (n.string - 1);
-    out.push(u8(stringMask)[0]);
+  let stringMask = 0;
+  for (const n of notes) stringMask |= 1 << (7 - n.string);
+  out.push(u8(stringMask)[0]); // played-strings byte -- present even on a rest/empty beat
+  if (status === 1) {
     for (const n of notes) out.push(...note(n));
   }
+  out.push(...i16(0)); // beat display flags, always present
   return out;
 }
 
-function measureTrack(beats) {
+function voice(beats) {
   return [...i32(beats.length), ...beats.flat()];
+}
+
+const EMPTY_VOICE = [beat({ empty: true })];
+
+function measureTrack(voice0Beats, voice1Beats = EMPTY_VOICE) {
+  return [...voice(voice0Beats), ...voice(voice1Beats), 0]; // 0 = line break byte
 }
 
 function gp5File({ version, info, tempoKey, channels, measures, tracks, measureTracks }) {
   return new Uint8Array([
     ...versionHeader(version),
     ...infoBlock(info),
+    ...lyricsBlock(),
+    ...rseMasterEffectBlock(),
+    ...pageSetupBlock(),
     ...tempoKeyBlock(tempoKey),
     ...(channels || channelTable()),
+    ...zeros(38), // directions
+    ...i32(0), // master reverb
     ...i32(measures.length),
     ...i32(tracks.length),
-    ...measures.flatMap(measureHeader),
-    ...tracks.flatMap(trackHeader),
+    ...measures.flatMap((m, i) => measureHeader(m, i === 0)),
+    ...tracks.flatMap((t, i) => trackHeader(t, i === 0)),
+    0, // separator after all track headers
     ...measureTracks.flat(2),
   ]);
 }
@@ -147,7 +196,7 @@ const STANDARD_TUNING = [64, 59, 55, 50, 45, 40]; // high E to low E
 test('one track, one measure, a few notes: parses name, tuning-derived pitch, ticks', () => {
   const bytes = gp5File({
     info: { title: 'Simple Riff' },
-    tempoKey: { tempo: 140, keySf: 0, keyMode: 0 },
+    tempoKey: { tempo: 140, keySf: 0 },
     measures: [{ num: 4, den: 4 }],
     tracks: [{ name: 'Guitar', tuning: STANDARD_TUNING, channelIndex: 0 }],
     measureTracks: [
@@ -206,6 +255,19 @@ test('dotted note and a tuplet both scale duration correctly', () => {
   assert.equal(part.notes[0].dur, 720);
   assert.equal(part.notes[1].start, 720);
   assert.equal(part.notes[1].dur, 320);
+});
+
+test('a quintuplet scales duration by times/n, not a fixed 2/n', () => {
+  const bytes = gp5File({
+    info: { title: 'Quintuplet' },
+    tempoKey: { tempo: 120 },
+    measures: [{ num: 4, den: 4 }],
+    tracks: [{ name: 'Guitar', tuning: [64], channelIndex: 0 }],
+    measureTracks: [[measureTrack([beat({ duration: 0, tuplet: 5, notes: [{ string: 1, fret: 0 }] })])]],
+  });
+
+  const { song } = importGp5(bytes);
+  assert.equal(song.parts[0].notes[0].dur, 384); // quarter * (4/5) * 480
 });
 
 test('a tie chains to the previous note on the same string', () => {
@@ -347,9 +409,15 @@ test('a truncated file is rejected with a plain-English error, never a crash mid
     ],
   });
 
-  for (const len of [0, 1, 5, 20, 40, bytes.length - 3, bytes.length - 1]) {
+  for (const len of [0, 1, 5, 20, 40, bytes.length - 3]) {
     assert.throws(() => importGp5(bytes.subarray(0, len)), /guitar pro file|end of/i);
   }
+
+  // Real Guitar Pro 5 files can be missing exactly their very last byte (the
+  // trailing line-break marker after the last measure/track) and are still
+  // well-formed -- Guitar Pro itself treats that byte as optional at
+  // end-of-file, so a one-byte-short file is a valid import, not truncation.
+  assert.doesNotThrow(() => importGp5(bytes.subarray(0, bytes.length - 1)));
 });
 
 test('every prefix of a valid file either imports or throws a plain-English error, never anything else', () => {
