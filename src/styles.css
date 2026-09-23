@@ -138,7 +138,17 @@
   .panel-songs-practice { border: 1px solid var(--line); border-radius: 10px; padding: 12px; margin-top: 12px; display: flex; flex-direction: column; gap: 8px; }
   .panel-songs-practice button { align-self: flex-start; }
   .panel-songs-count { color: var(--muted); }
-  @media (max-width: 400px) { .panel-songs-list { flex-direction: column; } }
+  .panel-songs-play-on-list { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+  .panel-songs-instrument-btn { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 6px 10px; }
+  .panel-songs-instrument-card-current .panel-songs-instrument-btn { border-color: var(--good); }
+  .panel-songs-instrument-name { font-weight: 600; }
+  .panel-songs-badge { font-size: 0.85em; border-radius: 999px; padding: 1px 8px; }
+  .panel-songs-badge[data-feasibility="as-written"] { background: var(--good); color: #000; }
+  .panel-songs-badge[data-feasibility="transposed"] { background: var(--warn); color: #000; }
+  .panel-songs-badge[data-feasibility="partial"] { background: var(--warn); color: #000; }
+  .panel-songs-badge[data-feasibility="unplayable"] { background: var(--bad); color: #fff; }
+  .panel-songs-badge[data-feasibility="empty"] { background: var(--muted); color: #000; }
+  @media (max-width: 400px) { .panel-songs-list { flex-direction: column; } .panel-songs-play-on-list { flex-direction: column; } }
   /* */
   .panel-editor { display: flex; flex-direction: column; gap: 12px; max-width: 100%; }
   .panel-editor .editor-record { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
@@ -332,3 +342,9 @@
   .ledger-cell-met { outline: 2px solid var(--accent); outline-offset: -2px; }
   .ledger-cell-unknown { background: repeating-linear-gradient(45deg, var(--panel-2), var(--panel-2) 4px, var(--line) 4px, var(--line) 8px); }
   .ledger-truncated-note { color: var(--muted); font-size: 13px; }
+  .history-print-report { display: none; }
+  @media print {
+    body * { visibility: hidden; }
+    .history-print-report, .history-print-report * { visibility: visible; }
+    .history-print-report { display: block; position: absolute; top: 0; left: 0; width: 100%; color: #000; background: #fff; }
+  }

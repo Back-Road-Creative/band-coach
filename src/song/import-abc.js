@@ -1,11 +1,16 @@
-// ABC notation 2.1 (single voice) -> the shared Song shape.
+// ABC notation 2.1 -> the shared Song shape.
 //
 // Wiring: call `importAbc(text)` with one ABC tune's raw text (one `X:`
 // block). Returns `{ song, warnings }` per the author brief's Song shape
 // (schema 'song/1', ticksPerQuarter 480, notes sorted by `start`). No I/O,
-// no DOM/global. Multi-voice `V:` tunes are read as one voice with a
-// warning. Chord symbols in quotes become `song.chords`. Grace notes and
-// decorations are skipped with a warning, not guessed at.
+// no DOM/global. Each `V:` voice -- declared in the header (`V:id
+// name=".." clef=..`) and/or switched to inline (`[V:id]`) or on its own
+// body line (`V:id`) -- becomes its own song part, in first-appearance
+// order, each with its own time cursor and its own bar-scoped accidentals
+// so one voice's naturals/sharps never bleed into another's. A tune with
+// no `V:` fields at all imports exactly as a single part, as before. Chord
+// symbols in quotes become `song.chords`. Grace notes and decorations are
+// skipped with a warning, not guessed at.
 
 import { songIdentity } from './ident.js';
 
@@ -84,9 +89,38 @@ export function importAbc(rawText, options = {}) {
   const bodyLines = [];
   let sawKey = false;
 
+  // Voices: `voiceOrder` records each voice id in first-appearance order
+  // (header declaration or first body/inline switch, whichever comes
+  // first in the text); `voiceMeta[id].name` holds its `name=`/`nm=` label
+  // if one was given. `VOICE_MARK`-wrapped ids are spliced into the body
+  // text so the tokenizer can see a voice switch as an ordinary token,
+  // interleaved with the notes around it.
+  const voiceOrder = [];
+  const voiceMeta = {};
+  const VOICE_MARK = '\x01';
+  function registerVoice(id, name) {
+    if (!(id in voiceMeta)) { voiceMeta[id] = { name }; voiceOrder.push(id); }
+    else if (name) voiceMeta[id].name = name;
+  }
+  function parseVoiceField(value) {
+    const m = /^(\S+)/.exec(value.trim());
+    if (!m) return null;
+    const rest = value.slice(m.index + m[0].length);
+    const nm = /(?:name|nm)="([^"]*)"|(?:name|nm)=(\S+)/.exec(rest);
+    return { id: m[1], name: nm ? (nm[1] ?? nm[2]) : undefined };
+  }
+
   for (const line of rawText.split(/\r\n|\r|\n/)) {
     if (line.trim() === '') continue;
     const m = /^([A-Za-z]):\s?(.*)$/.exec(line);
+    if (m && m[1] === 'V') {
+      const voice = parseVoiceField(m[2]);
+      if (voice) {
+        registerVoice(voice.id, voice.name);
+        if (sawKey) bodyLines.push(VOICE_MARK + voice.id + VOICE_MARK);
+      }
+      continue;
+    }
     if (m && !sawKey) {
       const [, field, value] = m;
       if (field === 'T') title = title === null ? value.trim() : `${title} ${value.trim()}`;
@@ -107,32 +141,42 @@ export function importAbc(rawText, options = {}) {
       // data the Song shape represents; ignored on purpose.
       continue;
     }
-    bodyLines.push(line);
+    // An inline `[V:id]` switch can appear mid-line, amongst notes; splice
+    // in the same voice marker the tokenizer looks for, registering the
+    // voice at its first appearance if this is the first time it's named.
+    bodyLines.push(line.replace(/\[V:(\S+?)\]/g, (_, id) => { registerVoice(id); return VOICE_MARK + id + VOICE_MARK; }));
   }
 
   if (!unitLengthExplicit) unitLength = defaultUnitLength(meter.num, meter.den);
 
-  const parts = [{ id: 'abc-1', name: title || 'Tune', notes: [] }];
-  const notes = parts[0].notes;
+  // One state bucket per voice: each voice gets its own time cursor and its
+  // own bar-scoped accidentals/ties/tuplet-in-progress, so switching voices
+  // never lets one voice's notation state bleed into another's. A tune with
+  // no `V:` fields at all never switches voice, so it plays out exactly as
+  // the single default-voice tune it always was.
+  const DEFAULT_VOICE = '\x00default';
+  const voiceStates = new Map();
+  function voiceState(id) {
+    if (!voiceStates.has(id)) voiceStates.set(id, { notes: [], tick: 0, barAccidentals: {}, pendingTieMidi: null, tupletRemaining: 0, tupletFactor: 1 });
+    return voiceStates.get(id);
+  }
+  let currentVoiceId = voiceOrder.length ? voiceOrder[0] : DEFAULT_VOICE;
   const chords = [];
-  let tick = 0;
-  let barAccidentals = {}; // "<letter><octave>" -> semitone offset, reset each bar
   const keySigAcc = keySignatureAccidentals(key.sigFifths ?? 0);
-  let pendingTieMidi = null; // an open tie waits for the next identical pitch
-  let tupletRemaining = 0; // `(n` marks the next n notes/rests n-in-time-of-2
-  let tupletFactor = 1;
   const bodyText = bodyLines.join(' ');
   const expanded = expandRepeats(tokenizeAbcBody(bodyText, warnings));
 
   for (const tok of expanded) {
-    if (tok.type === 'barline') { barAccidentals = {}; continue; }
-    if (tok.type === 'tuplet') { tupletRemaining = tok.n; tupletFactor = 2 / tok.n; continue; }
-    if (tok.type === 'chordSymbol') { chords.push({ start: tick, symbol: tok.text }); continue; }
+    if (tok.type === 'voiceSwitch') { currentVoiceId = tok.id; continue; }
+    const vs = voiceState(currentVoiceId);
+    if (tok.type === 'barline') { vs.barAccidentals = {}; continue; }
+    if (tok.type === 'tuplet') { vs.tupletRemaining = tok.n; vs.tupletFactor = 2 / tok.n; continue; }
+    if (tok.type === 'chordSymbol') { chords.push({ start: vs.tick, symbol: tok.text }); continue; }
     if (tok.type === 'graceOrDecoration') { warnings.push(`${tok.kind} skipped: "${tok.text}"`); continue; }
-    const factor = tupletRemaining > 0 ? tupletFactor : 1;
-    if (tupletRemaining > 0) tupletRemaining -= 1;
+    const factor = vs.tupletRemaining > 0 ? vs.tupletFactor : 1;
+    if (vs.tupletRemaining > 0) vs.tupletRemaining -= 1;
     const durTicks = Math.round(tok.lengthFrac * unitLength * 4 * TICKS_PER_QUARTER * factor);
-    if (tok.type === 'rest') { tick += durTicks; continue; }
+    if (tok.type === 'rest') { vs.tick += durTicks; continue; }
     if (tok.type === 'note') {
       const stepLetter = tok.letter.toUpperCase();
       const octave = (tok.letter === stepLetter ? 4 : 5) + tok.octaveMarks;
@@ -140,20 +184,26 @@ export function importAbc(rawText, options = {}) {
       let semitone;
       if (tok.explicitAccidental !== undefined) {
         semitone = tok.explicitAccidental;
-        barAccidentals[accKey] = semitone;
+        vs.barAccidentals[accKey] = semitone;
       } else {
-        semitone = accKey in barAccidentals ? barAccidentals[accKey] : keySigAcc[stepLetter] || 0;
+        semitone = accKey in vs.barAccidentals ? vs.barAccidentals[accKey] : keySigAcc[stepLetter] || 0;
       }
       const midi = (octave + 1) * 12 + STEP_PC[stepLetter] + semitone;
-      const noteObj = { start: tick, dur: durTicks, midi };
-      if (pendingTieMidi === midi) noteObj.tieFromPrev = true;
-      pendingTieMidi = tok.tie ? midi : null;
-      notes.push(noteObj);
-      tick += durTicks;
+      const noteObj = { start: vs.tick, dur: durTicks, midi };
+      if (vs.pendingTieMidi === midi) noteObj.tieFromPrev = true;
+      vs.pendingTieMidi = tok.tie ? midi : null;
+      vs.notes.push(noteObj);
+      vs.tick += durTicks;
     }
   }
 
-  notes.sort((a, b) => a.start - b.start);
+  const parts = voiceOrder.length
+    ? voiceOrder.map((id) => {
+        const vs = voiceState(id);
+        vs.notes.sort((a, b) => a.start - b.start);
+        return { id: `abc-${id}`, name: (voiceMeta[id] && voiceMeta[id].name) || id, notes: vs.notes };
+      })
+    : (() => { const vs = voiceState(DEFAULT_VOICE); vs.notes.sort((a, b) => a.start - b.start); return [{ id: 'abc-1', name: title || 'Tune', notes: vs.notes }]; })();
   if (tempo === undefined) warnings.push('no Q: tempo found; defaulted to 120 bpm');
 
   const song = {
@@ -192,6 +242,12 @@ function tokenizeAbcBody(bodyText, warnings) {
     const ch = r.peek();
     if (/\s/.test(ch)) { r.i += 1; continue; }
 
+    if (ch === '\x01') {
+      const end = r.body.indexOf('\x01', r.i + 1);
+      tokens.push({ type: 'voiceSwitch', id: r.body.slice(r.i + 1, end) });
+      r.i = end + 1;
+      continue;
+    }
     if (ch === '"') {
       const end = r.body.indexOf('"', r.i + 1);
       if (end === -1) { warnings.push('unterminated chord symbol; ignored'); break; }
