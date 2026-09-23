@@ -51,6 +51,16 @@ test('transposing to key of D shifts every note up 2 semitones', () => {
   }
 });
 
+// Standard 10-hole diatonic harps are not all pitched upward from C: keys
+// Db-F# sit above a C harp, but G, Ab, A, Bb and B sit below it (a G harp's
+// hole 1 blow is G3, not G4). The mic's listening range is built from this
+// layout, so the wrong octave would put a G harp's bottom notes outside it.
+test('keys G to B are pitched below a C harp, Db to F# above it', () => {
+  assert.equal(layoutFor(6)[0].blow, 66, 'F# harp hole 1 blow is F#4');
+  assert.equal(layoutFor(7)[0].blow, 55, 'G harp hole 1 blow is G3');
+  assert.equal(layoutFor(11)[0].blow, 59, 'B harp hole 1 blow is B3');
+});
+
 test('holesFor finds the open blow option first, then bends, ranked easiest first', () => {
   const options = holesFor(60, 0); // C4: hole1 blow, open
   assert.equal(options[0].hole, 1);

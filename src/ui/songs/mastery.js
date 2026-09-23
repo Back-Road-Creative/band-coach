@@ -29,6 +29,7 @@
 // is nothing to credit yet.
 
 import { byId as instrumentById } from '../../instruments/index.js';
+import { layoutFor as harpLayoutFor } from '../../instruments/how/harmonica.js';
 
 // Registry `family` values whose ready records use the same keyboard-style
 // scheme MODS.kbd pioneered: a fixed, non-transposing note layout folded
@@ -60,15 +61,12 @@ const VOICE_TONIC = { low: 48, mid: 55, high: 60 };
 const WIND_OFFSET = { c: 0, bb: -2, bbt: -14, eb: -9, ebb: -21, f: -7, bc: -19 };
 const WIND_BASS_CLEF = new Set(['bc']);
 
-// Hand-checked against src/instruments/harp.js (range 60-96, tonic C4=60)
-// and independently against src/song/lesson.js's RICHTER_*_INTERVALS,
-// which derive the same two arrays from a different starting point (the
-// major-triad/dominant-seventh arpeggio pattern rather than a typed table):
-// blow holes 1-10 -> 60,64,67,72,76,79,84,88,91,96;
-// draw holes 1-10 -> 62,67,71,74,77,81,83,86,89,93.
-const HARP_BLOW = [60, 64, 67, 72, 76, 79, 84, 88, 91, 96];
-const HARP_DRAW = [62, 67, 71, 74, 77, 81, 83, 86, 89, 93];
 // Same hole-search order as src/app.js customItem(): middle holes first.
+// harpLayoutFor(key) (src/instruments/how/harmonica.js) gives the blow/draw
+// midi for every hole in the learner's chosen key (prefs.harpKey, 0 = C) --
+// matching by pitch class (not exact octave) the same way this used to
+// match against a hand-typed C-only table, so a heard note one or more
+// octaves away from the physical harp's own register still credits.
 const HARP_HOLE_ORDER = [4, 5, 6, 7, 3, 2, 1, 8, 9, 10];
 
 // Returns the mastery item id S.item is keyed by for `instrumentId`, for a
@@ -108,15 +106,27 @@ export function itemIdForMidi(instrumentId, midi, prefs = {}) {
       // in src/app.js's info() 'w' branch, so this must match that.
       return 'w' + fold(midi + 19, 59, 71);
     }
+    // The five keyed woodwinds (src/instruments/flute.js/clarinet-bb.js/
+    // oboe.js/sax-alto-eb.js/sax-tenor-bb.js), each with its own fixed
+    // transposition and MODS entry (fixed windKind), same reasoning as
+    // trumpet-bb/horn-f/trombone above: written = sounding - transposition,
+    // folded into the record's own written range.
+    case 'flute': { const written = midi; return 'w' + fold(written, 60, 72); } // transposition 0
+    case 'oboe': { const written = midi; return 'w' + fold(written, 62, 74); } // transposition 0
+    case 'clarinet-bb': { const written = midi + 2; return 'w' + fold(written, 55, 67); } // sounding = written - 2
+    case 'sax-alto-eb': { const written = midi + 9; return 'w' + fold(written, 58, 67); } // sounding = written - 9
+    case 'sax-tenor-bb': { const written = midi + 14; return 'w' + fold(written, 58, 67); } // sounding = written - 14
     case 'wind': {
       const off = WIND_OFFSET[prefs.wind] ?? WIND_OFFSET.bb;
       const written = WIND_BASS_CLEF.has(prefs.wind) ? midi + 19 : midi - off;
       return 'w' + fold(written, 60, 79);
     }
     case 'harp': {
+      const hk = (Number.isInteger(prefs.harpKey) && prefs.harpKey >= 0 && prefs.harpKey <= 11) ? prefs.harpKey : 0;
+      const layout = harpLayoutFor(hk);
       for (const hole of HARP_HOLE_ORDER) {
-        if (pc(HARP_BLOW[hole - 1]) === pc(midi)) return 'hb' + hole;
-        if (pc(HARP_DRAW[hole - 1]) === pc(midi)) return 'hd' + hole;
+        if (pc(layout[hole - 1].blow) === pc(midi)) return 'hb' + hole;
+        if (pc(layout[hole - 1].draw) === pc(midi)) return 'hd' + hole;
       }
       return null;
     }

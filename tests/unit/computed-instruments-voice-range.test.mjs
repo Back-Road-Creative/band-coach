@@ -81,3 +81,30 @@ test('estimateRange still trims a glitch within one stage', () => {
   ];
   assert.deepEqual(estimateRange(samples), { low: 48, high: 73 });
 });
+
+// Pressing "now the highest" does not stop the learner's low note on the
+// same instant: the high stage opens still hearing it, and pitch wobble
+// (48 -> 49 -> 48) splits that tail into several held samples. They
+// outnumbered the one real high note, the interquartile rule threw 72 away
+// and the range saved as {low: 48, high: 48}. Samples recorded under a
+// real run of the Find-my-range test under load (load average ~45).
+test('estimateRange ignores the low note still sounding at the start of the high stage', () => {
+  const samples = [
+    { midi: 48, ms: 830, stage: 'low' },
+    { midi: 48, ms: 1082, stage: 'high' },
+    { midi: 49, ms: 556, stage: 'high' },
+    { midi: 48, ms: 840, stage: 'high' },
+    { midi: 47, ms: 653, stage: 'high' },
+    { midi: 72, ms: 731, stage: 'high' }
+  ];
+  assert.deepEqual(estimateRange(samples), { low: 48, high: 72 });
+});
+
+test('estimateRange keeps the high stage as it is when nothing in it clears the low note', () => {
+  const samples = [
+    { midi: 55, ms: 800, stage: 'low' },
+    { midi: 55, ms: 800, stage: 'high' },
+    { midi: 56, ms: 800, stage: 'high' }
+  ];
+  assert.deepEqual(estimateRange(samples), { low: 55, high: 56 });
+});
