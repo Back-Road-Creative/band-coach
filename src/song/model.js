@@ -463,15 +463,37 @@ function barTicksOf(song) {
   return song.metre.num * beatsToQuarterRatio * song.ticksPerQuarter;
 }
 
+// The metre in force from tick 0, followed by each entry in song.metreChanges
+// (already sorted-by-tick and normalized), each carrying its own bar length.
+// An entry at tick 0 replaces the opening metre rather than adding a
+// zero-length segment. Absent metreChanges this is just [{ tick: 0, ...}].
+function metreSegmentsOf(song) {
+  const segments = [{ tick: 0, barTicks: barTicksOf(song) }];
+  for (const change of song.metreChanges || []) {
+    const barTicks = change.num * (4 / change.den) * song.ticksPerQuarter;
+    if (change.tick === 0) segments[0] = { tick: 0, barTicks };
+    else segments.push({ tick: change.tick, barTicks });
+  }
+  return segments;
+}
+
 // Bar boundaries in ticks, e.g. [0, 1920, 3840]. Always covers at least one
 // bar, even for an empty song, so a coach UI always has a bar 1 to show.
+// Each entry in song.metreChanges forces a bar boundary at its tick -- the
+// bar straddling a change is shortened to end exactly there -- and bars
+// after it use that change's own length until the next change (if any).
 export function barsOf(song) {
-  const barTicks = barTicksOf(song);
   const duration = songDurationTicks(song);
-  const barCount = duration > 0 ? Math.ceil(duration / barTicks) : 1;
-  const boundaries = [];
-  for (let i = 0; i <= barCount; i++) {
-    boundaries.push(i * barTicks);
+  const segments = metreSegmentsOf(song);
+  const boundaries = [0];
+  let tick = 0;
+  let segIdx = 0;
+  while (tick < duration || boundaries.length === 1) {
+    while (segIdx + 1 < segments.length && segments[segIdx + 1].tick <= tick) segIdx++;
+    const nextChangeTick = segIdx + 1 < segments.length ? segments[segIdx + 1].tick : Infinity;
+    const next = tick + segments[segIdx].barTicks;
+    tick = next > nextChangeTick ? nextChangeTick : next;
+    boundaries.push(tick);
   }
   return boundaries;
 }
