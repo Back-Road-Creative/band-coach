@@ -92,8 +92,28 @@ function candidateShifts(instrument) {
   return shifts;
 }
 
+// Every src/instruments/*.js record with a non-zero `transposition` stores
+// its `range` in one of two conventions (confirmed against each file's own
+// header comment and src/app.js's transposedMicRange, app.js:556-562):
+//   - a genuine key-transposing instrument (clarinet-bb, trumpet-bb,
+//     sax-alto-eb, sax-tenor-bb, horn-f) is transposed by an interval other
+//     than a whole octave, and its `range` is WRITTEN pitch -- what the
+//     learner reads on the page, in that instrument's own key.
+//   - an octave-only "written an octave away" convention (double-bass,
+//     recorder-descant, tin-whistle -- transposition a multiple of 12) keeps
+//     `range` in SOUNDING pitch, same as every non-transposing instrument,
+//     because the pitch class never changes, only the printed octave.
+// `transposition % 12 !== 0` is exactly the data-driven test for the first
+// group: no new schema field needed, and it can never disagree with a
+// record's own file since it is derived from the same `transposition` value
+// every other convention in this codebase already keys off.
+function rangeIsWrittenPitch(instrument) {
+  return instrument.transposition % 12 !== 0;
+}
+
 function notePlayable(shiftedMidi, instrument, availableSet) {
-  if (shiftedMidi < instrument.range.low || shiftedMidi > instrument.range.high) return 'out-of-range';
+  const rangeMidi = rangeIsWrittenPitch(instrument) ? shiftedMidi - instrument.transposition : shiftedMidi;
+  if (rangeMidi < instrument.range.low || rangeMidi > instrument.range.high) return 'out-of-range';
   if (availableSet && !availableSet.has(shiftedMidi)) return 'not-on-instrument';
   return null;
 }
