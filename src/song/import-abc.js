@@ -1,16 +1,34 @@
 // ABC notation 2.1 -> the shared Song shape.
 //
-// Wiring: call `importAbc(text)` with one ABC tune's raw text (one `X:`
-// block). Returns `{ song, warnings }` per the author brief's Song shape
-// (schema 'song/1', ticksPerQuarter 480, notes sorted by `start`). No I/O,
-// no DOM/global. Each `V:` voice -- declared in the header (`V:id
-// name=".." clef=..`) and/or switched to inline (`[V:id]`) or on its own
-// body line (`V:id`) -- becomes its own song part, in first-appearance
-// order, each with its own time cursor and its own bar-scoped accidentals
-// so one voice's naturals/sharps never bleed into another's. A tune with
-// no `V:` fields at all imports exactly as a single part, as before. Chord
-// symbols in quotes become `song.chords`. Grace notes and decorations are
-// skipped with a warning, not guessed at.
+// Wiring: call `importAbc(text)` with raw ABC text. Returns `{ song,
+// warnings }` per the author brief's Song shape (schema 'song/1',
+// ticksPerQuarter 480, notes sorted by `start`). No I/O, no DOM/global.
+// Each `V:` voice -- declared in the header (`V:id name=".." clef=..`)
+// and/or switched to inline (`[V:id]`) or on its own body line (`V:id`) --
+// becomes its own song part, in first-appearance order, each with its own
+// time cursor and its own bar-scoped accidentals so one voice's
+// naturals/sharps never bleed into another's. A tune with no `V:` fields
+// at all imports exactly as a single part, as before. Chord symbols in
+// quotes become `song.chords`. Grace notes and decorations are skipped
+// with a warning, not guessed at.
+//
+// Real ABC files as found in the wild (abcnotation.com, Nottingham Music
+// Database) hold several tunes per file, each starting a new `X:` block --
+// `importAbc` reads only the first tune and warns about the rest, rather
+// than silently running the next tune's header lines into the first
+// tune's notes. `%`-comments (a whole comment line, or trailing text after
+// a `%` on an otherwise-real line, including a `%%directive`) are stripped
+// line-by-line, before lines are ever joined into one body string, so a
+// comment's stray letters can never be misread as notes. A header field
+// re-appearing on its own line mid-tune (`M:`, `L:`, `K:`, `Q:` -- ABC
+// allows this without the `[...]` inline-bracket form) is recognised and
+// consumed rather than falling through to the note tokenizer, where its
+// letters could otherwise be misread as pitches (a bare mid-tune `K:D`
+// line's `D` is a real note letter). A mid-tune `K:` actually changes the
+// key-signature accidentals applied to subsequent notes (song.key itself
+// still reports the tune's opening key); a mid-tune `M:`/`L:`/`Q:` is
+// consumed and warned about but not applied -- the opening M:/L: values
+// are used for the whole tune, matching the ABC default-unit-length rule.
 
 import { songIdentity } from './ident.js';
 
@@ -98,6 +116,7 @@ export function importAbc(rawText, options = {}) {
   const voiceOrder = [];
   const voiceMeta = {};
   const VOICE_MARK = '\x01';
+  const FIELD_MARK = '\x02';
   function registerVoice(id, name) {
     if (!(id in voiceMeta)) { voiceMeta[id] = { name }; voiceOrder.push(id); }
     else if (name) voiceMeta[id].name = name;
@@ -110,7 +129,14 @@ export function importAbc(rawText, options = {}) {
     return { id: m[1], name: nm ? (nm[1] ?? nm[2]) : undefined };
   }
 
-  for (const line of rawText.split(/\r\n|\r|\n/)) {
+  for (const rawLine of rawText.split(/\r\n|\r|\n/)) {
+    // Strip a `%`-comment (a whole comment line, or trailing text after a
+    // `%`, including a `%%directive`) before this line is ever joined with
+    // its neighbours -- once lines are joined into one body string a
+    // comment's `$`-anchored strip can no longer tell where a line ended,
+    // and its stray letters (e.g. "% Nottingham" has a real note-letter
+    // 'a') would otherwise reach the note tokenizer.
+    const line = rawLine.replace(/%.*/, '');
     if (line.trim() === '') continue;
     const m = /^([A-Za-z]):\s?(.*)$/.exec(line);
     if (m && m[1] === 'V') {
@@ -120,6 +146,14 @@ export function importAbc(rawText, options = {}) {
         if (sawKey) bodyLines.push(VOICE_MARK + voice.id + VOICE_MARK);
       }
       continue;
+    }
+    if (m && m[1] === 'X' && sawKey) {
+      // A second `X:` header starts a new tune. Real ABC files (the
+      // Nottingham Music Database, abcnotation.com collections) hold many
+      // tunes per file; importAbc reads only the first and says so, rather
+      // than running the next tune's header lines into this one's notes.
+      warnings.push('this file holds more than one tune (a later X: field was found); only the first tune was imported');
+      break;
     }
     if (m && !sawKey) {
       const [, field, value] = m;
@@ -141,6 +175,18 @@ export function importAbc(rawText, options = {}) {
       // data the Song shape represents; ignored on purpose.
       continue;
     }
+    if (m && sawKey && 'MLKQ'.includes(m[1])) {
+      // A header field re-appearing on its own line mid-tune (ABC allows
+      // this without the `[...]` inline-bracket form -- e.g. a plain
+      // "K:D" line partway through a tune, seen in real Nottingham Music
+      // Database files). Splice in a field marker the tokenizer turns into
+      // a 'fieldChange' token at the right point in the note stream, so
+      // its letters are never misread as notes/endings (a bare "K:D"
+      // line's "D" is a real note letter).
+      bodyLines.push(FIELD_MARK + m[1] + m[2].trim() + FIELD_MARK);
+      continue;
+    }
+    if (m) continue; // other header fields mid-tune (P, T, C, ...): no data the Song shape represents; ignored, same as in the header.
     // An inline `[V:id]` switch can appear mid-line, amongst notes; splice
     // in the same voice marker the tokenizer looks for, registering the
     // voice at its first appearance if this is the first time it's named.
@@ -162,12 +208,20 @@ export function importAbc(rawText, options = {}) {
   }
   let currentVoiceId = voiceOrder.length ? voiceOrder[0] : DEFAULT_VOICE;
   const chords = [];
-  const keySigAcc = keySignatureAccidentals(key.sigFifths ?? 0);
+  // Mutable: a mid-tune `K:` field (see FIELD_MARK above) reassigns this so
+  // later notes pick up the new key's accidentals; `song.key` itself still
+  // reports the tune's opening key, computed from `key` above.
+  let currentKeySigAcc = keySignatureAccidentals(key.sigFifths ?? 0);
   const bodyText = bodyLines.join(' ');
   const expanded = expandRepeats(tokenizeAbcBody(bodyText, warnings));
 
   for (const tok of expanded) {
     if (tok.type === 'voiceSwitch') { currentVoiceId = tok.id; continue; }
+    if (tok.type === 'fieldChange') {
+      if (tok.field === 'K') currentKeySigAcc = keySignatureAccidentals(parseKeyField(tok.value, warnings).sigFifths ?? 0);
+      else warnings.push(`mid-tune ${tok.field}: field ("${tok.value}") is not applied; the tune's opening M:/L: values are used throughout`);
+      continue;
+    }
     const vs = voiceState(currentVoiceId);
     if (tok.type === 'barline') { vs.barAccidentals = {}; continue; }
     if (tok.type === 'tuplet') { vs.tupletRemaining = tok.n; vs.tupletFactor = 2 / tok.n; continue; }
@@ -186,7 +240,7 @@ export function importAbc(rawText, options = {}) {
         semitone = tok.explicitAccidental;
         vs.barAccidentals[accKey] = semitone;
       } else {
-        semitone = accKey in vs.barAccidentals ? vs.barAccidentals[accKey] : keySigAcc[stepLetter] || 0;
+        semitone = accKey in vs.barAccidentals ? vs.barAccidentals[accKey] : currentKeySigAcc[stepLetter] || 0;
       }
       const midi = (octave + 1) * 12 + STEP_PC[stepLetter] + semitone;
       const noteObj = { start: vs.tick, dur: durTicks, midi };
@@ -245,6 +299,13 @@ function tokenizeAbcBody(bodyText, warnings) {
     if (ch === '\x01') {
       const end = r.body.indexOf('\x01', r.i + 1);
       tokens.push({ type: 'voiceSwitch', id: r.body.slice(r.i + 1, end) });
+      r.i = end + 1;
+      continue;
+    }
+    if (ch === '\x02') {
+      const end = r.body.indexOf('\x02', r.i + 1);
+      const raw = r.body.slice(r.i + 1, end);
+      tokens.push({ type: 'fieldChange', field: raw[0], value: raw.slice(1) });
       r.i = end + 1;
       continue;
     }
