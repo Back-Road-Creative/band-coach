@@ -12,7 +12,7 @@ permissions:
 jobs:
   package:
     runs-on: windows-latest
-    timeout-minutes: 20
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -78,6 +78,28 @@ jobs:
             throw 'the packaged app did not exit within 90s (a launch crash leaves an error dialog open)'
           }
           if ($p.ExitCode -ne 0) { throw "the packaged app's smoke check exited $($p.ExitCode) (see store/lib/smoke.js)" }
+
+      # Partner Center runs the Windows App Certification Kit on every
+      # submission. Run it here first, on a signed copy of the same .appx,
+      # and fail before upload on a FAIL report (WARNING = only optional
+      # tests failed, which the Store accepts). scripts/run-wack.ps1 says
+      # why it has to sign a copy.
+      - name: run the Windows App Certification Kit
+        working-directory: store
+        shell: pwsh
+        run: |
+          $appx = (Get-ChildItem release/*.appx | Select-Object -First 1).FullName
+          ./scripts/run-wack.ps1 -Appx $appx -Report "$PWD/wack/wack-report.xml"
+          node scripts/wack-verdict.mjs wack/wack-report.xml
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: upload the WACK report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wack-report
+          path: store/wack/
+          if-no-files-found: ignore
 
       - name: upload appx artifact
         uses: actions/upload-artifact@v4
