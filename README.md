@@ -162,6 +162,8 @@ practice log itself only keeps the most recent 60 sessions, so days older than t
 sessions not kept" rather than a false zero. The backup, restore and "Check for updates" messages
 above are read from the English string table in `src/core/i18n.js` (`t(id, params)`) rather than
 hardcoded — a scaffold for a future locale, though only English ships today.
+sessions not kept" rather than a false zero. "Print this week's report" turns the last 7 days into a
+one-page, printer-friendly summary for a teacher or parent.
 
 ## Turning an audio file into notes
 
