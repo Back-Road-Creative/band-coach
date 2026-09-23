@@ -11,6 +11,7 @@ import { recordError, getErrors } from './core/error-log.js';
 import { resolveAppVersion, DEV_VERSION } from './core/version.js';
 import { checkForUpdate, FALLBACK_DOWNLOAD_URL } from './core/update-check.js';
 import { setNoteNaming, sanitizeNoteNaming, name as noteNameFor } from './core/note-names.js';
+import { t } from './core/i18n.js';
 import { yin } from './audio/yin.js';
 import { createPitchNode } from './audio/pitch-worklet.js';
 //
@@ -73,6 +74,13 @@ import { register as registerPlayalong } from './ui/playalong.js';
 (function () {
   'use strict';
   const $ = id => document.getElementById(id);
+  // Static page labels: every element src/index.html marks with data-i18n="id"
+  // gets its textContent set from t(id) once at startup, so the shipped copy
+  // comes from the same English table as the strings app.js writes itself
+  // (see src/core/i18n.js). i18n.js stays DOM-free by design, so the walk
+  // lives here; the English text is left in the HTML too as the pre-JS/no-JS
+  // fallback, and this only overwrites it with the identical string today.
+  function applyStaticLabels(root) { root.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.getAttribute('data-i18n')); }); }
   const deafWindow = createDeafWindow({ now: () => performance.now() });
   // ---------- accessibility: wake lock, dialog focus, reduced motion ----------
   const wakeLock = createWakeLock();
@@ -1718,7 +1726,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
   document.addEventListener('visibilitychange', () => { if (document.hidden && playing) takeBreak('hidden'); wakeLock.handleVisibilityChange(document); });
   function jump(dl) { const nl = Math.max(1, S.level + dl); if (nl === S.level) return; S.level = nl; S.ready = 0.3; task = null; coach((dl < 0 ? 'Moved down' : 'Skipped ahead') + ' to level ' + S.level + ': ' + D().name + '.'); save(); showAll(); }
   $('easierBtn').addEventListener('click', function () { this.blur(); jump(-1); }); $('harderBtn').addEventListener('click', function () { this.blur(); jump(1); });
-  $('resetBtn').addEventListener('click', function () { this.blur(); if (sess) endSession(); DB.mods[mod] = S = freshModel(); recent = []; streak = 0; coach(MODS[mod].name + ' progress cleared. Back to level 1.'); save(); showAll(); });
+  $('resetBtn').addEventListener('click', function () { this.blur(); if (sess) endSession(); DB.mods[mod] = S = freshModel(); recent = []; streak = 0; coach(t('reset.progressCleared', { name: MODS[mod].name })); save(); showAll(); });
   $('optNames').addEventListener('change', function () { DB.prefs.names = this.checked; save(); });
   // Theme J1: 'system' removes the attribute so styles.css's own
   // prefers-color-scheme media query decides; 'light'/'dark' pin it,
@@ -1856,24 +1864,24 @@ import { register as registerPlayalong } from './ui/playalong.js';
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
     noteBackupMade(Date.now()); $('backupNudge').hidden = true;
-    coach('Backup saved to your downloads. Keep that file somewhere safe.');
+    coach(t('backup.saved'));
   }
   function doImportProgress(text) {
     const result = importProgressFile(text);
     if (!result.ok) { coach(result.error); return result; }
     const priorLatencyMs = DB && DB.latencyMs;
     modelNow = Date.now(); DB = sanitizeDB(result.db, undefined, modelNow); DB.latencyMs = num(priorLatencyMs, DB.latencyMs, 0, 300); if (!Array.isArray(DB.custom)) DB.custom = [];
-    $('optNames').checked = DB.prefs.names; $('optTheme').value = DB.prefs.theme; applyTheme(DB.prefs.theme); setNoteNaming(DB.prefs.noteNaming); $('optNoteSystem').value = DB.prefs.noteNaming.system; $('optAccidentals').value = DB.prefs.noteNaming.accidentals; setMod(DB.prefs.mod); coach('Backup restored.');
+    $('optNames').checked = DB.prefs.names; $('optTheme').value = DB.prefs.theme; applyTheme(DB.prefs.theme); setNoteNaming(DB.prefs.noteNaming); $('optNoteSystem').value = DB.prefs.noteNaming.system; $('optAccidentals').value = DB.prefs.noteNaming.accidentals; setMod(DB.prefs.mod); coach(t('backup.restored'));
     return result;
   }
   $('backupSaveBtn').addEventListener('click', function () { this.blur(); saveBackup(); });
   $('backupRestoreInput').addEventListener('change', function () {
     const file = this.files && this.files[0]; this.value = '';
     if (!file) return;
-    if (!confirm('Restore this backup? It will replace your current progress.')) return;
+    if (!confirm(t('backup.confirmRestore'))) return;
     const reader = new FileReader();
     reader.onload = () => doImportProgress(String(reader.result));
-    reader.onerror = () => coach('That file could not be read.');
+    reader.onerror = () => coach(t('backup.readError'));
     reader.readAsText(file);
   });
   $('backupNudgeDismiss').addEventListener('click', () => { $('backupNudge').hidden = true; });
@@ -1886,19 +1894,19 @@ import { register as registerPlayalong } from './ui/playalong.js';
     const updBtn = $('updateCheckBtn'), updResult = $('updateCheckResult');
     if (!updBtn || !updResult) return;
     function appendUpdateLink(href) {
-      const a = document.createElement('a'); a.href = href; a.rel = 'noopener'; a.textContent = 'Download the current version'; updResult.appendChild(a);
+      const a = document.createElement('a'); a.href = href; a.rel = 'noopener'; a.textContent = t('update.downloadLinkText'); updResult.appendChild(a);
     }
     function renderUpdateResult(r) {
       updResult.textContent = '';
-      if (r.status === 'dev') { updResult.textContent = 'This is a development build (' + DEV_VERSION + ').'; return; }
-      if (r.status === 'up-to-date') { updResult.textContent = 'You\'re running the latest version (' + r.latestVersion + ').'; return; }
-      if (r.status === 'behind') { updResult.textContent = 'Version ' + r.latestVersion + ' is out. '; appendUpdateLink(r.downloadUrl); return; }
-      updResult.textContent = 'Couldn\'t reach the update server. '; appendUpdateLink(r.downloadUrl);
+      if (r.status === 'dev') { updResult.textContent = t('update.devBuild', { version: DEV_VERSION }); return; }
+      if (r.status === 'up-to-date') { updResult.textContent = t('update.upToDate', { version: r.latestVersion }); return; }
+      if (r.status === 'behind') { updResult.textContent = t('update.behind', { version: r.latestVersion }); appendUpdateLink(r.downloadUrl); return; }
+      updResult.textContent = t('update.error'); appendUpdateLink(r.downloadUrl);
     }
     updBtn.addEventListener('click', function () {
       this.blur();
       if (updBtn.disabled) return; // a second press while one is in flight must not start another request
-      updBtn.disabled = true; updResult.textContent = 'Checking…';
+      updBtn.disabled = true; updResult.textContent = t('update.checking');
       checkForUpdate({ currentVersion: APP_VERSION, fetchImpl: typeof fetch === 'function' ? fetch : undefined })
         .then(renderUpdateResult, () => renderUpdateResult({ status: 'error', downloadUrl: FALLBACK_DOWNLOAD_URL }))
         .then(() => { updBtn.disabled = false; });
@@ -1968,6 +1976,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
     box.hidden = empty; const disclosure = $('panelPickerDisclosure'); if (disclosure) disclosure.hidden = empty;
     panels.list().forEach(p => { const b = document.createElement('button'); b.type = 'button'; b.dataset.panel = p.id; b.style.setProperty('--c', p.color || '#93a0bd'); b.setAttribute('aria-pressed', 'false'); b.appendChild(document.createTextNode(p.name)); const sm = document.createElement('small'); sm.textContent = p.tag || ''; b.appendChild(sm); b.addEventListener('click', () => { b.blur(); openPanel(p.id); }); box.appendChild(b); });
   }
+  applyStaticLabels(document);
   loadDB(); if (!Array.isArray(DB.custom)) DB.custom = []; $('optNames').checked = DB.prefs.names; $('optTheme').value = DB.prefs.theme; applyTheme(DB.prefs.theme); $('optNoteSystem').value = DB.prefs.noteNaming.system; $('optAccidentals').value = DB.prefs.noteNaming.accidentals; buildPicker(); buildPanelPicker(); setMod(mod); requestAnimationFrame(frame);
   const hook = !__DEBUG_HOOK__ ? null : { state: () => S, db: () => DB, sess: () => sess, task: () => task, cur: cur, note: onNote, answer: answer, tap: onTap, bar: () => bar, playing: () => playing, setMod: setMod, testSource: testSource, heard: () => heard, yin: yin, cap: () => cap, tuner: () => tunerState, tunerLock: () => tunerLock, deaf: () => deafWindow.isDeaf(), deafUntil: () => deafWindow.until(), exportProgress: doExportProgress, importProgress: doImportProgress, audioNow: audioNow, modelNow: () => modelNow };
   // Debug-hook slots: replace ONLY your own line with

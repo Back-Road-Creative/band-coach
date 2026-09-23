@@ -159,8 +159,16 @@ appears once you have actually practised a while without one — never on a fres
 there is nothing yet to lose. The "My progress" panel also shows a practice calendar (minutes and
 level changes, one cell per day, for the last 8 weeks) and a daily minutes goal with a streak — the
 practice log itself only keeps the most recent 60 sessions, so days older than that say "earlier
+sessions not kept" rather than a false zero. The backup, restore and "Check for updates" messages
+above are read from the English string table in `src/core/i18n.js` (`t(id, params)`) rather than
+hardcoded — a scaffold for a future locale, though only English ships today.
 sessions not kept" rather than a false zero. "Print this week's report" turns the last 7 days into a
 one-page, printer-friendly summary for a teacher or parent.
+hardcoded — a scaffold for a future locale, though only English ships today. `src/index.html`'s own
+static labels (headings, button text, help copy `src/app.js` never rewrites at runtime) go through
+the same table: each element carries `data-i18n="<id>"` and keeps its English text in the markup as
+a pre-JS/no-JS fallback, and `applyStaticLabels` in `src/app.js` overwrites it from `t(id)` once at
+startup.
 
 ## Turning an audio file into notes
 
@@ -253,7 +261,10 @@ notes and a key/clef/time signature, it returns plain drawing primitives
 (noteheads, stems, ledger lines, accidentals, clefs, key/time signatures,
 tab fret numbers) rather than drawing directly, so it can be unit-tested with
 `node --test` and no browser. `draw-canvas.js` is a thin Canvas 2D renderer
-for those primitives, and `for-instrument.js` bridges an instrument record
+for those primitives; `draw-svg.js` renders the same primitive list to a
+standalone SVG string (same geometry, no DOM) for printing, and
+`src/styles.css` has a `@media print` block that hides app chrome and prints
+the notation area black-on-white. `for-instrument.js` bridges an instrument record
 and a target MIDI note into what the engine needs (clef, the written pitch —
 guitar and bass print an octave above their sounding pitch, per each
 record's `writtenOctaveUp` — and a tab position for fretted instruments).
