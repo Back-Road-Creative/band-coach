@@ -166,6 +166,83 @@ export function sparkline(values, width) {
   return out;
 }
 
+// src/app.js keeps at most this many sessions (`DB.sessions.slice(-60)` at
+// the end of a session). ledger() cannot see eviction directly, but a full
+// log whose oldest entry falls inside the requested window is evidence
+// that older sessions once existed and were pushed out; see ledger() below.
+export const SESSION_LOG_CAP = 60;
+
+/**
+ * A calendar of the last `weeks` weeks (default 8), one cell per day,
+ * ending today: minutes practised, session count, the level change (sum of
+ * `to - from`), whether that day met `goalMin` minutes, and whether the day
+ * is honestly known at all (`notKept`). Days with no session are present
+ * with zeros, not omitted — a caller draws every cell.
+ *
+ * `notKept` days are NOT "nothing happened" — the 60-session cap means a
+ * full log's oldest kept day can be more recent than the calendar window,
+ * in which case whatever happened before it was real but is gone from the
+ * log. Those days get `notKept: true` instead of a false zero, and only
+ * when the log is actually full (otherwise an old start date just means
+ * practice began late, which is a true zero for the days before it).
+ */
+export function ledger(sessions, { now, weeks = 8, goalMin = 15 } = {}) {
+  const nowMs = typeof now === 'number' ? now : Date.now();
+  const nowDate = new Date(nowMs);
+  const nowKey = dayKey(nowDate);
+  const valid = validSessions(sessions).sort((a, b) => a._date - b._date);
+
+  const byDay = new Map();
+  valid.forEach((s) => {
+    const dk = dayKey(s._date);
+    const cur = byDay.get(dk) || { minutes: 0, sessions: 0, levelChange: 0 };
+    cur.minutes += s.min;
+    cur.sessions += 1;
+    cur.levelChange += (s.to || 0) - (s.from || 0);
+    byDay.set(dk, cur);
+  });
+
+  const totalDays = Math.max(1, Math.round(weeks) || 8) * 7;
+  const oldestKeptDay = valid.length ? dayKey(valid[0]._date) : null;
+  const logIsFull = valid.length >= SESSION_LOG_CAP;
+
+  const days = [];
+  for (let i = totalDays - 1; i >= 0; i--) {
+    const date = new Date(nowDate.getTime() - i * DAY_MS);
+    const dk = dayKey(date);
+    const info = byDay.get(dk) || { minutes: 0, sessions: 0, levelChange: 0 };
+    const notKept = !!(logIsFull && oldestKeptDay !== null && dk < oldestKeptDay);
+    const metGoal = !notKept && info.minutes >= goalMin;
+    days.push({
+      day: dk,
+      minutes: Math.round(info.minutes * 10) / 10,
+      sessions: info.sessions,
+      levelChange: info.levelChange,
+      metGoal,
+      notKept,
+    });
+  }
+
+  const byKey = new Map(days.map((d) => [d.day, d]));
+  const yesterdayKey = dayKey(new Date(parseDay(nowKey).getTime() - DAY_MS));
+  let anchor = null;
+  if (byKey.has(nowKey) && byKey.get(nowKey).metGoal) anchor = nowKey;
+  else if (byKey.has(yesterdayKey) && byKey.get(yesterdayKey).metGoal) anchor = yesterdayKey;
+  let goalStreak = 0;
+  if (anchor) {
+    let cursor = parseDay(anchor);
+    for (;;) {
+      const k = dayKey(cursor);
+      const cell = byKey.get(k);
+      if (!cell || !cell.metGoal) break;
+      goalStreak++;
+      cursor = new Date(cursor.getTime() - DAY_MS);
+    }
+  }
+
+  return { weeks, goalMin, days, goalStreak, truncated: days.some((d) => d.notKept) };
+}
+
 const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 const HONEST_LIMITS = 'This report is judged by microphone: accuracy tracks the note that sounded, not which string or fret produced it, so string and fret choices are not verified.';
