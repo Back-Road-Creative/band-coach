@@ -26,7 +26,7 @@ reach the server, also with a link to get the current file. It never checks on i
 a press — and a development build (one you built yourself rather than downloaded) says so instead
 of checking, since there is nothing meaningful to compare.
 
-The app follows your system's light/dark setting automatically, or pick Light/Dark yourself from the Theme control next to "Show note names" in the side rail.
+The app follows your system's light/dark setting automatically, or pick Light/Dark yourself from the Theme control next to "Show note names" in the side rail. Two more controls next to Theme let you pick how notes are named -- letters, German (H/B), or fixed-do solfege (Do, Re, Mi...) -- and whether the black keys are spelled with sharps, flats, or today's mixed spelling.
 
 If your microphone or keyboard is not being heard, the next two sections are the ones to read.
 Everything from "Build it from source" down is for people working on the app itself.
