@@ -128,7 +128,9 @@ class ByteReader {
   }
 }
 
-const textDecoder = new TextDecoder('utf-8', { fatal: false });
+// Guitar Pro stores text in the Windows ANSI code page, one byte per
+// character; Windows-1252 covers Western files (UTF-8 would turn "é" into U+FFFD).
+const textDecoder = new TextDecoder('windows-1252');
 function decodeText(bytes) {
   return textDecoder.decode(bytes);
 }

@@ -448,3 +448,23 @@ test('every prefix of a valid file either imports or throws a plain-English erro
   assert.ok(imported >= 1);
   assert.ok(thrown >= 1);
 });
+
+// Guitar Pro writes its strings in the Windows ANSI code page (Windows-1252 on
+// Western systems), one byte per character -- not UTF-8. A lone 0xE9 byte is
+// "é" there, but invalid UTF-8, so a UTF-8 decoder turns it into U+FFFD.
+test('accented title and track name are read as Windows-1252, not UTF-8', () => {
+  const bytes = gp5File({
+    info: { title: 'Café Señor' },
+    tempoKey: { tempo: 120, keySf: 0 },
+    measures: [{ num: 4, den: 4 }],
+    tracks: [{ name: 'Guitarra Ñ', tuning: STANDARD_TUNING, channelIndex: 0 }],
+    measureTracks: [[measureTrack([beat({ duration: 0, notes: [{ string: 1, fret: 0 }] })])]],
+  });
+
+  const { song } = importGp5(bytes);
+  assert.equal(song.title, 'Café Señor');
+  assert.ok(
+    song.parts.some((p) => p.name.includes('Guitarra Ñ')),
+    `track name lost its accent: ${song.parts.map((p) => p.name).join(', ')}`,
+  );
+});
