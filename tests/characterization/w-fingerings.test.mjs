@@ -175,3 +175,60 @@ test('fingerings panel: capo, alternate tuning and left-handed controls', async 
   assert.equal(await page.evaluate("!!document.getElementById('fingTuning')"), false);
   assert.equal(await page.evaluate("!!document.getElementById('fingLeftHanded')"), false);
 });
+
+test('fingerings panel: capo, tuning and left-handed are remembered per instrument across a reload', async (t) => {
+  const page = await launchPage(HTML_PATH);
+  t.after(() => page.close());
+
+  await page.evaluate("window.__coach.openPanel('fingerings')");
+  await page.evaluate(`(function () {
+    const sel = document.getElementById('fingInstrument');
+    sel.value = 'gtr'; sel.dispatchEvent(new Event('change'));
+  })()`);
+  await page.evaluate(`(function () {
+    const capo = document.getElementById('fingCapo');
+    capo.value = '3'; capo.dispatchEvent(new Event('change'));
+  })()`);
+  await page.evaluate(`(function () {
+    const sel = document.getElementById('fingTuning');
+    sel.value = 'drop-d'; sel.dispatchEvent(new Event('change'));
+  })()`);
+  await page.evaluate("document.getElementById('fingLeftHanded').click()");
+
+  // A different instrument keeps its own, unrelated remembered values --
+  // switching to it and back to guitar must not bleed one into the other.
+  await page.evaluate(`(function () {
+    const sel = document.getElementById('fingInstrument');
+    sel.value = 'violin'; sel.dispatchEvent(new Event('change'));
+  })()`);
+  assert.equal(await page.evaluate("document.getElementById('fingLeftHanded').checked"), false);
+
+  await page.evaluate(`(function () {
+    const sel = document.getElementById('fingInstrument');
+    sel.value = 'gtr'; sel.dispatchEvent(new Event('change'));
+  })()`);
+  assert.equal(await page.evaluate("document.getElementById('fingCapo').value"), '3');
+  assert.equal(await page.evaluate("document.getElementById('fingTuning').value"), 'drop-d');
+  assert.equal(await page.evaluate("document.getElementById('fingLeftHanded').checked"), true);
+
+  // save() debounces panel-store writes at 1200ms (src/app.js); outlast it
+  // before reloading, the same margin w-fixes-bar2-persist.test.mjs uses.
+  await new Promise((r) => setTimeout(r, 1600));
+  await page.reload();
+
+  await page.evaluate("window.__coach.openPanel('fingerings')");
+  await page.evaluate(`(function () {
+    const sel = document.getElementById('fingInstrument');
+    sel.value = 'gtr'; sel.dispatchEvent(new Event('change'));
+  })()`);
+  assert.equal(await page.evaluate("document.getElementById('fingCapo').value"), '3', 'capo should survive a reload');
+  assert.equal(await page.evaluate("document.getElementById('fingTuning').value"), 'drop-d', 'tuning should survive a reload');
+  assert.equal(await page.evaluate("document.getElementById('fingLeftHanded').checked"), true, 'left-handed should survive a reload');
+
+  // Violin, never touched above, still has no remembered left-handed choice.
+  await page.evaluate(`(function () {
+    const sel = document.getElementById('fingInstrument');
+    sel.value = 'violin'; sel.dispatchEvent(new Event('change'));
+  })()`);
+  assert.equal(await page.evaluate("document.getElementById('fingLeftHanded').checked"), false, 'an untouched instrument should not inherit another one’s remembered value');
+});
