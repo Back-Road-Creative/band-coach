@@ -144,3 +144,12 @@ Pitch's own 2 s-window / 30-frame-overlap design means only the CPU path was
 measurable without a browser; if a real WebGPU measurement later shows
 sub-1.0 realtime factor, that changes the call to C1. Until then, the
 measured plain-JS number does not clear the bar the plan set.
+
+**The speed bar depends on the use.** "Faster than realtime" is the bar for
+listening to the mic live. Transcribing a loaded audio file is offline: at
+1.836× a 3-minute recording takes about 5½ minutes on this CPU. That is slow but
+workable behind a progress bar. So a file-import-only T1 pack is a product call
+for JP, not something this measurement rules out. The comment at
+`src/audio/file-frames.js:17` rejected basic-pitch as "~2.2 MB". That figure is
+refuted here: the weights are 742,392 B (fp32) and 187,545 B (int8). The comment
+should be corrected whenever that file is next touched.
