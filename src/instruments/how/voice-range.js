@@ -17,6 +17,7 @@
 // the singer's absolute extremes.
 
 const MIN_SUSTAIN_MS = 400;
+const LOW_TAIL_SEMITONES = 2;
 
 // Drop samples too brief to be a deliberately held note, then trim
 // statistical outliers (spurious single-frame pitch-detector glitches) with
@@ -27,14 +28,25 @@ const MIN_SUSTAIN_MS = 400;
 // sing-low-then-high flow) are trimmed per stage: the low comes only from the
 // low stage and the high only from the high stage. Pooled, a learner who took
 // a few breaths on the low note outnumbered the high samples and the rule
-// threw the high note away as an outlier. Untagged samples (one slide) are
-// trimmed together, as before.
+// threw the high note away as an outlier. The high stage also ignores the
+// low note still sounding just after the switch (see LOW_TAIL_SEMITONES in
+// estimateRange). Untagged samples (one slide) are trimmed together, as before.
 export function estimateRange(samples) {
   const sustained = samples.filter(s => s.ms >= MIN_SUSTAIN_MS);
   if (sustained.length === 0) return null;
 
   const lowStage = trimOutliers(sustained.filter(s => s.stage === 'low').map(s => s.midi));
-  const highStage = trimOutliers(sustained.filter(s => s.stage === 'high').map(s => s.midi));
+  let highMidis = sustained.filter(s => s.stage === 'high').map(s => s.midi);
+  if (lowStage.length > 0) {
+    // The high stage opens still hearing the low note (the learner has not
+    // moved yet), and pitch wobble splits that tail into several held
+    // samples that would outvote the real high note in the trim below.
+    // Anything within LOW_TAIL_SEMITONES of the low is that tail -- unless
+    // nothing clears it, in which case the stage is kept as it is.
+    const clear = highMidis.filter(m => m > Math.min(...lowStage) + LOW_TAIL_SEMITONES);
+    if (clear.length > 0) highMidis = clear;
+  }
+  const highStage = trimOutliers(highMidis);
   if (lowStage.length > 0 && highStage.length > 0) {
     return { low: Math.min(...lowStage), high: Math.max(...highStage) };
   }
