@@ -40,6 +40,7 @@ import { feasibility } from '../song/feasibility.js';
 import { INSTRUMENTS } from '../instruments/index.js';
 import { routeImportFile, importerFor } from './songs/import-route.js';
 import { judgeAttempt, passesRule } from './songs/practice.js';
+import { barHeat, worstBars } from '../song/bar-heat.js';
 import { mapMasteryKeys } from './songs/mastery.js';
 import { parseChallenge, buildChallenge } from '../song/challenge.js';
 import { exportMidi } from '../song/export-midi.js';
@@ -91,6 +92,16 @@ const STEP_WORDS = {
 
 function stepTitle(step) {
   return STEP_WORDS[step.kind] || step.kind;
+}
+
+// Plain-word difficulty (src/song/phrase-difficulty.js's 0..1 score,
+// attached per phrase step by src/song/lesson.js's buildLessonPlan). Exact
+// thresholds are this unit's own call -- nothing in phrase-difficulty.js
+// mandates a three-way split.
+export function difficultyLabel(score) {
+  if (score < 0.34) return 'Easy';
+  if (score < 0.67) return 'Medium';
+  return 'Hard';
 }
 
 function stepHint(step) {
@@ -471,7 +482,15 @@ function mountSongsPanel(hostEl, api) {
     if (stepIndex === 0) {
       practiceSection.appendChild(renderPlayItOn(practice.song, practice.partId, practice.instrumentId));
     }
-    practiceSection.appendChild(el('h4', { text: stepTitle(step) + ' (bars ' + (step.bars[0] + 1) + '-' + (step.bars[1] + 1) + ')' }));
+    const titleRow = el('h4', { text: stepTitle(step) + ' (bars ' + (step.bars[0] + 1) + '-' + (step.bars[1] + 1) + ')' });
+    if (typeof step.difficulty === 'number') {
+      titleRow.appendChild(el('span', {
+        class: 'panel-songs-diff-badge',
+        'data-difficulty': difficultyLabel(step.difficulty).toLowerCase(),
+        text: difficultyLabel(step.difficulty),
+      }));
+    }
+    practiceSection.appendChild(titleRow);
     practiceSection.appendChild(el('p', { text: stepHint(step) }));
 
     const playBtn = el('button', { type: 'button', text: 'Play it', onclick: () => playPhrase(step) });
@@ -489,6 +508,37 @@ function mountSongsPanel(hostEl, api) {
     } else {
       practiceSection.appendChild(el('button', { type: 'button', text: 'Next', onclick: () => advance(true, null) }));
     }
+
+    // The last judged try's bar-by-bar result (advance() below), kept on
+    // screen until the learner starts another try (startRecording() clears
+    // it) so they can read it while deciding what to do next.
+    if (practice.lastHeat) {
+      practiceSection.appendChild(renderBarStrip(practice.lastHeat, practice.lastHeatBars));
+    }
+  }
+
+  // One small chip per bar of `heat` that falls inside `stepBars` (the just-
+  // attempted step's own [fromBar, toBar]) and actually had something judged
+  // in it, plus a "Work on bar N next" line naming the single worst bar in
+  // the whole heat map (worstBars ranks a bar with nothing judged last, so
+  // this always lands on a bar the learner actually played).
+  function renderBarStrip(heat, stepBars) {
+    const wrap = el('div', { class: 'panel-songs-bar-strip', 'aria-label': 'Bar-by-bar result' });
+    heat
+      .filter((h) => h.bar >= stepBars[0] && h.bar <= stepBars[1] && h.grade !== 'none')
+      .forEach((h) => {
+        wrap.appendChild(el('span', {
+          class: 'panel-songs-bar',
+          'data-grade': h.grade,
+          title: 'Bar ' + (h.bar + 1) + ': ' + h.hits + '/' + h.judged,
+          text: String(h.bar + 1),
+        }));
+      });
+    const worst = worstBars(heat, 1)[0];
+    if (worst && (worst.grade === 'miss' || worst.grade === 'shaky')) {
+      wrap.appendChild(el('p', { class: 'panel-songs-bar-worst', text: 'Work on bar ' + (worst.bar + 1) + ' next.' }));
+    }
+    return wrap;
   }
 
   function playPhrase(step) {
@@ -515,6 +565,9 @@ function mountSongsPanel(hostEl, api) {
   function startRecording() {
     practice.recording = true;
     practice.playedEvents = [];
+    // Starting a new try retires the previous try's bar strip.
+    practice.lastHeat = null;
+    practice.lastHeatBars = null;
     practice.recordStartSec = api.now();
     if (practice.instrument.input === 'midi') {
       const unsubscribe = onMidiNote((midi) => {
@@ -581,6 +634,10 @@ function mountSongsPanel(hostEl, api) {
       say(passed
         ? 'Nice. ' + (result ? result.hitCount + ' of ' + result.judgedCount + ' notes.' : '')
         : 'Not quite yet — try that again.', passed ? 'ok' : 'no');
+      if (result) {
+        practice.lastHeat = barHeat(practice.song, result.matches);
+        practice.lastHeatBars = step.bars;
+      }
     }
     practice.stepIndex = nextStep(practice.plan, practice.results);
     practice.playedEvents = [];

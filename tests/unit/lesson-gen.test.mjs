@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { fitToInstrument, segment, buildLessonPlan, nextStep, creditFor } from '../../src/song/lesson.js';
+import { difficultyLabel } from '../../src/ui/songs.js';
 import gtr from '../../src/instruments/gtr.js';
 import bass from '../../src/instruments/bass.js';
 import harp from '../../src/instruments/harp.js';
@@ -203,6 +204,65 @@ test('buildLessonPlan carries the instrument fit into the plan', () => {
   plan.steps.forEach(s => {
     s.notes.forEach(n => assert.ok(n.midi >= bass.range.low && n.midi <= bass.range.high));
   });
+});
+
+// =====================  phrase difficulty on steps  =====================
+
+// A one-bar phrase built entirely from small stepwise motion (2 semitones
+// between every note): the least difficult shape phraseDifficulty scores.
+function stepwiseOneBarSong(partId = 'melody') {
+  const notes = [note(0, 480, 60), note(480, 480, 62), note(960, 480, 64), note(1440, 480, 65)];
+  return {
+    schema: 'song/1', id: 'stepwise-song', title: 'Stepwise', composer: null, licence: null, source: null,
+    key: { tonic: 0, mode: 'major' }, metre: { num: 4, den: 4 }, bpm: 100,
+    ticksPerQuarter: 480,
+    parts: [{ id: partId, name: 'Melody', notes }],
+    chords: []
+  };
+}
+
+// Same rhythm and duration as stepwiseOneBarSong but built from wide leaps
+// (an octave-plus each step): the phrase-difficulty module's own tests
+// confirm leaps alone raise the score, so this must score higher.
+function leapyOneBarSong(partId = 'melody') {
+  const notes = [note(0, 480, 60), note(480, 480, 73), note(960, 480, 55), note(1440, 480, 79)];
+  return {
+    schema: 'song/1', id: 'leapy-song', title: 'Leapy', composer: null, licence: null, source: null,
+    key: { tonic: 0, mode: 'major' }, metre: { num: 4, den: 4 }, bpm: 100,
+    ticksPerQuarter: 480,
+    parts: [{ id: partId, name: 'Melody', notes }],
+    chords: []
+  };
+}
+
+test('buildLessonPlan attaches a numeric 0..1 difficulty to every per-phrase step', () => {
+  const song = eightBarSong();
+  const plan = buildLessonPlan(song, 'melody', gtr, { level: 1 });
+  const perPhraseKinds = new Set(['listen', 'rhythm', 'pitches', 'phrase-slow', 'tempo-ladder']);
+  plan.steps.filter(s => perPhraseKinds.has(s.kind)).forEach(s => {
+    assert.equal(typeof s.difficulty, 'number', s.kind + ' step missing a numeric difficulty');
+    assert.ok(s.difficulty >= 0 && s.difficulty <= 1, s.kind + ' difficulty ' + s.difficulty + ' out of bounds');
+  });
+});
+
+test('buildLessonPlan scores a leap-heavy phrase harder than a stepwise one', () => {
+  const stepwisePlan = buildLessonPlan(stepwiseOneBarSong(), 'melody', gtr, { level: 1 });
+  const leapyPlan = buildLessonPlan(leapyOneBarSong(), 'melody', gtr, { level: 1 });
+  const stepwiseListen = stepwisePlan.steps.find(s => s.kind === 'listen');
+  const leapyListen = leapyPlan.steps.find(s => s.kind === 'listen');
+  assert.ok(leapyListen.difficulty > stepwiseListen.difficulty,
+    'leapy (' + leapyListen.difficulty + ') should score above stepwise (' + stepwiseListen.difficulty + ')');
+});
+
+// =====================  difficultyLabel (src/ui/songs.js)  =====================
+
+test('difficultyLabel maps a 0..1 score to Easy/Medium/Hard', () => {
+  assert.equal(difficultyLabel(0), 'Easy');
+  assert.equal(difficultyLabel(0.33), 'Easy');
+  assert.equal(difficultyLabel(0.34), 'Medium');
+  assert.equal(difficultyLabel(0.66), 'Medium');
+  assert.equal(difficultyLabel(0.67), 'Hard');
+  assert.equal(difficultyLabel(1), 'Hard');
 });
 
 // =====================  nextStep  =====================
