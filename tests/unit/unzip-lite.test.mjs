@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import zlib from 'node:zlib';
-import { inflateRaw, readZipEntries, readZipEntryData, readMxlRootEntry } from '../../src/song/unzip-lite.js';
+import { inflateRaw, readZipEntries, readZipEntryData, readMxlRootEntry, MAX_ENTRY_BYTES } from '../../src/song/unzip-lite.js';
 
 // A minimal, hand-rolled ZIP writer for the test only: local file header +
 // data (stored or deflate) per entry, then one central directory entry per
@@ -11,16 +11,20 @@ function u16(n) { const b = Buffer.alloc(2); b.writeUInt16LE(n & 0xffff, 0); ret
 function u32(n) { const b = Buffer.alloc(4); b.writeUInt32LE(n >>> 0, 0); return b; }
 
 function buildZip(files) {
-  // files: [{ name, data: Buffer, method: 0|8 }]
+  // files: [{ name, data: Buffer, method: 0|8, declaredUncompressedSize? }]
+  // declaredUncompressedSize, when present, is written into both headers
+  // INSTEAD of f.data.length — lets a test simulate a zip whose header lies
+  // about how big the entry really unpacks to.
   const localChunks = [];
   const centralChunks = [];
   let offset = 0;
   for (const f of files) {
     const nameBuf = Buffer.from(f.name, 'utf8');
     const stored = f.method === 8 ? zlib.deflateRawSync(f.data) : f.data;
+    const declaredSize = f.declaredUncompressedSize ?? f.data.length;
     const localHeader = Buffer.concat([
       u32(0x04034b50), u16(20), u16(0), u16(f.method), u16(0), u16(0),
-      u32(0), u32(stored.length), u32(f.data.length),
+      u32(0), u32(stored.length), u32(declaredSize),
       u16(nameBuf.length), u16(0),
       nameBuf,
     ]);
@@ -30,7 +34,7 @@ function buildZip(files) {
 
     const centralHeader = Buffer.concat([
       u32(0x02014b50), u16(20), u16(20), u16(0), u16(f.method), u16(0), u16(0),
-      u32(0), u32(stored.length), u32(f.data.length),
+      u32(0), u32(stored.length), u32(declaredSize),
       u16(nameBuf.length), u16(0), u16(0), u16(0), u16(0),
       u32(0), u32(localOffset),
       nameBuf,
@@ -104,4 +108,42 @@ test('readMxlRootEntry falls back to the first non-META-INF .xml/.musicxml entry
   const found = readMxlRootEntry(zip);
   assert.equal(found.name, 'anything.xml');
   assert.deepEqual(Buffer.from(found.bytes), musicxml);
+});
+
+// ---- zip-bomb / output-size cap -----------------------------------------
+
+test('inflateRaw stops and throws a clear error as soon as output would exceed a small override cap', () => {
+  // A highly-compressible "bomb": a large zero buffer deflates to almost
+  // nothing but expands back to its full size — exactly the shape that
+  // would freeze a tab if left uncapped.
+  const bomb = Buffer.alloc(1024 * 1024, 0); // 1 MB of zeros
+  const compressed = zlib.deflateRawSync(bomb, { level: 9 });
+  assert.ok(compressed.length < 4096, 'fixture should compress far smaller than its inflated size');
+  assert.throws(
+    () => inflateRaw(new Uint8Array(compressed), 1024), // override cap: 1 KB
+    /larger than the.*limit|zip bomb/i
+  );
+});
+
+test('readZipEntryData rejects an entry whose declared uncompressed size exceeds the cap, without inflating it', () => {
+  const small = Buffer.from('tiny payload', 'utf8');
+  const zip = buildZip([{ name: 'huge.musicxml', data: small, method: 8, declaredUncompressedSize: MAX_ENTRY_BYTES + 1 }]);
+  const entries = readZipEntries(zip);
+  assert.equal(entries[0].uncompressedSize, MAX_ENTRY_BYTES + 1);
+  assert.throws(() => readZipEntryData(zip, entries[0]), /larger than the.*limit|zip bomb/i);
+});
+
+test('readZipEntryData still accepts a normal deflated entry well under the cap', () => {
+  const data = Buffer.from('ordinary musicxml content '.repeat(500), 'utf8');
+  const zip = buildZip([{ name: 'song.musicxml', data, method: 8 }]);
+  const entries = readZipEntries(zip);
+  const out = readZipEntryData(zip, entries[0]);
+  assert.deepEqual(Buffer.from(out), data);
+});
+
+test('readZipEntryData honors a per-call maxBytes override to reject a smaller entry a caller wants capped tighter', () => {
+  const data = Buffer.from('x'.repeat(2000), 'utf8');
+  const zip = buildZip([{ name: 'song.musicxml', data, method: 8 }]);
+  const entries = readZipEntries(zip);
+  assert.throws(() => readZipEntryData(zip, entries[0], 1000), /larger than the.*limit|zip bomb/i);
 });
