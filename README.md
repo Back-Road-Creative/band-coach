@@ -170,12 +170,11 @@ capture — so it feeds transcribe.js exactly the way a live capture does, teach
 nothing new. The "Record a tune" panel wires this in directly: alongside Listen/Stop, "Or choose
 an audio file" lets a learner pick a recording instead of using the microphone, and it goes
 through the same check-list step before anything can be practised or saved. Like the rest of this
-app's pitch tracking, it is monophonic only: a chord or a second voice reads as whichever single
-pitch the detector locks onto, not as separate notes — so this writes down one melody line at a
-time, from a file the same as from the mic.
-capture — so a file-import panel can be wired up later without teaching transcribe.js anything
-new. Like the rest of this app's pitch tracking, it is monophonic only: a chord or a second voice
-reads as whichever single pitch the detector locks onto, not as separate notes.
+app's pitch tracking, it is monophonic by default: a chord or a second voice reads as whichever
+single pitch the detector locks onto, not as separate notes — so this writes down one melody line
+at a time, from a file the same as from the mic — unless "More than one note at a time" is
+checked, in which case a multipitch detector (`src/audio/analysis/multipitch.js`) splits the file
+into a melody/bass/inner part per voice it hears, each shown as its own labelled lane.
 
 ## Songs
 
