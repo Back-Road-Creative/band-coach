@@ -296,18 +296,36 @@ function mountEditor(hostEl, api) {
       debugFrames = null;
       listenBtn.textContent = 'Listen';
       recordStatus.textContent = 'Working it out…';
+      // Disabled across the yield below so a click landing in this gap can't
+      // race Stop's own transcribe() -- the button re-enables once
+      // loadTranscription has run. One task yield (not e.g. a promise
+      // microtask) so the browser actually paints "Working it out…" before
+      // transcribe() -- synchronous CPU work -- runs; without it the status
+      // text is overwritten by loadTranscription() in the very same task and
+      // a learner never sees it (src/ui/editor.js's own setTimeout(...,
+      // duration) pattern below is the precedent this borrows).
+      listenBtn.disabled = true;
+      await new Promise((resolve) => setTimeout(resolve, 0));
       const result = transcribe(frames, { title: titleInput.value || 'My recording' });
       loadTranscription(result);
+      listenBtn.disabled = false;
       return;
     }
+    // Disabled synchronously, before the await, so a second tap while
+    // openMic() is still pending can't reach recorder.start() at all --
+    // mirrors src/ui/playalong.js's startRecordingCapture(), which disables
+    // its own record button the same way before opening the mic.
+    listenBtn.disabled = true;
     try {
       listenBtn.textContent = 'Stop';
       recordStatus.textContent = 'Listening…';
       await recorder.start();
+      listenBtn.disabled = false;
     } catch (e) {
       api.recordError('editor:listen', e);
       listenBtn.textContent = 'Listen';
       recordStatus.textContent = '';
+      listenBtn.disabled = false;
       tell('The microphone could not be opened.', 'no');
     }
   });

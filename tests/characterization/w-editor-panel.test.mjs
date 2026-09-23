@@ -56,6 +56,56 @@ test('Listen/Stop transcribes the captured frames and gates practise/save behind
   assert.equal(await page.evaluate("document.getElementById('editorPlayBtn').disabled"), false, 'acknowledging the check list unlocks play');
 });
 
+test('Stop shows "Working it out..." before the transcription result overwrites it, and Listen is disabled meanwhile', async (t) => {
+  const page = await launchPage(HTML_PATH);
+  t.after(() => page.close());
+  await openEditor(page);
+
+  await page.evaluate(`window.__coach.editorSetFrames(${JSON.stringify(TWO_NOTE_FRAMES)})`);
+  await page.evaluate("document.getElementById('editorListenBtn').click()");
+  await page.waitFor('window.__coach.editorRecording()');
+
+  // click() and the read happen inside the SAME Runtime.evaluate call, with
+  // no CDP round trip between them, so this genuinely observes what the
+  // click handler did synchronously before its first await -- transcribe()
+  // (synchronous CPU work) must not have run yet. Before the fix, Stop set
+  // "Working it out..." and then called transcribe() in the very same task,
+  // so this would already read the transcription's own status text instead.
+  const rightAfterClick = await page.evaluate(`(function(){
+    document.getElementById('editorListenBtn').click();
+    return {
+      status: document.querySelector('.editor-status').textContent,
+      disabled: document.getElementById('editorListenBtn').disabled,
+    };
+  })()`);
+  assert.equal(rightAfterClick.status, 'Working it out…', 'the "Working it out..." status must be set (and get a chance to paint) before transcribe() runs');
+  assert.equal(rightAfterClick.disabled, true, 'Listen must be disabled while the capture is being worked out, so a second tap cannot race the same transcribe');
+
+  await page.waitFor("document.getElementById('editorCheck').hidden === false");
+  assert.equal(await page.evaluate("document.getElementById('editorListenBtn').disabled"), false, 'Listen must re-enable once the transcription has landed');
+});
+
+test('a double-tapped Listen click cannot leave the mic-polling interval running after Stop', async (t) => {
+  const page = await launchPage(HTML_PATH);
+  t.after(() => page.close());
+  await openEditor(page);
+
+  // Two rapid taps before openMic() has had a chance to resolve -- the real
+  // defect this guards: without the fix the second tap opened a second,
+  // un-clearable interval that kept polling (and appending frames) even
+  // after Stop closed the panel down.
+  await page.evaluate(`(function(){
+    const b = document.getElementById('editorListenBtn');
+    b.click();
+    b.click();
+  })()`);
+  await page.waitFor('window.__coach.editorRecording()');
+
+  await page.evaluate("document.getElementById('editorListenBtn').click()");
+  await page.waitFor("document.getElementById('editorCheck').hidden === false");
+  assert.equal(await page.evaluate("window.__coach.editorRecording()"), false, 'no interval should still be running once Stop has finished');
+});
+
 test('keyboard: arrow keys select and move a note, +/- repitches, Delete removes, Ctrl+Z undoes', async (t) => {
   const page = await launchPage(HTML_PATH);
   t.after(() => page.close());
