@@ -89,8 +89,14 @@
      instrument row rather than replacing it (flex-basis stays auto, not
      100%, so it takes only as much row width as the parent button needs). */
   .picker-variant-group { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
-  .picker-variant-group > .variant-toggle { margin: 0; }
-  .picker-variant-group > .variant-toggle > summary { cursor: pointer; list-style: none; font: 500 11px var(--body); color: var(--muted); }
+  /* width 0 + min-width 100%: the shut disclosure takes the parent button's
+     width instead of widening the item to its one-line list of names (Wind
+     and brass lists 11), which pushed whole rows apart. The summary cuts off
+     with an ellipsis; its title and its text (read in full by screen readers)
+     still name every variant. Opened, it may take the room it needs. */
+  .picker-variant-group > .variant-toggle { margin: 0; width: 0; min-width: 100%; }
+  .picker-variant-group > .variant-toggle[open] { width: auto; }
+  .picker-variant-group > .variant-toggle > summary { cursor: pointer; list-style: none; font: 500 11px var(--body); color: var(--muted); display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .picker-variant-group > .variant-toggle > summary::-webkit-details-marker { display: none; }
   .picker-variant-group > .variant-toggle > summary::before { content: '\25b8  '; }
   .picker-variant-group > .variant-toggle[open] > summary::before { content: '\25be  '; }
