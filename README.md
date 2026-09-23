@@ -159,7 +159,8 @@ appears once you have actually practised a while without one — never on a fres
 there is nothing yet to lose. The "My progress" panel also shows a practice calendar (minutes and
 level changes, one cell per day, for the last 8 weeks) and a daily minutes goal with a streak — the
 practice log itself only keeps the most recent 60 sessions, so days older than that say "earlier
-sessions not kept" rather than a false zero.
+sessions not kept" rather than a false zero. "Print this week's report" turns the last 7 days into a
+one-page, printer-friendly summary for a teacher or parent.
 
 ## Turning an audio file into notes
 
