@@ -1,10 +1,17 @@
 // Which importer a file's extension routes to, and how the panel should
 // read it (as raw bytes for a binary format, as text for a text format).
-// Pure: takes only a file name string, does no I/O itself — the caller
-// (src/ui/songs.js) does the actual FileReader read and calls the matching
-// importer (src/song/import-midi.js importMidi, src/song/import-abc.js
-// importAbc, src/song/import-musicxml.js importMusicXml, src/song/challenge.js
-// parseChallenge for a teacher-authored .json challenge file).
+// routeImportFile is pure: takes only a file name string, does no I/O
+// itself — the caller (src/ui/songs.js) does the actual FileReader read.
+//
+// importerFor(kind) below hands back the actual importer function for a
+// song kind ('midi' | 'abc' | 'musicxml' | 'gp7'), so songs.js's dispatch
+// from a routed kind to the right importer (src/song/import-midi.js
+// importMidi, src/song/import-abc.js importAbc, src/song/import-musicxml.js
+// importMusicXml, src/song/import-gp7.js importGp7) lives in one place and
+// is unit-testable without a browser. 'challenge' (src/song/challenge.js
+// parseChallenge, a teacher-authored .json) has a different return shape
+// (a list of songs, not one song + warnings) and stays handled separately
+// in songs.js.
 //
 // Compressed .mxl (zipped MusicXML) routes to the same 'musicxml' kind as
 // plain .xml/.musicxml — importMusicXml itself now detects and unzips a
@@ -16,6 +23,11 @@
 // Guitar Pro `.gp` (GP7/8) is also a zip (of `Content/score.gpif`), but it
 // has its own importer (src/song/import-gp7.js importGp7) rather than
 // reusing the MusicXML one, so it gets its own 'gp7' kind read as bytes.
+
+import { importMidi } from '../../song/import-midi.js';
+import { importAbc } from '../../song/import-abc.js';
+import { importMusicXml } from '../../song/import-musicxml.js';
+import { importGp7 } from '../../song/import-gp7.js';
 
 function extensionOf(fileName) {
   const name = String(fileName || '');
@@ -33,4 +45,19 @@ export function routeImportFile(fileName) {
   if (ext === 'gp') return { kind: 'gp7', readAs: 'bytes' };
   if (ext === 'json') return { kind: 'challenge', readAs: 'text' };
   return { kind: 'unknown', readAs: null };
+}
+
+// Returns the (data, options) => { song, warnings } importer for a routed
+// song `kind`, or null for a kind with no such importer ('challenge',
+// 'unknown'). 'midi' and 'gp7' are read as raw bytes (an ArrayBuffer from
+// FileReader.readAsArrayBuffer) and need wrapping in a Uint8Array first;
+// 'abc' and 'musicxml' take the FileReader result as-is (text for 'abc',
+// and either text or bytes for 'musicxml' — importMusicXml itself detects
+// which, see its own comment).
+export function importerFor(kind) {
+  if (kind === 'midi') return (data, options) => importMidi(new Uint8Array(data), options);
+  if (kind === 'gp7') return (data, options) => importGp7(new Uint8Array(data), options);
+  if (kind === 'abc') return importAbc;
+  if (kind === 'musicxml') return importMusicXml;
+  return null;
 }

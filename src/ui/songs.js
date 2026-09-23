@@ -35,16 +35,16 @@ import { rangeForInstrument } from '../audio/range.js';
 import { starterSongs } from '../song/starter/index.js';
 import { createLibrary, memoryStore, indexedDbStore } from '../song/library.js';
 import { validateSong } from '../song/model.js';
-import { importMidi } from '../song/import-midi.js';
-import { importAbc } from '../song/import-abc.js';
-import { importMusicXml } from '../song/import-musicxml.js';
 import { buildLessonPlan, nextStep, creditFor } from '../song/lesson.js';
 import { feasibility } from '../song/feasibility.js';
 import { INSTRUMENTS } from '../instruments/index.js';
-import { routeImportFile } from './songs/import-route.js';
+import { routeImportFile, importerFor } from './songs/import-route.js';
 import { judgeAttempt, passesRule } from './songs/practice.js';
 import { mapMasteryKeys } from './songs/mastery.js';
 import { parseChallenge, buildChallenge } from '../song/challenge.js';
+import { exportMidi } from '../song/export-midi.js';
+import { exportMusicXml } from '../song/export-musicxml.js';
+import { exportAbc } from '../song/export-abc.js';
 
 // Every playable ('ready') instrument record, for the "Play it on…" row --
 // same source src/app.js reads for notation/mic-range/how-to-play, so this
@@ -183,8 +183,8 @@ function mountSongsPanel(hostEl, api) {
   const listUl = el('ul', { class: 'panel-songs-list' });
   listSection.appendChild(listUl);
 
-  const importLabel = el('label', { for: 'songsFileInput', text: 'Add a song, or a teacher’s challenge, from a file (.mid, .midi, .abc, .xml, .musicxml or .json)' });
-  const importInput = el('input', { type: 'file', id: 'songsFileInput', accept: '.mid,.midi,.abc,.xml,.musicxml,.json' });
+  const importLabel = el('label', { for: 'songsFileInput', text: 'Add a song, or a teacher’s challenge, from a file (.mid, .midi, .abc, .xml, .musicxml, .mxl, .gp or .json)' });
+  const importInput = el('input', { type: 'file', id: 'songsFileInput', accept: '.mid,.midi,.abc,.xml,.musicxml,.mxl,.gp,.json' });
   const importMsg = el('div', { class: 'panel-songs-msg', role: 'status' });
   const importSection = el('section', {}, [importLabel, importInput, importMsg]);
 
@@ -236,7 +236,48 @@ function mountSongsPanel(hostEl, api) {
       },
     });
     li.appendChild(btn);
+    li.appendChild(songExportControls(songOrMeta, libraryId));
     return li;
+  }
+
+  // "Save as…" (plan-adjacent to D6's challenge export): one small button
+  // per exporter (src/song/export-midi.js, export-musicxml.js, export-abc.js
+  // -- all pure functions, a Song object in, file bytes/text out) next to
+  // every song row, starter tunes included. `songOrMeta`/`libraryId` follow
+  // the same pattern songRow()'s own onclick uses to get a full Song: a
+  // starter tune already IS one, a library row needs library.get() first
+  // since the list only holds lightweight metadata (title/id/etc, no notes).
+  const EXPORT_FORMATS = [
+    { label: 'MIDI', ext: 'mid', mime: 'audio/midi', build: exportMidi },
+    { label: 'MusicXML', ext: 'musicxml', mime: 'application/vnd.recordare.musicxml+xml', build: exportMusicXml },
+    { label: 'ABC', ext: 'abc', mime: 'text/vnd.abc', build: exportAbc },
+  ];
+
+  function songExportControls(songOrMeta, libraryId) {
+    const span = el('span', { class: 'panel-songs-export' });
+    EXPORT_FORMATS.forEach((format) => {
+      const btn = el('button', {
+        type: 'button',
+        class: 'panel-songs-export-btn',
+        text: format.label,
+        title: 'Save "' + songOrMeta.title + '" as ' + format.label,
+        onclick: async () => {
+          const song = libraryId ? await library.get(libraryId) : songOrMeta;
+          if (!song) { say('That song could not be found any more.', 'no'); return; }
+          let data;
+          try {
+            data = format.build(song);
+          } catch (e) {
+            say('That song could not be saved as ' + format.label + ': ' + (e && e.message ? e.message : String(e)), 'no');
+            return;
+          }
+          const fileBase = (song.title || 'song').replace(/[^\w.-]+/g, '_') || 'song';
+          triggerDownload([data], format.mime, fileBase + '.' + format.ext);
+        },
+      });
+      span.appendChild(btn);
+    });
+    return span;
   }
 
   // Renders (or re-renders, e.g. after a song is marked passed) the loaded
@@ -302,16 +343,24 @@ function mountSongsPanel(hostEl, api) {
       exportMsg.textContent = 'That challenge could not be built: ' + (e && e.message ? e.message : String(e));
       return;
     }
-    const blob = new Blob([json], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
     const fileName = (title.replace(/[^\w.-]+/g, '_') || 'challenge') + '.challenge.json';
+    triggerDownload([json], 'application/json', fileName);
+    exportMsg.textContent = 'Exported "' + title + '" with ' + songs.length + ' song' + (songs.length === 1 ? '' : 's') + '.';
+  }
+
+  // Blob + hidden a[download] click -- the same pattern a "save my work"
+  // button uses anywhere in a browser, no server involved. Shared by
+  // exportChallenge() above and songExportControls() below so both
+  // downloads behave identically.
+  function triggerDownload(blobParts, mimeType, fileName) {
+    const blob = new Blob(blobParts, { type: mimeType });
+    const url = URL.createObjectURL(blob);
     const a = el('a', { href: url, download: fileName });
     a.click();
     // Revoked a moment later, not synchronously: some browsers cancel an
     // in-flight download if the object URL disappears before the click is
     // fully handled.
     setTimeout(() => URL.revokeObjectURL(url), 1000);
-    exportMsg.textContent = 'Exported "' + title + '" with ' + songs.length + ' song' + (songs.length === 1 ? '' : 's') + '.';
   }
 
   function openSong(song) {
@@ -544,12 +593,8 @@ function mountSongsPanel(hostEl, api) {
     importInput.value = '';
     if (!file) return;
     const route = routeImportFile(file.name);
-    if (route.kind === 'unsupported-mxl') {
-      say('Compressed .mxl files are not supported yet. Export or open it as an uncompressed .musicxml file first.', 'no');
-      return;
-    }
     if (route.kind === 'unknown') {
-      say('That file type is not supported yet. Use a .mid, .midi, .abc, .xml, .musicxml or .json file.', 'no');
+      say('That file type is not supported yet. Use a .mid, .midi, .abc, .xml, .musicxml, .mxl, .gp or .json file.', 'no');
       return;
     }
     if (route.kind === 'challenge') {
@@ -575,9 +620,13 @@ function mountSongsPanel(hostEl, api) {
     let song, warnings;
     try {
       const data = await readFile(file, route.readAs);
-      if (route.kind === 'midi') ({ song, warnings } = importMidi(new Uint8Array(data), { fileName: file.name }));
-      else if (route.kind === 'abc') ({ song, warnings } = importAbc(data, { fileName: file.name }));
-      else ({ song, warnings } = importMusicXml(data, { fileName: file.name }));
+      // routeImportFile() decided the kind above; importerFor() (src/ui/
+      // songs/import-route.js) is the one place that maps a kind to its
+      // actual importer, so a .gp file reaches importGp7 rather than
+      // falling through to the MusicXML importer.
+      const importer = importerFor(route.kind);
+      if (!importer) throw new Error('no importer for file kind "' + route.kind + '"');
+      ({ song, warnings } = importer(data, { fileName: file.name }));
     } catch (e) {
       say('That file could not be read: ' + (e && e.message ? e.message : String(e)), 'no');
       return;
