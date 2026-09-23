@@ -52,6 +52,26 @@ export function createRecorder(api, { intervalMs = 50, fmin, fmax } = {}) {
   let startedAt = 0;
   let activeFmin = fmin;
   let activeFmax = fmax;
+  // The Listen button's click handler has no re-entrancy guard of its own
+  // (it awaits start() before it can disable itself -- see editor.js), so a
+  // double tap while openMic() is still pending must not be allowed to reach
+  // here twice. `starting` holds the one in-flight start() promise; a second
+  // call while it is set reuses it instead of opening a second mic and
+  // creating a second, un-clearable setInterval. `stopRequested` covers the
+  // narrower case where stop() lands while openMic() is still pending: the
+  // interval must never start once that resolves.
+  let starting = null;
+  let stopRequested = false;
+
+  async function doStart() {
+    stopRequested = false;
+    await api.openMic();
+    if (stopRequested) { stopRequested = false; return; }
+    resolveRange();
+    frames = [];
+    startedAt = api.now();
+    timer = setInterval(tick, intervalMs);
+  }
 
   function resolveRange() {
     if (activeFmin !== undefined && activeFmax !== undefined) return;
@@ -81,15 +101,17 @@ export function createRecorder(api, { intervalMs = 50, fmin, fmax } = {}) {
   }
 
   return {
-    async start() {
-      await api.openMic();
-      resolveRange();
-      frames = [];
-      startedAt = api.now();
-      timer = setInterval(tick, intervalMs);
+    start() {
+      if (timer) return Promise.resolve(); // already listening -- nothing to do
+      if (starting) return starting; // already opening the mic for an earlier tap -- reuse it, never open a second one
+      starting = doStart().finally(() => { starting = null; });
+      return starting;
     },
-    // Stops sampling and returns the captured frames (a copy).
+    // Stops sampling and returns the captured frames (a copy). Also cancels
+    // any start() still awaiting openMic, so it cannot start the interval
+    // once it resolves.
     stop() {
+      stopRequested = true;
       if (timer) clearInterval(timer);
       timer = null;
       return frames.slice();
