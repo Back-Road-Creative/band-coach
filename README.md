@@ -161,7 +161,11 @@ level changes, one cell per day, for the last 8 weeks) and a daily minutes goal 
 practice log itself only keeps the most recent 60 sessions, so days older than that say "earlier
 sessions not kept" rather than a false zero. The backup, restore and "Check for updates" messages
 above are read from the English string table in `src/core/i18n.js` (`t(id, params)`) rather than
-hardcoded — a scaffold for a future locale, though only English ships today.
+hardcoded — a scaffold for a future locale, though only English ships today. `src/index.html`'s own
+static labels (headings, button text, help copy `src/app.js` never rewrites at runtime) go through
+the same table: each element carries `data-i18n="<id>"` and keeps its English text in the markup as
+a pre-JS/no-JS fallback, and `applyStaticLabels` in `src/app.js` overwrites it from `t(id)` once at
+startup.
 
 ## Turning an audio file into notes
 
