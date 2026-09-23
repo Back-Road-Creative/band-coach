@@ -23,6 +23,10 @@
 // this list before letting the learner practise the transcribed song.
 
 import { songIdentity } from './ident.js';
+import { FFTProcessor } from '../audio/analysis/fft.js';
+import { detectPitches } from '../audio/analysis/multipitch.js';
+import { assignVoices } from './voices-assign.js';
+import { quantizeNotes } from './quantize.js';
 
 const TICKS_PER_QUARTER = 480;
 
@@ -385,8 +389,117 @@ function emptySong(opts) {
 const KEY_PROFILE_CAVEAT =
   'Krumhansl-Schmuckler key-profile numbers (typed from memory) — verify against the published paper.';
 
+// ---- polyphonic wiring (B1-B4 behind opts.polyphonic) ---------------------
+//
+// multipitchTrack (src/audio/analysis/multipitch.js) already runs this same
+// FFT-hop/detectPitches/active-voice loop, but its own closeNote() only
+// records {onset, midi} — no note END, so it cannot tell a caller how long a
+// voice sounded. That module is a sibling unit's (B2's) and out of scope
+// here, so rather than widen its return shape this repeats its bookkeeping
+// (still calling its own exported detectPitches for the actual pitch-picking
+// — nothing about the harmonic-sum algorithm is reinvented) and additionally
+// keeps each note's end time, which quantizeNotes (B4) needs.
+function trackMultipitchNotesWithDuration(pcm, sampleRate, opts = {}) {
+  const { fftSize = 16384, hopSize = fftSize / 4, gapFrames = 1, minFrames = 3, ...detectOpts } = opts;
+  const proc = new FFTProcessor(fftSize);
+  const frameSeconds = hopSize / sampleRate;
+
+  const active = new Map(); // midi -> { startFrame, lastSeenFrame }
+  const notes = [];
+  const closeNote = (midi, info, endedAtFrame) => {
+    const lengthFrames = endedAtFrame - info.startFrame;
+    if (lengthFrames >= minFrames) {
+      notes.push({ start: info.startFrame * frameSeconds, end: endedAtFrame * frameSeconds, midi });
+    }
+  };
+
+  let frameIndex = 0;
+  for (let start = 0; start + fftSize <= pcm.length; start += hopSize, frameIndex++) {
+    const mag = proc.process(pcm.subarray(start, start + fftSize));
+    const picks = detectPitches(mag, sampleRate, fftSize, detectOpts);
+    const seen = new Set(picks.map((p) => p.midi));
+    for (const midi of seen) {
+      if (!active.has(midi)) active.set(midi, { startFrame: frameIndex, lastSeenFrame: frameIndex });
+      else active.get(midi).lastSeenFrame = frameIndex;
+    }
+    for (const [midi, info] of Array.from(active.entries())) {
+      if (!seen.has(midi) && frameIndex - info.lastSeenFrame > gapFrames) {
+        closeNote(midi, info, info.lastSeenFrame + 1);
+        active.delete(midi);
+      }
+    }
+  }
+  for (const [midi, info] of active.entries()) closeNote(midi, info, frameIndex);
+
+  notes.sort((a, b) => a.start - b.start || a.midi - b.midi);
+  return notes;
+}
+
+const ROLE_NAMES = { melody: 'Melody', bass: 'Bass', inner: 'Inner', percussion: 'Percussion' };
+
+// transcribePolyphonic(polyphonic, opts) -> same { song, report } shape as
+// the monophonic path, but with one part per detected voice (melody/bass/
+// inner/percussion — see src/song/voices-assign.js), each independently
+// quantized against a single shared tempo (estimateTempo run over every
+// voice's onsets combined, the same "read the beat from what's already
+// available" the monophonic path uses — no separate beat tracker is
+// invented here) turned into a flat, one-entry B1-shaped tempo map.
+function transcribePolyphonic(polyphonic, opts) {
+  const rawNotes = trackMultipitchNotesWithDuration(polyphonic.pcm, polyphonic.sampleRate, polyphonic);
+
+  const tempo = estimateTempo(rawNotes.map((n) => n.start));
+  const metre = inferMetreAndBars(rawNotes, tempo.bpm);
+  const key = detectKey(rawNotes);
+  const tempoMap = [{ tick: 0, bpm: tempo.bpm }];
+
+  const voiceOpts = { onsetEpsilon: 0.05, maxJump: 12, minCoverage: 0.3, hysteresis: 2, ...polyphonic };
+  const voiceParts = assignVoices(rawNotes, voiceOpts);
+
+  const parts = voiceParts.map((vp) => {
+    const forQuantize = vp.notes.map((n) => ({ midi: n.midi, startSec: n.start, durSec: Math.max(0, n.end - n.start) }));
+    const quantized = quantizeNotes(forQuantize, tempoMap, { grid: opts.grid });
+    const notes = quantized.map((q) => {
+      const out = { start: q.tick, dur: q.durTicks, midi: q.midi };
+      if (typeof q.confidence === 'number') out.confidence = q.confidence;
+      return out;
+    });
+    return { id: vp.role, name: ROLE_NAMES[vp.role] || vp.role, role: vp.role, notes };
+  });
+
+  const song = {
+    schema: 'song/1',
+    ...songIdentity({ title: opts.title, fallback: 'My recording' }),
+    composer: null,
+    licence: null,
+    source: null,
+    key: key.confidence > 0 ? { tonic: key.tonic, mode: key.mode } : null,
+    metre: metre.metre,
+    bpm: tempo.bpm,
+    ticksPerQuarter: TICKS_PER_QUARTER,
+    parts: parts.length ? parts : [{ id: 'melody', name: 'Melody', notes: [] }],
+    chords: [],
+  };
+
+  const voiceCount = parts.length;
+  const needsCheck = [KEY_PROFILE_CAVEAT];
+  if (tempo.confidence < 0.5) needsCheck.push('Tempo is uncertain — confirm the beat before practising to it.');
+  if (metre.confidence < 0.3) needsCheck.push('Metre defaulted or low-confidence — check the bar lines.');
+  if (key.confidence < 0.3) needsCheck.push('Key detection is low-confidence — check the key signature.');
+  needsCheck.push(
+    `I heard ${voiceCount} voice${voiceCount === 1 ? '' : 's'} — check each part shows the notes you meant.`,
+  );
+
+  return {
+    song,
+    report: { tempo, metre, key, notesCaptured: rawNotes.length, voices: voiceCount, needsCheck },
+  };
+}
+
 export function transcribe(frames, opts = {}) {
-  const { onsets, minNoteMs, grid } = opts;
+  const { onsets, minNoteMs, grid, polyphonic } = opts;
+  if (polyphonic && polyphonic.pcm && typeof polyphonic.sampleRate === 'number') {
+    return transcribePolyphonic(polyphonic, opts);
+  }
   const rawNotes = eventsToNotes(frames, { onsets, minNoteMs });
 
   if (!rawNotes.length) {
