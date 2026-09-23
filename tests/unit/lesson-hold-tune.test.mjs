@@ -162,3 +162,18 @@ test('a mic note heard for a single tick is judged as clipped short, not skipped
   assert.ok(ev.durSec > 0, 'durSec must be a real (short) length, never null');
   assert.ok(Math.abs(ev.cents) < 1);
 });
+
+test('a held note that drifts sharp after its attack folds later ticks into cents, not just the onset', async () => {
+  const { playedEventFrom, extendHeldEvent } = await import('../../src/ui/songs.js');
+  const inTuneFreq = 440 * Math.pow(2, (60 - 69) / 12); // midi 60, exactly in tune
+  const sharpFreq = inTuneFreq * Math.pow(2, 60 / 1200); // 60 cents sharp
+  const ev = playedEventFrom(inTuneFreq, 60, 1.0); // attacked in tune
+  assert.ok(Math.abs(ev.cents) < 1, 'onset should read as in tune');
+  // The learner drifts sharp for the rest of the hold -- three more mic
+  // ticks (50ms each) all reading ~60 cents sharp.
+  extendHeldEvent(ev, sharpFreq, 60, 1.05);
+  extendHeldEvent(ev, sharpFreq, 60, 1.10);
+  extendHeldEvent(ev, sharpFreq, 60, 1.15);
+  assert.ok(ev.cents > TUNE_MAX_MEAN_ABS_CENTS, `expected the drifted mean cents (${ev.cents}) to exceed the tune threshold (${TUNE_MAX_MEAN_ABS_CENTS}), catching the drift instead of only judging the in-tune attack`);
+  assert.ok(Math.abs(ev.durSec - 0.15) < 1e-9, 'durSec must still stretch forward exactly as before');
+});

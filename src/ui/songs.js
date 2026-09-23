@@ -98,6 +98,22 @@ export function playedEventFrom(freq, midi, atSec) {
   return { midi, atSec, durSec: MIC_TICK_SEC, cents: centsFromFreq(freq, midi) };
 }
 
+// Called on every capture tick where the SAME pitch is still sounding
+// (songs.js's mic loop, below). Before this, only durSec grew while the
+// note was held -- cents stayed frozen at whatever the very first tick
+// read, so a note attacked in tune that then drifted sharp or flat over
+// the hold was judged only on its attack. This folds each tick's reading
+// into a running mean (tracked via the private _centsN sample count) so
+// event.cents reflects the whole hold, sign preserved -- practice.js takes
+// Math.abs() of each hit's cents downstream, so a signed mean here is right.
+export function extendHeldEvent(event, freq, midi, nowSec) {
+  const n = (event._centsN || 1) + 1;
+  event.cents = (event.cents * (n - 1) + centsFromFreq(freq, midi)) / n;
+  event._centsN = n;
+  event.durSec = Math.max(MIC_TICK_SEC, nowSec - event.atSec);
+  return event;
+}
+
 function onMidiNote(fn) {
   noteListeners.push(fn);
   return () => {
@@ -751,7 +767,7 @@ function mountSongsPanel(hostEl, api) {
         const nowSec = api.now() - practice.recordStartSec;
         if (!o.onset) {
           if (openEvent && r.freq && r.clarity > 0.5 && Math.round(69 + 12 * Math.log2(r.freq / 440)) === openEvent.midi) {
-            openEvent.durSec = Math.max(MIC_TICK_SEC, nowSec - openEvent.atSec);
+            extendHeldEvent(openEvent, r.freq, openEvent.midi, nowSec);
           } else {
             openEvent = null;
           }
