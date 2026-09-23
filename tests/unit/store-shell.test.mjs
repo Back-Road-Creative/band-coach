@@ -90,6 +90,60 @@ test('electron-builder.json declares only the microphone device capability', () 
   assert.ok(!builderConfig.appx.capabilities.includes('internetClient'));
 });
 
+// Every file main.js (and anything it requires) loads at launch must be
+// matched by electron-builder.json's `files` list. That list is an explicit
+// allow-list: app-builder-lib adds the default `**/*` ONLY when `files` is
+// empty or contains nothing but `!` ignores (fileMatcher.js, "add default
+// patterns"), so a module main.js requires that is not on the list is left
+// out of app.asar and the packaged app dies at launch with Electron's
+// "A JavaScript error occurred in the main process" dialog. That is exactly
+// how v1.3.0-v1.6.0 shipped: lib/permission-policy.js arrived in PR #20
+// without a `files` entry, and the Store's certification run (policy
+// 10.1.2.10, 2026-09-23) was the first launch of the packaged app.
+function globToRegExp(glob) {
+  let re = '';
+  for (let i = 0; i < glob.length; i++) {
+    const c = glob[i];
+    if (c === '*') {
+      if (glob[i + 1] === '*') {
+        re += '.*';
+        i++;
+        if (glob[i + 1] === '/') i++;
+      } else {
+        re += '[^/]*';
+      }
+    } else if (c === '?') {
+      re += '[^/]';
+    } else {
+      re += c.replace(/[.+^${}()|[\]\\]/g, '\\$&');
+    }
+  }
+  return new RegExp('^' + re + '$');
+}
+
+function localRequiresOf(relPath, seen = new Set()) {
+  if (seen.has(relPath)) return seen;
+  seen.add(relPath);
+  const src = readFileSync(join(storeRoot, relPath), 'utf8');
+  for (const m of src.matchAll(/require\(\s*['"](\.{1,2}\/[^'"]+)['"]\s*\)/g)) {
+    const target = join(dirname(relPath), m[1]).split('\\').join('/');
+    localRequiresOf(target, seen);
+  }
+  return seen;
+}
+
+test('electron-builder.json packages every local module main.js requires', () => {
+  const includes = builderConfig.files.filter(p => !p.startsWith('!')).map(globToRegExp);
+  const needed = [...localRequiresOf('main.js'), 'preload.js'];
+  const missing = needed.filter(p => !includes.some(re => re.test(p)));
+  assert.deepEqual(
+    missing,
+    [],
+    'these files load at launch but are not in electron-builder.json "files", so the packaged app crashes: ' +
+      missing.join(', ')
+  );
+});
+
 test('scripts/apply-identity.mjs falls back to placeholders when env is unset', async () => {
   const { applyIdentity } = await import(join(storeRoot, 'scripts', 'apply-identity.mjs'));
   const { config, applied } = applyIdentity({});
