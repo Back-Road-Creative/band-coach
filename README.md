@@ -473,11 +473,14 @@ rests, ties, dotted-eighth figures, triplets, 3/4, 6/8, swing, and two-bar phras
 
 ## Ear training
 
-The Ear training screen (`src/core/ear/*`, wired in `src/ui/ear.js`) has nine listen-and-answer
+The Ear training screen (`src/core/ear/*`, wired in `src/ui/ear.js`) has ten listen-and-answer
 exercises, each leveling up or down on its own: scale degrees, melodic dictation, dictation from
 real song phrases (a 1-3 bar phrase pulled straight out of a starter song's melody -- which song
-it was is only revealed after grading, never before), rhythm dictation, chord progressions,
-scales and modes, chord inversions, in-tune-or-not intonation discrimination, and sing-it-back.
+it was is only revealed after grading, never before), rhythm dictation, rhythms from songs (a bar,
+two at higher levels, of a starter song's own note durations and rests, pitch dropped -- the song
+title is shown up front, since this is a sight-reading drill rather than a by-ear one, and it
+grades with rhythm dictation's own checker unchanged), chord progressions, scales and modes,
+chord inversions, in-tune-or-not intonation discrimination, and sing-it-back.
 
 ## Find your own singing range
 
