@@ -523,6 +523,14 @@ function mountSongsPanel(hostEl, api) {
   }
 
   function openSong(song) {
+    // A song already mid-recording (Stop and check never clicked) has its
+    // mic/MIDI listener subscribed via `practice`, the module-level variable
+    // every future note push reads live -- wiping practiceSection below
+    // removes the Stop button but, without this, leaves that listener
+    // running with nothing left to stop it: a multi-part song (parts list,
+    // no auto-start below) or a 0-note song (dead end) never calls
+    // startPractice() again to clean it up on its own.
+    stopRecording();
     practiceSection.hidden = false;
     practiceSection.innerHTML = '';
     practiceSection.appendChild(el('h3', { text: song.title }));
@@ -837,6 +845,14 @@ function mountSongsPanel(hostEl, api) {
         practice.lastHeat = barHeat(practice.song, result.matches);
         practice.lastHeatBars = step.bars;
       }
+    } else {
+      // A listen step (passRule: null) is judged nothing itself -- clicking
+      // its "Next" runs this same advance() with result: null, so without
+      // this the PREVIOUS step's bar strip (still sitting in lastHeat) rides
+      // along onto the step after the listen step, reading as that new,
+      // never-yet-attempted step's own result.
+      practice.lastHeat = null;
+      practice.lastHeatBars = null;
     }
     practice.stepIndex = nextStep(practice.plan, practice.results);
     practice.playedEvents = [];
