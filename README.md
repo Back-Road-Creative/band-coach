@@ -379,6 +379,26 @@ Drawing is shared, not duplicated: `drawStaff()` now dispatches off a generic
 never reading `prefs.wind` — so a captured or sung melody credits the right
 brass item too.
 
+Flute, clarinet (B flat), oboe, alto sax (E flat) and tenor sax (B flat)
+(`src/instruments/flute.js`/`clarinet-bb.js`/`oboe.js`/`sax-alto-eb.js`/
+`sax-tenor-bb.js`) ship `status: 'ready'`, following the same pattern as the
+brass trio above: each gets its own `MODS` entry with a fixed `windKind`
+(`'c'`, `'bb'`, `'c'`, `'eb'`, `'bbt'`) so its written notes never bend to
+the learner's generic Wind-and-brass preference, `staff: true` for the
+shared hand-built staff, and a `src/ui/songs/mastery.js` `itemIdForMidi()`
+case folding into the record's own written range. Fingering data lives in
+`src/instruments/how/keyed-woodwind.js`: typed lookup tables (same shape as
+`recorder-whistle.js`), one per instrument, since a keyed Boehm-system
+woodwind's fingering does not fall out of a formula the way brass valve/
+slide arithmetic does. `howKindFor()`/`computeHow()`
+(`src/ui/fingerings/how.js`) wire all five into the fingerings panel under a
+new `'keyed-woodwind'` kind. **Every fingering in that file is a good-faith
+beginner fingering written from general knowledge, not yet checked against
+a real chart or player** — see that file's top comment for exactly which
+notes (every sharp/flat, and the oboe's top three half-hole notes) most need
+a musician's check. Alto and tenor sax both start their written range at
+Bb3 (midi 58), the horn's actual lowest written note — a saxophone has
+nothing written below it, and `SAX_NOTES` has no entries for 55-57.
 Oboe (`src/instruments/oboe.js`) ships `status: 'planned'`: it is already
 nameable through the existing generic wind mod's concert-pitch group
 (`WIND_KINDS.c` in `src/app.js` already lists "flute, oboe, violin"), so it
