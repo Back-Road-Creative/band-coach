@@ -5,17 +5,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { HTML_PATH } from '../helpers/html-path.mjs';
 import { launchPage } from '../helpers/browser.mjs';
+import { tapAtAudioTime } from '../helpers/tap-at.mjs';
 
 const htmlPath = HTML_PATH;
-
-// Same trick tests/characterization/timing.test.mjs uses: build a fake DOM
-// event timeStamp that toAudioTime() resolves back to a chosen AudioContext
-// time, so taps can be pinned exactly against the bar's own onset times.
-async function fakeTimeStampFor(page, targetAudioTime) {
-  const [refAudio, refPerf] = await page.evaluate('[window.__coach.audioNow(), performance.now()]');
-  const offset = refAudio - refPerf / 1000;
-  return (targetAudioTime - offset) * 1000;
-}
 
 async function startAtLevel(page, level) {
   await page.evaluate("window.__coach.setMod('rhy')");
@@ -51,8 +43,7 @@ test('CHARACTERIZATION: a tied bar judged with taps at the un-tied onsets passes
   assert.equal(onsets.length, 3, 'a tied beat should not produce its own onset');
 
   for (const onsetTime of onsets) {
-    const ts = await fakeTimeStampFor(page, onsetTime);
-    await page.evaluate(`window.__coach.tap({ timeStamp: ${ts} })`);
+    await tapAtAudioTime(page, onsetTime);
   }
   await page.waitFor('window.__coach.bar().judged', 12000);
   const failed = await page.evaluate("window.__coach.task().els[0].failed");
@@ -70,11 +61,9 @@ test('CHARACTERIZATION: an extra tap on the tied note fails the bar', async (t) 
   const tiedNoteTime = bar.playAt + beatSec; // beat 1: the tied note, no real onset there
 
   for (const onsetTime of onsets) {
-    const ts = await fakeTimeStampFor(page, onsetTime);
-    await page.evaluate(`window.__coach.tap({ timeStamp: ${ts} })`);
+    await tapAtAudioTime(page, onsetTime);
   }
-  const extraTs = await fakeTimeStampFor(page, tiedNoteTime);
-  await page.evaluate(`window.__coach.tap({ timeStamp: ${extraTs} })`);
+  await tapAtAudioTime(page, tiedNoteTime);
 
   await page.waitFor('window.__coach.bar().judged', 12000);
   const failed = await page.evaluate("window.__coach.task().els[0].failed");

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { TICKS_PER_QUARTER } from '../../src/song/model.js';
+import { TICKS_PER_QUARTER, barsOf } from '../../src/song/model.js';
 import { judgeAttempt } from '../../src/ui/songs/practice.js';
 import {
   barHeat, worstBars,
@@ -142,4 +142,20 @@ test('barHeat integration: a real judgeAttempt result feeds straight into barHea
   assert.equal(heat.length, 2);
   assert.equal(heat[0].grade, 'good');
   assert.equal(heat[1].grade, 'miss');
+});
+
+test('barHeat uses the same bar windows as barsOf when a metre change lands mid-bar', () => {
+  // The change at 2400 falls inside the second 4/4 bar (1920-3840). barsOf
+  // ends that bar AT the change, so the 3/4 bar then runs from 2400 to 3840.
+  // A note at 3000 therefore sits in bar 2, not bar 1.
+  const song = baseSong({
+    metreChanges: [{ tick: 2400, num: 3, den: 4 }],
+    parts: [{ id: 'melody', name: 'Melody', notes: [
+      { start: 0, dur: 480, midi: 60 }, { start: 1920, dur: 480, midi: 62 }, { start: 3000, dur: 480, midi: 64 }
+    ] }]
+  });
+  const matches = song.parts[0].notes.map((note) => match({ note, ok: true, errorMs: 0, cents: 0 }));
+  const heat = barHeat(song, matches);
+  assert.equal(heat.length, barsOf(song).length - 1);
+  assert.deepEqual(heat.map((h) => h.judged), [1, 1, 1]);
 });
