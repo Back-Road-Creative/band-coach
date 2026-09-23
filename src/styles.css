@@ -344,3 +344,9 @@
   .ledger-cell-met { outline: 2px solid var(--accent); outline-offset: -2px; }
   .ledger-cell-unknown { background: repeating-linear-gradient(45deg, var(--panel-2), var(--panel-2) 4px, var(--line) 4px, var(--line) 8px); }
   .ledger-truncated-note { color: var(--muted); font-size: 13px; }
+  .history-print-report { display: none; }
+  @media print {
+    body * { visibility: hidden; }
+    .history-print-report, .history-print-report * { visibility: visible; }
+    .history-print-report { display: block; position: absolute; top: 0; left: 0; width: 100%; color: #000; background: #fff; }
+  }

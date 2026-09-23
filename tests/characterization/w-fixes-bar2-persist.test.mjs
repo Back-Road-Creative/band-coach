@@ -10,14 +10,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { HTML_PATH } from '../helpers/html-path.mjs';
 import { launchPage } from '../helpers/browser.mjs';
+import { tapAtAudioTime } from '../helpers/tap-at.mjs';
 
 const htmlPath = HTML_PATH;
-
-async function fakeTimeStampFor(page, targetAudioTime) {
-  const [refAudio, refPerf] = await page.evaluate('[window.__coach.audioNow(), performance.now()]');
-  const offset = refAudio - refPerf / 1000;
-  return (targetAudioTime - offset) * 1000;
-}
 
 test('bar2 mastery survives the debounced sanitize pass and a reload', async (t) => {
   const page = await launchPage(htmlPath);
@@ -32,8 +27,7 @@ test('bar2 mastery survives the debounced sanitize pass and a reload', async (t)
 
   const onsets = await page.evaluate('window.__coach.bar().onsets.map(o => o.t)');
   for (const onsetTime of onsets) {
-    const ts = await fakeTimeStampFor(page, onsetTime);
-    await page.evaluate(`window.__coach.tap({ timeStamp: ${ts} })`);
+    await tapAtAudioTime(page, onsetTime);
   }
   await page.waitFor('window.__coach.bar().judged', 12000);
   await page.waitFor('window.__coach.task() && window.__coach.task().done', 12000);

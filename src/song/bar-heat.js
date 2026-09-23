@@ -4,7 +4,7 @@
 // need another pass. Pure: no DOM, no AudioContext — the caller (later UI
 // unit) supplies the song and the already-judged matches.
 
-import { barsOf, songDurationTicks } from './model.js';
+import { barsOf } from './model.js';
 
 // ---- grading thresholds --------------------------------------------------
 // A bar with no judged notes at all (nothing was expected, or the caller
@@ -27,43 +27,13 @@ function mean(values) {
   return values.length ? values.reduce((a, b) => a + b, 0) / values.length : null;
 }
 
-function metreTicks(metre, ticksPerQuarter) {
-  return metre.num * (4 / metre.den) * ticksPerQuarter;
-}
-
-// Bar boundaries in ticks, e.g. [0, 1920, 3840, ...]. Delegates to
-// model.js's barsOf() for a song with no metreChanges (the common case);
-// barsOf() itself only knows about a song's single top-level `metre`, so a
-// song with metreChanges is walked bar-by-bar here instead, switching to
-// each new metre at the tick it takes effect (metreChanges entries are
-// validated to fall on the tick a change is meant to start, see
-// src/song/model.js validateSong).
-function barBoundaries(song) {
-  if (!song.metreChanges || !song.metreChanges.length) return barsOf(song);
-  const duration = songDurationTicks(song);
-  const tpq = song.ticksPerQuarter;
-  const changes = [...song.metreChanges].sort((a, b) => a.tick - b.tick);
-  const boundaries = [0];
-  let tick = 0;
-  let changeIndex = 0;
-  let activeMetre = song.metre;
-  while (tick < duration || boundaries.length === 1) {
-    while (changeIndex < changes.length && changes[changeIndex].tick <= tick) {
-      activeMetre = changes[changeIndex];
-      changeIndex++;
-    }
-    tick += metreTicks(activeMetre, tpq);
-    boundaries.push(tick);
-  }
-  return boundaries;
-}
-
 // { bar, judged, hits, hitRate, meanAbsErrorMs, meanAbsCents, grade } per
 // bar of `song`, in bar order. `matches` is a judgeAttempt() result's
 // `matches` array (or any array shaped like it) — every entry's note.start
 // (ticks) decides which bar it belongs to.
 export function barHeat(song, matches, opts = {}) {
-  const boundaries = barBoundaries(song);
+  // barsOf follows metreChanges, so heat bars match every other bar view.
+  const boundaries = barsOf(song);
   const heat = [];
   for (let bar = 0; bar < boundaries.length - 1; bar++) {
     const barStart = boundaries[bar];
