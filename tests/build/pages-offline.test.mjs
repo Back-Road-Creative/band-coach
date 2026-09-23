@@ -13,7 +13,7 @@
 // test needs (navigate to an http:// URL, evaluate script, reload).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
+import { spawnBrowser, retryOnBootDeadline } from '../helpers/browser.mjs';
 import { mkdtempSync, rmSync, existsSync, readdirSync, readFileSync } from 'node:fs';
 import { tmpdir, homedir } from 'node:os';
 import { join, extname } from 'node:path';
@@ -92,19 +92,16 @@ async function launchHttpPage(url) {
     );
   }
   const userDataDir = mkdtempSync(join(tmpdir(), 'band-coach-offline-cdp-'));
-  const args = [
-    '--headless',
-    '--remote-debugging-port=0',
-    `--user-data-dir=${userDataDir}`,
-    '--no-first-run',
-  ];
-  if (process.env.CI) args.splice(1, 0, '--no-sandbox');
-  args.push('about:blank');
-  // Its own process group (detached), so cleanup can kill the renderer, GPU
-  // and zygote processes too, not just the launched parent: those are
-  // separate processes that a plain child.kill() never touches, and they
-  // survive as orphans piling up on the box.
-  const child = spawn(bin, args, { stdio: ['ignore', 'ignore', 'pipe'], detached: true });
+  // The shared launcher: its startup timeout carries LAUNCH_TIMEOUT_CODE, so
+  // the retry below takes a missed DevTools window like any other launch.
+  let spawned;
+  try {
+    spawned = await spawnBrowser(bin, userDataDir);
+  } catch (e) {
+    rmSync(userDataDir, { recursive: true, force: true });
+    throw e;
+  }
+  const { child, browserWsUrl } = spawned;
   // child.pid is the process GROUP id too, since it is spawned detached
   // (group leader). Kills the whole group, not just this one process.
   function killGroup() {
@@ -128,24 +125,6 @@ async function launchHttpPage(url) {
   }
 
   async function finishLaunch() {
-  const browserWsUrl = await new Promise((resolve, reject) => {
-    let buf = '';
-    const onErr = (err) => reject(err);
-    child.once('error', onErr);
-    child.stderr.on('data', (chunk) => {
-      buf += chunk.toString();
-      const m = buf.match(/DevTools listening on (ws:\/\/[^\s]+)/);
-      if (m) {
-        child.off('error', onErr);
-        resolve(m[1]);
-      }
-    });
-    child.once('exit', (code) => {
-      if (!buf.includes('DevTools listening')) reject(new Error(`browser exited (code ${code}): ${buf}`));
-    });
-    setTimeout(() => reject(new Error('timed out waiting for DevTools listening line')), 15000).unref();
-  });
-
   const browserWs = new WebSocket(browserWsUrl);
   await new Promise((resolve, reject) => {
     browserWs.addEventListener('open', () => resolve(), { once: true });
@@ -282,7 +261,7 @@ test('phone-copy service worker activates and the page still renders offline aft
   const { port } = server.address();
   const url = `http://127.0.0.1:${port}/`;
 
-  const page = await launchHttpPage(url);
+  const page = await retryOnBootDeadline(() => launchHttpPage(url));
   t.after(() => page.close());
 
   assert.equal(await page.evaluate("'serviceWorker' in navigator"), true);
