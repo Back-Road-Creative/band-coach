@@ -193,6 +193,14 @@
   .panel-learn-confidence-note[data-confidence="medium"] { background: var(--warn); }
   .panel-learn-confidence-note[data-confidence="low"] { background: var(--bad); }
   .panel-learn-practise-btn { align-self: flex-start; }
+  .panel-learn-mic { display: flex; flex-direction: column; gap: 8px; border-top: 1px solid var(--line); padding-top: 12px; }
+  .panel-learn-mic h4 { margin: 0; }
+  .panel-learn-bpm-row { display: flex; align-items: center; gap: 8px; }
+  .panel-learn-bpm { width: 5em; }
+  .panel-learn-meter { position: relative; height: 10px; border-radius: 5px; background: var(--panel-2); overflow: hidden; }
+  .panel-learn-meter-fill { height: 100%; width: 0%; background: var(--good); transition: width .05s linear; }
+  .panel-learn-beat { min-height: 1.2em; font: 700 20px var(--body); }
+  .panel-learn-record-btn { align-self: flex-start; }
   /* */
   /* */
   .panel-ear .ear-exercises { display: flex; flex-wrap: wrap; gap: 8px; margin-block: 10px; }
