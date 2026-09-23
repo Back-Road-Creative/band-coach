@@ -21,7 +21,11 @@
 //     <Value/></Automation></Automations></MasterTrack>
 //   <Tracks><Track id><Name/><GeneralMidi><Program/></GeneralMidi>
 //     <Staves><Staff><Properties><Property name="Tuning"><Pitches/>
-//     </Property></Properties></Staff></Staves></Track></Tracks>
+//     </Property></Properties></Staff></Staves></Track></Tracks> --
+//     <GeneralMidi> is a simplified shape (and this file's own test
+//     fixture); a real Guitar Pro export instead carries the program at
+//     <Sounds><Sound><Role/><MIDI><Program/></Sound></Sounds>, preferring
+//     the Sound with <Role>User</Role>
 //   <MasterBars><MasterBar><Time/><Key><AccidentalCount/><Mode/></Key>
 //     <Bars/></MasterBar></MasterBars>  -- <Bars> is one bar-id per track,
 //     in the same order as <MasterTrack><Tracks>; a MasterBar with no
@@ -78,10 +82,25 @@ function propertyNamed(propertiesNode, name) {
   return elements(propertiesNode, 'Property').find((p) => attr(p, 'name') === name);
 }
 
+function trackProgram(trackNode) {
+  // Older/simpler GPIF (and this importer's own hand-authored test fixture)
+  // put the GM program straight on the track as <GeneralMidi><Program/>.
+  // A real Guitar Pro 7/8 export never writes that element at all -- the
+  // program instead lives on whichever <Sound> is in use, at
+  // <Sounds><Sound><MIDI><Program/></Sound></Sounds> (there can be several
+  // Sounds for different playing techniques; the one with <Role>User</Role>
+  // is the track's chosen sound, so it's preferred when present).
+  const gm = element(trackNode, 'GeneralMidi');
+  if (gm) return num(childText(gm, 'Program'), undefined);
+  const soundNodes = elements(element(trackNode, 'Sounds'), 'Sound');
+  const sound = soundNodes.find((s) => childText(s, 'Role') === 'User') || soundNodes[0];
+  const midiNode = sound ? element(sound, 'MIDI') : undefined;
+  return midiNode ? num(childText(midiNode, 'Program'), undefined) : undefined;
+}
+
 function readTrack(trackNode, index) {
   const name = childText(trackNode, 'Name') || `Track ${index + 1}`;
-  const gm = element(trackNode, 'GeneralMidi');
-  const program = gm ? num(childText(gm, 'Program'), undefined) : undefined;
+  const program = trackProgram(trackNode);
   const staff = element(element(trackNode, 'Staves'), 'Staff');
   const properties = staff ? element(staff, 'Properties') : undefined;
   const tuningProp = propertyNamed(properties, 'Tuning');
