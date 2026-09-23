@@ -11,6 +11,43 @@ function ticksToSec(ticks, bpm, ticksPerQuarter) {
   return (ticks / ticksPerQuarter) * (60 / bpm);
 }
 
+// A keyboard player's MIDI events for a chord (several expected notes at the
+// same `start` tick) arrive in whatever order fingers land — reverse order,
+// or a few ms apart (a "rolled" chord) — never guaranteed to match the order
+// the notes are listed in the song. CHORD_SPREAD_MS is how far apart (from
+// the first matched note of the chord) a played event can still count as
+// "part of this chord" rather than the start of the next thing.
+const CHORD_SPREAD_MS = 80;
+
+// Group expected notes into chords: consecutive notes sharing the same
+// `start` tick are one chord (a single note is a chord of size 1, and takes
+// the exact old forward-only path so single-note judging never changes).
+function groupIntoChords(notes) {
+  const groups = [];
+  for (const note of notes) {
+    const last = groups[groups.length - 1];
+    if (last && last[0].start === note.start) last.push(note);
+    else groups.push([note]);
+  }
+  return groups;
+}
+
+function matchOneNote(note, hit, timed, expectedAt, bpm, ticksPerQuarter) {
+  const errorMs = timed ? (hit.atSec - expectedAt) * 1000 : null;
+  let durRatio = null;
+  if (hit.durSec != null && note.dur != null) {
+    const expectedDurSec = ticksToSec(note.dur, bpm, ticksPerQuarter);
+    durRatio = expectedDurSec > 0 ? hit.durSec / expectedDurSec : null;
+  }
+  const cents = hit.cents != null ? hit.cents : null;
+  const velocityError = hit.velocity != null && note.velocity != null ? hit.velocity - note.velocity : null;
+  return { note, played: hit, ok: true, errorMs, durRatio, cents, velocityError };
+}
+
+function missedNote(note) {
+  return { note, played: null, ok: false, errorMs: null, durRatio: null, cents: null, velocityError: null };
+}
+
 // expectedNotes: [{ start, dur, midi, velocity? }] in ticks (a step's
 // `notes`, already fitted to the instrument by buildLessonPlan/fitToInstrument).
 // playedEvents: [{ midi, atSec, durSec?, cents?, velocity? }], in the order
@@ -42,34 +79,75 @@ export function judgeAttempt(expectedNotes, playedEvents, opts = {}) {
   const notes = expectedNotes || [];
   const played = playedEvents || [];
   const matches = [];
+  const extraList = [];
   let cursor = 0;
-  for (const note of notes) {
-    const expectedAt = timed ? ticksToSec(note.start, bpm, ticksPerQuarter) : null;
-    let foundAt = -1;
-    for (let i = cursor; i < played.length; i++) {
-      if (judgePitch({ heardMidi: played[i].midi, targetMidi: note.midi, policy }).ok) {
-        foundAt = i;
-        break;
+  for (const chord of groupIntoChords(notes)) {
+    if (chord.length === 1) {
+      // Single expected note at this tick: the original forward-only
+      // search, unchanged — no chord window, no extras.
+      const note = chord[0];
+      const expectedAt = timed ? ticksToSec(note.start, bpm, ticksPerQuarter) : null;
+      let foundAt = -1;
+      for (let i = cursor; i < played.length; i++) {
+        if (judgePitch({ heardMidi: played[i].midi, targetMidi: note.midi, policy }).ok) {
+          foundAt = i;
+          break;
+        }
       }
-    }
-    if (foundAt === -1) {
-      matches.push({ note, played: null, ok: false, errorMs: null, durRatio: null, cents: null, velocityError: null });
+      if (foundAt === -1) {
+        matches.push(missedNote(note));
+        continue;
+      }
+      matches.push(matchOneNote(note, played[foundAt], timed, expectedAt, bpm, ticksPerQuarter));
+      cursor = foundAt + 1;
       continue;
     }
-    const hit = played[foundAt];
-    const errorMs = timed ? (hit.atSec - expectedAt) * 1000 : null;
-    // durRatio: how long the note was actually held vs. how long it was
-    // written for. Only computable when the caller reports a played
-    // duration (durSec) — the mic pipeline does not, today.
-    let durRatio = null;
-    if (hit.durSec != null && note.dur != null) {
-      const expectedDurSec = ticksToSec(note.dur, bpm, ticksPerQuarter);
-      durRatio = expectedDurSec > 0 ? hit.durSec / expectedDurSec : null;
+    // A chord: several expected notes share this tick. Find the first
+    // played event (from cursor onward) that matches any still-unmatched
+    // chord note — that is the "anchor" that fixes the chord's window in
+    // time. Every played event up to CHORD_SPREAD_MS after the anchor is
+    // eligible to match any chord note, in any order.
+    let anchorIndex = -1;
+    for (let i = cursor; i < played.length && anchorIndex === -1; i++) {
+      for (const note of chord) {
+        if (judgePitch({ heardMidi: played[i].midi, targetMidi: note.midi, policy }).ok) {
+          anchorIndex = i;
+          break;
+        }
+      }
     }
-    const cents = hit.cents != null ? hit.cents : null;
-    const velocityError = hit.velocity != null && note.velocity != null ? hit.velocity - note.velocity : null;
-    matches.push({ note, played: hit, ok: true, errorMs, durRatio, cents, velocityError });
-    cursor = foundAt + 1;
+    if (anchorIndex === -1) {
+      for (const note of chord) matches.push(missedNote(note));
+      continue;
+    }
+    const windowEnd = played[anchorIndex].atSec + CHORD_SPREAD_MS / 1000;
+    let windowEndIdx = anchorIndex;
+    for (let i = anchorIndex + 1; i < played.length && played[i].atSec <= windowEnd; i++) windowEndIdx = i;
+    const usedIdx = new Set();
+    const expectedAt = timed ? ticksToSec(chord[0].start, bpm, ticksPerQuarter) : null;
+    for (const note of chord) {
+      let foundIdx = -1;
+      for (let i = anchorIndex; i <= windowEndIdx; i++) {
+        if (usedIdx.has(i)) continue;
+        if (judgePitch({ heardMidi: played[i].midi, targetMidi: note.midi, policy }).ok) {
+          foundIdx = i;
+          break;
+        }
+      }
+      if (foundIdx === -1) {
+        matches.push(missedNote(note));
+        continue;
+      }
+      usedIdx.add(foundIdx);
+      matches.push(matchOneNote(note, played[foundIdx], timed, expectedAt, bpm, ticksPerQuarter));
+    }
+    // Anything struck inside the chord's window that no expected note
+    // claimed is a wrong extra note, not a miss — it does not lower
+    // hitRate, but the learner should still be told they played it.
+    for (let i = anchorIndex; i <= windowEndIdx; i++) {
+      if (!usedIdx.has(i)) extraList.push(played[i]);
+    }
+    cursor = windowEndIdx + 1;
   }
   const hits = matches.filter((m) => m.ok);
   const hitRate = notes.length ? hits.length / notes.length : 0;
@@ -97,6 +175,10 @@ export function judgeAttempt(expectedNotes, playedEvents, opts = {}) {
     meanAbsCents,
     durationScore,
     dynamicsScore,
+    // Wrong notes struck alongside a chord, inside its spread window —
+    // reported so the learner sees what they actually played, but never
+    // counted against hitRate (see the chord-matching loop above).
+    extras: { count: extraList.length, list: extraList },
   };
 }
 
