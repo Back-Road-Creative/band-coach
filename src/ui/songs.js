@@ -272,8 +272,8 @@ function mountSongsPanel(hostEl, api) {
   const listUl = el('ul', { class: 'panel-songs-list' });
   listSection.appendChild(listUl);
 
-  const importLabel = el('label', { for: 'songsFileInput', text: 'Add a song, a teacher’s challenge, or a band pack, from a file (.mid, .midi, .abc, .xml, .musicxml, .mxl, .gp, .bandpack or .json)' });
-  const importInput = el('input', { type: 'file', id: 'songsFileInput', accept: '.mid,.midi,.abc,.xml,.musicxml,.mxl,.gp,.bandpack,.json' });
+  const importLabel = el('label', { for: 'songsFileInput', text: 'Add a song, a teacher’s challenge, or a band pack, from a file (.mid, .midi, .abc, .xml, .musicxml, .mxl, .gp, .gp5, .bandpack or .json)' });
+  const importInput = el('input', { type: 'file', id: 'songsFileInput', accept: '.mid,.midi,.abc,.xml,.musicxml,.mxl,.gp,.gp5,.bandpack,.json' });
   // Pointer to the one shared door (plan §11.5.7): this file input keeps
   // working exactly as before (existing tests use it directly), this just
   // tells a learner where the newer, simpler door is -- for a recording
@@ -835,7 +835,7 @@ function mountSongsPanel(hostEl, api) {
     bandPackPartsEl.innerHTML = '';
     const route = routeImportFile(file.name);
     if (route.kind === 'unknown') {
-      say('That file type is not supported yet. Use a .mid, .midi, .abc, .xml, .musicxml, .mxl, .gp, .bandpack or .json file.', 'no');
+      say('That file type is not supported yet. Use a .mid, .midi, .abc, .xml, .musicxml, .mxl, .gp, .gp5, .bandpack or .json file.', 'no');
       return;
     }
     if (route.kind === 'band-pack') {

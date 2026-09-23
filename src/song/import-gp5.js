@@ -41,6 +41,11 @@ import { songIdentity } from './ident.js';
 
 const TICKS_PER_QUARTER = 480;
 const CHANNEL_COUNT = 64;
+// Mirrors model.js's VALID_DENOMINATORS -- this importer validates the
+// metre itself (see the measure-header loop below) rather than trusting a
+// hostile byte stream, matching keyFromSignature's "each importer keeps its
+// own tiny copy" pattern above.
+const VALID_DENOMINATORS = [1, 2, 4, 8, 16, 32, 64];
 
 class ByteReader {
   constructor(bytes) {
@@ -301,6 +306,9 @@ export function importGp5(bytes, options = {}) {
   let songTick = 0;
   for (let i = 0; i < measureCount; i++) {
     const m = readMeasureHeader(reader, carry);
+    if (!Number.isInteger(m.num) || m.num < 1 || !VALID_DENOMINATORS.includes(m.den)) {
+      throw new Error(`Malformed Guitar Pro file: measure ${i + 1} has an invalid time signature ${m.num}/${m.den}`);
+    }
     if (i === 0 || m.num !== carry.num || m.den !== carry.den) {
       metreChanges.push({ tick: songTick, num: m.num, den: m.den });
     }
