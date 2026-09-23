@@ -46,6 +46,10 @@ test('the "Print this week\'s report" button renders the week and calls window.p
 
   const printCalls = await page.evaluate('window.__printCalls');
   assert.equal(printCalls, 1);
+  // report mode is on while the print dialog is up, so the report-only print CSS applies
+  assert.equal(await page.evaluate("document.body.classList.contains('printing-report')"), true);
+  await page.evaluate("window.dispatchEvent(new Event('afterprint'))");
+  assert.equal(await page.evaluate("document.body.classList.contains('printing-report')"), false, 'report mode must end after printing, so the next print is the page');
 
   const reportText = await page.evaluate("document.getElementById('historyPrintReport').textContent");
   assert.match(reportText, /20/); // today's 20 minutes
