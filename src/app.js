@@ -858,7 +858,15 @@ import { register as registerPlayalong } from './ui/playalong.js';
   }
   function loadDB() { modelNow = Date.now(); let v = null; try { v = migrateDB(JSON.parse(localStorage.getItem(KEY) || 'null')); } catch (e) {} hasSavedMod = !!(v && v.prefs && MODS[v.prefs.mod] && TOOL_MOD_IDS.indexOf(v.prefs.mod) < 0); DB = sanitizeDB(v, actx ? (actx.outputLatency || actx.baseLatency || 0) * 1000 : 0, modelNow); mod = DB.prefs.mod; S = DB.mods[mod]; gates = gatesFor(DB.prefs.noiseFloor); setNoteNaming(DB.prefs.noteNaming); }
   let saveTimer = null;
-  function save() { if (saveTimer) return; saveTimer = setTimeout(() => { saveTimer = null; try { if (MODS[mod]) DB.mods[mod] = S = sanitizeModel(mod, S, modelNow); localStorage.setItem(KEY, JSON.stringify(DB)); } catch (e) {} }, 1200); }
+  function writeDB() { try { if (MODS[mod]) DB.mods[mod] = S = sanitizeModel(mod, S, modelNow); localStorage.setItem(KEY, JSON.stringify(DB)); } catch (e) {} }
+  function save() { if (saveTimer) return; saveTimer = setTimeout(() => { saveTimer = null; writeDB(); }, 1200); }
+  // Closing or reloading within the 1200ms debounce window used to lose
+  // whatever save() just queued -- nothing ever flushed it early. pagehide
+  // fires on tab close, navigation and reload alike; visibilitychange with
+  // document.hidden also catches a learner switching tabs/apps without
+  // closing this one, which pagehide alone would miss.
+  function flushSave() { if (!saveTimer) return; clearTimeout(saveTimer); saveTimer = null; writeDB(); }
+  window.addEventListener('pagehide', flushSave);
   // `now` is always the caller's `modelNow` (frozen per page load/import,
   // never Date.now() read live) — see the comment on `modelNow` above.
   const it = (id, now) => S.item[id] || (S.item[id] = Object.assign(migrateItem({ m: 0.4 }, now), { seen: 0 }));
@@ -1734,7 +1742,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
   $('playBtn').addEventListener('click', function () { this.blur(); if (!sess) startSession(); else if (paused) resume(); else takeBreak('user'); });
   $('endBtn').addEventListener('click', function () { this.blur(); endSession(); }); $('endBtn2').addEventListener('click', endSession); $('backBtn').addEventListener('click', resume);
   $('snoozeBtn').addEventListener('click', () => { sess.snoozeUntil = Date.now() + 5 * 60000; sess.tiredFor = 0; S.ready = Math.min(S.ready, 0.6); pauseInfo = { at: Date.now(), secs: 0 }; resume(); coach('Five more minutes, then I will ask again. I have eased off the pace meanwhile.'); });
-  document.addEventListener('visibilitychange', () => { if (document.hidden && playing) takeBreak('hidden'); wakeLock.handleVisibilityChange(document); });
+  document.addEventListener('visibilitychange', () => { if (document.hidden && playing) takeBreak('hidden'); if (document.hidden) flushSave(); wakeLock.handleVisibilityChange(document); });
   function jump(dl) { const nl = Math.max(1, S.level + dl); if (nl === S.level) return; S.level = nl; S.ready = 0.3; task = null; coach((dl < 0 ? 'Moved down' : 'Skipped ahead') + ' to level ' + S.level + ': ' + D().name + '.'); save(); showAll(); }
   $('easierBtn').addEventListener('click', function () { this.blur(); jump(-1); }); $('harderBtn').addEventListener('click', function () { this.blur(); jump(1); });
   $('resetBtn').addEventListener('click', function () { this.blur(); if (sess) endSession(); DB.mods[mod] = S = freshModel(); recent = []; streak = 0; coach(t('reset.progressCleared', { name: MODS[mod].name })); save(); showAll(); });
