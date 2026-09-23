@@ -25,7 +25,9 @@ export const DRAW_STEPS = [2, 7, 11, 14, 17, 21, 23, 26, 29, 33]; // D G B D F A
 // semitones gives the layout for any of the 12 keys of harmonica.
 export function layoutFor(key = 0) {
   if (!Number.isInteger(key) || key < 0 || key > 11) throw new Error('key must be 0-11');
-  const tonic = 60 + key; // hole 1 blow, in the harp's own key
+  // hole 1 blow, in the harp's own key: Db-F# harps sit above a C harp's C4,
+  // G-B harps below it (a G harp's hole 1 blow is G3).
+  const tonic = key <= 6 ? 60 + key : 48 + key;
   const holes = [];
   for (let i = 0; i < 10; i++) {
     const hole = i + 1;

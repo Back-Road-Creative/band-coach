@@ -26,6 +26,8 @@ reach the server, also with a link to get the current file. It never checks on i
 a press — and a development build (one you built yourself rather than downloaded) says so instead
 of checking, since there is nothing meaningful to compare.
 
+The app follows your system's light/dark setting automatically, or pick Light/Dark yourself from the Theme control next to "Show note names" in the side rail.
+
 If your microphone or keyboard is not being heard, the next two sections are the ones to read.
 Everything from "Build it from source" down is for people working on the app itself.
 
@@ -53,6 +55,10 @@ page receives, even with no exercise running — useful for telling "the app can
 apart from "the app sees it but has nothing to judge right now". "MIDI details" opens a readout of
 every input's name, connection state and the last few raw messages heard, for tracking down a
 silent keyboard on your own machine.
+
+The pure scheduling and sending logic for "play it for me" — a song's notes sent out to a
+connected MIDI keyboard so it plays itself — lives in `src/core/midi.js` (`scheduleSong`,
+`playOnOutput`, `stopAll`, `describeOutputs`); there is no button wired to it yet.
 
 ## Build it from source
 
@@ -160,9 +166,27 @@ sessions not kept" rather than a false zero.
 `src/audio/file-frames.js` is a pure function, `framesFromPCM`, that walks a decoded mono audio
 clip (a plain `Float32Array` of samples plus its real sample rate) and produces the same
 `frames`/`onsets` shape `src/song/transcribe.js` already reads from a live "Record a tune" mic
+capture — so it feeds transcribe.js exactly the way a live capture does, teaching that module
+nothing new. The "Record a tune" panel wires this in directly: alongside Listen/Stop, "Or choose
+an audio file" lets a learner pick a recording instead of using the microphone, and it goes
+through the same check-list step before anything can be practised or saved. Like the rest of this
+app's pitch tracking, it is monophonic only: a chord or a second voice reads as whichever single
+pitch the detector locks onto, not as separate notes — so this writes down one melody line at a
+time, from a file the same as from the mic.
 capture — so a file-import panel can be wired up later without teaching transcribe.js anything
 new. Like the rest of this app's pitch tracking, it is monophonic only: a chord or a second voice
 reads as whichever single pitch the detector locks onto, not as separate notes.
+
+## Play along with a recording
+
+The "Play Along" panel (`src/ui/playalong.js`) opens an audio file of a song, works out its
+tempo, key and chords, and lets you loop any section slower — pitch unchanged — to learn your
+part. "Record a take" does the same starting point a different way: press it, play or sing into
+the mic, press it again to stop, and that take goes straight into the same analysis and loop —
+a duet with yourself, with no file to save or open first. The capture never leaves the device and
+mic permission is only asked for on that press; the pure chunk-accumulation logic (one bounded,
+five-minute-capped `Float32Array` out of whatever small buffers the mic hands back) lives in
+`src/audio/take-recorder.js`.
 
 ## Notation engine
 
@@ -295,6 +319,26 @@ A single detected pitch — as a monophonic microphone pitch detector would repo
 most one of the two notes and never both at once, so that grading is approximate
 (`gradeHandsTogetherApprox`) and the on-screen feedback says so in plain words rather than claiming
 both hands were heard.
+
+## Harmonica: any of the 12 keys, plus bends
+
+The harmonica mod is not locked to a C harmonica. A "My harmonica is in the key of" selector on
+the harmonica options panel picks any of the 12 keys, matching whatever is printed on your own
+instrument; changing it starts a fresh exercise. Hole numbers and blow/draw directions stay the
+same for every key — a 10-hole diatonic harmonica is built the same way whatever pitch it is
+tuned to — only the pitch each hole sounds moves. `src/instruments/how/harmonica.js`'s
+`layoutFor(key)` computes the ten-hole blow/draw table, and every reachable bend note, for any
+key 0-11 (0 = C, matching the app's usual tonic convention); `src/app.js`'s harp lookups and the
+on-screen diagram (`drawHarp`) read from it instead of a fixed C table, and the microphone's
+search window (`MODS.harp.fmin`/`fmax`) is computed from the chosen key's own layout so a
+higher- or lower-keyed harp is not silently mis-heard.
+
+Draw and blow bends — a reed pulled down in pitch with your breath — are new practice levels
+appended after the nine open-note levels, so an existing learner's saved level numbers do not
+shift. A bend is graded by its exact bent pitch, the same way an open note is graded by its own
+pitch. Bend availability (which holes bend, and how deep) does not change with key, since
+transposing the whole harmonica preserves the blow/draw gap inside every hole.
+
 ## Reference tones sound like the instrument
 
 Every reference/example tone (the note a lesson plays for you to match or tune to) goes through
@@ -351,6 +395,26 @@ Drawing is shared, not duplicated: `drawStaff()` now dispatches off a generic
 never reading `prefs.wind` — so a captured or sung melody credits the right
 brass item too.
 
+Flute, clarinet (B flat), oboe, alto sax (E flat) and tenor sax (B flat)
+(`src/instruments/flute.js`/`clarinet-bb.js`/`oboe.js`/`sax-alto-eb.js`/
+`sax-tenor-bb.js`) ship `status: 'ready'`, following the same pattern as the
+brass trio above: each gets its own `MODS` entry with a fixed `windKind`
+(`'c'`, `'bb'`, `'c'`, `'eb'`, `'bbt'`) so its written notes never bend to
+the learner's generic Wind-and-brass preference, `staff: true` for the
+shared hand-built staff, and a `src/ui/songs/mastery.js` `itemIdForMidi()`
+case folding into the record's own written range. Fingering data lives in
+`src/instruments/how/keyed-woodwind.js`: typed lookup tables (same shape as
+`recorder-whistle.js`), one per instrument, since a keyed Boehm-system
+woodwind's fingering does not fall out of a formula the way brass valve/
+slide arithmetic does. `howKindFor()`/`computeHow()`
+(`src/ui/fingerings/how.js`) wire all five into the fingerings panel under a
+new `'keyed-woodwind'` kind. **Every fingering in that file is a good-faith
+beginner fingering written from general knowledge, not yet checked against
+a real chart or player** — see that file's top comment for exactly which
+notes (every sharp/flat, and the oboe's top three half-hole notes) most need
+a musician's check. Alto and tenor sax both start their written range at
+Bb3 (midi 58), the horn's actual lowest written note — a saxophone has
+nothing written below it, and `SAX_NOTES` has no entries for 55-57.
 Oboe (`src/instruments/oboe.js`) ships `status: 'planned'`: it is already
 nameable through the existing generic wind mod's concert-pitch group
 (`WIND_KINDS.c` in `src/app.js` already lists "flute, oboe, violin"), so it
@@ -385,6 +449,14 @@ integer-tick durations, so triplets and swing are exact fractions rather than ro
 Rhythm reading (`rhy`) gains eight further levels built on it, after the original ten-cell levels:
 rests, ties, dotted-eighth figures, triplets, 3/4, 6/8, swing, and two-bar phrases.
 
+## Ear training
+
+The Ear training screen (`src/core/ear/*`, wired in `src/ui/ear.js`) has nine listen-and-answer
+exercises, each leveling up or down on its own: scale degrees, melodic dictation, dictation from
+real song phrases (a 1-3 bar phrase pulled straight out of a starter song's melody -- which song
+it was is only revealed after grading, never before), rhythm dictation, chord progressions,
+scales and modes, chord inversions, in-tune-or-not intonation discrimination, and sing-it-back.
+
 ## Find your own singing range
 
 The Voice screen offers three fixed ranges (Lower/Middle/Higher voice) plus a fourth, "Find my
@@ -394,7 +466,8 @@ highest," sing your highest comfortable note and hold it, then press "Got it —
 listens through the real pitch detector the whole time and shows exactly what it is hearing, so
 nothing is assumed from the microphone being open alone. `src/instruments/how/voice-range.js`
 turns the held notes into a range (dropping brief blips, then trimming statistical outliers
-within each half, so the low end comes only from the low note and the high end only from the high one),
+within each half, so the low end comes only from the low note and the high end only from the high one;
+the low note still sounding just after the switch is not counted toward the high end),
 picks the nearest voice type as a plain-language hint — never a diagnosis — and pulls a small
 safety margin in from both ends before placing the exercises' tonic at the low end of that
 margin-trimmed range. If what was sung is under an octave, the exercises still get a usable
