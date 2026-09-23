@@ -357,9 +357,27 @@
   .ledger-cell-met { outline: 2px solid var(--accent); outline-offset: -2px; }
   .ledger-cell-unknown { background: repeating-linear-gradient(45deg, var(--panel-2), var(--panel-2) 4px, var(--line) 4px, var(--line) 8px); }
   .ledger-truncated-note { color: var(--muted); font-size: 13px; }
+
+  /* Printing has two modes. Page print (G3): keep only the notation/content area, plain
+     black-on-white -- nav, setup, tabs, the side rail, buttons and help text are app chrome with
+     no meaning on paper. Report print (src/ui/history.js sets body.printing-report until
+     afterprint): only the weekly report. Each mode's rules are scoped so neither blanks the other. */
   .history-print-report { display: none; }
   @media print {
-    body * { visibility: hidden; }
-    .history-print-report, .history-print-report * { visibility: visible; }
-    .history-print-report { display: block; position: absolute; top: 0; left: 0; width: 100%; color: #000; background: #fff; }
+    body { background: #fff; color: #000; }
+    body:not(.printing-report) header, body:not(.printing-report) .picker, body:not(.printing-report) .panel-picker-disclosure,
+    body:not(.printing-report) .io, body:not(.printing-report) .setup-sheet, body:not(.printing-report) .midi-details,
+    body:not(.printing-report) .panel-say, body:not(.printing-report) .side, body:not(.printing-report) .stage-tools,
+    body:not(.printing-report) .choices, body:not(.printing-report) #tapPad, body:not(.printing-report) footer,
+    body:not(.printing-report) .editor-toolbar, body:not(.printing-report) .editor-record, body:not(.printing-report) .editor-status,
+    body:not(.printing-report) .editor-check, body:not(.printing-report) .editor-say,
+    body:not(.printing-report) .panel-songs-list, body:not(.printing-report) .panel-songs-intro, body:not(.printing-report) .panel-songs-msg,
+    body:not(.printing-report) .panel-songs-warn, body:not(.printing-report) .panel-songs-count, body:not(.printing-report) .panel-songs-practice,
+    body:not(.printing-report) .rail-menu, body:not(.printing-report) .help, body:not(.printing-report) .backup-nudge, body:not(.printing-report) .opts,
+    body:not(.printing-report) button, body:not(.printing-report) select, body:not(.printing-report) input { display: none !important; }
+    .wrap, .main, .stage, .panel-host, .panel-editor, #cv, .editor-canvas { background: #fff !important; color: #000 !important; }
+    body:not(.printing-report) #cv, body:not(.printing-report) .editor-canvas { display: block !important; box-shadow: none !important; }
+    body.printing-report * { visibility: hidden; }
+    body.printing-report .history-print-report, body.printing-report .history-print-report * { visibility: visible; }
+    body.printing-report .history-print-report { display: block; position: absolute; top: 0; left: 0; width: 100%; color: #000; background: #fff; }
   }
