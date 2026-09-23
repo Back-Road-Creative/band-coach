@@ -32,6 +32,7 @@ import { drawPrimitives } from './notation/draw-canvas.js';
 import { byId as instrumentById } from './instruments/index.js';
 import { rangeForInstrument, FALLBACK_RANGE, frameSizeForInstrument } from './audio/range.js';
 import { renderVoice } from './audio/voices.js';
+import { layoutFor as harpLayoutFor } from './instruments/how/harmonica.js';
 // slot:import:notation-wire
 //
 // slot:import:a11y
@@ -582,6 +583,50 @@ import { register as registerPlayalong } from './ui/playalong.js';
       { name: 'First three notes', add: Wn(59, 61, 63), limit: 12 }, { name: 'Two more, going up', add: Wn(64, 66), limit: 12 }, { name: 'Up to the top', add: Wn(68, 70, 71), limit: 12 },
       { name: 'Moves: two notes', task: 'seq', len: 2, limit: 10 }, { name: 'Moves: three notes', task: 'seq', len: 3, limit: 9 }, { name: 'Five-note runs', task: 'run', limit: 8 }
     ] };
+  // Five keyed woodwinds (flute, clarinet, oboe, alto sax, tenor sax): same
+  // pattern as the brass trio above -- own MODS entry, own fixed windKind so
+  // written notes always read in that instrument's own key regardless of
+  // the learner's generic Wind and brass preference, `staff: true` for the
+  // shared hand-built staff. Level notes match each record's own
+  // src/instruments/*.js curriculum (see those files' comments for the note
+  // choices), and Wn(...) note ids are checked against
+  // src/instruments/how/keyed-woodwind.js by
+  // tests/unit/computed-instruments-keyed-woodwind.test.mjs.
+  const fluteMicRange = transposedMicRange(instrumentById.flute);
+  MODS.flute = { name: instrumentById.flute.name, parent: 'wind', tag: 'microphone', color: '#5ab4d9', input: 'sustain', windKind: 'c', staff: true, fmin: fluteMicRange.fmin, fmax: fluteMicRange.fmax, help: 'Flute: press Connect to let the page listen through your microphone. Hold each note steady for about half a second. Written notes always read at concert pitch here, whatever you last chose on Wind and brass.',
+    levels: [
+      { name: 'Written C, D and E', add: Wn(60, 62, 64), limit: 12 }, { name: 'Add F and G', add: Wn(65, 67), limit: 12 }, { name: 'Add A, B and high C', add: Wn(69, 71, 72), limit: 12 },
+      { name: 'Sharps and flats: F sharp and B flat', add: Wn(66, 70), limit: 12 },
+      { name: 'Moves: two notes', task: 'seq', len: 2, limit: 10 }, { name: 'Moves: three notes', task: 'seq', len: 3, limit: 9 }, { name: 'Five-note runs', task: 'run', limit: 8 }
+    ] };
+  const oboeMicRange = transposedMicRange(instrumentById.oboe);
+  MODS.oboe = { name: instrumentById.oboe.name, parent: 'wind', tag: 'microphone', color: '#d9975a', input: 'sustain', windKind: 'c', staff: true, fmin: oboeMicRange.fmin, fmax: oboeMicRange.fmax, help: 'Oboe: press Connect to let the page listen through your microphone. Hold each note steady for about half a second. Written notes always read at concert pitch here, whatever you last chose on Wind and brass.',
+    levels: [
+      { name: 'Written D, E and F sharp', add: Wn(62, 64, 66), limit: 12 }, { name: 'Add G and A', add: Wn(67, 69), limit: 12 }, { name: 'Add B, C sharp and high D', add: Wn(71, 73, 74), limit: 12 },
+      { name: 'Sharps and flats: E flat and G sharp', add: Wn(63, 68), limit: 12 },
+      { name: 'Moves: two notes', task: 'seq', len: 2, limit: 10 }, { name: 'Moves: three notes', task: 'seq', len: 3, limit: 9 }, { name: 'Five-note runs', task: 'run', limit: 8 }
+    ] };
+  const clarinetBbMicRange = transposedMicRange(instrumentById['clarinet-bb']);
+  MODS['clarinet-bb'] = { name: instrumentById['clarinet-bb'].name, parent: 'wind', tag: 'microphone', color: '#7a5ad9', input: 'sustain', windKind: 'bb', staff: true, fmin: clarinetBbMicRange.fmin, fmax: clarinetBbMicRange.fmax, help: 'Clarinet (B flat): press Connect to let the page listen through your microphone. Hold each note steady for about half a second. Written notes always read for B flat clarinet here, whatever you last chose on Wind and brass.',
+    levels: [
+      { name: 'Written G, A and B', add: Wn(55, 57, 59), limit: 12 }, { name: 'Add C and D', add: Wn(60, 62), limit: 12 }, { name: 'Add E, F and high G', add: Wn(64, 65, 67), limit: 12 },
+      { name: 'Sharps and flats: A flat and C sharp', add: Wn(56, 61), limit: 12 },
+      { name: 'Moves: two notes', task: 'seq', len: 2, limit: 10 }, { name: 'Moves: three notes', task: 'seq', len: 3, limit: 9 }, { name: 'Five-note runs', task: 'run', limit: 8 }
+    ] };
+  const saxAltoEbMicRange = transposedMicRange(instrumentById['sax-alto-eb']);
+  MODS['sax-alto-eb'] = { name: instrumentById['sax-alto-eb'].name, parent: 'wind', tag: 'microphone', color: '#d95a8f', input: 'sustain', windKind: 'eb', staff: true, fmin: saxAltoEbMicRange.fmin, fmax: saxAltoEbMicRange.fmax, help: 'Alto sax (E flat): press Connect to let the page listen through your microphone. Hold each note steady for about half a second. Written notes always read for E flat alto sax here, whatever you last chose on Wind and brass.',
+    levels: [
+      { name: 'Written B flat, B and C', add: Wn(58, 59, 60), limit: 12 }, { name: 'Add D and E', add: Wn(62, 64), limit: 12 }, { name: 'Add F, F sharp and high G', add: Wn(65, 66, 67), limit: 12 },
+      { name: 'Sharps and flats: E flat and C sharp', add: Wn(63, 61), limit: 12 },
+      { name: 'Moves: two notes', task: 'seq', len: 2, limit: 10 }, { name: 'Moves: three notes', task: 'seq', len: 3, limit: 9 }, { name: 'Five-note runs', task: 'run', limit: 8 }
+    ] };
+  const saxTenorBbMicRange = transposedMicRange(instrumentById['sax-tenor-bb']);
+  MODS['sax-tenor-bb'] = { name: instrumentById['sax-tenor-bb'].name, parent: 'wind', tag: 'microphone', color: '#5ad9c2', input: 'sustain', windKind: 'bbt', staff: true, fmin: saxTenorBbMicRange.fmin, fmax: saxTenorBbMicRange.fmax, help: 'Tenor sax (B flat): press Connect to let the page listen through your microphone. Hold each note steady for about half a second. Written notes always read for B flat tenor sax here, whatever you last chose on Wind and brass.',
+    levels: [
+      { name: 'Written B flat, B and C', add: Wn(58, 59, 60), limit: 12 }, { name: 'Add D and E', add: Wn(62, 64), limit: 12 }, { name: 'Add F, F sharp and high G', add: Wn(65, 66, 67), limit: 12 },
+      { name: 'Sharps and flats: E flat and C sharp', add: Wn(63, 61), limit: 12 },
+      { name: 'Moves: two notes', task: 'seq', len: 2, limit: 10 }, { name: 'Moves: three notes', task: 'seq', len: 3, limit: 9 }, { name: 'Five-note runs', task: 'run', limit: 8 }
+    ] };
   const MOD_IDS = Object.keys(MODS);
   // Instruments the notation engine (src/notation/) is wired into. Wind
   // already draws its own hand-built staff (drawStaff below); it is not
@@ -610,14 +655,33 @@ import { register as registerPlayalong } from './ui/playalong.js';
   };
   let validId = function (mod, id) { try { if (typeof id !== 'string' || id.length > 10) return false; if (id === 'bar2') return true; const k = id[0], r = id.slice(1); if (k === 'n' || k === 'w' || k === 'p' || k === 'v') return /^\d{1,3}$/.test(r); if (k === 's') return /^\d+f\d+$/.test(r) && MODS[mod].tuning && +r.split('f')[0] <= MODS[mod].tuning.length && +r.split('f')[0] >= 1; if (k === 'c') return !!CHORDS[r]; if (k === 'i') return /^\d{1,2}[adh]$/.test(r) && !!INTERVALS[parseInt(r, 10)]; if (k === 'q') return !!QUALS[r]; if (k === 'r') return !!CELLS[r]; return false; } catch (e) { return false; } };
 
-  // ---------- harmonica (10-hole diatonic in C) and the two tools ----------
-  const HARP = { b: [60, 64, 67, 72, 76, 79, 84, 88, 91, 96], d: [62, 67, 71, 74, 77, 81, 83, 86, 89, 93] };
+  // ---------- harmonica (10-hole diatonic, any of the 12 keys) and the two tools ----------
   const H = (...xs) => xs.map(x => 'h' + x);
-  MODS.harp = { name: 'Harmonica', tag: 'microphone', color: '#ff8fb8', input: 'sustain', exactPitch: true, fmin: 200, fmax: 2300, help: 'Harmonica: for a 10-hole diatonic harmonica in the key of C. Press Connect to let the page listen. Arrows pointing up mean blow, arrows pointing down mean draw. Aim for one clean hole at a time; if two holes sound together the page may not recognise the note.',
+  // Bend ids: 'y' + hole + 'x' + semitonesBent, e.g. 'y3x2' = hole 3 bent down
+  // two semitones. Bend availability (which holes bend, how deep) is
+  // key-invariant -- transposing the whole harp preserves the blow/draw gap
+  // in every hole -- so it is computed once from the C layout and reused by
+  // validId() for any key the learner picks.
+  const HY = (...xs) => xs.map(x => 'y' + x);
+  const HARP_BEND_DEPTHS = harpLayoutFor(0).map(hole => hole.bends.map(b => b.semitonesBent));
+  // The 12 key choices for the selector, in schema.js tonic order (0 = C).
+  const HARP_KEY_OPTS = NAMES.reduce((o, n, i) => { o[i] = [n + ' harmonica']; return o; }, {});
+  // fmin/fmax are getters, not fixed numbers: a harmonica in a low or high
+  // key sounds a different absolute pitch range than a C harp, and a stale
+  // C-only search window would make the microphone mishear (or miss
+  // entirely) a real hole on any other key. Computed from the CHOSEN key's
+  // own layout (src/audio/range.js's margin/rounding), so the window is
+  // always honest about what this harp, in this key, actually sounds.
+  const harpRangeFor = key => { const holes = harpLayoutFor(key); let lo = holes[0].blow, hi = holes[0].blow; holes.forEach(hole => { lo = Math.min(lo, hole.blow, hole.draw); hi = Math.max(hi, hole.blow, hole.draw); }); return rangeForInstrument({ range: { low: lo, high: hi } }); };
+  MODS.harp = { name: 'Harmonica', tag: 'microphone', color: '#ff8fb8', input: 'sustain', exactPitch: true,
+    get fmin() { return harpRangeFor((DB && DB.prefs && DB.prefs.harpKey) || 0).fmin; },
+    get fmax() { return harpRangeFor((DB && DB.prefs && DB.prefs.harpKey) || 0).fmax; },
+    help: 'Harmonica: for a 10-hole diatonic harmonica in any of the 12 keys -- pick your harmonica’s key below to match the one printed on it. Press Connect to let the page listen. Arrows pointing up mean blow, arrows pointing down mean draw. Aim for one clean hole at a time; if two holes sound together the page may not recognise the note. Later levels ask for bends: a draw or blow reed pulled down in pitch with your breath.',
     levels: [
       { name: 'Blow holes 4, 5 and 6', add: H('b4', 'b5', 'b6'), limit: 12 }, { name: 'Draw holes 4, 5 and 6', add: H('d4', 'd5', 'd6'), limit: 12 }, { name: 'Moves: blow to draw', task: 'seq', len: 2, limit: 10 },
       { name: 'Hole 7 completes the scale', add: H('d7', 'b7'), limit: 12 }, { name: 'Scale runs of three', task: 'seq', len: 3, limit: 9 }, { name: 'The low end: holes 1 to 3', add: H('b1', 'd1', 'b2', 'd2', 'b3', 'd3'), limit: 12 },
-      { name: 'The top end: holes 8 to 10', add: H('b8', 'd8', 'b9', 'd9', 'b10', 'd10'), limit: 12 }, { name: 'Long tones: two steady seconds', task: 'hold', limit: 14 }, { name: 'Runs of four', task: 'seq', len: 4, limit: 8 }
+      { name: 'The top end: holes 8 to 10', add: H('b8', 'd8', 'b9', 'd9', 'b10', 'd10'), limit: 12 }, { name: 'Long tones: two steady seconds', task: 'hold', limit: 14 }, { name: 'Runs of four', task: 'seq', len: 4, limit: 8 },
+      { name: 'Easy bends: one semitone down', add: HY('1x1', '2x1', '3x1', '4x1', '6x1', '8x1', '9x1', '10x1'), limit: 16 }, { name: 'Moderate bends: two semitones down', add: HY('2x2', '3x2', '10x2'), limit: 12 }, { name: 'The deepest bend: hole 3, three semitones down', add: HY('3x3'), limit: 8 }
     ] };
   MOD_IDS.push('harp');
   const TOOLS = {
@@ -649,8 +713,8 @@ import { register as registerPlayalong } from './ui/playalong.js';
   const VARIANT_PARENTS = variantParentsFrom(MODS, { 'bass-5-string': 'bass', 'ukulele-low-g': 'uke', 'ukulele-baritone': 'uke' });
   const TUNINGS = { gtr: ['Guitar', [40, 45, 50, 55, 59, 64]], bass: ['Bass', [28, 33, 38, 43]], uke: ['Ukulele', [67, 60, 64, 69]], vln: ['Violin', [55, 62, 69, 76]], chrom: ['Any note (chromatic)', []] };
   const _info = info, _valid = validId;
-  info = function (m, id, prefs) { if (id[0] === 'h') { const mm = /^h([bd])(\d+)$/.exec(id), dir = mm[1], hole = +mm[2], midi = HARP[dir][hole - 1]; return { kind: 'note', midi: midi, hole: hole, dir: dir, note: nname(midi), label: (dir === 'b' ? 'Blow ' : 'Draw ') + hole + ' (' + nname(midi) + ')', short: (dir === 'b' ? 'Blow ' : 'Draw ') + hole }; } return _info(m, id, prefs); };
-  validId = function (m, id) { if (typeof id === 'string' && id[0] === 'h') return /^h[bd]([1-9]|10)$/.test(id); return _valid(m, id); };
+  info = function (m, id, prefs) { const hk = (prefs && Number.isInteger(prefs.harpKey) && prefs.harpKey >= 0 && prefs.harpKey <= 11) ? prefs.harpKey : 0; if (id[0] === 'h') { const mm = /^h([bd])(\d+)$/.exec(id), dir = mm[1], hole = +mm[2], layout = harpLayoutFor(hk), midi = layout[hole - 1][dir === 'b' ? 'blow' : 'draw']; return { kind: 'note', midi: midi, hole: hole, dir: dir, note: nname(midi), label: (dir === 'b' ? 'Blow ' : 'Draw ') + hole + ' (' + nname(midi) + ')', short: (dir === 'b' ? 'Blow ' : 'Draw ') + hole }; } if (id[0] === 'y') { const mm = /^y(\d+)x(\d)$/.exec(id), hole = +mm[1], depth = +mm[2], layout = harpLayoutFor(hk), b = layout[hole - 1].bends.find(x => x.semitonesBent === depth), dir = b.action === 'draw' ? 'd' : 'b'; return { kind: 'note', midi: b.pitch, hole: hole, dir: dir, bend: depth, note: nname(b.pitch), label: (dir === 'b' ? 'Blow ' : 'Draw ') + hole + ' bent ' + depth + (depth === 1 ? ' semitone' : ' semitones') + ' (' + nname(b.pitch) + ')', short: (dir === 'b' ? 'Blow ' : 'Draw ') + hole + ' ↓' + depth }; } return _info(m, id, prefs); };
+  validId = function (m, id) { if (typeof id === 'string' && id[0] === 'h') return /^h[bd]([1-9]|10)$/.test(id); if (typeof id === 'string' && id[0] === 'y') { const mm = /^y([1-9]|10)x([1-3])$/.exec(id); return !!mm && HARP_BEND_DEPTHS[+mm[1] - 1].indexOf(+mm[2]) >= 0; } return _valid(m, id); };
   const _info2 = info, _valid2 = validId;
   info = function (m, id, prefs) { if (typeof id === 'string' && id[0] === 'j' && handsTogetherById(id)) { const ex = handsTogetherById(id); return { kind: 'hands-together', ex: ex, label: ex.label, short: ex.short }; } return _info2(m, id, prefs); };
   validId = function (m, id) { if (typeof id === 'string' && id[0] === 'j') return !!handsTogetherById(id); return _valid2(m, id); };
@@ -756,6 +820,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
     // sanitises to 'system' so a corrupt/old backup never leaves the toggle
     // stuck on nothing it can render.
     d.prefs.theme = ['system', 'light', 'dark'].indexOf(p.theme) >= 0 ? p.theme : 'system';
+    d.prefs.harpKey = (Number.isInteger(p.harpKey) && p.harpKey >= 0 && p.harpKey <= 11) ? p.harpKey : 0;
     // "Show: staff / names / both" is per-instrument and defaults to 'names',
     // i.e. today's display, untouched, for any instrument not set.
     const pn = (p.notate && typeof p.notate === 'object') ? p.notate : {};
@@ -1260,9 +1325,10 @@ import { register as registerPlayalong } from './ui/playalong.js';
     if (e) { const c = liveCents(e.info.midi, false); gauge(W * 0.66, H * 0.42, W * 0.3, c, c === null ? 'play a note' : Math.abs(c) < 10 ? 'in tune' : Math.round(Math.abs(c)) + ' cents ' + (c > 0 ? 'sharp' : 'flat')); const need = task.kind === 'hold' ? 2 : 0.5; g.fillStyle = '#5be08a'; g.fillRect(W * 0.66, H * 0.3, W * 0.3 * c01(holdFor / need), H * 0.025); }
   }
   function drawHarp(e, W, H) {
+    const hk = (Number.isInteger(DB.prefs.harpKey) && DB.prefs.harpKey >= 0 && DB.prefs.harpKey <= 11) ? DB.prefs.harpKey : 0, layout = harpLayoutFor(hk);
     const x0 = W * 0.06, w = W * 0.88, hw = w / 10, y0 = H * 0.36, hh = H * 0.3; rr(x0 - 10, y0 - 14, w + 20, hh + 28, 14); g.fillStyle = '#8f96a3'; g.fill(); rr(x0 - 2, y0, w + 4, hh, 6); g.fillStyle = '#1b1e26'; g.fill();
     for (let h = 1; h <= 10; h++) { const x = x0 + (h - 1) * hw, tb = e && e.info.hole === h && (e.reveal || e.failed); rr(x + hw * 0.16, y0 + hh * 0.2, hw * 0.68, hh * 0.6, 4); g.fillStyle = tb ? accent() : '#05070c'; g.fill(); g.fillStyle = '#e9edf6'; font(H * 0.07); g.textAlign = 'center'; g.fillText(String(h), x + hw / 2, y0 - H * 0.06);
-      if (DB.prefs.names) { g.fillStyle = '#93a0bd'; font(H * 0.042, 600); g.fillText('↑ ' + nname(HARP.b[h - 1]), x + hw / 2, y0 + hh + H * 0.1); g.fillText('↓ ' + nname(HARP.d[h - 1]), x + hw / 2, y0 + hh + H * 0.17); } }
+      if (DB.prefs.names) { g.fillStyle = '#93a0bd'; font(H * 0.042, 600); g.fillText('↑ ' + nname(layout[h - 1].blow), x + hw / 2, y0 + hh + H * 0.1); g.fillText('↓ ' + nname(layout[h - 1].draw), x + hw / 2, y0 + hh + H * 0.17); } }
     if (e) { const x = x0 + (e.info.hole - 0.5) * hw, up = e.info.dir === 'b'; g.fillStyle = accent(); font(H * 0.2); g.textAlign = 'center'; g.fillText(up ? '↑' : '↓', x, up ? y0 - H * 0.13 : y0 - H * 0.13); font(H * 0.06); g.fillStyle = '#e9edf6'; g.fillText(up ? 'BLOW' : 'DRAW', x + hw * 1.3, y0 - H * 0.17); const c = liveCents(e.info.midi, true); g.fillStyle = '#5be08a'; g.fillRect(x0, H * 0.95, w * c01(holdFor / (task.kind === 'hold' ? 2 : 0.5)), H * 0.025); if (heard && heard.freq) { font(H * 0.05, 600); g.fillStyle = '#93a0bd'; g.textAlign = 'left'; g.fillText('Hearing ' + nname(heard.midi, true) + (c !== null && Math.abs(c) < 100 ? ', ' + Math.round(Math.abs(c)) + ' cents ' + (c > 0 ? 'sharp' : 'flat') : ''), x0, H * 0.1); } }
   }
   function drawEar(W, H) { const t = task; if (t && t.revealed && t.played) { drawKeys(W * 0.05, H * 0.3, W * 0.9, H * 0.5, 48, 84, { target: t.played, good: [], names: DB.prefs.names }); g.fillStyle = '#e9edf6'; font(H * 0.09); g.textAlign = 'center'; g.fillText(t.played.map(m => nname(m)).join('  →  '), W / 2, H * 0.18); } else { g.fillStyle = accent(); font(H * 0.5); g.textAlign = 'center'; g.fillText('?', W / 2, H * 0.66); g.strokeStyle = accent(); g.lineWidth = 4; if (reducedMotion) { g.beginPath(); g.arc(W / 2, H * 0.5, H * 0.35, 0, 7); g.stroke(); } else { const k = (performance.now() / 600) % 1; g.globalAlpha = 1 - k; g.beginPath(); g.arc(W / 2, H * 0.5, H * (0.3 + 0.15 * k), 0, 7); g.stroke(); g.globalAlpha = 1; } } }
@@ -1520,6 +1586,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
     if (mod === 'voice' && rangeTest && rangeTest.stage === 'low') { btn('optRangeNext', 'Got it -- now the highest', () => { handleRangeTest('next'); renderOpts(); }, true); btn('optRangeCancel', 'Cancel', () => { handleRangeTest('cancel'); renderOpts(); }); }
     if (mod === 'voice' && rangeTest && rangeTest.stage === 'high') { btn('optRangeDone', 'Got it -- done', () => { handleRangeTest('finish'); renderOpts(); }, true); btn('optRangeCancel2', 'Cancel', () => { handleRangeTest('cancel'); renderOpts(); }); }
     if (mod === 'tuner') { sel('optTune', 'Instrument', TUNINGS, tunerKind, v => { tunerKind = v; tunerState = null; tunerLock = null; }); btn('tuneReset', 'Start over', () => { tuned = {}; tunerLock = null; }); }
+    if (mod === 'harp') sel('optHarpKey', 'My harmonica is in the key of', HARP_KEY_OPTS, DB.prefs.harpKey, v => { DB.prefs.harpKey = +v; task = null; if (pitchWorkletNode) { lastWorkletRangeSent = { fmin: MODS.harp.fmin, fmax: MODS.harp.fmax }; pitchWorkletNode.port.postMessage({ type: 'range', fmin: MODS.harp.fmin, fmax: MODS.harp.fmax }); } save(); });
     if (mod === 'rhy') btn('calBtn', calRun ? 'Listening for 8 taps…' : 'Calibrate timing (' + Math.round(DB.latencyMs || 0) + ' ms)', startCalibrate, false);
     if (mod === 'capture') { btn('capGo', cap.on ? 'Stop' : 'Listen', () => { if (cap.on) capStop(); else { ensureAudio(); cap.on = true; cap.notes = []; cap.start = now(); cap.curM = -1; renderOpts(); } }, true); btn('capPlay', 'Play it back', () => { ensureAudio(); const t0 = now() + 0.1; cap.notes.forEach(n => tone(n.m, t0 + n.t - (cap.notes[0] ? cap.notes[0].t : 0), Math.max(0.2, n.d))); }); const lessons = {}; MOD_IDS.filter(m => hasMasteryScheme(m)).forEach(m => { lessons[m] = [MODS[m].name]; }); sel('capTo', cap.notes.length + ' notes. Practise on', lessons, 'kbd', () => {}); btn('capUse', 'Make it a lesson', () => { if (!cap.notes.length) { say('Nothing captured yet.', 'no'); return; } DB.custom = cap.notes.map(n => n.m).slice(0, 300); save(); const to = $('capTo').value; setMod(to); customOn = true; renderOpts(); showAll(); coach('Your captured tune is loaded: ' + DB.custom.length + ' notes, four at a time. Each group repeats until it is clean. Press Start.'); }); }
     if (MODS[mod] && DB.custom && DB.custom.length && hasMasteryScheme(mod)) chk('optCustom', 'Practise my captured melody (' + DB.custom.length + ' notes)', customOn, v => { customOn = v; chunk = 0; task = null; showAll(); });
