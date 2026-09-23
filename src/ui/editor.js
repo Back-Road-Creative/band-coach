@@ -13,7 +13,6 @@ import { rangeForInstrument } from '../audio/range.js';
 import {
   moveNote,
   repitch,
-  resize,
   deleteNote,
   insertNote,
   splitNote,
@@ -21,7 +20,6 @@ import {
   setTie,
   setBpm,
   setMetre,
-  setKey,
   shiftBarline,
   halveDurations,
   doubleDurations,

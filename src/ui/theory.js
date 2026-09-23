@@ -12,7 +12,7 @@ import { spellingToString, parseSpelling } from '../core/theory/pitch.js';
 import { layoutMeasure } from '../notation/layout.js';
 import { drawPrimitives } from '../notation/draw-canvas.js';
 import { byId as instrumentsById, INSTRUMENTS } from '../instruments/index.js';
-import { initLessonState, sanitizeLessonState, recordAnswer } from './theory/lesson-state.js';
+import { sanitizeLessonState, recordAnswer } from './theory/lesson-state.js';
 import { keyboardDiagramKeys } from './theory/keyboard-diagram.js';
 import { ascendingMidis, chordMidis } from './theory/scale-run.js';
 

@@ -810,12 +810,16 @@ import { register as registerPlayalong } from './ui/playalong.js';
   }
   function sanitizeDB(v, defaultLatencyMs, modelNow) {
     const notate = {}; NOTATE_MOD_IDS.forEach(m => { notate[m] = 'names'; });
-    const d = { v: 1, mods: {}, sessions: [], prefs: { mod: 'kbd', wind: 'bb', voice: 'low', names: true, noiseFloor: null, inputDeviceId: null, notate: notate } }; v = (v && typeof v === 'object') ? v : {};
+    const d = { v: 1, mods: {}, sessions: [], prefs: { mod: 'kbd', wind: 'bb', voice: 'low', names: true, noiseFloor: null, inputDeviceId: null, notate: notate, theme: 'system' } }; v = (v && typeof v === 'object') ? v : {};
     MOD_IDS.forEach(m => { d.mods[m] = sanitizeModel(m, v.mods && v.mods[m], modelNow); });
     if (Array.isArray(v.sessions)) d.sessions = v.sessions.filter(x => x && typeof x.d === 'string' && MODS[x.mod]).slice(-60).map(x => ({ d: x.d.slice(0, 10), mod: x.mod, min: num(x.min, 0, 0, 600), acc: num(x.acc, 0, 0, 1), a1: num(x.a1, 0, 0, 1), a2: num(x.a2, 0, 0, 1), from: num(x.from, 1, 1, 80), to: num(x.to, 1, 1, 80), breaks: num(x.breaks, 0, 0, 99) }));
     const p = v.prefs || {}; if (MODS[p.mod]) d.prefs.mod = p.mod; if (WIND_KINDS[p.wind]) d.prefs.wind = p.wind; d.prefs.voiceRange = (p.voiceRange && typeof p.voiceRange === 'object' && Number.isFinite(p.voiceRange.low) && Number.isFinite(p.voiceRange.high) && p.voiceRange.low < p.voiceRange.high) ? { low: clamp(Math.round(p.voiceRange.low), 24, 96), high: clamp(Math.round(p.voiceRange.high), 24, 96) } : null; const VKp = Object.assign({}, VOICE_KINDS, d.prefs.voiceRange ? { mine: ['My range (found by test)', tonicFromRange(exerciseRangeFor(d.prefs.voiceRange)).tonic] } : {}); if (VKp[p.voice]) d.prefs.voice = p.voice; d.prefs.names = p.names !== false;
     d.prefs.noiseFloor = (typeof p.noiseFloor === 'number' && isFinite(p.noiseFloor) && p.noiseFloor >= 0) ? clamp(p.noiseFloor, 0, 1) : null;
     d.prefs.inputDeviceId = typeof p.inputDeviceId === 'string' && p.inputDeviceId ? p.inputDeviceId : null;
+    // Theme J1: System/Light/Dark, an unrecognised or missing saved value
+    // sanitises to 'system' so a corrupt/old backup never leaves the toggle
+    // stuck on nothing it can render.
+    d.prefs.theme = ['system', 'light', 'dark'].indexOf(p.theme) >= 0 ? p.theme : 'system';
     d.prefs.harpKey = (Number.isInteger(p.harpKey) && p.harpKey >= 0 && p.harpKey <= 11) ? p.harpKey : 0;
     // "Show: staff / names / both" is per-instrument and defaults to 'names',
     // i.e. today's display, untouched, for any instrument not set.
@@ -1514,8 +1518,22 @@ import { register as registerPlayalong } from './ui/playalong.js';
   }
 
   // ---------- panels ----------
+  // Theme J1: each instrument re-tints the page with its own brand colour
+  // via --accent (below) -- a colour only ever picked to sit on the dark
+  // stage as either a button BACKGROUND (with fixed dark text on top, so its
+  // own contrast need doesn't depend on page theme) or as plain foreground
+  // TEXT on the page ground (which does: the same colour that reads on a
+  // near-black ground can fail 4.5:1 on the light palette's near-white one).
+  // --accent-ink is the second reading of that same brand colour for the
+  // text case only -- darkened (WCAG relative-luminance contrast, same
+  // formula as tests/unit/theme-contrast.test.mjs) only when needed, so
+  // --accent itself stays the raw brand colour everywhere buttons/fills use
+  // it as a background. See src/styles.css for which selectors read which.
+  function themeIsLight() { return DB.prefs.theme === 'light' || (DB.prefs.theme !== 'dark' && matchMedia('(prefers-color-scheme: light)').matches); }
+  function accentInkFor(hex) { if (!themeIsLight()) return hex; const n = parseInt(hex.slice(1), 16), r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255, lin = c => { c /= 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }, lum = (rr, gg, bb) => 0.2126 * lin(rr) + 0.7152 * lin(gg) + 0.0722 * lin(bb), gl = 0.929, l = lum(r, g, b); return (Math.max(l, gl) + 0.05) / (Math.min(l, gl) + 0.05) >= 4.5 ? hex : '#' + [r, g, b].map(c => Math.round(c * 0.45).toString(16).padStart(2, '0')).join(''); }
   function showAll() {
-    const tool = !!TOOLS[mod]; document.documentElement.style.setProperty('--accent', (MODS[mod] || TOOLS[mod]).color === '#e9edf6' ? '#9fb4d8' : (MODS[mod] || TOOLS[mod]).color);
+    const tool = !!TOOLS[mod], accentRaw = (MODS[mod] || TOOLS[mod]).color === '#e9edf6' ? '#9fb4d8' : (MODS[mod] || TOOLS[mod]).color;
+    document.documentElement.style.setProperty('--accent', accentRaw); document.documentElement.style.setProperty('--accent-ink', accentInkFor(accentRaw));
     $('helpText').innerHTML = ''; const st = document.createElement('strong'); st.textContent = 'How this one works: '; $('helpText').appendChild(st); $('helpText').appendChild(document.createTextNode((MODS[mod] || TOOLS[mod]).help));
     document.querySelectorAll('.side .card, .side .stats, #playBtn, #resetBtn').forEach(el => { el.style.display = tool ? 'none' : ''; }); $('tapPad').hidden = mod !== 'rhy'; $('timeFill').parentElement.style.visibility = tool || mod === 'rhy' ? 'hidden' : 'visible';
     if (tool) { $('prompt').textContent = TOOLS[mod].name; $('hint').textContent = mod === 'tuner' ? 'One open string at a time.' : 'One note at a time.'; $('choices').hidden = true; $('replayBtn').hidden = true; $('showMeBtn').hidden = true; return; }
@@ -1695,6 +1713,11 @@ import { register as registerPlayalong } from './ui/playalong.js';
   $('easierBtn').addEventListener('click', function () { this.blur(); jump(-1); }); $('harderBtn').addEventListener('click', function () { this.blur(); jump(1); });
   $('resetBtn').addEventListener('click', function () { this.blur(); if (sess) endSession(); DB.mods[mod] = S = freshModel(); recent = []; streak = 0; coach(MODS[mod].name + ' progress cleared. Back to level 1.'); save(); showAll(); });
   $('optNames').addEventListener('change', function () { DB.prefs.names = this.checked; save(); });
+  // Theme J1: 'system' removes the attribute so styles.css's own
+  // prefers-color-scheme media query decides; 'light'/'dark' pin it,
+  // overriding the OS setting either way (see src/styles.css).
+  function applyTheme(t) { if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t); else document.documentElement.removeAttribute('data-theme'); }
+  $('optTheme').addEventListener('change', function () { DB.prefs.theme = this.value; applyTheme(this.value); save(); });
 
   function setMod(m) {
     if (sess) endSession(); mod = m; if (MODS[m]) { S = DB.mods[m]; DB.prefs.mod = m; } customOn = false; grooveOn = false; groove = null; task = null; bar = null; heard = null; cap.on = false; tunerState = null; tunerLock = null; diagInputFrames = []; diagLastState = null;
@@ -1831,7 +1854,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
     if (!result.ok) { coach(result.error); return result; }
     const priorLatencyMs = DB && DB.latencyMs;
     modelNow = Date.now(); DB = sanitizeDB(result.db, undefined, modelNow); DB.latencyMs = num(priorLatencyMs, DB.latencyMs, 0, 300); if (!Array.isArray(DB.custom)) DB.custom = [];
-    $('optNames').checked = DB.prefs.names; setMod(DB.prefs.mod); coach('Backup restored.');
+    $('optNames').checked = DB.prefs.names; $('optTheme').value = DB.prefs.theme; applyTheme(DB.prefs.theme); setMod(DB.prefs.mod); coach('Backup restored.');
     return result;
   }
   $('backupSaveBtn').addEventListener('click', function () { this.blur(); saveBackup(); });
@@ -1933,7 +1956,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
     box.hidden = empty; const disclosure = $('panelPickerDisclosure'); if (disclosure) disclosure.hidden = empty;
     panels.list().forEach(p => { const b = document.createElement('button'); b.type = 'button'; b.dataset.panel = p.id; b.style.setProperty('--c', p.color || '#93a0bd'); b.setAttribute('aria-pressed', 'false'); b.appendChild(document.createTextNode(p.name)); const sm = document.createElement('small'); sm.textContent = p.tag || ''; b.appendChild(sm); b.addEventListener('click', () => { b.blur(); openPanel(p.id); }); box.appendChild(b); });
   }
-  loadDB(); if (!Array.isArray(DB.custom)) DB.custom = []; $('optNames').checked = DB.prefs.names; buildPicker(); buildPanelPicker(); setMod(mod); requestAnimationFrame(frame);
+  loadDB(); if (!Array.isArray(DB.custom)) DB.custom = []; $('optNames').checked = DB.prefs.names; $('optTheme').value = DB.prefs.theme; applyTheme(DB.prefs.theme); buildPicker(); buildPanelPicker(); setMod(mod); requestAnimationFrame(frame);
   const hook = !__DEBUG_HOOK__ ? null : { state: () => S, db: () => DB, sess: () => sess, task: () => task, cur: cur, note: onNote, answer: answer, tap: onTap, bar: () => bar, playing: () => playing, setMod: setMod, testSource: testSource, heard: () => heard, yin: yin, cap: () => cap, tuner: () => tunerState, tunerLock: () => tunerLock, deaf: () => deafWindow.isDeaf(), deafUntil: () => deafWindow.until(), exportProgress: doExportProgress, importProgress: doImportProgress, audioNow: audioNow, modelNow: () => modelNow };
   // Debug-hook slots: replace ONLY your own line with
   //   if (__DEBUG_HOOK__) Object.assign(hook, { … });

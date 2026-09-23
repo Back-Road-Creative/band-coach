@@ -26,6 +26,8 @@ reach the server, also with a link to get the current file. It never checks on i
 a press — and a development build (one you built yourself rather than downloaded) says so instead
 of checking, since there is nothing meaningful to compare.
 
+The app follows your system's light/dark setting automatically, or pick Light/Dark yourself from the Theme control next to "Show note names" in the side rail.
+
 If your microphone or keyboard is not being heard, the next two sections are the ones to read.
 Everything from "Build it from source" down is for people working on the app itself.
 
@@ -186,6 +188,16 @@ sessions; a song counts as passed once its practice lesson has been played throu
 "Export as a challenge" turns a learner's own saved library into a downloadable `.json` a teacher
 can pass along to another student, entirely by file exchange — no account, no server, no network
 call involved.
+## Play along with a recording
+
+The "Play Along" panel (`src/ui/playalong.js`) opens an audio file of a song, works out its
+tempo, key and chords, and lets you loop any section slower — pitch unchanged — to learn your
+part. "Record a take" does the same starting point a different way: press it, play or sing into
+the mic, press it again to stop, and that take goes straight into the same analysis and loop —
+a duet with yourself, with no file to save or open first. The capture never leaves the device and
+mic permission is only asked for on that press; the pure chunk-accumulation logic (one bounded,
+five-minute-capped `Float32Array` out of whatever small buffers the mic hands back) lives in
+`src/audio/take-recorder.js`.
 
 ## Notation engine
 
@@ -447,6 +459,14 @@ integer-tick durations, so triplets and swing are exact fractions rather than ro
 `buildPhrase`/`onsetsOf`/`validateBar` are unit-tested in isolation under `tests/unit/rhythm.test.mjs`.
 Rhythm reading (`rhy`) gains eight further levels built on it, after the original ten-cell levels:
 rests, ties, dotted-eighth figures, triplets, 3/4, 6/8, swing, and two-bar phrases.
+
+## Ear training
+
+The Ear training screen (`src/core/ear/*`, wired in `src/ui/ear.js`) has nine listen-and-answer
+exercises, each leveling up or down on its own: scale degrees, melodic dictation, dictation from
+real song phrases (a 1-3 bar phrase pulled straight out of a starter song's melody -- which song
+it was is only revealed after grading, never before), rhythm dictation, chord progressions,
+scales and modes, chord inversions, in-tune-or-not intonation discrimination, and sing-it-back.
 
 ## Find your own singing range
 

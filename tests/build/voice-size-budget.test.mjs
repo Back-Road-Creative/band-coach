@@ -47,9 +47,13 @@ test('the voices budget fails loudly if its module is renamed away', async () =>
 // A SEPARATE concern from the voices budget, named separately rather than
 // ridden along on it: the whole point of this app is a single file a
 // non-technical person downloads and double-clicks, so the bundle as a whole
-// has a ceiling too. Current size is ~590KB; this leaves room to build
-// without leaving room to embed a media library by accident.
-const TOTAL_BUDGET_BYTES = 640 * 1024;
+// has a ceiling too. It was 640KB. Raised to 1MB per plan decision D1 ("raise
+// only if A1's breakdown shows T0 cannot fit -- then to 1 MB, measured"):
+// measured 645,040 bytes on main after the dead-code sweep found 0 bytes to
+// cut, with the next open features alone needing ~13KB more. The release
+// file is minified (~362KB) and has its own 1.5MB gate in tests/release.
+// 1MB still leaves no room to embed a media library by accident.
+const TOTAL_BUDGET_BYTES = 1024 * 1024;
 
 test('the built single-file app stays under its total size ceiling', async () => {
   const outDir = mkdtempSync(join(tmpdir(), 'band-coach-total-budget-'));
