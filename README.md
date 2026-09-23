@@ -159,7 +159,9 @@ appears once you have actually practised a while without one — never on a fres
 there is nothing yet to lose. The "My progress" panel also shows a practice calendar (minutes and
 level changes, one cell per day, for the last 8 weeks) and a daily minutes goal with a streak — the
 practice log itself only keeps the most recent 60 sessions, so days older than that say "earlier
-sessions not kept" rather than a false zero.
+sessions not kept" rather than a false zero. The backup, restore and "Check for updates" messages
+above are read from the English string table in `src/core/i18n.js` (`t(id, params)`) rather than
+hardcoded — a scaffold for a future locale, though only English ships today.
 
 ## Turning an audio file into notes
 
