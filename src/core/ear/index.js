@@ -6,6 +6,7 @@
 
 import * as degrees from './degrees.js';
 import * as melodicDictation from './melodic-dictation.js';
+import * as songDictation from './song-dictation.js';
 import * as rhythmDictation from './rhythm-dictation.js';
 import * as progressions from './progressions.js';
 import * as scalesModes from './scales-modes.js';
@@ -20,6 +21,7 @@ function entry(mod, label) {
 export const EAR_EXERCISES = {
   degrees: entry(degrees, 'Scale degrees'),
   'melodic-dictation': entry(melodicDictation, 'Melodic dictation'),
+  'song-dictation': entry(songDictation, 'Dictation from songs'),
   'rhythm-dictation': entry(rhythmDictation, 'Rhythm dictation'),
   progressions: entry(progressions, 'Chord progressions'),
   'scales-modes': entry(scalesModes, 'Scales and modes'),
