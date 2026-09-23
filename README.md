@@ -157,6 +157,13 @@ there is nothing yet to lose.
 `src/audio/file-frames.js` is a pure function, `framesFromPCM`, that walks a decoded mono audio
 clip (a plain `Float32Array` of samples plus its real sample rate) and produces the same
 `frames`/`onsets` shape `src/song/transcribe.js` already reads from a live "Record a tune" mic
+capture — so it feeds transcribe.js exactly the way a live capture does, teaching that module
+nothing new. The "Record a tune" panel wires this in directly: alongside Listen/Stop, "Or choose
+an audio file" lets a learner pick a recording instead of using the microphone, and it goes
+through the same check-list step before anything can be practised or saved. Like the rest of this
+app's pitch tracking, it is monophonic only: a chord or a second voice reads as whichever single
+pitch the detector locks onto, not as separate notes — so this writes down one melody line at a
+time, from a file the same as from the mic.
 capture — so a file-import panel can be wired up later without teaching transcribe.js anything
 new. Like the rest of this app's pitch tracking, it is monophonic only: a chord or a second voice
 reads as whichever single pitch the detector locks onto, not as separate notes.
@@ -292,6 +299,26 @@ A single detected pitch — as a monophonic microphone pitch detector would repo
 most one of the two notes and never both at once, so that grading is approximate
 (`gradeHandsTogetherApprox`) and the on-screen feedback says so in plain words rather than claiming
 both hands were heard.
+
+## Harmonica: any of the 12 keys, plus bends
+
+The harmonica mod is not locked to a C harmonica. A "My harmonica is in the key of" selector on
+the harmonica options panel picks any of the 12 keys, matching whatever is printed on your own
+instrument; changing it starts a fresh exercise. Hole numbers and blow/draw directions stay the
+same for every key — a 10-hole diatonic harmonica is built the same way whatever pitch it is
+tuned to — only the pitch each hole sounds moves. `src/instruments/how/harmonica.js`'s
+`layoutFor(key)` computes the ten-hole blow/draw table, and every reachable bend note, for any
+key 0-11 (0 = C, matching the app's usual tonic convention); `src/app.js`'s harp lookups and the
+on-screen diagram (`drawHarp`) read from it instead of a fixed C table, and the microphone's
+search window (`MODS.harp.fmin`/`fmax`) is computed from the chosen key's own layout so a
+higher- or lower-keyed harp is not silently mis-heard.
+
+Draw and blow bends — a reed pulled down in pitch with your breath — are new practice levels
+appended after the nine open-note levels, so an existing learner's saved level numbers do not
+shift. A bend is graded by its exact bent pitch, the same way an open note is graded by its own
+pitch. Bend availability (which holes bend, and how deep) does not change with key, since
+transposing the whole harmonica preserves the blow/draw gap inside every hole.
+
 ## Reference tones sound like the instrument
 
 Every reference/example tone (the note a lesson plays for you to match or tune to) goes through
