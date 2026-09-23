@@ -122,9 +122,21 @@ export function importMusicXml(rawText, options = {}) {
   }
 
   const parts = [];
+  // `bpm`/`key`/`metre` track the CURRENT value while walking the score (so a
+  // later value can be compared against it to detect a change); `initial*`
+  // is frozen at the first sighting and is what the song's top-level
+  // bpm/key/metre stays as — mid-song values only ever reach the change lists.
   let bpm;
+  let initialBpm;
   let key = null;
+  let initialKey = null;
+  let keySet = false; // false until the first <key>: that one sets the initial key, not a change
   let metre = { num: 4, den: 4 };
+  let initialMetre = metre;
+  let metreSet = false; // false until the first <time>: that one sets the initial metre, not a change
+  const tempoMap = []; // sorted-by-tick change lists (model.js shape); empty ones stay off the song
+  const metreChanges = [];
+  const keyChanges = [];
 
   for (const partNode of elements(root, 'part')) {
     const partId = attr(partNode, 'id', `part-${parts.length + 1}`);
@@ -142,6 +154,10 @@ export function importMusicXml(rawText, options = {}) {
 
     for (const measure of elements(partNode, 'measure')) {
       measureStartTick = voiceCursor.size ? Math.max(...voiceCursor.values()) : 0;
+      // Where a <sound tempo> found mid-measure should land: the measure's
+      // start until a note has been read, then that note's end (= the next
+      // event's start) — the playhead position at the point the file states it.
+      let tickCursor = measureStartTick;
       for (const child of measure.children) {
         if (child.type !== 'element') continue;
 
@@ -149,16 +165,33 @@ export function importMusicXml(rawText, options = {}) {
           const divText = childText(child, 'divisions');
           if (divText !== undefined) divisions = num(divText, divisions);
           const keyNode = element(child, 'key');
-          if (keyNode) key = keyFromFifthsAndMode(num(childText(keyNode, 'fifths'), 0), childText(keyNode, 'mode'), warnings);
+          if (keyNode) {
+            const newKey = keyFromFifthsAndMode(num(childText(keyNode, 'fifths'), 0), childText(keyNode, 'mode'), warnings);
+            if (!keySet) { key = newKey; initialKey = newKey; keySet = true; }
+            else if (newKey.tonic !== key.tonic || newKey.mode !== key.mode) { keyChanges.push({ tick: measureStartTick, ...newKey }); key = newKey; }
+          }
           const timeNode = element(child, 'time');
-          if (timeNode) metre = { num: num(childText(timeNode, 'beats'), metre.num), den: num(childText(timeNode, 'beat-type'), metre.den) };
+          if (timeNode) {
+            const newMetre = { num: num(childText(timeNode, 'beats'), metre.num), den: num(childText(timeNode, 'beat-type'), metre.den) };
+            if (!metreSet) { metre = newMetre; initialMetre = newMetre; metreSet = true; }
+            else if (newMetre.num !== metre.num || newMetre.den !== metre.den) { metreChanges.push({ tick: measureStartTick, ...newMetre }); metre = newMetre; }
+          }
           const transposeNode = element(child, 'transpose');
           if (transposeNode) transposeSemitones = num(childText(transposeNode, 'chromatic'), 0) + 12 * num(childText(transposeNode, 'octave-change'), 0);
           continue;
         }
-        if (child.name === 'sound') {
-          const tempo = attr(child, 'tempo');
-          if (tempo !== undefined && bpm === undefined) bpm = num(tempo, undefined);
+        if (child.name === 'sound' || child.name === 'direction') {
+          // Real scores usually wrap <sound> in <direction><sound tempo="…"/></direction>;
+          // the pending exporter also writes it as a direct child of <measure>.
+          const soundNode = child.name === 'sound' ? child : element(child, 'sound');
+          const tempoAttr = soundNode ? attr(soundNode, 'tempo') : undefined;
+          if (tempoAttr !== undefined) {
+            const newBpm = num(tempoAttr, undefined);
+            if (newBpm !== undefined) {
+              if (bpm === undefined) { bpm = newBpm; initialBpm = newBpm; }
+              else if (newBpm !== bpm) { tempoMap.push({ tick: tickCursor, bpm: newBpm }); bpm = newBpm; }
+            }
+          }
           continue;
         }
         if (child.name === 'backup' || child.name === 'forward') {
@@ -194,7 +227,7 @@ export function importMusicXml(rawText, options = {}) {
               notes.push(noteObj);
             }
           }
-          if (!isChord) voiceCursor.set(voice, start + ticks);
+          if (!isChord) { voiceCursor.set(voice, start + ticks); tickCursor = start + ticks; }
           lastNoteStart = start;
         }
       }
@@ -205,7 +238,7 @@ export function importMusicXml(rawText, options = {}) {
     parts.push({ id: partId, name: partNames[partId] || partId, notes });
   }
 
-  if (bpm === undefined) { bpm = 120; warnings.push('no tempo found; defaulted to 120 bpm'); }
+  if (initialBpm === undefined) { initialBpm = 120; warnings.push('no tempo found; defaulted to 120 bpm'); }
 
   const workNode = element(root, 'work');
   const title = childText(root, 'movement-title') || (workNode ? childText(workNode, 'work-title') : undefined) || null;
@@ -220,12 +253,15 @@ export function importMusicXml(rawText, options = {}) {
     composer,
     licence,
     source: null,
-    key,
-    metre,
-    bpm,
+    key: initialKey,
+    metre: initialMetre,
+    bpm: initialBpm,
     ticksPerQuarter: TICKS_PER_QUARTER,
     parts,
     chords: [],
   };
+  if (tempoMap.length) song.tempoMap = tempoMap;
+  if (metreChanges.length) song.metreChanges = metreChanges;
+  if (keyChanges.length) song.keyChanges = keyChanges;
   return { song, warnings };
 }

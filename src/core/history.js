@@ -14,7 +14,9 @@
 // Wiring notes: call `summarize(DB.sessions, { now: Date.now() })` for the
 // history view; call `toTeacherSummary(DB, { now, learnerName })` for the
 // shareable report (it also reads `DB.mods[mod].level` for "levels
-// reached", if `DB.mods` is present — it degrades gracefully without it).
+// reached", if `DB.mods` is present — it degrades gracefully without it);
+// call `weeklyReport(DB, { now, learnerName, goalMin })` for the printable
+// weekly report (src/ui/history.js turns it into markup and prints it).
 
 const DAY_MS = 86400000;
 const clamp = (x, lo, hi) => Math.min(hi, Math.max(lo, x));
@@ -241,6 +243,57 @@ export function ledger(sessions, { now, weeks = 8, goalMin = 15 } = {}) {
   }
 
   return { weeks, goalMin, days, goalStreak, truncated: days.some((d) => d.notKept) };
+}
+
+/**
+ * A printable Sunday-through-Saturday-style report of the last 7 days
+ * (today plus the 6 before it), for a teacher or parent to hold on paper.
+ * Reuses ledger() for the day cells (so goal-met and the honest "not kept"
+ * flag stay in sync with the practice calendar) and adds a per-instrument
+ * breakdown restricted to sessions inside that same window — no metric here
+ * is invented; everything traces back to summarize()/ledger()'s own data.
+ * Pure, no DOM: `src/ui/history.js` turns this into markup and calls
+ * `window.print()`.
+ */
+export function weeklyReport(db, { now, learnerName, goalMin = 15 } = {}) {
+  const d = db && typeof db === 'object' ? db : {};
+  const nowMs = typeof now === 'number' ? now : Date.now();
+  const l = ledger(d.sessions, { now: nowMs, weeks: 1, goalMin });
+  const windowStart = l.days[0].day;
+  const windowEnd = l.days[l.days.length - 1].day;
+
+  const inWindow = validSessions(d.sessions).filter((s) => {
+    const dk = dayKey(s._date);
+    return dk >= windowStart && dk <= windowEnd;
+  });
+  const byMod = new Map();
+  inWindow.forEach((s) => {
+    const m = byMod.get(s.mod) || { mod: s.mod, minutes: 0, sessions: 0 };
+    m.minutes += s.min;
+    m.sessions += 1;
+    byMod.set(s.mod, m);
+  });
+  const perInstrument = Array.from(byMod.values())
+    .map((m) => ({ mod: m.mod, minutes: Math.round(m.minutes * 10) / 10, sessions: m.sessions }))
+    .sort((a, b) => b.minutes - a.minutes);
+
+  const totalMinutes = Math.round(l.days.reduce((sum, day) => sum + day.minutes, 0) * 10) / 10;
+  const daysPractised = l.days.filter((day) => day.sessions > 0).length;
+  const daysGoalMet = l.days.filter((day) => day.metGoal).length;
+  const name = learnerName && String(learnerName).trim() ? String(learnerName).trim() : 'This learner';
+
+  return {
+    name,
+    weekStart: windowStart,
+    weekEnd: windowEnd,
+    goalMin: l.goalMin,
+    days: l.days,
+    totalMinutes,
+    daysPractised,
+    daysGoalMet,
+    perInstrument,
+    truncated: l.truncated,
+  };
 }
 
 const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
