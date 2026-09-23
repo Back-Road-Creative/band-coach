@@ -296,15 +296,26 @@ import { register as registerPlayalong } from './ui/playalong.js';
     sum.__monoRouteInterval = setInterval(route, 300);
     return sum;
   }
+  // #ioBtn stays visible (ioRefresh) until micReady flips true, so an
+  // impatient double-click -- easy while waiting on the permission prompt --
+  // used to fire getUserMedia() twice concurrently: the loser's MediaStream
+  // was dropped with its tracks never stopped, leaving the OS mic indicator
+  // lit until the tab closed. Sharing one in-flight promise across
+  // concurrent callers means only one getUserMedia() call is ever made.
+  let openMicPromise = null;
   async function openMic() {
     ensureAudio(); if (micReady) return true;
+    if (openMicPromise) return openMicPromise;
     const base = { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: { ideal: 2 } };
     const wanted = DB.prefs.inputDeviceId ? { ...base, deviceId: { exact: DB.prefs.inputDeviceId } } : base;
-    let st;
-    try { st = await navigator.mediaDevices.getUserMedia({ audio: wanted }); }
-    catch (e) { if (!DB.prefs.inputDeviceId) throw e; st = await navigator.mediaDevices.getUserMedia({ audio: base }); }
-    micStream = st; const src = actx.createMediaStreamSource(st); wireAnalysers(monoSum(src)); micReady = true;
-    ensurePitchWorklet(); refreshMicDevices(); return true;
+    openMicPromise = (async () => {
+      let st;
+      try { st = await navigator.mediaDevices.getUserMedia({ audio: wanted }); }
+      catch (e) { if (!DB.prefs.inputDeviceId) throw e; st = await navigator.mediaDevices.getUserMedia({ audio: base }); }
+      micStream = st; const src = actx.createMediaStreamSource(st); wireAnalysers(monoSum(src)); micReady = true;
+      ensurePitchWorklet(); refreshMicDevices(); return true;
+    })();
+    try { return await openMicPromise; } finally { openMicPromise = null; }
   }
   async function refreshMicDevices() {
     if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return;
@@ -845,9 +856,23 @@ import { register as registerPlayalong } from './ui/playalong.js';
     d.panels = sanitizePanelData(v.panels);
     return d;
   }
-  function loadDB() { modelNow = Date.now(); let v = null; try { v = migrateDB(JSON.parse(localStorage.getItem(KEY) || 'null')); } catch (e) {} hasSavedMod = !!(v && v.prefs && MODS[v.prefs.mod] && TOOL_MOD_IDS.indexOf(v.prefs.mod) < 0); DB = sanitizeDB(v, actx ? (actx.outputLatency || actx.baseLatency || 0) * 1000 : 0, modelNow); mod = DB.prefs.mod; S = DB.mods[mod]; gates = gatesFor(DB.prefs.noiseFloor); setNoteNaming(DB.prefs.noteNaming); }
+  // The exact string this page last read from or wrote to storage. flushSave()
+  // compares against it so a page going away never clobbers a newer write made
+  // by someone else in the meantime (another tab, a restored backup).
+  let lastStored = null;
+  function loadDB() { modelNow = Date.now(); let v = null; try { lastStored = localStorage.getItem(KEY); v = migrateDB(JSON.parse(lastStored || 'null')); } catch (e) {} hasSavedMod = !!(v && v.prefs && MODS[v.prefs.mod] && TOOL_MOD_IDS.indexOf(v.prefs.mod) < 0); DB = sanitizeDB(v, actx ? (actx.outputLatency || actx.baseLatency || 0) * 1000 : 0, modelNow); mod = DB.prefs.mod; S = DB.mods[mod]; gates = gatesFor(DB.prefs.noiseFloor); setNoteNaming(DB.prefs.noteNaming); }
   let saveTimer = null;
-  function save() { if (saveTimer) return; saveTimer = setTimeout(() => { saveTimer = null; try { if (MODS[mod]) DB.mods[mod] = S = sanitizeModel(mod, S, modelNow); localStorage.setItem(KEY, JSON.stringify(DB)); } catch (e) {} }, 1200); }
+  function writeDB() { try { if (MODS[mod]) DB.mods[mod] = S = sanitizeModel(mod, S, modelNow); lastStored = JSON.stringify(DB); localStorage.setItem(KEY, lastStored); } catch (e) {} }
+  function save() { if (saveTimer) return; saveTimer = setTimeout(() => { saveTimer = null; writeDB(); }, 1200); }
+  // Closing or reloading within the 1200ms debounce window used to lose
+  // whatever save() just queued -- nothing ever flushed it early. pagehide
+  // fires on tab close, navigation and reload alike; visibilitychange with
+  // document.hidden also catches a learner switching tabs/apps without
+  // closing this one, which pagehide alone would miss.
+  // Skipped when storage no longer holds what this page last saw: the newer
+  // write wins, exactly as it would have had the debounce been cancelled.
+  function flushSave() { if (!saveTimer) return; let cur; try { cur = localStorage.getItem(KEY); } catch (e) { return; } if (cur !== lastStored) return; clearTimeout(saveTimer); saveTimer = null; writeDB(); }
+  window.addEventListener('pagehide', flushSave);
   // `now` is always the caller's `modelNow` (frozen per page load/import,
   // never Date.now() read live) — see the comment on `modelNow` above.
   const it = (id, now) => S.item[id] || (S.item[id] = Object.assign(migrateItem({ m: 0.4 }, now), { seen: 0 }));
@@ -1723,7 +1748,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
   $('playBtn').addEventListener('click', function () { this.blur(); if (!sess) startSession(); else if (paused) resume(); else takeBreak('user'); });
   $('endBtn').addEventListener('click', function () { this.blur(); endSession(); }); $('endBtn2').addEventListener('click', endSession); $('backBtn').addEventListener('click', resume);
   $('snoozeBtn').addEventListener('click', () => { sess.snoozeUntil = Date.now() + 5 * 60000; sess.tiredFor = 0; S.ready = Math.min(S.ready, 0.6); pauseInfo = { at: Date.now(), secs: 0 }; resume(); coach('Five more minutes, then I will ask again. I have eased off the pace meanwhile.'); });
-  document.addEventListener('visibilitychange', () => { if (document.hidden && playing) takeBreak('hidden'); wakeLock.handleVisibilityChange(document); });
+  document.addEventListener('visibilitychange', () => { if (document.hidden && playing) takeBreak('hidden'); if (document.hidden) flushSave(); wakeLock.handleVisibilityChange(document); });
   function jump(dl) { const nl = Math.max(1, S.level + dl); if (nl === S.level) return; S.level = nl; S.ready = 0.3; task = null; coach((dl < 0 ? 'Moved down' : 'Skipped ahead') + ' to level ' + S.level + ': ' + D().name + '.'); save(); showAll(); }
   $('easierBtn').addEventListener('click', function () { this.blur(); jump(-1); }); $('harderBtn').addEventListener('click', function () { this.blur(); jump(1); });
   $('resetBtn').addEventListener('click', function () { this.blur(); if (sess) endSession(); DB.mods[mod] = S = freshModel(); recent = []; streak = 0; coach(t('reset.progressCleared', { name: MODS[mod].name })); save(); showAll(); });
