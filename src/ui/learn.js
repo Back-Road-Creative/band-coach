@@ -47,6 +47,8 @@ import { framesFromPCM } from '../audio/file-frames.js';
 import { transcribe } from '../song/transcribe.js';
 import { rangeForInstrument } from '../audio/range.js';
 import { renderPlayItOnCards, requestOpenSong } from './songs.js';
+import { requestOpenInEditor } from './editor.js';
+import { requestPlayalongRecording } from './playalong.js';
 import { createRecorder } from './editor/record.js';
 import { countInTimes, clampBpm, DEFAULT_BPM } from './learn/count-in.js';
 import { rmsLevel } from './learn/level.js';
@@ -296,7 +298,7 @@ function mountLearnPanel(hostEl, api) {
     }
     say('Working it out…');
     try {
-      let song, warnings;
+      let song, warnings, audioRec = null;
       if (source === 'notation') {
         const route = routeImportFile(file.name);
         const data = await readFile(file, route.readAs);
@@ -306,12 +308,13 @@ function mountLearnPanel(hostEl, api) {
         const result = await transcribeAudioFile(file, api);
         song = result.song;
         warnings = (result.report && result.report.needsCheck) || [];
+        audioRec = result.rec;
       }
       const { ok, errors } = validateSong(song);
       if (!ok) { say('That file did not turn into a usable song: ' + errors.join('; ')); return; }
       const id = await library.add(song, { now: Date.now() });
       say('');
-      renderResult({ ...song, id }, warnings || []);
+      renderResult({ ...song, id }, warnings || [], audioRec);
     } catch (e) {
       if (typeof api.recordError === 'function') api.recordError('learn:file', e);
       say(source === 'audio'
@@ -324,6 +327,10 @@ function mountLearnPanel(hostEl, api) {
   // notation importers already do this for a title-less file); a learner
   // can rename it from Songs afterwards the same way any imported song is
   // renamed.
+  // Also hands back the decoded { pcm, sampleRate, duration, fileName } this
+  // file just became -- so a "Play along with this recording" button can
+  // hand the SAME decoded audio to Play Along (src/ui/playalong.js's
+  // requestPlayalongRecording()) without decoding the file a second time.
   async function transcribeAudioFile(file, api) {
     const actx = typeof api.audio === 'function' ? api.audio() : null;
     if (!actx) throw new Error('audio is not available');
@@ -333,7 +340,8 @@ function mountLearnPanel(hostEl, api) {
     const pcm = mixToMono(channels);
     const { fmin, fmax } = rangeForInstrument(typeof api.instrument === 'function' ? api.instrument() : null);
     const { frames, onsets } = framesFromPCM(pcm, audioBuffer.sampleRate, { fmin, fmax });
-    return transcribe(frames, { title: titleFromFileName(file.name), onsets });
+    const result = transcribe(frames, { title: titleFromFileName(file.name), onsets });
+    return { ...result, rec: { pcm, sampleRate: audioBuffer.sampleRate, duration: audioBuffer.duration, fileName: file.name } };
   }
 
   // Opening the Songs panel's lesson from here: this panel only ever gets
@@ -348,15 +356,40 @@ function mountLearnPanel(hostEl, api) {
   // such button exists (a page that never wired panel switching in), this
   // still SAVES the song and tells the learner in plain words where to go,
   // rather than silently doing nothing.
-  function openSongsPanel(songId, partId, instrumentId) {
-    requestOpenSong(api, songId, partId, instrumentId);
+  function clickPanelButton(panelId) {
     const doc = hostEl.ownerDocument || document;
-    const songsBtn = doc.querySelector('#panelPicker button[data-panel="songs"]') || doc.querySelector('button[data-panel="songs"]');
-    if (songsBtn) { songsBtn.click(); return true; }
+    const btn = doc.querySelector('#panelPicker button[data-panel="' + panelId + '"]') || doc.querySelector('button[data-panel="' + panelId + '"]');
+    if (btn) { btn.click(); return true; }
     return false;
   }
 
-  function renderResult(song, warnings) {
+  function openSongsPanel(songId, partId, instrumentId) {
+    requestOpenSong(api, songId, partId, instrumentId);
+    return clickPanelButton('songs');
+  }
+
+  // "Fix it up" (every result): hands the just-learned song to the older
+  // "Record a tune" editor, the one panel with note-editing ops (src/song/
+  // edit.js) this one deliberately does not reimplement -- same
+  // request+click pattern as openSongsPanel() above, mirrored in src/ui/
+  // editor.js's requestOpenInEditor()/checkOpenRequest().
+  function openEditorPanel(songId) {
+    requestOpenInEditor(api, songId);
+    return clickPanelButton('editor');
+  }
+
+  // "Play along with this recording" (audio sources only, where a decoded
+  // buffer exists -- see transcribeAudioFile's rec): hands the SAME decoded
+  // PCM to Play Along's beat/chord analysis and loop, rather than asking the
+  // learner to re-pick the file there. In-memory handoff (src/ui/
+  // playalong.js's requestPlayalongRecording()), not api.store -- audio is
+  // far too big for the 256KB panel-data budget.
+  function openPlayalongPanel(rec) {
+    requestPlayalongRecording(rec);
+    return clickPanelButton('playalong');
+  }
+
+  function renderResult(song, warnings, audioRec) {
     resultEl.innerHTML = '';
     resultEl.hidden = false;
     resultEl.appendChild(el('h4', { text: song.title }));
@@ -398,6 +431,28 @@ function mountLearnPanel(hostEl, api) {
       if (!opened) say('Saved "' + song.title + '". Open the Songs panel to practise it.');
     });
     resultEl.appendChild(practiseBtn);
+
+    // "Fix it up" -- every result, notation or audio, can be sent to the
+    // fuller note-editing panel.
+    const fixItUpBtn = el('button', { type: 'button', class: 'panel-learn-fixitup-btn', text: 'Fix it up' });
+    fixItUpBtn.addEventListener('click', () => {
+      const opened = openEditorPanel(song.id);
+      if (!opened) say('Saved "' + song.title + '". Open Record a tune to fix it up.');
+    });
+    resultEl.appendChild(fixItUpBtn);
+
+    // "Play along with this recording" -- only ever shown where a decoded
+    // audio buffer actually exists (the file door's own recording; the mic
+    // door's recorder captures pitch frames only, never raw audio, so it has
+    // none to hand over -- never claim a hand-off the app cannot back up).
+    if (audioRec) {
+      const playAlongBtn = el('button', { type: 'button', class: 'panel-learn-playalong-btn', text: 'Play along with this recording' });
+      playAlongBtn.addEventListener('click', () => {
+        const opened = openPlayalongPanel(audioRec);
+        if (!opened) say('Saved "' + song.title + '". Open Play Along to use this recording.');
+      });
+      resultEl.appendChild(playAlongBtn);
+    }
   }
 
   return {
