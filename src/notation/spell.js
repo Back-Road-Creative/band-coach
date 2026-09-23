@@ -49,17 +49,24 @@ function mod12(n) {
 // sharp or flat spelling depending on whether the key uses sharps or flats.
 export function spellMidi(midi, key) {
   const major = resolveToMajor(key);
-  const pc = mod12(midi);
-  const octave = Math.floor(midi / 12) - 1;
   const altered = keyAccidentals(major);
   const alteredMap = {};
   for (const a of altered) alteredMap[a.letter] = a.accidental;
   const accVal = { '#': 1, b: -1, '': 0 };
 
+  // A letter+accidental's own octave is not always the octave of its pitch
+  // class: B#3 sounds as C4 (pc octave 4, letter octave 3) and Cb4 sounds as
+  // B3 (pc octave 3, letter octave 4). Derive it from the chosen letter and
+  // accidental so it is correct by construction instead of reusing the
+  // pitch-class octave for every spelling.
+  const letterOctave = (midi, letter, accidental) =>
+    Math.floor((midi - (LETTER_BASE_PC[letter] + accVal[accidental])) / 12) - 1;
+
+  const pc = mod12(midi);
   for (const letter of Object.keys(LETTER_BASE_PC)) {
     const acc = alteredMap[letter] || '';
     const eff = mod12(LETTER_BASE_PC[letter] + accVal[acc]);
-    if (eff === pc) return { letter, accidental: acc, octave };
+    if (eff === pc) return { letter, accidental: acc, octave: letterOctave(midi, letter, acc) };
   }
 
   const usesFlats = Object.prototype.hasOwnProperty.call(MAJOR_FLATS, major) && MAJOR_FLATS[major] > 0;
@@ -67,5 +74,5 @@ export function spellMidi(midi, key) {
   const spelled = table[pc];
   const letter = spelled[0];
   const accidental = spelled.length > 1 ? spelled[1] : '';
-  return { letter, accidental, octave };
+  return { letter, accidental, octave: letterOctave(midi, letter, accidental) };
 }

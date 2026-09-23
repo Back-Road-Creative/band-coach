@@ -53,3 +53,24 @@ test('spellMidi: octave numbering follows middle C = 60 -> octave 4', () => {
   assert.equal(spellMidi(48, 'C').octave, 3);
   assert.equal(spellMidi(72, 'C').octave, 5);
 });
+
+test('spellMidi: B# in C# major sits one octave below the pitch-class octave', () => {
+  // midi 60 (pc 0, "octave 4" by pitch class) is B#3, not B#4: B#3 sounds
+  // as C4, so the letter's own octave must be one lower than the pc octave.
+  assert.deepEqual(spellMidi(60, 'C#'), { letter: 'B', accidental: '#', octave: 3 });
+  // and it carries through the minor-key alias.
+  assert.deepEqual(spellMidi(60, 'A#m'), { letter: 'B', accidental: '#', octave: 3 });
+});
+
+test('spellMidi: Cb in Cb major sits one octave above the pitch-class octave', () => {
+  // midi 59 (pc 11, "octave 3" by pitch class) is Cb4, not Cb3: Cb4 sounds
+  // as B3, so the letter's own octave must be one higher than the pc octave.
+  assert.deepEqual(spellMidi(59, 'Cb'), { letter: 'C', accidental: 'b', octave: 4 });
+  assert.deepEqual(spellMidi(59, 'Abm'), { letter: 'C', accidental: 'b', octave: 4 });
+});
+
+test('spellMidi: ordinary spellings keep the pitch-class octave (regression)', () => {
+  assert.deepEqual(spellMidi(60, 'C'), { letter: 'C', accidental: '', octave: 4 });
+  assert.deepEqual(spellMidi(61, 'Db'), { letter: 'D', accidental: 'b', octave: 4 });
+  assert.deepEqual(spellMidi(71, 'G'), { letter: 'B', accidental: '', octave: 4 });
+});
