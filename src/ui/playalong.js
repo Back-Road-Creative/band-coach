@@ -36,6 +36,18 @@ const RECORD_CAPTURE_INTERVAL_MS = 50;
 const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 const BEATS_PER_BAR = 4;
 
+// A cross-panel "analyse this decoded recording next time Play Along is
+// shown" handoff (used by src/ui/learn.js's "Play along with this
+// recording" button). Kept in memory at module scope, NOT api.store — the
+// PCM buffer this carries is real audio data, far past the 256KB panel-data
+// budget src/ui/panels.js's sanitizePanelData enforces, and it only ever
+// needs to survive the one click-through a learner just made, same lifetime
+// as songs.js's OPEN_REQUEST_STORE_ID request but too big for that slot.
+let pendingRecording = null; // { pcm, sampleRate, duration, fileName }
+export function requestPlayalongRecording(rec) {
+  pendingRecording = rec;
+}
+
 export function register(panels) {
   panels.register({
     id: 'playalong',
@@ -59,6 +71,7 @@ function mountPlayalong(el, api) {
     '<button type="button" id="paRecordBtn" class="small">Record a take</button>' +
     '<span id="paFileName" class="pa-filename"></span>' +
     '</div>' +
+    '<p class="pa-learn-tip">Tip: Learn this takes any recording or music file in one place. <button type="button" id="paLearnTipBtn" class="small">Open Learn this</button></p>' +
     '<p id="paRecordNote" class="pa-note" hidden></p>' +
     '<div id="paProgress" class="pa-progress" hidden>' +
     '<div class="pa-progress-track"><div id="paProgressFill" class="pa-progress-fill"></div></div>' +
@@ -111,6 +124,7 @@ function mountPlayalong(el, api) {
   const speedInput = $('paSpeed');
   const speedValEl = $('paSpeedVal');
   const countInInput = $('paCountIn');
+  const learnTipBtn = $('paLearnTipBtn');
 
   const store = api.store('playalong');
 
@@ -417,6 +431,23 @@ function mountPlayalong(el, api) {
     cancelled = true;
   });
 
+  learnTipBtn.addEventListener('click', () => {
+    const doc = el.ownerDocument || document;
+    const btn = doc.querySelector('#panelPicker button[data-panel="learn"]') || doc.querySelector('button[data-panel="learn"]');
+    if (btn) btn.click();
+  });
+
+  // A pending requestPlayalongRecording() (src/ui/learn.js's "Play along
+  // with this recording") -- read once, on the very next show(), then
+  // cleared so it never re-fires the next time a learner opens this panel
+  // normally.
+  function checkPendingRecording() {
+    if (!pendingRecording) return;
+    const rec = pendingRecording;
+    pendingRecording = null;
+    analyzeRecording(rec);
+  }
+
   // "Record a take": press once to start (mic permission is requested only
   // now, on this press — never ahead of time), press again to stop. The
   // captured PCM is handed to analyzeRecording() the same way an opened file
@@ -498,6 +529,7 @@ function mountPlayalong(el, api) {
   return {
     show() {
       showSavedHint();
+      checkPendingRecording();
     },
     hide() {
       stopLoop();

@@ -195,8 +195,18 @@ field defaulting to 90) using the exact same frame recorder `createRecorder` "Re
 (`src/ui/editor/record.js`), then Stop hands the capture through the same `transcribe()` and the
 same result view as a dropped file — a mic that is blocked or missing, or a take with nothing heard
 clearly enough to turn into notes, says so in plain words rather than saving nothing silently.
-Retiring the older Record a tune / Play Along / Songs file-picker panels this one is meant to
-replace is later work.
+
+Every result also offers hand-offs to the older, fuller panels rather than duplicating their
+features: "Fix it up" opens "Record a tune" (`src/ui/editor.js`) with the learned song already
+loaded for note-editing (`requestOpenInEditor`, read once by the editor's own `show()`, the same
+cross-panel request pattern Songs' `requestOpenSong` already uses); and, only when the source was
+a recording with a decoded audio buffer to hand over, "Play along with this recording" opens Play
+Along (`src/ui/playalong.js`) already analysing that same audio (`requestPlayalongRecording`, an
+in-memory hand-off — audio is far too big for the panel-data store). The Listen/file-input row in
+"Record a tune", the file input in Play Along, and the file button in Songs each carry a short
+pointer back to this panel, so a learner who lands on any of the older doors first is told where
+the simpler one is. Retiring the older Record a tune / Play Along / Songs file-picker panels this
+one is meant to replace is later work.
 
 ## Songs
 
