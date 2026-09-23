@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { exportMusicXml } from '../../src/song/export-musicxml.js';
 import { importMusicXml } from '../../src/song/import-musicxml.js';
 import { starterSongs } from '../../src/song/starter/index.js';
+import { barsOf } from '../../src/song/model.js';
 import { parseXml, elements, element, childText, attr } from '../../src/song/xml-lite.js';
 
 // Merge consecutive tied notes (same pitch, prev ends exactly where this one
@@ -170,4 +171,20 @@ test('mid-song tempo, metre and key changes are written at the measure where the
 
   const m3 = measures[2];
   assert.equal(element(m3, 'attributes'), undefined, 'measure 3 has no changes, so no <attributes> block');
+});
+
+test('a mid-bar metre change splits measures exactly where barsOf does', () => {
+  // 2400 falls inside the second 4/4 bar (1920..3840): barsOf closes that
+  // bar at the change, so the export must write a short measure there too.
+  const song = {
+    schema: 'song/1', id: 'mid-bar-metre', title: 'Mid-Bar Metre', composer: null, licence: null, source: null,
+    key: { tonic: 0, mode: 'major' }, metre: { num: 4, den: 4 }, bpm: 100, ticksPerQuarter: 480,
+    parts: [{ id: 'melody', name: 'Melody', notes: [
+      { start: 0, dur: 1920, midi: 60 }, { start: 1920, dur: 480, midi: 62 }, { start: 2400, dur: 1440, midi: 64 },
+    ] }],
+    chords: [],
+    metreChanges: [{ tick: 2400, num: 3, den: 4 }],
+  };
+  const part = elements(parseXml(exportMusicXml(song)), 'part')[0];
+  assert.equal(elements(part, 'measure').length, barsOf(song).length - 1);
 });
