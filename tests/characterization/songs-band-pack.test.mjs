@@ -116,6 +116,11 @@ test('"Share with your band" downloads a .bandpack file that readBandPack accept
   await page.waitFor("document.querySelectorAll('.panel-songs-row button').length > 0");
   await page.setFileInput('#songsFileInput', abcPath);
   await page.waitFor("document.querySelector('.panel-songs-msg').textContent.includes('Uploaded Tune')");
+  // The message lands before refreshList() re-reads the library and enables
+  // Share (src/ui/songs.js refreshList); clicking a disabled button does nothing.
+  await page.waitFor(
+    "Array.from(document.querySelectorAll('button')).some(b => b.textContent === 'Share with your band' && !b.disabled)"
+  );
 
   await page.evaluate(
     "Array.from(document.querySelectorAll('button')).find(b => b.textContent === 'Share with your band').click()"

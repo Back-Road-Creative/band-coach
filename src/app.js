@@ -43,6 +43,9 @@ import { createFocusTrap } from './ui/dialog-focus.js';
 import { createPanels, sanitizePanelData } from './ui/panels.js';
 import { estimateRange, classify, exerciseRangeFor, tonicFromRange } from './instruments/how/voice-range.js';
 //
+// slot:import:learn
+import { register as registerLearn } from './ui/learn.js';
+//
 // slot:import:w-songs
 import { register as registerSongs, forwardNote as forwardSongNote } from './ui/songs.js';
 import { itemIdForMidi } from './ui/songs/mastery.js';
@@ -1910,7 +1913,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
     });
   })();
 
-  // ---------- feature panels (src/ui/panels.js): songs, ear, theory, history, fingerings, play-along ----------
+  // ---------- feature panels (src/ui/panels.js): learn, songs, ear, theory, history, fingerings, play-along ----------
   // A panel unit registers ONE panel by replacing its own slot:panel line
   // below; everything it needs from the app goes through panelApi.
   const panels = createPanels();
@@ -1924,6 +1927,9 @@ import { register as registerPlayalong } from './ui/playalong.js';
     creditNote: () => { streak++; S.ready = clamp(S.ready + S.gain, 0, 1); evaluate(); save(); },
   };
   //
+  //
+  // slot:panel:learn
+  registerLearn(panels);
   //
   // slot:panel:w-songs
   registerSongs(panels);

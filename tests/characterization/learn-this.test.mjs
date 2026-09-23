@@ -1,0 +1,133 @@
+// "Learn this" panel (src/ui/learn.js, unit G1a: the file door only), wired
+// into the real app (src/app.js registers it first, ahead of Songs). Drives
+// the built dist/band-coach.html through window.__coach.openPanel('learn')
+// and the DOM, same pattern as tests/characterization/w-songs.test.mjs -- a
+// real headless browser, a real file input, a real IndexedDB, a real
+// AudioContext decoding a real WAV file on disk.
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { HTML_PATH } from '../helpers/html-path.mjs';
+import { launchPage } from '../helpers/browser.mjs';
+
+const htmlPath = HTML_PATH;
+
+// Pure-Node WAV writer: 16-bit PCM mono from a plain Float32Array (same
+// precedent as tests/characterization/editor-audio-file.test.mjs and
+// w-playalong.test.mjs -- no binary fixture committed to the repo).
+function writeWav(path, pcm, sampleRate) {
+  const dataSize = pcm.length * 2;
+  const buf = Buffer.alloc(44 + dataSize);
+  buf.write('RIFF', 0, 'ascii');
+  buf.writeUInt32LE(36 + dataSize, 4);
+  buf.write('WAVE', 8, 'ascii');
+  buf.write('fmt ', 12, 'ascii');
+  buf.writeUInt32LE(16, 16);
+  buf.writeUInt16LE(1, 20);
+  buf.writeUInt16LE(1, 22);
+  buf.writeUInt32LE(sampleRate, 24);
+  buf.writeUInt32LE(sampleRate * 2, 28);
+  buf.writeUInt16LE(2, 32);
+  buf.writeUInt16LE(16, 34);
+  buf.write('data', 36, 'ascii');
+  buf.writeUInt32LE(dataSize, 40);
+  for (let i = 0; i < pcm.length; i++) {
+    const clamped = Math.max(-1, Math.min(1, pcm[i]));
+    buf.writeInt16LE(Math.round(clamped * 32767), 44 + i * 2);
+  }
+  writeFileSync(path, buf);
+  return path;
+}
+
+// Three clean 0.35s tones at 44100Hz: C4, E4, G4 -- enough for a real note
+// sequence, short enough to transcribe fast.
+function threeToneWav(path) {
+  const sr = 44100;
+  const noteSamples = Math.round(0.35 * sr);
+  const pcm = new Float32Array(noteSamples * 3);
+  const freqFor = (midi) => 440 * Math.pow(2, (midi - 69) / 12);
+  [60, 64, 67].forEach((midi, i) => {
+    const f = freqFor(midi);
+    for (let j = 0; j < noteSamples; j++) pcm[i * noteSamples + j] = 0.5 * Math.sin((2 * Math.PI * f * j) / sr);
+  });
+  return writeWav(path, pcm, sr);
+}
+
+const ABC = 'X:1\nT:Learn Test\nM:4/4\nL:1/8\nK:C\nCDEFGABc|\n';
+
+test('the panel picker offers a "Learn this" panel', async (t) => {
+  const page = await launchPage(htmlPath);
+  t.after(() => page.close());
+  const exists = await page.evaluate("!!document.querySelector('#panelPicker button[data-panel=\"learn\"]')");
+  assert.equal(exists, true, 'a Learn this panel button is registered in the real app\'s panel picker');
+});
+
+test('a real .abc file dropped in becomes a practisable song, title + Play it on cards + library entry', async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'band-coach-learn-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const abcPath = join(dir, 'tune.abc');
+  writeFileSync(abcPath, ABC, 'utf8');
+
+  const page = await launchPage(htmlPath);
+  t.after(() => page.close());
+
+  await page.evaluate("window.__coach.setMod('kbd')");
+  await page.evaluate("window.__coach.openPanel('learn')");
+  await page.setFileInput('#learnFileInput', abcPath);
+  await page.waitFor("document.querySelector('.panel-learn-result').hidden === false", 20000);
+
+  assert.deepEqual(page.exceptions, [], 'no uncaught exceptions importing a notation file');
+  const title = await page.evaluate("document.querySelector('.panel-learn-result h4').textContent");
+  assert.equal(title, 'Learn Test');
+
+  const cardCount = await page.evaluate("document.querySelectorAll('.panel-learn-result .panel-songs-instrument-card').length");
+  assert.ok(cardCount > 0, 'at least one "Play it on…" instrument card is shown');
+
+  // Practise this -> switches to the real Songs panel, already on this
+  // song's lesson (requestOpenSong() + Songs's own show()-time check).
+  await page.evaluate(
+    "Array.from(document.querySelectorAll('.panel-learn-practise-btn')).find(b => b.textContent === 'Practise this').click()"
+  );
+  await page.waitFor("window.__coach.panelOpen() === 'songs'");
+  await page.waitFor("document.querySelector('.panel-songs-practice h3')");
+  const practiceTitle = await page.evaluate("document.querySelector('.panel-songs-practice h3').textContent");
+  assert.equal(practiceTitle, 'Learn Test', 'Songs opened straight onto this song\'s lesson');
+});
+
+test('a real .wav recording dropped in transcribes to a song with a positive note count', async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'band-coach-learn-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const wavPath = threeToneWav(join(dir, 'three-notes.wav'));
+
+  const page = await launchPage(htmlPath);
+  t.after(() => page.close());
+
+  await page.evaluate("window.__coach.setMod('kbd')");
+  await page.evaluate("window.__coach.openPanel('learn')");
+  await page.setFileInput('#learnFileInput', wavPath);
+  await page.waitFor("document.querySelector('.panel-learn-result').hidden === false", 20000);
+
+  assert.deepEqual(page.exceptions, [], 'no uncaught exceptions decoding and transcribing a recording');
+  const noteCount = await page.evaluate("document.querySelectorAll('.panel-learn-confidence-note').length");
+  assert.ok(noteCount > 0, 'at least one note was transcribed from the recording: ' + noteCount);
+});
+
+test('an unsupported file shows a plain-words message naming what this panel accepts', async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'band-coach-learn-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const badPath = join(dir, 'notes.txt');
+  writeFileSync(badPath, 'just some plain text, not a song or a recording', 'utf8');
+
+  const page = await launchPage(htmlPath);
+  t.after(() => page.close());
+
+  await page.evaluate("window.__coach.openPanel('learn')");
+  await page.setFileInput('#learnFileInput', badPath);
+  await page.waitFor("document.querySelector('.panel-learn-status').textContent.length > 0", 20000);
+
+  const message = await page.evaluate("document.querySelector('.panel-learn-status').textContent");
+  assert.match(message, /\.mid|\.abc|\.musicxml|\.wav|recording/i);
+  assert.equal(await page.evaluate("document.querySelector('.panel-learn-result').hidden"), true, 'no result is shown for an unsupported file');
+});
