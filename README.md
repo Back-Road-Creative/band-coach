@@ -229,7 +229,11 @@ lesson): a missed attempt steps the synthesized backing's speed down, a fully cl
 it back up, and the panel always shows the current rate in plain words ("Playing at 90% speed",
 "Full speed"). Only the synthesized backing is slowed this way — no starter or imported song
 carries an original recording to time-stretch, so `src/audio/stretch/wsola.js` stays wired only
-into the Play Along panel below.
+into the Play Along panel below. On a sustaining instrument (bowed, wind, free-reed or voice —
+anything without a natural decay) a practice step also checks that each note was actually held
+and played in tune, not just hit; a try that misses on holding or tuning alone is told so in plain
+words ("Hold each note a little longer." / "A little sharp — aim for the middle of the note.")
+instead of the generic retry prompt.
 
 ## Play along with a recording
 

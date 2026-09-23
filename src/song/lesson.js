@@ -1,5 +1,6 @@
 import { BLOW_STEPS, DRAW_STEPS } from '../instruments/how/harmonica.js';
 import { phraseDifficulty } from './phrase-difficulty.js';
+import { recipeForFamily } from '../audio/voices.js';
 
 // Lesson generator (plan unit 5.2, F9 "song practice never counts").
 //
@@ -230,6 +231,30 @@ export function segment(song, partId) {
 
 const LADDER_FRACTIONS = [0.6, 0.75, 0.9, 1.0];
 
+// Unit E3: on a sustaining instrument (src/audio/voices.js recipeForFamily
+// === 'sustain' -- bowed, wind, free-reed, voice) a note is not "played"
+// just by starting on the right pitch: it has to be HELD, and it can drift
+// out of tune the whole time it sounds, neither of which a plucked/struck/
+// brass instrument's attack-only judging can even measure (practice.js's
+// durationScore/meanAbsCents stay null unless the capture reports durSec/
+// cents -- see src/ui/songs.js). So only sustaining families gain these two
+// extra pass conditions; every other family's passRule is untouched.
+// Thresholds are a flat first pass (not scaled by tempo-ladder rung or
+// level) -- the plan calls stricter-at-higher-rungs optional, and a flat
+// number is the simplest thing that could work; revisit with real usage.
+export const HOLD_MIN_DURATION_SCORE = 0.6; // at least 6 of 10 matched notes must land in practice.js's own default 0.6-1.5x duration-ratio band -- neither a stab nor an overheld drone should read as "held it"
+export const TUNE_MAX_MEAN_ABS_CENTS = 40; // mean pitch error under 40 cents, comfortably inside a semitone (100 cents) with room to spare -- close to the +/-45 cents app.js's own live-tuner drill (src/app.js:1055) already treats as "in tune"
+
+// Adds the two sustain-only pass conditions to `passRule` when `instrument`
+// belongs to a sustaining family; returns `passRule` completely unchanged
+// (same object, same keys) otherwise -- so a non-sustaining instrument's
+// plan is byte-identical to what buildLessonPlan produced before this unit.
+function sustainRules(instrument, passRule) {
+  if (!passRule) return passRule;
+  if (recipeForFamily(instrument.family) !== 'sustain') return passRule;
+  return { ...passRule, minDurationScore: HOLD_MIN_DURATION_SCORE, maxMeanAbsCents: TUNE_MAX_MEAN_ABS_CENTS };
+}
+
 function hitRateFor(level, base) {
   const bonus = Math.min(Math.max((level || 1) - 1, 0), 5) * 0.02;
   return Math.min(0.95, Math.round((base + bonus) * 1000) / 1000);
@@ -265,16 +290,16 @@ export function buildLessonPlan(song, partId, instrument, opts = {}) {
     });
     steps.push({
       kind: 'pitches', phraseIndex: pi, bars: phrase.bars, bpm: 0, notes, difficulty,
-      passRule: { hitRate: hitRateFor(level, 0.8), maxMeanErrorMs: null }
+      passRule: sustainRules(instrument, { hitRate: hitRateFor(level, 0.8), maxMeanErrorMs: null })
     });
     steps.push({
       kind: 'phrase-slow', phraseIndex: pi, bars: phrase.bars, bpm: slowBpm, notes, difficulty,
-      passRule: { hitRate: hitRateFor(level, 0.8), maxMeanErrorMs: 150 }
+      passRule: sustainRules(instrument, { hitRate: hitRateFor(level, 0.8), maxMeanErrorMs: 150 })
     });
     LADDER_FRACTIONS.forEach(fraction => {
       steps.push({
         kind: 'tempo-ladder', phraseIndex: pi, bars: phrase.bars, bpm: Math.round(bpm * fraction), notes, difficulty,
-        passRule: { hitRate: hitRateFor(level, 0.85), maxMeanErrorMs: 100 }
+        passRule: sustainRules(instrument, { hitRate: hitRateFor(level, 0.85), maxMeanErrorMs: 100 })
       });
     });
   });
@@ -288,7 +313,7 @@ export function buildLessonPlan(song, partId, instrument, opts = {}) {
         bars: [chained[0].bars[0], chained[chained.length - 1].bars[1]],
         bpm,
         notes: chained.flatMap(p => p.notes),
-        passRule: { hitRate: hitRateFor(level, 0.8), maxMeanErrorMs: 120 }
+        passRule: sustainRules(instrument, { hitRate: hitRateFor(level, 0.8), maxMeanErrorMs: 120 })
       });
     }
   }
@@ -300,7 +325,7 @@ export function buildLessonPlan(song, partId, instrument, opts = {}) {
       bars: [phrases[0].bars[0], phrases[phrases.length - 1].bars[1]],
       bpm,
       notes: fit.notes,
-      passRule: { hitRate: hitRateFor(level, 0.8), maxMeanErrorMs: 120 }
+      passRule: sustainRules(instrument, { hitRate: hitRateFor(level, 0.8), maxMeanErrorMs: 120 })
     });
   }
 

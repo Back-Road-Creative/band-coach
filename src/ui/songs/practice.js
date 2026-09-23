@@ -75,8 +75,15 @@ export function judgeAttempt(expectedNotes, playedEvents, opts = {}) {
   const hitRate = notes.length ? hits.length / notes.length : 0;
   const errored = hits.map((m) => m.errorMs).filter((e) => e !== null).map(Math.abs);
   const meanErrorMs = errored.length ? errored.reduce((a, b) => a + b, 0) / errored.length : null;
-  const absCents = hits.map((m) => m.cents).filter((c) => c !== null).map(Math.abs);
+  const centsHits = hits.map((m) => m.cents).filter((c) => c !== null);
+  const absCents = centsHits.map(Math.abs);
   const meanAbsCents = absCents.length ? absCents.reduce((a, b) => a + b, 0) / absCents.length : null;
+  // meanCents: the SIGNED mean (sharp positive, flat negative), unlike
+  // meanAbsCents above -- passesRule() judges the absolute value (a phrase
+  // that wanders equally sharp and flat is not "in tune" just because the
+  // errors cancel out), but the feedback line below needs a direction to
+  // tell the learner which way to correct.
+  const meanCents = centsHits.length ? centsHits.reduce((a, b) => a + b, 0) / centsHits.length : null;
   const durRatios = hits.map((m) => m.durRatio).filter((d) => d !== null);
   const durationScore = durRatios.length
     ? durRatios.filter((d) => d >= durationTolerance.min && d <= durationTolerance.max).length / durRatios.length
@@ -95,6 +102,7 @@ export function judgeAttempt(expectedNotes, playedEvents, opts = {}) {
     hitRate,
     meanErrorMs,
     meanAbsCents,
+    meanCents,
     durationScore,
     dynamicsScore,
   };
@@ -117,4 +125,31 @@ export function passesRule(result, passRule) {
     if (result.durationScore < passRule.minDurationScore) return false;
   }
   return true;
+}
+
+// Plain-word feedback for a FAILED step that fell down ONLY on hold or tune
+// -- everything else about it (hit rate, timing) was fine, so telling the
+// learner the one concrete thing to fix beats the generic "try that again"
+// src/ui/songs.js falls back to otherwise. Returns null when there is no
+// hold/tune rule to judge, or when hit rate or timing is what actually
+// failed (those keep the existing generic message -- singling out hold/tune
+// there would be misleading).
+export function holdTuneFeedback(result, passRule) {
+  if (!passRule) return null;
+  if (result.hitRate < passRule.hitRate) return null;
+  if (passRule.maxMeanErrorMs != null) {
+    if (result.meanErrorMs == null) { if (result.judgedCount !== 0) return null; }
+    else if (result.meanErrorMs > passRule.maxMeanErrorMs) return null;
+  }
+  const holdFailed = passRule.minDurationScore != null && result.durationScore != null
+    && result.durationScore < passRule.minDurationScore;
+  const tuneFailed = passRule.maxMeanAbsCents != null && result.meanAbsCents != null
+    && result.meanAbsCents > passRule.maxMeanAbsCents;
+  if (!holdFailed && !tuneFailed) return null;
+  if (holdFailed && tuneFailed) return 'Hold each note a little longer, right in the middle of the pitch.';
+  if (holdFailed) return 'Hold each note a little longer.';
+  const sharp = result.meanCents == null || result.meanCents >= 0;
+  return sharp
+    ? 'A little sharp — aim for the middle of the note.'
+    : 'A little flat — aim for the middle of the note.';
 }
