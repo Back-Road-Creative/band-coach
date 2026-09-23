@@ -195,17 +195,29 @@ function mountLearnPanel(hostEl, api) {
   // watching a count-in that was never going to record anything.
   async function startMicRecording() {
     if (counting || recording) return;
+    // Claimed synchronously, before the `await` below, so a second Record
+    // click landing while the microphone permission prompt (or a slow
+    // device) is still pending is turned away by the guard above instead of
+    // running this whole function a second time. recordBtn is disabled for
+    // this (usually brief) stretch too -- it still reads "Record" and there
+    // is nothing yet to cancel back to -- and re-enabled the moment the
+    // count-in itself begins, below, so a learner CAN cancel a count-in in
+    // progress. Both are reset in the catch if opening the mic fails, so a
+    // denial does not leave the slot, or the button, stuck.
+    counting = true;
+    recordBtn.disabled = true;
     resultEl.hidden = true;
     resultEl.innerHTML = '';
     say('Getting the microphone ready…');
     try { await api.openMic(); }
     catch (e) {
+      counting = false;
+      recordBtn.disabled = false;
       say('The microphone is not available. You can drop a recording instead.');
       return;
     }
-    counting = true;
     recordBtn.textContent = 'Counting in…';
-    recordBtn.disabled = true;
+    recordBtn.disabled = false;
     bpmInput.disabled = true;
     say('Get ready…');
     startMeterLoop();
