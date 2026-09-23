@@ -50,6 +50,7 @@ import { INSTRUMENTS } from '../instruments/index.js';
 import { routeImportFile, importerFor } from './songs/import-route.js';
 import { judgeAttempt, passesRule } from './songs/practice.js';
 import { barHeat, worstBars } from '../song/bar-heat.js';
+import { createLoopBackingTransport, applyAttemptToTransport, backingBpm, rateLabel } from './songs/loop-backing.js';
 import { mapMasteryKeys } from './songs/mastery.js';
 import { parseChallenge, buildChallenge } from '../song/challenge.js';
 import { writeBandPack, readBandPack } from '../song/band-pack.js';
@@ -524,7 +525,16 @@ function mountSongsPanel(hostEl, api) {
     const saved = store.get();
     const level = saved && saved.songId === song.id && saved.partId === partId && Number.isFinite(saved.level) ? saved.level : 1;
     const plan = buildLessonPlan(song, partId, instrument, { level });
-    practice = { song, partId, instrument, instrumentId, plan, results: [], stepIndex: 0, recording: false, playedEvents: [], recordStartSec: 0, stop: null };
+    // loopTransport/loopTransportStepIndex: the tempo-ladder rung's own
+    // src/audio/stretch/loop.js transport (Riff Repeater pattern) -- created
+    // fresh the first time renderPractice() sees a given tempo-ladder step
+    // index, so a miss/clean-loop's rate change persists across repeat
+    // attempts on THE SAME rung but resets when the ladder moves to a
+    // different rung (nextStep() dropping back after two misses, or
+    // skipping ahead after a clean first try): each rung already has its own
+    // fixed bpm, so starting that rung's fine-grained rate back at full
+    // speed is the simplest reading of "fresh rung, fresh ladder".
+    practice = { song, partId, instrument, instrumentId, plan, results: [], stepIndex: 0, recording: false, playedEvents: [], recordStartSec: 0, stop: null, loopTransport: null, loopTransportStepIndex: null };
     store.set({ songId: song.id, partId, instrumentId, level });
     renderPractice();
   }
@@ -558,6 +568,18 @@ function mountSongsPanel(hostEl, api) {
       return;
     }
     const step = plan.steps[stepIndex];
+    // A tempo-ladder rung gets its own loop-backing transport (see the
+    // `practice = {...}` comment in startPractice() above for the reset
+    // rule); any other step kind carries none.
+    if (step.kind === 'tempo-ladder') {
+      if (practice.loopTransportStepIndex !== stepIndex) {
+        practice.loopTransport = createLoopBackingTransport();
+        practice.loopTransportStepIndex = stepIndex;
+      }
+    } else {
+      practice.loopTransport = null;
+      practice.loopTransportStepIndex = null;
+    }
     if (plan.fit.unplayable.length && stepIndex === 0) {
       practiceSection.appendChild(el('p', {
         class: 'panel-songs-warn',
@@ -580,6 +602,13 @@ function mountSongsPanel(hostEl, api) {
     }
     practiceSection.appendChild(titleRow);
     practiceSection.appendChild(el('p', { text: stepHint(step) }));
+    // Plain-word readout of the tempo ladder's own current rate (100% =
+    // this rung's written bpm; a miss earlier steps it down, a clean loop
+    // steps it back up -- see finishRecording() below and
+    // src/ui/songs/loop-backing.js).
+    if (step.kind === 'tempo-ladder' && practice.loopTransport) {
+      practiceSection.appendChild(el('p', { class: 'panel-songs-rate', text: rateLabel(practice.loopTransport.getRate()) }));
+    }
 
     const playBtn = el('button', { type: 'button', text: 'Play it', onclick: () => playPhrase(step) });
     practiceSection.appendChild(playBtn);
@@ -629,6 +658,18 @@ function mountSongsPanel(hostEl, api) {
     return wrap;
   }
 
+  // A tempo-ladder step's EFFECTIVE bpm: its own written rung bpm, scaled by
+  // that rung's loop-backing transport rate (the Riff Repeater ladder --
+  // src/ui/songs/loop-backing.js backingBpm()) -- 100% until a miss steps it
+  // down. Every other step kind plays at its own written bpm unchanged.
+  // Used for BOTH the synth backing playback below and the timing judged in
+  // finishRecording(), so a learner following a slowed-down backing is
+  // judged against the tempo they actually heard, not the rung's full speed.
+  function effectiveBpm(step) {
+    if (step.kind === 'tempo-ladder' && practice.loopTransport) return backingBpm(step.bpm, practice.loopTransport.getRate());
+    return step.bpm;
+  }
+
   function playPhrase(step) {
     const notes = step.notes;
     if (!notes.length) return;
@@ -640,9 +681,10 @@ function mountSongsPanel(hostEl, api) {
     if (step.bpm > 0) {
       const ticksPerQuarter = practice.song.ticksPerQuarter;
       const t0 = notes[0].start;
+      const bpm = effectiveBpm(step);
       notes.forEach((n) => {
-        const secOffset = ((n.start - t0) / ticksPerQuarter) * (60 / step.bpm);
-        const dur = Math.max(0.12, (n.dur / ticksPerQuarter) * (60 / step.bpm));
+        const secOffset = ((n.start - t0) / ticksPerQuarter) * (60 / bpm);
+        const dur = Math.max(0.12, (n.dur / ticksPerQuarter) * (60 / bpm));
         api.tone(n.midi, at0 + secOffset, dur, 0.22);
       });
     } else {
@@ -697,11 +739,19 @@ function mountSongsPanel(hostEl, api) {
     stopRecording();
     const timed = step.kind !== 'pitches';
     const result = judgeAttempt(step.notes, practice.playedEvents, {
-      bpm: step.bpm || practice.song.bpm,
+      bpm: effectiveBpm(step) || practice.song.bpm,
       ticksPerQuarter: practice.song.ticksPerQuarter,
       policy: practice.instrument.octavePolicy,
       timed,
     });
+    // Feed this attempt's outcome to the tempo ladder BEFORE passesRule()
+    // reads step.passRule -- rate only affects the NEXT attempt's backing
+    // and judging (effectiveBpm() above already ran for THIS one), so a
+    // miss on a rung the learner is about to be dropped from still slows
+    // the backing down for anyone retrying it.
+    if (step.kind === 'tempo-ladder' && practice.loopTransport) {
+      applyAttemptToTransport(practice.loopTransport, result);
+    }
     const passed = passesRule(result, step.passRule);
     // Every correctly-pitched note counts toward the trainer's own streak
     // and level-up path, not just this song's mastery record (applyMasteryCredit

@@ -407,3 +407,4 @@
     body.printing-report .history-print-report, body.printing-report .history-print-report * { visibility: visible; }
     body.printing-report .history-print-report { display: block; position: absolute; top: 0; left: 0; width: 100%; color: #000; background: #fff; }
   }
+  .panel-songs-rate { color: var(--muted); font-size: 13px; margin: 0; }
