@@ -332,3 +332,18 @@
   .ledger-cell-met { outline: 2px solid var(--accent); outline-offset: -2px; }
   .ledger-cell-unknown { background: repeating-linear-gradient(45deg, var(--panel-2), var(--panel-2) 4px, var(--line) 4px, var(--line) 8px); }
   .ledger-truncated-note { color: var(--muted); font-size: 13px; }
+
+  /* Printing: keep only the notation/content area (the canvas and its wrapping panel), plain
+     black-on-white -- everything else on the page (nav, setup, tabs, the side rail, buttons,
+     help text) is app chrome with no meaning on paper. */
+  @media print {
+    body { background: #fff; color: #000; }
+    header, .picker, .panel-picker-disclosure, .io, .setup-sheet, .midi-details, .panel-say,
+    .side, .stage-tools, .choices, #tapPad, footer,
+    .editor-toolbar, .editor-record, .editor-status, .editor-check, .editor-say,
+    .panel-songs-list, .panel-songs-intro, .panel-songs-msg, .panel-songs-warn, .panel-songs-count, .panel-songs-practice,
+    .rail-menu, .help, .backup-nudge, .opts,
+    button, select, input { display: none !important; }
+    .wrap, .main, .stage, .panel-host, .panel-editor, #cv, .editor-canvas { background: #fff !important; color: #000 !important; }
+    #cv, .editor-canvas { display: block !important; box-shadow: none !important; }
+  }
