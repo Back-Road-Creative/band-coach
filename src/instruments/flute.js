@@ -1,7 +1,12 @@
-// Not in today's MODS. Concert-pitch instrument, transposition 0, matching
-// WIND_KINDS.c in src/app.js:110. Range (treble clef) is a conservative
-// beginner range, not the instrument's full compass. Curriculum not written
-// yet, so status is planned and curriculum is [].
+// Wired into MODS.flute in src/app.js. Concert-pitch instrument,
+// transposition 0, matching WIND_KINDS.c in src/app.js's WIND_KINDS table.
+// Range (treble clef) is a conservative beginner range, not the
+// instrument's full compass. Fingering data lives in
+// src/instruments/how/keyed-woodwind.js (FLUTE_NOTES), which covers the
+// same 60-72 range. Curriculum follows the same beginner-order shape the
+// brass records use (see trumpet-bb.js): low three notes first, then two
+// more, then up to the top, then the one accidental in this range, then
+// moves and runs.
 export default {
   id: 'flute',
   name: 'Flute',
@@ -11,6 +16,14 @@ export default {
   transposition: 0,
   clefs: ['treble'],
   octavePolicy: 'exact',
-  status: 'planned',
-  curriculum: []
+  status: 'ready',
+  curriculum: [
+    { level: 1, items: ['Written C, D and E'] },
+    { level: 2, items: ['Add F and G'] },
+    { level: 3, items: ['Add A, B and high C'] },
+    { level: 4, items: ['Sharps and flats: F sharp and B flat'] },
+    { level: 5, items: ['Moves: two notes'] },
+    { level: 6, items: ['Moves: three notes'] },
+    { level: 7, items: ['Five-note runs'] }
+  ]
 };
