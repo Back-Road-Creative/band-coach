@@ -23,6 +23,15 @@ import { stretch } from '../audio/stretch/wsola.js';
 import { createTransport } from '../audio/stretch/loop.js';
 import { mixToMono, formatTime, makeCancellableProgress, AnalysisCancelledError } from './playalong/audio-prep.js';
 import { chordSegments, isLowConfidence, clampLoopSelection } from './playalong/timeline.js';
+import { createTakeAccumulator } from '../audio/take-recorder.js';
+
+// How often the mic-capture timer reads the analyser during "Record a take"
+// (src/ui/editor/record.js polls the same AnalyserNode on the same kind of
+// timer, for pitch frames rather than raw audio -- see startRecordingCapture
+// below for why only the TAIL of each read is kept). Matches that module's
+// own default interval so this panel's recording cadence is consistent with
+// the rest of the app's mic reads.
+const RECORD_CAPTURE_INTERVAL_MS = 50;
 
 const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 const BEATS_PER_BAR = 4;
@@ -42,13 +51,15 @@ export function register(panels) {
 function mountPlayalong(el, api) {
   el.innerHTML =
     '<div class="panel-playalong">' +
-    '<p class="pa-intro">Open a recording of a song. This finds its tempo, key and chords, then lets you loop any section slower — without changing the pitch — to learn your part. The recording never leaves this device.</p>' +
+    '<p class="pa-intro">Open a recording of a song, or record yourself playing one — a duet with your own earlier take. This finds its tempo, key and chords, then lets you loop any section slower — without changing the pitch — to learn your part. The recording never leaves this device.</p>' +
     '<p id="paSavedHint" class="pa-note" hidden></p>' +
     '<div class="row pa-open">' +
     '<label class="small file-label" for="paFileInput">Open a recording</label>' +
     '<input type="file" accept="audio/*" id="paFileInput" hidden>' +
+    '<button type="button" id="paRecordBtn" class="small">Record a take</button>' +
     '<span id="paFileName" class="pa-filename"></span>' +
     '</div>' +
+    '<p id="paRecordNote" class="pa-note" hidden></p>' +
     '<div id="paProgress" class="pa-progress" hidden>' +
     '<div class="pa-progress-track"><div id="paProgressFill" class="pa-progress-fill"></div></div>' +
     '<span id="paProgressLabel">Listening&hellip;</span>' +
@@ -79,6 +90,8 @@ function mountPlayalong(el, api) {
   const $ = (id) => el.querySelector('#' + id);
   const fileInput = $('paFileInput');
   const fileNameEl = $('paFileName');
+  const recordBtn = $('paRecordBtn');
+  const recordNoteEl = $('paRecordNote');
   const savedHintEl = $('paSavedHint');
   const progressEl = $('paProgress');
   const progressFill = $('paProgressFill');
@@ -108,6 +121,8 @@ function mountPlayalong(el, api) {
   let dragStart = null;
   let currentSource = null;
   let currentGain = null;
+  let captureTimer = null; // "Record a take": non-null while the mic-poll timer is running
+  let takeAccumulator = null;
 
   function playheadSeconds() {
     if (!recording) return 0;
@@ -320,38 +335,35 @@ function mountPlayalong(el, api) {
     resultsEl.hidden = true;
     errorEl.hidden = true;
     unsureEl.hidden = true;
+    recordNoteEl.hidden = true;
     analysis = null;
     transport = null;
   }
 
-  async function loadFile(file) {
+  // Shared by both ways a `recording` object gets made — opening a file
+  // (loadFile below) and finishing a mic take (stopRecordingCapture): once
+  // there is PCM + a sampleRate + a duration + a fileName, everything after
+  // (analysis, the timeline, the loop transport, the slow-down) is identical.
+  async function analyzeRecording(rec) {
     resetForNewFile();
-    fileNameEl.textContent = file.name;
+    recording = rec;
+    fileNameEl.textContent = rec.fileName;
     progressEl.hidden = false;
     setProgress(0);
     progressLabel.textContent = 'Listening…';
     cancelled = false;
     try {
-      const actx = api.audio();
-      if (!actx) throw new Error('audio is not available');
-      const arrayBuffer = await file.arrayBuffer();
-      const audioBuffer = await actx.decodeAudioData(arrayBuffer);
-      const channels = [];
-      for (let c = 0; c < audioBuffer.numberOfChannels; c++) channels.push(audioBuffer.getChannelData(c));
-      const pcm = mixToMono(channels);
-      recording = { pcm, sampleRate: audioBuffer.sampleRate, duration: audioBuffer.duration, fileName: file.name };
-
       const onProgress = makeCancellableProgress(
         (p) => setProgress(p),
         () => cancelled
       );
-      const result = await analyse(pcm, audioBuffer.sampleRate, { onProgress, beatsPerBar: BEATS_PER_BAR });
+      const result = await analyse(rec.pcm, rec.sampleRate, { onProgress, beatsPerBar: BEATS_PER_BAR });
       analysis = result;
       transport = createTransport({ durationSec: recording.duration, beatTimes: result.beats });
       transport.setRate(Number(speedInput.value) / 100);
 
       const saved = store.get();
-      if (saved && saved.fileName === file.name && Number.isFinite(saved.loopStart) && Number.isFinite(saved.loopEnd)) {
+      if (saved && saved.fileName === rec.fileName && Number.isFinite(saved.loopStart) && Number.isFinite(saved.loopEnd)) {
         try {
           transport.setLoop(saved.loopStart, saved.loopEnd);
         } catch (e) {
@@ -377,6 +389,25 @@ function mountPlayalong(el, api) {
     }
   }
 
+  async function loadFile(file) {
+    try {
+      const actx = api.audio();
+      if (!actx) throw new Error('audio is not available');
+      const arrayBuffer = await file.arrayBuffer();
+      const audioBuffer = await actx.decodeAudioData(arrayBuffer);
+      const channels = [];
+      for (let c = 0; c < audioBuffer.numberOfChannels; c++) channels.push(audioBuffer.getChannelData(c));
+      const pcm = mixToMono(channels);
+      await analyzeRecording({ pcm, sampleRate: audioBuffer.sampleRate, duration: audioBuffer.duration, fileName: file.name });
+    } catch (e) {
+      resetForNewFile();
+      fileNameEl.textContent = file.name;
+      api.recordError('playalong:load', e);
+      errorEl.textContent = 'That recording could not be opened or analysed.';
+      errorEl.hidden = false;
+    }
+  }
+
   fileInput.addEventListener('change', function () {
     const file = this.files && this.files[0];
     this.value = '';
@@ -384,6 +415,82 @@ function mountPlayalong(el, api) {
   });
   cancelBtn.addEventListener('click', () => {
     cancelled = true;
+  });
+
+  // "Record a take": press once to start (mic permission is requested only
+  // now, on this press — never ahead of time), press again to stop. The
+  // captured PCM is handed to analyzeRecording() the same way an opened file
+  // is, so everything downstream (tempo/key/chords, the loopable timeline,
+  // the slowed-down loop) works exactly the same for a learner's own take as
+  // for a song file. Nothing recorded here is ever sent anywhere; it lives
+  // only in memory for this tab, same as an opened file's decoded PCM.
+  function startRecordingCapture() {
+    const actx = api.audio();
+    if (!actx) {
+      api.say('Audio is not available right now.', 'no');
+      return;
+    }
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      recordNoteEl.textContent = 'This browser cannot open a microphone here. Open the standalone copy in Chrome.';
+      recordNoteEl.hidden = false;
+      return;
+    }
+    recordBtn.disabled = true;
+    api.openMic().then(() => {
+      const analysers = api.analysers();
+      if (!analysers || !analysers.time) {
+        recordBtn.disabled = false;
+        recordNoteEl.textContent = 'The microphone could not be opened.';
+        recordNoteEl.hidden = false;
+        return;
+      }
+      recordNoteEl.hidden = true;
+      const sampleRate = actx.sampleRate;
+      takeAccumulator = createTakeAccumulator(sampleRate);
+      // Each tick only keeps the TAIL of the analyser's buffer — the samples
+      // that arrived since the previous tick — not the whole (much longer,
+      // overlapping) analyser window every read hands back: the analyser's
+      // fftSize (4096, see src/app.js's wireAnalysers) covers ~93ms of audio
+      // at a typical mic sample rate, polled here every 50ms, so re-reading
+      // the FULL buffer every tick would duplicate roughly the last 43ms of
+      // audio into the take on every single poll.
+      const tailSamples = Math.max(1, Math.round((RECORD_CAPTURE_INTERVAL_MS / 1000) * sampleRate));
+      const buf = new Float32Array(analysers.time.fftSize);
+      recordBtn.disabled = false;
+      recordBtn.textContent = 'Stop recording';
+      captureTimer = setInterval(() => {
+        analysers.time.getFloatTimeDomainData(buf);
+        const n = Math.min(tailSamples, buf.length);
+        const tail = buf.subarray(buf.length - n);
+        const stillRoom = takeAccumulator.push(tail);
+        if (!stillRoom) stopRecordingCapture();
+      }, RECORD_CAPTURE_INTERVAL_MS);
+    }, () => {
+      recordBtn.disabled = false;
+      recordNoteEl.textContent = 'The microphone was blocked. Allow it to record a take.';
+      recordNoteEl.hidden = false;
+    });
+  }
+
+  function stopRecordingCapture() {
+    if (captureTimer) clearInterval(captureTimer);
+    captureTimer = null;
+    recordBtn.textContent = 'Record a take';
+    if (!takeAccumulator) return;
+    const took = takeAccumulator.finish();
+    takeAccumulator = null;
+    if (took.duration < 0.2) {
+      recordNoteEl.textContent = 'That take was too short to use.';
+      recordNoteEl.hidden = false;
+      return;
+    }
+    const fileName = 'My take (' + new Date().toLocaleTimeString() + ')';
+    analyzeRecording({ pcm: took.pcm, sampleRate: took.sampleRate, duration: took.duration, fileName });
+  }
+
+  recordBtn.addEventListener('click', () => {
+    if (captureTimer) stopRecordingCapture();
+    else startRecordingCapture();
   });
 
   showSavedHint();
@@ -394,8 +501,10 @@ function mountPlayalong(el, api) {
     },
     hide() {
       stopLoop();
+      if (captureTimer) stopRecordingCapture();
     },
     destroy() {
+      if (captureTimer) { clearInterval(captureTimer); captureTimer = null; takeAccumulator = null; }
       window.removeEventListener('pointerup', onWindowPointerUp);
     },
   };

@@ -172,6 +172,17 @@ capture — so a file-import panel can be wired up later without teaching transc
 new. Like the rest of this app's pitch tracking, it is monophonic only: a chord or a second voice
 reads as whichever single pitch the detector locks onto, not as separate notes.
 
+## Play along with a recording
+
+The "Play Along" panel (`src/ui/playalong.js`) opens an audio file of a song, works out its
+tempo, key and chords, and lets you loop any section slower — pitch unchanged — to learn your
+part. "Record a take" does the same starting point a different way: press it, play or sing into
+the mic, press it again to stop, and that take goes straight into the same analysis and loop —
+a duet with yourself, with no file to save or open first. The capture never leaves the device and
+mic permission is only asked for on that press; the pure chunk-accumulation logic (one bounded,
+five-minute-capped `Float32Array` out of whatever small buffers the mic hands back) lives in
+`src/audio/take-recorder.js`.
+
 ## Notation engine
 
 `src/notation/` is a pure layout engine for standard notation and tab: given
