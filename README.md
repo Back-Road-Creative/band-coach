@@ -212,7 +212,10 @@ notes and a key/clef/time signature, it returns plain drawing primitives
 (noteheads, stems, ledger lines, accidentals, clefs, key/time signatures,
 tab fret numbers) rather than drawing directly, so it can be unit-tested with
 `node --test` and no browser. `draw-canvas.js` is a thin Canvas 2D renderer
-for those primitives, and `for-instrument.js` bridges an instrument record
+for those primitives; `draw-svg.js` renders the same primitive list to a
+standalone SVG string (same geometry, no DOM) for printing, and
+`src/styles.css` has a `@media print` block that hides app chrome and prints
+the notation area black-on-white. `for-instrument.js` bridges an instrument record
 and a target MIDI note into what the engine needs (clef, the written pitch —
 guitar and bass print an octave above their sounding pitch, per each
 record's `writtenOctaveUp` — and a tab position for fretted instruments).
