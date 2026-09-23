@@ -160,6 +160,54 @@ function el(tag, attrs, children) {
   return node;
 }
 
+// "Play it on…" row (plan D8): one card per ready instrument with a
+// feasibility badge (src/song/feasibility.js -- itself built only on
+// fitToInstrument()'s real result, never a guessed score). Module-level and
+// exported (not a mountSongsPanel closure) so another panel -- currently
+// src/ui/learn.js's "Learn this" result view -- can render the exact same
+// row for a song it just imported/transcribed, without this panel's own
+// practice-session state. `onPick(instrument)` fires when a card is
+// clicked; mountSongsPanel's own renderPlayItOn() above passes its
+// startPractice, learn.js passes its own "open this song's lesson on that
+// instrument" handler.
+export function renderPlayItOnCards(song, partId, currentInstrumentId, onPick) {
+  const section = el('section', { class: 'panel-songs-play-on', 'aria-label': 'Play it on…' });
+  section.appendChild(el('h5', { text: 'Play it on…' }));
+  const list = el('ul', { class: 'panel-songs-play-on-list' });
+  READY_INSTRUMENTS.forEach((instrument) => {
+    const f = feasibility(song, partId, instrument);
+    const isCurrent = instrument.id === currentInstrumentId;
+    const card = el('li', {
+      class: 'panel-songs-instrument-card' + (isCurrent ? ' panel-songs-instrument-card-current' : ''),
+    });
+    const btn = el('button', {
+      type: 'button',
+      class: 'panel-songs-instrument-btn',
+      title: f.detail,
+      onclick: () => onPick(instrument),
+    });
+    btn.appendChild(el('span', { class: 'panel-songs-instrument-name', text: instrument.name }));
+    btn.appendChild(el('span', { class: 'panel-songs-badge', 'data-feasibility': f.level, text: f.label }));
+    card.appendChild(btn);
+    list.appendChild(card);
+  });
+  section.appendChild(list);
+  return section;
+}
+
+// A cross-panel "open this song's lesson next time Songs is shown" request
+// (used by src/ui/learn.js's "Practise this" button, since a panel only
+// ever gets its OWN mounted instance -- there is no direct call from one
+// panel's module into another's running closure). Backed by this panel's
+// own saved-data slot (api.store, see src/ui/panels.js's sanitizePanelData
+// contract: a plain, <=256KB JSON object, silently dropped if malformed),
+// so it survives exactly as long as a real click-through would need and no
+// longer -- mountSongsPanel's show() below reads it once and clears it.
+const OPEN_REQUEST_STORE_ID = 'songs-open-request';
+export function requestOpenSong(api, songId, partId, instrumentId) {
+  api.store(OPEN_REQUEST_STORE_ID).set({ songId, partId: partId || null, instrumentId: instrumentId || null });
+}
+
 function readFile(file, as) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -476,31 +524,7 @@ function mountSongsPanel(hostEl, api) {
   // an instrument. Computed lazily here, only for the song actually open --
   // never for the whole library up front.
   function renderPlayItOn(song, partId, currentInstrumentId) {
-    const section = el('section', { class: 'panel-songs-play-on', 'aria-label': 'Play it on…' });
-    section.appendChild(el('h5', { text: 'Play it on…' }));
-    const list = el('ul', { class: 'panel-songs-play-on-list' });
-    READY_INSTRUMENTS.forEach((instrument) => {
-      const f = feasibility(song, partId, instrument);
-      const isCurrent = instrument.id === currentInstrumentId;
-      const card = el('li', {
-        class: 'panel-songs-instrument-card' + (isCurrent ? ' panel-songs-instrument-card-current' : ''),
-      });
-      const btn = el('button', {
-        type: 'button',
-        class: 'panel-songs-instrument-btn',
-        title: f.detail,
-        // Picking a card starts (or restarts) this song's lesson on that
-        // instrument; see startPractice()'s instrumentOverride comment for
-        // why this never calls api.setMod().
-        onclick: () => startPractice(song, partId, instrument),
-      });
-      btn.appendChild(el('span', { class: 'panel-songs-instrument-name', text: instrument.name }));
-      btn.appendChild(el('span', { class: 'panel-songs-badge', 'data-feasibility': f.level, text: f.label }));
-      card.appendChild(btn);
-      list.appendChild(card);
-    });
-    section.appendChild(list);
-    return section;
+    return renderPlayItOnCards(song, partId, currentInstrumentId, (instrument) => startPractice(song, partId, instrument));
   }
 
   function updateCount() {
@@ -788,11 +812,29 @@ function mountSongsPanel(hostEl, api) {
 
   importInput.addEventListener('change', handleFile);
 
+  // A pending requestOpenSong() (src/ui/learn.js's "Practise this") --
+  // read once, on the very next show(), then cleared so it never re-fires
+  // the next time a learner opens Songs normally. A song this panel cannot
+  // find (removed, or from a store that failed to open) is silently
+  // skipped rather than shown as an error: the request has already served
+  // its purpose of getting the learner here.
+  async function checkOpenRequest() {
+    const req = api.store(OPEN_REQUEST_STORE_ID).get();
+    if (!req || !req.songId) return;
+    api.store(OPEN_REQUEST_STORE_ID).set(null);
+    const song = await library.get(req.songId);
+    if (!song || !song.parts.length) return;
+    const partId = req.partId || song.parts[0].id;
+    const instrument = req.instrumentId ? READY_INSTRUMENTS.find((i) => i.id === req.instrumentId) : undefined;
+    startPractice(song, partId, instrument);
+  }
+
   refreshList();
 
   return {
     show() {
       refreshList();
+      checkOpenRequest();
     },
     hide() {
       stopRecording();

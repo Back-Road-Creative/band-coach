@@ -176,6 +176,23 @@ at a time, from a file the same as from the mic — unless "More than one note a
 checked, in which case a multipitch detector (`src/audio/analysis/multipitch.js`) splits the file
 into a melody/bass/inner part per voice it hears, each shown as its own labelled lane.
 
+## Learn this
+
+The "Learn this" panel (`src/ui/learn.js`) is one drop zone: drop or pick a music file (`.mid`,
+`.midi`, `.abc`, `.xml`, `.musicxml`, `.mxl`, `.gp`) or a recording (`.wav`, `.mp3`, `.ogg`, `.m4a`,
+`.flac`, `.webm`), and either way it turns into a song you can practise — the panel never asks
+which kind of thing you dropped (`src/ui/learn/source.js`'s `learnSourceFor` tells notation from
+audio from neither, purely from the file's name and MIME type). A notation file is imported the
+same way Songs' own file input already imports one; a recording is decoded and transcribed through
+the same pipeline "Record a tune"'s file input uses (see "Turning an audio file into notes" below)
+— nothing about pitch tracking is reimplemented here. Either way the result is saved to the same
+song library Songs reads from, then shown: the song's title, any warnings as a plain check list, a
+confidence-coloured strip of notes when the transcription carries per-note confidence, the same
+"Play it on…" instrument-card row Songs shows, and a "Practise this" button that opens Songs
+already on that song's lesson. This is the file door only — recording straight from the microphone,
+and retiring the older Record a tune / Play Along / Songs file-picker panels this one is meant to
+replace, are later work.
+
 ## Songs
 
 The Songs panel (`src/ui/songs.js`) turns a whole tune — built in, or imported from a `.mid`,
