@@ -504,9 +504,12 @@ export function notesInBar(song, barIndex) {
   if (!isInt(barIndex) || barIndex < 0) {
     throw new Error('barIndex must be a non-negative integer');
   }
-  const barTicks = barTicksOf(song);
-  const barStart = barIndex * barTicks;
-  const barEnd = barStart + barTicks;
+  // Same bar windows as barsOf, so a metre change moves them too. Past the
+  // last bar there are no notes (barsOf covers the whole song).
+  const boundaries = barsOf(song);
+  if (barIndex >= boundaries.length - 1) return [];
+  const barStart = boundaries[barIndex];
+  const barEnd = boundaries[barIndex + 1];
   const result = [];
   for (const part of song.parts) {
     for (const note of part.notes) {

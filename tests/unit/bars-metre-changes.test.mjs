@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  SCHEMA, TICKS_PER_QUARTER, barsOf, songDurationTicks
+  SCHEMA, TICKS_PER_QUARTER, barsOf, notesInBar, songDurationTicks
 } from '../../src/song/model.js';
 
 // Mirrors the baseSong() shape used in tests/unit/song-model.test.mjs, but
@@ -72,4 +72,20 @@ test('barsOf handles multiple metre changes across a song', () => {
   });
   assert.deepEqual(songDurationTicks(song), 5701);
   assert.deepEqual(barsOf(song), [0, 1920, 3360, 4800, 5760]);
+});
+
+test('notesInBar uses the same bar windows as barsOf across a metre change', () => {
+  // 4/4 until 3840, then 3/4: bar 2 is [3840, 5280), bar 3 is [5280, 6720).
+  // The fixed-metre math put bar 3 at [5760, 7680) and missed the note at 5400.
+  const song = baseSong({
+    metreChanges: [{ tick: 3840, num: 3, den: 4 }],
+    parts: [{ id: 'melody', name: 'Melody', notes: [
+      { start: 0, dur: 480, midi: 60 }, { start: 5000, dur: 240, midi: 62 },
+      { start: 5400, dur: 240, midi: 64 }, { start: 6000, dur: 440, midi: 67 }
+    ] }]
+  });
+  const starts = (b) => notesInBar(song, b).map(({ note }) => note.start);
+  assert.deepEqual(starts(2), [5000]);
+  assert.deepEqual(starts(3), [5400, 6000]);
+  assert.deepEqual(starts(4), []);
 });
