@@ -274,13 +274,26 @@ function mountSongsPanel(hostEl, api) {
 
   const importLabel = el('label', { for: 'songsFileInput', text: 'Add a song, a teacher’s challenge, or a band pack, from a file (.mid, .midi, .abc, .xml, .musicxml, .mxl, .gp, .bandpack or .json)' });
   const importInput = el('input', { type: 'file', id: 'songsFileInput', accept: '.mid,.midi,.abc,.xml,.musicxml,.mxl,.gp,.bandpack,.json' });
+  // Pointer to the one shared door (plan §11.5.7): this file input keeps
+  // working exactly as before (existing tests use it directly), this just
+  // tells a learner where the newer, simpler door is -- for a recording
+  // especially, which this input does not transcribe.
+  const learnTipBtn = el('button', { type: 'button', id: 'songsLearnTipBtn', text: 'Open Learn this' });
+  learnTipBtn.addEventListener('click', () => {
+    const doc = hostEl.ownerDocument || document;
+    const btn = doc.querySelector('#panelPicker button[data-panel="learn"]') || doc.querySelector('button[data-panel="learn"]');
+    if (btn) btn.click();
+  });
+  const learnTip = el('p', { class: 'panel-songs-learn-tip' }, [
+    document.createTextNode('Tip: Learn this takes any recording or music file in one place. '), learnTipBtn,
+  ]);
   const importMsg = el('div', { class: 'panel-songs-msg', role: 'status' });
   // Read-only part assignments from the last imported band pack -- one line
   // per song that carries an assignment (a song with no assignment gets no
   // line at all). Cleared at the top of every handleFile() so it never shows
   // a stale pack's assignments after a different file is picked.
   const bandPackPartsEl = el('div', { class: 'panel-songs-band-pack-parts-list' });
-  const importSection = el('section', {}, [importLabel, importInput, importMsg, bandPackPartsEl]);
+  const importSection = el('section', {}, [importLabel, importInput, learnTip, importMsg, bandPackPartsEl]);
 
   const challengeSection = el('section', { class: 'panel-songs-challenge', hidden: 'hidden' });
 

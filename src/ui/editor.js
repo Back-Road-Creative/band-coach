@@ -33,6 +33,18 @@ import { drawPrimitives } from '../notation/draw-canvas.js';
 import { createRecorder } from './editor/record.js';
 import { layoutSong } from './editor/layout-song.js';
 
+// A cross-panel "load this saved song for editing next time Record a tune is
+// shown" request (used by src/ui/learn.js's "Fix it up" button, the same
+// pattern src/ui/songs.js's requestOpenSong()/OPEN_REQUEST_STORE_ID already
+// uses -- a panel only ever gets its own mounted instance, so there is no
+// direct call from one panel's module into another's running closure).
+// Backed by this panel's own saved-data slot (api.store), read once by
+// mountEditor's show() below and cleared so it never re-fires.
+const EDITOR_OPEN_REQUEST_STORE_ID = 'editor-open-request';
+export function requestOpenInEditor(api, songId) {
+  api.store(EDITOR_OPEN_REQUEST_STORE_ID).set({ songId });
+}
+
 // Shared across every unit that writes to the saved-song library — see the
 // author brief's "Wiring wave W" section: "every unit uses exactly that
 // database name." (src/song/library.js's own header comment shows a
@@ -111,6 +123,18 @@ export function register(panels) {
       return mountEditor(hostEl, api);
     },
   });
+}
+
+// Switches to another registered panel the one real, already-shipping way
+// any panel switches to another: a click on the app's own panel-picker
+// button (src/app.js's buildPanelPicker()/openPanel()) -- same precedent as
+// src/ui/learn.js's openSongsPanel(). No-op where no such button exists (a
+// host page that never wired panel switching in).
+function openOtherPanel(hostEl, panelId) {
+  const doc = hostEl.ownerDocument || document;
+  const btn = doc.querySelector('#panelPicker button[data-panel="' + panelId + '"]') || doc.querySelector('button[data-panel="' + panelId + '"]');
+  if (btn) { btn.click(); return true; }
+  return false;
 }
 
 function mountEditor(hostEl, api) {
@@ -238,9 +262,19 @@ function mountEditor(hostEl, api) {
     halveBtn, doubleBtn, octaveUpBtn, octaveDownBtn,
   ]);
 
+  // Pointer to the one shared door (plan §11.5.7): Listen/Stop and this file
+  // input keep working exactly as before (existing tests use them directly),
+  // this just tells a learner where the newer, simpler door is.
+  const learnTipBtn = el('button', { type: 'button', id: 'editorLearnTipBtn', class: 'small', text: 'Open Learn this' });
+  learnTipBtn.addEventListener('click', () => openOtherPanel(hostEl, 'learn'));
+  const learnTip = el('p', { class: 'editor-learn-tip' }, [
+    document.createTextNode('Tip: Learn this takes any recording or music file in one place. '), learnTipBtn,
+  ]);
+
   const root = el('div', { class: 'panel-editor' }, [
     el('h2', { text: 'Record a tune' }),
     el('p', { text: 'Press Listen, play or sing your tune, then press Stop. It will write down what it heard so you can fix it up and practise it.' }),
+    learnTip,
     el('div', { class: 'editor-record' }, [
       el('label', { for: 'editorTitle', text: 'Title' }), titleInput, listenBtn, recordStatus,
       el('label', { for: 'editorFileInput', text: 'Or choose an audio file' }), fileInput,
@@ -308,6 +342,39 @@ function mountEditor(hostEl, api) {
       fileInput.value = '';
     }
   });
+
+  // A song handed over already-built (src/ui/learn.js's "Fix it up"), rather
+  // than one just transcribed here -- it was already validated by whoever
+  // saved it, so there is no needsCheck list to gate behind; editing tools
+  // unlock immediately, same as after a check list has been acknowledged.
+  function loadSong(loadedSong) {
+    song = loadedSong;
+    debugSong = song;
+    report = { notesCaptured: song.parts[0] ? song.parts[0].notes.length : 0, needsCheck: [] };
+    history = createHistory(song);
+    selected = null;
+    activePartIndex = 0;
+    acknowledged = true;
+    titleInput.value = song.title;
+    renderCheckList();
+    recordStatus.textContent = 'Loaded "' + song.title + '" for editing.';
+    setControlsEnabled(true);
+    render();
+  }
+
+  // A pending requestOpenInEditor() -- read once, on the very next show(),
+  // then cleared so it never re-fires the next time a learner opens this
+  // panel normally. A song this panel cannot find (removed, or from a store
+  // that failed to open) is silently skipped, same precedent as songs.js's
+  // own checkOpenRequest().
+  async function checkOpenRequest() {
+    const req = api.store(EDITOR_OPEN_REQUEST_STORE_ID).get();
+    if (!req || !req.songId) return;
+    api.store(EDITOR_OPEN_REQUEST_STORE_ID).set(null);
+    const loaded = await getLibrary().get(req.songId);
+    if (!loaded) return;
+    loadSong(loaded);
+  }
 
   function loadTranscription(result) {
     song = result.song;
@@ -552,6 +619,7 @@ function mountEditor(hostEl, api) {
 
   return {
     show() {
+      checkOpenRequest();
       render();
     },
     hide() {
