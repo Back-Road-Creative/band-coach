@@ -60,6 +60,25 @@ jobs:
           appx=$(ls release/*.appx)
           node scripts/verify-appx.mjs "$appx"
 
+      # The Store's certification run was the first launch of v1.3.0-v1.6.0,
+      # and it crashed on every device. Run the packaged exe (the same
+      # app.asar the .appx carries) before anything is uploaded. A
+      # main-process crash leaves an error dialog open, so not exiting in
+      # time is a failure.
+      - name: launch the packaged app (must load the page and exit 0)
+        working-directory: store
+        shell: pwsh
+        run: |
+          $exe = 'release/win-unpacked/Band Coach.exe'
+          if (-not (Test-Path $exe)) { throw "no packaged exe at $exe" }
+          $p = Start-Process -FilePath $exe -ArgumentList '--smoke-test' -PassThru
+          $null = $p.Handle
+          if (-not $p.WaitForExit(90000)) {
+            Stop-Process -Id $p.Id -Force
+            throw 'the packaged app did not exit within 90s (a launch crash leaves an error dialog open)'
+          }
+          if ($p.ExitCode -ne 0) { throw "the packaged app's smoke check exited $($p.ExitCode) (see store/lib/smoke.js)" }
+
       - name: upload appx artifact
         uses: actions/upload-artifact@v4
         with:

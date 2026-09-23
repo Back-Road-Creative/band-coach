@@ -253,10 +253,13 @@ Store's own install path — see below.
   works is the first `store-package` workflow run on `windows-latest`.
 - **The package had never been installed or launched by us** before the Store's certification
   run on 2026-09-23, which crashed at launch on every device (see `electron-builder.json` above).
-  The window, menu, permission prompts and network block are still only checked by reading
-  `main.js`'s source (`tests/unit/store-shell.test.mjs` at the repo root). Run
-  `scripts/try-shell.ps1` on a Windows machine before the next submission — it is the same
-  `main.js` the package runs, and a launch crash shows up there in seconds.
+  `store-package.yml` now runs the packaged `release/win-unpacked/Band Coach.exe --smoke-test`
+  on the Windows runner before uploading: it must load the page with no errors and exit 0
+  (`lib/smoke.js`, `tests/unit/store-launch-smoke.test.mjs`). That proves the packaged app
+  starts; it does not install the `.appx`, and it does not click through the window, menu,
+  permission prompts or network block, which are still only checked by reading `main.js`'s
+  source (`tests/unit/store-shell.test.mjs`). `scripts/try-shell.ps1` on a real Windows machine
+  still covers the microphone and MIDI.
 - **The Windows App Certification Kit has not been run.** Partner Center requires (or strongly
   recommends) passing the WACK before submission; that has to be run on a real Windows machine,
   not in this CI job.
