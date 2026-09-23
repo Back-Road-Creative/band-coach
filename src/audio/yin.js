@@ -19,7 +19,7 @@
 // directly on the main thread — so it stands alone.
 export function yin(buf, sr, fmin, fmax, rmsGate = 0.008) {
   const n = buf.length; let rms = 0; for (let i = 0; i < n; i++) rms += buf[i] * buf[i]; rms = Math.sqrt(rms / n); if (rms < rmsGate) return { rms: rms, freq: 0 };
-  const tauMax = Math.min(Math.floor(sr / fmin), (n >> 1) - 1), tauMin = Math.max(2, Math.floor(sr / fmax)), W = n - tauMax, d = new Float32Array(tauMax + 2);
+  const tauMax = Math.min(Math.floor(sr / fmin), (n >> 1) - 1), tauMin = Math.max(2, Math.floor(sr / fmax)), W = n - tauMax - 1, d = new Float32Array(tauMax + 2);
   for (let tau = 1; tau <= tauMax + 1; tau++) { let s = 0; for (let i = 0; i < W; i++) { const x = buf[i] - buf[i + tau]; s += x * x; } d[tau] = s; }
   let run = 0; const c = new Float32Array(tauMax + 2); c[0] = 1; for (let tau = 1; tau <= tauMax + 1; tau++) { run += d[tau]; c[tau] = run ? d[tau] * tau / run : 1; }
   let best = -1; for (let tau = tauMin; tau <= tauMax; tau++) { if (c[tau] < 0.15) { while (tau + 1 <= tauMax && c[tau + 1] < c[tau]) tau++; best = tau; break; } }

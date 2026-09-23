@@ -86,3 +86,16 @@ test('a 5-string bass open B0 (30.87 Hz) IS found within a few cents at the deri
   const cents = 1200 * Math.log2(r.freq / 30.87);
   assert.ok(Math.abs(cents) < 10, `expected within 10 cents of 30.87Hz, got ${r.freq}Hz (${cents.toFixed(1)} cents)`);
 });
+
+// When the detected lag lands exactly on tauMax (the tone sits at the low edge
+// of the fmin search window, which range.js deliberately keeps tight), the
+// sub-sample interpolation reads c[tauMax + 1]. That neighbour must be a real
+// correlation value, not a sentinel from reading one sample past the buffer.
+test('a tone whose lag lands on tauMax reads the same pitch as with a wider search window', () => {
+  const freq = SAMPLE_RATE / 44 + 0.1; // period just under 44 samples: tauMax for fmin=1000
+  const buf = sine(freq, 2048, SAMPLE_RATE);
+  const edge = yin(buf, SAMPLE_RATE, 1000, 2000);
+  const wide = yin(buf, SAMPLE_RATE, 200, 2000);
+  const cents = 1200 * Math.log2(edge.freq / wide.freq);
+  assert.ok(Math.abs(cents) < 2, `edge ${edge.freq}Hz vs wide ${wide.freq}Hz (${cents.toFixed(1)} cents)`);
+});
