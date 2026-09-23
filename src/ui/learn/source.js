@@ -1,7 +1,7 @@
 // Pure classifier for the "Learn this" panel (src/ui/learn.js, plan
 // §11.5.7): tells whether a dropped/picked file is a notation file (one of
 // the kinds src/ui/songs/import-route.js's routeImportFile already routes
-// to an importer: midi/abc/musicxml/gp7), an audio recording, or neither --
+// to an importer: midi/abc/musicxml/gp7/gp5), an audio recording, or neither --
 // so the panel never has to ask the learner "what kind of thing is this?"
 // (the plan's "any source, one door" acceptance).
 //
@@ -17,7 +17,7 @@
 // that touches an actual File.
 import { routeImportFile } from '../songs/import-route.js';
 
-const NOTATION_KINDS = new Set(['midi', 'abc', 'musicxml', 'gp7']);
+const NOTATION_KINDS = new Set(['midi', 'abc', 'musicxml', 'gp7', 'gp5']);
 
 // Extensions a browser's audio/video MIME sniffing can miss or leave blank
 // (e.g. a `Blob` built from a MediaRecorder chunk, or a file dragged in from

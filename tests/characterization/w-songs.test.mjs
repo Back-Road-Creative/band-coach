@@ -31,7 +31,7 @@ test('the file input accepts the supported song and challenge extensions', async
 
   await page.evaluate("window.__coach.openPanel('songs')");
   const accept = await page.evaluate("document.getElementById('songsFileInput').getAttribute('accept')");
-  assert.equal(accept, '.mid,.midi,.abc,.xml,.musicxml,.mxl,.gp,.bandpack,.json');
+  assert.equal(accept, '.mid,.midi,.abc,.xml,.musicxml,.mxl,.gp,.gp5,.bandpack,.json');
   const label = await page.evaluate("document.querySelector('label[for=\"songsFileInput\"]').textContent");
   assert.ok(label.includes('.mid'));
   assert.ok(label.includes('.mxl'), 'label mentions compressed MusicXML: ' + label);

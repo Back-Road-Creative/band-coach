@@ -299,6 +299,30 @@ test('a dead note is consumed correctly but not added as a pitched note', () => 
   assert.equal(part.notes[0].start, 480);
 });
 
+test('a measure with a zero numerator is rejected rather than producing a zero-length bar', () => {
+  const bytes = gp5File({
+    info: { title: 'Bad Metre' },
+    tempoKey: { tempo: 120 },
+    measures: [{ num: 0, den: 4 }],
+    tracks: [{ name: 'Guitar', tuning: [64], channelIndex: 0 }],
+    measureTracks: [[measureTrack([beat({ duration: -2, rest: true })])]],
+  });
+
+  assert.throws(() => importGp5(bytes), /metre|time signature/i);
+});
+
+test('a measure with an unsupported denominator is rejected', () => {
+  const bytes = gp5File({
+    info: { title: 'Bad Denominator' },
+    tempoKey: { tempo: 120 },
+    measures: [{ num: 4, den: 3 }],
+    tracks: [{ name: 'Guitar', tuning: [64], channelIndex: 0 }],
+    measureTracks: [[measureTrack([beat({ duration: -2, rest: true })])]],
+  });
+
+  assert.throws(() => importGp5(bytes), /metre|time signature/i);
+});
+
 test('an unsupported version is rejected with a plain-English error', () => {
   const bytes = gp5File({
     version: 'FICHIER GUITAR PRO v4.06',

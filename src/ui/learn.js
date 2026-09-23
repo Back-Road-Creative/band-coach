@@ -5,7 +5,7 @@
 // §11.5.1) -- learnSourceFor (src/ui/learn/source.js) answers that
 // silently.
 //
-// A notation file (midi/abc/musicxml/gp7) is routed and imported exactly
+// A notation file (midi/abc/musicxml/gp7/gp5) is routed and imported exactly
 // the way src/ui/songs.js's own file input already does (routeImportFile +
 // importerFor, src/ui/songs/import-route.js). An audio recording is decoded
 // and transcribed through the EXACT SAME pipeline src/ui/editor.js's file
@@ -53,7 +53,7 @@ import { createRecorder } from './editor/record.js';
 import { countInTimes, clampBpm, DEFAULT_BPM } from './learn/count-in.js';
 import { rmsLevel } from './learn/level.js';
 
-const ACCEPT = '.mid,.midi,.abc,.xml,.musicxml,.mxl,.gp,.wav,.mp3,.ogg,.m4a,.flac,.webm';
+const ACCEPT = '.mid,.midi,.abc,.xml,.musicxml,.mxl,.gp,.gp5,.wav,.mp3,.ogg,.m4a,.flac,.webm';
 
 function el(tag, attrs, children) {
   const node = document.createElement(tag);
@@ -293,7 +293,7 @@ function mountLearnPanel(hostEl, api) {
     resultEl.innerHTML = '';
     const source = learnSourceFor(file.name, file.type);
     if (source === 'unknown') {
-      say('That file is not something this panel can learn from yet. Drop a music file (.mid, .abc, .musicxml, .gp) or a recording (.wav, .mp3, .ogg, .m4a, .flac, .webm).');
+      say('That file is not something this panel can learn from yet. Drop a music file (.mid, .abc, .musicxml, .gp, .gp5) or a recording (.wav, .mp3, .ogg, .m4a, .flac, .webm).');
       return;
     }
     say('Working it out…');

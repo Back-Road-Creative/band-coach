@@ -273,7 +273,7 @@ function mountSongsPanel(hostEl, api) {
   listSection.appendChild(listUl);
 
   const importLabel = el('label', { for: 'songsFileInput', text: 'Add a song, a teacher’s challenge, or a band pack, from a file (.mid, .midi, .abc, .xml, .musicxml, .mxl, .gp, .bandpack or .json)' });
-  const importInput = el('input', { type: 'file', id: 'songsFileInput', accept: '.mid,.midi,.abc,.xml,.musicxml,.mxl,.gp,.bandpack,.json' });
+  const importInput = el('input', { type: 'file', id: 'songsFileInput', accept: '.mid,.midi,.abc,.xml,.musicxml,.mxl,.gp,.gp5,.bandpack,.json' });
   // Pointer to the one shared door (plan §11.5.7): this file input keeps
   // working exactly as before (existing tests use it directly), this just
   // tells a learner where the newer, simpler door is -- for a recording

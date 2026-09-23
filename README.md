@@ -188,7 +188,7 @@ into a melody/bass/inner part per voice it hears, each shown as its own labelled
 ## Learn this
 
 The "Learn this" panel (`src/ui/learn.js`) is one drop zone: drop or pick a music file (`.mid`,
-`.midi`, `.abc`, `.xml`, `.musicxml`, `.mxl`, `.gp`) or a recording (`.wav`, `.mp3`, `.ogg`, `.m4a`,
+`.midi`, `.abc`, `.xml`, `.musicxml`, `.mxl`, `.gp`, `.gp5`) or a recording (`.wav`, `.mp3`, `.ogg`, `.m4a`,
 `.flac`, `.webm`), and either way it turns into a song you can practise — the panel never asks
 which kind of thing you dropped (`src/ui/learn/source.js`'s `learnSourceFor` tells notation from
 audio from neither, purely from the file's name and MIME type). A notation file is imported the
@@ -220,7 +220,7 @@ one is meant to replace is later work.
 ## Songs
 
 The Songs panel (`src/ui/songs.js`) turns a whole tune — built in, or imported from a `.mid`,
-`.midi`, `.abc`, `.xml`, `.musicxml`, compressed `.mxl`, or Guitar Pro `.gp` file — into a
+`.midi`, `.abc`, `.xml`, `.musicxml`, compressed `.mxl`, Guitar Pro `.gp`, or Guitar Pro 5 `.gp5` file — into a
 step-by-step practice lesson (`src/song/lesson.js`), tracking each learner's own pass/fail record
 and crediting every correctly played note toward the same mastery store a built-in drill uses. A
 teacher can also hand a student a whole set of songs at once as a **challenge**: a plain `.json`
