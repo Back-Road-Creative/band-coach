@@ -109,6 +109,14 @@ test('layoutMeasure: dotted durations get a dot primitive', () => {
   assert.equal(byType(primitives, 'dot').length, 1);
 });
 
+test('layoutMeasure: a dotted rest gets a dot primitive too', () => {
+  const { primitives } = layoutMeasure({
+    clef: 'treble', key: 'C', time: [4, 4], width: 400,
+    notes: [{ midi: null, dur: 1.5 }, { midi: 60, dur: 2.5 }],
+  });
+  assert.equal(byType(primitives, 'dot').length, 1);
+});
+
 test('layoutMeasure: notes needing ledger lines get ledger primitives', () => {
   const { primitives } = layoutMeasure({
     clef: 'treble', key: 'C', time: [4, 4], width: 400,

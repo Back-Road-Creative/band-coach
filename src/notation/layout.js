@@ -25,6 +25,7 @@ function durationInfo(dur) {
     hasStem: base < 4,
     flags: base < 1 ? Math.round(Math.log2(1 / base)) : 0,
     dotted,
+    base, // undotted duration (4/2/1/0.5/0.25/0.125): picks which rest glyph a 'rest' primitive draws
   };
 }
 
@@ -103,7 +104,9 @@ export function layoutMeasure({ clef, key, time, notes, width }) {
 
     if (note.midi === null) {
       const s = grand ? 'treble' : clef;
-      primitives.push({ type: 'rest', x: nx, y: staffBottomY[s] - MIDDLE_LINE_POSITION * STEP, dur: note.dur });
+      const y = staffBottomY[s] - MIDDLE_LINE_POSITION * STEP;
+      primitives.push({ type: 'rest', x: nx, y, dur: note.dur, base: info.base });
+      if (info.dotted) primitives.push({ type: 'dot', x: nx + 8, y });
       continue;
     }
 

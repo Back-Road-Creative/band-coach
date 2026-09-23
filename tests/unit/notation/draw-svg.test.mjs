@@ -86,6 +86,19 @@ test('drawSVG: uses the same geometry as draw-canvas.js for a line primitive', (
   assert.match(svg, /x1="5"[^>]*y1="10"[^>]*x2="55"[^>]*y2="10"/);
 });
 
+test('drawSVG: a whole rest and an eighth rest render different glyphs, with and without a glyph font', () => {
+  const wholeRest = { type: 'rest', x: 0, y: 0, base: 4 };
+  const eighthRest = { type: 'rest', x: 0, y: 0, base: 0.5 };
+
+  const glyphSvgWhole = drawSVG([wholeRest], { glyphFont: '"Noto Music"' }, { width: 50, height: 50 });
+  const glyphSvgEighth = drawSVG([eighthRest], { glyphFont: '"Noto Music"' }, { width: 50, height: 50 });
+  assert.notEqual(glyphSvgWhole, glyphSvgEighth);
+
+  const fallbackSvgWhole = drawSVG([wholeRest], { glyphFont: null }, { width: 50, height: 50 });
+  const fallbackSvgEighth = drawSVG([eighthRest], { glyphFont: null }, { width: 50, height: 50 });
+  assert.notEqual(fallbackSvgWhole, fallbackSvgEighth);
+});
+
 test('drawSVG: draws every primitive of a real measure without throwing, well-formed output', () => {
   const { primitives } = layoutMeasure({
     clef: 'grand', key: 'D', time: [4, 4], width: 400,
