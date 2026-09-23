@@ -223,7 +223,14 @@ Picking one through the same file input adds every song to the library and shows
 assignments read-only, one line per song ("Song title: Alex plays Melody, Sam plays Bass"). "Share
 with your band" bundles a learner's own saved library into a downloadable `.bandpack` with no
 assignments, the same file-exchange pattern as a challenge — no account, no server, no network
-call.
+call. Each phrase's tempo-ladder rungs run their own "Riff Repeater" loop
+(`src/ui/songs/loop-backing.js`, wiring `src/audio/stretch/loop.js`'s difficulty ladder into the
+lesson): a missed attempt steps the synthesized backing's speed down, a fully clean attempt steps
+it back up, and the panel always shows the current rate in plain words ("Playing at 90% speed",
+"Full speed"). Only the synthesized backing is slowed this way — no starter or imported song
+carries an original recording to time-stretch, so `src/audio/stretch/wsola.js` stays wired only
+into the Play Along panel below.
+
 ## Play along with a recording
 
 The "Play Along" panel (`src/ui/playalong.js`) opens an audio file of a song, works out its
