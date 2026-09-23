@@ -7,6 +7,9 @@
 // Registered as panel "editor" per the Wave-W contract (src/ui/panels.js):
 // `register(panels)` calls `panels.register({ id, name, tag, color, mount })`.
 import { transcribe } from '../song/transcribe.js';
+import { framesFromPCM } from '../audio/file-frames.js';
+import { mixToMono } from './playalong/audio-prep.js';
+import { rangeForInstrument } from '../audio/range.js';
 import {
   moveNote,
   repitch,
@@ -136,6 +139,7 @@ function mountEditor(hostEl, api) {
   });
   const listenBtn = el('button', { type: 'button', id: 'editorListenBtn', text: 'Listen' });
   const recordStatus = el('span', { class: 'editor-status', 'aria-live': 'polite' });
+  const fileInput = el('input', { type: 'file', id: 'editorFileInput', accept: 'audio/*' });
 
   const checkBox = el('div', { class: 'editor-check', id: 'editorCheck', hidden: 'hidden' });
   const checkList = el('ul');
@@ -229,6 +233,7 @@ function mountEditor(hostEl, api) {
     el('p', { text: 'Press Listen, play or sing your tune, then press Stop. It will write down what it heard so you can fix it up and practise it.' }),
     el('div', { class: 'editor-record' }, [
       el('label', { for: 'editorTitle', text: 'Title' }), titleInput, listenBtn, recordStatus,
+      el('label', { for: 'editorFileInput', text: 'Or choose an audio file' }), fileInput,
     ]),
     checkBox,
     toolbar,
@@ -259,6 +264,36 @@ function mountEditor(hostEl, api) {
       listenBtn.textContent = 'Listen';
       recordStatus.textContent = '';
       tell('The microphone could not be opened.', 'no');
+    }
+  });
+
+  // ---- transcribing from a chosen audio file (instead of the microphone) --
+  // Same destination as Listen/Stop: decode the file to mono PCM (mirroring
+  // src/ui/playalong.js's loadFile), walk it with framesFromPCM
+  // (src/audio/file-frames.js) into the same frame/onset shape the mic
+  // produces, then hand it to the same transcribe() -> loadTranscription()
+  // path so a file-picked tune lands in the same mandatory check-list step.
+  fileInput.addEventListener('change', async () => {
+    const file = fileInput.files && fileInput.files[0];
+    if (!file) return;
+    try {
+      recordStatus.textContent = 'Working it out…';
+      const actx = api.audio();
+      if (!actx) throw new Error('audio is not available');
+      const audioBuffer = await actx.decodeAudioData(await file.arrayBuffer());
+      const channels = [];
+      for (let c = 0; c < audioBuffer.numberOfChannels; c++) channels.push(audioBuffer.getChannelData(c));
+      const pcm = mixToMono(channels);
+      const { fmin, fmax } = rangeForInstrument(typeof api.instrument === 'function' ? api.instrument() : null);
+      const { frames, onsets } = framesFromPCM(pcm, audioBuffer.sampleRate, { fmin, fmax });
+      const result = transcribe(frames, { title: titleInput.value || 'My recording', onsets });
+      loadTranscription(result);
+    } catch (e) {
+      api.recordError('editor:file', e);
+      recordStatus.textContent = '';
+      tell('That file could not be read as audio. Try a different file, such as a .wav or .mp3.', 'no');
+    } finally {
+      fileInput.value = '';
     }
   });
 

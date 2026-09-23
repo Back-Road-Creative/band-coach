@@ -25,6 +25,7 @@ import { fingeringsForValves, fingeringsForSlide, PRESETS as BRASS_PRESETS } fro
 import { positionsFor, tuningFor } from '../../instruments/how/fretboard.js';
 import { holesFor } from '../../instruments/how/harmonica.js';
 import { fingeringFor } from '../../instruments/how/recorder-whistle.js';
+import { keyedFingeringFor } from '../../instruments/how/keyed-woodwind.js';
 import { noteName } from './notes.js';
 
 // Which brass preset (src/instruments/how/brass.js's PRESETS) an instrument
@@ -35,6 +36,18 @@ const BRASS_BY_ID = {
   'trumpet-bb': { preset: 'trumpet-cornet', style: 'valves' },
   'horn-f': { preset: 'horn-f-basics', style: 'valves' },
   trombone: { preset: 'trombone', style: 'slide' }
+};
+
+// Which src/instruments/how/keyed-woodwind.js chart a keyed Boehm-system
+// woodwind record uses (see that file's top comment for the low-confidence
+// caveat on every entry -- a good-faith beginner fingering, not verified
+// against a real chart or player).
+const KEYED_WOODWIND_CHART_BY_ID = {
+  flute: 'flute',
+  'clarinet-bb': 'clarinet',
+  oboe: 'oboe',
+  'sax-alto-eb': 'sax',
+  'sax-tenor-bb': 'sax'
 };
 
 // Which named alternate tunings (fretboard.js's TUNINGS) apply to a fretted
@@ -66,6 +79,7 @@ export function howKindFor(instrument) {
   if (instrument.family === 'free-reed') return 'harmonica';
   if (instrument.id === 'recorder-descant') return 'recorder';
   if (instrument.id === 'tin-whistle') return 'whistle';
+  if (KEYED_WOODWIND_CHART_BY_ID[instrument.id]) return 'keyed-woodwind';
   if (instrument.family === 'voice') return 'voice';
   return null;
 }
@@ -160,6 +174,14 @@ function describeRecorderLike(midi, entry, instrumentKind) {
   return text;
 }
 
+function describeKeyedWoodwind(midi, entry) {
+  const name = noteName(midi);
+  if (!entry) return name + ' has no fingering shown: this pitch is outside the beginner fingering chart for this instrument.';
+  let text = name + ': ' + entry.keys + '.';
+  if (entry.halfHole) text += ' Uses the half-hole technique.';
+  return text;
+}
+
 function describeVoice(instrument, midi) {
   const name = noteName(midi);
   const inRange = midi >= instrument.range.low && midi <= instrument.range.high;
@@ -216,6 +238,16 @@ export function computeHow(instrument, midi, opts = {}) {
       kind, instrumentKind: kind, entry,
       playable: !!entry,
       description: describeRecorderLike(midi, entry, kind)
+    };
+  }
+
+  if (kind === 'keyed-woodwind') {
+    const chart = KEYED_WOODWIND_CHART_BY_ID[instrument.id];
+    const entry = keyedFingeringFor(midi, chart);
+    return {
+      kind, chart, entry,
+      playable: !!entry,
+      description: describeKeyedWoodwind(midi, entry)
     };
   }
 

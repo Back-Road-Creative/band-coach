@@ -26,7 +26,32 @@ test('setMod sends the new module range to an already-created pitch worklet', as
 
   await page.evaluate("window.__coach.setMod('harp')");
   const harpRange = await page.evaluate('window.__coach.pitchWorkletRange()');
-  assert.deepEqual(harpRange, { fmin: 200, fmax: 2300 }, 'switching modules should re-range the already-created worklet');
+  // A C harmonica spans C4-C7 (60-96); src/audio/range.js's
+  // rangeForInstrument turns that into 220-2489 Hz, the same margins every
+  // other instrument gets (it was a hand-typed 200-2300 before harp keys).
+  assert.deepEqual(harpRange, { fmin: 220, fmax: 2489 }, 'switching modules should re-range the already-created worklet');
+});
+
+// Changing the harmonica's key changes its pitch range (MODS.harp.fmin/fmax
+// are getters on DB.prefs.harpKey), so the key <select> must re-range an
+// already-created worklet the same way setMod does -- otherwise a G harp
+// (hole 1 blow G3, 196 Hz) is heard through a C harp's 220 Hz floor.
+test('changing the harmonica key re-ranges an already-created pitch worklet', async (t) => {
+  const page = await launchPage(htmlPath);
+  t.after(() => page.close());
+
+  await page.evaluate("window.__coach.setMod('harp')");
+  await page.evaluate('window.__coach.testPluck(440, [0])');
+  assert.deepEqual(await page.evaluate('window.__coach.pitchWorkletRange()'), { fmin: 220, fmax: 2489 });
+
+  await page.waitFor("document.getElementById('optHarpKey')");
+  await page.evaluate(`
+    const s = document.getElementById('optHarpKey');
+    s.value = '7';
+    s.dispatchEvent(new Event('change', { bubbles: true }));
+  `);
+  const g = await page.evaluate('window.__coach.pitchWorkletRange()');
+  assert.ok(g.fmin < 196, 'a G harp\'s hole 1 blow (G3, 196 Hz) must be inside the new range, got fmin ' + g.fmin);
 });
 
 // src/audio/range.js's frameSizeForInstrument: the worklet's analysis frame

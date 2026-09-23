@@ -154,9 +154,23 @@ test('harp maps a concert pitch to the first matching hole in search order 4,5,6
 });
 
 test('planned instruments with no drill curriculum return null', () => {
-  assert.equal(itemIdForMidi('violin', 60, {}), null);
-  assert.equal(itemIdForMidi('trumpet-bb', 60, {}), null);
+  // As of this commit every wind record in src/instruments/*.js (flute,
+  // clarinet-bb, oboe, sax-alto-eb, sax-tenor-bb) is 'ready' -- see the
+  // dedicated woodwind mastery test below -- so there is no longer a
+  // planned instrument id in the registry to stand in here. The default
+  // branch's `rec.status !== 'ready'` guard (and its `!rec` guard) is
+  // exercised through an id with no registry record at all instead.
   assert.equal(itemIdForMidi('nonexistent-instrument', 60, {}), null);
+});
+
+test('trumpet-bb/horn-f/trombone map a concert-pitch midi note to their own fixed-transposition written item, never reading prefs.wind', () => {
+  // trumpet-bb: sounding = written - 2, so written = concert + 2.
+  assert.equal(itemIdForMidi('trumpet-bb', 60, {}), 'w62');
+  assert.equal(itemIdForMidi('trumpet-bb', 60, { wind: 'f' }), 'w62', 'trumpet-bb must not read the generic wind preference');
+  // horn-f: sounding = written - 7, so written = concert + 7.
+  assert.equal(itemIdForMidi('horn-f', 55, {}), 'w62');
+  // trombone: non-transposing, bass-clef 'w' id space is written + 19.
+  assert.equal(itemIdForMidi('trombone', 40, {}), 'w59');
 });
 
 test('mapMasteryKeys converts creditFor()-shaped keys and drops unmapped ones', () => {
@@ -168,5 +182,20 @@ test('mapMasteryKeys converts creditFor()-shaped keys and drops unmapped ones', 
     { id: 'n60', hit: true },
     { id: 'n64', hit: false },
   ]);
-  assert.deepEqual(mapMasteryKeys(masteryKeys, 'violin', {}), []);
+  // 'flute' is 'ready' as of this commit (see the dedicated woodwind
+  // mastery test below); a nonexistent id stands in here for "this
+  // instrument has no mastery scheme to credit".
+  assert.deepEqual(mapMasteryKeys(masteryKeys, 'nonexistent-instrument', {}), []);
+});
+
+test('the five keyed woodwinds map a written-pitch midi note to their own written item, using each record\'s own transposition', () => {
+  // flute/oboe: transposition 0, written = sounding.
+  assert.equal(itemIdForMidi('flute', 60, {}), 'w60');
+  assert.equal(itemIdForMidi('oboe', 62, {}), 'w62');
+  // clarinet-bb: sounding = written - 2, so written = sounding + 2.
+  assert.equal(itemIdForMidi('clarinet-bb', 60, {}), 'w62');
+  // sax-alto-eb: sounding = written - 9, so written = sounding + 9.
+  assert.equal(itemIdForMidi('sax-alto-eb', 58, {}), 'w67');
+  // sax-tenor-bb: sounding = written - 14, so written = sounding + 14.
+  assert.equal(itemIdForMidi('sax-tenor-bb', 53, {}), 'w67');
 });
