@@ -18,6 +18,7 @@ const { app, BrowserWindow, Menu, session, shell } = require('electron');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { isAllowed, ALLOWED_PERMISSIONS } = require('./lib/permission-policy.js');
+const { SMOKE_FLAG, smokeExitCode } = require('./lib/smoke.js');
 
 const APP_HTML_PATH = path.join(__dirname, 'app', 'band-coach.html');
 const APP_FILE_URL = pathToFileURL(APP_HTML_PATH).href;
@@ -163,6 +164,36 @@ function createWindow() {
   return win;
 }
 
+// `--smoke-test` (store-package.yml runs the packaged exe with it): load the
+// page, collect anything that went wrong, and exit with lib/smoke.js's
+// verdict instead of staying open. A main-process crash before this runs
+// shows an error dialog and never exits, which the workflow's timeout
+// catches.
+function runSmokeTest(win) {
+  const state = { loaded: false, failedLoad: null, rendererGone: null, pageErrors: [] };
+  const wc = win.webContents;
+  const finish = () => app.exit(smokeExitCode(state));
+  wc.on('console-message', (event, level, message) => {
+    const lvl = typeof level === 'number' ? level : event && event.level;
+    if (lvl === 3 || lvl === 'error') {
+      state.pageErrors.push(String(message !== undefined ? message : event && event.message));
+    }
+  });
+  wc.on('did-fail-load', (_event, _code, description) => {
+    state.failedLoad = description || 'load failed';
+  });
+  wc.on('render-process-gone', (_event, details) => {
+    state.rendererGone = (details && details.reason) || 'gone';
+    finish();
+  });
+  wc.on('did-finish-load', () => {
+    state.loaded = true;
+    // Give start-up scripts a moment to throw before the verdict.
+    setTimeout(finish, 3000);
+  });
+  setTimeout(finish, 45000);
+}
+
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
 if (!gotSingleInstanceLock) {
   app.quit();
@@ -178,7 +209,8 @@ if (!gotSingleInstanceLock) {
   app.whenReady().then(() => {
     installNetworkBlock(session.defaultSession);
     installPermissionHandler(session.defaultSession);
-    createWindow();
+    const win = createWindow();
+    if (process.argv.includes(SMOKE_FLAG)) runSmokeTest(win);
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) {
