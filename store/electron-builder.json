@@ -9,6 +9,7 @@
   "files": [
     "main.js",
     "preload.js",
+    "lib/**/*.js",
     "app/band-coach.html",
     "package.json"
   ],
