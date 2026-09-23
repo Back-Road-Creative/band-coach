@@ -14,13 +14,16 @@ function scoreXml(partsXml, { divisions = 1 } = {}) {
 </score-partwise>`;
 }
 
-test('throws a plain message for compressed .mxl input', () => {
+test('a garbage/incomplete .mxl (not a real zip) throws a plain "could not be read" message, not a dead end', () => {
   const zipBytes = 'PK\x03\x04rest of a fake zip';
-  assert.throws(() => importMusicXml(zipBytes), /\.mxl.*not supported/i);
+  assert.throws(() => importMusicXml(zipBytes), /\.mxl.*could not be read/i);
 });
-test('throws a plain message for score-timewise input', () => {
+test('an empty score-timewise document imports (no parts, no throw) — real .mxl coverage is in import-mxl.test.mjs', () => {
   const xml = '<?xml version="1.0"?><score-timewise version="3.1"></score-timewise>';
-  assert.throws(() => importMusicXml(xml), /score-timewise.*not supported/i);
+  const { song, warnings } = importMusicXml(xml);
+  assert.equal(song.schema, 'song/1');
+  assert.deepEqual(song.parts, []);
+  assert.deepEqual(warnings, ['no tempo found; defaulted to 120 bpm']);
 });
 test('imports a one-octave C major scale with correct ticks and midi', () => {
   // Quarter notes, divisions=1 (so duration 1 == one quarter note == 480 ticks).
