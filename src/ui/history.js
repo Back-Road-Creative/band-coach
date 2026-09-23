@@ -241,6 +241,10 @@ export function registerHistory(panels) {
         const store = sanitizeHistoryStore(api.store('history').get());
         const w = weeklyReport(api.db(), { now: Date.now(), learnerName: store.learnerName || undefined, goalMin: store.goalMin });
         printReport.innerHTML = weeklyReportHtml(w, api);
+        // Report mode (styles.css body.printing-report) stays on until the dialog closes;
+        // print() does not block in every browser, so afterprint is what ends it.
+        document.body.classList.add('printing-report');
+        window.addEventListener('afterprint', () => document.body.classList.remove('printing-report'), { once: true });
         window.print();
       });
 
