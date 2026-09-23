@@ -6,7 +6,12 @@ const CLEF_GLYPH = { treble: '\u{1D11E}', bass: '\u{1D122}', alto: '\u{1D121}', 
 const CLEF_FALLBACK = { treble: 'G', bass: 'F', alto: 'C', tenor: 'C' };
 const ACCIDENTAL_GLYPH = { '#': '♯', b: '♭', '': '♮' };
 const ACCIDENTAL_FALLBACK = { '#': '#', b: 'b', '': 'n' };
-const REST_FALLBACK = 'z';
+// Keyed by the rest's undotted duration in whole notes (layout.js's durationInfo `base`).
+// Glyphs are the Unicode musical-symbol rests; fallbacks are one-letter mnemonics
+// (W)hole/(H)alf/(Q)uarter/(E)ighth/(S)ixteenth/(T)hirty-second so a no-glyph-font rest still reads
+// as "how long", not just "silence". An unrecognized/missing base falls back to quarter.
+const REST_GLYPH = { 4: '\u{1D13B}', 2: '\u{1D13C}', 1: '\u{1D13D}', 0.5: '\u{1D13E}', 0.25: '\u{1D13F}', 0.125: '\u{1D140}' };
+const REST_LETTER_FALLBACK = { 4: 'W', 2: 'H', 1: 'Q', 0.5: 'E', 0.25: 'S', 0.125: 'T' };
 
 function glyphOrFallback(theme, glyph, fallback) {
   return theme && theme.glyphFont ? glyph : fallback;
@@ -54,7 +59,7 @@ const DRAWERS = {
     ctx.fillText(String(p.bottom), p.x, p.y + 2);
   },
 
-  rest: (ctx, p, theme) => drawText(ctx, glyphOrFallback(theme, REST_FALLBACK, REST_FALLBACK), p.x, p.y, theme && theme.glyphFont),
+  rest: (ctx, p, theme) => drawText(ctx, glyphOrFallback(theme, REST_GLYPH[p.base] || REST_GLYPH[1], REST_LETTER_FALLBACK[p.base] || REST_LETTER_FALLBACK[1]), p.x, p.y, theme && theme.glyphFont),
 
   flag: (ctx, p) => {
     ctx.beginPath();
