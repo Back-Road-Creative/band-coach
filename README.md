@@ -198,9 +198,14 @@ the same pipeline "Record a tune"'s file input uses (see "Turning an audio file 
 song library Songs reads from, then shown: the song's title, any warnings as a plain check list, a
 confidence-coloured strip of notes when the transcription carries per-note confidence, the same
 "Play it on…" instrument-card row Songs shows, and a "Practise this" button that opens Songs
-already on that song's lesson. This is the file door only — recording straight from the microphone,
-and retiring the older Record a tune / Play Along / Songs file-picker panels this one is meant to
-replace, are later work.
+already on that song's lesson. The same panel also has a mic door: a "Record" button that counts
+you in for four beats (with a visible "1 2 3 4" and a live level meter, tempo set by a 40–200bpm
+field defaulting to 90) using the exact same frame recorder `createRecorder` "Record a tune" uses
+(`src/ui/editor/record.js`), then Stop hands the capture through the same `transcribe()` and the
+same result view as a dropped file — a mic that is blocked or missing, or a take with nothing heard
+clearly enough to turn into notes, says so in plain words rather than saving nothing silently.
+Retiring the older Record a tune / Play Along / Songs file-picker panels this one is meant to
+replace is later work.
 
 ## Songs
 

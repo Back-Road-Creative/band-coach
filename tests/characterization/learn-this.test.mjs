@@ -131,3 +131,83 @@ test('an unsupported file shows a plain-words message naming what this panel acc
   assert.match(message, /\.mid|\.abc|\.musicxml|\.wav|recording/i);
   assert.equal(await page.evaluate("document.querySelector('.panel-learn-result').hidden"), true, 'no result is shown for an unsupported file');
 });
+
+// ---- the mic door (unit G1b): Record -> a four-beat count-in -> capture ->
+// Stop -> the SAME result view the file door above already proved. Drives
+// the REAL getUserMedia() chain via Chromium's `--use-file-for-fake-audio-
+// capture` (launchPage's `fakeAudioFile`), the same technique
+// playalong-take-recorder.test.mjs and mic-channel-mono.test.mjs already use
+// elsewhere in this suite -- not the window.__coach debug hook, so this
+// proves the real capture path a learner's own mic would drive.
+
+// A steady repeating three-tone loop, long enough (a little over 4s) that
+// whatever few seconds the recorder happens to capture -- after the
+// count-in has already spent time playing the fake file from its start --
+// still contains real pitched audio to transcribe, however that lands.
+function loopingThreeToneWav(path) {
+  const sr = 44100;
+  const noteSamples = Math.round(0.3 * sr);
+  const freqFor = (midi) => 440 * Math.pow(2, (midi - 69) / 12);
+  const cycle = [60, 64, 67];
+  const totalNotes = 16; // ~4.8s
+  const pcm = new Float32Array(noteSamples * totalNotes);
+  for (let n = 0; n < totalNotes; n++) {
+    const f = freqFor(cycle[n % cycle.length]);
+    for (let j = 0; j < noteSamples; j++) pcm[n * noteSamples + j] = 0.5 * Math.sin((2 * Math.PI * f * j) / sr);
+  }
+  return writeWav(path, pcm, sr);
+}
+
+test('Record counts in four beats, then Stop turns the mic capture into a practisable song', async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'band-coach-learn-mic-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const wavPath = loopingThreeToneWav(join(dir, 'loop.wav'));
+
+  const page = await launchPage(htmlPath, { fakeAudioFile: wavPath });
+  t.after(() => page.close());
+
+  await page.evaluate("window.__coach.setMod('kbd')");
+  await page.evaluate("window.__coach.openPanel('learn')");
+
+  // A fast tempo (still inside the 40-200 range the field enforces) so the
+  // count-in this test waits through is short, not because the app's own
+  // default (90bpm) is wrong.
+  await page.evaluate(
+    "(() => { const b = document.getElementById('learnBpm'); b.value = '200'; b.dispatchEvent(new Event('input', { bubbles: true })); })()"
+  );
+  await page.evaluate("document.querySelector('.panel-learn-record-btn').click()");
+
+  await page.waitFor("document.querySelector('.panel-learn-beat').textContent === '4'", 15000);
+  await page.waitFor("document.querySelector('.panel-learn-record-btn').textContent === 'Stop'", 10000);
+
+  // Let a couple of real seconds of the fake mic stream actually get
+  // captured before stopping.
+  await new Promise((r) => setTimeout(r, 2000));
+
+  await page.evaluate("document.querySelector('.panel-learn-record-btn').click()");
+  await page.waitFor("document.querySelector('.panel-learn-result').hidden === false", 20000);
+
+  assert.deepEqual(page.exceptions, [], 'no uncaught exceptions counting in and capturing from the mic');
+  const noteCount = await page.evaluate("document.querySelectorAll('.panel-learn-confidence-note').length");
+  assert.ok(noteCount > 0, 'at least one note was transcribed from the mic capture: ' + noteCount);
+
+  const buttonText = await page.evaluate("document.querySelector('.panel-learn-record-btn').textContent");
+  assert.equal(buttonText, 'Record', 'the Record button resets once a take has been analysed');
+});
+
+test('a blocked or missing microphone says so in plain words, with no crash', async (t) => {
+  const DENY_MIC_INIT = "navigator.mediaDevices.getUserMedia = () => Promise.reject(new DOMException('Permission denied by the user or the system.', 'NotAllowedError'));";
+  const page = await launchPage(htmlPath, { initScript: DENY_MIC_INIT });
+  t.after(() => page.close());
+
+  await page.evaluate("window.__coach.openPanel('learn')");
+  await page.evaluate("document.querySelector('.panel-learn-record-btn').click()");
+  await page.waitFor("document.querySelector('.panel-learn-status').textContent.indexOf('not available') >= 0", 15000);
+
+  assert.deepEqual(page.exceptions, [], 'a denied microphone must not throw an uncaught exception');
+  const message = await page.evaluate("document.querySelector('.panel-learn-status').textContent");
+  assert.match(message, /microphone is not available/i);
+  assert.match(message, /drop a recording instead/i);
+  const buttonText = await page.evaluate("document.querySelector('.panel-learn-record-btn').textContent");
+  assert.equal(buttonText, 'Record', 'the Record button is not left stuck disabled after a denial');
+});

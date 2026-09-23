@@ -27,9 +27,17 @@
 // songs.js's requestOpenSong() + a click on the real panel-picker button --
 // see openSongsPanel() below for why a click, not a direct call).
 //
-// Recording via the microphone (the plan's other door) and retiring the
-// older Record a tune / Play Along / Songs-file-button panels are separate,
-// later units (G1b, G1c) -- this panel never opens a microphone itself.
+// Recording via the microphone is this unit's own addition (G1b): a
+// "Record" button that counts the learner in for four beats (clicks via
+// panelApi.click(), the same clock/click every other count-in in the app
+// already uses -- see app.js's startBar/startGroove) with a visible "1 2 3
+// 4" and a live level meter, then starts capturing on the downbeat through
+// the EXACT SAME frame recorder the older "Record a tune" panel uses
+// (src/ui/editor/record.js's createRecorder -- reused, not reimplemented)
+// and the same transcribe() the file door above already calls. Either mic
+// or file ends at the one shared result view below. Retiring the older
+// Record a tune / Play Along / Songs-file-button panels is a separate, later
+// unit (G1c).
 import { learnSourceFor } from './learn/source.js';
 import { routeImportFile, importerFor } from './songs/import-route.js';
 import { validateSong } from '../song/model.js';
@@ -39,6 +47,9 @@ import { framesFromPCM } from '../audio/file-frames.js';
 import { transcribe } from '../song/transcribe.js';
 import { rangeForInstrument } from '../audio/range.js';
 import { renderPlayItOnCards, requestOpenSong } from './songs.js';
+import { createRecorder } from './editor/record.js';
+import { countInTimes, clampBpm, DEFAULT_BPM } from './learn/count-in.js';
+import { rmsLevel } from './learn/level.js';
 
 const ACCEPT = '.mid,.midi,.abc,.xml,.musicxml,.mxl,.gp,.wav,.mp3,.ogg,.m4a,.flac,.webm';
 
@@ -91,6 +102,32 @@ function mountLearnPanel(hostEl, api) {
   drop.appendChild(input);
   root.appendChild(drop);
 
+  // ---- mic door: Record -> a four-beat count-in -> capture -> Stop -------
+  // Reuses src/ui/editor/record.js's createRecorder unchanged (the same
+  // frame recorder "Record a tune" drives) against this panel's own
+  // panelApi, so the capture itself is not reimplemented here -- this file
+  // only adds the count-in, the level meter, and routing the result through
+  // the shared renderResult() below.
+  const recorder = createRecorder(api);
+  const micSection = el('div', { class: 'panel-learn-mic' });
+  micSection.appendChild(el('h4', { text: 'Or sing, hum or play into the mic' }));
+  const bpmInput = el('input', {
+    type: 'number', id: 'learnBpm', min: '40', max: '200', value: String(DEFAULT_BPM),
+    class: 'panel-learn-bpm', 'aria-label': 'Tempo (beats per minute)',
+  });
+  const bpmRow = el('div', { class: 'panel-learn-bpm-row' }, [
+    el('label', { for: 'learnBpm', text: 'Tempo (beats per minute)' }), bpmInput,
+  ]);
+  const meterFill = el('div', { class: 'panel-learn-meter-fill' });
+  const meterBox = el('div', {
+    class: 'panel-learn-meter', role: 'progressbar', 'aria-label': 'Microphone level',
+    'aria-valuemin': '0', 'aria-valuemax': '100', 'aria-valuenow': '0',
+  }, [meterFill]);
+  const beatEl = el('p', { class: 'panel-learn-beat', 'aria-live': 'polite' });
+  const recordBtn = el('button', { type: 'button', class: 'panel-learn-record-btn', text: 'Record' });
+  micSection.append(bpmRow, meterBox, beatEl, recordBtn);
+  root.appendChild(micSection);
+
   const statusEl = el('p', { class: 'panel-learn-status', role: 'status' });
   root.appendChild(statusEl);
   const resultEl = el('div', { class: 'panel-learn-result' });
@@ -99,6 +136,135 @@ function mountLearnPanel(hostEl, api) {
   hostEl.appendChild(root);
 
   function say(text) { statusEl.textContent = text; }
+
+  // ---- mic level meter: a plain requestAnimationFrame loop reading RMS off
+  // the SAME time-domain analyser the rest of the app already keeps running
+  // (panelApi.analysers().time) through the pure rmsLevel() (src/ui/learn/
+  // level.js) -- started only while the mic door is actually listening
+  // (count-in or capture), stopped on Stop or when the panel is hidden, so
+  // it never spins in the background once a learner leaves this screen.
+  let meterRaf = null;
+  function setLevel(v) {
+    const pct = Math.round(v * 100);
+    meterFill.style.width = pct + '%';
+    meterBox.setAttribute('aria-valuenow', String(pct));
+  }
+  function startMeterLoop() {
+    function loop() {
+      const analysers = typeof api.analysers === 'function' ? api.analysers() : null;
+      const time = analysers && analysers.time;
+      if (time) {
+        const buf = new Float32Array(time.fftSize);
+        time.getFloatTimeDomainData(buf);
+        setLevel(rmsLevel(buf));
+      }
+      meterRaf = requestAnimationFrame(loop);
+    }
+    meterRaf = requestAnimationFrame(loop);
+  }
+  function stopMeterLoop() {
+    if (meterRaf !== null) cancelAnimationFrame(meterRaf);
+    meterRaf = null;
+    setLevel(0);
+  }
+
+  let counting = false;
+  let recording = false;
+  let countInTimers = [];
+  function clearCountInTimers() {
+    countInTimers.forEach((id) => clearTimeout(id));
+    countInTimers = [];
+  }
+  function resetMicUi() {
+    counting = false;
+    recording = false;
+    clearCountInTimers();
+    stopMeterLoop();
+    beatEl.textContent = '';
+    recordBtn.textContent = 'Record';
+    recordBtn.disabled = false;
+    bpmInput.disabled = false;
+  }
+
+  // Record -> Counting in… (four clicks, "1 2 3 4") -> recording starts on
+  // the downbeat -> Stop. The mic itself is opened (and any denial reported)
+  // BEFORE the count-in is scheduled, so a learner who has no mic, or has
+  // blocked it, sees the plain message immediately rather than after
+  // watching a count-in that was never going to record anything.
+  async function startMicRecording() {
+    if (counting || recording) return;
+    resultEl.hidden = true;
+    resultEl.innerHTML = '';
+    say('Getting the microphone ready…');
+    try { await api.openMic(); }
+    catch (e) {
+      say('The microphone is not available. You can drop a recording instead.');
+      return;
+    }
+    counting = true;
+    recordBtn.textContent = 'Counting in…';
+    recordBtn.disabled = true;
+    bpmInput.disabled = true;
+    say('Get ready…');
+    startMeterLoop();
+    const bpm = clampBpm(bpmInput.value);
+    const spb = 60 / bpm;
+    const startAt = api.now() + 0.15;
+    const times = countInTimes(bpm, 4, startAt);
+    times.forEach((t, i) => {
+      api.click(t, i === 0);
+      const delayMs = Math.max(0, (t - api.now()) * 1000);
+      countInTimers.push(setTimeout(() => { beatEl.textContent = String(i + 1); }, delayMs));
+    });
+    const lastBeat = times[times.length - 1];
+    const captureDelayMs = Math.max(0, (lastBeat + spb - api.now()) * 1000);
+    countInTimers.push(setTimeout(beginCapture, captureDelayMs));
+  }
+
+  async function beginCapture() {
+    if (!counting) return; // Stop was pressed mid count-in
+    counting = false;
+    beatEl.textContent = '';
+    try { await recorder.start(); }
+    catch (e) {
+      resetMicUi();
+      say('The microphone is not available. You can drop a recording instead.');
+      return;
+    }
+    recording = true;
+    say('Recording…');
+    recordBtn.textContent = 'Stop';
+    recordBtn.disabled = false;
+  }
+
+  async function stopMicRecording() {
+    if (counting) { clearCountInTimers(); resetMicUi(); say(''); return; }
+    if (!recording) return;
+    const frames = recorder.stop();
+    resetMicUi();
+    say('Working it out…');
+    try {
+      const { song, report } = transcribe(frames, { title: 'My recording' });
+      const notes = song.parts[0] ? song.parts[0].notes : [];
+      if (!notes.length) {
+        say('Nothing was heard clearly enough to turn into notes. Try again a little closer to the mic, or drop a recording instead.');
+        return;
+      }
+      const { ok, errors } = validateSong(song);
+      if (!ok) { say('That recording did not turn into a usable song: ' + errors.join('; ')); return; }
+      const id = await library.add(song, { now: Date.now() });
+      say('');
+      renderResult({ ...song, id }, (report && report.needsCheck) || []);
+    } catch (e) {
+      if (typeof api.recordError === 'function') api.recordError('learn:mic', e);
+      say('That recording could not be analysed. Try again, or drop a recording instead.');
+    }
+  }
+
+  recordBtn.addEventListener('click', () => {
+    if (recording || counting) stopMicRecording();
+    else startMicRecording();
+  });
 
   // Drag-and-drop is the file input's own better-known sibling gesture, not
   // a separate code path: a dropped file is handed to the SAME handleFile()
@@ -236,7 +402,16 @@ function mountLearnPanel(hostEl, api) {
 
   return {
     show() {},
-    hide() {},
+    // Leaving this panel mid count-in or mid recording must not leave the
+    // meter's requestAnimationFrame loop or a pending count-in click running
+    // in the background -- stop them, and any in-flight capture's frames are
+    // simply discarded (nothing was played to the learner suggesting it was
+    // saved).
+    hide() {
+      if (counting) clearCountInTimers();
+      if (recording) recorder.stop();
+      resetMicUi();
+    },
   };
 }
 
