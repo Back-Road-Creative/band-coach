@@ -3,16 +3,12 @@
 // Wiring: call `exportAbc(song)` with a normalized Song (see model.js).
 // Returns one ABC tune as a string: X:/T:/M:/L:/Q:/K: header, one `V:`
 // voice per part (omitted for a single-part song, since that is the
-// idiomatic single-voice ABC form and the sibling `import-abc.js` has no
-// multi-voice support -- see the note below). Pure: no DOM, no I/O.
+// idiomatic single-voice ABC form). Pure: no DOM, no I/O.
 //
-// Round-trip note: `import-abc.js`'s header comment claims multi-voice `V:`
-// tunes are "read as one voice with a warning", but its header loop has no
-// `V:` case at all, so a `V:` line appearing after `K:` falls into the tune
-// body and gets character-tokenized -- and lowercase a-g in a voice name
-// (e.g. "melody") are themselves note letters. So a multi-part export here
-// is structurally correct ABC but does NOT round-trip through importAbc;
-// only a single-part Song does. Every starter song has exactly one part.
+// Round-trip note: `import-abc.js` reads `V:` voices before and after `K:`
+// (its parseVoiceField), so a multi-part export comes back as the same parts
+// with their names and notes -- tests/unit/export-abc.test.mjs checks this
+// ("a multi-part song round-trips through ABC").
 
 const TICKS_PER_QUARTER = 480;
 
