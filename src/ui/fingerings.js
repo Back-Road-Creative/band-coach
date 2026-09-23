@@ -163,13 +163,55 @@ export function registerFingerings(panels) {
     mount(hostEl, api) {
       let instrument = null;
       let midi = null;
-      // Capo, alternate tuning and left-handed are per-instrument, session-
-      // only choices (no persistence layer reaches this file without
-      // touching src/app.js — out of scope here): they reset whenever the
-      // learner switches instruments below.
+      // Capo, alternate tuning and left-handed are per-instrument choices,
+      // remembered across reloads in api.store('fingerings') — shape
+      // { byInstrument: { [instrumentId]: { capo, tuning, leftHanded } } }
+      // (see src/app.js's `store(id)`, DB.panels[id] as plain JSON). Loaded
+      // in selectInstrument() below and saved back on every control change.
       let capo = 0;
       let tuningName = null;
       let leftHanded = false;
+
+      // Reads and validates the store; never throws, never trusts what's in
+      // it — a corrupt or hand-edited localStorage blob must not wedge the
+      // panel. Unrecognised shapes fall back to an empty byInstrument map.
+      function loadStore() {
+        try {
+          const raw = api.store('fingerings').get();
+          return raw && typeof raw === 'object' && raw.byInstrument && typeof raw.byInstrument === 'object'
+            ? raw
+            : { byInstrument: {} };
+        } catch (e) {
+          api.recordError('fingerings:store-load', e);
+          return { byInstrument: {} };
+        }
+      }
+
+      // Validates one instrument's saved entry against what THIS instrument
+      // currently allows (alternate tunings differ per instrument, and an
+      // instrument swap in instruments/index.js must never resurrect a
+      // capo/tuning value that no longer makes sense).
+      function rememberedFor(id) {
+        const store = loadStore();
+        const entry = store.byInstrument[id];
+        if (!entry || typeof entry !== 'object') return { capo: 0, tuning: null, leftHanded: false };
+        const alts = alternateTuningsFor(instrument);
+        const validCapo = Number.isInteger(entry.capo) && entry.capo >= 0 && entry.capo <= 11 ? entry.capo : 0;
+        const validTuning = alts && typeof entry.tuning === 'string' && alts.includes(entry.tuning) ? entry.tuning : null;
+        const validLeftHanded = typeof entry.leftHanded === 'boolean' ? entry.leftHanded : false;
+        return { capo: validCapo, tuning: validTuning, leftHanded: validLeftHanded };
+      }
+
+      function rememberCurrent() {
+        if (!instrument) return;
+        try {
+          const store = loadStore();
+          store.byInstrument[instrument.id] = { capo: capo, tuning: tuningName, leftHanded: leftHanded };
+          api.store('fingerings').set(store);
+        } catch (e) {
+          api.recordError('fingerings:store-save', e);
+        }
+      }
 
       const title = el('h2', { text: 'How to play it' });
       const help = el('p', { className: 'small', text: 'Pick an instrument and a note to see how to play it, drawn clearly with a plain-text description underneath.' });
@@ -250,9 +292,10 @@ export function registerFingerings(panels) {
       function selectInstrument(id) {
         instrument = api.instrument(id) || PLAYABLE.find(r => r.id === id) || PLAYABLE[0];
         instrSelect.value = instrument.id;
-        capo = 0;
-        tuningName = null;
-        leftHanded = false;
+        const remembered = rememberedFor(instrument.id);
+        capo = remembered.capo;
+        tuningName = remembered.tuning;
+        leftHanded = remembered.leftHanded;
         renderControls();
         midi = defaultNoteFor(instrument, {});
         renderNotePicker();
@@ -260,9 +303,9 @@ export function registerFingerings(panels) {
       }
 
       instrSelect.addEventListener('change', () => selectInstrument(instrSelect.value));
-      capoInput.addEventListener('change', () => { capo = Math.max(0, Math.round(Number(capoInput.value)) || 0); render(); });
-      tuningSelect.addEventListener('change', () => { tuningName = tuningSelect.value; render(); });
-      leftHandedInput.addEventListener('change', () => { leftHanded = leftHandedInput.checked; render(); });
+      capoInput.addEventListener('change', () => { capo = Math.min(11, Math.max(0, Math.round(Number(capoInput.value)) || 0)); capoInput.value = String(capo); rememberCurrent(); render(); });
+      tuningSelect.addEventListener('change', () => { tuningName = tuningSelect.value; rememberCurrent(); render(); });
+      leftHandedInput.addEventListener('change', () => { leftHanded = leftHandedInput.checked; rememberCurrent(); render(); });
 
       const current = api.instrument();
       const startId = current && howKindFor(current) ? current.id : (PLAYABLE[0] && PLAYABLE[0].id);
