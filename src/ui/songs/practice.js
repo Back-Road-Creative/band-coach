@@ -11,42 +11,175 @@ function ticksToSec(ticks, bpm, ticksPerQuarter) {
   return (ticks / ticksPerQuarter) * (60 / bpm);
 }
 
-// expectedNotes: [{ start, dur, midi }] in ticks (a step's `notes`, already
-// fitted to the instrument by buildLessonPlan/fitToInstrument).
-// playedEvents: [{ midi, atSec }], in the order they were detected, atSec
-// measured from the moment the learner was told to start playing.
+// A keyboard player's MIDI events for a chord (several expected notes at the
+// same `start` tick) arrive in whatever order fingers land — reverse order,
+// or a few ms apart (a "rolled" chord) — never guaranteed to match the order
+// the notes are listed in the song. CHORD_SPREAD_MS is how far apart (from
+// the first matched note of the chord) a played event can still count as
+// "part of this chord" rather than the start of the next thing.
+const CHORD_SPREAD_MS = 80;
+
+// Group expected notes into chords: consecutive notes sharing the same
+// `start` tick are one chord (a single note is a chord of size 1, and takes
+// the exact old forward-only path so single-note judging never changes).
+function groupIntoChords(notes) {
+  const groups = [];
+  for (const note of notes) {
+    const last = groups[groups.length - 1];
+    if (last && last[0].start === note.start) last.push(note);
+    else groups.push([note]);
+  }
+  return groups;
+}
+
+function matchOneNote(note, hit, timed, expectedAt, bpm, ticksPerQuarter) {
+  const errorMs = timed ? (hit.atSec - expectedAt) * 1000 : null;
+  let durRatio = null;
+  if (hit.durSec != null && note.dur != null) {
+    const expectedDurSec = ticksToSec(note.dur, bpm, ticksPerQuarter);
+    durRatio = expectedDurSec > 0 ? hit.durSec / expectedDurSec : null;
+  }
+  const cents = hit.cents != null ? hit.cents : null;
+  const velocityError = hit.velocity != null && note.velocity != null ? hit.velocity - note.velocity : null;
+  return { note, played: hit, ok: true, errorMs, durRatio, cents, velocityError };
+}
+
+function missedNote(note) {
+  return { note, played: null, ok: false, errorMs: null, durRatio: null, cents: null, velocityError: null };
+}
+
+// expectedNotes: [{ start, dur, midi, velocity? }] in ticks (a step's
+// `notes`, already fitted to the instrument by buildLessonPlan/fitToInstrument).
+// playedEvents: [{ midi, atSec, durSec?, cents?, velocity? }], in the order
+// they were detected, atSec measured from the moment the learner was told
+// to start playing. durSec/cents/velocity are optional — nothing upstream
+// supplies them yet (the mic pipeline only reports pitch and onset time), so
+// every field they feed (durRatio, cents, velocityError, meanAbsCents,
+// durationScore, dynamicsScore) stays null until a caller starts passing
+// them, and every existing field is computed exactly as before.
 // opts.timed: false for the "pitches" step kind (out of time; matched by
 // order only, no timing error computed) — every other kind is timed.
 // opts.policy: the instrument's octave policy (src/core/judge.js), so e.g.
 // a singer's octave is never marked wrong.
+// opts.durationTolerance: { min, max } durRatio band counted as "held about
+// right" for durationScore (default 0.6..1.5 — a note held clearly too short
+// or too long should not read as in tune/in time but wrong duration).
+// opts.velocityTolerance: max |velocityError| (MIDI 0-127 units) counted as
+// "about as loud as asked" for dynamicsScore (default 24 — roughly one
+// dynamic step; no spec value was given, chosen as a first pass).
 export function judgeAttempt(expectedNotes, playedEvents, opts = {}) {
-  const { bpm, ticksPerQuarter = 480, policy = 'exact', timed = true } = opts;
+  const {
+    bpm,
+    ticksPerQuarter = 480,
+    policy = 'exact',
+    timed = true,
+    durationTolerance = { min: 0.6, max: 1.5 },
+    velocityTolerance = 24,
+  } = opts;
   const notes = expectedNotes || [];
   const played = playedEvents || [];
   const matches = [];
+  const extraList = [];
   let cursor = 0;
-  for (const note of notes) {
-    const expectedAt = timed ? ticksToSec(note.start, bpm, ticksPerQuarter) : null;
-    let foundAt = -1;
-    for (let i = cursor; i < played.length; i++) {
-      if (judgePitch({ heardMidi: played[i].midi, targetMidi: note.midi, policy }).ok) {
-        foundAt = i;
-        break;
+  for (const chord of groupIntoChords(notes)) {
+    if (chord.length === 1) {
+      // Single expected note at this tick: the original forward-only
+      // search, unchanged — no chord window, no extras.
+      const note = chord[0];
+      const expectedAt = timed ? ticksToSec(note.start, bpm, ticksPerQuarter) : null;
+      let foundAt = -1;
+      for (let i = cursor; i < played.length; i++) {
+        if (judgePitch({ heardMidi: played[i].midi, targetMidi: note.midi, policy }).ok) {
+          foundAt = i;
+          break;
+        }
       }
-    }
-    if (foundAt === -1) {
-      matches.push({ note, played: null, ok: false, errorMs: null });
+      if (foundAt === -1) {
+        matches.push(missedNote(note));
+        continue;
+      }
+      matches.push(matchOneNote(note, played[foundAt], timed, expectedAt, bpm, ticksPerQuarter));
+      cursor = foundAt + 1;
       continue;
     }
-    const errorMs = timed ? (played[foundAt].atSec - expectedAt) * 1000 : null;
-    matches.push({ note, played: played[foundAt], ok: true, errorMs });
-    cursor = foundAt + 1;
+    // A chord: several expected notes share this tick. Find the first
+    // played event (from cursor onward) that matches any still-unmatched
+    // chord note — that is the "anchor" that fixes the chord's window in
+    // time. Every played event up to CHORD_SPREAD_MS after the anchor is
+    // eligible to match any chord note, in any order.
+    let anchorIndex = -1;
+    for (let i = cursor; i < played.length && anchorIndex === -1; i++) {
+      for (const note of chord) {
+        if (judgePitch({ heardMidi: played[i].midi, targetMidi: note.midi, policy }).ok) {
+          anchorIndex = i;
+          break;
+        }
+      }
+    }
+    if (anchorIndex === -1) {
+      for (const note of chord) matches.push(missedNote(note));
+      continue;
+    }
+    const windowEnd = played[anchorIndex].atSec + CHORD_SPREAD_MS / 1000;
+    let windowEndIdx = anchorIndex;
+    for (let i = anchorIndex + 1; i < played.length && played[i].atSec <= windowEnd; i++) windowEndIdx = i;
+    const usedIdx = new Set();
+    const expectedAt = timed ? ticksToSec(chord[0].start, bpm, ticksPerQuarter) : null;
+    for (const note of chord) {
+      let foundIdx = -1;
+      for (let i = anchorIndex; i <= windowEndIdx; i++) {
+        if (usedIdx.has(i)) continue;
+        if (judgePitch({ heardMidi: played[i].midi, targetMidi: note.midi, policy }).ok) {
+          foundIdx = i;
+          break;
+        }
+      }
+      if (foundIdx === -1) {
+        matches.push(missedNote(note));
+        continue;
+      }
+      usedIdx.add(foundIdx);
+      matches.push(matchOneNote(note, played[foundIdx], timed, expectedAt, bpm, ticksPerQuarter));
+    }
+    // Anything struck inside the chord's window that no expected note
+    // claimed is a wrong extra note, not a miss — it does not lower
+    // hitRate, but the learner should still be told they played it.
+    for (let i = anchorIndex; i <= windowEndIdx; i++) {
+      if (!usedIdx.has(i)) extraList.push(played[i]);
+    }
+    cursor = windowEndIdx + 1;
   }
   const hits = matches.filter((m) => m.ok);
   const hitRate = notes.length ? hits.length / notes.length : 0;
   const errored = hits.map((m) => m.errorMs).filter((e) => e !== null).map(Math.abs);
   const meanErrorMs = errored.length ? errored.reduce((a, b) => a + b, 0) / errored.length : null;
-  return { matches, judgedCount: notes.length, hitCount: hits.length, hitRate, meanErrorMs };
+  const absCents = hits.map((m) => m.cents).filter((c) => c !== null).map(Math.abs);
+  const meanAbsCents = absCents.length ? absCents.reduce((a, b) => a + b, 0) / absCents.length : null;
+  const durRatios = hits.map((m) => m.durRatio).filter((d) => d !== null);
+  const durationScore = durRatios.length
+    ? durRatios.filter((d) => d >= durationTolerance.min && d <= durationTolerance.max).length / durRatios.length
+    : null;
+  // dynamicsScore only exists when the phrase itself carries velocity
+  // targets — a song with no dynamics markings has nothing to judge here.
+  const notesHaveVelocity = notes.some((n) => n.velocity != null);
+  const velocityErrors = hits.map((m) => m.velocityError).filter((v) => v !== null);
+  const dynamicsScore = notesHaveVelocity && velocityErrors.length
+    ? velocityErrors.filter((v) => Math.abs(v) <= velocityTolerance).length / velocityErrors.length
+    : notesHaveVelocity ? null : null;
+  return {
+    matches,
+    judgedCount: notes.length,
+    hitCount: hits.length,
+    hitRate,
+    meanErrorMs,
+    meanAbsCents,
+    durationScore,
+    dynamicsScore,
+    // Wrong notes struck alongside a chord, inside its spread window —
+    // reported so the learner sees what they actually played, but never
+    // counted against hitRate (see the chord-matching loop above).
+    extras: { count: extraList.length, list: extraList },
+  };
 }
 
 // Whether a judgeAttempt() result satisfies a step's passRule. A null
@@ -58,6 +191,12 @@ export function passesRule(result, passRule) {
   if (passRule.maxMeanErrorMs != null) {
     if (result.meanErrorMs == null) return result.judgedCount === 0;
     if (result.meanErrorMs > passRule.maxMeanErrorMs) return false;
+  }
+  if (passRule.maxMeanAbsCents != null && result.meanAbsCents != null) {
+    if (result.meanAbsCents > passRule.maxMeanAbsCents) return false;
+  }
+  if (passRule.minDurationScore != null && result.durationScore != null) {
+    if (result.durationScore < passRule.minDurationScore) return false;
   }
   return true;
 }

@@ -4,7 +4,7 @@
 // (aggregating sessions, downsampling a trend into a sparkline, wording the
 // teacher report, ranking items by how well they will be remembered) lives
 // in src/core/history.js and src/core/srs.js — this module is the DOM glue.
-import { summarize, sparkline, toTeacherSummary } from '../core/history.js';
+import { summarize, sparkline, toTeacherSummary, ledger } from '../core/history.js';
 import { due } from '../core/srs.js';
 import { itemLabel } from './history/item-label.js';
 import { sanitizeHistoryStore } from './history/store.js';
@@ -45,6 +45,26 @@ function itemRow(entry) {
   return `<li><span>${esc(label)}</span><span>${pct(entry.r)}</span></li>`;
 }
 
+/** Builds the practice calendar grid: one cell per day, shaded by minutes,
+ * with a text label per cell (screen readers get the words, not the
+ * shading) plus the goal streak and, when the 60-session cap has pushed
+ * older days out of the log, an honest note instead of a false zero. */
+function calendarHtml(l) {
+  const maxMinutes = Math.max(1, ...l.days.map((d) => (d.notKept ? 0 : d.minutes)));
+  const cells = l.days
+    .map((d) => {
+      const shade = d.notKept ? 0 : Math.round((d.minutes / maxMinutes) * 100);
+      const cls = 'ledger-cell' + (d.notKept ? ' ledger-cell-unknown' : d.metGoal ? ' ledger-cell-met' : '');
+      const label = d.notKept
+        ? `${d.day}: earlier sessions not kept`
+        : `${d.day}: ${d.minutes} min, ${d.sessions} session${d.sessions === 1 ? '' : 's'}${d.metGoal ? ', goal met' : ''}${d.levelChange ? ', level ' + (d.levelChange > 0 ? '+' : '') + d.levelChange : ''}`;
+      return `<div class="${cls}" style="--ledger-shade:${shade}%" title="${esc(label)}"><span class="visually-hidden">${esc(label)}</span></div>`;
+    })
+    .join('');
+  const banner = l.truncated ? '<p class="ledger-truncated-note">Earlier sessions in this window were not kept — the practice log only holds the most recent sessions, so the greyed days are unknown, not zero.</p>' : '';
+  return `${banner}<div class="ledger-grid" role="img" aria-label="Practice calendar, last ${l.weeks} weeks">${cells}</div>`;
+}
+
 export function registerHistory(panels) {
   panels.register({
     id: 'history',
@@ -57,6 +77,11 @@ export function registerHistory(panels) {
           <h2>My progress</h2>
           <p>What your practice has looked like, in plain numbers — no account, nothing sent anywhere.</p>
           <div class="history-summary" id="historySummary"></div>
+          <h3>Practice calendar</h3>
+          <label for="historyGoalInput">Daily minutes goal</label>
+          <input type="number" id="historyGoalInput" min="5" max="120" step="1">
+          <p id="historyGoalStreak"></p>
+          <div id="historyCalendar"></div>
           <h3>By instrument</h3>
           <div id="historyInstruments"></div>
           <h3>Items to know</h3>
@@ -75,6 +100,7 @@ export function registerHistory(panels) {
         </div>`;
 
       const nameInput = el.querySelector('#historyNameInput');
+      const goalInput = el.querySelector('#historyGoalInput');
       const modSelect = el.querySelector('#historyModSelect');
       const copyBtn = el.querySelector('#historyCopyBtn');
       const copyStatus = el.querySelector('#historyCopyStatus');
@@ -101,10 +127,17 @@ export function registerHistory(panels) {
         const s = summarize(db.sessions, { now });
         const store = sanitizeHistoryStore(api.store('history').get());
         nameInput.value = store.learnerName;
+        goalInput.value = store.goalMin;
 
         el.querySelector('#historySummary').innerHTML = s.totalSessions
           ? `<p>${s.totalSessions} session${s.totalSessions === 1 ? '' : 's'} logged. Current streak: ${s.currentStreak} day${s.currentStreak === 1 ? '' : 's'} (best ${s.bestStreak}). Accuracy is trending <strong>${esc(s.accuracyTrend.direction)}</strong>.</p>`
           : '<p>No sessions logged yet. Practice a little and come back.</p>';
+
+        const l = ledger(db.sessions, { now, goalMin: store.goalMin });
+        el.querySelector('#historyCalendar').innerHTML = calendarHtml(l);
+        el.querySelector('#historyGoalStreak').textContent = l.goalStreak > 0
+          ? `Goal streak: ${l.goalStreak} day${l.goalStreak === 1 ? '' : 's'} of hitting ${l.goalMin} minutes.`
+          : `No current goal streak yet — hit ${l.goalMin} minutes today to start one.`;
 
         const instBox = el.querySelector('#historyInstruments');
         if (!s.perInstrument.length) {
@@ -137,9 +170,18 @@ export function registerHistory(panels) {
       modSelect.addEventListener('change', () => renderItemsFor(modSelect.value, api.db(), Date.now()));
 
       nameInput.addEventListener('change', () => {
-        const clean = sanitizeHistoryStore({ learnerName: nameInput.value });
+        const store = sanitizeHistoryStore(api.store('history').get());
+        const clean = sanitizeHistoryStore({ learnerName: nameInput.value, goalMin: store.goalMin });
         nameInput.value = clean.learnerName;
         api.store('history').set(clean);
+      });
+
+      goalInput.addEventListener('change', () => {
+        const store = sanitizeHistoryStore(api.store('history').get());
+        const clean = sanitizeHistoryStore({ learnerName: store.learnerName, goalMin: +goalInput.value });
+        goalInput.value = clean.goalMin;
+        api.store('history').set(clean);
+        render();
       });
 
       copyBtn.addEventListener('click', () => {

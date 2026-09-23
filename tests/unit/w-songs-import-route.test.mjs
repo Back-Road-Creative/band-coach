@@ -16,8 +16,13 @@ test('routes .xml and .musicxml to the musicxml importer, reading text', () => {
   assert.deepEqual(routeImportFile('score.musicxml'), { kind: 'musicxml', readAs: 'text' });
 });
 
-test('a compressed .mxl file is a plain-words unsupported case, not a crash', () => {
-  assert.deepEqual(routeImportFile('score.mxl'), { kind: 'unsupported-mxl', readAs: null });
+test('routes .json to the challenge importer, reading text', () => {
+  assert.deepEqual(routeImportFile('term1.json'), { kind: 'challenge', readAs: 'text' });
+  assert.deepEqual(routeImportFile('Term1.JSON'), { kind: 'challenge', readAs: 'text' });
+});
+
+test('routes .mxl (compressed MusicXML) to the musicxml importer, reading bytes so it can be unzipped', () => {
+  assert.deepEqual(routeImportFile('score.mxl'), { kind: 'musicxml', readAs: 'bytes' });
 });
 
 test('an unrecognised extension is reported, not guessed at', () => {

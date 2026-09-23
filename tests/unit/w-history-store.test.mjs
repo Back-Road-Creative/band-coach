@@ -1,16 +1,16 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { sanitizeHistoryStore, MAX_LEARNER_NAME } from '../../src/ui/history/store.js';
+import { sanitizeHistoryStore, MAX_LEARNER_NAME, GOAL_MIN_DEFAULT } from '../../src/ui/history/store.js';
 
 test('garbage or missing input sanitizes to an empty name', () => {
-  assert.deepEqual(sanitizeHistoryStore(null), { learnerName: '' });
-  assert.deepEqual(sanitizeHistoryStore({}), { learnerName: '' });
-  assert.deepEqual(sanitizeHistoryStore({ learnerName: 42 }), { learnerName: '' });
-  assert.deepEqual(sanitizeHistoryStore('garbage'), { learnerName: '' });
+  assert.deepEqual(sanitizeHistoryStore(null), { learnerName: '', goalMin: GOAL_MIN_DEFAULT });
+  assert.deepEqual(sanitizeHistoryStore({}), { learnerName: '', goalMin: GOAL_MIN_DEFAULT });
+  assert.deepEqual(sanitizeHistoryStore({ learnerName: 42 }), { learnerName: '', goalMin: GOAL_MIN_DEFAULT });
+  assert.deepEqual(sanitizeHistoryStore('garbage'), { learnerName: '', goalMin: GOAL_MIN_DEFAULT });
 });
 
 test('a real name is trimmed and kept', () => {
-  assert.deepEqual(sanitizeHistoryStore({ learnerName: '  Ada  ' }), { learnerName: 'Ada' });
+  assert.deepEqual(sanitizeHistoryStore({ learnerName: '  Ada  ' }), { learnerName: 'Ada', goalMin: GOAL_MIN_DEFAULT });
 });
 
 test('an oversized name is capped, never dropped entirely', () => {

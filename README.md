@@ -26,7 +26,7 @@ reach the server, also with a link to get the current file. It never checks on i
 a press — and a development build (one you built yourself rather than downloaded) says so instead
 of checking, since there is nothing meaningful to compare.
 
-The app follows your system's light/dark setting automatically, or pick Light/Dark yourself from the Theme control next to "Show note names" in the side rail.
+The app follows your system's light/dark setting automatically, or pick Light/Dark yourself from the Theme control next to "Show note names" in the side rail. Two more controls next to Theme let you pick how notes are named -- letters, German (H/B), or fixed-do solfege (Do, Re, Mi...) -- and whether the black keys are spelled with sharps, flats, or today's mixed spelling.
 
 If your microphone or keyboard is not being heard, the next two sections are the ones to read.
 Everything from "Build it from source" down is for people working on the app itself.
@@ -156,7 +156,10 @@ or re-downloading the file can lose it, since browsers do not share that storage
 the "More options" menu in the side rail for "Save a backup", which downloads
 `band-coach-progress.json`, and "Restore a backup", which loads one back in. A quiet reminder
 appears once you have actually practised a while without one — never on a fresh profile, since
-there is nothing yet to lose.
+there is nothing yet to lose. The "My progress" panel also shows a practice calendar (minutes and
+level changes, one cell per day, for the last 8 weeks) and a daily minutes goal with a streak — the
+practice log itself only keeps the most recent 60 sessions, so days older than that say "earlier
+sessions not kept" rather than a false zero.
 
 ## Turning an audio file into notes
 
@@ -173,6 +176,20 @@ at a time, from a file the same as from the mic — unless "More than one note a
 checked, in which case a multipitch detector (`src/audio/analysis/multipitch.js`) splits the file
 into a melody/bass/inner part per voice it hears, each shown as its own labelled lane.
 
+## Songs
+
+The Songs panel (`src/ui/songs.js`) turns a whole tune — built in, or imported from a `.mid`,
+`.midi`, `.abc`, `.xml` or `.musicxml` file — into a step-by-step practice lesson
+(`src/song/lesson.js`), tracking each learner's own pass/fail record and crediting every
+correctly played note toward the same mastery store a built-in drill uses. A teacher can also
+hand a student a whole set of songs at once as a **challenge**: a plain `.json` file
+(`src/song/challenge.js`, schema `challenge/1`) holding a title, an optional note, and a list of
+songs. Picking one through the same file input adds every song to the library and shows it as
+its own list — "N of M songs passed" — with each song's own pass state remembered across
+sessions; a song counts as passed once its practice lesson has been played through to the end.
+"Export as a challenge" turns a learner's own saved library into a downloadable `.json` a teacher
+can pass along to another student, entirely by file exchange — no account, no server, no network
+call involved.
 ## Play along with a recording
 
 The "Play Along" panel (`src/ui/playalong.js`) opens an audio file of a song, works out its
@@ -436,6 +453,14 @@ first, then the high C and D above them, then the low E, D and C below G,
 then the forked-fingering F; whistle: the D-major scale, first octave, D E
 F# G A B C# D — rather than chromatic or alphabetical order.
 
+`fitToInstrument` (`src/song/lesson.js`) fits a song part's range against
+each transposing instrument's *written* pitch when its `range` is written
+(clarinet, trumpet, alto/tenor sax, French horn — `transposition` not a
+multiple of 12), not the sounding pitch the mic actually hears, so a song's
+notes land where the learner's printed part says, not just where a real
+instrument could reach; `src/song/arrange/transposing.js` computes a part's
+written notes and written key signature for display.
+
 ## Rhythm vocabulary
 
 `src/core/rhythm.js` is a pure rhythm-notation module: cells (quarter, eighth pairs, rests, ties,
@@ -444,6 +469,14 @@ integer-tick durations, so triplets and swing are exact fractions rather than ro
 `buildPhrase`/`onsetsOf`/`validateBar` are unit-tested in isolation under `tests/unit/rhythm.test.mjs`.
 Rhythm reading (`rhy`) gains eight further levels built on it, after the original ten-cell levels:
 rests, ties, dotted-eighth figures, triplets, 3/4, 6/8, swing, and two-bar phrases.
+
+## Ear training
+
+The Ear training screen (`src/core/ear/*`, wired in `src/ui/ear.js`) has nine listen-and-answer
+exercises, each leveling up or down on its own: scale degrees, melodic dictation, dictation from
+real song phrases (a 1-3 bar phrase pulled straight out of a starter song's melody -- which song
+it was is only revealed after grading, never before), rhythm dictation, chord progressions,
+scales and modes, chord inversions, in-tune-or-not intonation discrimination, and sing-it-back.
 
 ## Find your own singing range
 

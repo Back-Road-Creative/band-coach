@@ -41,6 +41,7 @@ const PITCH_FMAX = 1200;
 const EXERCISE_TITLES = {
   degrees: 'Scale degrees',
   'melodic-dictation': 'Melodic dictation',
+  'song-dictation': 'Dictation from songs',
   'rhythm-dictation': 'Rhythm dictation',
   progressions: 'Chord progressions',
   'scales-modes': 'Scales and modes',
@@ -365,7 +366,7 @@ export function registerEar(panels) {
       }
 
       function renderAnswerWidget() {
-        if (exerciseId === 'melodic-dictation') return renderNoteEntry();
+        if (exerciseId === 'melodic-dictation' || exerciseId === 'song-dictation') return renderNoteEntry();
         if (exerciseId === 'rhythm-dictation') return renderRhythmEntry();
         if (exerciseId === 'sing-back') return renderMicEntry();
         if (Array.isArray(question.answer)) return renderChoiceSequence();

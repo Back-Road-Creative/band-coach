@@ -2,6 +2,16 @@
 // plus the learner's own saved songs), a way to add a song from a file, and
 // a step-by-step practice lesson built by src/song/lesson.js.
 //
+// Teacher challenge lists (Wave I, unit I6, src/song/challenge.js): the same
+// file input also accepts a teacher-authored .json challenge (a titled list
+// of songs). Importing one adds every song to the library and shows it as
+// its own list with a "N of M songs passed" line, each song's own pass
+// state remembered in api.store('songs-progress') (a song counts as passed
+// the moment its own practice lesson reaches the end, whole-piece step
+// included -- see the `stepIndex >= plan.steps.length` branch of
+// renderPractice()). "Export as a challenge" turns the learner's own saved
+// library into a downloadable .json a teacher can hand to another student.
+//
 // Registered via register(panels) -> panels.register({ id: 'songs', ... }),
 // following the panel-frame contract in src/ui/panels.js / the "feature
 // panels" block of src/app.js.
@@ -32,6 +42,7 @@ import { buildLessonPlan, nextStep, creditFor } from '../song/lesson.js';
 import { routeImportFile } from './songs/import-route.js';
 import { judgeAttempt, passesRule } from './songs/practice.js';
 import { mapMasteryKeys } from './songs/mastery.js';
+import { parseChallenge, buildChallenge } from '../song/challenge.js';
 
 // ---------------------------------------------------------------------------
 // onNote() forwarding (the one permitted src/app.js line)
@@ -140,6 +151,13 @@ function mountSongsPanel(hostEl, api) {
   }
 
   const store = api.store('songs');
+  // { [songId]: true } for every song whose lesson has been played through
+  // to the end at least once -- the ledger a loaded challenge reads its
+  // "N of M songs passed" line from (plan D7: a ledger of pass/fail, no
+  // XP or leagues).
+  const progressStore = api.store('songs-progress');
+  // The challenge currently being shown in challengeSection, or null.
+  let currentChallenge = null;
 
   // practice state for the currently chosen song+part, or null
   let practice = null; // { song, partId, instrument, plan, results, stepIndex, recording, playedEvents, recordStartSec, stop }
@@ -158,10 +176,20 @@ function mountSongsPanel(hostEl, api) {
   const listUl = el('ul', { class: 'panel-songs-list' });
   listSection.appendChild(listUl);
 
-  const importLabel = el('label', { for: 'songsFileInput', text: 'Add a song from a file (.mid, .midi, .abc, .xml or .musicxml)' });
-  const importInput = el('input', { type: 'file', id: 'songsFileInput', accept: '.mid,.midi,.abc,.xml,.musicxml' });
+  const importLabel = el('label', { for: 'songsFileInput', text: 'Add a song, or a teacher’s challenge, from a file (.mid, .midi, .abc, .xml, .musicxml or .json)' });
+  const importInput = el('input', { type: 'file', id: 'songsFileInput', accept: '.mid,.midi,.abc,.xml,.musicxml,.json' });
   const importMsg = el('div', { class: 'panel-songs-msg', role: 'status' });
   const importSection = el('section', {}, [importLabel, importInput, importMsg]);
+
+  const challengeSection = el('section', { class: 'panel-songs-challenge', hidden: 'hidden' });
+
+  const exportTitleLabel = el('label', { for: 'challengeTitleInput', text: 'Challenge title' });
+  const exportTitleInput = el('input', { type: 'text', id: 'challengeTitleInput', value: 'My songs' });
+  const exportBtn = el('button', { type: 'button', text: 'Export as a challenge', onclick: exportChallenge });
+  const exportMsg = el('div', { class: 'panel-songs-export-msg', role: 'status' });
+  const exportSection = el('section', { 'aria-label': 'Export a challenge' }, [
+    exportTitleLabel, exportTitleInput, exportBtn, exportMsg,
+  ]);
 
   const practiceSection = el('section', { class: 'panel-songs-practice', hidden: 'hidden' });
 
@@ -169,6 +197,8 @@ function mountSongsPanel(hostEl, api) {
   hostEl.appendChild(intro);
   hostEl.appendChild(listSection);
   hostEl.appendChild(importSection);
+  hostEl.appendChild(challengeSection);
+  hostEl.appendChild(exportSection);
   hostEl.appendChild(practiceSection);
 
   function say(text, kind) {
@@ -200,6 +230,81 @@ function mountSongsPanel(hostEl, api) {
     });
     li.appendChild(btn);
     return li;
+  }
+
+  // Renders (or re-renders, e.g. after a song is marked passed) the loaded
+  // challenge's own list: title, who it is from, an optional note, the
+  // "N of M songs passed" summary, and one button per song that opens it
+  // straight into practice via the SAME openSong() a starter/library row
+  // uses -- a challenge song is a real Song object throughout, never a
+  // separate code path.
+  function renderChallenge(challenge) {
+    currentChallenge = challenge;
+    const progress = progressStore.get() || {};
+    const passedCount = challenge.songs.filter((s) => progress[s.id]).length;
+    challengeSection.hidden = false;
+    challengeSection.innerHTML = '';
+    challengeSection.appendChild(el('h3', { text: challenge.title }));
+    if (challenge.from) challengeSection.appendChild(el('p', { text: 'From: ' + challenge.from }));
+    if (challenge.note) challengeSection.appendChild(el('p', { text: challenge.note }));
+    challengeSection.appendChild(el('p', {
+      class: 'panel-songs-challenge-progress',
+      text: passedCount + ' of ' + challenge.songs.length + ' songs passed',
+    }));
+    const ul = el('ul', {});
+    challenge.songs.forEach((song) => {
+      const passed = !!progress[song.id];
+      const li = el('li', {}, [
+        el('button', { type: 'button', text: song.title + (passed ? ' (passed)' : ''), onclick: () => openSong(song) }),
+      ]);
+      ul.appendChild(li);
+    });
+    challengeSection.appendChild(ul);
+  }
+
+  // Marks `songId` passed in the ledger (idempotent) and, if it belongs to
+  // the currently displayed challenge, re-renders that list so the "N of M"
+  // count and the song's own row update right away.
+  function markSongPassed(songId) {
+    const progress = progressStore.get() || {};
+    if (!progress[songId]) {
+      progress[songId] = true;
+      progressStore.set(progress);
+    }
+    if (currentChallenge && currentChallenge.songs.some((s) => s.id === songId)) renderChallenge(currentChallenge);
+  }
+
+  // "Export as a challenge": bundles every song currently in the learner's
+  // own saved library (not the built-in starter tunes, which every copy of
+  // the app already ships with) into one .json file a teacher hands to a
+  // student, via a Blob + a hidden a[download] click -- the same pattern a
+  // "save my work" button uses anywhere in a browser, no server involved
+  // (plan D6).
+  async function exportChallenge() {
+    let songs = [];
+    try { songs = await library.exportAll(); } catch (e) { songs = []; }
+    if (!songs.length) {
+      exportMsg.textContent = 'Add some songs to your library first, then export them as a challenge.';
+      return;
+    }
+    const title = exportTitleInput.value.trim() || 'My songs';
+    let json;
+    try {
+      json = buildChallenge(title, songs);
+    } catch (e) {
+      exportMsg.textContent = 'That challenge could not be built: ' + (e && e.message ? e.message : String(e));
+      return;
+    }
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const fileName = (title.replace(/[^\w.-]+/g, '_') || 'challenge') + '.challenge.json';
+    const a = el('a', { href: url, download: fileName });
+    a.click();
+    // Revoked a moment later, not synchronously: some browsers cancel an
+    // in-flight download if the object URL disappears before the click is
+    // fully handled.
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    exportMsg.textContent = 'Exported "' + title + '" with ' + songs.length + ' song' + (songs.length === 1 ? '' : 's') + '.';
   }
 
   function openSong(song) {
@@ -250,6 +355,7 @@ function mountSongsPanel(hostEl, api) {
     practiceSection.appendChild(el('h3', { text: practice.song.title }));
     const { plan, stepIndex } = practice;
     if (stepIndex >= plan.steps.length) {
+      markSongPassed(practice.song.id);
       practiceSection.appendChild(el('p', { text: 'Nicely done. You have played through the whole piece.' }));
       practiceSection.appendChild(el('button', { type: 'button', text: 'Practise again', onclick: () => startPractice(practice.song, practice.partId) }));
       practiceSection.appendChild(el('button', { type: 'button', text: 'Back to songs', onclick: () => { practice = null; practiceSection.hidden = true; } }));
@@ -392,7 +498,27 @@ function mountSongsPanel(hostEl, api) {
       return;
     }
     if (route.kind === 'unknown') {
-      say('That file type is not supported yet. Use a .mid, .midi, .abc, .xml or .musicxml file.', 'no');
+      say('That file type is not supported yet. Use a .mid, .midi, .abc, .xml, .musicxml or .json file.', 'no');
+      return;
+    }
+    if (route.kind === 'challenge') {
+      let challenge;
+      try {
+        const text = await readFile(file, route.readAs);
+        challenge = parseChallenge(text);
+      } catch (e) {
+        say('That file could not be read: ' + (e && e.message ? e.message : String(e)), 'no');
+        return;
+      }
+      try {
+        for (const s of challenge.songs) await library.add(s, { now: Date.now() });
+      } catch (e) {
+        say('The challenge could not be fully saved: ' + (e && e.message ? e.message : String(e)), 'no');
+        return;
+      }
+      say('Added the "' + challenge.title + '" challenge (' + challenge.songs.length + ' song' + (challenge.songs.length === 1 ? '' : 's') + ').', 'ok');
+      renderChallenge(challenge);
+      await refreshList();
       return;
     }
     let song, warnings;
