@@ -1,11 +1,9 @@
 // The shared Song shape -> MusicXML (uncompressed, score-partwise).
 //
 // Wiring: `exportMusicXml(song) -> string` produces the full text of a
-// `.musicxml` file. One <part> per song part; measures come from bar
-// boundaries computed locally (boundariesOf, below) rather than
-// song.model.js's barsOf/notesInBar, because those assume one fixed bar
-// width for the whole song -- this module honours song.metreChanges, so
-// bars can change width partway through. A note that runs past a barline
+// `.musicxml` file. One <part> per song part; measures come from
+// model.js's barsOf, which honours song.metreChanges, so bars can change
+// width partway through. A note that runs past a barline
 // is written as two-or-more tied notes rather than one overlong duration --
 // that is what real notation software (and importMusicXml, which walks
 // measure-by-measure) expects. song.tempoMap/keyChanges entries are written
@@ -16,7 +14,7 @@
 // Pairs with src/song/import-musicxml.js; see tests/unit/export-musicxml.test.mjs
 // for the round-trip proof against every starter song.
 
-import { TICKS_PER_QUARTER, songDurationTicks, partRange } from './model.js';
+import { TICKS_PER_QUARTER, barsOf, partRange } from './model.js';
 import { spellMidi } from '../notation/spell.js';
 
 // Same letter -> natural pitch-class table as import-musicxml.js's STEP_PC
@@ -120,32 +118,6 @@ function noteXml(seg, keyName) {
 // barTicksOf, which only ever sees the song's single initial metre.
 function barTicksFor(metre) {
   return metre.num * (4 / metre.den) * TICKS_PER_QUARTER;
-}
-
-// Bar boundaries in ticks, honouring song.metreChanges: each entry starts a
-// new run of bars at its own width, from its tick onward. With no
-// metreChanges this produces exactly the array model.js's barsOf would
-// (same formula, same "always at least one bar" rule for an empty song), so
-// a song with no mid-song changes exports byte-identical XML to before.
-function boundariesOf(song) {
-  const segments = [{ tick: 0, metre: song.metre }, ...(song.metreChanges ?? [])
-    .map((c) => ({ tick: c.tick, metre: { num: c.num, den: c.den } }))];
-  const duration = songDurationTicks(song);
-  const boundaries = [0];
-  segments.forEach((seg, s) => {
-    const barTicks = barTicksFor(seg.metre);
-    const nextTick = s + 1 < segments.length ? segments[s + 1].tick : undefined;
-    let b = seg.tick;
-    if (nextTick !== undefined) {
-      while (b + barTicks <= nextTick) { b += barTicks; boundaries.push(b); }
-      if (b < nextTick) boundaries.push(nextTick); // metre change not bar-aligned: close out the partial bar
-    } else if (duration > seg.tick) {
-      while (b < duration) { b += barTicks; boundaries.push(b); }
-    } else {
-      boundaries.push(seg.tick + barTicks); // always at least one bar, even for an empty tail
-    }
-  });
-  return boundaries;
 }
 
 // The active `metre` for the bar starting at `boundaries[i]`.
@@ -289,7 +261,7 @@ function identificationXml(song) {
 }
 
 export function exportMusicXml(song) {
-  const boundaries = boundariesOf(song);
+  const boundaries = barsOf(song);
   const keyInfo = song.key ?? { tonic: 0, mode: 'major' };
   const fifths = fifthsFor(keyInfo.tonic, keyInfo.mode);
   const keyName = keyNameFor(keyInfo.tonic, keyInfo.mode);

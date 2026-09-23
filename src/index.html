@@ -8,13 +8,13 @@
   <header>
     <div>
       <h1>Band <span>Coach</span></h1>
-      <p class="sub">One coach, many instruments. It teaches where things are, then the moves between them, picks every next exercise from your own results, and watches your energy so practice stays fresh.</p>
+      <p class="sub" data-i18n="app.subtitle">One coach, many instruments. It teaches where things are, then the moves between them, picks every next exercise from your own results, and watches your energy so practice stays fresh.</p>
     </div>
   </header>
 
   <div class="picker" id="picker" role="group" aria-label="Instrument"></div>
   <details class="panel-picker-disclosure" id="panelPickerDisclosure" hidden>
-    <summary>More ways to practise</summary>
+    <summary data-i18n="panel.more">More ways to practise</summary>
     <div class="picker panel-picker" id="panelPicker" role="group" aria-label="More ways to practise" hidden></div>
   </details>
 
@@ -22,14 +22,14 @@
     <span class="dot" id="ioDot"></span>
     <span id="ioText"></span>
     <span class="dot" id="midiActDot" hidden aria-hidden="true"></span>
-    <button type="button" class="small" id="setupBtn" aria-expanded="false" aria-controls="setupSheet">Set up input</button>
+    <button type="button" class="small" id="setupBtn" aria-expanded="false" aria-controls="setupSheet" data-i18n="setup.button">Set up input</button>
   </div>
   <div class="setup-sheet" id="setupSheet" hidden>
-    <button class="primary" id="ioBtn" type="button">Connect</button>
-    <button type="button" class="small" id="midiDetailsBtn" hidden>MIDI details</button>
-    <label for="micDeviceSelect" class="small">Input</label>
-    <select id="micDeviceSelect" aria-label="Input device"><option value="">Default microphone</option></select>
-    <button type="button" class="small" id="calibrateBtn">Check my microphone</button>
+    <button class="primary" id="ioBtn" type="button" data-i18n="setup.connect">Connect</button>
+    <button type="button" class="small" id="midiDetailsBtn" hidden data-i18n="setup.midiDetails">MIDI details</button>
+    <label for="micDeviceSelect" class="small" data-i18n="setup.inputLabel">Input</label>
+    <select id="micDeviceSelect" aria-label="Input device"><option value="" data-i18n="setup.defaultMic">Default microphone</option></select>
+    <button type="button" class="small" id="calibrateBtn" data-i18n="setup.checkMic">Check my microphone</button>
     <div class="meterbox thin mic-meter" role="progressbar" aria-label="Microphone level" aria-valuemin="0" aria-valuemax="100"><div id="micLevelFill"></div></div>
     <span id="calibrateResult" role="status"></span>
   </div>
@@ -44,7 +44,7 @@
         <h2 id="breakTitle">Paused</h2>
         <p id="breakWhy"></p>
         <div id="breakClock" hidden>2:00</div>
-        <div class="row"><button type="button" class="primary" id="backBtn">I'm back, resume</button><button type="button" id="snoozeBtn" hidden>Keep going 5 more minutes</button><button type="button" id="endBtn2">End session</button></div>
+        <div class="row"><button type="button" class="primary" id="backBtn" data-i18n="break.back">I'm back, resume</button><button type="button" id="snoozeBtn" hidden data-i18n="break.snooze">Keep going 5 more minutes</button><button type="button" id="endBtn2" data-i18n="break.end">End session</button></div>
       </div>
       <div id="prompt" aria-live="polite" aria-atomic="true">Pick an instrument</div>
       <div id="hint"></div>
@@ -52,10 +52,10 @@
       <canvas id="cv" width="960" height="492" role="img" aria-label="Exercise display" aria-describedby="cvDesc"></canvas>
       <div id="cvDesc" class="visually-hidden"></div>
       <div class="choices" id="choices" hidden></div>
-      <button type="button" id="tapPad" hidden>Tap here, or press space</button>
+      <button type="button" id="tapPad" hidden data-i18n="stage.tapPad">Tap here, or press space</button>
       <div class="stage-tools">
-        <button type="button" class="small" id="replayBtn" hidden>Hear it again</button>
-        <button type="button" class="small" id="showMeBtn" hidden>Show me</button>
+        <button type="button" class="small" id="replayBtn" hidden data-i18n="stage.replay">Hear it again</button>
+        <button type="button" class="small" id="showMeBtn" hidden data-i18n="stage.showMe">Show me</button>
         <span class="opts" id="modOpts"></span>
       </div>
     </section>
@@ -63,10 +63,10 @@
     <aside class="side">
       <div class="row">
         <button type="button" class="primary big" id="playBtn">Start</button>
-        <button type="button" id="endBtn" hidden>End session</button>
+        <button type="button" id="endBtn" hidden data-i18n="side.end">End session</button>
       </div>
       <div class="card">
-        <div class="eyebrow">Your energy this session</div>
+        <div class="eyebrow" data-i18n="side.energyEyebrow">Your energy this session</div>
         <div class="meterbox thin" role="progressbar" aria-label="Estimated energy" aria-valuemin="0" aria-valuemax="100" id="energyBar"><div id="energyFill"></div></div>
         <div id="sessLine">No session yet today.</div>
       </div>
@@ -75,15 +75,15 @@
         <div id="levelName"></div>
         <div class="meterbox" role="progressbar" aria-label="Progress to next level" aria-valuemin="0" aria-valuemax="100" id="readyBar"><div id="readyFill"></div></div>
         <div id="coach">Pick an instrument, then press Start.</div>
-        <div class="row" style="margin-top:8px"><button type="button" class="small" id="easierBtn">Make it easier</button><button type="button" class="small" id="harderBtn">Skip ahead</button></div>
+        <div class="row" style="margin-top:8px"><button type="button" class="small" id="easierBtn" data-i18n="side.easier">Make it easier</button><button type="button" class="small" id="harderBtn" data-i18n="side.harder">Skip ahead</button></div>
       </div>
-      <div class="card" id="feedbackCard" hidden><div class="eyebrow">Instant feedback</div><div id="feedback" role="status"></div></div>
+      <div class="card" id="feedbackCard" hidden><div class="eyebrow" data-i18n="side.feedbackEyebrow">Instant feedback</div><div id="feedback" role="status"></div></div>
       <div class="stats" id="statsBlock" hidden>
-        <div class="stat"><b id="sAcc">0%</b><span>last 20</span></div>
-        <div class="stat"><b id="sStreak">0</b><span>streak</span></div>
-        <div class="stat"><b id="sRt">0.0</b><span id="sRtLabel">sec to answer</span></div>
+        <div class="stat"><b id="sAcc">0%</b><span data-i18n="stats.last20">last 20</span></div>
+        <div class="stat"><b id="sStreak">0</b><span data-i18n="stats.streak">streak</span></div>
+        <div class="stat"><b id="sRt">0.0</b><span id="sRtLabel" data-i18n="stats.rtLabel">sec to answer</span></div>
       </div>
-      <div class="card weak" id="weakCard" hidden><div class="eyebrow">What the coach is leaning on</div><ul id="weakList"></ul></div>
+      <div class="card weak" id="weakCard" hidden><div class="eyebrow" data-i18n="side.weakEyebrow">What the coach is leaning on</div><ul id="weakList"></ul></div>
       <div class="opts">
         <label for="optNames"><input type="checkbox" id="optNames" checked> Show note names</label>
         <label for="optTheme">Theme <select id="optTheme"><option value="system">Match system</option><option value="light">Light</option><option value="dark">Dark</option></select></label>
@@ -92,24 +92,24 @@
       </div>
       <div class="backup-nudge" id="backupNudge" hidden>
         <span id="backupNudgeText"></span>
-        <button type="button" class="small" id="backupNudgeDismiss">Dismiss</button>
+        <button type="button" class="small" id="backupNudgeDismiss" data-i18n="side.backupDismiss">Dismiss</button>
       </div>
       <details class="rail-menu" id="railMenu">
-        <summary class="small">More options</summary>
+        <summary class="small" data-i18n="rail.summary">More options</summary>
         <div class="rail-menu-body">
-          <button type="button" class="small danger" id="resetBtn">Reset this instrument (clears progress)</button>
-          <button type="button" class="small" id="backupSaveBtn">Save a backup</button>
-          <label class="small file-label" for="backupRestoreInput">Restore a backup</label>
+          <button type="button" class="small danger" id="resetBtn" data-i18n="rail.reset">Reset this instrument (clears progress)</button>
+          <button type="button" class="small" id="backupSaveBtn" data-i18n="rail.backupSave">Save a backup</button>
+          <label class="small file-label" for="backupRestoreInput" data-i18n="rail.backupRestore">Restore a backup</label>
           <input type="file" accept=".json,application/json" id="backupRestoreInput" hidden>
           <div class="update-check">
-            <button type="button" class="small" id="updateCheckBtn">Check for updates</button>
-            <p class="update-check-help" id="updateCheckHelp">Asks the Band Coach website for the latest version number. Sends nothing about your playing.</p>
+            <button type="button" class="small" id="updateCheckBtn" data-i18n="rail.checkUpdates">Check for updates</button>
+            <p class="update-check-help" id="updateCheckHelp" data-i18n="rail.updateHelp">Asks the Band Coach website for the latest version number. Sends nothing about your playing.</p>
             <span id="updateCheckResult" role="status"></span>
           </div>
         </div>
       </details>
       <details class="help">
-        <summary>How this works</summary>
+        <summary data-i18n="help.summary">How this works</summary>
         <p id="helpText"></p>
         <p><strong>How it decides:</strong> no dice. The next exercise is always the item or move with the largest need score (low knowledge, weak move, not seen lately), so the same results always give the same lesson. Knowledge fades if you stay away, so old material comes back.</p>
         <p><strong>Drums</strong> have their own page, Kit Coach, with your kit drawn out.</p>
