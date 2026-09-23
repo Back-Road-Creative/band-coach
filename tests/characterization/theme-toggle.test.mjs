@@ -41,7 +41,9 @@ test('choosing Light survives a reload', async (t) => {
 
   await page.evaluate("document.getElementById('optTheme').value = 'light'");
   await page.evaluate("document.getElementById('optTheme').dispatchEvent(new Event('change'))");
-  await page.waitFor("localStorage.getItem('bandcoach.v1') !== null", 10000);
+  // save() is debounced (1.2 s) and the page may already have saved once at
+  // boot, so "anything stored" is not enough: wait for the Light choice itself.
+  await page.waitFor("(() => { try { return JSON.parse(localStorage.getItem('bandcoach.v1')).prefs.theme === 'light'; } catch (e) { return false; } })()", 10000);
 
   await page.reload();
   await page.waitFor('typeof window.__coach !== "undefined"', 8000);
