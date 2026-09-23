@@ -467,12 +467,24 @@ function barTicksOf(song) {
 // (already sorted-by-tick and normalized), each carrying its own bar length.
 // An entry at tick 0 replaces the opening metre rather than adding a
 // zero-length segment. Absent metreChanges this is just [{ tick: 0, ...}].
+// A bar length that is zero, negative or NaN would leave `tick` in barsOf's
+// loop below unable to advance, growing `boundaries` without bound. A
+// validated song can't produce this (validateSong/normalizeSong reject
+// num < 1), but barsOf is called directly by bar-heat.js and
+// export-musicxml.js with no re-validation, so the guard lives here.
+function assertPositiveBarTicks(barTicks) {
+  if (!(Number.isFinite(barTicks) && barTicks > 0)) {
+    throw new Error('barsOf: a bar must be longer than zero ticks');
+  }
+  return barTicks;
+}
+
 function metreSegmentsOf(song) {
-  const segments = [{ tick: 0, barTicks: barTicksOf(song) }];
+  const segments = [{ tick: 0, barTicks: assertPositiveBarTicks(barTicksOf(song)) }];
   for (const change of song.metreChanges || []) {
     const barTicks = change.num * (4 / change.den) * song.ticksPerQuarter;
-    if (change.tick === 0) segments[0] = { tick: 0, barTicks };
-    else segments.push({ tick: change.tick, barTicks });
+    if (change.tick === 0) segments[0] = { tick: 0, barTicks: assertPositiveBarTicks(barTicks) };
+    else segments.push({ tick: change.tick, barTicks: assertPositiveBarTicks(barTicks) });
   }
   return segments;
 }

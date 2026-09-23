@@ -89,3 +89,34 @@ test('notesInBar uses the same bar windows as barsOf across a metre change', () 
   assert.deepEqual(starts(3), [5400, 6000]);
   assert.deepEqual(starts(4), []);
 });
+
+// A bar length of zero (or NaN) must never be allowed to loop forever inside
+// barsOf's `while (tick < duration ...)` loop. Without the guard these three
+// cases hang the process rather than throwing, so this file hangs and the
+// containing `node --test` run times out (exit 124) instead of failing fast.
+// See tests/unit/song-model.test.mjs for the same guard exercised in a
+// child process, in case a future regression reintroduces the infinite loop.
+
+test('barsOf throws rather than looping forever on a zero-length opening metre', () => {
+  const song = baseSong({
+    metre: { num: 0, den: 4 },
+    parts: [{ id: 'melody', name: 'Melody', notes: [{ start: 0, dur: 480, midi: 60 }] }]
+  });
+  assert.throws(() => barsOf(song), /bar must be longer than zero ticks/);
+});
+
+test('barsOf throws rather than looping forever on a zero-length metreChanges entry', () => {
+  const song = baseSong({
+    metreChanges: [{ tick: 1920, num: 0, den: 4 }],
+    parts: [{ id: 'melody', name: 'Melody', notes: [{ start: 0, dur: 480, midi: 60 }, { start: 2400, dur: 1, midi: 60 }] }]
+  });
+  assert.throws(() => barsOf(song), /bar must be longer than zero ticks/);
+});
+
+test('barsOf throws rather than looping forever on a metre with den 0 (NaN bar length)', () => {
+  const song = baseSong({
+    metre: { num: 4, den: 0 },
+    parts: [{ id: 'melody', name: 'Melody', notes: [{ start: 0, dur: 480, midi: 60 }] }]
+  });
+  assert.throws(() => barsOf(song), /bar must be longer than zero ticks/);
+});
