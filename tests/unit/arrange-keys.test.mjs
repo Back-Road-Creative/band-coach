@@ -124,3 +124,8 @@ test('family proof: every starter song arranges on the keyboard with no dropped 
     }
   }
 });
+
+test('fingerHand: the left hand mirrors the right -- C3 up to G3 is 5-4-3-2-1', () => {
+  const notes = [48, 50, 52, 53, 55].map((midi, i) => ({ start: i * 480, dur: 480, midi }));
+  assert.deepEqual(fingerHand(notes, 'lh').map(n => n.finger), [5, 4, 3, 2, 1]);
+});
