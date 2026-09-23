@@ -26,7 +26,7 @@ reach the server, also with a link to get the current file. It never checks on i
 a press — and a development build (one you built yourself rather than downloaded) says so instead
 of checking, since there is nothing meaningful to compare.
 
-The app follows your system's light/dark setting automatically, or pick Light/Dark yourself from the Theme control next to "Show note names" in the side rail.
+The app follows your system's light/dark setting automatically, or pick Light/Dark yourself from the Theme control next to "Show note names" in the side rail. Two more controls next to Theme let you pick how notes are named -- letters, German (H/B), or fixed-do solfege (Do, Re, Mi...) -- and whether the black keys are spelled with sharps, flats, or today's mixed spelling.
 
 If your microphone or keyboard is not being heard, the next two sections are the ones to read.
 Everything from "Build it from source" down is for people working on the app itself.
@@ -159,7 +159,8 @@ appears once you have actually practised a while without one — never on a fres
 there is nothing yet to lose. The "My progress" panel also shows a practice calendar (minutes and
 level changes, one cell per day, for the last 8 weeks) and a daily minutes goal with a streak — the
 practice log itself only keeps the most recent 60 sessions, so days older than that say "earlier
-sessions not kept" rather than a false zero.
+sessions not kept" rather than a false zero. "Print this week's report" turns the last 7 days into a
+one-page, printer-friendly summary for a teacher or parent.
 
 ## Turning an audio file into notes
 
@@ -492,11 +493,14 @@ rests, ties, dotted-eighth figures, triplets, 3/4, 6/8, swing, and two-bar phras
 
 ## Ear training
 
-The Ear training screen (`src/core/ear/*`, wired in `src/ui/ear.js`) has nine listen-and-answer
+The Ear training screen (`src/core/ear/*`, wired in `src/ui/ear.js`) has ten listen-and-answer
 exercises, each leveling up or down on its own: scale degrees, melodic dictation, dictation from
 real song phrases (a 1-3 bar phrase pulled straight out of a starter song's melody -- which song
-it was is only revealed after grading, never before), rhythm dictation, chord progressions,
-scales and modes, chord inversions, in-tune-or-not intonation discrimination, and sing-it-back.
+it was is only revealed after grading, never before), rhythm dictation, rhythms from songs (a bar,
+two at higher levels, of a starter song's own note durations and rests, pitch dropped -- the song
+title is shown up front, since this is a sight-reading drill rather than a by-ear one, and it
+grades with rhythm dictation's own checker unchanged), chord progressions, scales and modes,
+chord inversions, in-tune-or-not intonation discrimination, and sing-it-back.
 
 ## Find your own singing range
 
