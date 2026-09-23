@@ -12,6 +12,10 @@
 // panel should read the file: bytes (ArrayBuffer) for the zip, text for the
 // plain XML. This kept src/ui/songs.js's generic 'musicxml' branch as the
 // only wiring needed — no per-kind special case there.
+//
+// Guitar Pro `.gp` (GP7/8) is also a zip (of `Content/score.gpif`), but it
+// has its own importer (src/song/import-gp7.js importGp7) rather than
+// reusing the MusicXML one, so it gets its own 'gp7' kind read as bytes.
 
 function extensionOf(fileName) {
   const name = String(fileName || '');
@@ -26,6 +30,7 @@ export function routeImportFile(fileName) {
   if (ext === 'abc') return { kind: 'abc', readAs: 'text' };
   if (ext === 'xml' || ext === 'musicxml') return { kind: 'musicxml', readAs: 'text' };
   if (ext === 'mxl') return { kind: 'musicxml', readAs: 'bytes' };
+  if (ext === 'gp') return { kind: 'gp7', readAs: 'bytes' };
   if (ext === 'json') return { kind: 'challenge', readAs: 'text' };
   return { kind: 'unknown', readAs: null };
 }
