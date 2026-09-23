@@ -23,7 +23,7 @@ async function selectExercise(page, id) {
   await page.waitFor(`window.__coach.ear().getExerciseId() === ${JSON.stringify(id)}`);
 }
 
-test('the ear panel opens, lists all nine exercises in plain words, and plays a question', async (t) => {
+test('the ear panel opens, lists all ten exercises in plain words, and plays a question', async (t) => {
   const page = await launchPage(htmlPath);
   t.after(() => page.close());
   await openEar(page);
@@ -36,6 +36,7 @@ test('the ear panel opens, lists all nine exercises in plain words, and plays a 
     'Melodic dictation',
     'Dictation from songs',
     'Rhythm dictation',
+    'Rhythms from songs',
     'Chord progressions',
     'Scales and modes',
     'Chord inversions',
@@ -156,6 +157,27 @@ test('rhythm dictation: tapping the exact onset spacing back grades ok', async (
   // Tap at the exact converted second offsets (60 BPM => 1 tick = 1/480 s),
   // scheduled with the page's own timers so the test does not depend on this
   // process's own scheduling jitter.
+  await page.evaluate(`(function () {
+    const onsets = ${JSON.stringify(onsets)};
+    const tapBtn = document.getElementById('earTapBtn');
+    onsets.forEach((ticks, i) => setTimeout(() => tapBtn.click(), (ticks / 480) * 1000));
+  })()`);
+  await new Promise((r) => setTimeout(r, ((onsets[onsets.length - 1] || 0) / 480) * 1000 + 200));
+  await page.evaluate("document.querySelector('#earAnswerArea button:nth-of-type(3)').click()"); // Submit rhythm
+  await page.waitFor("document.getElementById('earFeedback').className === 'ear-feedback ok'", 3000);
+});
+
+test('rhythms from songs: shows the song title up front and tapping the exact onsets back grades ok', async (t) => {
+  const page = await launchPage(htmlPath);
+  t.after(() => page.close());
+  await openEar(page);
+  await selectExercise(page, 'song-rhythm');
+  await page.waitFor('window.__coach.ear().getQuestion()');
+
+  const prompt = await page.evaluate("document.getElementById('earPrompt').textContent");
+  assert.ok(prompt.includes('"'), 'the prompt names the song up front (sight-reading, not ear training)');
+
+  const onsets = await page.evaluate('window.__coach.ear().getQuestion().answer');
   await page.evaluate(`(function () {
     const onsets = ${JSON.stringify(onsets)};
     const tapBtn = document.getElementById('earTapBtn');
