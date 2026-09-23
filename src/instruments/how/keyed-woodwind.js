@@ -17,12 +17,9 @@
 // the entry or null if the pitch isn't in this table's range, and throws on
 // an unknown chart name.
 //
-// KNOWN ISSUE (see the unit report, not fixed here): a saxophone's lowest
-// written note is Bb3 (midi 58) — written 55-57, inside
-// sax-alto-eb.js/sax-tenor-bb.js's current beginner range, do not exist on
-// the horn. SAX_NOTES has no entries for them, so keyedFingeringFor returns
-// null for 55-57 exactly like an out-of-range pitch. Correcting the two
-// records' range.low is a follow-up, not this change.
+// A saxophone's lowest written note is Bb3 (midi 58), and SAX_NOTES starts
+// there; sax-alto-eb.js and sax-tenor-bb.js keep range.low at 58 to match, so
+// keyedFingeringFor never has to answer for the non-existent written 55-57.
 
 function noteName(midi) {
   const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
