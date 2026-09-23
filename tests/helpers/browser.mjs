@@ -114,6 +114,13 @@ function waitForOpen(ws) {
   });
 }
 
+// The code a missed DevTools startup window rejects with. Like BOOT_DEADLINE
+// it is a busy-runner flake, not a defect: CI runs 35878233553, 35882082593 and
+// 35884980289 each missed it at the start of the run, when many test files
+// cold-start a browser at once, and each passed on a plain re-run.
+// retryOnBootDeadline retries it with a fresh browser.
+export const LAUNCH_TIMEOUT_CODE = 'LAUNCH_TIMEOUT';
+
 // Spawns the browser and resolves once "DevTools listening on ws://..." is
 // seen on stderr, extracting the port that was actually bound (we always ask
 // for port 0 so parallel test files never collide).
@@ -175,7 +182,11 @@ export function spawnBrowser(bin, userDataDir, extraArgs = [], { launchTimeoutMs
         fail(new Error(`browser exited (code ${code}) before DevTools was ready. stderr:\n${buf}`));
       }
     });
-    timer = setTimeout(() => fail(new Error('timed out waiting for DevTools listening line')), launchTimeoutMs).unref();
+    timer = setTimeout(() => {
+      const err = new Error('timed out waiting for DevTools listening line');
+      err.code = LAUNCH_TIMEOUT_CODE;
+      fail(err);
+    }, launchTimeoutMs).unref();
   });
 }
 
@@ -249,7 +260,7 @@ export function bootDeadlineError(ms) {
 // deaf-window, which nothing had wrapped. A per-test wrap would have to be
 // remembered by every future test; this cannot be forgotten.
 //
-// Only BOOT_DEADLINE is retried. Every other error propagates on the first
+// Only BOOT_DEADLINE and LAUNCH_TIMEOUT are retried. Every other error propagates on the first
 // attempt: a missing browser binary or a CDP protocol failure is not a flake,
 // and retrying it would turn one clear message into three slow identical ones.
 // launchPageOnce already kills the browser group and removes its user-data dir
@@ -261,11 +272,12 @@ export async function retryOnBootDeadline(launch, { attempts = 3 } = {}) {
     try {
       return await launch(i);
     } catch (err) {
-      if (!err || err.code !== BOOT_DEADLINE_CODE) throw err;
+      if (!err || (err.code !== BOOT_DEADLINE_CODE && err.code !== LAUNCH_TIMEOUT_CODE)) throw err;
       last = err;
     }
   }
   const err = bootDeadlineError(BOOT_DEADLINE_MS);
+  if (last) err.code = last.code;
   err.message = `${last ? last.message : err.message} -- and again in ${attempts} attempts, each with a fresh browser. Failing every time points at the app or the build, not at a busy runner.`;
   err.attempts = attempts;
   throw err;
@@ -287,7 +299,15 @@ async function launchPageOnce(htmlPath, options = {}) {
   }
   const userDataDir = mkdtempSync(join(tmpdir(), 'band-coach-cdp-'));
   const extraArgs = fakeAudioFile ? [`--use-file-for-fake-audio-capture=${fakeAudioFile}`] : [];
-  const { child, browserWsUrl } = await spawnBrowser(bin, userDataDir, extraArgs);
+  let spawned;
+  try {
+    spawned = await spawnBrowser(bin, userDataDir, extraArgs);
+  } catch (e) {
+    // spawnBrowser already killed the group; the profile dir is ours to remove.
+    rmSync(userDataDir, { recursive: true, force: true });
+    throw e;
+  }
+  const { child, browserWsUrl } = spawned;
 
   // child.pid is the process GROUP id too, since spawnBrowser starts it
   // detached (group leader). Kills the whole group, not just this one
