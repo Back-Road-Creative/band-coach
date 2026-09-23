@@ -25,13 +25,13 @@ test('the songs panel lists the starter songs, easiest first', async (t) => {
   assert.ok(titles.indexOf('Hot Cross Buns') < titles.indexOf('Minuet in G'), 'easiest tune is listed before a harder one');
 });
 
-test('the file input only accepts the four supported extensions', async (t) => {
+test('the file input accepts the supported song and challenge extensions', async (t) => {
   const page = await launchPage(htmlPath);
   t.after(() => page.close());
 
   await page.evaluate("window.__coach.openPanel('songs')");
   const accept = await page.evaluate("document.getElementById('songsFileInput').getAttribute('accept')");
-  assert.equal(accept, '.mid,.midi,.abc,.xml,.musicxml');
+  assert.equal(accept, '.mid,.midi,.abc,.xml,.musicxml,.json');
   const label = await page.evaluate("document.querySelector('label[for=\"songsFileInput\"]').textContent");
   assert.ok(label.includes('.mid'));
 });

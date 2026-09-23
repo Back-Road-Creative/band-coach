@@ -177,6 +177,20 @@ capture — so a file-import panel can be wired up later without teaching transc
 new. Like the rest of this app's pitch tracking, it is monophonic only: a chord or a second voice
 reads as whichever single pitch the detector locks onto, not as separate notes.
 
+## Songs
+
+The Songs panel (`src/ui/songs.js`) turns a whole tune — built in, or imported from a `.mid`,
+`.midi`, `.abc`, `.xml` or `.musicxml` file — into a step-by-step practice lesson
+(`src/song/lesson.js`), tracking each learner's own pass/fail record and crediting every
+correctly played note toward the same mastery store a built-in drill uses. A teacher can also
+hand a student a whole set of songs at once as a **challenge**: a plain `.json` file
+(`src/song/challenge.js`, schema `challenge/1`) holding a title, an optional note, and a list of
+songs. Picking one through the same file input adds every song to the library and shows it as
+its own list — "N of M songs passed" — with each song's own pass state remembered across
+sessions; a song counts as passed once its practice lesson has been played through to the end.
+"Export as a challenge" turns a learner's own saved library into a downloadable `.json` a teacher
+can pass along to another student, entirely by file exchange — no account, no server, no network
+call involved.
 ## Play along with a recording
 
 The "Play Along" panel (`src/ui/playalong.js`) opens an audio file of a song, works out its
