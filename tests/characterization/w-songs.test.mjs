@@ -31,11 +31,12 @@ test('the file input accepts the supported song and challenge extensions', async
 
   await page.evaluate("window.__coach.openPanel('songs')");
   const accept = await page.evaluate("document.getElementById('songsFileInput').getAttribute('accept')");
-  assert.equal(accept, '.mid,.midi,.abc,.xml,.musicxml,.mxl,.gp,.json');
+  assert.equal(accept, '.mid,.midi,.abc,.xml,.musicxml,.mxl,.gp,.bandpack,.json');
   const label = await page.evaluate("document.querySelector('label[for=\"songsFileInput\"]').textContent");
   assert.ok(label.includes('.mid'));
   assert.ok(label.includes('.mxl'), 'label mentions compressed MusicXML: ' + label);
   assert.ok(label.includes('.gp'), 'label mentions Guitar Pro: ' + label);
+  assert.ok(label.includes('.bandpack'), 'label mentions band packs: ' + label);
 });
 
 test('choosing a one-part starter song opens a practice lesson, starting with a listen step', async (t) => {

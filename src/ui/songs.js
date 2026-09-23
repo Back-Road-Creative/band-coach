@@ -12,6 +12,15 @@
 // renderPractice()). "Export as a challenge" turns the learner's own saved
 // library into a downloadable .json a teacher can hand to another student.
 //
+// Band packs (src/song/band-pack.js): the same file input also accepts a
+// .bandpack file -- a whole band's set list, plus optionally who plays which
+// part of each song, handed around as one zip. Importing one adds every song
+// to the library the same way a challenge does, and shows any part
+// assignments read-only (plain text, no editing here). "Share with your
+// band" bundles the learner's own saved library into a downloadable
+// .bandpack with no assignments -- file exchange only, same as a challenge,
+// no network/server/account (plan D6).
+//
 // Registered via register(panels) -> panels.register({ id: 'songs', ... }),
 // following the panel-frame contract in src/ui/panels.js / the "feature
 // panels" block of src/app.js.
@@ -43,6 +52,7 @@ import { judgeAttempt, passesRule } from './songs/practice.js';
 import { barHeat, worstBars } from '../song/bar-heat.js';
 import { mapMasteryKeys } from './songs/mastery.js';
 import { parseChallenge, buildChallenge } from '../song/challenge.js';
+import { writeBandPack, readBandPack } from '../song/band-pack.js';
 import { exportMidi } from '../song/export-midi.js';
 import { exportMusicXml } from '../song/export-musicxml.js';
 import { exportAbc } from '../song/export-abc.js';
@@ -194,10 +204,15 @@ function mountSongsPanel(hostEl, api) {
   const listUl = el('ul', { class: 'panel-songs-list' });
   listSection.appendChild(listUl);
 
-  const importLabel = el('label', { for: 'songsFileInput', text: 'Add a song, or a teacher’s challenge, from a file (.mid, .midi, .abc, .xml, .musicxml, .mxl, .gp or .json)' });
-  const importInput = el('input', { type: 'file', id: 'songsFileInput', accept: '.mid,.midi,.abc,.xml,.musicxml,.mxl,.gp,.json' });
+  const importLabel = el('label', { for: 'songsFileInput', text: 'Add a song, a teacher’s challenge, or a band pack, from a file (.mid, .midi, .abc, .xml, .musicxml, .mxl, .gp, .bandpack or .json)' });
+  const importInput = el('input', { type: 'file', id: 'songsFileInput', accept: '.mid,.midi,.abc,.xml,.musicxml,.mxl,.gp,.bandpack,.json' });
   const importMsg = el('div', { class: 'panel-songs-msg', role: 'status' });
-  const importSection = el('section', {}, [importLabel, importInput, importMsg]);
+  // Read-only part assignments from the last imported band pack -- one line
+  // per song that carries an assignment (a song with no assignment gets no
+  // line at all). Cleared at the top of every handleFile() so it never shows
+  // a stale pack's assignments after a different file is picked.
+  const bandPackPartsEl = el('div', { class: 'panel-songs-band-pack-parts-list' });
+  const importSection = el('section', {}, [importLabel, importInput, importMsg, bandPackPartsEl]);
 
   const challengeSection = el('section', { class: 'panel-songs-challenge', hidden: 'hidden' });
 
@@ -205,8 +220,16 @@ function mountSongsPanel(hostEl, api) {
   const exportTitleInput = el('input', { type: 'text', id: 'challengeTitleInput', value: 'My songs' });
   const exportBtn = el('button', { type: 'button', text: 'Export as a challenge', onclick: exportChallenge });
   const exportMsg = el('div', { class: 'panel-songs-export-msg', role: 'status' });
+  // "Share with your band" (plan-adjacent to the challenge export above):
+  // bundles the same library songs into a .bandpack instead, with no part
+  // assignments (those are made band-side, once, by whoever hands the pack
+  // out -- this panel only ever shows assignments read-only, see
+  // bandPackPartsEl). Disabled until the library has at least one song, so a
+  // learner can't download an empty pack.
+  const shareBtn = el('button', { type: 'button', text: 'Share with your band', onclick: shareBandPack, disabled: 'disabled' });
+  const shareMsg = el('div', { class: 'panel-songs-share-msg', role: 'status' });
   const exportSection = el('section', { 'aria-label': 'Export a challenge' }, [
-    exportTitleLabel, exportTitleInput, exportBtn, exportMsg,
+    exportTitleLabel, exportTitleInput, exportBtn, exportMsg, shareBtn, shareMsg,
   ]);
 
   const practiceSection = el('section', { class: 'panel-songs-practice', hidden: 'hidden' });
@@ -233,6 +256,10 @@ function mountSongsPanel(hostEl, api) {
       .slice()
       .sort((a, b) => a.title.localeCompare(b.title))
       .forEach((meta) => listUl.appendChild(songRow(meta, meta.id)));
+    // "Share with your band" packs up the library's own saved songs (same
+    // as "Export as a challenge"), so it stays disabled with nothing to pack.
+    if (saved.length) shareBtn.removeAttribute('disabled');
+    else shareBtn.setAttribute('disabled', 'disabled');
   }
 
   function songRow(songOrMeta, libraryId) {
@@ -359,10 +386,34 @@ function mountSongsPanel(hostEl, api) {
     exportMsg.textContent = 'Exported "' + title + '" with ' + songs.length + ' song' + (songs.length === 1 ? '' : 's') + '.';
   }
 
+  // "Share with your band": same source list as exportChallenge() above
+  // (the learner's own saved library, not the built-in starter tunes), built
+  // into a .bandpack instead of a .challenge.json, via src/song/band-pack.js
+  // writeBandPack(). No part assignments are made here -- shareBtn stays
+  // disabled until the library holds a song (see refreshList()), so this
+  // never runs against an empty library.
+  async function shareBandPack() {
+    let songs = [];
+    try { songs = await library.exportAll(); } catch (e) { songs = []; }
+    if (!songs.length) {
+      shareMsg.textContent = 'Add some songs to your library first, then share them with your band.';
+      return;
+    }
+    let bytes;
+    try {
+      bytes = writeBandPack({ name: 'Band pack', songs });
+    } catch (e) {
+      shareMsg.textContent = 'That band pack could not be built: ' + (e && e.message ? e.message : String(e));
+      return;
+    }
+    triggerDownload([bytes], 'application/zip', 'band-pack.bandpack');
+    shareMsg.textContent = 'Shared ' + songs.length + ' song' + (songs.length === 1 ? '' : 's') + ' as band-pack.bandpack.';
+  }
+
   // Blob + hidden a[download] click -- the same pattern a "save my work"
   // button uses anywhere in a browser, no server involved. Shared by
-  // exportChallenge() above and songExportControls() below so both
-  // downloads behave identically.
+  // exportChallenge(), shareBandPack() above and songExportControls() below
+  // so every download behaves identically.
   function triggerDownload(blobParts, mimeType, fileName) {
     const blob = new Blob(blobParts, { type: mimeType });
     const url = URL.createObjectURL(blob);
@@ -649,9 +700,40 @@ function mountSongsPanel(hostEl, api) {
     const file = importInput.files && importInput.files[0];
     importInput.value = '';
     if (!file) return;
+    bandPackPartsEl.innerHTML = '';
     const route = routeImportFile(file.name);
     if (route.kind === 'unknown') {
-      say('That file type is not supported yet. Use a .mid, .midi, .abc, .xml, .musicxml, .mxl, .gp or .json file.', 'no');
+      say('That file type is not supported yet. Use a .mid, .midi, .abc, .xml, .musicxml, .mxl, .gp, .bandpack or .json file.', 'no');
+      return;
+    }
+    if (route.kind === 'band-pack') {
+      let pack;
+      try {
+        const buffer = await readFile(file, route.readAs);
+        pack = readBandPack(new Uint8Array(buffer));
+      } catch (e) {
+        say(e && e.message ? e.message : String(e), 'no');
+        return;
+      }
+      try {
+        for (const s of pack.songs) await library.add(s, { now: Date.now() });
+      } catch (e) {
+        say('The band pack could not be fully saved: ' + (e && e.message ? e.message : String(e)), 'no');
+        return;
+      }
+      say('Added ' + pack.songs.length + ' song' + (pack.songs.length === 1 ? '' : 's') + ' from band pack "' + pack.name + '".', 'ok');
+      // Part assignments, read-only: one line per song that carries one,
+      // "<title>: <member> plays <part name>, ...". A song with no
+      // assignment (pack.parts[i] is null) gets no line at all.
+      pack.songs.forEach((s, i) => {
+        const assignment = pack.parts[i];
+        if (!assignment) return;
+        const line = Object.entries(assignment)
+          .map(([member, partIndex]) => member + ' plays ' + (s.parts[partIndex] ? s.parts[partIndex].name : 'part ' + (partIndex + 1)))
+          .join(', ');
+        bandPackPartsEl.appendChild(el('p', { class: 'panel-songs-band-pack-parts', text: s.title + ': ' + line }));
+      });
+      await refreshList();
       return;
     }
     if (route.kind === 'challenge') {

@@ -73,6 +73,15 @@ test('routes .gp (Guitar Pro 7/8) to its own importer, reading bytes so it can b
   assert.deepEqual(routeImportFile('Song.GP'), { kind: 'gp7', readAs: 'bytes' });
 });
 
+test('routes .bandpack to the band pack importer, reading bytes so the zip can be unpacked', () => {
+  assert.deepEqual(routeImportFile('ourset.bandpack'), { kind: 'band-pack', readAs: 'bytes' });
+  assert.deepEqual(routeImportFile('OurSet.BANDPACK'), { kind: 'band-pack', readAs: 'bytes' });
+});
+
+test('a plain .zip stays unknown -- only .bandpack is treated as a band pack, so a random zip is not mistaken for one', () => {
+  assert.deepEqual(routeImportFile('archive.zip'), { kind: 'unknown', readAs: null });
+});
+
 test('an unrecognised extension is reported, not guessed at', () => {
   assert.deepEqual(routeImportFile('notes.txt'), { kind: 'unknown', readAs: null });
   assert.deepEqual(routeImportFile('no-extension-at-all'), { kind: 'unknown', readAs: null });
@@ -84,6 +93,7 @@ test('importerFor maps each song kind to its own importer, not a shared fallback
   assert.notEqual(importerFor('gp7'), importMusicXml, 'a .gp file must not be handed to the MusicXML importer');
   assert.notEqual(importerFor('midi'), importMusicXml);
   assert.equal(importerFor('challenge'), null);
+  assert.equal(importerFor('band-pack'), null, 'a band pack, like a challenge, holds several songs and is unpacked by songs.js itself, not a single-song importer');
   assert.equal(importerFor('unknown'), null);
 });
 

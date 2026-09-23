@@ -23,6 +23,13 @@
 // Guitar Pro `.gp` (GP7/8) is also a zip (of `Content/score.gpif`), but it
 // has its own importer (src/song/import-gp7.js importGp7) rather than
 // reusing the MusicXML one, so it gets its own 'gp7' kind read as bytes.
+//
+// A band pack (src/song/band-pack.js readBandPack/writeBandPack) is also a
+// zip, holding several songs (plus, optionally, who plays which part) at
+// once -- like 'challenge' above, it has a different return shape than a
+// single-song importer and stays handled separately in songs.js. Its
+// extension is `.bandpack`, not `.zip`: `.zip` is left 'unknown' on purpose,
+// so a random zip a learner happens to pick is never mistaken for one.
 
 import { importMidi } from '../../song/import-midi.js';
 import { importAbc } from '../../song/import-abc.js';
@@ -43,13 +50,14 @@ export function routeImportFile(fileName) {
   if (ext === 'xml' || ext === 'musicxml') return { kind: 'musicxml', readAs: 'text' };
   if (ext === 'mxl') return { kind: 'musicxml', readAs: 'bytes' };
   if (ext === 'gp') return { kind: 'gp7', readAs: 'bytes' };
+  if (ext === 'bandpack') return { kind: 'band-pack', readAs: 'bytes' };
   if (ext === 'json') return { kind: 'challenge', readAs: 'text' };
   return { kind: 'unknown', readAs: null };
 }
 
 // Returns the (data, options) => { song, warnings } importer for a routed
 // song `kind`, or null for a kind with no such importer ('challenge',
-// 'unknown'). 'midi' and 'gp7' are read as raw bytes (an ArrayBuffer from
+// 'band-pack', 'unknown'). 'midi' and 'gp7' are read as raw bytes (an ArrayBuffer from
 // FileReader.readAsArrayBuffer) and need wrapping in a Uint8Array first;
 // 'abc' and 'musicxml' take the FileReader result as-is (text for 'abc',
 // and either text or bytes for 'musicxml' — importMusicXml itself detects
