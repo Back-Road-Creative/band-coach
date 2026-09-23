@@ -203,7 +203,14 @@ MIDI (`.mid`), MusicXML (`.musicxml`) or ABC (`.abc`), using the pure exporters 
 `src/song/export-midi.js`, `src/song/export-musicxml.js` and `src/song/export-abc.js`. Each phrase
 step also shows a plain-word Easy/Medium/Hard difficulty (`src/song/phrase-difficulty.js`), and
 after a judged try the panel draws a small bar-by-bar strip (`src/song/bar-heat.js`) naming which
-bars went well and which need another pass.
+bars went well and which need another pass. A band can also share a whole set list at once as a
+**band pack**: a `.bandpack` file (`src/song/band-pack.js`, a small zip of song files plus a
+manifest) holding several songs and, optionally, who in the band plays which part of each.
+Picking one through the same file input adds every song to the library and shows any part
+assignments read-only, one line per song ("Song title: Alex plays Melody, Sam plays Bass"). "Share
+with your band" bundles a learner's own saved library into a downloadable `.bandpack` with no
+assignments, the same file-exchange pattern as a challenge — no account, no server, no network
+call.
 ## Play along with a recording
 
 The "Play Along" panel (`src/ui/playalong.js`) opens an audio file of a song, works out its

@@ -160,6 +160,9 @@
   .panel-songs-bar[data-grade="shaky"] { background: var(--warn); }
   .panel-songs-bar[data-grade="miss"] { background: var(--bad); color: #fff; }
   .panel-songs-bar-worst { flex-basis: 100%; color: var(--muted); }
+  .panel-songs-band-pack-parts-list { margin-top: 4px; }
+  .panel-songs-band-pack-parts { margin: 2px 0; color: var(--muted); }
+  .panel-songs-share-msg { min-height: 1.2em; color: var(--good); }
   @media (max-width: 400px) { .panel-songs-list { flex-direction: column; } .panel-songs-play-on-list { flex-direction: column; } }
   /* */
   .panel-editor { display: flex; flex-direction: column; gap: 12px; max-width: 100%; }
