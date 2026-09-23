@@ -10,7 +10,7 @@ import { createMidiParser } from './core/midi.js';
 import { recordError, getErrors } from './core/error-log.js';
 import { resolveAppVersion, DEV_VERSION } from './core/version.js';
 import { checkForUpdate, FALLBACK_DOWNLOAD_URL } from './core/update-check.js';
-//
+import { setNoteNaming, sanitizeNoteNaming, name as noteNameFor } from './core/note-names.js';
 import { yin } from './audio/yin.js';
 import { createPitchNode } from './audio/pitch-worklet.js';
 //
@@ -86,7 +86,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
   const NAMES = ['C', 'C♯', 'D', 'E♭', 'E', 'F', 'F♯', 'G', 'A♭', 'A', 'B♭', 'B'];
   const SOLFA = { 0: 'Do', 2: 'Re', 4: 'Mi', 5: 'Fa', 7: 'Sol', 9: 'La', 11: 'Ti', 12: 'high Do' };
   const pc = m => ((Math.round(m) % 12) + 12) % 12;
-  const nname = (m, oct) => NAMES[pc(m)] + (oct ? (Math.floor(m / 12) - 1) : '');
+  const nname = (m, oct) => noteNameFor(m, oct);
   const mfreq = m => 440 * Math.pow(2, (m - 69) / 12);
   const fmidi = f => 69 + 12 * Math.log2(f / 440);
   const clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
@@ -813,7 +813,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
   }
   function sanitizeDB(v, defaultLatencyMs, modelNow) {
     const notate = {}; NOTATE_MOD_IDS.forEach(m => { notate[m] = 'names'; });
-    const d = { v: 1, mods: {}, sessions: [], prefs: { mod: 'kbd', wind: 'bb', voice: 'low', names: true, noiseFloor: null, inputDeviceId: null, notate: notate, theme: 'system' } }; v = (v && typeof v === 'object') ? v : {};
+    const d = { v: 1, mods: {}, sessions: [], prefs: { mod: 'kbd', wind: 'bb', voice: 'low', names: true, noiseFloor: null, inputDeviceId: null, notate: notate, theme: 'system', noteNaming: { system: 'letters', accidentals: 'mixed' } } }; v = (v && typeof v === 'object') ? v : {};
     MOD_IDS.forEach(m => { d.mods[m] = sanitizeModel(m, v.mods && v.mods[m], modelNow); });
     if (Array.isArray(v.sessions)) d.sessions = v.sessions.filter(x => x && typeof x.d === 'string' && MODS[x.mod]).slice(-60).map(x => ({ d: x.d.slice(0, 10), mod: x.mod, min: num(x.min, 0, 0, 600), acc: num(x.acc, 0, 0, 1), a1: num(x.a1, 0, 0, 1), a2: num(x.a2, 0, 0, 1), from: num(x.from, 1, 1, 80), to: num(x.to, 1, 1, 80), breaks: num(x.breaks, 0, 0, 99) }));
     const p = v.prefs || {}; if (MODS[p.mod]) d.prefs.mod = p.mod; if (WIND_KINDS[p.wind]) d.prefs.wind = p.wind; d.prefs.voiceRange = (p.voiceRange && typeof p.voiceRange === 'object' && Number.isFinite(p.voiceRange.low) && Number.isFinite(p.voiceRange.high) && p.voiceRange.low < p.voiceRange.high) ? { low: clamp(Math.round(p.voiceRange.low), 24, 96), high: clamp(Math.round(p.voiceRange.high), 24, 96) } : null; const VKp = Object.assign({}, VOICE_KINDS, d.prefs.voiceRange ? { mine: ['My range (found by test)', tonicFromRange(exerciseRangeFor(d.prefs.voiceRange)).tonic] } : {}); if (VKp[p.voice]) d.prefs.voice = p.voice; d.prefs.names = p.names !== false;
@@ -823,6 +823,10 @@ import { register as registerPlayalong } from './ui/playalong.js';
     // sanitises to 'system' so a corrupt/old backup never leaves the toggle
     // stuck on nothing it can render.
     d.prefs.theme = ['system', 'light', 'dark'].indexOf(p.theme) >= 0 ? p.theme : 'system';
+    // Note naming J2: letters / German (H/B) / fixed-do solfege, each in
+    // sharps, flats or mixed spelling -- unknown or missing sanitises to
+    // today's default so nname() never has a pref it can't render.
+    d.prefs.noteNaming = sanitizeNoteNaming(p.noteNaming);
     d.prefs.harpKey = (Number.isInteger(p.harpKey) && p.harpKey >= 0 && p.harpKey <= 11) ? p.harpKey : 0;
     // "Show: staff / names / both" is per-instrument and defaults to 'names',
     // i.e. today's display, untouched, for any instrument not set.
@@ -833,7 +837,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
     d.panels = sanitizePanelData(v.panels);
     return d;
   }
-  function loadDB() { modelNow = Date.now(); let v = null; try { v = migrateDB(JSON.parse(localStorage.getItem(KEY) || 'null')); } catch (e) {} hasSavedMod = !!(v && v.prefs && MODS[v.prefs.mod] && TOOL_MOD_IDS.indexOf(v.prefs.mod) < 0); DB = sanitizeDB(v, actx ? (actx.outputLatency || actx.baseLatency || 0) * 1000 : 0, modelNow); mod = DB.prefs.mod; S = DB.mods[mod]; gates = gatesFor(DB.prefs.noiseFloor); }
+  function loadDB() { modelNow = Date.now(); let v = null; try { v = migrateDB(JSON.parse(localStorage.getItem(KEY) || 'null')); } catch (e) {} hasSavedMod = !!(v && v.prefs && MODS[v.prefs.mod] && TOOL_MOD_IDS.indexOf(v.prefs.mod) < 0); DB = sanitizeDB(v, actx ? (actx.outputLatency || actx.baseLatency || 0) * 1000 : 0, modelNow); mod = DB.prefs.mod; S = DB.mods[mod]; gates = gatesFor(DB.prefs.noiseFloor); setNoteNaming(DB.prefs.noteNaming); }
   let saveTimer = null;
   function save() { if (saveTimer) return; saveTimer = setTimeout(() => { saveTimer = null; try { if (MODS[mod]) DB.mods[mod] = S = sanitizeModel(mod, S, modelNow); localStorage.setItem(KEY, JSON.stringify(DB)); } catch (e) {} }, 1200); }
   // `now` is always the caller's `modelNow` (frozen per page load/import,
@@ -1721,6 +1725,8 @@ import { register as registerPlayalong } from './ui/playalong.js';
   // overriding the OS setting either way (see src/styles.css).
   function applyTheme(t) { if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t); else document.documentElement.removeAttribute('data-theme'); }
   $('optTheme').addEventListener('change', function () { DB.prefs.theme = this.value; applyTheme(this.value); save(); });
+  function applyNoteNaming() { DB.prefs.noteNaming = { system: $('optNoteSystem').value, accidentals: $('optAccidentals').value }; setNoteNaming(DB.prefs.noteNaming); save(); showAll(); }
+  $('optNoteSystem').addEventListener('change', applyNoteNaming); $('optAccidentals').addEventListener('change', applyNoteNaming);
 
   function setMod(m) {
     if (sess) endSession(); mod = m; if (MODS[m]) { S = DB.mods[m]; DB.prefs.mod = m; } customOn = false; grooveOn = false; groove = null; task = null; bar = null; heard = null; cap.on = false; tunerState = null; tunerLock = null; diagInputFrames = []; diagLastState = null;
@@ -1857,7 +1863,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
     if (!result.ok) { coach(result.error); return result; }
     const priorLatencyMs = DB && DB.latencyMs;
     modelNow = Date.now(); DB = sanitizeDB(result.db, undefined, modelNow); DB.latencyMs = num(priorLatencyMs, DB.latencyMs, 0, 300); if (!Array.isArray(DB.custom)) DB.custom = [];
-    $('optNames').checked = DB.prefs.names; $('optTheme').value = DB.prefs.theme; applyTheme(DB.prefs.theme); setMod(DB.prefs.mod); coach('Backup restored.');
+    $('optNames').checked = DB.prefs.names; $('optTheme').value = DB.prefs.theme; applyTheme(DB.prefs.theme); setNoteNaming(DB.prefs.noteNaming); $('optNoteSystem').value = DB.prefs.noteNaming.system; $('optAccidentals').value = DB.prefs.noteNaming.accidentals; setMod(DB.prefs.mod); coach('Backup restored.');
     return result;
   }
   $('backupSaveBtn').addEventListener('click', function () { this.blur(); saveBackup(); });
@@ -1962,7 +1968,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
     box.hidden = empty; const disclosure = $('panelPickerDisclosure'); if (disclosure) disclosure.hidden = empty;
     panels.list().forEach(p => { const b = document.createElement('button'); b.type = 'button'; b.dataset.panel = p.id; b.style.setProperty('--c', p.color || '#93a0bd'); b.setAttribute('aria-pressed', 'false'); b.appendChild(document.createTextNode(p.name)); const sm = document.createElement('small'); sm.textContent = p.tag || ''; b.appendChild(sm); b.addEventListener('click', () => { b.blur(); openPanel(p.id); }); box.appendChild(b); });
   }
-  loadDB(); if (!Array.isArray(DB.custom)) DB.custom = []; $('optNames').checked = DB.prefs.names; $('optTheme').value = DB.prefs.theme; applyTheme(DB.prefs.theme); buildPicker(); buildPanelPicker(); setMod(mod); requestAnimationFrame(frame);
+  loadDB(); if (!Array.isArray(DB.custom)) DB.custom = []; $('optNames').checked = DB.prefs.names; $('optTheme').value = DB.prefs.theme; applyTheme(DB.prefs.theme); $('optNoteSystem').value = DB.prefs.noteNaming.system; $('optAccidentals').value = DB.prefs.noteNaming.accidentals; buildPicker(); buildPanelPicker(); setMod(mod); requestAnimationFrame(frame);
   const hook = !__DEBUG_HOOK__ ? null : { state: () => S, db: () => DB, sess: () => sess, task: () => task, cur: cur, note: onNote, answer: answer, tap: onTap, bar: () => bar, playing: () => playing, setMod: setMod, testSource: testSource, heard: () => heard, yin: yin, cap: () => cap, tuner: () => tunerState, tunerLock: () => tunerLock, deaf: () => deafWindow.isDeaf(), deafUntil: () => deafWindow.until(), exportProgress: doExportProgress, importProgress: doImportProgress, audioNow: audioNow, modelNow: () => modelNow };
   // Debug-hook slots: replace ONLY your own line with
   //   if (__DEBUG_HOOK__) Object.assign(hook, { … });

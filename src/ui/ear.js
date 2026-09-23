@@ -1,4 +1,4 @@
-// Ear training panel (id "ear"). Wires src/core/ear/index.js's eight pure
+// Ear training panel (id "ear"). Wires src/core/ear/index.js's ten pure
 // exercise generators to sound (api.tone/api.click), answer widgets (choice
 // buttons, an on-screen note/rhythm entry, or the microphone), and a
 // per-exercise level that adapts to how the learner is doing. All timing and
@@ -27,10 +27,10 @@ export function __earTestHook() {
 }
 
 const MAX_LEVEL = 5;
-// Fixed playback tempo for rhythm dictation (its play events are in quarter
-// notes, not seconds, unlike every other exercise here). Slow enough that a
-// learner's tap timing has room inside rhythm-dictation's default 40-tick
-// tolerance (about 80ms at this tempo).
+// Fixed playback tempo for rhythm dictation and song-rhythm (their play
+// events are in quarter notes, not seconds, unlike every other exercise
+// here). Slow enough that a learner's tap timing has room inside
+// rhythm-dictation's default 40-tick tolerance (about 80ms at this tempo).
 const RHYTHM_BPM = 60;
 const MIC_POLL_MS = 90;
 const PITCH_FMIN = 70;
@@ -43,6 +43,7 @@ const EXERCISE_TITLES = {
   'melodic-dictation': 'Melodic dictation',
   'song-dictation': 'Dictation from songs',
   'rhythm-dictation': 'Rhythm dictation',
+  'song-rhythm': 'Rhythms from songs',
   progressions: 'Chord progressions',
   'scales-modes': 'Scales and modes',
   inversions: 'Chord inversions',
@@ -176,7 +177,7 @@ export function registerEar(panels) {
       }
 
       function scheduleEvents(startAt) {
-        const isRhythm = exerciseId === 'rhythm-dictation';
+        const isRhythm = exerciseId === 'rhythm-dictation' || exerciseId === 'song-rhythm';
         question.play.forEach((ev) => {
           const t = isRhythm ? ev.t * secondsPerQuarter(RHYTHM_BPM) : ev.t;
           const dur = isRhythm ? ev.dur * secondsPerQuarter(RHYTHM_BPM) : ev.dur;
@@ -367,7 +368,7 @@ export function registerEar(panels) {
 
       function renderAnswerWidget() {
         if (exerciseId === 'melodic-dictation' || exerciseId === 'song-dictation') return renderNoteEntry();
-        if (exerciseId === 'rhythm-dictation') return renderRhythmEntry();
+        if (exerciseId === 'rhythm-dictation' || exerciseId === 'song-rhythm') return renderRhythmEntry();
         if (exerciseId === 'sing-back') return renderMicEntry();
         if (Array.isArray(question.answer)) return renderChoiceSequence();
         return renderChoiceSingle();
