@@ -71,6 +71,13 @@ import { register as registerPlayalong } from './ui/playalong.js';
 (function () {
   'use strict';
   const $ = id => document.getElementById(id);
+  // Static page labels: every element src/index.html marks with data-i18n="id"
+  // gets its textContent set from t(id) once at startup, so the shipped copy
+  // comes from the same English table as the strings app.js writes itself
+  // (see src/core/i18n.js). i18n.js stays DOM-free by design, so the walk
+  // lives here; the English text is left in the HTML too as the pre-JS/no-JS
+  // fallback, and this only overwrites it with the identical string today.
+  function applyStaticLabels(root) { root.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.getAttribute('data-i18n')); }); }
   const deafWindow = createDeafWindow({ now: () => performance.now() });
   // ---------- accessibility: wake lock, dialog focus, reduced motion ----------
   const wakeLock = createWakeLock();
@@ -1963,6 +1970,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
     box.hidden = empty; const disclosure = $('panelPickerDisclosure'); if (disclosure) disclosure.hidden = empty;
     panels.list().forEach(p => { const b = document.createElement('button'); b.type = 'button'; b.dataset.panel = p.id; b.style.setProperty('--c', p.color || '#93a0bd'); b.setAttribute('aria-pressed', 'false'); b.appendChild(document.createTextNode(p.name)); const sm = document.createElement('small'); sm.textContent = p.tag || ''; b.appendChild(sm); b.addEventListener('click', () => { b.blur(); openPanel(p.id); }); box.appendChild(b); });
   }
+  applyStaticLabels(document);
   loadDB(); if (!Array.isArray(DB.custom)) DB.custom = []; $('optNames').checked = DB.prefs.names; $('optTheme').value = DB.prefs.theme; applyTheme(DB.prefs.theme); $('optNoteSystem').value = DB.prefs.noteNaming.system; $('optAccidentals').value = DB.prefs.noteNaming.accidentals; buildPicker(); buildPanelPicker(); setMod(mod); requestAnimationFrame(frame);
   const hook = !__DEBUG_HOOK__ ? null : { state: () => S, db: () => DB, sess: () => sess, task: () => task, cur: cur, note: onNote, answer: answer, tap: onTap, bar: () => bar, playing: () => playing, setMod: setMod, testSource: testSource, heard: () => heard, yin: yin, cap: () => cap, tuner: () => tunerState, tunerLock: () => tunerLock, deaf: () => deafWindow.isDeaf(), deafUntil: () => deafWindow.until(), exportProgress: doExportProgress, importProgress: doImportProgress, audioNow: audioNow, modelNow: () => modelNow };
   // Debug-hook slots: replace ONLY your own line with

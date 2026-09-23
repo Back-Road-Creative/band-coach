@@ -22,6 +22,44 @@ export const en = {
   'update.behind': 'Version {version} is out. ',
   'update.error': "Couldn't reach the update server. ",
   'update.downloadLinkText': 'Download the current version',
+
+  // Static page labels -- headings, button text, help copy that src/app.js
+  // never rewrites at runtime. Applied once at startup by applyStaticLabels
+  // in src/app.js (this file stays DOM-free, see the header comment) from a
+  // data-i18n="id" attribute on the element; the same English text is also
+  // left sitting in src/index.html so the page still reads correctly before
+  // that startup call runs, or if JS never runs at all.
+  'app.subtitle': 'One coach, many instruments. It teaches where things are, then the moves between them, picks every next exercise from your own results, and watches your energy so practice stays fresh.',
+  'panel.more': 'More ways to practise',
+  'setup.button': 'Set up input',
+  'setup.connect': 'Connect',
+  'setup.midiDetails': 'MIDI details',
+  'setup.inputLabel': 'Input',
+  'setup.defaultMic': 'Default microphone',
+  'setup.checkMic': 'Check my microphone',
+  'break.back': "I'm back, resume",
+  'break.snooze': 'Keep going 5 more minutes',
+  'break.end': 'End session',
+  'stage.tapPad': 'Tap here, or press space',
+  'stage.replay': 'Hear it again',
+  'stage.showMe': 'Show me',
+  'side.end': 'End session',
+  'side.energyEyebrow': 'Your energy this session',
+  'side.easier': 'Make it easier',
+  'side.harder': 'Skip ahead',
+  'side.feedbackEyebrow': 'Instant feedback',
+  'stats.last20': 'last 20',
+  'stats.streak': 'streak',
+  'stats.rtLabel': 'sec to answer',
+  'side.weakEyebrow': 'What the coach is leaning on',
+  'side.backupDismiss': 'Dismiss',
+  'rail.summary': 'More options',
+  'rail.reset': 'Reset this instrument (clears progress)',
+  'rail.backupSave': 'Save a backup',
+  'rail.backupRestore': 'Restore a backup',
+  'rail.checkUpdates': 'Check for updates',
+  'rail.updateHelp': 'Asks the Band Coach website for the latest version number. Sends nothing about your playing.',
+  'help.summary': 'How this works',
 };
 
 const locales = { en };

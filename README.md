@@ -164,6 +164,11 @@ above are read from the English string table in `src/core/i18n.js` (`t(id, param
 hardcoded — a scaffold for a future locale, though only English ships today.
 sessions not kept" rather than a false zero. "Print this week's report" turns the last 7 days into a
 one-page, printer-friendly summary for a teacher or parent.
+hardcoded — a scaffold for a future locale, though only English ships today. `src/index.html`'s own
+static labels (headings, button text, help copy `src/app.js` never rewrites at runtime) go through
+the same table: each element carries `data-i18n="<id>"` and keeps its English text in the markup as
+a pre-JS/no-JS fallback, and `applyStaticLabels` in `src/app.js` overwrites it from `t(id)` once at
+startup.
 
 ## Turning an audio file into notes
 
