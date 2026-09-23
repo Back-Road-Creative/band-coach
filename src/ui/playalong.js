@@ -132,6 +132,7 @@ function mountPlayalong(el, api) {
   let analysis = null; // analyse() result
   let transport = null; // createTransport(...)
   let cancelled = false;
+  let destroyed = false; // set by destroy(); guards an in-flight analyse() from writing to a torn-down instance's DOM/store (see destroy() below)
   let dragStart = null;
   let currentSource = null;
   let currentGain = null;
@@ -241,6 +242,12 @@ function mountPlayalong(el, api) {
 
   timelineEl.addEventListener('pointerdown', (e) => {
     if (!recording) return;
+    // Without pointer capture, a drag that leaves the timeline strip (a
+    // narrow target) stops receiving pointermove and the loop selection
+    // freezes mid-drag; capture keeps events coming to this element until
+    // pointerup, which releases it automatically. Guarded for test DOMs
+    // that don't implement it.
+    if (timelineEl.setPointerCapture) timelineEl.setPointerCapture(e.pointerId);
     dragStart = timeFromClientX(e.clientX);
   });
   timelineEl.addEventListener('pointermove', (e) => {
@@ -372,6 +379,12 @@ function mountPlayalong(el, api) {
         () => cancelled
       );
       const result = await analyse(rec.pcm, rec.sampleRate, { onProgress, beatsPerBar: BEATS_PER_BAR });
+      // The panel may have been closed (panels.close() -> hide() then
+      // destroy()) while analyse() above was still running -- it is not
+      // cancellable mid-flight the way the Cancel button is. A destroyed
+      // instance must never write to the shared store or a container that
+      // may already be detached from the document.
+      if (destroyed) return;
       analysis = result;
       transport = createTransport({ durationSec: recording.duration, beatTimes: result.beats });
       transport.setRate(Number(speedInput.value) / 100);
@@ -391,6 +404,7 @@ function mountPlayalong(el, api) {
       resultsEl.hidden = false;
       persistLoop();
     } catch (e) {
+      if (destroyed) return; // nothing left to show an error on
       if (e instanceof AnalysisCancelledError) {
         errorEl.textContent = 'Analysis cancelled.';
       } else {
@@ -399,7 +413,7 @@ function mountPlayalong(el, api) {
       }
       errorEl.hidden = false;
     } finally {
-      progressEl.hidden = true;
+      if (!destroyed) progressEl.hidden = true;
     }
   }
 
@@ -536,6 +550,15 @@ function mountPlayalong(el, api) {
       if (captureTimer) stopRecordingCapture();
     },
     destroy() {
+      // panels.close() always calls hide() then destroy() together (see
+      // src/ui/panels.js) -- hide() alone (e.g. switching mods without
+      // closing the panel) never happens, so it is safe to only cancel/guard
+      // here rather than in hide(). destroyed stops any in-flight
+      // analyzeRecording() from writing to the store or this (possibly
+      // already-detached) DOM once it resolves; cancelled lets it notice
+      // sooner, at its next onProgress tick (see makeCancellableProgress).
+      destroyed = true;
+      cancelled = true;
       if (captureTimer) { clearInterval(captureTimer); captureTimer = null; takeAccumulator = null; }
       window.removeEventListener('pointerup', onWindowPointerUp);
     },
