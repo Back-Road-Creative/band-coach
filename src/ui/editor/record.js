@@ -52,10 +52,9 @@ export function createRecorder(api, { intervalMs = 50, fmin, fmax } = {}) {
   let startedAt = 0;
   let activeFmin = fmin;
   let activeFmax = fmax;
-  // The Listen button's click handler has no re-entrancy guard of its own
-  // (it awaits start() before it can disable itself -- see editor.js), so a
-  // double tap while openMic() is still pending must not be allowed to reach
-  // here twice. `starting` holds the one in-flight start() promise; a second
+  // editor.js disables Listen before awaiting start(), but this recorder must
+  // not depend on its caller for that: a double start() while openMic() is
+  // still pending must not be allowed to run twice. `starting` holds the one in-flight start() promise; a second
   // call while it is set reuses it instead of opening a second mic and
   // creating a second, un-clearable setInterval. `stopRequested` covers the
   // narrower case where stop() lands while openMic() is still pending: the
