@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  BAND_PACK_FORMAT, BAND_PACK_VERSION, writeBandPack, readBandPack
+  BAND_PACK_FORMAT, BAND_PACK_VERSION, MAX_BAND_PACK_SONGS, MAX_BAND_PACK_BYTES, writeBandPack, readBandPack
 } from '../../src/song/band-pack.js';
 import { SCHEMA, TICKS_PER_QUARTER } from '../../src/song/model.js';
 import { readZipEntries, readZipEntryData } from '../../src/song/unzip-lite.js';
@@ -168,4 +168,29 @@ test('readBandPack rejects an invalid song inside the pack', () => {
     { name: 'songs/0.json', data: encoder.encode(JSON.stringify({ title: 'no id' })) },
   ]);
   assert.throws(() => readBandPack(bytes), /song 1/);
+});
+
+// ---- caps: a hostile or corrupted pack must not ask the library to store
+// thousands of songs, same bound as challenge.js ----
+
+test('writeBandPack refuses more than MAX_BAND_PACK_SONGS songs', () => {
+  const songs = Array.from({ length: MAX_BAND_PACK_SONGS + 1 }, (_, i) => song('s' + i));
+  assert.throws(() => writeBandPack({ name: 'Too many', songs }), /at most 50 songs/);
+  assert.doesNotThrow(() => writeBandPack({ name: 'Just right', songs: songs.slice(0, MAX_BAND_PACK_SONGS) }));
+});
+
+test('readBandPack refuses a manifest listing more than MAX_BAND_PACK_SONGS songs', () => {
+  const encoder = new TextEncoder();
+  const listed = Array.from({ length: MAX_BAND_PACK_SONGS + 1 }, (_, i) => ({ title: 'S' + i, file: 'songs/0.json' }));
+  const manifest = { format: BAND_PACK_FORMAT, version: BAND_PACK_VERSION, name: 'Flood', songs: listed };
+  const bytes = buildTestZip([
+    { name: 'band-pack.json', data: encoder.encode(JSON.stringify(manifest)) },
+    { name: 'songs/0.json', data: encoder.encode(JSON.stringify(song('a'))) },
+  ]);
+  assert.throws(() => readBandPack(bytes), /at most 50 songs \(this one lists 51\)/);
+});
+
+test('readBandPack refuses a file larger than MAX_BAND_PACK_BYTES before unzipping it', () => {
+  const bytes = new Uint8Array(MAX_BAND_PACK_BYTES + 1);
+  assert.throws(() => readBandPack(bytes), /too large to open \(over 20 MB\)/);
 });

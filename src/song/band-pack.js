@@ -29,6 +29,12 @@ export const BAND_PACK_FORMAT = 'band-pack';
 export const BAND_PACK_VERSION = '1.0';
 const BAND_PACK_MAJOR = 1;
 const MANIFEST_NAME = 'band-pack.json';
+// Same song bound as src/song/challenge.js: a band's whole set list fits
+// comfortably, and a hostile or corrupted pack can't ask the library to
+// store thousands of songs. The byte cap is on the zip as handed over,
+// checked before anything is unzipped (unzip-lite caps each entry too).
+export const MAX_BAND_PACK_SONGS = 50;
+export const MAX_BAND_PACK_BYTES = 20 * 1024 * 1024;
 
 function isPlainObject(x) { return x !== null && typeof x === 'object' && !Array.isArray(x); }
 function isNonEmptyString(x) { return typeof x === 'string' && x.length > 0; }
@@ -133,6 +139,9 @@ export function writeBandPack({ name, songs, parts } = {}) {
   if (!Array.isArray(songs) || songs.length === 0) {
     throw new Error('a band pack needs at least one song');
   }
+  if (songs.length > MAX_BAND_PACK_SONGS) {
+    throw new Error('a band pack can hold at most ' + MAX_BAND_PACK_SONGS + ' songs (got ' + songs.length + ')');
+  }
   if (parts !== undefined && parts !== null && !Array.isArray(parts)) {
     throw new Error('parts must be an array parallel to songs, or omitted');
   }
@@ -180,6 +189,9 @@ export function writeBandPack({ name, songs, parts } = {}) {
 // Error naming what is wrong with the file; never returns a partially-broken
 // pack.
 export function readBandPack(bytes) {
+  if (bytes && bytes.length > MAX_BAND_PACK_BYTES) {
+    throw new Error('that band pack is too large to open (over 20 MB)');
+  }
   const entries = readZipEntries(bytes);
   const byName = new Map(entries.map((e) => [e.name, e]));
 
@@ -209,6 +221,9 @@ export function readBandPack(bytes) {
   }
   if (!Array.isArray(manifest.songs) || manifest.songs.length === 0) {
     throw new Error('a band pack needs at least one song');
+  }
+  if (manifest.songs.length > MAX_BAND_PACK_SONGS) {
+    throw new Error('a band pack can hold at most ' + MAX_BAND_PACK_SONGS + ' songs (this one lists ' + manifest.songs.length + ')');
   }
 
   const songs = [];
