@@ -128,12 +128,12 @@ test('READY instrument ids match the instrument ids in today\'s MODS', () => {
   assert.deepEqual(readyIds, modsInstrumentIds);
 });
 
-test('oboe is a planned concert-pitch wind record with no fingering data', () => {
-  assert.equal(byId.oboe.status, 'planned');
+test('oboe is a ready concert-pitch wind record with a curriculum, no invented fingerings field', () => {
+  assert.equal(byId.oboe.status, 'ready');
   assert.equal(byId.oboe.family, 'wind');
   assert.equal(byId.oboe.transposition, 0);
-  assert.deepEqual(byId.oboe.curriculum, []);
-  assert.equal(byId.oboe.fingerings, undefined, 'no fingering-chart data model exists for oboe; none should be invented');
+  assert.ok(byId.oboe.curriculum.length > 0);
+  assert.equal(byId.oboe.fingerings, undefined, 'fingering data lives in src/instruments/how/keyed-woodwind.js, not a field on the record itself');
 });
 
 test('mallet-percussion is a ready percussion record with a non-empty curriculum', () => {

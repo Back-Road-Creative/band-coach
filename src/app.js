@@ -32,6 +32,7 @@ import { drawPrimitives } from './notation/draw-canvas.js';
 import { byId as instrumentById } from './instruments/index.js';
 import { rangeForInstrument, FALLBACK_RANGE, frameSizeForInstrument } from './audio/range.js';
 import { renderVoice } from './audio/voices.js';
+import { layoutFor as harpLayoutFor } from './instruments/how/harmonica.js';
 // slot:import:notation-wire
 //
 // slot:import:a11y
@@ -367,10 +368,15 @@ import { register as registerPlayalong } from './ui/playalong.js';
 
   // ---------- instruments: each is a curriculum plus a way of hearing you ----------
   const N = (...ms) => ms.map(m => 'n' + m), Wn = (...ms) => ms.map(m => 'w' + m), SF = (s, ...fs) => fs.map(f => 's' + s + 'f' + f), V = (...ds) => ds.map(d => 'v' + d);
-  function stringLevels(tuning, names, maxFret, chordSet) {
-    const L = [], ns = tuning.length, natural = (s, lo, hi) => { const out = []; for (let f = lo; f <= hi; f++) if ([0, 2, 4, 5, 7, 9, 11].indexOf(pc(tuning[s] + f)) >= 0) out.push(f); return out; };
+  // posWord names the positional unit in each per-string level's label:
+  // 'fret' for every fretted instrument (frets 1 to N, a fingerboard dot the
+  // player can feel), 'position' for the bowed instruments (violin, viola,
+  // cello, double-bass -- fretless, so there is nothing to feel for, only a
+  // pitch to match; see MODS.violin etc.'s fretless flag in this same file).
+  function stringLevels(tuning, names, maxFret, chordSet, posWord) {
+    const w = posWord || 'fret', L = [], ns = tuning.length, natural = (s, lo, hi) => { const out = []; for (let f = lo; f <= hi; f++) if ([0, 2, 4, 5, 7, 9, 11].indexOf(pc(tuning[s] + f)) >= 0) out.push(f); return out; };
     L.push({ name: 'The open strings', add: tuning.map((t, i) => 's' + (ns - i) + 'f0'), limit: 9 });
-    for (let i = 0; i < ns; i++) { const sn = ns - i, mid = Math.min(5, maxFret); L.push({ name: names[i] + ' string, frets 1 to ' + mid, add: SF(sn, ...natural(i, 1, mid)), limit: 9 }); if (maxFret > 5) L.push({ name: names[i] + ' string, up the neck', add: SF(sn, ...natural(i, 6, maxFret)), limit: 9 }); }
+    for (let i = 0; i < ns; i++) { const sn = ns - i, mid = Math.min(5, maxFret); L.push({ name: names[i] + ' string, ' + w + 's 1 to ' + mid, add: SF(sn, ...natural(i, 1, mid)), limit: 9 }); if (maxFret > 5) L.push({ name: names[i] + ' string, up the neck', add: SF(sn, ...natural(i, 6, maxFret)), limit: 9 }); }
     L.push({ name: 'Moves: two notes', task: 'seq', len: 2, limit: 8 }); L.push({ name: 'Moves: three notes', task: 'seq', len: 3, limit: 7 });
     L.push({ name: 'Find it by name, no dot', add: [0, 2, 4, 5, 7, 9, 11].map(k => 'p' + k), pool: 'p', limit: 9, blind: true });
     L.push({ name: 'Sharps and flats by name', add: [1, 3, 6, 8, 10].map(k => 'p' + k), pool: 'p', limit: 9, blind: true });
@@ -461,12 +467,60 @@ import { register as registerPlayalong } from './ui/playalong.js';
   const bass5Range = rangeForInstrument(instrumentById['bass-5-string']);
   MODS['bass-5-string'] = { name: instrumentById['bass-5-string'].name, tag: 'microphone', color: '#c2453a', input: 'pluck', fmin: bass5Range.fmin, fmax: bass5Range.fmax, tuning: instrumentById['bass-5-string'].tuning, frets: 12, help: '5-string bass: press Connect to let the page listen. Play one clean note at a time and let it ring for a moment, including the low B string.', levels: null };
   MODS['bass-5-string'].levels = stringLevels(MODS['bass-5-string'].tuning, ['B', 'E', 'A', 'D', 'G'], 12, null);
+  // Four bowed instruments: fretless, so `fretless: true` tells drawFret()
+  // not to draw fret wires (a plain fingerboard, position dots instead) and
+  // the info/validId override below (see the _info3/_valid3 pair) not to
+  // label a position "fret N" the way the fretted six above do. 'sustain'
+  // (not 'pluck') because a bowed note is held, not plucked -- the same
+  // input voice/wind/harp already use, judged the same intonation-first way
+  // (onPitch's M.input === 'sustain' branch: exact-pitch cents against
+  // e.info.midi, shown live on the same cents gauge). `frets: 5` sets
+  // drawFret's position-dot spacing to match each record's own maxFret 5.
+  const violinRange = rangeForInstrument(instrumentById.violin);
+  MODS.violin = { name: instrumentById.violin.name, tag: 'microphone', color: '#d97b5f', input: 'sustain', fmin: violinRange.fmin, fmax: violinRange.fmax, tuning: instrumentById.violin.tuning, frets: 5, fretless: true, help: 'Violin: press Connect to let the page listen through your microphone or audio interface. Standard tuning G D A E. There are no frets to feel for, so hold each note steady for about half a second and let the gauge tell you how sharp or flat you are; the dot marks roughly where your finger should land.', levels: null };
+  MODS.violin.levels = stringLevels(MODS.violin.tuning, ['G', 'D', 'A', 'E'], 5, null, 'position');
+  const violaRange = rangeForInstrument(instrumentById.viola);
+  MODS.viola = { name: instrumentById.viola.name, parent: 'violin', tag: 'microphone', color: '#c2654f', input: 'sustain', fmin: violaRange.fmin, fmax: violaRange.fmax, tuning: instrumentById.viola.tuning, frets: 5, fretless: true, help: 'Viola: press Connect to let the page listen through your microphone or audio interface. Standard tuning C G D A. There are no frets to feel for, so hold each note steady for about half a second and let the gauge tell you how sharp or flat you are; the dot marks roughly where your finger should land.', levels: null };
+  MODS.viola.levels = stringLevels(MODS.viola.tuning, ['C', 'G', 'D', 'A'], 5, null, 'position');
+  const celloRange = rangeForInstrument(instrumentById.cello);
+  MODS.cello = { name: instrumentById.cello.name, parent: 'violin', tag: 'microphone', color: '#a8503f', input: 'sustain', fmin: celloRange.fmin, fmax: celloRange.fmax, tuning: instrumentById.cello.tuning, frets: 5, fretless: true, help: 'Cello: press Connect to let the page listen through your microphone or audio interface. Standard tuning C G D A, an octave below viola. There are no frets to feel for, so hold each note steady for about half a second and let the gauge tell you how sharp or flat you are; the dot marks roughly where your finger should land.', levels: null };
+  MODS.cello.levels = stringLevels(MODS.cello.tuning, ['C', 'G', 'D', 'A'], 5, null, 'position');
+  const doubleBassRange = rangeForInstrument(instrumentById['double-bass']);
+  MODS['double-bass'] = { name: instrumentById['double-bass'].name, parent: 'violin', tag: 'microphone', color: '#8a3f33', input: 'sustain', fmin: doubleBassRange.fmin, fmax: doubleBassRange.fmax, tuning: instrumentById['double-bass'].tuning, frets: 5, fretless: true, help: 'Double bass: press Connect to let the page listen through your microphone or audio interface. Standard tuning E A D G. There are no frets to feel for, so hold each note steady for about half a second and let the gauge tell you how sharp or flat you are; the low open E takes the mic a little longer to lock onto.', levels: null };
+  MODS['double-bass'].levels = stringLevels(MODS['double-bass'].tuning, ['E', 'A', 'D', 'G'], 5, null, 'position');
   const ukeLowGRange = rangeForInstrument(instrumentById['ukulele-low-g']);
   MODS['ukulele-low-g'] = { name: instrumentById['ukulele-low-g'].name, tag: 'microphone', color: '#e6c34a', input: 'pluck', fmin: ukeLowGRange.fmin, fmax: ukeLowGRange.fmax, tuning: instrumentById['ukulele-low-g'].tuning, frets: 7, help: 'Low-G ukulele: press Connect to let the page listen. Standard tuning G C E A with a low, non-re-entrant G. On a single-note lesson, play one clean note at a time; if it hears a strum instead it will tell you so rather than staying silent. Chord listening is experimental.', levels: null };
   MODS['ukulele-low-g'].levels = stringLevels(MODS['ukulele-low-g'].tuning, ['G', 'C', 'E', 'A'], 7, ['C', 'Am', 'F', 'G7']);
   const ukeBaritoneRange = rangeForInstrument(instrumentById['ukulele-baritone']);
   MODS['ukulele-baritone'] = { name: instrumentById['ukulele-baritone'].name, tag: 'microphone', color: '#b8863b', input: 'pluck', fmin: ukeBaritoneRange.fmin, fmax: ukeBaritoneRange.fmax, tuning: instrumentById['ukulele-baritone'].tuning, frets: 12, help: 'Baritone ukulele: press Connect to let the page listen. Standard tuning D G B E, the same pitches as the top four guitar strings. On a single-note lesson, play one clean note at a time; if it hears a strum instead it will tell you so rather than staying silent.', levels: null };
   MODS['ukulele-baritone'].levels = stringLevels(MODS['ukulele-baritone'].tuning, ['D', 'G', 'B', 'E'], 12, null);
+  // Descant recorder and tin whistle: held-pitch wind instruments like
+  // MODS.wind/MODS.harp above (input 'sustain', not 'pluck' -- a blown note
+  // is held, not struck), so their levels use plain N() note ids at SOUNDING
+  // pitch straight off each record's own curriculum (src/instruments/
+  // recorder-descant.js, tin-whistle.js -- see those files for why sounding
+  // pitch is a full octave above what a beginner method book prints, and why
+  // octavePolicy stays exact). `staff: true` and `writtenOffset: -12` record
+  // the same octave gap for the notation drawing pass to honour once it
+  // reads them (src/app.js drawStaff/draw dispatch); until then they are
+  // inert extra fields, harmless to the rest of MODS.
+  const recorderRange = rangeForInstrument(instrumentById['recorder-descant']);
+  MODS['recorder-descant'] = { name: instrumentById['recorder-descant'].name, parent: 'wind', tag: 'microphone', color: '#d98fd9', input: 'sustain', fmin: recorderRange.fmin, fmax: recorderRange.fmax, staff: true, writtenOffset: -12, help: 'Descant recorder: press Connect to let the page listen through your microphone. Hold each note steady for about half a second. Starts on B, A and G, the first three notes most method books teach.', levels: null };
+  MODS['recorder-descant'].levels = [
+    { name: 'First three notes: B, A, G', add: N(83, 81, 79), limit: 12 }, { name: 'Two more, going up: high C and D', add: N(84, 86), limit: 12 },
+    { name: 'Going down: E', add: N(76), limit: 12 }, { name: 'Down to low D and C', add: N(74, 72), limit: 12 },
+    { name: 'Moves: two notes', task: 'seq', len: 2, limit: 10 }, { name: 'The tricky note: F (forked fingering)', add: N(77), limit: 12 },
+    { name: 'Long tones: two steady seconds', task: 'hold', limit: 14 }, { name: 'Moves: three notes', task: 'seq', len: 3, limit: 9 },
+    { name: 'Five-note runs', task: 'run', limit: 8 }
+  ];
+  const whistleRange = rangeForInstrument(instrumentById['tin-whistle']);
+  MODS['tin-whistle'] = { name: instrumentById['tin-whistle'].name, parent: 'wind', tag: 'microphone', color: '#8fd9a0', input: 'sustain', fmin: whistleRange.fmin, fmax: whistleRange.fmax, staff: true, writtenOffset: -12, help: 'Tin whistle (D): press Connect to let the page listen through your microphone. Hold each note steady for about half a second. Starts on D, E and F sharp, the bottom of the D-major scale, and works up one octave.', levels: null };
+  MODS['tin-whistle'].levels = [
+    { name: 'First three notes: D, E, F sharp', add: N(74, 76, 78), limit: 12 }, { name: 'Two more, going up: G and A', add: N(79, 81), limit: 12 },
+    { name: 'Finishing the octave: B and C sharp', add: N(83, 85), limit: 12 }, { name: 'The top of the octave: high D', add: N(86), limit: 12 },
+    { name: 'Moves: two notes', task: 'seq', len: 2, limit: 10 }, { name: 'Long tones: two steady seconds', task: 'hold', limit: 14 },
+    { name: 'Moves: three notes', task: 'seq', len: 3, limit: 9 }, { name: 'Five-note runs', task: 'run', limit: 8 }
+  ];
   // Mallet percussion (bells/glockenspiel): not fretted, so it does not
   // reuse stringLevels/drawFret like the six mic instruments above it. It
   // reuses MODS.kbd's own note-group shape instead (N() item ids, same
@@ -482,6 +536,97 @@ import { register as registerPlayalong } from './ui/playalong.js';
     { name: 'Moves: two notes', task: 'seq', len: 2, limit: 6 }, { name: 'Moves: three notes', task: 'seq', len: 3, limit: 5 },
     { name: 'Up an octave', add: N(74, 76, 77, 79, 81, 83, 84), limit: 8 }, { name: 'Five-note runs', task: 'run', limit: 4 }
   ];
+  // MODS.wind draws its own hand-built staff too (it always has); mark it
+  // with the same generic `staff` flag the three brass mods below use, so
+  // draw()'s dispatch and drawStaff() no longer special-case `mod ===
+  // 'wind'` by name.
+  MODS.wind.staff = true;
+  // Three beginner brass instruments (trumpet, French horn, trombone): each
+  // gets its own MODS entry rather than reusing the generic MODS.wind
+  // trainer, because MODS.wind's transposition comes from the learner's
+  // global prefs.wind (WIND_KINDS, below) -- fine for a single shared
+  // "choose your instrument" trainer, wrong for a dedicated trumpet/horn/
+  // trombone mod, whose written notes must always read in that instrument's
+  // own key regardless of what the learner last picked in Wind and brass.
+  // `windKind` on the MODS entry is that fix: the 'w' branch of info() below
+  // prefers M.windKind over prefs.wind when present. `staff: true` is the
+  // generic flag draw()'s dispatch (below) and drawStaff() use instead of
+  // `mod === 'wind'`, so any current or future notated mod (this trio, and
+  // MODS.wind itself) gets the same hand-built staff. transposedMicRange
+  // turns each record's WRITTEN range + transposition into the instrument's
+  // actual SOUNDING range before handing it to rangeForInstrument(), since
+  // rangeForInstrument()/frameSizeForInstrument() otherwise read
+  // instrumentById[mod].range verbatim (written pitch for a transposing
+  // instrument), which would search the pitch detector around the wrong
+  // acoustic frequencies.
+  const transposedMicRange = rec => rangeForInstrument({ range: { low: rec.range.low + rec.transposition, high: rec.range.high + rec.transposition } });
+  const trumpetBbMicRange = transposedMicRange(instrumentById['trumpet-bb']);
+  MODS['trumpet-bb'] = { name: instrumentById['trumpet-bb'].name, parent: 'wind', tag: 'microphone', color: '#d1592f', input: 'sustain', windKind: 'bb', staff: true, fmin: trumpetBbMicRange.fmin, fmax: trumpetBbMicRange.fmax, help: 'Trumpet (B flat): press Connect to let the page listen through your microphone or audio interface. Hold each note steady for about half a second. Written notes always read for B flat trumpet here, whatever you last chose on Wind and brass.',
+    levels: [
+      { name: 'Written C, D and E', add: Wn(60, 62, 64), limit: 12 }, { name: 'Add F and G', add: Wn(65, 67), limit: 12 }, { name: 'Add A, B and high C', add: Wn(69, 71, 72), limit: 12 },
+      { name: 'Sharps and flats: F sharp and B flat', add: Wn(66, 70), limit: 12 },
+      { name: 'Moves: two notes', task: 'seq', len: 2, limit: 10 }, { name: 'Moves: three notes', task: 'seq', len: 3, limit: 9 }, { name: 'Five-note runs', task: 'run', limit: 8 }
+    ] };
+  const hornFMicRange = transposedMicRange(instrumentById['horn-f']);
+  MODS['horn-f'] = { name: instrumentById['horn-f'].name, parent: 'wind', tag: 'microphone', color: '#c9a15a', input: 'sustain', windKind: 'f', staff: true, fmin: hornFMicRange.fmin, fmax: hornFMicRange.fmax, help: 'French horn (F): press Connect to let the page listen through your microphone or audio interface. Hold each note steady for about half a second. Written notes always read for F horn here, whatever you last chose on Wind and brass.',
+    levels: [
+      { name: 'Written G, A and B', add: Wn(55, 57, 59), limit: 12 }, { name: 'Add C and D', add: Wn(60, 62), limit: 12 }, { name: 'Add E, F and high G', add: Wn(64, 65, 67), limit: 12 },
+      { name: 'Sharps and flats: C sharp and F sharp', add: Wn(61, 66), limit: 12 },
+      { name: 'Moves: two notes', task: 'seq', len: 2, limit: 10 }, { name: 'Moves: three notes', task: 'seq', len: 3, limit: 9 }, { name: 'Five-note runs', task: 'run', limit: 8 }
+    ] };
+  const tromboneMicRange = transposedMicRange(instrumentById.trombone);
+  // Trombone's 'w' item numbers are written pitch + 19 (WIND_KINDS.bc's bass-
+  // clef register shift, info() 'w' branch below), so Wn(59, 61, ...) below
+  // plays written/sounding 40, 42, ... -- this record's own range.
+  MODS.trombone = { name: instrumentById.trombone.name, parent: 'wind', tag: 'microphone', color: '#8f8fbd', input: 'sustain', windKind: 'bc', staff: true, fmin: tromboneMicRange.fmin, fmax: tromboneMicRange.fmax, help: 'Trombone: press Connect to let the page listen through your microphone or audio interface. Hold each note steady for about half a second.',
+    levels: [
+      { name: 'First three notes', add: Wn(59, 61, 63), limit: 12 }, { name: 'Two more, going up', add: Wn(64, 66), limit: 12 }, { name: 'Up to the top', add: Wn(68, 70, 71), limit: 12 },
+      { name: 'Moves: two notes', task: 'seq', len: 2, limit: 10 }, { name: 'Moves: three notes', task: 'seq', len: 3, limit: 9 }, { name: 'Five-note runs', task: 'run', limit: 8 }
+    ] };
+  // Five keyed woodwinds (flute, clarinet, oboe, alto sax, tenor sax): same
+  // pattern as the brass trio above -- own MODS entry, own fixed windKind so
+  // written notes always read in that instrument's own key regardless of
+  // the learner's generic Wind and brass preference, `staff: true` for the
+  // shared hand-built staff. Level notes match each record's own
+  // src/instruments/*.js curriculum (see those files' comments for the note
+  // choices), and Wn(...) note ids are checked against
+  // src/instruments/how/keyed-woodwind.js by
+  // tests/unit/computed-instruments-keyed-woodwind.test.mjs.
+  const fluteMicRange = transposedMicRange(instrumentById.flute);
+  MODS.flute = { name: instrumentById.flute.name, parent: 'wind', tag: 'microphone', color: '#5ab4d9', input: 'sustain', windKind: 'c', staff: true, fmin: fluteMicRange.fmin, fmax: fluteMicRange.fmax, help: 'Flute: press Connect to let the page listen through your microphone. Hold each note steady for about half a second. Written notes always read at concert pitch here, whatever you last chose on Wind and brass.',
+    levels: [
+      { name: 'Written C, D and E', add: Wn(60, 62, 64), limit: 12 }, { name: 'Add F and G', add: Wn(65, 67), limit: 12 }, { name: 'Add A, B and high C', add: Wn(69, 71, 72), limit: 12 },
+      { name: 'Sharps and flats: F sharp and B flat', add: Wn(66, 70), limit: 12 },
+      { name: 'Moves: two notes', task: 'seq', len: 2, limit: 10 }, { name: 'Moves: three notes', task: 'seq', len: 3, limit: 9 }, { name: 'Five-note runs', task: 'run', limit: 8 }
+    ] };
+  const oboeMicRange = transposedMicRange(instrumentById.oboe);
+  MODS.oboe = { name: instrumentById.oboe.name, parent: 'wind', tag: 'microphone', color: '#d9975a', input: 'sustain', windKind: 'c', staff: true, fmin: oboeMicRange.fmin, fmax: oboeMicRange.fmax, help: 'Oboe: press Connect to let the page listen through your microphone. Hold each note steady for about half a second. Written notes always read at concert pitch here, whatever you last chose on Wind and brass.',
+    levels: [
+      { name: 'Written D, E and F sharp', add: Wn(62, 64, 66), limit: 12 }, { name: 'Add G and A', add: Wn(67, 69), limit: 12 }, { name: 'Add B, C sharp and high D', add: Wn(71, 73, 74), limit: 12 },
+      { name: 'Sharps and flats: E flat and G sharp', add: Wn(63, 68), limit: 12 },
+      { name: 'Moves: two notes', task: 'seq', len: 2, limit: 10 }, { name: 'Moves: three notes', task: 'seq', len: 3, limit: 9 }, { name: 'Five-note runs', task: 'run', limit: 8 }
+    ] };
+  const clarinetBbMicRange = transposedMicRange(instrumentById['clarinet-bb']);
+  MODS['clarinet-bb'] = { name: instrumentById['clarinet-bb'].name, parent: 'wind', tag: 'microphone', color: '#7a5ad9', input: 'sustain', windKind: 'bb', staff: true, fmin: clarinetBbMicRange.fmin, fmax: clarinetBbMicRange.fmax, help: 'Clarinet (B flat): press Connect to let the page listen through your microphone. Hold each note steady for about half a second. Written notes always read for B flat clarinet here, whatever you last chose on Wind and brass.',
+    levels: [
+      { name: 'Written G, A and B', add: Wn(55, 57, 59), limit: 12 }, { name: 'Add C and D', add: Wn(60, 62), limit: 12 }, { name: 'Add E, F and high G', add: Wn(64, 65, 67), limit: 12 },
+      { name: 'Sharps and flats: A flat and C sharp', add: Wn(56, 61), limit: 12 },
+      { name: 'Moves: two notes', task: 'seq', len: 2, limit: 10 }, { name: 'Moves: three notes', task: 'seq', len: 3, limit: 9 }, { name: 'Five-note runs', task: 'run', limit: 8 }
+    ] };
+  const saxAltoEbMicRange = transposedMicRange(instrumentById['sax-alto-eb']);
+  MODS['sax-alto-eb'] = { name: instrumentById['sax-alto-eb'].name, parent: 'wind', tag: 'microphone', color: '#d95a8f', input: 'sustain', windKind: 'eb', staff: true, fmin: saxAltoEbMicRange.fmin, fmax: saxAltoEbMicRange.fmax, help: 'Alto sax (E flat): press Connect to let the page listen through your microphone. Hold each note steady for about half a second. Written notes always read for E flat alto sax here, whatever you last chose on Wind and brass.',
+    levels: [
+      { name: 'Written B flat, B and C', add: Wn(58, 59, 60), limit: 12 }, { name: 'Add D and E', add: Wn(62, 64), limit: 12 }, { name: 'Add F, F sharp and high G', add: Wn(65, 66, 67), limit: 12 },
+      { name: 'Sharps and flats: E flat and C sharp', add: Wn(63, 61), limit: 12 },
+      { name: 'Moves: two notes', task: 'seq', len: 2, limit: 10 }, { name: 'Moves: three notes', task: 'seq', len: 3, limit: 9 }, { name: 'Five-note runs', task: 'run', limit: 8 }
+    ] };
+  const saxTenorBbMicRange = transposedMicRange(instrumentById['sax-tenor-bb']);
+  MODS['sax-tenor-bb'] = { name: instrumentById['sax-tenor-bb'].name, parent: 'wind', tag: 'microphone', color: '#5ad9c2', input: 'sustain', windKind: 'bbt', staff: true, fmin: saxTenorBbMicRange.fmin, fmax: saxTenorBbMicRange.fmax, help: 'Tenor sax (B flat): press Connect to let the page listen through your microphone. Hold each note steady for about half a second. Written notes always read for B flat tenor sax here, whatever you last chose on Wind and brass.',
+    levels: [
+      { name: 'Written B flat, B and C', add: Wn(58, 59, 60), limit: 12 }, { name: 'Add D and E', add: Wn(62, 64), limit: 12 }, { name: 'Add F, F sharp and high G', add: Wn(65, 66, 67), limit: 12 },
+      { name: 'Sharps and flats: E flat and C sharp', add: Wn(63, 61), limit: 12 },
+      { name: 'Moves: two notes', task: 'seq', len: 2, limit: 10 }, { name: 'Moves: three notes', task: 'seq', len: 3, limit: 9 }, { name: 'Five-note runs', task: 'run', limit: 8 }
+    ] };
   const MOD_IDS = Object.keys(MODS);
   // Instruments the notation engine (src/notation/) is wired into. Wind
   // already draws its own hand-built staff (drawStaff below); it is not
@@ -498,7 +643,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
   let info = function (mod, id, prefs) {
     const M = MODS[mod], k = id[0], rest = id.slice(1);
     if (k === 'n') { const m = +rest; return { kind: 'note', midi: m, exact: true, label: nname(m) + (m < 60 ? ' (low)' : m >= 72 ? ' (high)' : ''), short: nname(m) }; }
-    if (k === 'w') { const w = +rest, kind = WIND_KINDS[(prefs.wind || 'bb')] || WIND_KINDS.bb, wm = kind[2] === 'bass' ? w - 19 : w; return { kind: 'note', written: wm, midi: kind[2] === 'bass' ? wm : w + kind[1], clef: kind[2], label: nname(wm, true), short: nname(wm, true) }; }
+    if (k === 'w') { const w = +rest, kind = WIND_KINDS[(M.windKind || prefs.wind || 'bb')] || WIND_KINDS.bb, wm = kind[2] === 'bass' ? w - 19 : w; return { kind: 'note', written: wm, midi: kind[2] === 'bass' ? wm : w + kind[1], clef: kind[2], label: nname(wm, true), short: nname(wm, true) }; }
     if (k === 's') { const mm = /^(\d+)f(\d+)$/.exec(rest), s = +mm[1], f = +mm[2], ns = M.tuning.length, m = M.tuning[ns - s] + f; return { kind: 'note', midi: m, string: s, fret: f, label: nname(m) + ': string ' + s + (f ? ', fret ' + f : ', open'), short: nname(m) + ' (string ' + s + ')' }; }
     if (k === 'p') { const p = +rest; return { kind: 'note', midi: 60 + p, anywhere: true, label: NAMES[p] + ', anywhere', short: NAMES[p] + ' by name' }; }
     if (k === 'c') return { kind: 'chord', pcs: CHORDS[rest], label: CHORD_NAMES[rest], short: CHORD_NAMES[rest], sym: rest };
@@ -510,14 +655,33 @@ import { register as registerPlayalong } from './ui/playalong.js';
   };
   let validId = function (mod, id) { try { if (typeof id !== 'string' || id.length > 10) return false; if (id === 'bar2') return true; const k = id[0], r = id.slice(1); if (k === 'n' || k === 'w' || k === 'p' || k === 'v') return /^\d{1,3}$/.test(r); if (k === 's') return /^\d+f\d+$/.test(r) && MODS[mod].tuning && +r.split('f')[0] <= MODS[mod].tuning.length && +r.split('f')[0] >= 1; if (k === 'c') return !!CHORDS[r]; if (k === 'i') return /^\d{1,2}[adh]$/.test(r) && !!INTERVALS[parseInt(r, 10)]; if (k === 'q') return !!QUALS[r]; if (k === 'r') return !!CELLS[r]; return false; } catch (e) { return false; } };
 
-  // ---------- harmonica (10-hole diatonic in C) and the two tools ----------
-  const HARP = { b: [60, 64, 67, 72, 76, 79, 84, 88, 91, 96], d: [62, 67, 71, 74, 77, 81, 83, 86, 89, 93] };
+  // ---------- harmonica (10-hole diatonic, any of the 12 keys) and the two tools ----------
   const H = (...xs) => xs.map(x => 'h' + x);
-  MODS.harp = { name: 'Harmonica', tag: 'microphone', color: '#ff8fb8', input: 'sustain', exactPitch: true, fmin: 200, fmax: 2300, help: 'Harmonica: for a 10-hole diatonic harmonica in the key of C. Press Connect to let the page listen. Arrows pointing up mean blow, arrows pointing down mean draw. Aim for one clean hole at a time; if two holes sound together the page may not recognise the note.',
+  // Bend ids: 'y' + hole + 'x' + semitonesBent, e.g. 'y3x2' = hole 3 bent down
+  // two semitones. Bend availability (which holes bend, how deep) is
+  // key-invariant -- transposing the whole harp preserves the blow/draw gap
+  // in every hole -- so it is computed once from the C layout and reused by
+  // validId() for any key the learner picks.
+  const HY = (...xs) => xs.map(x => 'y' + x);
+  const HARP_BEND_DEPTHS = harpLayoutFor(0).map(hole => hole.bends.map(b => b.semitonesBent));
+  // The 12 key choices for the selector, in schema.js tonic order (0 = C).
+  const HARP_KEY_OPTS = NAMES.reduce((o, n, i) => { o[i] = [n + ' harmonica']; return o; }, {});
+  // fmin/fmax are getters, not fixed numbers: a harmonica in a low or high
+  // key sounds a different absolute pitch range than a C harp, and a stale
+  // C-only search window would make the microphone mishear (or miss
+  // entirely) a real hole on any other key. Computed from the CHOSEN key's
+  // own layout (src/audio/range.js's margin/rounding), so the window is
+  // always honest about what this harp, in this key, actually sounds.
+  const harpRangeFor = key => { const holes = harpLayoutFor(key); let lo = holes[0].blow, hi = holes[0].blow; holes.forEach(hole => { lo = Math.min(lo, hole.blow, hole.draw); hi = Math.max(hi, hole.blow, hole.draw); }); return rangeForInstrument({ range: { low: lo, high: hi } }); };
+  MODS.harp = { name: 'Harmonica', tag: 'microphone', color: '#ff8fb8', input: 'sustain', exactPitch: true,
+    get fmin() { return harpRangeFor((DB && DB.prefs && DB.prefs.harpKey) || 0).fmin; },
+    get fmax() { return harpRangeFor((DB && DB.prefs && DB.prefs.harpKey) || 0).fmax; },
+    help: 'Harmonica: for a 10-hole diatonic harmonica in any of the 12 keys -- pick your harmonica’s key below to match the one printed on it. Press Connect to let the page listen. Arrows pointing up mean blow, arrows pointing down mean draw. Aim for one clean hole at a time; if two holes sound together the page may not recognise the note. Later levels ask for bends: a draw or blow reed pulled down in pitch with your breath.',
     levels: [
       { name: 'Blow holes 4, 5 and 6', add: H('b4', 'b5', 'b6'), limit: 12 }, { name: 'Draw holes 4, 5 and 6', add: H('d4', 'd5', 'd6'), limit: 12 }, { name: 'Moves: blow to draw', task: 'seq', len: 2, limit: 10 },
       { name: 'Hole 7 completes the scale', add: H('d7', 'b7'), limit: 12 }, { name: 'Scale runs of three', task: 'seq', len: 3, limit: 9 }, { name: 'The low end: holes 1 to 3', add: H('b1', 'd1', 'b2', 'd2', 'b3', 'd3'), limit: 12 },
-      { name: 'The top end: holes 8 to 10', add: H('b8', 'd8', 'b9', 'd9', 'b10', 'd10'), limit: 12 }, { name: 'Long tones: two steady seconds', task: 'hold', limit: 14 }, { name: 'Runs of four', task: 'seq', len: 4, limit: 8 }
+      { name: 'The top end: holes 8 to 10', add: H('b8', 'd8', 'b9', 'd9', 'b10', 'd10'), limit: 12 }, { name: 'Long tones: two steady seconds', task: 'hold', limit: 14 }, { name: 'Runs of four', task: 'seq', len: 4, limit: 8 },
+      { name: 'Easy bends: one semitone down', add: HY('1x1', '2x1', '3x1', '4x1', '6x1', '8x1', '9x1', '10x1'), limit: 16 }, { name: 'Moderate bends: two semitones down', add: HY('2x2', '3x2', '10x2'), limit: 12 }, { name: 'The deepest bend: hole 3, three semitones down', add: HY('3x3'), limit: 8 }
     ] };
   MOD_IDS.push('harp');
   const TOOLS = {
@@ -549,11 +713,22 @@ import { register as registerPlayalong } from './ui/playalong.js';
   const VARIANT_PARENTS = variantParentsFrom(MODS, { 'bass-5-string': 'bass', 'ukulele-low-g': 'uke', 'ukulele-baritone': 'uke' });
   const TUNINGS = { gtr: ['Guitar', [40, 45, 50, 55, 59, 64]], bass: ['Bass', [28, 33, 38, 43]], uke: ['Ukulele', [67, 60, 64, 69]], vln: ['Violin', [55, 62, 69, 76]], chrom: ['Any note (chromatic)', []] };
   const _info = info, _valid = validId;
-  info = function (m, id, prefs) { if (id[0] === 'h') { const mm = /^h([bd])(\d+)$/.exec(id), dir = mm[1], hole = +mm[2], midi = HARP[dir][hole - 1]; return { kind: 'note', midi: midi, hole: hole, dir: dir, note: nname(midi), label: (dir === 'b' ? 'Blow ' : 'Draw ') + hole + ' (' + nname(midi) + ')', short: (dir === 'b' ? 'Blow ' : 'Draw ') + hole }; } return _info(m, id, prefs); };
-  validId = function (m, id) { if (typeof id === 'string' && id[0] === 'h') return /^h[bd]([1-9]|10)$/.test(id); return _valid(m, id); };
+  info = function (m, id, prefs) { const hk = (prefs && Number.isInteger(prefs.harpKey) && prefs.harpKey >= 0 && prefs.harpKey <= 11) ? prefs.harpKey : 0; if (id[0] === 'h') { const mm = /^h([bd])(\d+)$/.exec(id), dir = mm[1], hole = +mm[2], layout = harpLayoutFor(hk), midi = layout[hole - 1][dir === 'b' ? 'blow' : 'draw']; return { kind: 'note', midi: midi, hole: hole, dir: dir, note: nname(midi), label: (dir === 'b' ? 'Blow ' : 'Draw ') + hole + ' (' + nname(midi) + ')', short: (dir === 'b' ? 'Blow ' : 'Draw ') + hole }; } if (id[0] === 'y') { const mm = /^y(\d+)x(\d)$/.exec(id), hole = +mm[1], depth = +mm[2], layout = harpLayoutFor(hk), b = layout[hole - 1].bends.find(x => x.semitonesBent === depth), dir = b.action === 'draw' ? 'd' : 'b'; return { kind: 'note', midi: b.pitch, hole: hole, dir: dir, bend: depth, note: nname(b.pitch), label: (dir === 'b' ? 'Blow ' : 'Draw ') + hole + ' bent ' + depth + (depth === 1 ? ' semitone' : ' semitones') + ' (' + nname(b.pitch) + ')', short: (dir === 'b' ? 'Blow ' : 'Draw ') + hole + ' ↓' + depth }; } return _info(m, id, prefs); };
+  validId = function (m, id) { if (typeof id === 'string' && id[0] === 'h') return /^h[bd]([1-9]|10)$/.test(id); if (typeof id === 'string' && id[0] === 'y') { const mm = /^y([1-9]|10)x([1-3])$/.exec(id); return !!mm && HARP_BEND_DEPTHS[+mm[1] - 1].indexOf(+mm[2]) >= 0; } return _valid(m, id); };
   const _info2 = info, _valid2 = validId;
   info = function (m, id, prefs) { if (typeof id === 'string' && id[0] === 'j' && handsTogetherById(id)) { const ex = handsTogetherById(id); return { kind: 'hands-together', ex: ex, label: ex.label, short: ex.short }; } return _info2(m, id, prefs); };
   validId = function (m, id) { if (typeof id === 'string' && id[0] === 'j') return !!handsTogetherById(id); return _valid2(m, id); };
+  // Bowed instruments (violin, viola, cello, double-bass) reuse the 's'
+  // string+fret item id scheme (stringLevels above) so the fingerings panel
+  // and drawFret's dot placement keep working unchanged, but they have no
+  // frets: the label the base info() built at :502 ("string 1, fret 3")
+  // would be a false claim of a fret the player cannot feel. Rewrites the
+  // label/short for any MODS[m].fretless mod's 's' item to name a plain
+  // position (semitones above the open string) instead -- see the honest
+  // wording in hintFor and the "time's up" text below for the same reason.
+  const _info3 = info, _valid3 = validId;
+  info = function (m, id, prefs) { const r = _info3(m, id, prefs); if (r && r.kind === 'note' && r.string !== undefined && MODS[m] && MODS[m].fretless) { const pos = r.fret ? r.fret + ' semitone' + (r.fret > 1 ? 's' : '') + ' up' : 'open'; return Object.assign({}, r, { label: nname(r.midi) + ': string ' + r.string + ', ' + pos, short: nname(r.midi) + ' (string ' + r.string + ')' }); } return r; };
+  validId = _valid3;
   // turn a heard note into an item this instrument can practise. Delegates
   // to src/ui/songs/mastery.js's itemIdForMidi -- the "capture a melody"
   // path and a song's mastery crediting must credit the identical item id
@@ -635,12 +810,17 @@ import { register as registerPlayalong } from './ui/playalong.js';
   }
   function sanitizeDB(v, defaultLatencyMs, modelNow) {
     const notate = {}; NOTATE_MOD_IDS.forEach(m => { notate[m] = 'names'; });
-    const d = { v: 1, mods: {}, sessions: [], prefs: { mod: 'kbd', wind: 'bb', voice: 'low', names: true, noiseFloor: null, inputDeviceId: null, notate: notate } }; v = (v && typeof v === 'object') ? v : {};
+    const d = { v: 1, mods: {}, sessions: [], prefs: { mod: 'kbd', wind: 'bb', voice: 'low', names: true, noiseFloor: null, inputDeviceId: null, notate: notate, theme: 'system' } }; v = (v && typeof v === 'object') ? v : {};
     MOD_IDS.forEach(m => { d.mods[m] = sanitizeModel(m, v.mods && v.mods[m], modelNow); });
     if (Array.isArray(v.sessions)) d.sessions = v.sessions.filter(x => x && typeof x.d === 'string' && MODS[x.mod]).slice(-60).map(x => ({ d: x.d.slice(0, 10), mod: x.mod, min: num(x.min, 0, 0, 600), acc: num(x.acc, 0, 0, 1), a1: num(x.a1, 0, 0, 1), a2: num(x.a2, 0, 0, 1), from: num(x.from, 1, 1, 80), to: num(x.to, 1, 1, 80), breaks: num(x.breaks, 0, 0, 99) }));
     const p = v.prefs || {}; if (MODS[p.mod]) d.prefs.mod = p.mod; if (WIND_KINDS[p.wind]) d.prefs.wind = p.wind; d.prefs.voiceRange = (p.voiceRange && typeof p.voiceRange === 'object' && Number.isFinite(p.voiceRange.low) && Number.isFinite(p.voiceRange.high) && p.voiceRange.low < p.voiceRange.high) ? { low: clamp(Math.round(p.voiceRange.low), 24, 96), high: clamp(Math.round(p.voiceRange.high), 24, 96) } : null; const VKp = Object.assign({}, VOICE_KINDS, d.prefs.voiceRange ? { mine: ['My range (found by test)', tonicFromRange(exerciseRangeFor(d.prefs.voiceRange)).tonic] } : {}); if (VKp[p.voice]) d.prefs.voice = p.voice; d.prefs.names = p.names !== false;
     d.prefs.noiseFloor = (typeof p.noiseFloor === 'number' && isFinite(p.noiseFloor) && p.noiseFloor >= 0) ? clamp(p.noiseFloor, 0, 1) : null;
     d.prefs.inputDeviceId = typeof p.inputDeviceId === 'string' && p.inputDeviceId ? p.inputDeviceId : null;
+    // Theme J1: System/Light/Dark, an unrecognised or missing saved value
+    // sanitises to 'system' so a corrupt/old backup never leaves the toggle
+    // stuck on nothing it can render.
+    d.prefs.theme = ['system', 'light', 'dark'].indexOf(p.theme) >= 0 ? p.theme : 'system';
+    d.prefs.harpKey = (Number.isInteger(p.harpKey) && p.harpKey >= 0 && p.harpKey <= 11) ? p.harpKey : 0;
     // "Show: staff / names / both" is per-instrument and defaults to 'names',
     // i.e. today's display, untouched, for any instrument not set.
     const pn = (p.notate && typeof p.notate === 'object') ? p.notate : {};
@@ -759,7 +939,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
     ensureAudio(); const at = now() + 0.05, e = t.els[0];
     if (t.kind === 'ear') { const i = e.info; if (i.kind === 'interval') { const a = t.root, b = i.dir === 'd' ? a - i.semi : a + i.semi; if (i.dir === 'h') { tone(a, at, 1.4); tone(b, at, 1.4); } else { tone(a, at, 0.8); tone(b, at + 0.75, 1.1); } t.played = [a, b]; } else { t.played = i.pcs.map(x => t.root + x); t.played.forEach(m => tone(m, at, 1.6, 0.16)); } return; }
     if (mod === 'voice') { const tonic = e.info.tonic; if (t.ref === 'target') t.els.forEach((el, k) => tone(el.info.midi, at + k * 0.8, 0.75)); else { tone(tonic, at, 0.9); } }
-    else if (mod === 'wind' && $('optRef') && $('optRef').checked) t.els.forEach((el, k) => tone(el.info.midi, at + k * 0.8, 0.75));
+    else if (MODS[mod].staff && $('optRef') && $('optRef').checked) t.els.forEach((el, k) => tone(el.info.midi, at + k * 0.8, 0.75));
   }
   function present() {
     const t = task, M = MODS[mod], e = cur(); t.t0 = now(); if (e) e.t0 = now(); held = []; holdFor = 0; holdCents = []; wrongFor = 0; released = true;
@@ -772,7 +952,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
     else { const verb = mod === 'voice' ? 'Sing' : 'Play'; p = verb + ' ' + t.els.map((el, k) => (k === t.idx ? '<b>' : '') + promptFor(el.info, el.reveal) + (k === t.idx ? '</b>' : '')).join(' → '); if (t.kind === 'hold') p = (mod === 'voice' ? 'Hold ' : 'Hold ') + '<b>' + e.info.label + '</b> for two seconds'; h = hintFor(e); playRef(t); }
     $('prompt').innerHTML = p; $('hint').textContent = (t.warm ? 'Warm-up, does not count. ' : '') + h; updateDesc();
   }
-  function hintFor(e) { const i = e.info; if (i.string) return coreHintFor(i, e.reveal); if (i.anywhere) return 'Any string, any octave.'; if (i.kind === 'chord') return 'All the notes together: ' + i.pcs.map(x => NAMES[x]).join(', ') + '.'; if (i.kind === 'hands-together') return fingeringLabel(i.ex) + ' (' + nname(i.ex.rh.midi) + ' right hand, ' + nname(i.ex.lh.midi) + ' left hand). A MIDI keyboard or two hands on the computer keys grades both notes exactly; a microphone only hears one note at a time, so that grading is approximate.'; if (mod === 'voice') return task.ref === 'target' ? 'You heard the note. Sing it back in any octave and hold it.' : 'You heard Do. Find ' + i.short + ' from it.'; if (mod === 'wind') return 'Written ' + i.label + '. Hold it steady.'; return e.reveal ? 'New key: it is lit up this time.' : ''; }
+  function hintFor(e) { const i = e.info; if (i.string && MODS[mod].fretless) return (e.reveal ? i.label + '. The dot shows the position.' : 'Find this pitch on the string.') + ' There is no fret to feel for — match the pitch, and the gauge shows sharp or flat.'; if (i.string) return coreHintFor(i, e.reveal); if (i.anywhere) return 'Any string, any octave.'; if (i.kind === 'chord') return 'All the notes together: ' + i.pcs.map(x => NAMES[x]).join(', ') + '.'; if (i.kind === 'hands-together') return fingeringLabel(i.ex) + ' (' + nname(i.ex.rh.midi) + ' right hand, ' + nname(i.ex.lh.midi) + ' left hand). A MIDI keyboard or two hands on the computer keys grades both notes exactly; a microphone only hears one note at a time, so that grading is approximate.'; if (mod === 'voice') return task.ref === 'target' ? 'You heard the note. Sing it back in any octave and hold it.' : 'You heard Do. Find ' + i.short + ' from it.'; if (mod === 'wind') return 'Written ' + i.label + '. Hold it steady.'; return e.reveal ? 'New key: it is lit up this time.' : ''; }
   function refreshPrompt() { if (!task || task.kind === 'ear' || task.kind === 'bar' || task.kind === 'hold') return; const verb = mod === 'voice' ? 'Sing' : 'Play'; $('prompt').innerHTML = verb + ' ' + task.els.map((el, k) => (k === task.idx ? '<b>' : '') + promptFor(el.info, el.reveal) + (k === task.idx ? '</b>' : '')).join(' → '); const e = cur(); if (e) $('hint').textContent = (task.warm ? 'Warm-up, does not count. ' : '') + hintFor(e); updateDesc(); }
   // text mirror of the canvas for the visually-hidden #cvDesc element (unit 7.7 item 1):
   // revealed mirrors the current element's own reveal/failed flag, never invents one.
@@ -1020,7 +1200,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
     else if (!task.done) {
       const e = cur(), el = now() - e.t0, lim = task.limit * (task.kind === 'hold' ? 1.4 : 1);
       $('timeFill').style.width = Math.round(100 * c01(1 - el / lim)) + '%';
-      if (el > lim && !e.failed) { failEl(task.kind === 'ear' ? '' : 'Time. ' + (e.info.string ? 'It is on string ' + e.info.string + (e.info.fret ? ', fret ' + e.info.fret : ', open') + '. ' : '') + 'It is shown now: play it to move on.', null); if (task.kind === 'ear') { answer('timeout'); } else if (mod === 'voice') tone(e.info.midi, now() + 0.05, 0.9); }
+      if (el > lim && !e.failed) { failEl(task.kind === 'ear' ? '' : 'Time. ' + (e.info.string ? 'It is on string ' + e.info.string + (MODS[mod].fretless ? (e.info.fret ? ', ' + e.info.fret + ' semitone' + (e.info.fret > 1 ? 's' : '') + ' up' : ', open') : (e.info.fret ? ', fret ' + e.info.fret : ', open')) + '. ' : '') + 'It is shown now: play it to move on.', null); if (task.kind === 'ear') { answer('timeout'); } else if (mod === 'voice') tone(e.info.midi, now() + 0.05, 0.9); }
       if (now() - lastInputAt > 30 && el > lim + 8) { if (e.failed && !task.warm) { /* this one does not count: nobody was there */ e.failed = false; } task.done = true; task = null; takeBreak('away'); return; }
     }
     if (sess.sinceBreak > 25 * 60 && Date.now() > sess.snoozeUntil) { takeBreak('long'); return; }
@@ -1099,7 +1279,12 @@ import { register as registerPlayalong } from './ui/playalong.js';
     const ns = M.tuning.length, nf = M.frets, x0 = W * 0.15, x1 = W * 0.97, y0 = H * 0.16, y1 = H * 0.84, fx = f => f === 0 ? x0 - W * 0.035 : x0 + (x1 - x0) * ((f - 0.5) / nf), sy = s => y0 + (y1 - y0) * ((s - 1) / (ns - 1));
     rr(x0, y0 - H * 0.05, x1 - x0, y1 - y0 + H * 0.1, 6); g.fillStyle = '#2a1c12'; g.fill();
     [3, 5, 7, 9, 12].forEach(f => { if (f > nf) return; g.fillStyle = '#ffffff22'; g.beginPath(); g.arc(fx(f), (y0 + y1) / 2 + (f === 12 ? -H * 0.12 : 0), H * 0.022, 0, 7); g.fill(); if (f === 12) { g.beginPath(); g.arc(fx(f), (y0 + y1) / 2 + H * 0.12, H * 0.022, 0, 7); g.fill(); } });
-    for (let f = 0; f <= nf; f++) { const x = x0 + (x1 - x0) * f / nf; g.strokeStyle = f === 0 ? '#e9edf6' : '#8a8f99'; g.lineWidth = f === 0 ? 6 : 2; g.beginPath(); g.moveTo(x, y0 - H * 0.05); g.lineTo(x, y1 + H * 0.05); g.stroke(); if (f > 0) { g.fillStyle = '#93a0bd'; font(H * 0.05, 600); g.textAlign = 'center'; g.fillText(String(f), fx(f), H * 0.97); } }
+    // Fretless (bowed) fingerboards draw only the nut, not a grid of fret
+    // wires that do not exist: the dot() calls below still place notes at
+    // the same fx(f) x-coordinates (f is a semitone position, not a real
+    // fret), just with nothing drawn under them to claim a fret is there.
+    if (M.fretless) { const x = x0; g.strokeStyle = '#e9edf6'; g.lineWidth = 6; g.beginPath(); g.moveTo(x, y0 - H * 0.05); g.lineTo(x, y1 + H * 0.05); g.stroke(); }
+    else for (let f = 0; f <= nf; f++) { const x = x0 + (x1 - x0) * f / nf; g.strokeStyle = f === 0 ? '#e9edf6' : '#8a8f99'; g.lineWidth = f === 0 ? 6 : 2; g.beginPath(); g.moveTo(x, y0 - H * 0.05); g.lineTo(x, y1 + H * 0.05); g.stroke(); if (f > 0) { g.fillStyle = '#93a0bd'; font(H * 0.05, 600); g.textAlign = 'center'; g.fillText(String(f), fx(f), H * 0.97); } }
     for (let s = 1; s <= ns; s++) { g.strokeStyle = '#c9ced9'; g.lineWidth = 1 + (s / ns) * 3; g.beginPath(); g.moveTo(x0 - W * 0.06, sy(s)); g.lineTo(x1, sy(s)); g.stroke(); g.fillStyle = '#93a0bd'; font(H * 0.055, 600); g.textAlign = 'right'; g.fillText(s + (DB.prefs.names ? '  ' + nname(M.tuning[ns - s]) : ''), x0 - W * 0.07, sy(s) + H * 0.02); }
     const dot = (s, f, col, txt, a) => { g.globalAlpha = a; g.fillStyle = col; g.beginPath(); g.arc(fx(f), sy(s), H * 0.05, 0, 7); g.fill(); g.globalAlpha = 1; if (txt) { g.fillStyle = '#06101d'; font(H * 0.05); g.textAlign = 'center'; g.fillText(txt, fx(f), sy(s) + H * 0.018); } };
     if (heard && heard.freq && MODS[mod].input === 'pluck') { const p = pc(heard.midi); for (let s = 1; s <= ns; s++) for (let f = 0; f <= nf; f++) if (pc(M.tuning[ns - s] + f) === p) dot(s, f, '#9fb4d8', '', 0.25); }
@@ -1123,20 +1308,27 @@ import { register as registerPlayalong } from './ui/playalong.js';
     // a state that just says "connected" with nothing behind it.
     if (rangeTest) { handleRangeTest('tick', heard); const heldS = rangeTest.curMidi !== null ? Math.round((performance.now() - rangeTest.curSince) / 100) / 10 : 0; const label = heard && heard.freq ? 'Hearing ' + nname(Math.round(heard.midi)) + (heldS >= 0.4 ? ', held ' + heldS + 's' : '') : 'Listening for your voice...'; g.fillStyle = '#e9edf6'; font(H * 0.05, 600); g.textAlign = 'center'; g.fillText((rangeTest.stage === 'low' ? 'Sing your lowest note -- ' : 'Sing your highest note -- ') + label, W * 0.5, H * 0.06); }
   }
-  function drawStaff(e, W, H) {
+  // M: the current mod's MODS[mod] record. Reads M.writtenOffset for items
+  // whose info() has no `written`/`clef` of its own (plain 'n' ids -- see
+  // the R3 recorder/tin-whistle contract in this function's caller): such an
+  // item is written at info.midi + (M.writtenOffset || 0) on the treble
+  // staff, same as a staff mod with real `written`/`clef` data (the 'w' ids
+  // this trio and MODS.wind use).
+  function drawStaff(M, e, W, H) {
     const clef = e ? e.info.clef : 'treble', sp = H * 0.075, yb = H * 0.62, x0 = W * 0.08, x1 = W * 0.6, bottomStep = clef === 'bass' ? 18 : 30;
     g.strokeStyle = '#c9ced9'; g.lineWidth = 2; for (let l = 0; l < 5; l++) { g.beginPath(); g.moveTo(x0, yb - l * sp); g.lineTo(x1, yb - l * sp); g.stroke(); }
     g.fillStyle = '#e9edf6'; g.textAlign = 'left'; g.font = Math.round(sp * (clef === 'bass' ? 3.4 : 5.2)) + 'px "Segoe UI Symbol", "Noto Music", "Apple Symbols", serif'; g.fillText(clef === 'bass' ? '𝄢' : '𝄞', x0 + 6, clef === 'bass' ? yb - sp * 0.9 : yb + sp * 0.9);
-    const els = task ? task.els : []; els.forEach((el, k) => { const m = el.info.written, nm = NAMES[pc(m)], letter = 'CDEFGAB'.indexOf(nm[0]), oct = Math.floor(m / 12) - 1, step = oct * 7 + letter, y = yb - (step - bottomStep) * sp / 2, x = x0 + (x1 - x0) * (0.32 + 0.6 * (k + 0.5) / els.length), isCur = k === task.idx;
+    const els = task ? task.els : []; els.forEach((el, k) => { const m = el.info.written !== undefined ? el.info.written : el.info.midi + (M.writtenOffset || 0), nm = NAMES[pc(m)], letter = 'CDEFGAB'.indexOf(nm[0]), oct = Math.floor(m / 12) - 1, step = oct * 7 + letter, y = yb - (step - bottomStep) * sp / 2, x = x0 + (x1 - x0) * (0.32 + 0.6 * (k + 0.5) / els.length), isCur = k === task.idx;
       g.strokeStyle = '#c9ced9'; for (let s2 = bottomStep - 2; s2 >= step; s2 -= 2) { g.beginPath(); g.moveTo(x - sp * 0.95, yb - (s2 - bottomStep) * sp / 2); g.lineTo(x + sp * 0.95, yb - (s2 - bottomStep) * sp / 2); g.stroke(); } for (let s3 = bottomStep + 10; s3 <= step; s3 += 2) { g.beginPath(); g.moveTo(x - sp * 0.95, yb - (s3 - bottomStep) * sp / 2); g.lineTo(x + sp * 0.95, yb - (s3 - bottomStep) * sp / 2); g.stroke(); }
       g.fillStyle = k < task.idx ? '#5be08a' : isCur ? accent() : '#e9edf6'; g.beginPath(); g.ellipse(x, y, sp * 0.62, sp * 0.45, -0.35, 0, 7); g.fill(); g.strokeStyle = g.fillStyle; g.lineWidth = 3; g.beginPath(); if (step < bottomStep + 4) { g.moveTo(x + sp * 0.58, y); g.lineTo(x + sp * 0.58, y - sp * 3.2); } else { g.moveTo(x - sp * 0.58, y); g.lineTo(x - sp * 0.58, y + sp * 3.2); } g.stroke();
       if (nm.length > 1) { font(sp * 1.5, 600); g.textAlign = 'right'; g.fillText(nm[1], x - sp * 0.85, y + sp * 0.45); } if (DB.prefs.names) { font(sp * 0.9, 600); g.textAlign = 'center'; g.fillStyle = '#93a0bd'; g.fillText(nname(m, true), x, yb + sp * 3.2); } });
     if (e) { const c = liveCents(e.info.midi, false); gauge(W * 0.66, H * 0.42, W * 0.3, c, c === null ? 'play a note' : Math.abs(c) < 10 ? 'in tune' : Math.round(Math.abs(c)) + ' cents ' + (c > 0 ? 'sharp' : 'flat')); const need = task.kind === 'hold' ? 2 : 0.5; g.fillStyle = '#5be08a'; g.fillRect(W * 0.66, H * 0.3, W * 0.3 * c01(holdFor / need), H * 0.025); }
   }
   function drawHarp(e, W, H) {
+    const hk = (Number.isInteger(DB.prefs.harpKey) && DB.prefs.harpKey >= 0 && DB.prefs.harpKey <= 11) ? DB.prefs.harpKey : 0, layout = harpLayoutFor(hk);
     const x0 = W * 0.06, w = W * 0.88, hw = w / 10, y0 = H * 0.36, hh = H * 0.3; rr(x0 - 10, y0 - 14, w + 20, hh + 28, 14); g.fillStyle = '#8f96a3'; g.fill(); rr(x0 - 2, y0, w + 4, hh, 6); g.fillStyle = '#1b1e26'; g.fill();
     for (let h = 1; h <= 10; h++) { const x = x0 + (h - 1) * hw, tb = e && e.info.hole === h && (e.reveal || e.failed); rr(x + hw * 0.16, y0 + hh * 0.2, hw * 0.68, hh * 0.6, 4); g.fillStyle = tb ? accent() : '#05070c'; g.fill(); g.fillStyle = '#e9edf6'; font(H * 0.07); g.textAlign = 'center'; g.fillText(String(h), x + hw / 2, y0 - H * 0.06);
-      if (DB.prefs.names) { g.fillStyle = '#93a0bd'; font(H * 0.042, 600); g.fillText('↑ ' + nname(HARP.b[h - 1]), x + hw / 2, y0 + hh + H * 0.1); g.fillText('↓ ' + nname(HARP.d[h - 1]), x + hw / 2, y0 + hh + H * 0.17); } }
+      if (DB.prefs.names) { g.fillStyle = '#93a0bd'; font(H * 0.042, 600); g.fillText('↑ ' + nname(layout[h - 1].blow), x + hw / 2, y0 + hh + H * 0.1); g.fillText('↓ ' + nname(layout[h - 1].draw), x + hw / 2, y0 + hh + H * 0.17); } }
     if (e) { const x = x0 + (e.info.hole - 0.5) * hw, up = e.info.dir === 'b'; g.fillStyle = accent(); font(H * 0.2); g.textAlign = 'center'; g.fillText(up ? '↑' : '↓', x, up ? y0 - H * 0.13 : y0 - H * 0.13); font(H * 0.06); g.fillStyle = '#e9edf6'; g.fillText(up ? 'BLOW' : 'DRAW', x + hw * 1.3, y0 - H * 0.17); const c = liveCents(e.info.midi, true); g.fillStyle = '#5be08a'; g.fillRect(x0, H * 0.95, w * c01(holdFor / (task.kind === 'hold' ? 2 : 0.5)), H * 0.025); if (heard && heard.freq) { font(H * 0.05, 600); g.fillStyle = '#93a0bd'; g.textAlign = 'left'; g.fillText('Hearing ' + nname(heard.midi, true) + (c !== null && Math.abs(c) < 100 ? ', ' + Math.round(Math.abs(c)) + ' cents ' + (c > 0 ? 'sharp' : 'flat') : ''), x0, H * 0.1); } }
   }
   function drawEar(W, H) { const t = task; if (t && t.revealed && t.played) { drawKeys(W * 0.05, H * 0.3, W * 0.9, H * 0.5, 48, 84, { target: t.played, good: [], names: DB.prefs.names }); g.fillStyle = '#e9edf6'; font(H * 0.09); g.textAlign = 'center'; g.fillText(t.played.map(m => nname(m)).join('  →  '), W / 2, H * 0.18); } else { g.fillStyle = accent(); font(H * 0.5); g.textAlign = 'center'; g.fillText('?', W / 2, H * 0.66); g.strokeStyle = accent(); g.lineWidth = 4; if (reducedMotion) { g.beginPath(); g.arc(W / 2, H * 0.5, H * 0.35, 0, 7); g.stroke(); } else { const k = (performance.now() / 600) % 1; g.globalAlpha = 1 - k; g.beginPath(); g.arc(W / 2, H * 0.5, H * (0.3 + 0.15 * k), 0, 7); g.stroke(); g.globalAlpha = 1; } } }
@@ -1221,7 +1413,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
     if (TOOLS[mod]) { if (mod === 'tuner') drawTuner(W, H); else drawCapture(W, H); return; }
     const M = MODS[mod], e = playing && task && !task.done ? cur() : null, showE = e || (task && task.done ? task.els[task.els.length - 1] : null);
     if (mod === 'kbd') { const kr = kbdRange(); const tg = []; if (e) { if (e.info.kind === 'chord') { if (e.reveal || e.failed) e.info.pcs.forEach(x => tg.push(60 + x)); } else if (e.info.kind === 'hands-together') { if (e.reveal || e.failed) tg.push(e.info.ex.rh.midi, e.info.ex.lh.midi); } else if (e.reveal || e.failed) tg.push(e.info.midi); } const good = performance.now() - flashGood < 300 && task ? task.els.slice(0, task.idx).map(x => x.info.midi).filter(x => x) : []; drawKeys(W * 0.03, H * 0.18, W * 0.94, H * 0.7, kr[0], kr[1], { target: tg, good: good, names: DB.prefs.names }); if (e && e.info.kind === 'chord') { g.fillStyle = '#e9edf6'; font(H * 0.11); g.textAlign = 'center'; g.fillText(e.info.sym, W / 2, H * 0.13); } if (document.activeElement === cv) { const fi = kbdFocusInfo(); if (fi) { g.strokeStyle = '#ffd23f'; g.lineWidth = 4; g.strokeRect(fi.x + 2, fi.y + 2, fi.w - 4, fi.h - 4); } } }
-    else if (M.tuning) drawFret(M, e, W, H); else if (mod === 'voice') drawVoice(e, W, H); else if (mod === 'wind') drawStaff(e, W, H); else if (mod === 'harp') drawHarp(e, W, H);
+    else if (M.tuning) drawFret(M, e, W, H); else if (mod === 'voice') drawVoice(e, W, H); else if (M.staff) drawStaff(M, e, W, H); else if (mod === 'harp') drawHarp(e, W, H);
     else if (mod === 'mallet-percussion') { const rec = instrumentById['mallet-percussion'], tg = e && e.info.kind === 'note' && (e.reveal || e.failed) ? [e.info.midi] : []; drawKeys(W * 0.03, H * 0.18, W * 0.94, H * 0.7, rec.range.low, rec.range.high, { target: tg, good: [], names: DB.prefs.names }); }
     else if (mod === 'ear') drawEar(W, H); else if (mod === 'rhy') { if (task && task.kind === 'bar2') drawBar2(W, H); else drawBar(W, H); }
     if (NOTATE_MOD_IDS.indexOf(mod) >= 0) drawNotation(e, W, H); else lastStaff = null;
@@ -1326,8 +1518,22 @@ import { register as registerPlayalong } from './ui/playalong.js';
   }
 
   // ---------- panels ----------
+  // Theme J1: each instrument re-tints the page with its own brand colour
+  // via --accent (below) -- a colour only ever picked to sit on the dark
+  // stage as either a button BACKGROUND (with fixed dark text on top, so its
+  // own contrast need doesn't depend on page theme) or as plain foreground
+  // TEXT on the page ground (which does: the same colour that reads on a
+  // near-black ground can fail 4.5:1 on the light palette's near-white one).
+  // --accent-ink is the second reading of that same brand colour for the
+  // text case only -- darkened (WCAG relative-luminance contrast, same
+  // formula as tests/unit/theme-contrast.test.mjs) only when needed, so
+  // --accent itself stays the raw brand colour everywhere buttons/fills use
+  // it as a background. See src/styles.css for which selectors read which.
+  function themeIsLight() { return DB.prefs.theme === 'light' || (DB.prefs.theme !== 'dark' && matchMedia('(prefers-color-scheme: light)').matches); }
+  function accentInkFor(hex) { if (!themeIsLight()) return hex; const n = parseInt(hex.slice(1), 16), r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255, lin = c => { c /= 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }, lum = (rr, gg, bb) => 0.2126 * lin(rr) + 0.7152 * lin(gg) + 0.0722 * lin(bb), gl = 0.929, l = lum(r, g, b); return (Math.max(l, gl) + 0.05) / (Math.min(l, gl) + 0.05) >= 4.5 ? hex : '#' + [r, g, b].map(c => Math.round(c * 0.45).toString(16).padStart(2, '0')).join(''); }
   function showAll() {
-    const tool = !!TOOLS[mod]; document.documentElement.style.setProperty('--accent', (MODS[mod] || TOOLS[mod]).color === '#e9edf6' ? '#9fb4d8' : (MODS[mod] || TOOLS[mod]).color);
+    const tool = !!TOOLS[mod], accentRaw = (MODS[mod] || TOOLS[mod]).color === '#e9edf6' ? '#9fb4d8' : (MODS[mod] || TOOLS[mod]).color;
+    document.documentElement.style.setProperty('--accent', accentRaw); document.documentElement.style.setProperty('--accent-ink', accentInkFor(accentRaw));
     $('helpText').innerHTML = ''; const st = document.createElement('strong'); st.textContent = 'How this one works: '; $('helpText').appendChild(st); $('helpText').appendChild(document.createTextNode((MODS[mod] || TOOLS[mod]).help));
     document.querySelectorAll('.side .card, .side .stats, #playBtn, #resetBtn').forEach(el => { el.style.display = tool ? 'none' : ''; }); $('tapPad').hidden = mod !== 'rhy'; $('timeFill').parentElement.style.visibility = tool || mod === 'rhy' ? 'hidden' : 'visible';
     if (tool) { $('prompt').textContent = TOOLS[mod].name; $('hint').textContent = mod === 'tuner' ? 'One open string at a time.' : 'One note at a time.'; $('choices').hidden = true; $('replayBtn').hidden = true; $('showMeBtn').hidden = true; return; }
@@ -1354,16 +1560,17 @@ import { register as registerPlayalong } from './ui/playalong.js';
   // state (null when idle); it has to live outside renderOpts, which rebuilds
   // its DOM box from scratch on every call and remembers nothing itself.
   // Samples are collected once, across both halves of the slide, as
-  // `{ midi, ms }` -- how long each held note lasted before the pitch moved
-  // to a new one -- and handed to voice-range.js's estimateRange() a single
-  // time at the end; its own IQR trim is what guards against one bad frame,
-  // so this code does not try to filter samples itself.
+  // `{ midi, ms, stage }` -- how long each held note lasted before the pitch
+  // moved to a new one, and which half it was sung in -- and handed to
+  // voice-range.js's estimateRange() a single time at the end; its own
+  // per-stage IQR trim is what guards against one bad frame, so this code
+  // does not try to filter samples itself.
   let rangeTest = null;
   function handleRangeTest(action, fr) {
     if (action === 'start') { rangeTest = { stage: 'low', samples: [], curMidi: null, curSince: 0 }; coach('Sing your lowest comfortable note and hold it, then press "Got it -- now the highest".'); return; }
     if (!rangeTest) return;
-    if (action === 'tick') { if (!fr || !fr.freq) return; const m = Math.round(fr.midi), t = performance.now(); if (rangeTest.curMidi === null) { rangeTest.curMidi = m; rangeTest.curSince = t; } else if (m !== rangeTest.curMidi) { rangeTest.samples.push({ midi: rangeTest.curMidi, ms: t - rangeTest.curSince }); rangeTest.curMidi = m; rangeTest.curSince = t; } return; }
-    if (action === 'flush') { if (rangeTest.curMidi !== null) rangeTest.samples.push({ midi: rangeTest.curMidi, ms: performance.now() - rangeTest.curSince }); rangeTest.curMidi = null; return; }
+    if (action === 'tick') { if (!fr || !fr.freq) return; const m = Math.round(fr.midi), t = performance.now(); if (rangeTest.curMidi === null) { rangeTest.curMidi = m; rangeTest.curSince = t; } else if (m !== rangeTest.curMidi) { rangeTest.samples.push({ midi: rangeTest.curMidi, ms: t - rangeTest.curSince, stage: rangeTest.stage }); rangeTest.curMidi = m; rangeTest.curSince = t; } return; }
+    if (action === 'flush') { if (rangeTest.curMidi !== null) rangeTest.samples.push({ midi: rangeTest.curMidi, ms: performance.now() - rangeTest.curSince, stage: rangeTest.stage }); rangeTest.curMidi = null; return; }
     if (action === 'next') { handleRangeTest('flush'); rangeTest.stage = 'high'; coach('Now sing your highest comfortable note and hold it, then press "Got it -- done".'); return; }
     if (action === 'cancel') { rangeTest = null; return; }
     if (action === 'finish') { handleRangeTest('flush'); const range = estimateRange(rangeTest.samples); rangeTest = null; if (!range) { coach("I didn't catch a held note either time -- make sure the mic is connected, sing clearly and hold each note for at least half a second, then try again."); return; } const clamped = { low: clamp(range.low, 24, 96), high: clamp(range.high, 24, 96) }; DB.prefs.voiceRange = clamped; DB.prefs.voice = 'mine'; task = null; save(); const t = tonicFromRange(exerciseRangeFor(clamped)), hint = classify(clamped); coach(hint.wording + (t.stretch ? ' That is a little under an octave, so the exercises will stretch a bit past what you just sang.' : ' Exercises are set from your range now.')); return; }
@@ -1379,6 +1586,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
     if (mod === 'voice' && rangeTest && rangeTest.stage === 'low') { btn('optRangeNext', 'Got it -- now the highest', () => { handleRangeTest('next'); renderOpts(); }, true); btn('optRangeCancel', 'Cancel', () => { handleRangeTest('cancel'); renderOpts(); }); }
     if (mod === 'voice' && rangeTest && rangeTest.stage === 'high') { btn('optRangeDone', 'Got it -- done', () => { handleRangeTest('finish'); renderOpts(); }, true); btn('optRangeCancel2', 'Cancel', () => { handleRangeTest('cancel'); renderOpts(); }); }
     if (mod === 'tuner') { sel('optTune', 'Instrument', TUNINGS, tunerKind, v => { tunerKind = v; tunerState = null; tunerLock = null; }); btn('tuneReset', 'Start over', () => { tuned = {}; tunerLock = null; }); }
+    if (mod === 'harp') sel('optHarpKey', 'My harmonica is in the key of', HARP_KEY_OPTS, DB.prefs.harpKey, v => { DB.prefs.harpKey = +v; task = null; if (pitchWorkletNode) { lastWorkletRangeSent = { fmin: MODS.harp.fmin, fmax: MODS.harp.fmax }; pitchWorkletNode.port.postMessage({ type: 'range', fmin: MODS.harp.fmin, fmax: MODS.harp.fmax }); } save(); });
     if (mod === 'rhy') btn('calBtn', calRun ? 'Listening for 8 taps…' : 'Calibrate timing (' + Math.round(DB.latencyMs || 0) + ' ms)', startCalibrate, false);
     if (mod === 'capture') { btn('capGo', cap.on ? 'Stop' : 'Listen', () => { if (cap.on) capStop(); else { ensureAudio(); cap.on = true; cap.notes = []; cap.start = now(); cap.curM = -1; renderOpts(); } }, true); btn('capPlay', 'Play it back', () => { ensureAudio(); const t0 = now() + 0.1; cap.notes.forEach(n => tone(n.m, t0 + n.t - (cap.notes[0] ? cap.notes[0].t : 0), Math.max(0.2, n.d))); }); const lessons = {}; MOD_IDS.filter(m => hasMasteryScheme(m)).forEach(m => { lessons[m] = [MODS[m].name]; }); sel('capTo', cap.notes.length + ' notes. Practise on', lessons, 'kbd', () => {}); btn('capUse', 'Make it a lesson', () => { if (!cap.notes.length) { say('Nothing captured yet.', 'no'); return; } DB.custom = cap.notes.map(n => n.m).slice(0, 300); save(); const to = $('capTo').value; setMod(to); customOn = true; renderOpts(); showAll(); coach('Your captured tune is loaded: ' + DB.custom.length + ' notes, four at a time. Each group repeats until it is clean. Press Start.'); }); }
     if (MODS[mod] && DB.custom && DB.custom.length && hasMasteryScheme(mod)) chk('optCustom', 'Practise my captured melody (' + DB.custom.length + ' notes)', customOn, v => { customOn = v; chunk = 0; task = null; showAll(); });
@@ -1505,6 +1713,11 @@ import { register as registerPlayalong } from './ui/playalong.js';
   $('easierBtn').addEventListener('click', function () { this.blur(); jump(-1); }); $('harderBtn').addEventListener('click', function () { this.blur(); jump(1); });
   $('resetBtn').addEventListener('click', function () { this.blur(); if (sess) endSession(); DB.mods[mod] = S = freshModel(); recent = []; streak = 0; coach(MODS[mod].name + ' progress cleared. Back to level 1.'); save(); showAll(); });
   $('optNames').addEventListener('change', function () { DB.prefs.names = this.checked; save(); });
+  // Theme J1: 'system' removes the attribute so styles.css's own
+  // prefers-color-scheme media query decides; 'light'/'dark' pin it,
+  // overriding the OS setting either way (see src/styles.css).
+  function applyTheme(t) { if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t); else document.documentElement.removeAttribute('data-theme'); }
+  $('optTheme').addEventListener('change', function () { DB.prefs.theme = this.value; applyTheme(this.value); save(); });
 
   function setMod(m) {
     if (sess) endSession(); mod = m; if (MODS[m]) { S = DB.mods[m]; DB.prefs.mod = m; } customOn = false; grooveOn = false; groove = null; task = null; bar = null; heard = null; cap.on = false; tunerState = null; tunerLock = null; diagInputFrames = []; diagLastState = null;
@@ -1641,7 +1854,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
     if (!result.ok) { coach(result.error); return result; }
     const priorLatencyMs = DB && DB.latencyMs;
     modelNow = Date.now(); DB = sanitizeDB(result.db, undefined, modelNow); DB.latencyMs = num(priorLatencyMs, DB.latencyMs, 0, 300); if (!Array.isArray(DB.custom)) DB.custom = [];
-    $('optNames').checked = DB.prefs.names; setMod(DB.prefs.mod); coach('Backup restored.');
+    $('optNames').checked = DB.prefs.names; $('optTheme').value = DB.prefs.theme; applyTheme(DB.prefs.theme); setMod(DB.prefs.mod); coach('Backup restored.');
     return result;
   }
   $('backupSaveBtn').addEventListener('click', function () { this.blur(); saveBackup(); });
@@ -1743,7 +1956,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
     box.hidden = empty; const disclosure = $('panelPickerDisclosure'); if (disclosure) disclosure.hidden = empty;
     panels.list().forEach(p => { const b = document.createElement('button'); b.type = 'button'; b.dataset.panel = p.id; b.style.setProperty('--c', p.color || '#93a0bd'); b.setAttribute('aria-pressed', 'false'); b.appendChild(document.createTextNode(p.name)); const sm = document.createElement('small'); sm.textContent = p.tag || ''; b.appendChild(sm); b.addEventListener('click', () => { b.blur(); openPanel(p.id); }); box.appendChild(b); });
   }
-  loadDB(); if (!Array.isArray(DB.custom)) DB.custom = []; $('optNames').checked = DB.prefs.names; buildPicker(); buildPanelPicker(); setMod(mod); requestAnimationFrame(frame);
+  loadDB(); if (!Array.isArray(DB.custom)) DB.custom = []; $('optNames').checked = DB.prefs.names; $('optTheme').value = DB.prefs.theme; applyTheme(DB.prefs.theme); buildPicker(); buildPanelPicker(); setMod(mod); requestAnimationFrame(frame);
   const hook = !__DEBUG_HOOK__ ? null : { state: () => S, db: () => DB, sess: () => sess, task: () => task, cur: cur, note: onNote, answer: answer, tap: onTap, bar: () => bar, playing: () => playing, setMod: setMod, testSource: testSource, heard: () => heard, yin: yin, cap: () => cap, tuner: () => tunerState, tunerLock: () => tunerLock, deaf: () => deafWindow.isDeaf(), deafUntil: () => deafWindow.until(), exportProgress: doExportProgress, importProgress: doImportProgress, audioNow: audioNow, modelNow: () => modelNow };
   // Debug-hook slots: replace ONLY your own line with
   //   if (__DEBUG_HOOK__) Object.assign(hook, { … });
@@ -1800,6 +2013,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
   //
   if (__DEBUG_HOOK__) Object.assign(hook, { flash: () => ({ bad: flashBad, good: flashGood }), pitchWorkletRange: () => lastWorkletRangeSent, pitchWorkletFrameSize: () => lastWorkletFrameSize, kbdFocus: kbdFocusInfo });
   if (__DEBUG_HOOK__) Object.assign(hook, { audioHeardTicks: () => audioHeardTicks });
+  if (__DEBUG_HOOK__) Object.assign(hook, { rangeHeld: () => rangeTest && rangeTest.curMidi !== null ? { stage: rangeTest.stage, midi: rangeTest.curMidi, ms: performance.now() - rangeTest.curSince } : null });
   if (__DEBUG_HOOK__) window.__coach = hook;
 
   // Boot is over. Announce it so anything driving the page has a condition to

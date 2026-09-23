@@ -17,16 +17,47 @@
 // the singer's absolute extremes.
 
 const MIN_SUSTAIN_MS = 400;
+const LOW_TAIL_SEMITONES = 2;
 
 // Drop samples too brief to be a deliberately held note, then trim
 // statistical outliers (spurious single-frame pitch-detector glitches) with
 // the standard interquartile rule, so one bad reading can't blow the range
 // out by an octave.
+//
+// Samples tagged `stage: 'low'` / `stage: 'high'` (the "Find my range"
+// sing-low-then-high flow) are trimmed per stage: the low comes only from the
+// low stage and the high only from the high stage. Pooled, a learner who took
+// a few breaths on the low note outnumbered the high samples and the rule
+// threw the high note away as an outlier. The high stage also ignores the
+// low note still sounding just after the switch (see LOW_TAIL_SEMITONES in
+// estimateRange). Untagged samples (one slide) are trimmed together, as before.
 export function estimateRange(samples) {
-  const sustained = samples.filter(s => s.ms >= MIN_SUSTAIN_MS).map(s => s.midi);
+  const sustained = samples.filter(s => s.ms >= MIN_SUSTAIN_MS);
   if (sustained.length === 0) return null;
 
-  const sorted = [...sustained].sort((a, b) => a - b);
+  const lowStage = trimOutliers(sustained.filter(s => s.stage === 'low').map(s => s.midi));
+  let highMidis = sustained.filter(s => s.stage === 'high').map(s => s.midi);
+  if (lowStage.length > 0) {
+    // The high stage opens still hearing the low note (the learner has not
+    // moved yet), and pitch wobble splits that tail into several held
+    // samples that would outvote the real high note in the trim below.
+    // Anything within LOW_TAIL_SEMITONES of the low is that tail -- unless
+    // nothing clears it, in which case the stage is kept as it is.
+    const clear = highMidis.filter(m => m > Math.min(...lowStage) + LOW_TAIL_SEMITONES);
+    if (clear.length > 0) highMidis = clear;
+  }
+  const highStage = trimOutliers(highMidis);
+  if (lowStage.length > 0 && highStage.length > 0) {
+    return { low: Math.min(...lowStage), high: Math.max(...highStage) };
+  }
+
+  const kept = trimOutliers(sustained.map(s => s.midi));
+  return { low: Math.min(...kept), high: Math.max(...kept) };
+}
+
+function trimOutliers(midis) {
+  if (midis.length === 0) return midis;
+  const sorted = [...midis].sort((a, b) => a - b);
   const quartile = p => {
     const idx = (sorted.length - 1) * p;
     const lo = Math.floor(idx);
@@ -39,9 +70,7 @@ export function estimateRange(samples) {
   const lowerFence = q1 - 1.5 * iqr;
   const upperFence = q3 + 1.5 * iqr;
   const trimmed = sorted.filter(m => m >= lowerFence && m <= upperFence);
-  const kept = trimmed.length > 0 ? trimmed : sorted;
-
-  return { low: Math.min(...kept), high: Math.max(...kept) };
+  return trimmed.length > 0 ? trimmed : sorted;
 }
 
 // Approximate comfortable ranges for the standard voice types, used only to

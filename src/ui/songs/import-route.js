@@ -3,7 +3,8 @@
 // Pure: takes only a file name string, does no I/O itself — the caller
 // (src/ui/songs.js) does the actual FileReader read and calls the matching
 // importer (src/song/import-midi.js importMidi, src/song/import-abc.js
-// importAbc, src/song/import-musicxml.js importMusicXml).
+// importAbc, src/song/import-musicxml.js importMusicXml, src/song/challenge.js
+// parseChallenge for a teacher-authored .json challenge file).
 //
 // Compressed .mxl (zipped MusicXML) is a DELIBERATE non-goal (see
 // src/song/import-musicxml.js's own header): reported as
@@ -23,5 +24,6 @@ export function routeImportFile(fileName) {
   if (ext === 'abc') return { kind: 'abc', readAs: 'text' };
   if (ext === 'xml' || ext === 'musicxml') return { kind: 'musicxml', readAs: 'text' };
   if (ext === 'mxl') return { kind: 'unsupported-mxl', readAs: null };
+  if (ext === 'json') return { kind: 'challenge', readAs: 'text' };
   return { kind: 'unknown', readAs: null };
 }
