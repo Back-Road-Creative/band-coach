@@ -8,13 +8,19 @@
 // (writing zips) — read-only, just enough to open an `.mxl` archive.
 //
 // API:
-//   inflateRaw(bytes) -> Uint8Array                 raw DEFLATE decompress
+//   inflateRaw(bytes, maxBytes?) -> Uint8Array        raw DEFLATE decompress
 //   readZipEntries(bytes) -> [{ name, method, compressedSize,
 //     uncompressedSize, localOffset }]               central directory listing
-//   readZipEntryData(bytes, entry) -> Uint8Array      decompressed entry bytes
+//   readZipEntryData(bytes, entry, maxBytes?) -> Uint8Array
+//                                                      decompressed entry bytes
 //   readMxlRootEntry(bytes) -> { name, bytes }        the score inside an .mxl,
 //     found via META-INF/container.xml, falling back to the first
 //     non-META-INF .musicxml/.xml entry
+//
+// Every entry's unpacked size is capped at MAX_ENTRY_BYTES (a "zip bomb"
+// guard): a declared size over the cap is rejected before inflating, and
+// inflate itself stops the instant its output would exceed the cap rather
+// than after allocating it. `maxBytes` overrides the cap for tests.
 
 // ---- bit-level reading for DEFLATE -----------------------------------
 
@@ -111,10 +117,23 @@ function readDynamicTrees(br) {
   };
 }
 
-function inflateBlock(br, out, litHuff, distHuff) {
+// A deflated entry can expand to thousands of times its compressed size (a
+// "zip bomb"): a few KB on disk can inflate to gigabytes and freeze or crash
+// the tab. Band Coach only ever unpacks scores (.mxl) and, soon, band packs
+// and Guitar Pro files, none of which have a legitimate reason to exceed a
+// few MB uncompressed — 32 MB is generous headroom above any real MusicXML
+// score (even a full orchestral score rarely tops a few MB of markup) while
+// still refusing anything shaped like a bomb.
+export const MAX_ENTRY_BYTES = 32 * 1024 * 1024; // 32 MB
+
+function tooBigError(maxBytes) {
+  return new Error(`this file inside the archive is larger than the ${(maxBytes / (1024 * 1024)).toFixed(0)} MB limit Band Coach allows — it may be corrupted, or a "zip bomb" designed to crash the app; it was not opened`);
+}
+
+function inflateBlock(br, out, litHuff, distHuff, maxBytes) {
   for (;;) {
     const sym = decodeSymbol(br, litHuff);
-    if (sym < 256) { out.push(sym); continue; }
+    if (sym < 256) { if (out.length + 1 > maxBytes) throw tooBigError(maxBytes); out.push(sym); continue; }
     if (sym === 256) return;
     const lenIdx = sym - 257;
     if (lenIdx < 0 || lenIdx >= LENGTH_BASE.length) throw new Error('malformed deflate stream: invalid length symbol');
@@ -124,11 +143,12 @@ function inflateBlock(br, out, litHuff, distHuff) {
     const distance = DIST_BASE[distSym] + br.readBits(DIST_EXTRA[distSym]);
     const start = out.length - distance;
     if (start < 0) throw new Error('malformed deflate stream: back-reference before the start of output');
+    if (out.length + length > maxBytes) throw tooBigError(maxBytes);
     for (let i = 0; i < length; i += 1) out.push(out[start + i]);
   }
 }
 
-export function inflateRaw(bytes) {
+export function inflateRaw(bytes, maxBytes = MAX_ENTRY_BYTES) {
   const br = new BitReader(bytes);
   const out = [];
   const fixedLit = fixedLitHuffman();
@@ -141,13 +161,14 @@ export function inflateRaw(bytes) {
       br.align();
       const len = bytes[br.bytePos] | (bytes[br.bytePos + 1] << 8);
       br.bytePos += 4; // LEN (2 bytes) + NLEN (2 bytes, ones-complement of LEN, unchecked)
+      if (out.length + len > maxBytes) throw tooBigError(maxBytes);
       for (let i = 0; i < len; i += 1) out.push(bytes[br.bytePos + i]);
       br.bytePos += len;
     } else if (btype === 1) {
-      inflateBlock(br, out, fixedLit, fixedDist);
+      inflateBlock(br, out, fixedLit, fixedDist, maxBytes);
     } else if (btype === 2) {
       const { litHuff, distHuff } = readDynamicTrees(br);
-      inflateBlock(br, out, litHuff, distHuff);
+      inflateBlock(br, out, litHuff, distHuff, maxBytes);
     } else {
       throw new Error('malformed deflate stream: reserved block type 3');
     }
@@ -197,7 +218,8 @@ export function readZipEntries(bytes) {
   return entries;
 }
 
-export function readZipEntryData(bytes, entry) {
+export function readZipEntryData(bytes, entry, maxBytes = MAX_ENTRY_BYTES) {
+  if (entry.uncompressedSize > maxBytes) throw tooBigError(maxBytes);
   const pos = entry.localOffset;
   if (u32(bytes, pos) !== LOCAL_SIG) throw new Error(`not a valid zip archive: malformed local file header for "${entry.name}"`);
   const nameLen = u16(bytes, pos + 26);
@@ -205,7 +227,7 @@ export function readZipEntryData(bytes, entry) {
   const dataStart = pos + 30 + nameLen + extraLen;
   const compressed = bytes.subarray(dataStart, dataStart + entry.compressedSize);
   if (entry.method === 0) return Uint8Array.from(compressed);
-  if (entry.method === 8) return inflateRaw(compressed);
+  if (entry.method === 8) return inflateRaw(compressed, maxBytes);
   throw new Error(`unsupported zip compression method ${entry.method} for "${entry.name}" (only stored and deflate are supported)`);
 }
 
