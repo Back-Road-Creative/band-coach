@@ -856,16 +856,22 @@ import { register as registerPlayalong } from './ui/playalong.js';
     d.panels = sanitizePanelData(v.panels);
     return d;
   }
-  function loadDB() { modelNow = Date.now(); let v = null; try { v = migrateDB(JSON.parse(localStorage.getItem(KEY) || 'null')); } catch (e) {} hasSavedMod = !!(v && v.prefs && MODS[v.prefs.mod] && TOOL_MOD_IDS.indexOf(v.prefs.mod) < 0); DB = sanitizeDB(v, actx ? (actx.outputLatency || actx.baseLatency || 0) * 1000 : 0, modelNow); mod = DB.prefs.mod; S = DB.mods[mod]; gates = gatesFor(DB.prefs.noiseFloor); setNoteNaming(DB.prefs.noteNaming); }
+  // The exact string this page last read from or wrote to storage. flushSave()
+  // compares against it so a page going away never clobbers a newer write made
+  // by someone else in the meantime (another tab, a restored backup).
+  let lastStored = null;
+  function loadDB() { modelNow = Date.now(); let v = null; try { lastStored = localStorage.getItem(KEY); v = migrateDB(JSON.parse(lastStored || 'null')); } catch (e) {} hasSavedMod = !!(v && v.prefs && MODS[v.prefs.mod] && TOOL_MOD_IDS.indexOf(v.prefs.mod) < 0); DB = sanitizeDB(v, actx ? (actx.outputLatency || actx.baseLatency || 0) * 1000 : 0, modelNow); mod = DB.prefs.mod; S = DB.mods[mod]; gates = gatesFor(DB.prefs.noiseFloor); setNoteNaming(DB.prefs.noteNaming); }
   let saveTimer = null;
-  function writeDB() { try { if (MODS[mod]) DB.mods[mod] = S = sanitizeModel(mod, S, modelNow); localStorage.setItem(KEY, JSON.stringify(DB)); } catch (e) {} }
+  function writeDB() { try { if (MODS[mod]) DB.mods[mod] = S = sanitizeModel(mod, S, modelNow); lastStored = JSON.stringify(DB); localStorage.setItem(KEY, lastStored); } catch (e) {} }
   function save() { if (saveTimer) return; saveTimer = setTimeout(() => { saveTimer = null; writeDB(); }, 1200); }
   // Closing or reloading within the 1200ms debounce window used to lose
   // whatever save() just queued -- nothing ever flushed it early. pagehide
   // fires on tab close, navigation and reload alike; visibilitychange with
   // document.hidden also catches a learner switching tabs/apps without
   // closing this one, which pagehide alone would miss.
-  function flushSave() { if (!saveTimer) return; clearTimeout(saveTimer); saveTimer = null; writeDB(); }
+  // Skipped when storage no longer holds what this page last saw: the newer
+  // write wins, exactly as it would have had the debounce been cancelled.
+  function flushSave() { if (!saveTimer) return; let cur; try { cur = localStorage.getItem(KEY); } catch (e) { return; } if (cur !== lastStored) return; clearTimeout(saveTimer); saveTimer = null; writeDB(); }
   window.addEventListener('pagehide', flushSave);
   // `now` is always the caller's `modelNow` (frozen per page load/import,
   // never Date.now() read live) — see the comment on `modelNow` above.
