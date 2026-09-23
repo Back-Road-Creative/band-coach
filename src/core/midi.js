@@ -15,6 +15,10 @@
 import { ticksToSeconds } from '../song/model.js';
 
 const NOTE_ON = 0x90, NOTE_OFF = 0x80, CONTROL_CHANGE = 0xb0, ALL_NOTES_OFF_CC = 123;
+const PROGRAM_CHANGE = 0xc0, CHANNEL_PRESSURE = 0xd0;
+// Data bytes after each System Common status (0xF1 MTC quarter frame, 0xF2
+// Song Position Pointer, 0xF3 Song Select; 0xF4-0xF7 carry none).
+const SYSTEM_COMMON_DATA = { 0xf1: 1, 0xf2: 2, 0xf3: 1 };
 
 function clampByte(x) { return Math.min(127, Math.max(0, Math.round(x))); }
 
@@ -28,15 +32,31 @@ export function createMidiParser() {
     let i = 0;
     while (i < bytes.length) {
       const b = bytes[i];
-      if (b >= 0xf0) { i++; continue; } // realtime/system bytes carry no channel-voice data and never touch running status
-      let status, d1, d2, consumed;
-      if (b & 0x80) { status = b; d1 = bytes[i + 1]; d2 = bytes[i + 2]; consumed = 3; }
-      else { status = runningStatus; d1 = b; d2 = bytes[i + 1]; consumed = 2; } // running status: this byte and the next are data only
-      if (status == null || d1 === undefined) break; // truncated message -- nothing more to parse
-      runningStatus = status;
+      if (b >= 0xf8) { i++; continue; } // realtime: one byte, no data, never touches running status
+      if (b === 0xf0) { // SysEx: skip through its 0xF7 terminator; cancels running status
+        runningStatus = null;
+        i++;
+        while (i < bytes.length && bytes[i] !== 0xf7) i++;
+        i++;
+        continue;
+      }
+      if (b >= 0xf1) { // System Common: carries its own data bytes and cancels running status
+        runningStatus = null;
+        i += 1 + (SYSTEM_COMMON_DATA[b] || 0);
+        continue;
+      }
+      let status, at;
+      if (b & 0x80) { status = b; at = i + 1; }
+      else { status = runningStatus; at = i; } // running status: this byte starts the data
+      if (status == null) { i++; continue; } // stray data byte with no status to apply it to
       const type = status & 0xf0, channel = status & 0x0f;
-      if (type === NOTE_ON || type === NOTE_OFF) events.push({ type: type === NOTE_ON && d2 > 0 ? 'on' : 'off', note: d1, velocity: d2 || 0, channel: channel });
-      i += consumed;
+      const dataLen = type === PROGRAM_CHANGE || type === CHANNEL_PRESSURE ? 1 : 2;
+      if (at + dataLen > bytes.length) break; // truncated message -- nothing more to parse
+      const d1 = bytes[at], d2 = dataLen === 2 ? bytes[at + 1] : undefined;
+      if (d1 & 0x80 || (d2 !== undefined && d2 & 0x80)) { i = at + ((d1 & 0x80) ? 0 : 1); continue; } // a status byte cut this message short -- drop it, resume at that byte
+      runningStatus = status;
+      if (type === NOTE_ON || type === NOTE_OFF) events.push({ type: type === NOTE_ON && d2 > 0 ? 'on' : 'off', note: d1, velocity: d2, channel: channel });
+      i = at + dataLen;
     }
     return events;
   }
