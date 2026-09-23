@@ -41,7 +41,13 @@ import { layoutSong } from './editor/layout-song.js';
 // than the comment.)
 const LIBRARY_DB_NAME = 'bandcoach-songs';
 
-const PART_INDEX = 0; // transcribe() always produces exactly one part, 'melody'.
+// transcribe() produces exactly one part, 'melody', UNLESS the "More than
+// one note at a time" checkbox sent it opts.polyphonic (src/song/
+// transcribe.js), in which case it comes back with one part per voice heard
+// (melody/bass/inner/percussion). Editing tools (delete/split/insert/arrow
+// keys/etc.) work on whichever part was last clicked in the notation —
+// `activePartIndex`, starting at part 0 for every newly loaded song.
+let activePartIndex = 0;
 const GRID_TICKS = 480 / 4; // a 16th note; the grid every move/insert/quantize snaps to.
 const MIN_INSERT_DUR = GRID_TICKS;
 
@@ -114,7 +120,7 @@ function mountEditor(hostEl, api) {
   let history = null;
   let report = null;
   let acknowledged = false;
-  let selected = null; // note index into song.parts[PART_INDEX].notes, or null
+  let selected = null; // note index into song.parts[activePartIndex].notes, or null
   let hitboxes = [];
   let library = null;
   let playing = false;
@@ -138,6 +144,12 @@ function mountEditor(hostEl, api) {
   const listenBtn = el('button', { type: 'button', id: 'editorListenBtn', text: 'Listen' });
   const recordStatus = el('span', { class: 'editor-status', 'aria-live': 'polite' });
   const fileInput = el('input', { type: 'file', id: 'editorFileInput', accept: 'audio/*' });
+  // Off by default: multipitch detection (src/song/transcribe.js's
+  // opts.polyphonic) costs real accuracy on a single clean melody line, so a
+  // learner recording just one instrument should get the plain monophonic
+  // path unless they ask for more. Read only from the file-import path — the
+  // live-mic Listen/Stop path is unchanged.
+  const polyphonicCheckbox = el('input', { type: 'checkbox', id: 'editorPolyphonic' });
 
   const checkBox = el('div', { class: 'editor-check', id: 'editorCheck', hidden: 'hidden' });
   const checkList = el('ul');
@@ -176,20 +188,20 @@ function mountEditor(hostEl, api) {
   const redoBtn = btn('Redo', () => { if (!history) return; setSongState(history.redo()); render(); }, { id: 'editorRedoBtn' });
   const deleteBtn = btn('Delete note', () => {
     if (selected === null) return;
-    applyOp((s) => deleteNote(s, PART_INDEX, selected), { clearSelection: true });
+    applyOp((s) => deleteNote(s, activePartIndex, selected), { clearSelection: true });
   });
   const splitBtn = btn('Split note in half', () => {
     if (selected === null) return;
-    const note = song.parts[PART_INDEX].notes[selected];
-    applyOp((s) => splitNote(s, PART_INDEX, selected, Math.max(1, Math.round(note.dur / 2))));
+    const note = song.parts[activePartIndex].notes[selected];
+    applyOp((s) => splitNote(s, activePartIndex, selected, Math.max(1, Math.round(note.dur / 2))));
   });
   const mergeBtn = btn('Merge with next', () => {
     if (selected === null) return;
-    applyOp((s) => mergeWithNext(s, PART_INDEX, selected));
+    applyOp((s) => mergeWithNext(s, activePartIndex, selected));
   });
   const tieBtn = btn('Tie to previous', () => {
     if (selected === null) return;
-    applyOp((s) => setTie(s, PART_INDEX, selected, !isTied()));
+    applyOp((s) => setTie(s, activePartIndex, selected, !isTied()));
   });
   const insertBtn = btn('Insert note', insertHere);
   // halveDurations/doubleDurations (src/song/edit.js) rescale every note's
@@ -199,8 +211,8 @@ function mountEditor(hostEl, api) {
   // editor-ops.test.mjs now pins the sounding position of a note.)
   const halveBtn = btn('Halve note values (the tune keeps its speed)', () => applyOp((s) => halveDurations(s)));
   const doubleBtn = btn('Double note values (the tune keeps its speed)', () => applyOp((s) => doubleDurations(s)));
-  const octaveUpBtn = btn('Whole song up an octave', () => applyOp((s) => octaveShiftPart(s, PART_INDEX, 1)));
-  const octaveDownBtn = btn('Whole song down an octave', () => applyOp((s) => octaveShiftPart(s, PART_INDEX, -1)));
+  const octaveUpBtn = btn('Whole song up an octave', () => applyOp((s) => octaveShiftPart(s, activePartIndex, 1)));
+  const octaveDownBtn = btn('Whole song down an octave', () => applyOp((s) => octaveShiftPart(s, activePartIndex, -1)));
   const pickupBtn = btn('Shift barline (pickup)', () => {
     const ticks = Number(pickupInput.value) || 0;
     applyOp((s) => shiftBarline(s, ticks));
@@ -232,6 +244,7 @@ function mountEditor(hostEl, api) {
     el('div', { class: 'editor-record' }, [
       el('label', { for: 'editorTitle', text: 'Title' }), titleInput, listenBtn, recordStatus,
       el('label', { for: 'editorFileInput', text: 'Or choose an audio file' }), fileInput,
+      el('label', { for: 'editorPolyphonic', text: 'More than one note at a time' }), polyphonicCheckbox,
     ]),
     checkBox,
     toolbar,
@@ -284,7 +297,8 @@ function mountEditor(hostEl, api) {
       const pcm = mixToMono(channels);
       const { fmin, fmax } = rangeForInstrument(typeof api.instrument === 'function' ? api.instrument() : null);
       const { frames, onsets } = framesFromPCM(pcm, audioBuffer.sampleRate, { fmin, fmax });
-      const result = transcribe(frames, { title: titleInput.value || 'My recording', onsets });
+      const polyphonic = polyphonicCheckbox.checked ? { pcm, sampleRate: audioBuffer.sampleRate } : undefined;
+      const result = transcribe(frames, { title: titleInput.value || 'My recording', onsets, polyphonic });
       loadTranscription(result);
     } catch (e) {
       api.recordError('editor:file', e);
@@ -301,6 +315,7 @@ function mountEditor(hostEl, api) {
     report = result.report;
     history = createHistory(song);
     selected = null;
+    activePartIndex = 0;
     acknowledged = false;
     renderCheckList();
     recordStatus.textContent = 'Captured ' + report.notesCaptured + ' notes.';
@@ -366,16 +381,16 @@ function mountEditor(hostEl, api) {
 
   function isTied() {
     if (selected === null) return false;
-    const note = song.parts[PART_INDEX].notes[selected];
+    const note = song.parts[activePartIndex].notes[selected];
     return !!(note && note.tieFromPrev);
   }
 
   function insertHere() {
-    const notes = song.parts[PART_INDEX].notes;
+    const notes = song.parts[activePartIndex].notes;
     const base = selected !== null && notes[selected] ? notes[selected] : notes[notes.length - 1];
     const start = base ? base.start + base.dur : 0;
     const midi = base ? base.midi : 60;
-    applyOp((s) => insertNote(s, PART_INDEX, { start, dur: MIN_INSERT_DUR, midi }));
+    applyOp((s) => insertNote(s, activePartIndex, { start, dur: MIN_INSERT_DUR, midi }));
   }
 
   // ---- drawing + hit testing --------------------------------------------
@@ -392,24 +407,47 @@ function mountEditor(hostEl, api) {
     const rec = api.instrument();
     const clef = clefFor(rec);
     const width = Math.max(220, Math.min(340, (hostEl.clientWidth || 340) - 20));
-    const layout = layoutSong(song, PART_INDEX, { clef, key: keyName(song.key), width });
+    // One lane per part (src/ui/editor/layout-song.js already lays out one
+    // part at a time), stacked vertically with a text label above each when
+    // there is more than one -- a mono song keeps today's single, unlabelled
+    // staff exactly as before. Each hitbox is tagged with the part it came
+    // from so a click on any lane both selects the note AND makes that
+    // lane's part the one the toolbar/keyboard edit.
+    const LABEL_HEIGHT = song.parts.length > 1 ? 18 : 0;
+    let yOffset = 0;
+    const lanes = song.parts.map((part, pIndex) => {
+      const layout = layoutSong(song, pIndex, { clef, key: keyName(song.key), width });
+      const laneY0 = yOffset;
+      yOffset += LABEL_HEIGHT + layout.barCount * layout.rowHeight;
+      return { part, pIndex, layout, laneY0 };
+    });
     canvas.width = width;
-    canvas.height = layout.barCount * layout.rowHeight + 10;
+    canvas.height = yOffset + 10;
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.strokeStyle = '#1a1a1a';
-    ctx.fillStyle = '#1a1a1a';
-    ctx.lineWidth = 1.2;
-    ctx.font = '20px serif';
-    layout.rows.forEach((row) => {
-      ctx.save();
-      ctx.translate(0, row.y0);
-      drawPrimitives(ctx, row.primitives, {});
-      ctx.restore();
+    hitboxes = [];
+    lanes.forEach(({ part, pIndex, layout, laneY0 }) => {
+      if (LABEL_HEIGHT) {
+        ctx.save();
+        ctx.font = '12px sans-serif';
+        ctx.fillStyle = '#1a1a1a';
+        ctx.fillText(part.name || part.role || ('Part ' + (pIndex + 1)), 4, laneY0 + 13);
+        ctx.restore();
+      }
+      ctx.strokeStyle = '#1a1a1a';
+      ctx.fillStyle = '#1a1a1a';
+      ctx.lineWidth = 1.2;
+      ctx.font = '20px serif';
+      layout.rows.forEach((row) => {
+        ctx.save();
+        ctx.translate(0, laneY0 + LABEL_HEIGHT + row.y0);
+        drawPrimitives(ctx, row.primitives, {});
+        ctx.restore();
+      });
+      layout.hitboxes.forEach((h) => hitboxes.push({ ...h, y: h.y + laneY0 + LABEL_HEIGHT, partIndex: pIndex }));
     });
-    hitboxes = layout.hitboxes;
     if (selected !== null) {
-      const box = hitboxes.find((h) => h.noteIndex === selected);
+      const box = hitboxes.find((h) => h.noteIndex === selected && h.partIndex === activePartIndex);
       if (box) {
         ctx.strokeStyle = '#5b8dee';
         ctx.lineWidth = 2;
@@ -425,6 +463,7 @@ function mountEditor(hostEl, api) {
     const y = ev.clientY - rect.top;
     const box = hitTest(hitboxes, x, y, 6);
     if (box) {
+      activePartIndex = typeof box.partIndex === 'number' ? box.partIndex : activePartIndex;
       selected = box.noteIndex;
       render();
     }
@@ -434,7 +473,7 @@ function mountEditor(hostEl, api) {
     if (!song || canvas.disabled) return;
     if (ev.ctrlKey && (ev.key === 'z' || ev.key === 'Z')) { ev.preventDefault(); undoBtn.click(); return; }
     if (ev.ctrlKey && (ev.key === 'y' || ev.key === 'Y')) { ev.preventDefault(); redoBtn.click(); return; }
-    const notes = song.parts[PART_INDEX].notes;
+    const notes = song.parts[activePartIndex].notes;
     if (ev.key === 'ArrowRight' || ev.key === 'ArrowLeft') {
       ev.preventDefault();
       if (!notes.length) return;
@@ -448,19 +487,19 @@ function mountEditor(hostEl, api) {
       if (selected === null) return;
       const note = notes[selected];
       const delta = ev.key === 'ArrowDown' ? GRID_TICKS : -GRID_TICKS;
-      applyOp((s) => moveNote(s, PART_INDEX, selected, Math.max(0, note.start + delta), GRID_TICKS));
+      applyOp((s) => moveNote(s, activePartIndex, selected, Math.max(0, note.start + delta), GRID_TICKS));
       return;
     }
     if (ev.key === '+' || ev.key === '=') {
       ev.preventDefault();
       if (selected === null) return;
-      applyOp((s) => repitch(s, PART_INDEX, selected, { semitones: 1 }));
+      applyOp((s) => repitch(s, activePartIndex, selected, { semitones: 1 }));
       return;
     }
     if (ev.key === '-' || ev.key === '_') {
       ev.preventDefault();
       if (selected === null) return;
-      applyOp((s) => repitch(s, PART_INDEX, selected, { semitones: -1 }));
+      applyOp((s) => repitch(s, activePartIndex, selected, { semitones: -1 }));
       return;
     }
     if (ev.key === 'Delete' || ev.key === 'Backspace') {
@@ -472,17 +511,23 @@ function mountEditor(hostEl, api) {
   });
 
   // ---- playback ----------------------------------------------------------
+  // Plays every part together, not just the active one -- "hear more than
+  // one note at a time" is the whole point of a polyphonic transcription; a
+  // mono song still has exactly one part, so this is unchanged for it.
   function playSong() {
     if (!song || playing) return;
     playing = true;
     const t0 = api.now() + 0.1;
-    const notes = song.parts[PART_INDEX].notes;
-    notes.forEach((n) => {
-      const at = t0 + ticksToSeconds(n.start, song.bpm);
-      const dur = Math.max(0.05, ticksToSeconds(n.dur, song.bpm));
-      api.tone(n.midi, at, dur, 0.22);
+    let totalEndTicks = 0;
+    song.parts.forEach((part) => {
+      part.notes.forEach((n) => {
+        const at = t0 + ticksToSeconds(n.start, song.bpm);
+        const dur = Math.max(0.05, ticksToSeconds(n.dur, song.bpm));
+        api.tone(n.midi, at, dur, 0.22);
+        totalEndTicks = Math.max(totalEndTicks, n.start + n.dur);
+      });
     });
-    const totalDur = notes.length ? ticksToSeconds(notes[notes.length - 1].start + notes[notes.length - 1].dur, song.bpm) : 0;
+    const totalDur = totalEndTicks ? ticksToSeconds(totalEndTicks, song.bpm) : 0;
     setTimeout(() => { playing = false; }, (totalDur + 0.2) * 1000);
   }
 
