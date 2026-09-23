@@ -48,7 +48,7 @@ import { buildLessonPlan, nextStep, creditFor } from '../song/lesson.js';
 import { feasibility } from '../song/feasibility.js';
 import { INSTRUMENTS } from '../instruments/index.js';
 import { routeImportFile, importerFor } from './songs/import-route.js';
-import { judgeAttempt, passesRule } from './songs/practice.js';
+import { judgeAttempt, passesRule, holdTuneFeedback } from './songs/practice.js';
 import { barHeat, worstBars } from '../song/bar-heat.js';
 import { createLoopBackingTransport, applyAttemptToTransport, backingBpm, rateLabel } from './songs/loop-backing.js';
 import { mapMasteryKeys } from './songs/mastery.js';
@@ -77,6 +77,25 @@ export function forwardNote(midi, exact) {
   for (const fn of noteListeners.slice()) {
     try { fn(midi, exact); } catch (e) { /* one bad listener must not break the others */ }
   }
+}
+
+// Cents deviation of a detected frequency from the nearest equal-tempered
+// semitone `midi` -- positive is sharp, negative is flat. Pure (no DOM, no
+// AudioContext), the same maths src/app.js's own live tuner uses (fmidi =
+// 69 + 12*log2(f/440), app.js:91), just expressed as an offset from a given
+// target rather than rounded to the nearest note itself.
+export function centsFromFreq(freq, midi) {
+  const fractionalMidi = 69 + 12 * Math.log2(freq / 440);
+  return (fractionalMidi - midi) * 100;
+}
+
+// One mic-detected note as a played event. durSec starts at one capture
+// tick (50 ms), so a note heard once and gone is judged as clipped short
+// rather than skipped as "unmeasured"; the capture loop stretches it while
+// the same pitch keeps sounding.
+export const MIC_TICK_SEC = 0.05;
+export function playedEventFrom(freq, midi, atSec) {
+  return { midi, atSec, durSec: MIC_TICK_SEC, cents: centsFromFreq(freq, midi) };
 }
 
 function onMidiNote(fn) {
@@ -708,6 +727,15 @@ function mountSongsPanel(hostEl, api) {
     } else {
       api.openMic().catch(() => say('The microphone was blocked. Allow microphone access, or switch to the keyboard.', 'no'));
       let onset;
+      // The played event still being sounded, so a sustained instrument's
+      // hold/tune rules (src/song/lesson.js) have something real to judge
+      // (durSec/cents) -- every tick this SAME pitch keeps being heard, its
+      // durSec is stamped forward; the moment it drops out (silence, or the
+      // pitch moves on to the next note) durSec is left at that last-seen
+      // value rather than kept open forever. A MIDI/on-screen-key note (see
+      // onMidiNote above) never gets either field: there is no "still
+      // sounding" signal to poll for a discrete key press.
+      let openEvent = null;
       const timer = setInterval(() => {
         const analysers = api.analysers();
         const audio = api.audio();
@@ -716,12 +744,24 @@ function mountSongsPanel(hostEl, api) {
         const buf = new Float32Array(analysers.time.fftSize);
         analysers.time.getFloatTimeDomainData(buf);
         const o = onset.push(buf);
-        if (!o.onset) return;
+        // No onset and nothing still sounding: skip YIN entirely this tick.
+        if (!o.onset && !openEvent) return;
         const toolRange = rangeForInstrument(practice.instrument);
         const r = yin(buf, audio.sampleRate, toolRange.fmin, toolRange.fmax, api.gates().pitch);
-        if (!r.freq || !(r.clarity > 0.7)) return;
+        const nowSec = api.now() - practice.recordStartSec;
+        if (!o.onset) {
+          if (openEvent && r.freq && r.clarity > 0.5 && Math.round(69 + 12 * Math.log2(r.freq / 440)) === openEvent.midi) {
+            openEvent.durSec = Math.max(MIC_TICK_SEC, nowSec - openEvent.atSec);
+          } else {
+            openEvent = null;
+          }
+          return;
+        }
+        if (!r.freq || !(r.clarity > 0.7)) { openEvent = null; return; }
         const midi = Math.round(69 + 12 * Math.log2(r.freq / 440));
-        practice.playedEvents.push({ midi, atSec: api.now() - practice.recordStartSec });
+        const event = playedEventFrom(r.freq, midi, nowSec);
+        practice.playedEvents.push(event);
+        openEvent = event;
         updateCount();
       }, 50);
       practice.stop = () => clearInterval(timer);
@@ -769,9 +809,14 @@ function mountSongsPanel(hostEl, api) {
       const credit = creditFor({ step, passed, elapsedMs: elapsedMs || 0, judgedCount: result ? result.judgedCount : undefined });
       const mapped = mapMasteryKeys(credit.masteryKeys, practice.instrumentId, (api.db().prefs || {}));
       applyMasteryCredit(api, practice.instrumentId, mapped);
+      // A step that failed ONLY on holding the note or playing it in tune
+      // (hit rate and timing were both fine) gets the specific plain-word
+      // reason instead of the generic retry prompt, so a sustaining
+      // instrument's learner knows the ONE thing to fix.
+      const holdTuneReason = !passed && result ? holdTuneFeedback(result, step.passRule) : null;
       say(passed
         ? 'Nice. ' + (result ? result.hitCount + ' of ' + result.judgedCount + ' notes.' : '')
-        : 'Not quite yet — try that again.', passed ? 'ok' : 'no');
+        : holdTuneReason || 'Not quite yet — try that again.', passed ? 'ok' : 'no');
       if (result) {
         practice.lastHeat = barHeat(practice.song, result.matches);
         practice.lastHeatBars = step.bars;
