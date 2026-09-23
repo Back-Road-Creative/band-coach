@@ -35,6 +35,16 @@ function dayKey(date) {
   return date.toISOString().slice(0, 10);
 }
 
+// "Today" as the learner's LOCAL calendar day, returned as that day's UTC
+// midnight so the rest of this module's UTC day math applies unchanged.
+// app.js stamps each session's `d` from local date fields, so anchoring
+// "now" on the UTC day would put an evening session west of Greenwich on
+// yesterday (or a morning one east of it on tomorrow).
+function localToday(nowMs) {
+  const d = new Date(nowMs);
+  return new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+}
+
 /** The Monday (UTC) of the week containing `date`, as a day key. */
 function weekKey(date) {
   const d = new Date(date.getTime());
@@ -83,7 +93,7 @@ function streaks(dayKeys, nowKey) {
  */
 export function summarize(log, { now } = {}) {
   const nowMs = typeof now === 'number' ? now : Date.now();
-  const nowKey = dayKey(new Date(nowMs));
+  const nowKey = dayKey(localToday(nowMs));
   const sessions = validSessions(log).sort((a, b) => a._date - b._date);
 
   const byDay = new Map();
@@ -190,7 +200,7 @@ export const SESSION_LOG_CAP = 60;
  */
 export function ledger(sessions, { now, weeks = 8, goalMin = 15 } = {}) {
   const nowMs = typeof now === 'number' ? now : Date.now();
-  const nowDate = new Date(nowMs);
+  const nowDate = localToday(nowMs);
   const nowKey = dayKey(nowDate);
   const valid = validSessions(sessions).sort((a, b) => a._date - b._date);
 
