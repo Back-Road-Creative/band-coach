@@ -462,6 +462,14 @@ notes land where the learner's printed part says, not just where a real
 instrument could reach; `src/song/arrange/transposing.js` computes a part's
 written notes and written key signature for display.
 
+`src/song/feasibility.js`'s `feasibility(song, partId, instrument)` turns
+`fitToInstrument`'s own result into a plain-language badge -- "Fits as
+written", "Transposed to G", "3 notes skipped" -- never a guessed score.
+The songs panel (`src/ui/songs.js`) shows one "Play it on…" card per ready
+instrument, badge included, on a lesson's first (listen) step, before the
+learner has attempted anything; picking a card starts that same song on the
+chosen instrument without leaving the panel.
+
 ## Rhythm vocabulary
 
 `src/core/rhythm.js` is a pure rhythm-notation module: cells (quarter, eighth pairs, rests, ties,
