@@ -8,18 +8,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { HTML_PATH } from '../helpers/html-path.mjs';
 import { launchPage } from '../helpers/browser.mjs';
+import { tapAtAudioTime } from '../helpers/tap-at.mjs';
 
 const htmlPath = HTML_PATH;
-
-// Builds a fake DOM-event timeStamp that toAudioTime() will resolve back to
-// `targetAudioTime` (AudioContext seconds), using a same-instant sample of
-// (performance.now(), audioContext.currentTime) as the conversion anchor —
-// exactly the anchor onTap itself takes when the tap actually happens.
-async function fakeTimeStampFor(page, targetAudioTime) {
-  const [refAudio, refPerf] = await page.evaluate('[window.__coach.audioNow(), performance.now()]');
-  const offset = refAudio - refPerf / 1000;
-  return (targetAudioTime - offset) * 1000;
-}
 
 async function playOneBar(page, latencyMs) {
   await page.evaluate("window.__coach.setMod('rhy')");
@@ -34,8 +25,7 @@ test('CHARACTERIZATION (E4 fix): a tap 200ms after the beat is judged on-time on
   t.after(() => page.close());
 
   const onsetTime = await playOneBar(page, 200);
-  const fakeTs = await fakeTimeStampFor(page, onsetTime + 0.2);
-  await page.evaluate(`window.__coach.tap({ timeStamp: ${fakeTs} })`);
+  await tapAtAudioTime(page, onsetTime + 0.2);
 
   await page.waitFor('window.__coach.bar().judged', 12000);
   const hit = await page.evaluate('window.__coach.bar().onsets[0].hit');
@@ -48,8 +38,7 @@ test('CHARACTERIZATION (E4 fix): the same 200ms-late tap is judged missed with n
   t.after(() => page.close());
 
   const onsetTime = await playOneBar(page, 0);
-  const fakeTs = await fakeTimeStampFor(page, onsetTime + 0.2);
-  await page.evaluate(`window.__coach.tap({ timeStamp: ${fakeTs} })`);
+  await tapAtAudioTime(page, onsetTime + 0.2);
 
   await page.waitFor('window.__coach.bar().judged', 12000);
   const hit = await page.evaluate('window.__coach.bar().onsets[0].hit');

@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { importMusicXml } from '../../src/song/import-musicxml.js';
+import { validateSong } from '../../src/song/model.js';
 
 const TPQ = 480;
 
@@ -14,13 +15,16 @@ function scoreXml(partsXml, { divisions = 1 } = {}) {
 </score-partwise>`;
 }
 
-test('throws a plain message for compressed .mxl input', () => {
+test('a garbage/incomplete .mxl (not a real zip) throws a plain "could not be read" message, not a dead end', () => {
   const zipBytes = 'PK\x03\x04rest of a fake zip';
-  assert.throws(() => importMusicXml(zipBytes), /\.mxl.*not supported/i);
+  assert.throws(() => importMusicXml(zipBytes), /\.mxl.*could not be read/i);
 });
-test('throws a plain message for score-timewise input', () => {
+test('an empty score-timewise document imports (no parts, no throw) — real .mxl coverage is in import-mxl.test.mjs', () => {
   const xml = '<?xml version="1.0"?><score-timewise version="3.1"></score-timewise>';
-  assert.throws(() => importMusicXml(xml), /score-timewise.*not supported/i);
+  const { song, warnings } = importMusicXml(xml);
+  assert.equal(song.schema, 'song/1');
+  assert.deepEqual(song.parts, []);
+  assert.deepEqual(warnings, ['no tempo found; defaulted to 120 bpm']);
 });
 test('imports a one-octave C major scale with correct ticks and midi', () => {
   // Quarter notes, divisions=1 (so duration 1 == one quarter note == 480 ticks).
@@ -146,4 +150,67 @@ test('reads title, composer and key from a minor-key example', () => {
   assert.equal(song.title, 'Example Tune');
   assert.equal(song.composer, 'A. Composer');
   assert.deepEqual(song.key, { tonic: 9, mode: 'minor' });
+});
+test('mid-song metre, key and tempo changes (the latter via <direction>) become sorted change lists at the right ticks', () => {
+  const xml = scoreXml(`
+    <measure number="1">
+      <attributes><divisions>1</divisions><key><fifths>0</fifths><mode>major</mode></key>
+      <time><beats>4</beats><beat-type>4</beat-type></time></attributes>
+      <sound tempo="100"/>
+      <note><pitch><step>C</step><octave>4</octave></pitch><duration>1</duration><type>quarter</type></note>
+      <note><pitch><step>D</step><octave>4</octave></pitch><duration>1</duration><type>quarter</type></note>
+      <note><pitch><step>E</step><octave>4</octave></pitch><duration>1</duration><type>quarter</type></note>
+      <note><pitch><step>F</step><octave>4</octave></pitch><duration>1</duration><type>quarter</type></note>
+    </measure>
+    <measure number="2">
+      <attributes><key><fifths>-3</fifths><mode>major</mode></key>
+      <time><beats>3</beats><beat-type>4</beat-type></time></attributes>
+      <note><pitch><step>G</step><octave>4</octave></pitch><duration>1</duration><type>quarter</type></note>
+      <direction><sound tempo="140"/></direction>
+      <note><pitch><step>A</step><octave>4</octave></pitch><duration>1</duration><type>quarter</type></note>
+    </measure>
+  `);
+  const { song, warnings } = importMusicXml(xml);
+  assert.equal(song.bpm, 100, 'initial bpm stays the first tempo seen');
+  assert.deepEqual(song.metre, { num: 4, den: 4 }, 'initial metre stays the first time signature seen');
+  assert.deepEqual(song.key, { tonic: 0, mode: 'major' }, 'initial key stays the first key seen');
+  assert.deepEqual(song.metreChanges, [{ tick: 4 * TPQ, num: 3, den: 4 }]);
+  assert.deepEqual(song.keyChanges, [{ tick: 4 * TPQ, tonic: 3, mode: 'major' }]);
+  assert.deepEqual(song.tempoMap, [{ tick: 5 * TPQ, bpm: 140 }]);
+  const { ok, errors } = validateSong(song);
+  assert.ok(ok, 'song with change lists must validate: ' + errors.join('; '));
+  assert.equal(warnings.length, 0);
+});
+test('a <direction>-only tempo with no direct <sound> child still sets the initial bpm', () => {
+  const xml = scoreXml(`
+    <measure number="1">
+      <attributes><divisions>1</divisions></attributes>
+      <direction><direction-type><words>Andante</words></direction-type><sound tempo="90"/></direction>
+      <note><pitch><step>C</step><octave>4</octave></pitch><duration>1</duration><type>quarter</type></note>
+    </measure>
+  `);
+  const { song, warnings } = importMusicXml(xml);
+  assert.equal(song.bpm, 90);
+  assert.equal(song.tempoMap, undefined, 'no change, no tempoMap key at all');
+  assert.deepEqual(warnings, []);
+});
+test('repeated identical <attributes> across measures produce no change entries; the keys stay absent', () => {
+  const xml = scoreXml(`
+    <measure number="1">
+      <attributes><divisions>1</divisions><key><fifths>0</fifths><mode>major</mode></key>
+      <time><beats>4</beats><beat-type>4</beat-type></time></attributes>
+      <sound tempo="100"/>
+      <note><pitch><step>C</step><octave>4</octave></pitch><duration>1</duration><type>quarter</type></note>
+    </measure>
+    <measure number="2">
+      <attributes><key><fifths>0</fifths><mode>major</mode></key>
+      <time><beats>4</beats><beat-type>4</beat-type></time></attributes>
+      <sound tempo="100"/>
+      <note><pitch><step>D</step><octave>4</octave></pitch><duration>1</duration><type>quarter</type></note>
+    </measure>
+  `);
+  const { song } = importMusicXml(xml);
+  assert.equal(song.metreChanges, undefined);
+  assert.equal(song.keyChanges, undefined);
+  assert.equal(song.tempoMap, undefined);
 });
