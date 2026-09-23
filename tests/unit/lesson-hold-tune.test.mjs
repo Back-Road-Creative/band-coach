@@ -107,6 +107,18 @@ test('passesRule with a hold/tune rule still passes when the capture never measu
   assert.equal(passesRule(result, passRule), true);
 });
 
+test('passesRule still checks tune when no note was timed (judgedCount 0, hitRate rule of 0)', () => {
+  const result = { hitRate: 0, meanErrorMs: null, judgedCount: 0, meanAbsCents: 999, durationScore: 1 };
+  const passRule = { hitRate: 0, maxMeanErrorMs: 50, maxMeanAbsCents: 20 };
+  assert.equal(passesRule(result, passRule), false);
+});
+
+test('passesRule still checks hold when no note was timed (judgedCount 0, hitRate rule of 0)', () => {
+  const result = { hitRate: 0, meanErrorMs: null, judgedCount: 0, meanAbsCents: 5, durationScore: 0 };
+  const passRule = { hitRate: 0, maxMeanErrorMs: 50, minDurationScore: 0.6 };
+  assert.equal(passesRule(result, passRule), false);
+});
+
 // ===================== holdTuneFeedback =====================
 
 test('holdTuneFeedback names holding the note when that is the only thing that failed', () => {
