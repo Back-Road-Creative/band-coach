@@ -21,9 +21,13 @@ import { recipeForFamily } from '../audio/voices.js';
 //     with a fixed pitch set (currently only the free-reed family, i.e. a
 //     10-hole diatonic harmonica in Richter tuning), by whichever semitone
 //     shift lands the most notes on the instrument's real, playable pitches.
-//     Never drops a note: every input note appears in `notes` (transposed by
-//     the chosen shift) and any that still cannot be played are listed in
+//     Never drops a note itself: every input note appears in `notes`
+//     (transposed by the chosen shift, each entry's `index` matching its
+//     position in `notes`) and any that still cannot be played are listed in
 //     `unplayable` with a reason, for the wiring pass to show the learner.
+//     buildLessonPlan is what actually removes those notes from the practice
+//     steps below -- a step can't require playing a note the instrument
+//     can't sound.
 //   segment(song, partId) -> [{ bars: [fromBar, toBar], startTick, endTick, notes }]
 //     Cuts the part into 1-4 bar phrases at rests, long notes, or the 4-bar
 //     cap. Deterministic: same song in, same phrases out.
@@ -132,11 +136,14 @@ export function fitToInstrument(song, partId, instrument) {
   let best = null;
   for (const shift of candidateShifts(instrument)) {
     const details = [];
-    for (const n of notes) {
+    notes.forEach((n, index) => {
       const shiftedMidi = n.midi + shift;
       const reason = notePlayable(shiftedMidi, instrument, availableSet);
-      if (reason) details.push({ start: n.start, dur: n.dur, originalMidi: n.midi, attemptedMidi: shiftedMidi, reason });
-    }
+      // `index` into `notes` (== into `fittedNotes` below, same order) so a
+      // caller can drop exactly the flagged notes without guessing from
+      // start/midi alone, which breaks on two notes sharing both.
+      if (reason) details.push({ start: n.start, dur: n.dur, originalMidi: n.midi, attemptedMidi: shiftedMidi, reason, index });
+    });
     if (best === null || details.length < best.details.length) {
       best = { shift, details };
     }
@@ -263,9 +270,18 @@ function hitRateFor(level, base) {
 export function buildLessonPlan(song, partId, instrument, opts = {}) {
   const level = opts.level || 1;
   const fit = fitToInstrument(song, partId, instrument);
+  // fit.notes keeps every input note (fitToInstrument's own contract); a
+  // practice step must not, or a note flagged unplayable in fit.unplayable
+  // (see songs.js's "will be skipped" warning) would still show up as
+  // something the learner has to hit to pass. Drop those by `index`, the
+  // position each unplayable entry shares with its note in fit.notes --
+  // robust to two notes at the same start/pitch, which start/midi matching
+  // is not.
+  const unplayableIndices = new Set(fit.unplayable.map(u => u.index));
+  const playableNotes = fit.notes.filter((n, index) => !unplayableIndices.has(index));
   const fittedSong = {
     ...song,
-    parts: song.parts.map(p => (p.id === partId ? { ...p, notes: fit.notes } : p))
+    parts: song.parts.map(p => (p.id === partId ? { ...p, notes: playableNotes } : p))
   };
   const phrases = segment(fittedSong, partId);
   const bpm = song.bpm;
@@ -324,7 +340,7 @@ export function buildLessonPlan(song, partId, instrument, opts = {}) {
       phraseIndex: null,
       bars: [phrases[0].bars[0], phrases[phrases.length - 1].bars[1]],
       bpm,
-      notes: fit.notes,
+      notes: playableNotes,
       passRule: sustainRules(instrument, { hitRate: hitRateFor(level, 0.8), maxMeanErrorMs: 120 })
     });
   }

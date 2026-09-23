@@ -206,6 +206,41 @@ test('buildLessonPlan carries the instrument fit into the plan', () => {
   });
 });
 
+// A run of three adjacent semitones (60, 61, 62): no single shift can land
+// all three on the harmonica's fixed Richter pitches (no three consecutive
+// semitones ever appear together in BLOW_STEPS/DRAW_STEPS -- checked by hand
+// against src/instruments/how/harmonica.js), so fitToInstrument must always
+// flag at least one of the three as unplayable, for any key.
+function threeChromaticNotesSong(partId = 'melody') {
+  const notes = [note(0, 480, 60), note(480, 480, 61), note(960, 480, 62)];
+  return {
+    schema: 'song/1', id: 'chromatic-song', title: 'Chromatic', composer: null, licence: null, source: null,
+    key: { tonic: 0, mode: 'major' }, metre: { num: 4, den: 4 }, bpm: 100,
+    ticksPerQuarter: 480,
+    parts: [{ id: partId, name: 'Melody', notes }],
+    chords: []
+  };
+}
+
+test('buildLessonPlan drops notes fitToInstrument could not fit on a fixed-pitch instrument from every step', () => {
+  const song = threeChromaticNotesSong();
+  const plan = buildLessonPlan(song, 'melody', harp, { level: 1 });
+  assert.ok(plan.fit.unplayable.length > 0, 'expected the harmonica fit to flag at least one unplayable note');
+  const unplayableMidis = new Set(plan.fit.unplayable.map(u => u.attemptedMidi));
+  plan.steps.forEach(s => {
+    s.notes.forEach(n => assert.ok(!unplayableMidis.has(n.midi),
+      s.kind + ' step still contains an unplayable note (midi ' + n.midi + ')'));
+  });
+});
+
+test('buildLessonPlan does not crash on a part with no notes at all', () => {
+  const song = threeChromaticNotesSong();
+  song.parts[0].notes = [];
+  const plan = buildLessonPlan(song, 'melody', harp, { level: 1 });
+  assert.deepEqual(plan.fit.unplayable, []);
+  assert.deepEqual(plan.steps, []);
+});
+
 // =====================  phrase difficulty on steps  =====================
 
 // A one-bar phrase built entirely from small stepwise motion (2 semitones
