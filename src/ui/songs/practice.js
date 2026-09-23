@@ -197,8 +197,8 @@ export function passesRule(result, passRule) {
   if (!passRule) return true;
   if (result.hitRate < passRule.hitRate) return false;
   if (passRule.maxMeanErrorMs != null) {
-    if (result.meanErrorMs == null) return result.judgedCount === 0;
-    if (result.meanErrorMs > passRule.maxMeanErrorMs) return false;
+    if (result.meanErrorMs == null) { if (result.judgedCount !== 0) return false; }
+    else if (result.meanErrorMs > passRule.maxMeanErrorMs) return false;
   }
   if (passRule.maxMeanAbsCents != null && result.meanAbsCents != null) {
     if (result.meanAbsCents > passRule.maxMeanAbsCents) return false;
