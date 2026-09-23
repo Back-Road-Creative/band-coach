@@ -424,6 +424,14 @@ first, then the high C and D above them, then the low E, D and C below G,
 then the forked-fingering F; whistle: the D-major scale, first octave, D E
 F# G A B C# D — rather than chromatic or alphabetical order.
 
+`fitToInstrument` (`src/song/lesson.js`) fits a song part's range against
+each transposing instrument's *written* pitch when its `range` is written
+(clarinet, trumpet, alto/tenor sax, French horn — `transposition` not a
+multiple of 12), not the sounding pitch the mic actually hears, so a song's
+notes land where the learner's printed part says, not just where a real
+instrument could reach; `src/song/arrange/transposing.js` computes a part's
+written notes and written key signature for display.
+
 ## Rhythm vocabulary
 
 `src/core/rhythm.js` is a pure rhythm-notation module: cells (quarter, eighth pairs, rests, ties,
