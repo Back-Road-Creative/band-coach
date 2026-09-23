@@ -54,6 +54,10 @@ apart from "the app sees it but has nothing to judge right now". "MIDI details" 
 every input's name, connection state and the last few raw messages heard, for tracking down a
 silent keyboard on your own machine.
 
+The pure scheduling and sending logic for "play it for me" — a song's notes sent out to a
+connected MIDI keyboard so it plays itself — lives in `src/core/midi.js` (`scheduleSong`,
+`playOnOutput`, `stopAll`, `describeOutputs`); there is no button wired to it yet.
+
 ## Build it from source
 
 Everything from here down is for building Band Coach yourself or working on it. If you only want
@@ -157,6 +161,13 @@ there is nothing yet to lose.
 `src/audio/file-frames.js` is a pure function, `framesFromPCM`, that walks a decoded mono audio
 clip (a plain `Float32Array` of samples plus its real sample rate) and produces the same
 `frames`/`onsets` shape `src/song/transcribe.js` already reads from a live "Record a tune" mic
+capture — so it feeds transcribe.js exactly the way a live capture does, teaching that module
+nothing new. The "Record a tune" panel wires this in directly: alongside Listen/Stop, "Or choose
+an audio file" lets a learner pick a recording instead of using the microphone, and it goes
+through the same check-list step before anything can be practised or saved. Like the rest of this
+app's pitch tracking, it is monophonic only: a chord or a second voice reads as whichever single
+pitch the detector locks onto, not as separate notes — so this writes down one melody line at a
+time, from a file the same as from the mic.
 capture — so a file-import panel can be wired up later without teaching transcribe.js anything
 new. Like the rest of this app's pitch tracking, it is monophonic only: a chord or a second voice
 reads as whichever single pitch the detector locks onto, not as separate notes.
@@ -224,6 +235,20 @@ that need it pay the extra ~42ms of analysis latency; everything else stays
 at 2048. See `src/audio/pitch-worklet.js` for how the AudioWorklet pipeline
 resizes on an instrument switch.
 
+Ready bowed instruments as of this writing: violin, viola, cello and double
+bass. They are fretless, so their trainer entries (`MODS.violin`, etc.) carry
+a `fretless: true` flag and `input: 'sustain'` (a note is held and matched by
+pitch, the same judging voice and wind already use, not plucked). `drawFret()`
+checks that flag to draw a plain fingerboard with a nut but no fret wires,
+and an `info`/`validId` override rewrites the string+fret item labels those
+six fretted instruments already use (`stringLevels()`, with a `posWord`
+argument of `'position'` instead of `'fret'`) so a learner is never told to
+find a "fret" that is not there — the hint and the "time's up" text say the
+same thing. Each record's curriculum stops at exactly first position (5
+semitones above each open string): the instrument's own beginner
+`range.high` is built from its highest open string plus 5, so no item ever
+asks for a note outside the range the mic is tuned to listen for.
+
 A processor that throws inside its own constructor fails silently from the app's point of view:
 `addModule()` still resolves and `new AudioWorkletNode(...)` still succeeds, so `src/app.js` would
 otherwise hold a worklet that looks connected but never posts a single frame — and because it looks
@@ -278,6 +303,26 @@ A single detected pitch — as a monophonic microphone pitch detector would repo
 most one of the two notes and never both at once, so that grading is approximate
 (`gradeHandsTogetherApprox`) and the on-screen feedback says so in plain words rather than claiming
 both hands were heard.
+
+## Harmonica: any of the 12 keys, plus bends
+
+The harmonica mod is not locked to a C harmonica. A "My harmonica is in the key of" selector on
+the harmonica options panel picks any of the 12 keys, matching whatever is printed on your own
+instrument; changing it starts a fresh exercise. Hole numbers and blow/draw directions stay the
+same for every key — a 10-hole diatonic harmonica is built the same way whatever pitch it is
+tuned to — only the pitch each hole sounds moves. `src/instruments/how/harmonica.js`'s
+`layoutFor(key)` computes the ten-hole blow/draw table, and every reachable bend note, for any
+key 0-11 (0 = C, matching the app's usual tonic convention); `src/app.js`'s harp lookups and the
+on-screen diagram (`drawHarp`) read from it instead of a fixed C table, and the microphone's
+search window (`MODS.harp.fmin`/`fmax`) is computed from the chosen key's own layout so a
+higher- or lower-keyed harp is not silently mis-heard.
+
+Draw and blow bends — a reed pulled down in pitch with your breath — are new practice levels
+appended after the nine open-note levels, so an existing learner's saved level numbers do not
+shift. A bend is graded by its exact bent pitch, the same way an open note is graded by its own
+pitch. Bend availability (which holes bend, and how deep) does not change with key, since
+transposing the whole harmonica preserves the blow/draw gap inside every hole.
+
 ## Reference tones sound like the instrument
 
 Every reference/example tone (the note a lesson plays for you to match or tune to) goes through
@@ -315,6 +360,45 @@ struck bar does not ring long enough to hold a steady pitch. Its
 detectability measurement (a synthesized inharmonic bar tone through
 `yin()`) that justified shipping it `status: 'ready'` rather than `'planned'`.
 
+Ready beginner brass (`trumpet-bb`, `horn-f`, `trombone`) each get their own
+MODS entry instead of reusing the generic `MODS.wind` trainer: `MODS.wind`'s
+transposition comes from the learner's saved `prefs.wind`, which is right for
+a single "choose your instrument" trainer but wrong for a dedicated
+trumpet/horn/trombone mod, where the written notes must always read in that
+instrument's own key. Each entry carries a fixed `windKind` (`'bb'`, `'f'`,
+`'bc'`) that `info()`'s `'w'`-id branch in `src/app.js` prefers over
+`prefs.wind` when present, so switching a learner's Wind-and-brass preference
+never bends a dedicated brass mod's own transposition. `MODS.trombone`'s
+curriculum items sit at written-pitch-plus-19 (`WIND_KINDS.bc`'s bass-clef
+register shift for the shared `'w'` item-id space — a display convention, not
+a pitch transposition; `trombone.js`'s own `transposition` stays `0`).
+Drawing is shared, not duplicated: `drawStaff()` now dispatches off a generic
+`M.staff` flag (set on `MODS.wind` and all three brass entries) instead of
+`mod === 'wind'` by name, and `src/ui/songs/mastery.js` gets three matching
+`itemIdForMidi()` cases — each folding into the record's own written range,
+never reading `prefs.wind` — so a captured or sung melody credits the right
+brass item too.
+
+Flute, clarinet (B flat), oboe, alto sax (E flat) and tenor sax (B flat)
+(`src/instruments/flute.js`/`clarinet-bb.js`/`oboe.js`/`sax-alto-eb.js`/
+`sax-tenor-bb.js`) ship `status: 'ready'`, following the same pattern as the
+brass trio above: each gets its own `MODS` entry with a fixed `windKind`
+(`'c'`, `'bb'`, `'c'`, `'eb'`, `'bbt'`) so its written notes never bend to
+the learner's generic Wind-and-brass preference, `staff: true` for the
+shared hand-built staff, and a `src/ui/songs/mastery.js` `itemIdForMidi()`
+case folding into the record's own written range. Fingering data lives in
+`src/instruments/how/keyed-woodwind.js`: typed lookup tables (same shape as
+`recorder-whistle.js`), one per instrument, since a keyed Boehm-system
+woodwind's fingering does not fall out of a formula the way brass valve/
+slide arithmetic does. `howKindFor()`/`computeHow()`
+(`src/ui/fingerings/how.js`) wire all five into the fingerings panel under a
+new `'keyed-woodwind'` kind. **Every fingering in that file is a good-faith
+beginner fingering written from general knowledge, not yet checked against
+a real chart or player** — see that file's top comment for exactly which
+notes (every sharp/flat, and the oboe's top three half-hole notes) most need
+a musician's check. Alto and tenor sax both start their written range at
+Bb3 (midi 58), the horn's actual lowest written note — a saxophone has
+nothing written below it, and `SAX_NOTES` has no entries for 55-57.
 Oboe (`src/instruments/oboe.js`) ships `status: 'planned'`: it is already
 nameable through the existing generic wind mod's concert-pitch group
 (`WIND_KINDS.c` in `src/app.js` already lists "flute, oboe, violin"), so it
@@ -322,6 +406,24 @@ needs no new MODS entry, but it has no curriculum yet and no fingering
 data — this repo's `src/instruments/how/` fingering-chart helpers only cover
 open/closed-hole instruments (recorder, tin whistle) and valve/slide brass,
 neither of which fits a keyed woodwind like oboe.
+
+Descant recorder (`src/instruments/recorder-descant.js`) and tin whistle
+(`src/instruments/tin-whistle.js`) ship `status: 'ready'` with their own
+`MODS['recorder-descant']`/`MODS['tin-whistle']` entries (`src/app.js`), input
+`'sustain'` like `MODS.wind`/`MODS.harp` above — a blown note is held, not
+struck. Both records are written an octave below what they sound (the same
+octave-only notation gap `writtenOctaveUp` documents for guitar/bass, just in
+the other direction): a descant recorder's lowest written note is middle C
+but it actually sounds C5, and a D tin whistle's lowest written note sounds
+D5, so each record's `transposition` is `+12` and its `range` is the SOUNDING
+pitch the microphone actually hears, not the printed page. Their MODS entries
+carry `staff: true` and `writtenOffset: -12` for the notation drawing pass to
+pick up once it honours those fields; until then the fields are inert. Each
+curriculum introduces notes in beginner method-book order — recorder: B, A, G
+first, then the high C and D above them, then the low E, D and C below G,
+then the forked-fingering F; whistle: the D-major scale, first octave, D E
+F# G A B C# D — rather than chromatic or alphabetical order.
+
 ## Rhythm vocabulary
 
 `src/core/rhythm.js` is a pure rhythm-notation module: cells (quarter, eighth pairs, rests, ties,
