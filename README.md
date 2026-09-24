@@ -217,6 +217,19 @@ pointer back to this panel, so a learner who lands on any of the older doors fir
 the simpler one is. Retiring the older Record a tune / Play Along / Songs file-picker panels this
 one is meant to replace is later work.
 
+## Capture a melody
+
+The "Capture a melody" tool (`TOOLS.capture` in `src/app.js`) is a simpler cousin of "Learn this" and
+"Record a tune": press Connect, then Listen, and play, sing, hum or whistle a tune, or hold the
+microphone up to a recording of one instrument playing one note at a time. Like the rest of this
+app's pitch tracking it is monophonic and hears one note at a time — it cannot pull a separate part
+out of a full band recording. Unlike "Learn this" and "Record a tune", it does **not** write down
+timing: "Make it a lesson" (`capUse`) keeps only the pitch of each note it heard, in order, and
+drops how long each note was held and how far apart they came — so what gets saved is a melody's
+note order, not its rhythm. That note list (capped at 300 notes) becomes the "Practise my captured
+melody" custom drill on whichever instrument you pick, four notes at a time, the same repeat-until-
+clean chunking a built-in curriculum level uses.
+
 ## Songs
 
 The Songs panel (`src/ui/songs.js`) turns a whole tune — built in, or imported from a `.mid`,
@@ -359,6 +372,49 @@ live, it is disconnected and discarded, `listen()` picks up on its next tick, an
 recorded through `recordError()` (visible via the debug hook's `errors()`) rather than silently
 dropped.
 
+## Beginner pathway status
+
+One row per instrument module in `src/instruments/*.js` (every record with a `status` field),
+generated from the same source the app reads: `status`, whether it has a non-empty `curriculum`,
+which `src/instruments/how/*.js` chart (if any) `howKindFor()`/`computeHow()`
+(`src/ui/fingerings/how.js`) picks for it, and whether that chart is a typed lookup table a
+musician has not yet checked (`src/instruments/how/keyed-woodwind.js` and
+`src/instruments/how/recorder-whistle.js`'s own "NEEDS A MUSICIAN'S CHECK" headers) or a formula
+computed at runtime (fretboard, fingerboard, brass, harmonica — no per-note table to get wrong).
+"None" means the instrument has no fingering/how panel at all (keyboard, voice, the generic
+wind-and-brass picker, and mallet percussion): a learner still gets a curriculum and mic-matched
+pitch detection, just no diagram.
+
+| Instrument | Status | Curriculum | Fingering/how chart | Chart reviewed |
+| --- | --- | --- | --- | --- |
+| Keyboard | ready | yes | none | n/a |
+| Guitar | ready | yes | fretboard (computed) | yes (formula, not a typed table) |
+| Bass | ready | yes | fretboard (computed) | yes (formula, not a typed table) |
+| Ukulele | ready | yes | fretboard (computed) | yes (formula, not a typed table) |
+| Voice | ready | yes | none (sing the pitch) | n/a |
+| Wind and brass (choose your instrument) | ready | yes | none | n/a |
+| Harmonica | ready | yes | harmonica (computed) | yes (formula, not a typed table) |
+| Violin | ready | yes | fingerboard (computed) | yes (formula, not a typed table) |
+| Viola | ready | yes | fingerboard (computed) | yes (formula, not a typed table) |
+| Cello | ready | yes | fingerboard (computed) | yes (formula, not a typed table) |
+| Double bass | ready | yes | fingerboard (computed) | yes (formula, not a typed table) |
+| Mandolin | ready | yes | fretboard (computed) | yes (formula, not a typed table) |
+| 5-string banjo | ready | yes | fretboard (computed) | yes (formula, not a typed table) |
+| Baritone ukulele | ready | yes | fretboard (computed) | yes (formula, not a typed table) |
+| Low-G ukulele | ready | yes | fretboard (computed) | yes (formula, not a typed table) |
+| 5-string bass | ready | yes | fretboard (computed) | yes (formula, not a typed table) |
+| Trumpet (B flat) | ready | yes | brass valves (computed) | yes (formula, not a typed table) |
+| Clarinet (B flat) | ready | yes | keyed-woodwind chart | no -- unchecked |
+| Alto sax (E flat) | ready | yes | keyed-woodwind chart | no -- unchecked |
+| Tenor sax (B flat) | ready | yes | keyed-woodwind chart | no -- unchecked |
+| Flute | ready | yes | keyed-woodwind chart | no -- unchecked |
+| French horn (F) | ready | yes | brass valves (computed) | yes (formula, not a typed table) |
+| Trombone | ready | yes | brass slide (computed) | yes (formula, not a typed table) |
+| Descant recorder | ready | yes | recorder chart | no -- unchecked |
+| Tin whistle (D) | ready | yes | whistle chart | no -- unchecked |
+| Oboe | ready | yes | keyed-woodwind chart | no -- unchecked |
+| Mallet percussion (bells) | ready | yes | none | n/a |
+
 ## Capo, alternate tunings and a left-handed view
 
 The "How to play it" panel's fretted-instrument diagrams (guitar, bass, ukulele, mandolin,
@@ -499,13 +555,14 @@ notes (every sharp/flat, and the oboe's top three half-hole notes) most need
 a musician's check. Alto and tenor sax both start their written range at
 Bb3 (midi 58), the horn's actual lowest written note — a saxophone has
 nothing written below it, and `SAX_NOTES` has no entries for 55-57.
-Oboe (`src/instruments/oboe.js`) ships `status: 'planned'`: it is already
-nameable through the existing generic wind mod's concert-pitch group
-(`WIND_KINDS.c` in `src/app.js` already lists "flute, oboe, violin"), so it
-needs no new MODS entry, but it has no curriculum yet and no fingering
-data — this repo's `src/instruments/how/` fingering-chart helpers only cover
-open/closed-hole instruments (recorder, tin whistle) and valve/slide brass,
-neither of which fits a keyed woodwind like oboe.
+Oboe (`src/instruments/oboe.js`) is one of the five above and ships
+`status: 'ready'`, not planned: it has the same seven-level curriculum shape
+as the other four, and its fingering chart is `OBOE_NOTES` in the same
+`src/instruments/how/keyed-woodwind.js` table, covering its full D4-D5
+beginner range. The same not-yet-checked caveat applies, and the oboe's top
+three notes (C5, C#5, D5) are the ones the file's own top comment names as
+most likely to need a musician's correction, since they cross the
+octave-key break and use the half-hole technique.
 
 Descant recorder (`src/instruments/recorder-descant.js`) and tin whistle
 (`src/instruments/tin-whistle.js`) ship `status: 'ready'` with their own
