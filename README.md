@@ -18,6 +18,11 @@ That is the whole app — one page, nothing to install, no account, and it keeps
 network off. Open it in Chrome or Edge. Microphone instruments ask for permission the first time;
 a MIDI keyboard is optional. To put it away, delete the file.
 
+A **Practice / Songs / Progress** bar sits at the top of the page at all times. Practice is the
+instrument trainer this page opens on; Songs takes you straight to your saved and imported tunes;
+Progress takes you straight to your practice history. Pressing whichever one you're already on
+does nothing, so it's always safe to press.
+
 A downloaded file cannot update itself — that's a browser security boundary, not a missing
 feature — so the "More options" menu in the side rail carries a "Check for updates" button
 instead. Press it and it asks the
