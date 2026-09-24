@@ -2344,11 +2344,41 @@ import { register as registerPlayalong } from './ui/playalong.js';
     document.querySelectorAll('#panelPicker button, #picker button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.panel === id)));
     $('mainArea').hidden = true; $('panelHost').hidden = false; $('panelSay').textContent = ''; $('panelSay').hidden = false;
     try { panels.open(id, $('panelHost'), panelApi); } catch (e) { recordError('panel:' + id, e); say('That screen could not open.', 'no'); }
+    updateNavState();
   }
   function closePanel() {
-    if (!panels.current()) return;
+    if (!panels.current()) { updateNavState(); return; }
     panels.close(); $('panelHost').hidden = true; $('panelSay').hidden = true; $('mainArea').hidden = false;
     document.querySelectorAll('#panelPicker button').forEach(b => b.setAttribute('aria-pressed', 'false'));
+    updateNavState();
+  }
+  // P2a: maps the currently open panel (if any) onto one of the nav's three
+  // destinations -- 'songs' and 'history' are the only panels with a nav
+  // button of their own; any other open panel (theory, ear, editor, a panel
+  // reached only through the old picker) means no destination is "current",
+  // same as a screen the nav doesn't know about.
+  function navDestFor(panelId) { return panelId === 'songs' ? 'songs' : panelId === 'history' ? 'progress' : panelId ? null : 'practice'; }
+  function updateNavState() {
+    const dest = navDestFor(panels.current());
+    document.querySelectorAll('#mainNav button[data-route]').forEach(b => { if (b.dataset.route === dest) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
+  }
+  // routeTo() is the nav bar's only entry point: 'practice' closes whatever
+  // panel is open, 'songs'/'progress' open the panel that destination maps
+  // to. Re-pressing the destination already showing is a no-op guarded
+  // BEFORE calling openPanel -- openPanel() unconditionally ends a running
+  // session, so without this guard clicking Songs again while Songs is
+  // already open would silently end the learner's session for nothing.
+  const NAV_PANEL_FOR = { songs: 'songs', progress: 'history' };
+  function routeTo(dest) {
+    if (dest === navDestFor(panels.current())) return;
+    if (dest === 'practice') { closePanel(); return; }
+    const panelId = NAV_PANEL_FOR[dest]; if (!panelId) return;
+    openPanel(panelId);
+  }
+  function buildNav() {
+    $('mainNav').setAttribute('aria-label', t('nav.label'));
+    document.querySelectorAll('#mainNav button[data-route]').forEach(b => b.addEventListener('click', () => { b.blur(); routeTo(b.dataset.route); }));
+    updateNavState();
   }
   function buildPanelPicker() {
     // U6: the empty-state guard has to move OUT to the disclosure that now
@@ -2360,7 +2390,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
     panels.list().forEach(p => { const b = document.createElement('button'); b.type = 'button'; b.dataset.panel = p.id; b.style.setProperty('--c', p.color || '#93a0bd'); b.setAttribute('aria-pressed', 'false'); b.appendChild(document.createTextNode(p.name)); const sm = document.createElement('small'); sm.textContent = p.tag || ''; b.appendChild(sm); b.addEventListener('click', () => { b.blur(); openPanel(p.id); }); box.appendChild(b); });
   }
   applyStaticLabels(document);
-  loadDB(); if (!Array.isArray(DB.custom)) DB.custom = []; $('optNames').checked = DB.prefs.names; $('optTheme').value = DB.prefs.theme; applyTheme(DB.prefs.theme); $('optNoteSystem').value = DB.prefs.noteNaming.system; $('optAccidentals').value = DB.prefs.noteNaming.accidentals; buildPicker(); buildPanelPicker(); setMod(mod); requestAnimationFrame(frame);
+  loadDB(); if (!Array.isArray(DB.custom)) DB.custom = []; $('optNames').checked = DB.prefs.names; $('optTheme').value = DB.prefs.theme; applyTheme(DB.prefs.theme); $('optNoteSystem').value = DB.prefs.noteNaming.system; $('optAccidentals').value = DB.prefs.noteNaming.accidentals; buildPicker(); buildPanelPicker(); buildNav(); setMod(mod); requestAnimationFrame(frame);
   const hook = !__DEBUG_HOOK__ ? null : { state: () => S, db: () => DB, sess: () => sess, task: () => task, cur: cur, note: onNote, answer: answer, tap: onTap, bar: () => bar, playing: () => playing, setMod: setMod, testSource: testSource, heard: () => heard, yin: yin, cap: () => cap, tuner: () => tunerState, tunerLock: () => tunerLock, deaf: () => deafWindow.isDeaf(), deafUntil: () => deafWindow.until(), exportProgress: doExportProgress, importProgress: doImportProgress, audioNow: audioNow, modelNow: () => modelNow, plan: () => sessionPlan };
   // Debug-hook slots: replace ONLY your own line with
   //   if (__DEBUG_HOOK__) Object.assign(hook, { … });

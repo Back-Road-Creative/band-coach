@@ -30,6 +30,10 @@ export const en = {
   // left sitting in src/index.html so the page still reads correctly before
   // that startup call runs, or if JS never runs at all.
   'app.subtitle': 'One coach, many instruments. It teaches where things are, then the moves between them, picks every next exercise from your own results, and watches your energy so practice stays fresh.',
+  'nav.label': 'Main',
+  'nav.practice': 'Practice',
+  'nav.songs': 'Songs',
+  'nav.progress': 'Progress',
   'panel.more': 'More ways to practise',
   'setup.button': 'Set up input',
   'setup.connect': 'Connect',

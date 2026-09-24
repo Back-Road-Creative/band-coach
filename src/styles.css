@@ -65,6 +65,13 @@
   button.small { padding: 5px 10px; font-size: 13px; }
   a { color: var(--accent-ink); }
 
+  /* P2a: the one always-visible way to reach the three destinations
+     (Practice/Songs/Progress) -- never wraps, even at a 390px phone width,
+     so it stays a single reachable row instead of stacking. */
+  .main-nav { display: flex; flex-wrap: nowrap; gap: 8px; }
+  .main-nav button { flex: 1 1 0; text-align: center; }
+  .main-nav button[aria-current="page"] { background: var(--text); color: var(--ground); border-color: var(--text); }
+
   .picker { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-start; }
   .picker button { border-left: 4px solid var(--c, var(--line)); }
   .picker button[aria-pressed="true"] { background: var(--text); color: var(--ground); border-color: var(--text); border-left-color: var(--c); }
