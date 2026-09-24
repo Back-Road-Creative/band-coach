@@ -226,6 +226,31 @@ browser profile — nothing in the app code needed to change for this.
 6. In Partner Center, upload that `.appx` under **Packages** on your submission. The Store
    re-signs it — no local signing step, no certificate to buy.
 
+## Installing the submission package on your own Windows machine
+
+`scripts/install-local.ps1` installs the exact `.appx` the `store-package` run uploaded (the
+`band-coach-appx` artifact) so you can try what a Partner Center reviewer installs: the Start-menu
+tile, the packaged shell, its microphone and MIDI prompts, and progress kept under the package's own
+app-data folder. Windows refuses an unsigned package and the Store only signs on ingest, so the
+script does what `run-wack.ps1` does on the CI runner: it signs a **copy** with a throwaway
+self-signed certificate whose subject is the Publisher read out of the package's own manifest,
+trusts that certificate on this machine only, and installs the copy. The original file is never
+touched — upload that one, not the signed copy.
+
+Needs: an **elevated** PowerShell (the certificate goes into `LocalMachine\TrustedPeople`), the
+Windows SDK's `signtool.exe`, and **Developer Mode** or sideloading enabled (Settings → System →
+For developers).
+
+```
+pwsh -File <repo>\store\scripts\install-local.ps1 -Appx <path>\band-coach.appx
+pwsh -File <repo>\store\scripts\install-local.ps1 -Appx <path>\band-coach.appx -Uninstall
+```
+
+An installed copy from an earlier run is replaced. `-Uninstall` removes the package by the name in
+that manifest. `tests/unit/store-install-local.test.mjs` pins the script's contract (manifest-derived
+publisher, copy-only signing, the same certificate shape as `run-wack.ps1`) — the script itself
+runs only on Windows and is not exercised in CI.
+
 ## Trying the shell on Windows without packaging it
 
 `scripts/try-shell.ps1` runs this shell **unpackaged** on a real Windows machine. It is the cheapest
