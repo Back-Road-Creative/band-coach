@@ -27,12 +27,12 @@ test('fresh profile: feedback, stats and weak-list cards are not shown before St
   assert.equal(await page.evaluate("document.getElementById('backupNudge').hidden"), true);
 });
 
-test('the three help paragraphs collapse behind one disclosure', async (t) => {
+test('the two help paragraphs collapse behind one disclosure', async (t) => {
   const page = await launchPage(htmlPath);
   t.after(() => page.close());
 
   const helpParas = await page.evaluate("document.querySelectorAll('.help p').length");
-  assert.equal(helpParas, 3);
+  assert.equal(helpParas, 2); // was 3 until the Kit Coach paragraph (a page that never existed) was removed
   assert.equal(await page.evaluate("document.querySelector('.help').tagName"), 'DETAILS');
   assert.equal(await page.evaluate("document.querySelector('.help').open"), false);
   assert.ok(await page.evaluate("Boolean(document.querySelector('.help summary'))"));

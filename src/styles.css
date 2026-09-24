@@ -1,5 +1,5 @@
-  /* Dark stage (same as Kit Coach) is the committed default, kept whenever
-     the system prefers dark or no light rule below fires. */
+  /* Dark stage is the committed default, kept whenever the system prefers
+     dark or no light rule below fires. */
   :root {
     --ground: #0a0d14; --panel: #121726; --panel-2: #1a2033; --line: #2a3350;
     --text: #e9edf6; --muted: #93a0bd; --accent: #2f93ee; --accent-ink: #2f93ee; --good: #5be08a; --warn: #f3c52f; --bad: #ff6b5e;
