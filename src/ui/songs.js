@@ -518,14 +518,35 @@ function mountSongsPanel(hostEl, api) {
   const exportSection = el('section', { 'aria-label': 'Export a challenge' }, [
     exportTitleLabel, exportTitleInput, exportBtn, exportMsg, shareBtn, shareMsg,
   ]);
+  // P3-8: challengeSection and exportSection (both teacher/band-facing, not
+  // "practise this song" actions) now sit under one "Assignments" heading,
+  // moved out from between the song list and the practise section so a
+  // learner opening a song sees their own one-row action set (songHeader,
+  // below) first. challengeSection/exportSection themselves keep every id,
+  // class and button text unchanged -- the characterization tests that
+  // already proved them (songs-challenge.test.mjs, songs-band-pack.test.mjs)
+  // still select the SAME elements, just nested one level deeper.
+  const assignmentsSection = el('section', { class: 'panel-songs-assignments' }, [
+    el('h3', { text: 'Assignments' }),
+    challengeSection,
+    exportSection,
+  ]);
+
+  // P3-8: one row of plain actions (Edit notes, Play along, Export, Share,
+  // Save a copy) for the song currently open, filled by songHeader() below.
+  // Lives OUTSIDE practiceSection (renderPractice()/openSong() both wipe
+  // practiceSection.innerHTML on every render/song switch -- see those
+  // functions' own comments -- so a header living inside it would be wiped
+  // right along with the step it was just rendered for).
+  const songHeaderSection = el('section', { class: 'panel-songs-song-actions', hidden: 'hidden' });
 
   const practiceSection = el('section', { class: 'panel-songs-practice', hidden: 'hidden' });
 
   hostEl.appendChild(heading);
   hostEl.appendChild(intro);
   hostEl.appendChild(listSection);
-  hostEl.appendChild(challengeSection);
-  hostEl.appendChild(exportSection);
+  hostEl.appendChild(assignmentsSection);
+  hostEl.appendChild(songHeaderSection);
   hostEl.appendChild(practiceSection);
 
   function say(text, kind) {
@@ -556,7 +577,7 @@ function mountSongsPanel(hostEl, api) {
       onclick: async () => {
         const song = libraryId ? await library.get(libraryId) : songOrMeta;
         if (!song) { say('That song could not be found any more.', 'no'); return; }
-        openSong(song);
+        openSong(song, libraryId);
       },
     });
     li.appendChild(btn);
@@ -570,17 +591,21 @@ function mountSongsPanel(hostEl, api) {
       const label = statusLabel(statusFor(songStatusLedger(), libraryId));
       if (label) li.appendChild(el('span', { class: 'panel-songs-status', text: label }));
     }
-    li.appendChild(songExportControls(songOrMeta, libraryId));
+    // P3-8: no more per-row Save-as/export controls here -- MIDI/MusicXML/
+    // ABC now live inside the open song's own Export action (songHeader,
+    // songExportControls() below is reused there instead).
     return li;
   }
 
-  // "Save as…" (plan-adjacent to D6's challenge export): one small button
-  // per exporter (src/song/export-midi.js, export-musicxml.js, export-abc.js
-  // -- all pure functions, a Song object in, file bytes/text out) next to
-  // every song row, starter tunes included. `songOrMeta`/`libraryId` follow
-  // the same pattern songRow()'s own onclick uses to get a full Song: a
-  // starter tune already IS one, a library row needs library.get() first
-  // since the list only holds lightweight metadata (title/id/etc, no notes).
+  // "Save as…": one small button per exporter (src/song/export-midi.js,
+  // export-musicxml.js, export-abc.js -- all pure functions, a Song object
+  // in, file bytes/text out), rendered into the open song's action row on
+  // Export press (P3-8 -- was a per-row control until then, see songRow()'s
+  // own comment above). `songOrMeta`/`libraryId` follow the same pattern
+  // openSong()'s own callers use to get a full Song: a starter tune already
+  // IS one, a library row needs library.get() first since the list only
+  // holds lightweight metadata (title/id/etc, no notes) -- but by the time
+  // this runs, openSong() has already resolved a full Song either way.
   const EXPORT_FORMATS = [
     { label: 'MIDI', ext: 'mid', mime: 'audio/midi', build: exportMidi },
     { label: 'MusicXML', ext: 'musicxml', mime: 'application/vnd.recordare.musicxml+xml', build: exportMusicXml },
@@ -637,7 +662,11 @@ function mountSongsPanel(hostEl, api) {
     challenge.songs.forEach((song) => {
       const passed = !!progress[song.id];
       const li = el('li', {}, [
-        el('button', { type: 'button', text: song.title + (passed ? ' (passed)' : ''), onclick: () => openSong(song) }),
+        // A challenge song's id is already the id it was stored under in the
+        // library (D2's withStoredIds reconciliation ran before this list
+        // was built), so it is a real libraryId, not null -- the header's
+        // Edit notes/Save a copy/Share all need a real id to act on.
+        el('button', { type: 'button', text: song.title + (passed ? ' (passed)' : ''), onclick: () => openSong(song, song.id) }),
       ]);
       ul.appendChild(li);
     });
@@ -682,6 +711,17 @@ function mountSongsPanel(hostEl, api) {
     exportMsg.textContent = 'Exported "' + title + '" with ' + songs.length + ' song' + (songs.length === 1 ? '' : 's') + '.';
   }
 
+  // Builds a .bandpack out of `songs` (writeBandPack, src/song/band-pack.js)
+  // and triggers its download under `fileName` -- the one piece shareBandPack()
+  // (the whole library) and the per-song Share action in songHeader() (P3-8)
+  // both need, pulled out here so the two download calls cannot drift apart.
+  // Throws on a build failure; each caller phrases its own message for that,
+  // since "your whole library" and "this one song" read differently.
+  function downloadBandPackOf(name, songs, fileName) {
+    const bytes = writeBandPack({ name, songs });
+    triggerDownload([bytes], 'application/zip', fileName);
+  }
+
   // "Share with your band": same source list as exportChallenge() above
   // (the learner's own saved library, not the built-in starter tunes), built
   // into a .bandpack instead of a .challenge.json, via src/song/band-pack.js
@@ -695,14 +735,12 @@ function mountSongsPanel(hostEl, api) {
       shareMsg.textContent = 'Add some songs to your library first, then share them with your band.';
       return;
     }
-    let bytes;
     try {
-      bytes = writeBandPack({ name: 'Band pack', songs });
+      downloadBandPackOf('Band pack', songs, 'band-pack.bandpack');
     } catch (e) {
       shareMsg.textContent = 'That band pack could not be built: ' + (e && e.message ? e.message : String(e));
       return;
     }
-    triggerDownload([bytes], 'application/zip', 'band-pack.bandpack');
     shareMsg.textContent = 'Shared ' + songs.length + ' song' + (songs.length === 1 ? '' : 's') + ' as band-pack.bandpack.';
   }
 
@@ -721,7 +759,119 @@ function mountSongsPanel(hostEl, api) {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
-  function openSong(song) {
+  // Decoded audio held only for whichever song this panel most recently
+  // saved from a mic take or an opened audio file (onMicTake/handleFile
+  // below) -- keyed by the stored library id so songHeader()'s Play along
+  // only hands it off when the song ACTUALLY open is the one it belongs to.
+  // Never a full per-song cache: the same "audio is far too big for a store,
+  // in-memory only, one click-through's worth of lifetime" rule
+  // requestPlayalongRecording() (src/ui/playalong.js) already follows.
+  let lastAudioRecSongId = null;
+  let lastAudioRec = null;
+
+  // Save-a-copy (P3-8): library.add() with the SAME id the song already
+  // carries -- normalizeSong (src/song/model.js) requires a non-empty
+  // string id, so `id: undefined` throws rather than getting a fresh one
+  // assigned. library.add() already collision-renames (song-2, song-3, ...)
+  // when that id is already stored, which is exactly the case for a copy of
+  // a library song; a starter tune's id has never been stored in the
+  // library at all, so its copy simply lands under that same id, no
+  // collision. Returns the copy's stored id; refreshList() runs before
+  // returning so the new row is visible the moment the caller reports back.
+  async function saveCopyOf(song) {
+    const copyId = await library.add({ ...song, title: song.title + ' (copy)' }, { now: Date.now() });
+    await refreshList();
+    return copyId;
+  }
+
+  // songHeader(song, libraryId): the one row of plain actions above a song's
+  // own practise section (P3-8) -- Edit notes, Play along, Export, Share,
+  // Save a copy, in that order. `libraryId` is null for a starter tune (not
+  // yet saved anywhere a learner owns) and the library's own id otherwise;
+  // called fresh every time a song is opened, so songHeaderSection.innerHTML
+  // reset below also clears any Export toggle left open from a previous song.
+  function songHeader(song, libraryId) {
+    songHeaderSection.hidden = false;
+    songHeaderSection.innerHTML = '';
+
+    // "Edit notes": a library song goes straight to the editor; a starter
+    // tune has no id of its own to edit in place, so it is saved as a copy
+    // first (same helper "Save a copy" uses) and THAT copy is opened --
+    // editing must never mutate the shipped starter tune itself.
+    const editBtn = el('button', {
+      type: 'button', class: 'panel-songs-action-edit', text: 'Edit notes',
+      onclick: async () => {
+        let targetId = libraryId;
+        if (!targetId) {
+          targetId = await saveCopyOf(song);
+          say('Saved a copy to edit.');
+        }
+        addSongHandoffs.openEditorPanel(targetId, []);
+      },
+    });
+
+    // "Play along": hands the SAME decoded recording Play Along would need
+    // off to it directly when one is still held in memory for THIS song
+    // (see lastAudioRec/lastAudioRecSongId above); otherwise
+    // openPlayalongPanel(null) still switches to Play Along, which reads no
+    // pending recording as its normal empty state (playalong.js's own
+    // `if (!pendingRecording) return`) -- so this never needs a separate
+    // api.openPanel() branch to reach the same place.
+    const playAlongBtn = el('button', {
+      type: 'button', class: 'panel-songs-action-playalong', text: 'Play along',
+      onclick: () => {
+        const rec = libraryId && libraryId === lastAudioRecSongId ? lastAudioRec : null;
+        const opened = addSongHandoffs.openPlayalongPanel(rec);
+        if (!opened) say('Open Play Along to use this recording.');
+      },
+    });
+
+    // "Export": toggles the SAME MIDI/MusicXML/ABC controls songExportControls()
+    // has always built (songRow() used to render them into every row up
+    // front; now they exist only between one Export press and the next).
+    let headerExportEl = null;
+    const exportBtn = el('button', {
+      type: 'button', class: 'panel-songs-action-export', text: 'Export',
+      onclick: () => {
+        if (headerExportEl) { headerExportEl.remove(); headerExportEl = null; return; }
+        headerExportEl = songExportControls(song, libraryId);
+        songHeaderSection.appendChild(headerExportEl);
+      },
+    });
+
+    // "Share": a one-song .bandpack, via the same downloadBandPackOf()
+    // shareBandPack() (the whole library) uses -- see that helper's comment.
+    const shareBtn = el('button', {
+      type: 'button', class: 'panel-songs-action-share', text: 'Share',
+      onclick: () => {
+        const fileBase = (song.title || 'song').replace(/[^\w.-]+/g, '_') || 'song';
+        try {
+          downloadBandPackOf(song.title, [song], fileBase + '.bandpack');
+        } catch (e) {
+          say('That song could not be shared: ' + (e && e.message ? e.message : String(e)), 'no');
+          return;
+        }
+        say('Shared "' + song.title + '" as ' + fileBase + '.bandpack.', 'ok');
+      },
+    });
+
+    // "Save a copy": library.add() under a new title, see saveCopyOf() above.
+    const saveCopyBtn = el('button', {
+      type: 'button', class: 'panel-songs-action-copy', text: 'Save a copy',
+      onclick: async () => {
+        await saveCopyOf(song);
+        say('Saved a copy: ' + song.title + ' (copy)');
+      },
+    });
+
+    songHeaderSection.appendChild(editBtn);
+    songHeaderSection.appendChild(playAlongBtn);
+    songHeaderSection.appendChild(exportBtn);
+    songHeaderSection.appendChild(shareBtn);
+    songHeaderSection.appendChild(saveCopyBtn);
+  }
+
+  function openSong(song, libraryId) {
     // A song already mid-recording (Stop and check never clicked) has its
     // mic/MIDI listener subscribed via `practice`, the module-level variable
     // every future note push reads live -- wiping practiceSection below
@@ -730,6 +880,7 @@ function mountSongsPanel(hostEl, api) {
     // no auto-start below) or a 0-note song (dead end) never calls
     // startPractice() again to clean it up on its own.
     stopRecording();
+    songHeader(song, libraryId || null);
     practiceSection.hidden = false;
     practiceSection.innerHTML = '';
     practiceSection.appendChild(el('h3', { text: song.title }));
@@ -1288,7 +1439,13 @@ function mountSongsPanel(hostEl, api) {
     // in memory for this review screen -- Play original and Play along with
     // this recording -- never saved with the song (the ledger's
     // originalAudioKept stays false above: Songs still cannot keep the
-    // original audio, only the notes).
+    // original audio, only the notes). P3-8: also remembered here, keyed by
+    // storedId, so the song header's own Play along action can hand off the
+    // SAME decoded audio if this exact song is reopened before it is lost
+    // (a panel remount, or the app closing, both drop it -- see
+    // lastAudioRecSongId's own comment above).
+    lastAudioRecSongId = storedId;
+    lastAudioRec = rec || null;
     renderAddReview({ ...song, id: storedId }, warnings || [], rec || null);
     await refreshList();
   }
@@ -1365,6 +1522,9 @@ function mountSongsPanel(hostEl, api) {
       if (destroyed || door.generation() !== gen) return;
       say('');
       setSongStatus(markDraft, storedId, { needsCheck: warnings.length, source: 'file', originalAudioKept: false });
+      // P3-8: remembered the same way onMicTake() does, above.
+      lastAudioRecSongId = storedId;
+      lastAudioRec = rec || null;
       renderAddReview({ ...song, id: storedId }, warnings, rec);
       await refreshList();
       return;
@@ -1493,6 +1653,11 @@ function mountSongsPanel(hostEl, api) {
     if (!song || !song.parts.length) return;
     const partId = req.partId || song.parts[0].id;
     const instrument = req.instrumentId ? READY_INSTRUMENTS.find((i) => i.id === req.instrumentId) : undefined;
+    // Goes straight to startPractice(), skipping openSong()'s own part-list
+    // branch (a hand-off from Learn this/the editor always names a real
+    // part) -- but a song opened this way still needs its own action row
+    // (P3-8), same as any other way into a lesson.
+    songHeader(song, req.songId);
     startPractice(song, partId, instrument);
   }
 
