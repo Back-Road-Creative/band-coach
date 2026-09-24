@@ -371,18 +371,15 @@ function mountLearnPanel(hostEl, api) {
   // its own mounted instance (see src/ui/panels.js), never a reference to
   // the shared panels registry app.js owns, so it cannot call panels.open()
   // itself. The one real, already-shipping way any panel switches to
-  // another is the app's own panel-picker button (src/app.js's
-  // buildPanelPicker()/openPanel(), one <button data-panel="…"> per
-  // registered panel) -- clicking it here is the same click a learner would
-  // make by hand, not a shortcut around it. requestOpenSong() (src/ui/
-  // songs.js) is read by Songs's own show() the moment it opens. Where no
-  // such button exists (a page that never wired panel switching in), this
-  // still SAVES the song and tells the learner in plain words where to go,
-  // rather than silently doing nothing.
+  // another is src/app.js's panelApi.openPanel(id) (P2b-3 -- panels no
+  // longer all have a button of their own to click, e.g. Songs itself now
+  // lives only on the nav bar). requestOpenSong() (src/ui/songs.js) is read
+  // by Songs's own show() the moment it opens. Where api carries no
+  // openPanel (a page that never wired panel switching in), this still
+  // SAVES the song and tells the learner in plain words where to go, rather
+  // than silently doing nothing.
   function clickPanelButton(panelId) {
-    const doc = hostEl.ownerDocument || document;
-    const btn = doc.querySelector('#panelPicker button[data-panel="' + panelId + '"]') || doc.querySelector('button[data-panel="' + panelId + '"]');
-    if (btn) { btn.click(); return true; }
+    if (api && typeof api.openPanel === 'function') { api.openPanel(panelId); return true; }
     return false;
   }
 

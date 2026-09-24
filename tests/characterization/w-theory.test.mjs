@@ -1,7 +1,9 @@
 // The Music theory panel: a graded lesson track, an Explore tab (keys,
 // scales, chords) and a Transpose tab. Drives it entirely through the DOM
-// via window.__coach.openPanel('theory'), the same contract every other
-// feature panel uses (see tests/characterization/panels.test.mjs).
+// by clicking the real Music theory button in the instrument sheet's Tools
+// group (P2b-3's home for it), the same click path a learner uses -- not
+// window.__coach.openPanel('theory') directly (see
+// tests/characterization/panels.test.mjs for that contract).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { HTML_PATH } from '../helpers/html-path.mjs';
@@ -11,7 +13,7 @@ test('theory panel registers and opens with a Lesson tab active by default', asy
   const page = await launchPage(HTML_PATH);
   t.after(() => page.close());
   assert.equal(await page.evaluate("window.__coach.panels().includes('theory')"), true);
-  await page.evaluate("document.querySelector('#panelPicker button[data-panel=\"theory\"]').click()");
+  await page.evaluate("document.querySelector('#picker .picker-tools button[data-panel=\"theory\"]').click()");
   assert.equal(await page.evaluate('window.__coach.panelOpen()'), 'theory');
   assert.equal(await page.evaluate("!!document.querySelector('.panel-theory')"), true);
   assert.equal(
@@ -24,7 +26,7 @@ test('theory panel registers and opens with a Lesson tab active by default', asy
 test('answering a lesson question shows an explanation and a Next button, and keeps progress across a reload', async (t) => {
   const page = await launchPage(HTML_PATH);
   t.after(() => page.close());
-  await page.evaluate("document.querySelector('#panelPicker button[data-panel=\"theory\"]').click()");
+  await page.evaluate("document.querySelector('#picker .picker-tools button[data-panel=\"theory\"]').click()");
   await page.waitFor("document.querySelectorAll('.panel-theory-choice').length > 0");
   const choiceCount = await page.evaluate("document.querySelectorAll('.panel-theory-choice').length");
   assert.ok(choiceCount >= 2);
@@ -47,7 +49,7 @@ test('answering a lesson question shows an explanation and a Next button, and ke
 test('three correct lesson answers in a row level up', async (t) => {
   const page = await launchPage(HTML_PATH);
   t.after(() => page.close());
-  await page.evaluate("document.querySelector('#panelPicker button[data-panel=\"theory\"]').click()");
+  await page.evaluate("document.querySelector('#picker .picker-tools button[data-panel=\"theory\"]').click()");
   await page.waitFor("document.querySelectorAll('.panel-theory-choice').length > 0");
 
   for (let i = 0; i < 3; i++) {
@@ -68,7 +70,7 @@ test('three correct lesson answers in a row level up', async (t) => {
 test('Explore tab shows a key\'s spelled notes and draws a staff', async (t) => {
   const page = await launchPage(HTML_PATH);
   t.after(() => page.close());
-  await page.evaluate("document.querySelector('#panelPicker button[data-panel=\"theory\"]').click()");
+  await page.evaluate("document.querySelector('#picker .picker-tools button[data-panel=\"theory\"]').click()");
   await page.evaluate("document.querySelector('.panel-theory [data-tab=\"explore\"]').click()");
   assert.equal(
     await page.evaluate("document.querySelector('.panel-theory [data-tab=\"explore\"]').getAttribute('aria-selected')"),
@@ -87,7 +89,7 @@ test('Explore tab on guitar shows fretboard positions for a scale', async (t) =>
   const page = await launchPage(HTML_PATH);
   t.after(() => page.close());
   await page.evaluate("document.querySelector('#picker button[data-mod=\"gtr\"]').click()");
-  await page.evaluate("document.querySelector('#panelPicker button[data-panel=\"theory\"]').click()");
+  await page.evaluate("document.querySelector('#picker .picker-tools button[data-panel=\"theory\"]').click()");
   await page.evaluate("document.querySelector('.panel-theory [data-tab=\"explore\"]').click()");
   await page.evaluate("document.getElementById('theoryExploreKind').value = 'key'; document.getElementById('theoryExploreKind').dispatchEvent(new Event('change'))");
   await page.evaluate("document.getElementById('theoryExploreKey').value = 'C'; document.getElementById('theoryExploreKey').dispatchEvent(new Event('change'))");
@@ -98,7 +100,7 @@ test('Explore tab on guitar shows fretboard positions for a scale', async (t) =>
 test('Explore tab on chords shows voicing shapes for guitar, bass and ukulele', async (t) => {
   const page = await launchPage(HTML_PATH);
   t.after(() => page.close());
-  await page.evaluate("document.querySelector('#panelPicker button[data-panel=\"theory\"]').click()");
+  await page.evaluate("document.querySelector('#picker .picker-tools button[data-panel=\"theory\"]').click()");
   await page.evaluate("document.querySelector('.panel-theory [data-tab=\"explore\"]').click()");
   await page.evaluate("document.getElementById('theoryExploreKind').value = 'chord'; document.getElementById('theoryExploreKind').dispatchEvent(new Event('change'))");
   const groups = await page.evaluate("Array.from(document.querySelectorAll('.panel-theory-voicing-group')).map(g => g.dataset.instrument)");
@@ -108,7 +110,7 @@ test('Explore tab on chords shows voicing shapes for guitar, bass and ukulele', 
 test('Transpose tab shows written and concert pitch for a transposing instrument', async (t) => {
   const page = await launchPage(HTML_PATH);
   t.after(() => page.close());
-  await page.evaluate("document.querySelector('#panelPicker button[data-panel=\"theory\"]').click()");
+  await page.evaluate("document.querySelector('#picker .picker-tools button[data-panel=\"theory\"]').click()");
   await page.evaluate("document.querySelector('.panel-theory [data-tab=\"transpose\"]').click()");
   await page.evaluate("document.getElementById('theoryTransposeKey').value = 'C'; document.getElementById('theoryTransposeKey').dispatchEvent(new Event('change'))");
   await page.evaluate("document.getElementById('theoryTransposeInstrument').value = 'trumpet-bb'; document.getElementById('theoryTransposeInstrument').dispatchEvent(new Event('change'))");
@@ -121,7 +123,7 @@ test('Transpose tab shows written and concert pitch for a transposing instrument
 test('theory panel has no console errors or network requests', async (t) => {
   const page = await launchPage(HTML_PATH);
   t.after(() => page.close());
-  await page.evaluate("document.querySelector('#panelPicker button[data-panel=\"theory\"]').click()");
+  await page.evaluate("document.querySelector('#picker .picker-tools button[data-panel=\"theory\"]').click()");
   await page.evaluate("document.querySelector('.panel-theory [data-tab=\"explore\"]').click()");
   await page.evaluate("document.querySelector('.panel-theory [data-tab=\"transpose\"]').click()");
   assert.deepEqual(page.consoleErrors, []);

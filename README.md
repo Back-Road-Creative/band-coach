@@ -282,6 +282,12 @@ repeat-until-clean chunking a built-in curriculum level uses.
 
 ## Songs
 
+The Songs panel's own "Add a song" row, right at the top, opens "Record a tune", "Learn this" and
+"Play Along" directly — every way of getting a song into the app lives in one plain, always-visible
+row, with no hidden disclosure to find first. Ear training, How to play it and Music theory get
+their own plain home the same way: a "Tools" group inside the instrument sheet, alongside
+Tuner/Capture a melody/Interval drill/Rhythm, open with no extra click once the sheet is open.
+
 The Songs panel (`src/ui/songs.js`) turns a whole tune — built in, or imported from a `.mid`,
 `.midi`, `.abc`, `.xml`, `.musicxml`, compressed `.mxl`, Guitar Pro `.gp`, or Guitar Pro 5 `.gp5` file — into a
 step-by-step practice lesson (`src/song/lesson.js`), tracking each learner's own pass/fail record

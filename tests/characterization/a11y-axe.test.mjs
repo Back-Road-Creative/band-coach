@@ -67,15 +67,26 @@ test('axe-core finds no WCAG 2/2.1 A/AA violations across the app\'s main states
     await page.evaluate("document.getElementById('endBtn').click()");
   });
 
-  // Each side panel: real entry points only -- expand the "More ways to
-  // practise" disclosure exactly as a learner would, then click the panel's
-  // own button (built by buildPanelPicker() in src/app.js, one real
+  // Each side panel: real entry points only, per its actual P2b-3 home --
+  // History from the nav bar, Songs from the nav bar, and the instrument
+  // sheet's Tools group for the two feature panels that live there
+  // (buildPanelToolButton() in src/app.js, one real
   // addEventListener('click', ...) per button, not a debug-hook call).
-  for (const panelId of ['history', 'fingerings', 'songs', 'theory']) {
+  for (const panelId of ['history', 'songs']) {
     await t.test(`${panelId} panel open`, async () => {
-      await page.evaluate("document.getElementById('panelPickerDisclosure').open = true");
+      const route = panelId === 'history' ? 'progress' : panelId;
+      await page.evaluate(`document.querySelector('#mainNav button[data-route="${route}"]').click()`);
+      await page.waitFor(`window.__coach.panelOpen() === ${JSON.stringify(panelId)}`);
+      await scan(page, `${panelId} panel open`);
+    });
+  }
+
+  for (const panelId of ['fingerings', 'theory']) {
+    await t.test(`${panelId} panel open`, async () => {
+      await page.evaluate("document.getElementById('navInstrument').click()");
+      await page.waitFor("document.getElementById('picker').hidden === false");
       await page.evaluate(
-        `document.querySelector('#panelPicker button[data-panel="${panelId}"]').click()`,
+        `document.querySelector('#picker .picker-tools button[data-panel="${panelId}"]').click()`,
       );
       await page.waitFor(`window.__coach.panelOpen() === ${JSON.stringify(panelId)}`);
       await scan(page, `${panelId} panel open`);

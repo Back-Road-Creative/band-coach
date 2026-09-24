@@ -86,32 +86,29 @@
      the real instruments above them -- smaller type, muted border, no
      colour dot -- and get their own row via flex-basis: 100% so they never
      interleave with the instrument buttons in the wrap. */
-  /* U6: the tools tier collapses behind its own <summary> disclosure --
-     shut by default, opened natively by click/keyboard, forced open by
-     setMod() whenever the selected mod lives inside it. */
+  /* P2b-3: a plain, always-visible group -- no <details>/<summary>, no
+     click-to-reveal. Once the instrument sheet itself is open, the tools
+     (Tuner/Capture a melody/Interval drill/Rhythm) and the three panel
+     tools (Ear training, How to play it, Music theory) are all visible with
+     no second disclosure to find. */
   .picker-tools { flex-basis: 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line); }
-  /* Sentence case, not the old uppercase TOOLS heading: the label is now a
-     full sentence naming four tools, and 60-odd uppercase characters across
-     the row reads louder than the buttons it replaced.
-     R10 P5: same 15px/600/--muted style as "More ways to practise" below --
-     two disclosure rows in the same picker area read as one family, not two
-     unrelated sizes. */
-  .picker-tools > summary { cursor: pointer; list-style: none; font: 600 15px var(--body); color: var(--muted); }
-  .picker-tools > summary::-webkit-details-marker { display: none; }
-  .picker-tools > summary::before { content: '\25b8  '; }
-  .picker-tools[open] > summary { color: var(--text); margin-bottom: 6px; }
-  .picker-tools[open] > summary::before { content: '\25be  '; }
+  /* Sentence case, not the old uppercase TOOLS heading: plain text naming
+     what the group is, not what is inside it -- the buttons themselves
+     already say that. */
+  .picker-tools-label { font: 600 15px var(--body); color: var(--muted); flex-basis: 100%; }
   .picker-tools button { border-left-color: var(--line); padding: 6px 10px; font-size: 13px; }
   .picker-tools button[aria-pressed="true"] { border-left-color: var(--c); }
   .picker-tools small { font-size: 11px; }
   /* U2: the two genuine variant families (Bass + 5-string bass, Ukulele +
      low-G + baritone) render as one flex item -- the parent button, always
      visible and independently selectable, plus a small <details> beside it
-     for the variant buttons, shut by default. Reuses .picker-tools' own
-     disclosure idiom (triangle marker, muted summary) rather than a third
-     look, but stays its own class since it sits INSIDE the top-level
-     instrument row rather than replacing it (flex-basis stays auto, not
-     100%, so it takes only as much row width as the parent button needs). */
+     for the variant buttons, shut by default (unlike .picker-tools, P2b-3
+     made that a plain always-visible group -- this disclosure stays because
+     a variant is a rarer, deliberate choice a learner opts into, not a
+     tool used every session). Its own class, not .picker-tools, since it
+     sits INSIDE the top-level instrument row rather than replacing it
+     (flex-basis stays auto, not 100%, so it takes only as much row width as
+     the parent button needs). */
   .picker-variant-group { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
   /* width 0 + min-width 100%: the shut disclosure takes the parent button's
      width instead of widening the item to its one-line list of names (Wind
@@ -133,26 +130,18 @@
   @media (max-width: 860px) { .main { grid-template-columns: minmax(0, 1fr); } }
 
   /* feature panels */
-  /* U6: the "more ways to practise" row (Songs, Record a tune, Ear
-     training, Music theory, My progress, How to play it, Play Along)
-     collapses behind one disclosure the same way .picker-tools does;
-     openPanel() forces it back open when one of its panels is selected. */
-  /* R10 P5/P9: "More tools" (.picker-tools, above) and "More ways to
-     practise" read as one disclosure-row family, 8px apart, not the ~25px
-     dead gap .wrap's own 16px between-groups gap plus this element's own
-     margin used to add -- the negative margin below cancels 8px of that
-     gap back out so the pair lands on the 8px inside-a-group step. */
-  .panel-picker-disclosure { margin-top: -8px; }
-  .panel-picker-disclosure > summary { cursor: pointer; list-style: none; font: 600 15px var(--body); color: var(--muted); }
-  .panel-picker-disclosure > summary::-webkit-details-marker { display: none; }
-  .panel-picker-disclosure > summary::before { content: '\25b8  '; }
-  .panel-picker-disclosure[open] > summary { color: var(--text); margin-bottom: 8px; }
-  .panel-picker-disclosure[open] > summary::before { content: '\25be  '; }
-  .panel-picker { margin-top: 8px; }
+  /* P2b-3: Songs, My progress, Learn this, Record a tune, Play Along, Ear
+     training, How to play it and Music theory each now have a plain home
+     (nav bar, the Songs panel's own Add-a-song row, or the instrument
+     sheet's Tools group) -- no picker-row disclosure left to style here. */
   .panel-host { margin-top: 18px; }
   /* */
   /* */
   /* slot:css:w-songs */
+  /* The Songs panel's first row (P2b-3): three plain buttons -- Record a
+     tune, Learn this, Play Along -- open a sibling panel via panelApi's
+     openPanel(), same visual weight as the rest of the panel's own buttons. */
+  .add-song-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
   .panel-songs-list { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
   .panel-songs-row button { width: 100%; text-align: left; }
   .panel-songs-export { display: flex; gap: 4px; margin-top: 2px; }
@@ -426,7 +415,7 @@
   .history-print-report { display: none; }
   @media print {
     body { background: #fff; color: #000; }
-    body:not(.printing-report) header, body:not(.printing-report) .picker, body:not(.printing-report) .panel-picker-disclosure,
+    body:not(.printing-report) header, body:not(.printing-report) .picker,
     body:not(.printing-report) .io, body:not(.printing-report) .setup-sheet, body:not(.printing-report) .midi-details,
     body:not(.printing-report) .panel-say, body:not(.printing-report) .side, body:not(.printing-report) .stage-tools,
     body:not(.printing-report) .choices, body:not(.printing-report) #tapPad, body:not(.printing-report) footer,

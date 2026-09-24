@@ -17,6 +17,10 @@
 // closing the DOM node alone would not release). Saved panel data
 // (DB.panels[<id>], via api.store) lives outside this lifecycle, so it
 // survives a close/reopen even though the mounted instance does not.
+//
+// `api` (src/app.js's panelApi) also carries openPanel(id): P2b-3, lets a
+// mounted panel open a sibling panel directly -- e.g. the Songs panel's
+// "Add a song" row opening Learn this/Record a tune/Play Along.
 
 export function createPanels() {
   const defs = [], mounted = new Map();

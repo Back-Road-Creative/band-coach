@@ -61,11 +61,26 @@ import { exportMidi } from '../song/export-midi.js';
 import { exportMusicXml } from '../song/export-musicxml.js';
 import { exportAbc } from '../song/export-abc.js';
 import { makeEvent } from '../core/learning-events.js';
+import { t } from '../core/i18n.js';
 
 // Every playable ('ready') instrument record, for the "Play it on…" row --
 // same source src/app.js reads for notation/mic-range/how-to-play, so this
 // panel never invents an instrument list of its own.
 const READY_INSTRUMENTS = INSTRUMENTS.filter((i) => i.status === 'ready');
+
+// P2b-3: the plain home for three sibling panels that used to sit behind
+// the now-deleted "More ways to practise" disclosure -- Record a tune
+// (src/ui/editor.js), Learn this (src/ui/learn.js) and Play Along
+// (src/ui/playalong.js) are all ways to ADD a song to practise, so they sit
+// in one row at the very top of this panel rather than getting three
+// separate nav buttons of their own. Labels match each panel's own
+// registered `name` exactly (panels.register in the files above), so a
+// rename there never goes stale here.
+const ADD_SONG_PANELS = [
+  { id: 'editor', label: 'Record a tune' },
+  { id: 'learn', label: 'Learn this' },
+  { id: 'playalong', label: 'Play Along' },
+];
 
 // ---------------------------------------------------------------------------
 // onNote() forwarding (the one permitted src/app.js line)
@@ -385,6 +400,16 @@ function mountSongsPanel(hostEl, api) {
   let countEl = null;
 
   hostEl.innerHTML = '';
+  // FIRST inside the container, ahead of even the heading -- the three
+  // ways to add a song are the thing a learner arriving from the nav's
+  // Songs button is most likely to want before they have any songs of
+  // their own to pick from.
+  const addSongRow = el('div', { class: 'add-song-row', role: 'group', 'aria-label': t('songs.addRow') });
+  ADD_SONG_PANELS.forEach((p) => {
+    addSongRow.appendChild(el('button', { type: 'button', text: p.label, onclick: () => api.openPanel(p.id) }));
+  });
+  hostEl.appendChild(addSongRow);
+
   const heading = el('h2', { text: 'Songs' });
   const intro = el('p', { class: 'panel-songs-intro', text: 'Pick a tune to practise, or add your own from a file.' });
 
@@ -398,12 +423,11 @@ function mountSongsPanel(hostEl, api) {
   // working exactly as before (existing tests use it directly), this just
   // tells a learner where the newer, simpler door is -- for a recording
   // especially, which this input does not transcribe.
-  const learnTipBtn = el('button', { type: 'button', id: 'songsLearnTipBtn', text: 'Open Learn this' });
-  learnTipBtn.addEventListener('click', () => {
-    const doc = hostEl.ownerDocument || document;
-    const btn = doc.querySelector('#panelPicker button[data-panel="learn"]') || doc.querySelector('button[data-panel="learn"]');
-    if (btn) btn.click();
-  });
+  // P2b-3: Learn this now has a real home of its own in the Add-a-song row
+  // above -- this tip's button just opens it directly through the same
+  // api.openPanel() that row uses, rather than hunting the DOM for a button
+  // that may or may not still exist.
+  const learnTipBtn = el('button', { type: 'button', id: 'songsLearnTipBtn', text: 'Open Learn this', onclick: () => api.openPanel('learn') });
   const learnTip = el('p', { class: 'panel-songs-learn-tip' }, [
     document.createTextNode('Tip: Learn this takes any recording or music file in one place. '), learnTipBtn,
   ]);

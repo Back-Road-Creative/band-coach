@@ -472,10 +472,11 @@ import { register as registerPlayalong } from './ui/playalong.js';
         { name: 'Moves: three notes', task: 'seq', len: 3, limit: 9 }, { name: 'Five-note runs', task: 'run', limit: 8 }, { name: 'The upper notes', add: Wn(76, 77, 79), limit: 12 }
       ] },
     // Named "Interval drill" rather than "Ear training" so its picker button
-    // never collides with the #panelPicker "Ear training" panel
-    // (src/ui/ear.js, registerEar()) -- read both before touching this: they
-    // are genuinely different features, not one duplicated twice. The name
-    // says what this one actually is; calling it a variant of "Ear training"
+    // never collides with the instrument sheet's own "Ear training" panel
+    // button (src/ui/ear.js, registerEar(), homed in the Tools group below
+    // -- see PANEL_TOOL_IDS) -- read both before touching this: they are
+    // genuinely different features, not one duplicated twice. The name says
+    // what this one actually is; calling it a variant of "Ear training"
     // ("Ear training: quick drill", the first attempt) still read as a second
     // door to the same room to anyone who does not know the internals.
     // This pseudo-mod is a single interval/chord-ID drill woven into
@@ -759,6 +760,14 @@ import { register as registerPlayalong } from './ui/playalong.js';
   // MOD_IDS untouched, but the picker groups them with TOOLS below because
   // to a learner they read as "a tool", not "an instrument to pick up".
   const TOOL_MOD_IDS = ['ear', 'rhy'];
+  // P2b-3: the three feature panels (src/ui/panels.js) that read as small
+  // reference/quick-drill tools rather than a whole practice screen of their
+  // own -- Ear training (the eight-exercise panel, not MODS.ear above),
+  // How to play it, Music theory -- get their plain home in the SAME
+  // instrument-sheet Tools group as Tuner/Capture a melody/Interval drill/
+  // Rhythm, via buildPanelToolButton() in buildPicker() below, rather than a
+  // second disclosure of their own.
+  const PANEL_TOOL_IDS = ['ear', 'fingerings', 'theory'];
   // U2/U-parent: keyed variant id -> parent id, for the same-instrument
   // groupings the picker collapses under one parent (buildPicker()/setMod()
   // below). Two sources feed it: a hand-declared pair for the two families
@@ -2091,7 +2100,6 @@ import { register as registerPlayalong } from './ui/playalong.js';
     if (pitchWorkletNode && actx) { const neededFrameSize = frameSizeForInstrument(instrumentById[m], actx.sampleRate); if (neededFrameSize !== lastWorkletFrameSize) { lastWorkletFrameSize = neededFrameSize; pitchWorkletNode.port.postMessage({ type: 'frameSize', frameSize: neededFrameSize }); } }
     document.querySelectorAll('#picker button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.mod === m)));
     updateNavInstrumentLabel();
-    const toolsGroup = $('pickerTools'); if (toolsGroup && TOOL_MOD_IDS.concat(Object.keys(TOOLS)).indexOf(m) >= 0) toolsGroup.open = true;
     // U2: a returning learner whose saved mod is a variant (e.g.
     // 'ukulele-low-g') lands with that variant's family disclosure already
     // open and the variant itself pressed, mirroring the toolsGroup line
@@ -2108,19 +2116,24 @@ import { register as registerPlayalong } from './ui/playalong.js';
   }
   // Two visual tiers inside the one #picker container (kept as a single id
   // so every existing `#picker button` selector -- setMod's aria-pressed
-  // sync, openPanel/closePanel's cross-picker clearing -- still finds every
-  // button with no change there): real instruments render straight into
-  // #picker as before, most prominent; TOOLS (Tuner, Capture a melody) plus
-  // the two pseudo-mods that read as tools to a learner rather than
-  // instruments to pick up (TOOL_MOD_IDS: 'ear', 'rhy') render into a
-  // quieter nested .picker-tools group instead (U6: now a <details> --
-  // shut on first paint, one native disclosure instead of four permanent
-  // buttons, no JS needed to toggle it, contents stay real DOM nodes so
-  // every existing `#picker button[data-mod=...]` selector still finds
-  // them -- see .picker-tools in styles.css). setMod() below forces it back
-  // open whenever the selected mod lives inside it, so a returning learner
-  // never loses sight of where they are.
+  // sync, openPanel's cross-picker clearing -- still finds every button with
+  // no change there): real instruments render straight into #picker as
+  // before, most prominent; TOOLS (Tuner, Capture a melody), the two
+  // pseudo-mods that read as tools to a learner rather than instruments to
+  // pick up (TOOL_MOD_IDS: 'ear', 'rhy'), and the three panel tools
+  // (PANEL_TOOL_IDS: Ear training, How to play it, Music theory) render into
+  // a quieter nested .picker-tools group instead. P2b-3: this group is a
+  // plain, always-visible group now, not a shut-by-default <details> -- once
+  // the instrument sheet itself is open (setInstrumentSheetOpen), everything
+  // inside it, tools included, is visible with no second disclosure to find.
   function buildPickerButton(m, o) { const b = document.createElement('button'); b.type = 'button'; b.dataset.mod = m; b.style.setProperty('--c', o.color); b.setAttribute('aria-pressed', 'false'); b.appendChild(document.createTextNode(o.name)); const sm = document.createElement('small'); sm.textContent = o.tag; b.appendChild(sm); b.addEventListener('click', () => { b.blur(); closePanel(); pickerAsSheet = true; setMod(m); setInstrumentSheetOpen(false); }); return b; }
+  // A panel tool button (Ear training / How to play it / Music theory)
+  // shares buildPickerButton's look (--c colour dot, <small> tag line) but
+  // opens a registered panel instead of selecting a mod, and shuts the
+  // instrument sheet on click exactly like picking an instrument does --
+  // both leave the learner looking at what they just chose, not an empty
+  // sheet still hanging open behind it.
+  function buildPanelToolButton(p) { const b = document.createElement('button'); b.type = 'button'; b.dataset.panel = p.id; b.style.setProperty('--c', p.color || '#93a0bd'); b.setAttribute('aria-pressed', 'false'); b.appendChild(document.createTextNode(p.name)); const sm = document.createElement('small'); sm.textContent = p.tag || ''; b.appendChild(sm); b.addEventListener('click', () => { b.blur(); openPanel(p.id); setInstrumentSheetOpen(false); }); return b; }
   // U2: children[parentId] lists the variant ids grouped under it, built
   // from VARIANT_PARENTS rather than a second hand-written map, so the two
   // stay impossible to drift apart.
@@ -2187,13 +2200,15 @@ import { register as registerPlayalong } from './ui/playalong.js';
       group.appendChild(toggle);
       box.appendChild(group);
     });
-    const toolsGroup = document.createElement('details'); toolsGroup.className = 'picker-tools'; toolsGroup.id = 'pickerTools';
-    // The label names what is inside, but is BUILT from the tool names
-    // rather than repeating them: a hand-written list silently goes stale
-    // the first time a tool is renamed or added, and this one already had.
-    const summary = document.createElement('summary'); summary.textContent = 'More tools: ' + toolIds.map(m => (MODS[m] || TOOLS[m]).name).join(', '); toolsGroup.appendChild(summary);
+    // P2b-3: a plain labelled group, not a <details> -- always visible the
+    // moment the instrument sheet itself is open, no second disclosure a
+    // learner has to find. Tuner/Capture a melody/Interval drill/Rhythm
+    // (toolIds) plus the three panel tools (PANEL_TOOL_IDS -- Ear training,
+    // How to play it, Music theory) all live here now.
+    const toolsGroup = document.createElement('div'); toolsGroup.className = 'picker-tools'; toolsGroup.id = 'pickerTools'; toolsGroup.setAttribute('role', 'group'); toolsGroup.setAttribute('aria-labelledby', 'pickerToolsLabel');
+    const label = document.createElement('span'); label.id = 'pickerToolsLabel'; label.className = 'picker-tools-label'; label.textContent = t('picker.tools'); toolsGroup.appendChild(label);
     toolIds.forEach(m => toolsGroup.appendChild(buildPickerButton(m, MODS[m] || TOOLS[m])));
-    if (toolIds.indexOf(mod) >= 0) toolsGroup.open = true;
+    PANEL_TOOL_IDS.forEach(id => { const p = panels.list().find(pp => pp.id === id); if (p) toolsGroup.appendChild(buildPanelToolButton(p)); });
     box.appendChild(toolsGroup);
   }
   // The tuner tool knows which instrument's open strings it is listening
@@ -2286,6 +2301,11 @@ import { register as registerPlayalong } from './ui/playalong.js';
     db: () => DB, save: save, mod: () => mod, setMod: m => { closePanel(); setMod(m); }, instrument: id => instrumentById[id || mod],
     audio: () => { ensureAudio(); return actx; }, openMic: openMic, analysers: () => ({ time: anTime, freq: anFreq }), gates: () => gates,
     tone: tone, click: click, now: now, say: say, coach: coach, recordError: recordError, close: () => closePanel(),
+    // openPanel(id): P2b-3, lets one panel open a sibling panel directly --
+    // first user, the Songs panel's "Add a song" row (src/ui/songs.js),
+    // opening Learn this/Record a tune/Play Along the same way a nav click
+    // or a Tools-group panel button does.
+    openPanel: id => openPanel(id),
     // store(id): this panel's saved data, kept in DB.panels[id] (plain JSON, 256 KB max; see sanitizePanelData)
     store: id => ({ get: () => (DB.panels && DB.panels[id]) || null, set: obj => { if (!DB.panels) DB.panels = {}; DB.panels[id] = obj; save(); } }),
     // creditNote(instrumentId): a panel-judged correct note feeds THAT
@@ -2343,8 +2363,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
   //
   function openPanel(id) {
     if (sess) endSession(); task = null;
-    const panelDisclosure = $('panelPickerDisclosure'); if (panelDisclosure) panelDisclosure.open = true;
-    document.querySelectorAll('#panelPicker button, #picker button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.panel === id)));
+    document.querySelectorAll('#picker button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.panel === id)));
     $('settingsView').hidden = true; $('mainArea').hidden = true; $('panelHost').hidden = false; $('panelSay').textContent = ''; $('panelSay').hidden = false;
     try { panels.open(id, $('panelHost'), panelApi); } catch (e) { recordError('panel:' + id, e); say('That screen could not open.', 'no'); }
     updateNavState();
@@ -2353,7 +2372,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
     $('settingsView').hidden = true;
     if (!panels.current()) { $('mainArea').hidden = false; updateNavState(); return; }
     panels.close(); $('panelHost').hidden = true; $('panelSay').hidden = true; $('mainArea').hidden = false;
-    document.querySelectorAll('#panelPicker button').forEach(b => b.setAttribute('aria-pressed', 'false'));
+    document.querySelectorAll('#picker button[data-panel]').forEach(b => b.setAttribute('aria-pressed', 'false'));
     updateNavState();
   }
   // P2b-2: Settings is a fourth real nav destination (unlike Instrument,
@@ -2403,17 +2422,8 @@ import { register as registerPlayalong } from './ui/playalong.js';
     document.querySelectorAll('#mainNav button[data-route]').forEach(b => b.addEventListener('click', () => { b.blur(); routeTo(b.dataset.route); }));
     updateNavState();
   }
-  function buildPanelPicker() {
-    // U6: the empty-state guard has to move OUT to the disclosure that now
-    // wraps this row. Hiding only #panelPicker would leave a "More ways to
-    // practise" control that opens onto nothing -- including in the failure
-    // mode where the page boots but no panel registers.
-    const box = $('panelPicker'); const empty = !panels.list().length;
-    box.hidden = empty; const disclosure = $('panelPickerDisclosure'); if (disclosure) disclosure.hidden = empty;
-    panels.list().forEach(p => { const b = document.createElement('button'); b.type = 'button'; b.dataset.panel = p.id; b.style.setProperty('--c', p.color || '#93a0bd'); b.setAttribute('aria-pressed', 'false'); b.appendChild(document.createTextNode(p.name)); const sm = document.createElement('small'); sm.textContent = p.tag || ''; b.appendChild(sm); b.addEventListener('click', () => { b.blur(); openPanel(p.id); }); box.appendChild(b); });
-  }
   applyStaticLabels(document);
-  loadDB(); if (!Array.isArray(DB.custom)) DB.custom = []; $('optNames').checked = DB.prefs.names; $('optTheme').value = DB.prefs.theme; applyTheme(DB.prefs.theme); $('optNoteSystem').value = DB.prefs.noteNaming.system; $('optAccidentals').value = DB.prefs.noteNaming.accidentals; buildPicker(); pickerAsSheet = hasSavedMod; setInstrumentSheetOpen(!hasSavedMod); buildPanelPicker(); buildNav(); setMod(mod); requestAnimationFrame(frame);
+  loadDB(); if (!Array.isArray(DB.custom)) DB.custom = []; $('optNames').checked = DB.prefs.names; $('optTheme').value = DB.prefs.theme; applyTheme(DB.prefs.theme); $('optNoteSystem').value = DB.prefs.noteNaming.system; $('optAccidentals').value = DB.prefs.noteNaming.accidentals; buildPicker(); pickerAsSheet = hasSavedMod; setInstrumentSheetOpen(!hasSavedMod); buildNav(); setMod(mod); requestAnimationFrame(frame);
   const hook = !__DEBUG_HOOK__ ? null : { state: () => S, db: () => DB, sess: () => sess, task: () => task, cur: cur, note: onNote, answer: answer, tap: onTap, bar: () => bar, playing: () => playing, setMod: setMod, testSource: testSource, heard: () => heard, yin: yin, cap: () => cap, tuner: () => tunerState, tunerLock: () => tunerLock, deaf: () => deafWindow.isDeaf(), deafUntil: () => deafWindow.until(), exportProgress: doExportProgress, importProgress: doImportProgress, audioNow: audioNow, modelNow: () => modelNow, plan: () => sessionPlan };
   // Debug-hook slots: replace ONLY your own line with
   //   if (__DEBUG_HOOK__) Object.assign(hook, { … });
@@ -2445,7 +2455,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
   //
   // slot:hook:a11y
   if (__DEBUG_HOOK__) Object.assign(hook, { reducedMotion: () => reducedMotion });
-  if (__DEBUG_HOOK__) Object.assign(hook, { panels: () => panels.list().map(p => p.id), openPanel: openPanel, closePanel: closePanel, panelOpen: () => panels.current(), registerPanel: def => { panels.register(def); $('panelPicker').innerHTML = ''; buildPanelPicker(); } });
+  if (__DEBUG_HOOK__) Object.assign(hook, { panels: () => panels.list().map(p => p.id), openPanel: openPanel, closePanel: closePanel, panelOpen: () => panels.current(), registerPanel: def => panels.register(def) });
   //
   //
   // slot:hook:w-songs
