@@ -14,6 +14,9 @@ them. Treat every result here as **formative evidence, not proof of efficacy.**
 - A **real-microphone path**: at least a few participants on a real acoustic or electric
   instrument through a microphone, since that is the harder, noisier, more common case and the one
   this app has to be honest about when it fails.
+- A **drum-kit path**: one participant with an electronic kit connected over MIDI, and one using
+  the computer keys only (no kit on hand), so the newest trainer is checked against both real
+  hardware and the always-available fallback.
 
 Mixed skill levels (rank beginner through a few months in) — Band Coach's target learner is not
 someone who already knows what "in tune" sounds like.
