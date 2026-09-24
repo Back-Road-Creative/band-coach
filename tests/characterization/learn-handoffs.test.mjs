@@ -60,7 +60,10 @@ function threeToneWav(path) {
 
 const ABC = 'X:1\nT:Handoff Test\nM:4/4\nL:1/8\nK:C\nCDEFGABc|\n';
 
-test('"Fix it up" opens the editor panel with the learned song loaded for editing', async (t) => {
+// P3-4 renamed the button's label "Fix it up" -> "Edit notes" (class kept),
+// so this test looks for the new label; the test name and behavior are
+// unchanged.
+test('"Edit notes" opens the editor panel with the learned song loaded for editing', async (t) => {
   const dir = mkdtempSync(join(tmpdir(), 'band-coach-learn-handoff-'));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   const abcPath = join(dir, 'tune.abc');
@@ -75,7 +78,7 @@ test('"Fix it up" opens the editor panel with the learned song loaded for editin
   await page.waitFor("document.querySelector('.panel-learn-result').hidden === false", 20000);
 
   await page.evaluate(
-    "Array.from(document.querySelectorAll('.panel-learn-fixitup-btn')).find(b => b.textContent === 'Fix it up').click()"
+    "Array.from(document.querySelectorAll('.panel-learn-fixitup-btn')).find(b => b.textContent === 'Edit notes').click()"
   );
   await page.waitFor("window.__coach.panelOpen() === 'editor'");
   await page.waitFor("document.getElementById('editorTitle') && document.getElementById('editorTitle').value === 'Handoff Test'", 10000);
@@ -131,7 +134,10 @@ test('a notation import shows no "Play along with this recording" button (no dec
   assert.equal(count, 0, 'a notation import never claims a hand-off the app cannot back up');
 });
 
-test('a recording with unresolved check items disables "Practise this" and "Fix it up" carries the check list to the editor', async (t) => {
+// P3-4 renamed the button's label "Fix it up" -> "Edit notes" (class kept);
+// this test's own name is left describing the old label to match the
+// scenario title, only the selector text below changed.
+test('a recording with unresolved check items disables "Practise this" and "Edit notes" carries the check list to the editor', async (t) => {
   const dir = mkdtempSync(join(tmpdir(), 'band-coach-learn-handoff-'));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   const wavPath = threeToneWav(join(dir, 'three-notes.wav'));
@@ -156,7 +162,7 @@ test('a recording with unresolved check items disables "Practise this" and "Fix 
   assert.match(reason, /fix/i, 'a plain-language reason is shown next to the disabled button');
 
   await page.evaluate(
-    "Array.from(document.querySelectorAll('.panel-learn-fixitup-btn')).find(b => b.textContent === 'Fix it up').click()"
+    "Array.from(document.querySelectorAll('.panel-learn-fixitup-btn')).find(b => b.textContent === 'Edit notes').click()"
   );
   await page.waitFor("window.__coach.panelOpen() === 'editor'");
   await page.waitFor("document.getElementById('editorCheck') && !document.getElementById('editorCheck').hidden", 10000);
@@ -166,15 +172,23 @@ test('a recording with unresolved check items disables "Practise this" and "Fix 
   assert.ok(checkItemCount > 0, 'the editor shows the SAME check list the learner was just shown, not an empty one');
 });
 
-test('the Songs panel\'s pointer button opens Learn this', async (t) => {
+// P3-4: the Songs panel's pointer to this panel (#songsLearnTipBtn) is gone
+// -- Songs now has its own "Add a song" button that reveals the SAME record
+// door in place, without leaving Songs at all
+// (tests/characterization/songs-add-a-song.test.mjs covers that route in
+// full). Renamed from "...pointer button opens Learn this".
+test('the Songs panel\'s "Add a song" button reveals the record door in Songs, without opening Learn this', async (t) => {
   const page = await launchPage(htmlPath);
   t.after(() => page.close());
 
   await page.evaluate("window.__coach.openPanel('songs')");
-  await page.waitFor("document.getElementById('songsLearnTipBtn')");
-  await page.evaluate("document.getElementById('songsLearnTipBtn').click()");
-  await page.waitFor("window.__coach.panelOpen() === 'learn'");
+  await page.waitFor("document.querySelector('.add-song-row')");
+  assert.equal(await page.evaluate("!!document.getElementById('songsLearnTipBtn')"), false, 'the old pointer button is gone');
+  await page.evaluate(
+    "Array.from(document.querySelectorAll('.add-song-row button')).find(b => b.textContent.trim() === 'Add a song').click()",
+  );
+  await page.waitFor("!!document.querySelector('.panel-songs-record-btn')");
 
-  assert.deepEqual(page.exceptions, [], 'no uncaught exceptions opening Learn this from the Songs pointer');
-  assert.equal(await page.evaluate("!!document.querySelector('.panel-learn')"), true);
+  assert.deepEqual(page.exceptions, [], 'no uncaught exceptions revealing the record door from Songs');
+  assert.equal(await page.evaluate('window.__coach.panelOpen()'), 'songs', 'Learn this is never opened -- the record door lives in Songs itself');
 });

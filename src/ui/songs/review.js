@@ -130,11 +130,13 @@ export function renderReview(resultEl, { song, warnings, audioRec, api, onPracti
   resultEl.appendChild(practiseBtn);
   if (!gate.allowed) resultEl.appendChild(el('p', { class: 'panel-learn-practise-gate-reason', text: gate.reason }));
 
-  // "Fix it up" -- every result, notation or audio, can be sent to the
-  // fuller note-editing panel. Any unresolved check items ride along
-  // (requestOpenInEditor/loadReport, src/ui/editor.js) so the editor shows
-  // the learner the SAME check list rather than losing it.
-  const fixItUpBtn = el('button', { type: 'button', class: 'panel-learn-fixitup-btn', text: 'Fix it up' });
+  // "Edit notes" (P3-4 rename, was "Fix it up") -- every result, notation
+  // or audio, can be sent to the fuller note-editing panel. Any unresolved
+  // check items ride along (requestOpenInEditor/loadReport,
+  // src/ui/editor.js) so the editor shows the learner the SAME check list
+  // rather than losing it. Class kept unchanged so nothing that selects by
+  // class needs to know about the rename.
+  const fixItUpBtn = el('button', { type: 'button', class: 'panel-learn-fixitup-btn', text: 'Edit notes' });
   fixItUpBtn.addEventListener('click', () => {
     const opened = onEditNotes(song.id, warnings);
     if (!opened) say('Saved "' + song.title + '". Open Record a tune to fix it up.');

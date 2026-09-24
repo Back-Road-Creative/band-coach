@@ -51,7 +51,12 @@ test('panel homes: clicking a panel tool button opens that panel and closes the 
   assert.equal(await page.evaluate("document.getElementById('picker').hidden"), true, 'the sheet shuts, the same as picking an instrument does');
 });
 
-test('panel homes: the Songs panel\'s first row offers Record a tune, Learn this and Play Along', async (t) => {
+// P3-4: the Add-a-song row's three panel-opening buttons became one "Add a
+// song" button that reveals a Record/Open-file section inside Songs itself
+// (tests/characterization/songs-add-a-song.test.mjs covers that section in
+// full) -- renamed from "...offers Record a tune, Learn this and Play Along"
+// and the final click now checks the row no longer navigates away.
+test('panel homes: the Songs panel\'s first row offers Add a song', async (t) => {
   const page = await launchPage(htmlPath);
   t.after(() => page.close());
 
@@ -61,19 +66,24 @@ test('panel homes: the Songs panel\'s first row offers Record a tune, Learn this
   const labels = await page.evaluate(
     "Array.from(document.querySelectorAll('.add-song-row button')).map(b => b.textContent.trim())",
   );
-  assert.deepEqual(labels, ['Record a tune', 'Learn this', 'Play Along']);
+  assert.deepEqual(labels, ['Add a song']);
 
   const isFirstChild = await page.evaluate("document.querySelector('.add-song-row').previousElementSibling === null");
   assert.equal(isFirstChild, true, 'the Add-a-song row is the first thing inside the Songs panel');
 
   await page.evaluate(
-    "Array.from(document.querySelectorAll('.add-song-row button')).find(b => b.textContent.trim() === 'Record a tune').click()",
+    "Array.from(document.querySelectorAll('.add-song-row button')).find(b => b.textContent.trim() === 'Add a song').click()",
   );
-  assert.equal(await page.evaluate('window.__coach.panelOpen()'), 'editor', 'clicking "Record a tune" opens the editor panel');
+  assert.equal(
+    await page.evaluate("!!document.querySelector('.panel-songs-record-btn') && !!document.getElementById('songsFileInput')"),
+    true,
+    'pressing Add a song reveals the Record and Open file section, in place',
+  );
+  assert.equal(await page.evaluate('window.__coach.panelOpen()'), 'songs', 'Songs stays open -- the row no longer opens another panel');
   assert.equal(
     await page.evaluate("document.querySelector('#mainNav button[data-route=\"songs\"]').getAttribute('aria-current')"),
-    null,
-    'Songs is no longer current once its Add-a-song row has opened a different panel',
+    'page',
+    'Songs stays the current nav destination',
   );
 });
 

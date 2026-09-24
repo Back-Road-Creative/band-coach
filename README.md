@@ -250,7 +250,7 @@ confidence-coloured strip of notes when the transcription carries per-note confi
 "Play it on…" instrument-card row Songs shows, and a "Practise this" button that opens Songs
 already on that song's lesson. When there are unresolved check items in that warnings list,
 "Practise this" is disabled instead, with a plain-language reason next to it naming how many
-notes to fix first (`practiceGate`) — "Fix it up" is the primary action instead, and carries that
+notes to fix first (`practiceGate`) — "Edit notes" is the primary action instead, and carries that
 same check list over to the editor's own mandatory check step rather than losing it on hand-off.
 With no warnings, "Practise this" works exactly as before. The same panel also has a mic door: a "Record" button that counts
 you in for four beats (with a visible "1 2 3 4" and a live level meter, tempo set by a 40–200bpm
@@ -260,7 +260,7 @@ same result view as a dropped file — a mic that is blocked or missing, or a ta
 clearly enough to turn into notes, says so in plain words rather than saving nothing silently.
 
 Every result also offers hand-offs to the older, fuller panels rather than duplicating their
-features: "Fix it up" opens "Record a tune" (`src/ui/editor.js`) with the learned song already
+features: "Edit notes" opens "Record a tune" (`src/ui/editor.js`) with the learned song already
 loaded for note-editing (`requestOpenInEditor`, read once by the editor's own `show()`, the same
 cross-panel request pattern Songs' `requestOpenSong` already uses) — pressing "Save to my songs"
 afterwards corrects that same saved song in place rather than leaving a new suffixed copy behind;
@@ -269,10 +269,12 @@ the source was a recording with a decoded audio buffer to hand over, "Play along
 recording" opens Play
 Along (`src/ui/playalong.js`) already analysing that same audio (`requestPlayalongRecording`, an
 in-memory hand-off — audio is far too big for the panel-data store). The Listen/file-input row in
-"Record a tune", the file input in Play Along, and the file button in Songs each carry a short
-pointer back to this panel, so a learner who lands on any of the older doors first is told where
-the simpler one is. Retiring the older Record a tune / Play Along / Songs file-picker panels this
-one is meant to replace is later work.
+"Record a tune" and the file input in Play Along each carry a short pointer back to this panel, so
+a learner who lands on either of those older doors first is told where the simpler one is. Songs'
+own "Add a song" button (see "Songs" below) now offers the same record-or-open-file route without
+leaving Songs at all, so this panel and Songs' own Add a song share the exact same record door and
+review screen (`src/ui/songs/record-door.js`, `src/ui/songs/review.js`) rather than each keeping a
+separate copy. Retiring this panel now that Songs has its own way in is later work.
 
 ## Capture a melody
 
@@ -292,14 +294,25 @@ repeat-until-clean chunking a built-in curriculum level uses.
 
 ## Songs
 
-The Songs panel's own "Add a song" row, right at the top, opens "Record a tune", "Learn this" and
-"Play Along" directly — every way of getting a song into the app lives in one plain, always-visible
-row, with no hidden disclosure to find first. Ear training, How to play it and Music theory get
-their own plain home the same way: a "Tools" group inside the instrument sheet, alongside
-Tuner/Capture a melody/Interval drill/Rhythm, open with no extra click once the sheet is open.
+The Songs panel's own "Add a song" button, right at the top, opens one section with both ways to
+add a song: a "Record" door (the same count-in, level meter and capture "Learn this" uses,
+`src/ui/songs/record-door.js`, built with its own `songs`-prefixed ids so they never clash with
+Learn this's) and an "Open file" input for a score, a recording, a teacher's challenge or a band
+pack — one input, one help line naming every accepted extension (`ADD_ACCEPT`/`ADD_HELP_LINE`,
+`src/ui/songs/add-source.js`). A recording or a score lands on the same review screen "Learn this"
+shows (`src/ui/songs/review.js`) without leaving Songs: "Practise this" opens the lesson (a
+multi-part song shows its part choice first), "Edit notes" (was "Fix it up") opens "Record a tune"
+with the song loaded, and "Play along with this recording" appears whenever a decoded audio buffer
+exists. A song saved this way is a **Draft** until its check items are resolved — every song row
+shows its status ("Draft — N notes to check", or "Checked") next to its title, and since Songs
+cannot keep the original recording (only its notes), a Draft or Checked row from a recording also
+says so plainly. Ear training, How to play it and Music theory get their own plain home the same
+way: a "Tools" group inside the instrument sheet, alongside Tuner/Capture a melody/Interval
+drill/Rhythm, open with no extra click once the sheet is open.
 
 The Songs panel (`src/ui/songs.js`) turns a whole tune — built in, or imported from a `.mid`,
-`.midi`, `.abc`, `.xml`, `.musicxml`, compressed `.mxl`, Guitar Pro `.gp`, or Guitar Pro 5 `.gp5` file — into a
+`.midi`, `.abc`, `.xml`, `.musicxml`, compressed `.mxl`, Guitar Pro `.gp`, Guitar Pro 5 `.gp5`, or a
+recording (`.wav`, `.mp3`, `.ogg`, `.m4a`, `.flac`, `.webm`) — into a
 step-by-step practice lesson (`src/song/lesson.js`), tracking each learner's own pass/fail record
 and crediting every correctly played note toward the same mastery store a built-in drill uses —
 credit always lands on whichever instrument the song is actually being played on, even if a
