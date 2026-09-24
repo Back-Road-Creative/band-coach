@@ -1,8 +1,9 @@
 # Band Coach
 
-One coach, many instruments. Band Coach listens through a microphone or a MIDI keyboard, picks
-every next exercise from your own results, and watches your energy so practice stays fresh.
-Free, no account, and your sound never leaves your computer.
+One coach, many instruments, including a drum kit. Band Coach listens through a microphone, a
+MIDI keyboard, or — for the drum kit — an electronic kit over MIDI, the computer keys, or
+clicking the drawn kit; it picks every next exercise from your own results, and watches your
+energy so practice stays fresh. Free, no account, and your sound never leaves your computer.
 
 Band Coach hears pitch and timing. It cannot see posture, breath, bowing or hand position — use a
 teacher or video for those.
@@ -901,9 +902,9 @@ Total: under 5 minutes with a MIDI keyboard on hand, faster without one.
   by hand in Safari.
 - **iPhone/iPad (the "Phone copy" edition):** unmeasured — see "Phone copy" above. Do not tell a
   learner it works on their phone.
-- **Real MIDI keyboards, real instruments through a real microphone:** untested beyond whichever
-  specific hardware someone last ran the checklist above on — never claim broader hardware
-  coverage than that.
+- **Real MIDI keyboards, real electronic drum kits, real instruments through a real microphone:**
+  untested beyond whichever specific hardware someone last ran the checklist above on — never
+  claim broader hardware coverage than that.
 
 ## Licence
 
