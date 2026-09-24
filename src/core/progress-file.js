@@ -3,9 +3,12 @@
 // what starts reading it, and gives export/import a versioned envelope of
 // their own so a backup file can outlive the app version that wrote it.
 //
-// Nothing here trusts its input: importProgress() only gets the caller as
-// far as a plausible `db` object. The call site must still run that db
-// through the app's own sanitizeDB before using it.
+// Nothing here trusts its input: importProgress() fully validates the
+// envelope -- a missing profile, a profile from a newer app, or a broken
+// song entry is refused with a plain-English error instead of silently
+// replacing the learner's real progress with an empty one. On success the
+// call site still runs the returned db through the app's own sanitizeDB
+// before using it.
 
 export const PROGRESS_FORMAT = 'band-coach-progress';
 export const PROGRESS_FORMAT_VERSION = 2;
@@ -109,6 +112,19 @@ export function importProgress(text) {
   if (!Number.isInteger(parsed.formatVersion) || parsed.formatVersion > PROGRESS_FORMAT_VERSION) {
     return { ok: false, error: 'This backup was made by a newer Band Coach. Update the app to restore it.' };
   }
+  if (!isPlainObject(parsed.db)) {
+    return { ok: false, error: 'That backup file has no saved progress in it, so nothing was changed.' };
+  }
+  if (Number.isInteger(parsed.db.v) && parsed.db.v > CURRENT_DB_VERSION) {
+    return { ok: false, error: 'This backup was made by a newer Band Coach. Update the app to restore it.' };
+  }
+  if (Array.isArray(parsed.songs) && !parsed.songs.every(isPlainObject)) {
+    return { ok: false, error: 'That backup file has a damaged song in it, so nothing was changed.' };
+  }
   const migrated = migrateEnvelope(parsed);
   return { ok: true, db: migrate(migrated.db), songs: Array.isArray(migrated.songs) ? migrated.songs : [] };
+}
+
+function isPlainObject(value) {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
 }

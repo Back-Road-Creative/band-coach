@@ -138,3 +138,52 @@ test('rejects a formatVersion this app has never known about (3)', () => {
   assert.equal(result.ok, false);
   assert.match(result.error, /newer Band Coach/i);
 });
+
+test('rejects a backup with no profile at all, instead of silently wiping progress', () => {
+  const text = JSON.stringify({ format: PROGRESS_FORMAT, formatVersion: PROGRESS_FORMAT_VERSION, appVersion: 'x', exportedAt: 'x' });
+  const result = importProgress(text);
+  assert.equal(result.ok, false);
+  assert.doesNotMatch(result.error, /undefined|null|object|JSON|schema/i);
+});
+
+test('rejects a db field that is not an object', () => {
+  for (const badDB of ['hello', [1, 2], null]) {
+    const text = JSON.stringify({ format: PROGRESS_FORMAT, formatVersion: PROGRESS_FORMAT_VERSION, appVersion: 'x', exportedAt: 'x', db: badDB });
+    const result = importProgress(text);
+    assert.equal(result.ok, false, `expected db ${JSON.stringify(badDB)} to be rejected`);
+  }
+});
+
+test('rejects a db stamped with a version newer than this app understands', () => {
+  const newerDB = { ...sampleDB(), v: CURRENT_DB_VERSION + 1 };
+  const text = JSON.stringify({ format: PROGRESS_FORMAT, formatVersion: PROGRESS_FORMAT_VERSION, appVersion: 'x', exportedAt: 'x', db: newerDB });
+  const result = importProgress(text);
+  assert.equal(result.ok, false);
+  assert.match(result.error, /newer Band Coach/i);
+});
+
+test('rejects a songs array containing a broken entry', () => {
+  for (const badSongs of [[sampleDB(), null], ['x']]) {
+    const text = JSON.stringify({ format: PROGRESS_FORMAT, formatVersion: PROGRESS_FORMAT_VERSION, appVersion: 'x', exportedAt: 'x', db: sampleDB(), songs: badSongs });
+    const result = importProgress(text);
+    assert.equal(result.ok, false, `expected songs ${JSON.stringify(badSongs)} to be rejected`);
+  }
+});
+
+test('accepts an empty songs array and a songs array of plain object entries', () => {
+  for (const okSongs of [[], [{}]]) {
+    const text = JSON.stringify({ format: PROGRESS_FORMAT, formatVersion: PROGRESS_FORMAT_VERSION, appVersion: 'x', exportedAt: 'x', db: sampleDB(), songs: okSongs });
+    const result = importProgress(text);
+    assert.equal(result.ok, true);
+    assert.deepEqual(result.songs, okSongs);
+  }
+});
+
+test('a pre-versioning db with no v field still imports through importProgress, stamped v: 1', () => {
+  const older = { mods: { kbd: { level: 1 } }, sessions: [], prefs: {} }; // no `v` field at all
+  const text = JSON.stringify({ format: PROGRESS_FORMAT, formatVersion: PROGRESS_FORMAT_VERSION, appVersion: 'x', exportedAt: 'x', db: older });
+  const result = importProgress(text);
+  assert.equal(result.ok, true);
+  assert.equal(result.db.v, CURRENT_DB_VERSION);
+  assert.deepEqual(result.db.mods, older.mods);
+});
