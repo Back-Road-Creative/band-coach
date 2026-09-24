@@ -53,6 +53,7 @@ import { judgeAttempt, passesRule, holdTuneFeedback, phraseSec } from './songs/p
 import { barHeat, worstBars } from '../song/bar-heat.js';
 import { createLoopBackingTransport, applyAttemptToTransport, backingBpm, rateLabel } from './songs/loop-backing.js';
 import { mapMasteryKeys } from './songs/mastery.js';
+import { GRADE, review, migrateItem } from '../core/srs.js';
 import { parseChallenge, buildChallenge } from '../song/challenge.js';
 import { writeBandPack, readBandPack } from '../song/band-pack.js';
 import { exportMidi } from '../song/export-midi.js';
@@ -222,20 +223,49 @@ function stepHint(step) {
 // empty array for them) are left untouched — nothing invented.
 // ---------------------------------------------------------------------------
 
-function applyMasteryCredit(api, instrumentId, mapped) {
+export function applyMasteryCredit(api, instrumentId, mapped) {
   if (!mapped.length) return;
   const db = api.db();
   if (!db.mods) db.mods = {};
   if (!db.mods[instrumentId]) db.mods[instrumentId] = { item: {}, trans: {}, acc: {}, cr: {}, level: 1, ready: 0, judged: 0, tick: 0 };
   const modState = db.mods[instrumentId];
   if (!modState.item) modState.item = {};
+  const now = Date.now();
   for (const { id, hit } of mapped) {
-    const o = modState.item[id] || (modState.item[id] = { m: 0.4, n: 0, last: 0, seen: 0 });
-    o.m = o.m * 0.75 + (hit ? 1 : 0) * 0.25;
-    o.n++;
-    o.last = Date.now();
+    const seen = modState.item[id] ? modState.item[id].seen || 0 : 0;
+    // Same live item shape (`stability`/`difficulty`/`lastSeen`/`reps`/
+    // `lapses`) src/app.js's built-in drills write via review() (src/core/
+    // srs.js), migrated through if what's stored is still the old
+    // { m, n, last } shape -- a song answer and a drill answer now leave
+    // identical records, so due()/retrievability() reads either one the
+    // same way. GRADE.GOOD/LAPSE (not HARD/EASY): a song step has no
+    // reaction-time or confidence signal to grade finer than right/wrong.
+    const raw = modState.item[id];
+    const before = raw && typeof raw.stability === 'number' ? raw : migrateItem(raw || {}, now);
+    modState.item[id] = Object.assign({ seen }, review(before, { grade: hit ? GRADE.GOOD : GRADE.LAPSE, now }));
   }
   api.save();
+}
+
+// ---------------------------------------------------------------------------
+// session logging: a song lesson leaves a row in DB.sessions the same way a
+// built-in drill's endSession() does (src/app.js), so "today's minutes", day
+// streak and "last session" all count song practice too. `practice.judgedCount`/
+// `judgedOk`/`startedAt` are set by advance() below, lazily, the first time a
+// judged (passRule) step is attempted -- so a learner who never gets past the
+// listen step never logs an empty session. Pure summary here; api.logSession()
+// (src/app.js) does the actual push/trim/save, same split applyMasteryCredit
+// above keeps with api.save().
+// ---------------------------------------------------------------------------
+export function summarizePracticeSession(practice, nowSec) {
+  if (!practice || !practice.judgedCount) return null;
+  return {
+    mod: practice.instrumentId,
+    minutes: Math.max(0, (nowSec - (practice.startedAt != null ? practice.startedAt : nowSec)) / 60),
+    acc: practice.judgedOk / practice.judgedCount,
+    source: 'song',
+    songId: practice.song.id,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -944,7 +974,7 @@ function mountSongsPanel(hostEl, api) {
     // A rhythm step's hit is an onset, so it only credits when the pitch
     // happened to be right too (pitchOk, practice.js) -- a clap never does.
     if (typeof api.creditNote === 'function') {
-      result.matches.forEach((m) => { if (m.ok && m.pitchOk !== false) api.creditNote(); });
+      result.matches.forEach((m) => { if (m.ok && m.pitchOk !== false) api.creditNote(practice.instrumentId); });
     }
     advance(passed, result, elapsedMs);
   }
@@ -953,7 +983,14 @@ function mountSongsPanel(hostEl, api) {
     const step = practice.plan.steps[practice.stepIndex];
     practice.results.push({ stepIndex: practice.stepIndex, passed });
     if (step.passRule) {
-      const credit = creditFor({ step, passed, elapsedMs: elapsedMs || 0, judgedCount: result ? result.judgedCount : undefined });
+      // Lazily started on the FIRST judged step, not in startPractice(): a
+      // learner who only ever watches the listen step and leaves never
+      // logs an empty session (summarizePracticeSession above returns null
+      // while judgedCount is 0).
+      if (practice.startedAt == null) practice.startedAt = api.now();
+      practice.judgedCount = (practice.judgedCount || 0) + 1;
+      if (passed) practice.judgedOk = (practice.judgedOk || 0) + 1;
+      const credit = creditFor({ step, passed, elapsedMs: elapsedMs || 0, judgedCount: result ? result.judgedCount : undefined, matches: result ? result.matches : undefined });
       const mapped = mapMasteryKeys(credit.masteryKeys, practice.instrumentId, (api.db().prefs || {}));
       // A rhythm step is judged on onsets only: a try with any clap or
       // wrong-pitch hit is no evidence about the notes' pitch mastery.
@@ -982,6 +1019,13 @@ function mountSongsPanel(hostEl, api) {
     practice.stepIndex = nextStep(practice.plan, practice.results);
     practice.playedEvents = [];
     store.set({ songId: practice.song.id, partId: practice.partId, instrumentId: practice.instrumentId, level: practice.plan.level });
+    // The lesson just reached its end (the "whole piece" step passed): log
+    // this practice session once, the same moment endSession() logs a
+    // built-in drill's session.
+    if (practice.stepIndex >= practice.plan.steps.length && !practice.sessionLogged && typeof api.logSession === 'function') {
+      const summary = summarizePracticeSession(practice, api.now());
+      if (summary) { practice.sessionLogged = true; api.logSession(summary); }
+    }
     renderPractice();
   }
 
@@ -1123,6 +1167,17 @@ function mountSongsPanel(hostEl, api) {
     },
     hide() {
       stopRecording();
+      // A learner who judged at least one step then switched to another
+      // panel without finishing the lesson still gets that practice counted
+      // -- otherwise a session cut short by "I'll come back to this" never
+      // shows up in the practice log at all. Same logSession() path and the
+      // same practice.sessionLogged guard the lesson-finish call above uses,
+      // so returning to this same lesson and finishing it later does not
+      // log a second row for the steps already counted here.
+      if (practice && !practice.sessionLogged && typeof api.logSession === 'function') {
+        const summary = summarizePracticeSession(practice, api.now());
+        if (summary) { practice.sessionLogged = true; api.logSession(summary); }
+      }
     },
   };
 }

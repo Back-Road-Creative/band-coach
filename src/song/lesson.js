@@ -427,12 +427,35 @@ export function nextStep(plan, results) {
 // creditFor
 // ---------------------------------------------------------------------------
 
+// `matches`, when given (src/ui/songs/practice.js judgeAttempt()'s
+// result.matches), scores each mastery key by that NOTE's own outcome
+// (hit = ok && pitchOk !== false -- a clap onset with no pitch, ok:true/
+// pitchOk:false, is not evidence the pitch was right) instead of the whole
+// step's pass/fail: a step that failed only because ONE note was missed
+// should not mark every other, correctly-played note as missed too, and a
+// step that happened to pass should not credit a note it never actually
+// got right. A midi key that appears more than once (a repeated note)
+// counts as hit only if EVERY occurrence hit.
+// With no `matches` (older callers, or a step judgeAttempt never ran
+// per-note matching for), falls back to the original one-outcome-for-the-
+// whole-step behaviour.
 export function creditFor(stepResult) {
-  const { step, passed, elapsedMs, judgedCount } = stepResult;
+  const { step, passed, elapsedMs, judgedCount, matches } = stepResult;
   const judged = typeof judgedCount === 'number' ? judgedCount : step.notes.length;
   const minutes = Math.round(((elapsedMs || 0) / 60000) * 100) / 100;
-  const seenKeys = new Set(step.notes.map(n => 'midi:' + n.midi));
-  const masteryKeys = Array.from(seenKeys).map(key => ({ key, hit: !!passed }));
+  let masteryKeys;
+  if (Array.isArray(matches)) {
+    const perKey = new Map();
+    matches.forEach(m => {
+      if (!m || !m.note || m.note.midi == null) return;
+      const key = 'midi:' + m.note.midi, hit = !!(m.ok && m.pitchOk !== false);
+      perKey.set(key, (perKey.has(key) ? perKey.get(key) : true) && hit);
+    });
+    masteryKeys = Array.from(perKey, ([key, hit]) => ({ key, hit }));
+  } else {
+    const seenKeys = new Set(step.notes.map(n => 'midi:' + n.midi));
+    masteryKeys = Array.from(seenKeys).map(key => ({ key, hit: !!passed }));
+  }
   return {
     judged,
     ok: passed ? judged : 0,
