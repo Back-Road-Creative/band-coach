@@ -128,6 +128,26 @@
      side rail rounds down to the 16px "between groups" step. */
   .main { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 16px; align-items: start; }
   @media (max-width: 860px) { .main { grid-template-columns: minmax(0, 1fr); } }
+  /* P7-nav journey: Start in the first phone screen -- on a phone the
+     stacked stage (357px) plus an open instrument sheet (590px) pushed
+     #playBtn's row to ~1307px, well below a 390x844 first paint. `display:
+     contents` on .side dissolves it as a box so its children become plain
+     items of the single-column grid above; giving the row that holds
+     #playBtn order: -1 then renders it first, ahead of the stage, so Start
+     lands within the first screen on a fresh visit and the remaining side
+     cards keep following the stage in their existing order. Desktop (the
+     two-column grid) is untouched -- .side stays a real flex box there. */
+  @media (max-width: 600px) {
+    .main > .side { display: contents; }
+    .main > .side > .row:first-child { order: -1; }
+    /* The instrument sheet becomes a real bottom sheet: capped height with
+       its own scroll so the page below (nav, Start) is always in reach
+       instead of the full button list pushing everything else down. Its
+       buttons stay individually focusable, so axe's scrollable-region-
+       focusable rule is satisfied without adding a tabindex to #picker
+       itself. */
+    #picker { max-height: 40vh; overflow-y: auto; }
+  }
 
   /* feature panels */
   /* P2b-3: Songs, My progress, Learn this, Record a tune, Play Along, Ear
