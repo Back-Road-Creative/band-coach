@@ -22,6 +22,7 @@ export default {
   tuning: [55, 62, 69, 76],
   fretted: false,
   status: 'ready',
+  provenance: null,
   curriculum: [
     { level: 1, items: ['The open strings'] },
     { level: 2, items: ['G string, positions 1 to 5'] },

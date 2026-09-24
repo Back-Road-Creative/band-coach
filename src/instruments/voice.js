@@ -14,6 +14,7 @@ export default {
   clefs: ['treble'],
   octavePolicy: 'nearest-octave',
   status: 'ready',
+  provenance: null,
   curriculum: [
     { level: 1, items: ['Match a note: Do, Re, Mi'] },
     { level: 2, items: ['Add Fa and Sol'] },

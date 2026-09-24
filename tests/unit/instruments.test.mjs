@@ -10,6 +10,13 @@ import { INSTRUMENTS, byId } from '../../src/instruments/index.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const APP_JS_PATH = path.join(__dirname, '..', '..', 'src', 'app.js');
 
+test('every instrument record carries a provenance field, provisional (null) until a musician reviews it', () => {
+  for (const rec of INSTRUMENTS) {
+    assert.ok('provenance' in rec, rec.id + ' is missing a provenance field');
+    assert.equal(rec.provenance, null, rec.id + ': no reviewer name/date has been supplied yet, so provenance must stay null');
+  }
+});
+
 test('every instrument record passes validateInstrument', () => {
   for (const rec of INSTRUMENTS) {
     const { ok, errors } = validateInstrument(rec);
@@ -134,6 +141,57 @@ test('oboe is a ready concert-pitch wind record with a curriculum, no invented f
   assert.equal(byId.oboe.transposition, 0);
   assert.ok(byId.oboe.curriculum.length > 0);
   assert.equal(byId.oboe.fingerings, undefined, 'fingering data lives in src/instruments/how/keyed-woodwind.js, not a field on the record itself');
+});
+
+test('validateInstrument accepts a null or absent provenance (provisional, no reviewer yet)', () => {
+  const good = {
+    id: 'test-good-3',
+    name: 'Test Good 3',
+    family: 'keys',
+    input: 'midi',
+    range: { low: 40, high: 60 },
+    transposition: 0,
+    clefs: ['treble'],
+    octavePolicy: 'exact',
+    status: 'ready',
+    curriculum: [{ level: 1, items: ['First'] }]
+  };
+  assert.equal(validateInstrument(good).ok, true, 'provenance is optional');
+  assert.equal(validateInstrument({ ...good, provenance: null }).ok, true, validateInstrument({ ...good, provenance: null }).errors.join('; '));
+});
+
+test('validateInstrument accepts a fully-reviewed provenance and rejects a half-filled one', () => {
+  const good = {
+    id: 'test-good-4',
+    name: 'Test Good 4',
+    family: 'keys',
+    input: 'midi',
+    range: { low: 40, high: 60 },
+    transposition: 0,
+    clefs: ['treble'],
+    octavePolicy: 'exact',
+    status: 'ready',
+    curriculum: [{ level: 1, items: ['First'] }]
+  };
+  const reviewed = { ...good, provenance: { reference: 'Standard of Excellence, Book 1', reviewedBy: 'A. Reviewer', reviewedAt: '2026-09-24' } };
+  assert.equal(validateInstrument(reviewed).ok, true, validateInstrument(reviewed).errors.join('; '));
+
+  const unreviewed = { ...good, provenance: { reference: 'Standard of Excellence, Book 1', reviewedBy: null, reviewedAt: null } };
+  assert.equal(validateInstrument(unreviewed).ok, true, validateInstrument(unreviewed).errors.join('; '));
+
+  const cases = [
+    ['reviewedBy without reviewedAt', { ...good, provenance: { reference: 'X', reviewedBy: 'A. Reviewer', reviewedAt: null } }],
+    ['reviewedAt without reviewedBy', { ...good, provenance: { reference: 'X', reviewedBy: null, reviewedAt: '2026-09-24' } }],
+    ['empty reference', { ...good, provenance: { reference: '', reviewedBy: null, reviewedAt: null } }],
+    ['missing reference', { ...good, provenance: { reviewedBy: null, reviewedAt: null } }],
+    ['reviewedAt not YYYY-MM-DD', { ...good, provenance: { reference: 'X', reviewedBy: 'A. Reviewer', reviewedAt: '9/24/2026' } }],
+    ['provenance as a string', { ...good, provenance: 'reviewed by someone' }]
+  ];
+  for (const [label, bad] of cases) {
+    const { ok, errors } = validateInstrument(bad);
+    assert.equal(ok, false, label + ': expected rejection, got ok');
+    assert.ok(errors.length > 0, label + ': expected at least one error message');
+  }
 });
 
 test('mallet-percussion is a ready percussion record with a non-empty curriculum', () => {
