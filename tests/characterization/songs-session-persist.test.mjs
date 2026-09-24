@@ -64,7 +64,13 @@ test('a song session row keeps its source and songId after the page reloads', as
       continue;
     }
     await page.evaluate(
-      "(function () { Array.from(document.querySelectorAll('.panel-songs-practice button')).find(b => b.textContent === 'Your turn').click(); window.__coach.songsNote(64, true); })()"
+      "Array.from(document.querySelectorAll('.panel-songs-practice button')).find(b => b.textContent === 'Your turn').click()"
+    );
+    await page.waitFor(
+      "document.querySelector('.panel-songs-count') && document.querySelector('.panel-songs-count').textContent.startsWith('Notes heard so far')"
+    ); // N2 (#191): a four-beat count-in runs before listening starts; a note during it is ignored
+    await page.evaluate(
+      "window.__coach.songsNote(64, true)"
     );
     await page.waitFor("document.querySelector('.panel-songs-count') && document.querySelector('.panel-songs-count').textContent.includes('1')");
     await page.evaluate(

@@ -46,6 +46,11 @@ async function getToRecordingStep(page) {
   await page.waitFor(
     "Array.from(document.querySelectorAll('.panel-songs-practice button')).some(b => b.textContent === 'Stop and check')"
   );
+  // N2 (#191): a four-beat count-in runs before listening starts; a note
+  // played during it is ignored, so wait for the "heard so far" counter.
+  await page.waitFor(
+    "document.querySelector('.panel-songs-count') && document.querySelector('.panel-songs-count').textContent.startsWith('Notes heard so far')"
+  );
 }
 
 test('a correctly-played note in a keyboard song lesson credits keyboard, not the violin mod showing on the main screen', async (t) => {
