@@ -19,6 +19,18 @@ import { launchPage } from '../helpers/browser.mjs';
 
 const htmlPath = HTML_PATH;
 
+// P3-6: the separate Learn this panel is gone -- opens the same record door
+// and review screen through Songs' own Add a song section instead (same
+// duplicate-not-import precedent as tests/characterization/learn-this.
+// test.mjs's own copy).
+async function openAddSongSection(page) {
+  await page.evaluate("window.__coach.openPanel('songs')");
+  await page.waitFor("document.querySelector('.add-song-row')");
+  await page.evaluate(
+    "Array.from(document.querySelectorAll('.add-song-row button')).find(b => b.textContent.trim() === 'Add a song').click()",
+  );
+}
+
 // Pure-Node WAV writer: 16-bit PCM mono from a plain Float32Array (same
 // precedent as tests/characterization/learn-this.test.mjs).
 function writeWav(path, pcm, sampleRate) {
@@ -73,8 +85,9 @@ test('"Edit notes" opens the editor panel with the learned song loaded for editi
   t.after(() => page.close());
 
   await page.evaluate("window.__coach.setMod('kbd')");
-  await page.evaluate("window.__coach.openPanel('learn')");
-  await page.setFileInput('#learnFileInput', abcPath);
+  // P3-6: Learn this is retired -- same file door, now in Songs' Add a song.
+  await openAddSongSection(page);
+  await page.setFileInput('#songsFileInput', abcPath);
   await page.waitFor("document.querySelector('.panel-learn-result').hidden === false", 20000);
 
   await page.evaluate(
@@ -99,8 +112,9 @@ test('"Play along with this recording" opens Play Along already analysing the sa
   t.after(() => page.close());
 
   await page.evaluate("window.__coach.setMod('kbd')");
-  await page.evaluate("window.__coach.openPanel('learn')");
-  await page.setFileInput('#learnFileInput', wavPath);
+  // P3-6: Learn this is retired -- same file door, now in Songs' Add a song.
+  await openAddSongSection(page);
+  await page.setFileInput('#songsFileInput', wavPath);
   await page.waitFor("document.querySelector('.panel-learn-result').hidden === false", 20000);
 
   await page.evaluate(
@@ -126,8 +140,9 @@ test('a notation import shows no "Play along with this recording" button (no dec
   t.after(() => page.close());
 
   await page.evaluate("window.__coach.setMod('kbd')");
-  await page.evaluate("window.__coach.openPanel('learn')");
-  await page.setFileInput('#learnFileInput', abcPath);
+  // P3-6: Learn this is retired -- same file door, now in Songs' Add a song.
+  await openAddSongSection(page);
+  await page.setFileInput('#songsFileInput', abcPath);
   await page.waitFor("document.querySelector('.panel-learn-result').hidden === false", 20000);
 
   const count = await page.evaluate("document.querySelectorAll('.panel-learn-playalong-btn').length");
@@ -146,8 +161,9 @@ test('a recording with unresolved check items disables "Practise this" and "Edit
   t.after(() => page.close());
 
   await page.evaluate("window.__coach.setMod('kbd')");
-  await page.evaluate("window.__coach.openPanel('learn')");
-  await page.setFileInput('#learnFileInput', wavPath);
+  // P3-6: Learn this is retired -- same file door, now in Songs' Add a song.
+  await openAddSongSection(page);
+  await page.setFileInput('#songsFileInput', wavPath);
   await page.waitFor("document.querySelector('.panel-learn-result').hidden === false", 20000);
 
   // Every transcription (mic or audio file) carries at least one check

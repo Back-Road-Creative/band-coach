@@ -237,44 +237,13 @@ note, never evidence that the previous one kept sounding until then.
 
 ## Learn this
 
-The "Learn this" panel (`src/ui/learn.js`) is one drop zone: drop or pick a music file (`.mid`,
-`.midi`, `.abc`, `.xml`, `.musicxml`, `.mxl`, `.gp`, `.gp5`) or a recording (`.wav`, `.mp3`, `.ogg`, `.m4a`,
-`.flac`, `.webm`), and either way it turns into a song you can practise — the panel never asks
-which kind of thing you dropped (`src/ui/learn/source.js`'s `learnSourceFor` tells notation from
-audio from neither, purely from the file's name and MIME type). A notation file is imported the
-same way Songs' own file input already imports one; a recording is decoded and transcribed through
-the same pipeline "Record a tune"'s file input uses (see "Turning an audio file into notes" below)
-— nothing about pitch tracking is reimplemented here. Either way the result is saved to the same
-song library Songs reads from, then shown: the song's title, any warnings as a plain check list, a
-confidence-coloured strip of notes when the transcription carries per-note confidence, the same
-"Play it on…" instrument-card row Songs shows, and a "Practise this" button that opens Songs
-already on that song's lesson. When there are unresolved check items in that warnings list,
-"Practise this" is disabled instead, with a plain-language reason next to it naming how many
-notes to fix first (`practiceGate`) — "Edit notes" is the primary action instead, and carries that
-same check list over to the editor's own mandatory check step rather than losing it on hand-off.
-With no warnings, "Practise this" works exactly as before. The same panel also has a mic door: a "Record" button that counts
-you in for four beats (with a visible "1 2 3 4" and a live level meter, tempo set by a 40–200bpm
-field defaulting to 90) using the exact same frame recorder `createRecorder` "Record a tune" uses
-(`src/ui/editor/record.js`), then Stop hands the capture through the same `transcribe()` and the
-same result view as a dropped file — a mic that is blocked or missing, or a take with nothing heard
-clearly enough to turn into notes, says so in plain words rather than saving nothing silently.
-
-Every result also offers hand-offs to the older, fuller panels rather than duplicating their
-features: "Edit notes" opens "Record a tune" (`src/ui/editor.js`) with the learned song already
-loaded for note-editing (`requestOpenInEditor`, read once by the editor's own `show()`, the same
-cross-panel request pattern Songs' `requestOpenSong` already uses) — pressing "Save to my songs"
-afterwards corrects that same saved song in place rather than leaving a new suffixed copy behind;
-a separate "Save a copy" button is there for when a new entry is actually wanted. And, only when
-the source was a recording with a decoded audio buffer to hand over, "Play along with this
-recording" opens Play
-Along (`src/ui/playalong.js`) already analysing that same audio (`requestPlayalongRecording`, an
-in-memory hand-off — audio is far too big for the panel-data store). The Listen/file-input row in
-"Record a tune" and the file input in Play Along each carry a short pointer back to this panel, so
-a learner who lands on either of those older doors first is told where the simpler one is. Songs'
-own "Add a song" button (see "Songs" below) now offers the same record-or-open-file route without
-leaving Songs at all, so this panel and Songs' own Add a song share the exact same record door and
-review screen (`src/ui/songs/record-door.js`, `src/ui/songs/review.js`) rather than each keeping a
-separate copy. Retiring this panel now that Songs has its own way in is later work.
+The separate "Learn this" panel has been retired — Songs' own "Add a song" button (see "Songs"
+below) is now the one place to turn a recording or a music file into a song. It offers the same
+record-or-open-file route the old panel did, without ever leaving Songs. The record door (the
+"Record" button, four-beat count-in, live level meter and capture) lives in
+`src/ui/songs/record-door.js`, and the shared result screen (title, plain-language warnings,
+confidence-coloured note strip, "Play it on…" cards, and the "Practise this" gate that stays
+disabled until any unresolved check items are fixed) lives in `src/ui/songs/review.js`.
 
 ## Capture a melody
 

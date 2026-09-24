@@ -21,6 +21,17 @@ import assert from 'node:assert/strict';
 import { HTML_PATH } from '../helpers/html-path.mjs';
 import { launchPage } from '../helpers/browser.mjs';
 
+// P3-6: the separate Learn this panel is gone -- opens the same mic door
+// through Songs' own Add a song section instead (same duplicate-not-import
+// precedent as tests/characterization/learn-this.test.mjs's own copy).
+async function openAddSongSection(page) {
+  await page.evaluate("window.__coach.openPanel('songs')");
+  await page.waitFor("document.querySelector('.add-song-row')");
+  await page.evaluate(
+    "Array.from(document.querySelectorAll('.add-song-row button')).find(b => b.textContent.trim() === 'Add a song').click()",
+  );
+}
+
 // Counts every getUserMedia() call the page makes and delays each one by
 // 500ms -- comfortably long enough for a second Record click to land while
 // the first is still awaiting the (fake) permission prompt, and a realistic
@@ -43,17 +54,19 @@ test('a second Record click while the microphone is still opening does not start
   t.after(() => page.close());
 
   await page.evaluate("window.__coach.setMod('kbd')");
-  await page.evaluate("window.__coach.openPanel('learn')");
+  // P3-6: Learn this is retired -- the mic door now lives in Songs' Add a
+  // song section (idPrefix 'songs': .panel-songs-record-btn).
+  await openAddSongSection(page);
 
-  await page.evaluate("document.querySelector('.panel-learn-record-btn').click()");
+  await page.evaluate("document.querySelector('.panel-songs-record-btn').click()");
   // Land the second click well inside the 500ms getUserMedia delay above,
   // before the first call has resolved and claimed the slot.
   await new Promise((r) => setTimeout(r, 100));
-  await page.evaluate("document.querySelector('.panel-learn-record-btn').click()");
+  await page.evaluate("document.querySelector('.panel-songs-record-btn').click()");
 
   // Let both getUserMedia calls (if there are two) resolve and the count-in
   // that follows run its course.
-  await page.waitFor("document.querySelector('.panel-learn-record-btn').textContent === 'Stop'", 15000);
+  await page.waitFor("document.querySelector('.panel-songs-record-btn').textContent === 'Stop'", 15000);
 
   const gumCalls = await page.evaluate('window.__gumCalls');
   assert.equal(gumCalls, 1, 'a second Record click during the mic-permission wait opened the microphone a second ' +
@@ -62,8 +75,8 @@ test('a second Record click while the microphone is still opening does not start
   assert.deepEqual(page.exceptions, [], 'no uncaught exceptions from a double Record click');
 
   // Clean shutdown: Stop the one recording that should be in progress.
-  await page.evaluate("document.querySelector('.panel-learn-record-btn').click()");
-  await page.waitFor("document.querySelector('.panel-learn-record-btn').textContent === 'Record'", 15000);
+  await page.evaluate("document.querySelector('.panel-songs-record-btn').click()");
+  await page.waitFor("document.querySelector('.panel-songs-record-btn').textContent === 'Record'", 15000);
 });
 
 test('Record stays clickable during the count-in, and clicking it cancels back to idle with no capture', async (t) => {
@@ -71,25 +84,28 @@ test('Record stays clickable during the count-in, and clicking it cancels back t
   t.after(() => page.close());
 
   await page.evaluate("window.__coach.setMod('kbd')");
-  await page.evaluate("window.__coach.openPanel('learn')");
+  // P3-6: Learn this is retired -- the mic door now lives in Songs' Add a
+  // song section (idPrefix 'songs': songsBpm, .panel-songs-record-btn,
+  // .panel-songs-beat; the shared review screen stays .panel-learn-*).
+  await openAddSongSection(page);
 
   // A slow tempo so the count-in stays up long enough to reliably observe
   // and click mid-way through, without racing straight to capture.
   await page.evaluate(
-    "(() => { const b = document.getElementById('learnBpm'); b.value = '40'; b.dispatchEvent(new Event('input', { bubbles: true })); })()"
+    "(() => { const b = document.getElementById('songsBpm'); b.value = '40'; b.dispatchEvent(new Event('input', { bubbles: true })); })()"
   );
-  await page.evaluate("document.querySelector('.panel-learn-record-btn').click()");
+  await page.evaluate("document.querySelector('.panel-songs-record-btn').click()");
 
-  await page.waitFor("document.querySelector('.panel-learn-record-btn').textContent === 'Counting in…'", 15000);
+  await page.waitFor("document.querySelector('.panel-songs-record-btn').textContent === 'Counting in…'", 15000);
 
-  const disabledMidCountIn = await page.evaluate("document.querySelector('.panel-learn-record-btn').disabled");
+  const disabledMidCountIn = await page.evaluate("document.querySelector('.panel-songs-record-btn').disabled");
   assert.equal(disabledMidCountIn, false, 'the Record button is disabled during the count-in, so there is no way ' +
     'to click it to cancel -- the mid-count-in Stop path the app is written to support is unreachable');
 
-  await page.evaluate("document.querySelector('.panel-learn-record-btn').click()");
+  await page.evaluate("document.querySelector('.panel-songs-record-btn').click()");
 
-  await page.waitFor("document.querySelector('.panel-learn-record-btn').textContent === 'Record'", 15000);
-  const beat = await page.evaluate("document.querySelector('.panel-learn-beat').textContent");
+  await page.waitFor("document.querySelector('.panel-songs-record-btn').textContent === 'Record'", 15000);
+  const beat = await page.evaluate("document.querySelector('.panel-songs-beat').textContent");
   assert.equal(beat, '', 'the beat display was not cleared when the count-in was cancelled');
 
   // No capture ever started, so no result should appear even after waiting

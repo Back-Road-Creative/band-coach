@@ -1,13 +1,14 @@
-// practiceGate (src/ui/learn.js): the pure decision behind "Learn this"'s
-// result screen -- can "Practise this" be clicked yet, or does the song
-// still carry unresolved check items from transcription (report.needsCheck)
-// that "Fix it up" needs to clear first? Sending a song straight to
-// practice with doubtful notes uncorrected is exactly what this gate
-// exists to stop. No DOM in it, tested the same way chooseSaveTarget
+// practiceGate (src/ui/songs/review.js, moved here from the now-retired
+// src/ui/learn.js in P3-6): the pure decision behind the Add a song review
+// screen's -- can "Practise this" be clicked yet, or does the song still
+// carry unresolved check items from transcription (report.needsCheck) that
+// "Fix it up" needs to clear first? Sending a song straight to practice
+// with doubtful notes uncorrected is exactly what this gate exists to
+// stop. No DOM in it, tested the same way chooseSaveTarget
 // (src/ui/editor.js) is.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { practiceGate } from '../../src/ui/learn.js';
+import { practiceGate } from '../../src/ui/songs/review.js';
 
 test('practiceGate: no warnings allows practice', () => {
   assert.deepEqual(practiceGate([]), { allowed: true, reason: null });
