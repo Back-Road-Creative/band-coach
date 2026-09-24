@@ -82,6 +82,17 @@ function titleFromFileName(fileName) {
   return (dot > 0 ? name.slice(0, dot) : name) || 'My recording';
 }
 
+// Pure decision behind renderResult()'s "Practise this" button: a song
+// whose transcription still has unresolved check items (warnings, from
+// report.needsCheck) must not be sent straight to practice with doubtful
+// notes uncorrected -- it has to go through "Fix it up" first. No DOM in
+// it, tested the same way src/ui/editor.js's chooseSaveTarget is.
+export function practiceGate(warnings) {
+  const list = Array.isArray(warnings) ? warnings : [];
+  if (!list.length) return { allowed: true, reason: null };
+  return { allowed: false, reason: 'Fix up the ' + list.length + ' flagged note' + (list.length === 1 ? '' : 's') + ' first, then practise.' };
+}
+
 function mountLearnPanel(hostEl, api) {
   // Shares the exact library Songs reads from (same store name), so a song
   // saved here shows up in Songs's own list without either panel knowing
@@ -385,8 +396,8 @@ function mountLearnPanel(hostEl, api) {
   // edit.js) this one deliberately does not reimplement -- same
   // request+click pattern as openSongsPanel() above, mirrored in src/ui/
   // editor.js's requestOpenInEditor()/checkOpenRequest().
-  function openEditorPanel(songId) {
-    requestOpenInEditor(api, songId);
+  function openEditorPanel(songId, needsCheck) {
+    requestOpenInEditor(api, songId, needsCheck);
     return clickPanelButton('editor');
   }
 
@@ -437,18 +448,28 @@ function mountLearnPanel(hostEl, api) {
       resultEl.appendChild(renderPlayItOnCards(song, partId, typeof api.mod === 'function' ? api.mod() : null, (instrument) => openSongsPanel(song.id, partId, instrument.id)));
     }
 
+    // A song with unresolved check items (warnings) cannot be sent straight
+    // to practice with doubtful notes uncorrected -- see practiceGate,
+    // above. The button stays visible (never a dead end) but disabled,
+    // with the reason spelled out in plain language right next to it.
+    const gate = practiceGate(warnings);
     const practiseBtn = el('button', { type: 'button', class: 'panel-learn-practise-btn', text: 'Practise this' });
+    if (!gate.allowed) practiseBtn.disabled = true;
     practiseBtn.addEventListener('click', () => {
+      if (!gate.allowed) return;
       const opened = openSongsPanel(song.id, partId, null);
       if (!opened) say('Saved "' + song.title + '". Open the Songs panel to practise it.');
     });
     resultEl.appendChild(practiseBtn);
+    if (!gate.allowed) resultEl.appendChild(el('p', { class: 'panel-learn-practise-gate-reason', text: gate.reason }));
 
     // "Fix it up" -- every result, notation or audio, can be sent to the
-    // fuller note-editing panel.
+    // fuller note-editing panel. Any unresolved check items ride along
+    // (requestOpenInEditor/loadReport, src/ui/editor.js) so the editor
+    // shows the learner the SAME check list rather than losing it.
     const fixItUpBtn = el('button', { type: 'button', class: 'panel-learn-fixitup-btn', text: 'Fix it up' });
     fixItUpBtn.addEventListener('click', () => {
-      const opened = openEditorPanel(song.id);
+      const opened = openEditorPanel(song.id, warnings);
       if (!opened) say('Saved "' + song.title + '". Open Record a tune to fix it up.');
     });
     resultEl.appendChild(fixItUpBtn);

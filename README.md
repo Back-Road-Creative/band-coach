@@ -214,7 +214,11 @@ the same pipeline "Record a tune"'s file input uses (see "Turning an audio file 
 song library Songs reads from, then shown: the song's title, any warnings as a plain check list, a
 confidence-coloured strip of notes when the transcription carries per-note confidence, the same
 "Play it on…" instrument-card row Songs shows, and a "Practise this" button that opens Songs
-already on that song's lesson. The same panel also has a mic door: a "Record" button that counts
+already on that song's lesson. When there are unresolved check items in that warnings list,
+"Practise this" is disabled instead, with a plain-language reason next to it naming how many
+notes to fix first (`practiceGate`) — "Fix it up" is the primary action instead, and carries that
+same check list over to the editor's own mandatory check step rather than losing it on hand-off.
+With no warnings, "Practise this" works exactly as before. The same panel also has a mic door: a "Record" button that counts
 you in for four beats (with a visible "1 2 3 4" and a live level meter, tempo set by a 40–200bpm
 field defaulting to 90) using the exact same frame recorder `createRecorder` "Record a tune" uses
 (`src/ui/editor/record.js`), then Stop hands the capture through the same `transcribe()` and the

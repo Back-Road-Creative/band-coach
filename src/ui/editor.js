@@ -41,8 +41,8 @@ import { layoutSong } from './editor/layout-song.js';
 // Backed by this panel's own saved-data slot (api.store), read once by
 // mountEditor's show() below and cleared so it never re-fires.
 const EDITOR_OPEN_REQUEST_STORE_ID = 'editor-open-request';
-export function requestOpenInEditor(api, songId) {
-  api.store(EDITOR_OPEN_REQUEST_STORE_ID).set({ songId });
+export function requestOpenInEditor(api, songId, needsCheck) {
+  api.store(EDITOR_OPEN_REQUEST_STORE_ID).set({ songId, needsCheck: Array.isArray(needsCheck) ? needsCheck : [] });
 }
 
 // Shared across every unit that writes to the saved-song library — see the
@@ -81,6 +81,23 @@ function keyName(key) {
 export function chooseSaveTarget({ loadedId, asCopy }) {
   if (loadedId && !asCopy) return { mode: 'update', id: loadedId };
   return { mode: 'add' };
+}
+
+// Pure decision behind loadSong(): what report (notesCaptured/needsCheck/
+// acknowledged) does a handed-over song load with? A song "Fix it up"
+// (src/ui/learn.js) sends over with unresolved check items keeps that SAME
+// list, unacknowledged -- loadSong() used to always reset needsCheck: []
+// and acknowledged: true, so the check list the learner was just shown on
+// the Learn result screen silently vanished on hand-over. No needsCheck
+// (or an empty one) keeps the old behaviour: nothing to check, editing
+// unlocks immediately.
+export function loadReport(song, needsCheck) {
+  const list = Array.isArray(needsCheck) ? needsCheck : [];
+  return {
+    notesCaptured: song.parts[0] ? song.parts[0].notes.length : 0,
+    needsCheck: list,
+    acknowledged: list.length === 0,
+  };
 }
 
 function clefFor(rec) {
@@ -385,22 +402,25 @@ function mountEditor(hostEl, api) {
   });
 
   // A song handed over already-built (src/ui/learn.js's "Fix it up"), rather
-  // than one just transcribed here -- it was already validated by whoever
-  // saved it, so there is no needsCheck list to gate behind; editing tools
-  // unlock immediately, same as after a check list has been acknowledged.
-  function loadSong(loadedSong) {
+  // than one just transcribed here. It was already validated by whoever
+  // saved it, but may still carry the SAME needsCheck list the learner saw
+  // on the Learn result screen (loadReport, above) -- passed through so
+  // that list, and the mandatory acknowledgement gate behind it, survives
+  // the hand-over instead of silently vanishing. No needsCheck (or an
+  // empty one) unlocks editing immediately, same as before.
+  function loadSong(loadedSong, needsCheck) {
     song = loadedSong;
     debugSong = song;
     loadedId = loadedSong.id;
-    report = { notesCaptured: song.parts[0] ? song.parts[0].notes.length : 0, needsCheck: [] };
+    report = loadReport(song, needsCheck);
     history = createHistory(song);
     selected = null;
     activePartIndex = 0;
-    acknowledged = true;
+    acknowledged = report.acknowledged;
     titleInput.value = song.title;
     renderCheckList();
     recordStatus.textContent = 'Loaded "' + song.title + '" for editing.';
-    setControlsEnabled(true);
+    setControlsEnabled(acknowledged);
     render();
   }
 
@@ -415,7 +435,7 @@ function mountEditor(hostEl, api) {
     api.store(EDITOR_OPEN_REQUEST_STORE_ID).set(null);
     const loaded = await getLibrary().get(req.songId);
     if (!loaded) return;
-    loadSong(loaded);
+    loadSong(loaded, req.needsCheck);
   }
 
   function loadTranscription(result) {

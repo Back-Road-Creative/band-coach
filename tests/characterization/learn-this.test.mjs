@@ -55,7 +55,10 @@ function threeToneWav(path) {
   return writeWav(path, pcm, sr);
 }
 
-const ABC = 'X:1\nT:Learn Test\nM:4/4\nL:1/8\nK:C\nCDEFGABc|\n';
+// A Q: tempo field is included so this imports with no warnings (an ABC
+// file missing one still imports fine, but defaults its tempo and so warns
+// -- see the practiceGate coverage below, which relies on that).
+const ABC = 'X:1\nT:Learn Test\nM:4/4\nL:1/8\nQ:120\nK:C\nCDEFGABc|\n';
 
 test('the panel picker offers a "Learn this" panel', async (t) => {
   const page = await launchPage(htmlPath);

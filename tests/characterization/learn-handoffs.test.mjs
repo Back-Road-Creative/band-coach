@@ -131,6 +131,41 @@ test('a notation import shows no "Play along with this recording" button (no dec
   assert.equal(count, 0, 'a notation import never claims a hand-off the app cannot back up');
 });
 
+test('a recording with unresolved check items disables "Practise this" and "Fix it up" carries the check list to the editor', async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'band-coach-learn-handoff-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const wavPath = threeToneWav(join(dir, 'three-notes.wav'));
+
+  const page = await launchPage(htmlPath);
+  t.after(() => page.close());
+
+  await page.evaluate("window.__coach.setMod('kbd')");
+  await page.evaluate("window.__coach.openPanel('learn')");
+  await page.setFileInput('#learnFileInput', wavPath);
+  await page.waitFor("document.querySelector('.panel-learn-result').hidden === false", 20000);
+
+  // Every transcription (mic or audio file) carries at least one check
+  // item (transcribe()'s own key-profile caveat), so "Practise this" is
+  // disabled with a plain-language reason next to it, and "Fix it up" is
+  // the way forward.
+  const practiseDisabled = await page.evaluate(
+    "Array.from(document.querySelectorAll('.panel-learn-practise-btn')).find(b => b.textContent === 'Practise this').disabled"
+  );
+  assert.equal(practiseDisabled, true, 'Practise this is disabled while check items are unresolved');
+  const reason = await page.evaluate("(document.querySelector('.panel-learn-practise-gate-reason') || {}).textContent || ''");
+  assert.match(reason, /fix/i, 'a plain-language reason is shown next to the disabled button');
+
+  await page.evaluate(
+    "Array.from(document.querySelectorAll('.panel-learn-fixitup-btn')).find(b => b.textContent === 'Fix it up').click()"
+  );
+  await page.waitFor("window.__coach.panelOpen() === 'editor'");
+  await page.waitFor("document.getElementById('editorCheck') && !document.getElementById('editorCheck').hidden", 10000);
+
+  assert.deepEqual(page.exceptions, [], 'no uncaught exceptions handing the check list to the editor');
+  const checkItemCount = await page.evaluate("document.getElementById('editorCheck').querySelectorAll('li').length");
+  assert.ok(checkItemCount > 0, 'the editor shows the SAME check list the learner was just shown, not an empty one');
+});
+
 test('the Songs panel\'s pointer button opens Learn this', async (t) => {
   const page = await launchPage(htmlPath);
   t.after(() => page.close());
