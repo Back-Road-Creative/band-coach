@@ -6,8 +6,8 @@
 // Wiring pass (src/ui/fingerings.js): call `howKindFor(instrument)` to know
 // whether an instrument can be shown at all (only instruments with tuning,
 // a mapped brass preset, the free-reed family, the descant recorder, the
-// tin whistle, or the voice family qualify), then `computeHow(instrument,
-// midi, opts)` for the note the learner picked. `opts.key` (0-11) picks the
+// tin whistle, the voice family, or a drum `kit` qualify), then
+// `computeHow(instrument, midi, opts)` for the note the learner picked. `opts.key` (0-11) picks the
 // harmonica's key; `opts.maxFret` caps how many frets/positions a
 // fretboard or fingerboard diagram shows. `opts.leftHanded` mirrors a
 // fretboard or fingerboard diagram; `opts.capo` and `opts.tuning` (one of
@@ -26,6 +26,8 @@ import { positionsFor, tuningFor } from '../../instruments/how/fretboard.js';
 import { holesFor } from '../../instruments/how/harmonica.js';
 import { fingeringFor } from '../../instruments/how/recorder-whistle.js';
 import { keyedFingeringFor } from '../../instruments/how/keyed-woodwind.js';
+import { kitLayout, describeHit } from '../../instruments/how/drum-kit.js';
+import { pieceForMidi, canonicalMidi } from '../../instruments/drum-kit.js';
 import { noteName } from './notes.js';
 
 // Which brass preset (src/instruments/how/brass.js's PRESETS) an instrument
@@ -70,6 +72,8 @@ export function alternateTuningsFor(instrument) {
 
 export function howKindFor(instrument) {
   if (!instrument) return null;
+  // A drum `kit` (schema.js) is drawn as the kit itself, whatever the family.
+  if (Array.isArray(instrument.kit)) return 'drum-kit';
   if (Array.isArray(instrument.tuning) && instrument.tuning.length > 0) {
     return instrument.fretted === false ? 'fingerboard' : 'fretboard';
   }
@@ -194,6 +198,17 @@ export function computeHow(instrument, midi, opts = {}) {
   const kind = howKindFor(instrument);
   if (!kind) return null;
 
+  // Drum kit: the note is a General MIDI percussion note naming a piece,
+  // not a pitch. A note that is not on this kit highlights nothing.
+  if (kind === 'drum-kit') {
+    const piece = pieceForMidi(midi);
+    return {
+      kind, piece, layout: kitLayout(),
+      playable: !!piece,
+      description: piece ? describeHit(piece) : 'MIDI drum note ' + midi + ' is not one of the drums on this kit.'
+    };
+  }
+
   if (kind === 'fretboard' || kind === 'fingerboard') {
     const maxFret = opts.maxFret ?? 15;
     const leftHanded = !!opts.leftHanded;
@@ -265,6 +280,7 @@ export function computeHow(instrument, midi, opts = {}) {
 // range.low is not always in a typed table (e.g. the descant recorder's
 // beginner range starts below its short fingering table).
 export function defaultNoteFor(instrument, opts = {}) {
+  if (howKindFor(instrument) === 'drum-kit') return canonicalMidi('snare') ?? instrument.range.low;
   const { low, high } = instrument.range;
   for (let m = low; m <= high; m++) {
     const how = computeHow(instrument, m, opts);

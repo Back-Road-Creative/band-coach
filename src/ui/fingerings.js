@@ -145,7 +145,38 @@ function voiceDiagram(instrument, how) {
   ]);
 }
 
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
+function svgEl(tag, attrs) {
+  const node = document.createElementNS(SVG_NS, tag);
+  Object.keys(attrs || {}).forEach(k => node.setAttribute(k, attrs[k]));
+  return node;
+}
+
+// Drum kit, top-down (src/instruments/how/drum-kit.js's kitLayout(), unit
+// square scaled to a 100x100 viewBox): a circle per piece, cymbals as
+// thinner rings, the struck piece filled with the panel's highlight colour.
+// Colours come from the stage's CSS variables so the dark and light themes
+// both read.
+export function drumKitDiagram(instrument, how) {
+  const svg = svgEl('svg', { viewBox: '0 0 100 100', class: 'fing-drumkit', role: 'img', 'aria-label': how.description, width: '320', height: '320', style: 'max-width:100%;height:auto' });
+  how.layout.forEach(p => {
+    const hit = p.id === how.piece;
+    svg.appendChild(svgEl('circle', {
+      cx: String(p.x * 100), cy: String(p.y * 100), r: String(p.r * 100),
+      class: 'fing-drum' + (hit ? ' fing-hit' : ''), 'data-piece': p.id,
+      'stroke-width': p.shape === 'drum' ? '1.2' : '0.5',
+      style: hit ? 'fill:#f3c52f;stroke:#f3c52f' : 'fill:' + (p.shape === 'drum' ? 'var(--panel-2)' : 'none') + ';stroke:var(--line)'
+    }));
+    const label = svgEl('text', { x: String(p.x * 100), y: String(p.y * 100 + 1.2), 'text-anchor': 'middle', 'font-size': '3.4', style: 'fill:' + (hit ? '#06101d' : 'var(--text)') });
+    label.textContent = p.name;
+    svg.appendChild(label);
+  });
+  return svg;
+}
+
 function diagramFor(instrument, how) {
+  if (how.kind === 'drum-kit') return drumKitDiagram(instrument, how);
   if (how.kind === 'fretboard') return fretboardDiagram(instrument, how);
   if (how.kind === 'fingerboard') return fingerboardDiagram(instrument, how);
   if (how.kind === 'brass-valves' || how.kind === 'brass-slide') return brassDiagram(instrument, how);
@@ -266,13 +297,20 @@ export function registerFingerings(panels) {
         }
       }
 
+      // A drum kit is picked by piece name (its canonical GM note), not by
+      // pitch names that mean nothing on a drum; no tone is played for it,
+      // since the app has no drum sound yet (that comes with its trainer).
       function renderNotePicker() {
         notesHost.innerHTML = '';
-        chromaticRange(instrument.range.low, instrument.range.high).forEach(m => {
-          const btn = el('button', { type: 'button', className: 'fing-note-btn', text: noteName(m), 'aria-pressed': String(m === midi) });
+        const isKit = howKindFor(instrument) === 'drum-kit';
+        const choices = isKit
+          ? instrument.kit.map(p => ({ m: p.midi[0], label: p.name }))
+          : chromaticRange(instrument.range.low, instrument.range.high).map(m => ({ m, label: noteName(m) }));
+        choices.forEach(({ m, label }) => {
+          const btn = el('button', { type: 'button', className: 'fing-note-btn', text: label, 'data-midi': String(m), 'aria-pressed': String(m === midi) });
           btn.addEventListener('click', () => {
             midi = m;
-            try { api.audio(); api.tone(m, api.now(), 0.6, 0.18); } catch (e) { api.recordError('fingerings:tone', e); }
+            if (!isKit) { try { api.audio(); api.tone(m, api.now(), 0.6, 0.18); } catch (e) { api.recordError('fingerings:tone', e); } }
             render();
           });
           notesHost.appendChild(btn);
@@ -281,8 +319,8 @@ export function registerFingerings(panels) {
 
       function render() {
         rangeHost.innerHTML = '';
-        rangeHost.appendChild(rangeBar(instrument.range, midi));
-        Array.from(notesHost.children).forEach(b => b.setAttribute('aria-pressed', String(b.textContent === noteName(midi))));
+        if (howKindFor(instrument) !== 'drum-kit') rangeHost.appendChild(rangeBar(instrument.range, midi));
+        Array.from(notesHost.children).forEach(b => b.setAttribute('aria-pressed', String(Number(b.getAttribute('data-midi')) === midi)));
         const how = computeHow(instrument, midi, { capo, tuning: tuningName, leftHanded });
         diagramHost.innerHTML = '';
         diagramHost.appendChild(diagramFor(instrument, how));

@@ -202,3 +202,95 @@ test('mallet-percussion is a ready percussion record with a non-empty curriculum
   assert.equal(rec.transposition, 0);
   assert.ok(rec.curriculum.length > 0);
 });
+
+// Drum kit: a planned percussion record whose `kit` lists the drawn pieces,
+// their General MIDI percussion notes and a computer-key suggestion each.
+// These ids and notes are a contract other units code against.
+const DRUM_CONTRACT = {
+  kick: [35, 36],
+  snare: [37, 38, 40],
+  'hihat-closed': [42],
+  'hihat-pedal': [44],
+  'hihat-open': [46],
+  'tom-floor': [41, 43],
+  'tom-mid': [45, 47],
+  'tom-high': [48, 50],
+  crash: [49, 52, 55, 57],
+  ride: [51, 53, 59]
+};
+
+test('drum-kit is a planned percussion record with the contract kit and no curriculum yet', async () => {
+  const rec = byId['drum-kit'];
+  assert.ok(rec, 'expected a drum-kit record in INSTRUMENTS');
+  assert.equal(rec.name, 'Drum kit');
+  assert.equal(rec.family, 'percussion');
+  assert.equal(rec.input, 'midi');
+  assert.deepEqual(rec.range, { low: 35, high: 59 });
+  assert.deepEqual(rec.clefs, ['percussion']);
+  assert.equal(rec.status, 'planned');
+  assert.deepEqual(rec.curriculum, []);
+  const { ok, errors } = validateInstrument(rec);
+  assert.equal(ok, true, errors.join('; '));
+  const got = Object.fromEntries(rec.kit.map(p => [p.id, p.midi]));
+  assert.deepEqual(got, DRUM_CONTRACT);
+  const keys = Object.fromEntries(rec.kit.map(p => [p.id, p.key]));
+  assert.deepEqual(keys, { kick: 'f', snare: 'j', 'hihat-closed': 'd', 'hihat-open': 'e', 'hihat-pedal': 'c', 'tom-high': 'u', 'tom-mid': 'i', 'tom-floor': 'k', crash: 'r', ride: 'o' });
+  const names = Object.fromEntries(rec.kit.map(p => [p.id, p.name]));
+  assert.deepEqual(names, { kick: 'Bass drum', snare: 'Snare', 'hihat-closed': 'Hi-hat (closed)', 'hihat-pedal': 'Hi-hat (pedal)', 'hihat-open': 'Hi-hat (open)', 'tom-floor': 'Floor tom', 'tom-mid': 'Mid tom', 'tom-high': 'High tom', crash: 'Crash cymbal', ride: 'Ride cymbal' });
+});
+
+test('drum-kit helpers map every GM note to its piece and each piece to its first note', async () => {
+  const { PIECES, pieceForMidi, canonicalMidi } = await import('../../src/instruments/drum-kit.js');
+  assert.equal(PIECES, byId['drum-kit'].kit);
+  for (const [id, notes] of Object.entries(DRUM_CONTRACT)) {
+    for (const n of notes) assert.equal(pieceForMidi(n), id, 'MIDI ' + n);
+    assert.equal(canonicalMidi(id), notes[0]);
+  }
+  assert.equal(pieceForMidi(39), null, 'hand clap is not on this kit');
+  assert.equal(pieceForMidi(60), null);
+  assert.equal(pieceForMidi('38'), null);
+  assert.equal(canonicalMidi('cowbell'), null);
+});
+
+test('validateInstrument checks an optional kit field piece by piece', () => {
+  const base = {
+    id: 'test-kit',
+    name: 'Test kit',
+    family: 'percussion',
+    input: 'midi',
+    range: { low: 35, high: 59 },
+    transposition: 0,
+    clefs: ['percussion'],
+    octavePolicy: 'exact',
+    status: 'planned',
+    provenance: null,
+    curriculum: []
+  };
+  const kick = { id: 'kick', name: 'Bass drum', midi: [35, 36], key: 'f' };
+  const snare = { id: 'snare', name: 'Snare', midi: [38], key: 'j' };
+  assert.equal(validateInstrument(base).ok, true, 'kit is optional');
+  const good = { ...base, kit: [kick, snare] };
+  assert.equal(validateInstrument(good).ok, true, validateInstrument(good).errors.join('; '));
+
+  const cases = [
+    ['kit not an array', { ...base, kit: { kick } }],
+    ['empty kit', { ...base, kit: [] }],
+    ['piece not an object', { ...base, kit: [kick, 'snare'] }],
+    ['id not kebab-case', { ...base, kit: [kick, { ...snare, id: 'Snare Drum' }] }],
+    ['duplicate id', { ...base, kit: [kick, { ...snare, id: 'kick' }] }],
+    ['empty name', { ...base, kit: [kick, { ...snare, name: '' }] }],
+    ['empty midi list', { ...base, kit: [kick, { ...snare, midi: [] }] }],
+    ['midi not an integer', { ...base, kit: [kick, { ...snare, midi: [38.5] }] }],
+    ['midi outside range', { ...base, kit: [kick, { ...snare, midi: [60] }] }],
+    ['one note on two pieces', { ...base, kit: [kick, { ...snare, midi: [36] }] }],
+    ['key uppercase', { ...base, kit: [kick, { ...snare, key: 'J' }] }],
+    ['key two letters', { ...base, kit: [kick, { ...snare, key: 'jj' }] }],
+    ['key not a letter', { ...base, kit: [kick, { ...snare, key: ';' }] }],
+    ['duplicate key', { ...base, kit: [kick, { ...snare, key: 'f' }] }]
+  ];
+  for (const [label, bad] of cases) {
+    const { ok, errors } = validateInstrument(bad);
+    assert.equal(ok, false, label + ': expected rejection, got ok');
+    assert.ok(errors.some(e => /kit/.test(e)), label + ': expected an error naming the kit, got ' + JSON.stringify(errors));
+  }
+});
