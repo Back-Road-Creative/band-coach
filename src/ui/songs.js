@@ -1167,6 +1167,17 @@ function mountSongsPanel(hostEl, api) {
     },
     hide() {
       stopRecording();
+      // A learner who judged at least one step then switched to another
+      // panel without finishing the lesson still gets that practice counted
+      // -- otherwise a session cut short by "I'll come back to this" never
+      // shows up in the practice log at all. Same logSession() path and the
+      // same practice.sessionLogged guard the lesson-finish call above uses,
+      // so returning to this same lesson and finishing it later does not
+      // log a second row for the steps already counted here.
+      if (practice && !practice.sessionLogged && typeof api.logSession === 'function') {
+        const summary = summarizePracticeSession(practice, api.now());
+        if (summary) { practice.sessionLogged = true; api.logSession(summary); }
+      }
     },
   };
 }

@@ -845,7 +845,17 @@ import { register as registerPlayalong } from './ui/playalong.js';
     const notate = {}; NOTATE_MOD_IDS.forEach(m => { notate[m] = 'names'; });
     const d = { v: 1, mods: {}, sessions: [], prefs: { mod: 'kbd', wind: 'bb', voice: 'low', names: true, noiseFloor: null, inputDeviceId: null, notate: notate, theme: 'system', noteNaming: { system: 'letters', accidentals: 'mixed' } } }; v = (v && typeof v === 'object') ? v : {};
     MOD_IDS.forEach(m => { d.mods[m] = sanitizeModel(m, v.mods && v.mods[m], modelNow); });
-    if (Array.isArray(v.sessions)) d.sessions = v.sessions.filter(x => x && typeof x.d === 'string' && MODS[x.mod]).slice(-60).map(x => ({ d: x.d.slice(0, 10), mod: x.mod, min: num(x.min, 0, 0, 600), acc: num(x.acc, 0, 0, 1), a1: num(x.a1, 0, 0, 1), a2: num(x.a2, 0, 0, 1), from: num(x.from, 1, 1, 80), to: num(x.to, 1, 1, 80), breaks: num(x.breaks, 0, 0, 99) }));
+    if (Array.isArray(v.sessions)) d.sessions = v.sessions.filter(x => x && typeof x.d === 'string' && MODS[x.mod]).slice(-60).map(x => {
+      // source/songId (a panel-logged row, e.g. a finished or abandoned song
+      // lesson -- see songs.js's logSession()) are optional: a built-in
+      // drill's row never carried them and still shouldn't after this load,
+      // so an absent/non-string value is dropped rather than sanitised to ''
+      // or null, keeping a drill row and a song row's own shape distinct.
+      const row = { d: x.d.slice(0, 10), mod: x.mod, min: num(x.min, 0, 0, 600), acc: num(x.acc, 0, 0, 1), a1: num(x.a1, 0, 0, 1), a2: num(x.a2, 0, 0, 1), from: num(x.from, 1, 1, 80), to: num(x.to, 1, 1, 80), breaks: num(x.breaks, 0, 0, 99) };
+      if (typeof x.source === 'string') row.source = x.source;
+      if (typeof x.songId === 'string') row.songId = x.songId;
+      return row;
+    });
     const p = v.prefs || {}; if (MODS[p.mod]) d.prefs.mod = p.mod; if (WIND_KINDS[p.wind]) d.prefs.wind = p.wind; d.prefs.voiceRange = (p.voiceRange && typeof p.voiceRange === 'object' && Number.isFinite(p.voiceRange.low) && Number.isFinite(p.voiceRange.high) && p.voiceRange.low < p.voiceRange.high) ? { low: clamp(Math.round(p.voiceRange.low), 24, 96), high: clamp(Math.round(p.voiceRange.high), 24, 96) } : null; const VKp = Object.assign({}, VOICE_KINDS, d.prefs.voiceRange ? { mine: ['My range (found by test)', tonicFromRange(exerciseRangeFor(d.prefs.voiceRange)).tonic] } : {}); if (VKp[p.voice]) d.prefs.voice = p.voice; d.prefs.names = p.names !== false;
     d.prefs.noiseFloor = (typeof p.noiseFloor === 'number' && isFinite(p.noiseFloor) && p.noiseFloor >= 0) ? clamp(p.noiseFloor, 0, 1) : null;
     d.prefs.inputDeviceId = typeof p.inputDeviceId === 'string' && p.inputDeviceId ? p.inputDeviceId : null;
