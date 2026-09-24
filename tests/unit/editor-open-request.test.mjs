@@ -32,3 +32,12 @@ test('requestOpenInEditor: needsCheck, when given, rides along in the same reque
   requestOpenInEditor(api, 'song-1', ['Bar 2 beat 3 note unclear']);
   assert.deepEqual(api._stores['editor-open-request'], { songId: 'song-1', needsCheck: ['Bar 2 beat 3 note unclear'] });
 });
+
+// P3-10: "Edit notes" on a starter tune (no library id of its own) hands the
+// starter's id along under its own key instead, so checkOpenRequest can
+// resolve it through starterSongs rather than the shared library.
+test('requestOpenInEditor: starterId, when given, rides along', () => {
+  const api = fakeApi();
+  requestOpenInEditor(api, null, [], { starterId: 'hot-cross-buns' });
+  assert.deepEqual(api._stores['editor-open-request'], { songId: null, needsCheck: [], starterId: 'hot-cross-buns' });
+});
