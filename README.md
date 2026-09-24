@@ -1,8 +1,8 @@
 # Band Coach
 
 One coach, many instruments, including a drum kit. Band Coach listens through a microphone, a
-MIDI keyboard, or — for the drum kit — an electronic kit over MIDI, the computer keys, or
-clicking the drawn kit; it picks every next exercise from your own results, and watches your
+MIDI keyboard, or — for the drum kit — an electronic kit over MIDI, the computer keys,
+clicking the drawn kit, or the microphone for kick, snare and hi-hat; it picks every next exercise from your own results, and watches your
 energy so practice stays fresh. Free, no account, and your sound never leaves your computer.
 
 Band Coach hears pitch and timing. It cannot see posture, breath, bowing or hand position — use a
@@ -605,13 +605,25 @@ percussion staff, with the kit drawn from above underneath it. The drums the bar
 uses are outlined, and they fill in while the count-in plays. Play the bar on an
 electronic kit over MIDI, on the computer keys (F bass drum, J snare, D closed
 hi-hat, E open hi-hat, C hi-hat pedal, U/I/K high/mid/floor tom, R crash, O
-ride), or by clicking the drawn kit. All three go to one judge. A note only
-counts when it is the right drum and within 150 ms of the beat (110 ms once you
-are past the last level). The right time on the wrong drum is reported as
-"wrong drum", with the drum it wanted. A MIDI note that isn't on the kit counts
-as an extra hit, and the coach line says so. The nine levels (in
-`TRAINER_LEVELS`, `src/instruments/drum-kit.js`, which is also where the record's
-curriculum comes from) are:
+ride), by clicking the drawn kit, or on a real kit in front of your microphone
+(`input: 'mic+midi'` in `src/instruments/drum-kit.js`; pressing Connect arms
+MIDI and the mic together). All four go to one judge. A note only counts when
+it is the right drum and within 150 ms of the beat (110 ms once you are past
+the last level). The right time on the wrong drum is reported as "wrong drum",
+with the drum it wanted. A MIDI note that isn't on the kit counts as an extra
+hit, and the coach line says so.
+
+Through the microphone, `src/app.js`'s `listenDrums()` runs an onset detector
+plus `src/audio/drum-classify.js`'s band-energy classifier on every hit, and
+that can only tell kick, snare and hi-hat apart -- toms, crash and ride come
+back as "a hit, unknown drum" (confidence 0, `piece: null`). Rather than
+pretending the mic can name a drum it cannot, a bar whose onsets need one of
+those five pieces judges an unnamed mic hit leniently: it counts as a match
+for timing, just not for which drum. Keys and clicks still sound a
+synthesized drum for feedback; a real mic hit does not get one, since it
+already made its own sound. The nine levels (in `TRAINER_LEVELS`,
+`src/instruments/drum-kit.js`, which is also where the record's curriculum
+comes from) are:
 
 1. one drum at a time
 2. bass drum and snare

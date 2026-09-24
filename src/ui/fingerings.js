@@ -298,8 +298,9 @@ export function registerFingerings(panels) {
       }
 
       // A drum kit is picked by piece name (its canonical GM note), not by
-      // pitch names that mean nothing on a drum; no tone is played for it,
-      // since the app has no drum sound yet (that comes with its trainer).
+      // pitch names that mean nothing on a drum; no tone is played for it
+      // from this static diagram -- the drum's own sound (drumHit(), a kit
+      // key or click in the live trainer) belongs to src/app.js, not here.
       function renderNotePicker() {
         notesHost.innerHTML = '';
         const isKit = howKindFor(instrument) === 'drum-kit';

@@ -224,7 +224,9 @@ test('drum-kit is a ready percussion record with the contract kit and a curricul
   assert.ok(rec, 'expected a drum-kit record in INSTRUMENTS');
   assert.equal(rec.name, 'Drum kit');
   assert.equal(rec.family, 'percussion');
-  assert.equal(rec.input, 'midi');
+  // 'mic+midi', not plain 'midi': the trainer now also hears a real kit
+  // through the microphone (kick/snare/hi-hat only -- see src/app.js).
+  assert.equal(rec.input, 'mic+midi');
   assert.deepEqual(rec.range, { low: 35, high: 59 });
   assert.deepEqual(rec.clefs, ['percussion']);
   assert.equal(rec.status, 'ready');
