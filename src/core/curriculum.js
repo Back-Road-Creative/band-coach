@@ -40,8 +40,14 @@ export function planSession({ instrumentId, level, activeIds, items, events = []
   // than one merely low on retrievability with a clean record, so a lapsed
   // id always wins when one exists; `due()` already sorts ascending by
   // retrievability, so its first match is the most-forgotten of the pool.
+  // A learner who has never been shown ANY of this level's ids yet (no
+  // item record at all in the pool) has no real weak spot to single out --
+  // every id would tie on "never practiced", and due()'s alphabetical
+  // tie-break would then pick whichever id merely sorts first, forcing a
+  // task on it for no reason grounded in this learner's own history. Only
+  // look for a weak id once at least one active id has actually been seen.
   let weak = null;
-  if (ids.length && typeof due === 'function') {
+  if (ids.length && ids.some(id => itemsMap[id]) && typeof due === 'function') {
     const allScored = due(ids.map(id => Object.assign({ id }, itemsMap[id])), now);
     const lapsed = allScored.filter(e => itemsMap[e.id] && itemsMap[e.id].lapses > 0);
     const pool = lapsed.length ? lapsed : allScored;
