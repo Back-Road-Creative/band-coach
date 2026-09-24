@@ -203,6 +203,16 @@ timing, hold, tune) were actually checked, and how long it took — kept alongsi
 described above. The raw sound of your playing or singing is never recorded; only the judged
 result is.
 
+## Today's plan
+
+Starting a drill session (`src/core/curriculum.js`'s `planSession`/`describePlan`, `src/app.js`'s
+`startSession`) has the coach say, in plain words, what the sitting will cover: what's due for
+review, then the one active skill you're weakest on (named in plain words, e.g. "G4", never its
+internal id), then a short phrase that uses it, then a check with no hints. The drill chooser
+follows that same order — review first, then the weak skill on its own, then applying it, then
+the blind check — before falling back to today's ordinary level-by-level practice once all four
+are done.
+
 ## Turning an audio file into notes
 
 `src/audio/file-frames.js` is a pure function, `framesFromPCM`, that walks a decoded mono audio

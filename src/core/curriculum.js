@@ -62,20 +62,53 @@ export function planSession({ instrumentId, level, activeIds, items, events = []
   return blocks;
 }
 
-// describePlan(blocks) -> one plain sentence for the coach line, e.g.
+// describePlan(blocks, nameOf) -> one plain sentence for the coach line, e.g.
 // "Today: 3 to review, then G4, then use it in a phrase, then a check."
 // Reads whatever blocks planSession produced; never recomputes anything.
-export function describePlan(blocks) {
+// `nameOf(id) -> string` names the weak block's id in plain words (e.g. the
+// app passes `id => inf(id).short`, turning a raw id like 'n67' into 'G4');
+// defaults to the identity function so a caller that does not pass one gets
+// today's behaviour unchanged.
+export function describePlan(blocks, nameOf) {
   const list = Array.isArray(blocks) ? blocks : [];
+  const name = typeof nameOf === 'function' ? nameOf : (id => String(id));
   const review = list.find(b => b.kind === 'review');
   const weak = list.find(b => b.kind === 'weak');
   const apply = list.find(b => b.kind === 'apply');
   const check = list.find(b => b.kind === 'check');
   const parts = [];
   if (review) parts.push(review.ids.length + ' to review');
-  if (weak) parts.push(String(weak.id));
+  if (weak) parts.push(name(weak.id));
   if (apply) parts.push('use it in a phrase');
   if (check) parts.push('a check');
   if (!parts.length) return 'Today: nothing new due -- free practice.';
   return 'Today: ' + parts.join(', then ') + '.';
+}
+
+// nextPlanStep(blocks, progress) -> { kind, ids, blind } | null
+// Pure cursor over the ordered blocks planSession produced: `progress` is
+// the caller's own tally of how many tasks each block kind has already
+// served (`{ review, weak, apply, check }`, any missing key reads as 0).
+// Each block kind has a small fixed budget of tasks before the plan moves
+// on to the next one -- review and check each serve one task per id in
+// their `ids` (so every id gets its own turn), weak repeats its single id
+// three times running, apply gets two goes at using it in a phrase. A block
+// the current plan never produced (e.g. no review due) is skipped outright.
+// Returns null once every block present has used up its budget, which is
+// the caller's cue to fall back to today's ordinary level chooser.
+const PLAN_ORDER = ['review', 'weak', 'apply', 'check'];
+const PLAN_BUDGET = { review: b => b.ids.length, weak: () => 3, apply: () => 2, check: b => b.ids.length };
+export function nextPlanStep(blocks, progress) {
+  const list = Array.isArray(blocks) ? blocks : [];
+  const p = progress || {};
+  for (let i = 0; i < PLAN_ORDER.length; i++) {
+    const kind = PLAN_ORDER[i];
+    const block = list.find(b => b.kind === kind);
+    if (!block) continue;
+    const budget = PLAN_BUDGET[kind](block), done = p[kind] || 0;
+    if (done >= budget) continue;
+    const ids = kind === 'review' ? block.ids.slice() : kind === 'weak' ? [block.id] : kind === 'apply' ? [block.skill] : block.ids.slice();
+    return { kind: kind, ids: ids, blind: kind === 'check' };
+  }
+  return null;
 }
