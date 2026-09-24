@@ -14,6 +14,13 @@ import { framesFromPCM } from '../../audio/file-frames.js';
 import { transcribe } from '../../song/transcribe.js';
 import { rangeForInstrument } from '../../audio/range.js';
 import { validateSong } from '../../song/model.js';
+import { createTakeAccumulator } from '../../audio/take-recorder.js';
+
+// Same tail-of-buffer polling interval as src/ui/playalong.js's own "Record a
+// take" capture (startRecordingCapture) -- copied here, not imported, since
+// this module already duplicates learn.js's own copy of the mic door rather
+// than sharing it (see the file header).
+const TAKE_CAPTURE_INTERVAL_MS = 50;
 
 function el(tag, attrs, children) {
   const node = document.createElement(tag);
@@ -135,6 +142,20 @@ export function createRecordDoor(api, { onTake, say, onStart, idPrefix = 'learn'
 
   let counting = false;
   let recording = false;
+  // Raw PCM captured alongside the pitch-frame recorder (P3-7): the SAME
+  // tail-of-buffer AnalyserNode polling src/ui/playalong.js's "Record a
+  // take" uses, so a mic take can also get "Play original" and "Play along
+  // with this recording" -- today only a file recording can, since the mic
+  // door's own frame recorder (recorder above) keeps pitch frames, never raw
+  // audio. Started in beginCapture, stopped and read in stopMicRecording;
+  // torn down (with no PCM handed anywhere) by teardown() the same as the
+  // frame recorder is.
+  let takeAccumulator = null;
+  let captureTimer = null;
+  function stopTakeCapture() {
+    if (captureTimer) clearInterval(captureTimer);
+    captureTimer = null;
+  }
   // P3-5: bumped by teardown() -- so by hide(), destroy() AND cancel() below,
   // all three are the same "whatever was in flight for this door no longer
   // counts" event -- so a caller (Songs) holding a generation snapshot from
@@ -218,12 +239,41 @@ export function createRecordDoor(api, { onTake, say, onStart, idPrefix = 'learn'
     say('Recording…');
     recordBtn.textContent = 'Stop';
     recordBtn.disabled = false;
+    // Same accumulator/polling pattern as src/ui/playalong.js's
+    // startRecordingCapture -- each tick keeps only the TAIL of the
+    // analyser's buffer (the samples that arrived since the previous tick),
+    // not the whole, much longer, overlapping window every read hands back,
+    // so a 50ms poll of a ~93ms analyser buffer never duplicates audio into
+    // the take. If the audio context is unavailable this simply captures no
+    // PCM (takeAccumulator stays null) -- the frame recorder above still
+    // works either way, since it reads pitch frames off the same analyser,
+    // not raw samples.
+    const actx = typeof api.audio === 'function' ? api.audio() : null;
+    if (actx) {
+      takeAccumulator = createTakeAccumulator(actx.sampleRate);
+      const tailSamples = Math.max(1, Math.round((TAKE_CAPTURE_INTERVAL_MS / 1000) * actx.sampleRate));
+      captureTimer = setInterval(() => {
+        const analysers = typeof api.analysers === 'function' ? api.analysers() : null;
+        const time = analysers && analysers.time;
+        if (!time || !takeAccumulator) return;
+        const buf = new Float32Array(time.fftSize);
+        time.getFloatTimeDomainData(buf);
+        const n = Math.min(tailSamples, buf.length);
+        const tail = buf.subarray(buf.length - n);
+        if (!takeAccumulator.push(tail)) stopTakeCapture();
+      }, TAKE_CAPTURE_INTERVAL_MS);
+    } else {
+      takeAccumulator = null;
+    }
   }
 
   async function stopMicRecording() {
     if (counting) { clearCountInTimers(); resetMicUi(); say(''); return; }
     if (!recording) return;
     const frames = recorder.stop();
+    stopTakeCapture();
+    const rec = takeAccumulator ? { ...takeAccumulator.finish(), fileName: 'My recording' } : null;
+    takeAccumulator = null;
     resetMicUi();
     say('Working it out…');
     try {
@@ -235,7 +285,7 @@ export function createRecordDoor(api, { onTake, say, onStart, idPrefix = 'learn'
       }
       const { ok, errors } = validateSong(song);
       if (!ok) { say('That recording did not turn into a usable song: ' + errors.join('; ')); return; }
-      await onTake(song, (report && report.needsCheck) || []);
+      await onTake(song, (report && report.needsCheck) || [], rec);
     } catch (e) {
       if (typeof api.recordError === 'function') api.recordError('learn:mic', e);
       say('That recording could not be analysed. Try again, or drop a recording instead.');
@@ -257,6 +307,8 @@ export function createRecordDoor(api, { onTake, say, onStart, idPrefix = 'learn'
     generation++;
     if (counting) clearCountInTimers();
     if (recording) recorder.stop();
+    stopTakeCapture();
+    takeAccumulator = null;
     resetMicUi();
   }
 

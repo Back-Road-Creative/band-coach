@@ -272,7 +272,14 @@ pack — one input, one help line naming every accepted extension (`ADD_ACCEPT`/
 shows (`src/ui/songs/review.js`) without leaving Songs: "Practise this" opens the lesson (a
 multi-part song shows its part choice first), "Edit notes" (was "Fix it up") opens "Record a tune"
 with the song loaded, and "Play along with this recording" appears whenever a decoded audio buffer
-exists. A song saved this way is a **Draft** until its check items are resolved — every song row
+exists. The review also lets you hear what was recorded next to what it turned into: **Play
+original** plays the actual decoded recording back (only where one exists — a file, or now a mic
+take too, since the mic door captures raw PCM alongside its usual pitch frames), and **Play
+notes** always plays the transcription itself through the app's own instrument sound, so you can
+tell a real mistake from the transcriber mishearing you. Underneath the confidence strip, a plain
+list names each note the transcription itself was not sure about — "Note 4 (about 1.2 s in) — not
+sure" — never colour alone; a song with no unsure notes says so in one line instead of showing
+nothing. A song saved this way is a **Draft** until its check items are resolved — every song row
 shows its status ("Draft — N notes to check", or "Checked") next to its title, and since Songs
 cannot keep the original recording (only its notes), a Draft or Checked row from a recording also
 says so plainly. Stopping never leaves a half-finished song behind: a "Cancel" button shows while

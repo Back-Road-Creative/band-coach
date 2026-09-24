@@ -1266,7 +1266,7 @@ function mountSongsPanel(hostEl, api) {
   // show the shared review screen. Mirrors src/ui/learn.js's
   // saveAndRenderResult, kept as its own copy here (not shared) since the
   // status-ledger write is Songs-only.
-  async function onMicTake(song, warnings) {
+  async function onMicTake(song, warnings, rec) {
     // P3-5: notes already exist by the time this runs (transcribe() finished
     // synchronously inside record-door.js), but a learner can still have
     // left Songs in the instant since -- checked again immediately before
@@ -1284,7 +1284,12 @@ function mountSongsPanel(hostEl, api) {
     if (destroyed || door.generation() !== gen) return;
     say('');
     setSongStatus(markDraft, storedId, { needsCheck: (warnings || []).length, source: 'mic', originalAudioKept: false });
-    renderAddReview({ ...song, id: storedId }, warnings || [], null);
+    // rec (src/ui/songs/record-door.js's raw-PCM capture, P3-7) is held only
+    // in memory for this review screen -- Play original and Play along with
+    // this recording -- never saved with the song (the ledger's
+    // originalAudioKept stays false above: Songs still cannot keep the
+    // original audio, only the notes).
+    renderAddReview({ ...song, id: storedId }, warnings || [], rec || null);
     await refreshList();
   }
 
