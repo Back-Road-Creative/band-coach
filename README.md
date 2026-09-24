@@ -248,12 +248,15 @@ The "Capture a melody" tool (`TOOLS.capture` in `src/app.js`) is a simpler cousi
 "Record a tune": press Connect, then Listen, and play, sing, hum or whistle a tune, or hold the
 microphone up to a recording of one instrument playing one note at a time. Like the rest of this
 app's pitch tracking it is monophonic and hears one note at a time — it cannot pull a separate part
-out of a full band recording. Unlike "Learn this" and "Record a tune", it does **not** write down
-timing: "Make it a lesson" (`capUse`) keeps only the pitch of each note it heard, in order, and
-drops how long each note was held and how far apart they came — so what gets saved is a melody's
-note order, not its rhythm. That note list (capped at 300 notes) becomes the "Practise my captured
-melody" custom drill on whichever instrument you pick, four notes at a time, the same repeat-until-
-clean chunking a built-in curriculum level uses.
+out of a full band recording. Once notes are captured, two buttons turn them into practice: "Make
+it a lesson" (`captureToSong`, `src/song/capture.js`) keeps the full timing of what you played,
+quantized onto a tempo grid, and saves it as a draft song in the library (`src/song/library.js`) —
+opening straight into the Songs panel with the phrase-by-phrase lesson a whole imported tune gets
+(`buildLessonPlan`, `src/song/lesson.js`). "Drill the notes" (`capDrill`) is the older, simpler
+path: it keeps only the pitch of each note heard, in order, dropping how long each note was held
+and how far apart they came, and loads that note list (capped at 300 notes) as the "Practise my
+captured melody" custom drill on whichever instrument you pick, four notes at a time, the same
+repeat-until-clean chunking a built-in curriculum level uses.
 
 ## Songs
 
