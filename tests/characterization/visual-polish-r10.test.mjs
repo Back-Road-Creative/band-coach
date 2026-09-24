@@ -88,3 +88,33 @@ test('P8: on a phone viewport the input status dot and its text sit on the same 
     `expected the text to sit to the right of the dot, not wrapped below it; dot.right=${rects.dot.right} text.left=${rects.text.left}`
   );
 });
+
+// P1 asks for one accent: the COACH wordmark in the Start button's colour.
+// The wordmark is 44px bold, which is WCAG "large text", so it needs 3:1
+// against the page, not the 4.5:1 that --accent-ink enforces for small text.
+// Holding it to 4.5:1 is what turned it navy beside a bright Start button.
+test('P1: in the light theme the wordmark matches Start when that colour reads at 3:1, and never drops below 3:1', async (t) => {
+  const page = await launchPage(htmlPath);
+  t.after(() => page.close());
+  await page.evaluate(`(() => { const s = document.getElementById('optTheme'); s.value = 'light'; s.dispatchEvent(new Event('change')); })()`);
+  const mods = await page.evaluate(`[...new Set([...document.querySelectorAll('[data-mod]')].map(b => b.dataset.mod))]`);
+  assert.ok(mods.length > 3, `expected the instrument list, got ${JSON.stringify(mods)}`);
+  const rows = [];
+  for (const m of mods) {
+    rows.push(await page.evaluate(`(() => {
+      window.__coach.setMod(${JSON.stringify(m)});
+      const rgb = s => s.match(/\\d+(\\.\\d+)?/g).slice(0, 3).map(Number);
+      const lin = c => { c /= 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); };
+      const lum = ([r, g, b]) => 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+      const ratio = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+      const bg = rgb(getComputedStyle(document.body).backgroundColor);
+      const word = rgb(getComputedStyle(document.querySelector('h1 span')).color);
+      const start = rgb(getComputedStyle(document.getElementById('playBtn')).backgroundColor);
+      return { m: ${JSON.stringify(m)}, wordRatio: ratio(word, bg), startRatio: ratio(start, bg), same: word.join() === start.join() };
+    })()`));
+  }
+  for (const r of rows) {
+    assert.ok(r.wordRatio >= 3, `${r.m}: wordmark ${r.wordRatio.toFixed(2)}:1 is below 3:1`);
+    if (r.startRatio >= 3) assert.ok(r.same, `${r.m}: Start reads at ${r.startRatio.toFixed(2)}:1, so the wordmark should be the same colour`);
+  }
+});

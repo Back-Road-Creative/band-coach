@@ -40,11 +40,10 @@
   .wrap { max-width: 1080px; margin-inline: auto; display: flex; flex-direction: column; gap: 16px; }
   header { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 12px 24px; }
   h1 { font: 700 44px/1 var(--display); margin: 0; letter-spacing: .02em; text-transform: uppercase; }
-  /* R10 P1: one accent on first paint -- COACH matches the Start button's raw
-     --accent (not the contrast-darkened --accent-ink links/small text read),
-     so the wordmark and the one action on the page are the same blue instead
-     of two competing shades. */
-  h1 span { color: var(--accent); }
+  /* R10 P1: one accent on first paint -- COACH reads --accent-display, the
+     Start button's colour darkened only as far as the 3:1 large-text minimum
+     needs (src/app.js accentDisplayFor), not --accent-ink's 4.5:1 navy. */
+  h1 span { color: var(--accent-display, var(--accent)); }
   .sub { color: var(--muted); margin: 6px 0 0; max-width: 64ch; }
   .io { display: flex; align-items: flex-start; gap: 10px; flex-wrap: wrap; }
   .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); flex: none; margin-top: 5px; }

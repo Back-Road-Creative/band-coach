@@ -1571,9 +1571,14 @@ import { register as registerPlayalong } from './ui/playalong.js';
   // it as a background. See src/styles.css for which selectors read which.
   function themeIsLight() { return DB.prefs.theme === 'light' || (DB.prefs.theme !== 'dark' && matchMedia('(prefers-color-scheme: light)').matches); }
   function accentInkFor(hex) { if (!themeIsLight()) return hex; const n = parseInt(hex.slice(1), 16), r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255, lin = c => { c /= 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }, lum = (rr, gg, bb) => 0.2126 * lin(rr) + 0.7152 * lin(gg) + 0.0722 * lin(bb), gl = 0.929, l = lum(r, g, b); return (Math.max(l, gl) + 0.05) / (Math.min(l, gl) + 0.05) >= 4.5 ? hex : '#' + [r, g, b].map(c => Math.round(c * 0.45).toString(16).padStart(2, '0')).join(''); }
+  // --accent-display is the same brand colour for the 44px wordmark, which is
+  // WCAG large text (3:1, not 4.5:1). It is darkened only as far as it takes
+  // to reach 3:1, so COACH stays a near match for the Start button instead of
+  // dropping to --accent-ink's navy (R10 P1).
+  function accentDisplayFor(hex) { if (!themeIsLight()) return hex; const n = parseInt(hex.slice(1), 16), c0 = [(n >> 16) & 255, (n >> 8) & 255, n & 255], lin = c => { c /= 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }, lum = ([r, g, b]) => 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b), gl = 0.929; for (let k = 1; k > 0; k -= 0.02) { const c = c0.map(v => Math.round(v * k)); if ((gl + 0.05) / (lum(c) + 0.05) >= 3) return '#' + c.map(v => v.toString(16).padStart(2, '0')).join(''); } return '#000000'; }
   function showAll() {
     const tool = !!TOOLS[mod], accentRaw = (MODS[mod] || TOOLS[mod]).color === '#e9edf6' ? '#9fb4d8' : (MODS[mod] || TOOLS[mod]).color;
-    document.documentElement.style.setProperty('--accent', accentRaw); document.documentElement.style.setProperty('--accent-ink', accentInkFor(accentRaw));
+    document.documentElement.style.setProperty('--accent', accentRaw); document.documentElement.style.setProperty('--accent-ink', accentInkFor(accentRaw)); document.documentElement.style.setProperty('--accent-display', accentDisplayFor(accentRaw));
     $('helpText').innerHTML = ''; const st = document.createElement('strong'); st.textContent = 'How this one works: '; $('helpText').appendChild(st); $('helpText').appendChild(document.createTextNode((MODS[mod] || TOOLS[mod]).help));
     document.querySelectorAll('.side .card, .side .stats, #playBtn, #resetBtn').forEach(el => { el.style.display = tool ? 'none' : ''; }); $('tapPad').hidden = mod !== 'rhy'; $('timeFill').parentElement.style.visibility = tool || mod === 'rhy' ? 'hidden' : 'visible';
     if (tool) { $('prompt').textContent = ''; $('hint').textContent = mod === 'tuner' ? 'One open string at a time.' : 'One note at a time.'; $('choices').hidden = true; $('replayBtn').hidden = true; $('showMeBtn').hidden = true; return; }
