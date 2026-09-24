@@ -302,6 +302,9 @@ long."; being out of tune says "A little sharp — aim for the middle of the not
 instead of the generic retry prompt. A chord step also refuses a wrong extra note struck alongside
 the right ones (`maxExtras` on every judged step's passRule, `src/song/lesson.js`): hitting every
 expected note is not enough to pass if the learner also struck a note that was not asked for.
+A failed try always names the first concrete thing to fix — the missed note, the late note, the
+hold/tune reason above, or the extra note — instead of a generic retry prompt
+(`firstCorrection()` in `src/ui/songs/practice.js`).
 Each step is played back, captured and judged on one
 clock that starts at the phrase's first bar line (`originTick` on every lesson step,
 `phraseSec` in `src/ui/songs/practice.js`), so a pickup rest is kept; the "Clap the rhythm"

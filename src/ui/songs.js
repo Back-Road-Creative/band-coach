@@ -49,7 +49,7 @@ import { buildLessonPlan, nextStep, creditFor } from '../song/lesson.js';
 import { feasibility } from '../song/feasibility.js';
 import { INSTRUMENTS } from '../instruments/index.js';
 import { routeImportFile, importerFor } from './songs/import-route.js';
-import { judgeAttempt, passesRule, holdTuneFeedback, phraseSec } from './songs/practice.js';
+import { judgeAttempt, passesRule, holdTuneFeedback, firstCorrection, phraseSec } from './songs/practice.js';
 import { barHeat, worstBars } from '../song/bar-heat.js';
 import { createLoopBackingTransport, applyAttemptToTransport, backingBpm, rateLabel } from './songs/loop-backing.js';
 import { mapMasteryKeys } from './songs/mastery.js';
@@ -995,14 +995,14 @@ function mountSongsPanel(hostEl, api) {
       // A rhythm step is judged on onsets only: a try with any clap or
       // wrong-pitch hit is no evidence about the notes' pitch mastery.
       if (!result || result.matches.every((m) => !m.ok || m.pitchOk !== false)) applyMasteryCredit(api, practice.instrumentId, mapped);
-      // A step that failed ONLY on holding the note or playing it in tune
-      // (hit rate and timing were both fine) gets the specific plain-word
-      // reason instead of the generic retry prompt, so a sustaining
-      // instrument's learner knows the ONE thing to fix.
-      const holdTuneReason = !passed && result ? holdTuneFeedback(result, step.passRule) : null;
+      // A failed try gets told the FIRST concrete thing to fix -- the
+      // missed note, the late note, the hold/tune reason, or the extra note
+      // -- instead of the generic retry prompt, so the learner knows the
+      // ONE thing to work on next.
+      const correction = !passed && result ? firstCorrection(result, step.passRule) : null;
       say(passed
         ? 'Nice. ' + (result ? result.hitCount + ' of ' + result.judgedCount + ' notes.' : '')
-        : holdTuneReason || 'Not quite yet — try that again.', passed ? 'ok' : 'no');
+        : correction || 'Not quite yet — try that again.', passed ? 'ok' : 'no');
       if (result) {
         practice.lastHeat = barHeat(practice.song, result.matches);
         practice.lastHeatBars = step.bars;
