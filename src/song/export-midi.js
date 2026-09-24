@@ -23,6 +23,7 @@
 
 import { TICKS_PER_QUARTER } from './model.js';
 import { canonicalMidi } from '../instruments/drum-kit.js';
+import { songTempoEntries } from './clock.js';
 
 const DEFAULT_VELOCITY = 80;
 
@@ -89,7 +90,7 @@ function trackBody(events) {
 // --- track 0: tempo / time signature / key signature -------------------
 
 function tempoEvents(song) {
-  const entries = song.tempoMap && song.tempoMap.length > 0 ? song.tempoMap : [{ tick: 0, bpm: song.bpm }];
+  const entries = songTempoEntries(song);
   return entries.map((entry) => {
     const microsPerQuarter = Math.round(60000000 / entry.bpm);
     return { tick: entry.tick, bytes: [0xff, 0x51, 0x03, ...u32(microsPerQuarter).slice(1)] };
