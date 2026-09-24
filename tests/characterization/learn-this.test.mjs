@@ -1,9 +1,12 @@
-// "Learn this" panel (src/ui/learn.js, unit G1a: the file door only), wired
-// into the real app (src/app.js registers it first, ahead of Songs). Drives
-// the built dist/band-coach.html through window.__coach.openPanel('learn')
-// and the DOM, same pattern as tests/characterization/w-songs.test.mjs -- a
-// real headless browser, a real file input, a real IndexedDB, a real
-// AudioContext decoding a real WAV file on disk.
+// "Learn this" panel (originally src/ui/learn.js, unit G1a: the file door
+// only). P3-6 retired the separate panel -- these tests now drive the same
+// record door and review screen through Songs' own "Add a song" section
+// (window.__coach.openPanel('songs') then the Add a song button), same
+// precedent as tests/characterization/songs-add-a-song.test.mjs. Drives the
+// built dist/band-coach.html through the DOM, same pattern as
+// tests/characterization/w-songs.test.mjs -- a real headless browser, a
+// real file input, a real IndexedDB, a real AudioContext decoding a real
+// WAV file on disk.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
@@ -60,6 +63,18 @@ function threeToneWav(path) {
 // -- see the practiceGate coverage below, which relies on that).
 const ABC = 'X:1\nT:Learn Test\nM:4/4\nL:1/8\nQ:120\nK:C\nCDEFGABc|\n';
 
+// P3-6: the separate Learn this panel is gone -- opens the same record door
+// and review screen through Songs' own Add a song section instead (no
+// shared import across test files by convention here, so this duplicates
+// tests/characterization/songs-add-a-song.test.mjs's openAddSongSection).
+async function openAddSongSection(page) {
+  await page.evaluate("window.__coach.openPanel('songs')");
+  await page.waitFor("document.querySelector('.add-song-row')");
+  await page.evaluate(
+    "Array.from(document.querySelectorAll('.add-song-row button')).find(b => b.textContent.trim() === 'Add a song').click()",
+  );
+}
+
 // P3-4: the Songs panel's Add-a-song row no longer points at this panel by
 // name -- it opens its own record-or-open-file section built from the same
 // record-door.js/review.js this panel uses (tests/characterization/
@@ -90,8 +105,10 @@ test('a real .abc file dropped in becomes a practisable song, title + Play it on
   t.after(() => page.close());
 
   await page.evaluate("window.__coach.setMod('kbd')");
-  await page.evaluate("window.__coach.openPanel('learn')");
-  await page.setFileInput('#learnFileInput', abcPath);
+  // P3-6: Learn this is retired -- the same file door now lives in Songs'
+  // Add a song section (#songsFileInput, idPrefix 'songs').
+  await openAddSongSection(page);
+  await page.setFileInput('#songsFileInput', abcPath);
   await page.waitFor("document.querySelector('.panel-learn-result').hidden === false", 20000);
 
   assert.deepEqual(page.exceptions, [], 'no uncaught exceptions importing a notation file');
@@ -121,8 +138,9 @@ test('a real .wav recording dropped in transcribes to a song with a positive not
   t.after(() => page.close());
 
   await page.evaluate("window.__coach.setMod('kbd')");
-  await page.evaluate("window.__coach.openPanel('learn')");
-  await page.setFileInput('#learnFileInput', wavPath);
+  // P3-6: Learn this is retired -- same file door, now in Songs' Add a song.
+  await openAddSongSection(page);
+  await page.setFileInput('#songsFileInput', wavPath);
   await page.waitFor("document.querySelector('.panel-learn-result').hidden === false", 20000);
 
   assert.deepEqual(page.exceptions, [], 'no uncaught exceptions decoding and transcribing a recording');
@@ -139,11 +157,13 @@ test('an unsupported file shows a plain-words message naming what this panel acc
   const page = await launchPage(htmlPath);
   t.after(() => page.close());
 
-  await page.evaluate("window.__coach.openPanel('learn')");
-  await page.setFileInput('#learnFileInput', badPath);
-  await page.waitFor("document.querySelector('.panel-learn-status').textContent.length > 0", 20000);
+  // P3-6: Learn this is retired -- the same file door's status line is now
+  // Songs' own importMsg (.panel-songs-msg), not .panel-learn-status.
+  await openAddSongSection(page);
+  await page.setFileInput('#songsFileInput', badPath);
+  await page.waitFor("document.querySelector('.panel-songs-msg').textContent.length > 0", 20000);
 
-  const message = await page.evaluate("document.querySelector('.panel-learn-status').textContent");
+  const message = await page.evaluate("document.querySelector('.panel-songs-msg').textContent");
   assert.match(message, /\.mid|\.abc|\.musicxml|\.wav|recording/i);
   assert.equal(await page.evaluate("document.querySelector('.panel-learn-result').hidden"), true, 'no result is shown for an unsupported file');
 });
@@ -183,31 +203,34 @@ test('Record counts in four beats, then Stop turns the mic capture into a practi
   t.after(() => page.close());
 
   await page.evaluate("window.__coach.setMod('kbd')");
-  await page.evaluate("window.__coach.openPanel('learn')");
+  // P3-6: Learn this is retired -- the mic door now lives in Songs' Add a
+  // song section (idPrefix 'songs': songsBpm, .panel-songs-beat,
+  // .panel-songs-record-btn; the shared review screen stays .panel-learn-*).
+  await openAddSongSection(page);
 
   // A fast tempo (still inside the 40-200 range the field enforces) so the
   // count-in this test waits through is short, not because the app's own
   // default (90bpm) is wrong.
   await page.evaluate(
-    "(() => { const b = document.getElementById('learnBpm'); b.value = '200'; b.dispatchEvent(new Event('input', { bubbles: true })); })()"
+    "(() => { const b = document.getElementById('songsBpm'); b.value = '200'; b.dispatchEvent(new Event('input', { bubbles: true })); })()"
   );
-  await page.evaluate("document.querySelector('.panel-learn-record-btn').click()");
+  await page.evaluate("document.querySelector('.panel-songs-record-btn').click()");
 
-  await page.waitFor("document.querySelector('.panel-learn-beat').textContent === '4'", 15000);
-  await page.waitFor("document.querySelector('.panel-learn-record-btn').textContent === 'Stop'", 10000);
+  await page.waitFor("document.querySelector('.panel-songs-beat').textContent === '4'", 15000);
+  await page.waitFor("document.querySelector('.panel-songs-record-btn').textContent === 'Stop'", 10000);
 
   // Let a couple of real seconds of the fake mic stream actually get
   // captured before stopping.
   await new Promise((r) => setTimeout(r, 2000));
 
-  await page.evaluate("document.querySelector('.panel-learn-record-btn').click()");
+  await page.evaluate("document.querySelector('.panel-songs-record-btn').click()");
   await page.waitFor("document.querySelector('.panel-learn-result').hidden === false", 20000);
 
   assert.deepEqual(page.exceptions, [], 'no uncaught exceptions counting in and capturing from the mic');
   const noteCount = await page.evaluate("document.querySelectorAll('.panel-learn-confidence-note').length");
   assert.ok(noteCount > 0, 'at least one note was transcribed from the mic capture: ' + noteCount);
 
-  const buttonText = await page.evaluate("document.querySelector('.panel-learn-record-btn').textContent");
+  const buttonText = await page.evaluate("document.querySelector('.panel-songs-record-btn').textContent");
   assert.equal(buttonText, 'Record', 'the Record button resets once a take has been analysed');
 });
 
@@ -216,14 +239,16 @@ test('a blocked or missing microphone says so in plain words, with no crash', as
   const page = await launchPage(htmlPath, { initScript: DENY_MIC_INIT });
   t.after(() => page.close());
 
-  await page.evaluate("window.__coach.openPanel('learn')");
-  await page.evaluate("document.querySelector('.panel-learn-record-btn').click()");
-  await page.waitFor("document.querySelector('.panel-learn-status').textContent.indexOf('not available') >= 0", 15000);
+  // P3-6: Learn this is retired -- same mic door, now Songs' Add a song
+  // section; the status line is Songs' own importMsg (.panel-songs-msg).
+  await openAddSongSection(page);
+  await page.evaluate("document.querySelector('.panel-songs-record-btn').click()");
+  await page.waitFor("document.querySelector('.panel-songs-msg').textContent.indexOf('not available') >= 0", 15000);
 
   assert.deepEqual(page.exceptions, [], 'a denied microphone must not throw an uncaught exception');
-  const message = await page.evaluate("document.querySelector('.panel-learn-status').textContent");
+  const message = await page.evaluate("document.querySelector('.panel-songs-msg').textContent");
   assert.match(message, /microphone is not available/i);
   assert.match(message, /drop a recording instead/i);
-  const buttonText = await page.evaluate("document.querySelector('.panel-learn-record-btn').textContent");
+  const buttonText = await page.evaluate("document.querySelector('.panel-songs-record-btn').textContent");
   assert.equal(buttonText, 'Record', 'the Record button is not left stuck disabled after a denial');
 });

@@ -52,8 +52,6 @@ import { createFocusTrap } from './ui/dialog-focus.js';
 import { createPanels, sanitizePanelData } from './ui/panels.js';
 import { estimateRange, classify, exerciseRangeFor, tonicFromRange } from './instruments/how/voice-range.js';
 //
-// slot:import:learn
-import { register as registerLearn } from './ui/learn.js';
 //
 // slot:import:w-songs
 import { register as registerSongs, forwardNote as forwardSongNote, requestOpenSong } from './ui/songs.js';
@@ -2386,9 +2384,6 @@ import { register as registerPlayalong } from './ui/playalong.js';
     logEvent: ev => logEvent(ev),
   };
   //
-  //
-  // slot:panel:learn
-  registerLearn(panels);
   //
   // slot:panel:w-songs
   registerSongs(panels);

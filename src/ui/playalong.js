@@ -71,7 +71,6 @@ function mountPlayalong(el, api) {
     '<button type="button" id="paRecordBtn" class="small">Record a take</button>' +
     '<span id="paFileName" class="pa-filename"></span>' +
     '</div>' +
-    '<p class="pa-learn-tip">Tip: Learn this takes any recording or music file in one place. <button type="button" id="paLearnTipBtn" class="small">Open Learn this</button></p>' +
     '<p id="paRecordNote" class="pa-note" hidden></p>' +
     '<div id="paProgress" class="pa-progress" hidden>' +
     '<div class="pa-progress-track"><div id="paProgressFill" class="pa-progress-fill"></div></div>' +
@@ -124,7 +123,6 @@ function mountPlayalong(el, api) {
   const speedInput = $('paSpeed');
   const speedValEl = $('paSpeedVal');
   const countInInput = $('paCountIn');
-  const learnTipBtn = $('paLearnTipBtn');
 
   const store = api.store('playalong');
 
@@ -444,11 +442,6 @@ function mountPlayalong(el, api) {
   cancelBtn.addEventListener('click', () => {
     cancelled = true;
   });
-
-  // P2b-3: Learn this now has a real home of its own in the Songs panel's
-  // Add-a-song row -- this tip's button just opens it directly through the
-  // same panelApi.openPanel() that row uses.
-  learnTipBtn.addEventListener('click', () => { if (api && typeof api.openPanel === 'function') api.openPanel('learn'); });
 
   // A pending requestPlayalongRecording() (src/ui/learn.js's "Play along
   // with this recording") -- read once, on the very next show(), then
