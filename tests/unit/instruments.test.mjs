@@ -208,7 +208,7 @@ test('mallet-percussion is a ready percussion record with a non-empty curriculum
 // These ids and notes are a contract other units code against.
 const DRUM_CONTRACT = {
   kick: [35, 36],
-  snare: [37, 38, 40],
+  snare: [38, 37, 40],
   'hihat-closed': [42],
   'hihat-pedal': [44],
   'hihat-open': [46],

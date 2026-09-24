@@ -25,7 +25,7 @@
 // The keys follow where each piece sits, not which stick hits it.
 export const PIECES = [
   { id: 'kick', name: 'Bass drum', midi: [35, 36], key: 'f' },
-  { id: 'snare', name: 'Snare', midi: [37, 38, 40], key: 'j' },
+  { id: 'snare', name: 'Snare', midi: [38, 37, 40], key: 'j' },
   { id: 'hihat-closed', name: 'Hi-hat (closed)', midi: [42], key: 'd' },
   { id: 'hihat-pedal', name: 'Hi-hat (pedal)', midi: [44], key: 'c' },
   { id: 'hihat-open', name: 'Hi-hat (open)', midi: [46], key: 'e' },
