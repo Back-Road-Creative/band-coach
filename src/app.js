@@ -28,6 +28,7 @@ import { stepTuner } from './core/tuner.js';
 //
 import { shouldReveal, promptFor, hintFor as coreHintFor } from './core/reveal.js';
 import { gradeOutcome } from './core/grade-outcome.js';
+import { makeEvent, validateEvent } from './core/learning-events.js';
 //
 import * as RHY from './core/rhythm.js';
 //
@@ -845,7 +846,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
   }
   function sanitizeDB(v, defaultLatencyMs, modelNow) {
     const notate = {}; NOTATE_MOD_IDS.forEach(m => { notate[m] = 'names'; });
-    const d = { v: 1, mods: {}, sessions: [], prefs: { mod: 'kbd', wind: 'bb', voice: 'low', names: true, noiseFloor: null, inputDeviceId: null, notate: notate, theme: 'system', noteNaming: { system: 'letters', accidentals: 'mixed' } } }; v = (v && typeof v === 'object') ? v : {};
+    const d = { v: 1, mods: {}, sessions: [], events: [], prefs: { mod: 'kbd', wind: 'bb', voice: 'low', names: true, noiseFloor: null, inputDeviceId: null, notate: notate, theme: 'system', noteNaming: { system: 'letters', accidentals: 'mixed' } } }; v = (v && typeof v === 'object') ? v : {};
     MOD_IDS.forEach(m => { d.mods[m] = sanitizeModel(m, v.mods && v.mods[m], modelNow); });
     if (Array.isArray(v.sessions)) d.sessions = v.sessions.filter(x => x && typeof x.d === 'string' && MODS[x.mod]).slice(-60).map(x => {
       // source/songId (a panel-logged row, e.g. a finished or abandoned song
@@ -858,6 +859,11 @@ import { register as registerPlayalong } from './ui/playalong.js';
       if (typeof x.songId === 'string') row.songId = x.songId;
       return row;
     });
+    // DB.events (src/core/learning-events.js): each row is validated with
+    // the SAME validateEvent() a writer runs before push -- a corrupt or
+    // hand-edited row is dropped here, never thrown, exactly like an
+    // invalid DB.sessions row above is filtered rather than crashing load.
+    if (Array.isArray(v.events)) d.events = v.events.filter(x => validateEvent(x).ok).slice(-500);
     const p = v.prefs || {}; if (MODS[p.mod]) d.prefs.mod = p.mod; if (WIND_KINDS[p.wind]) d.prefs.wind = p.wind; d.prefs.voiceRange = (p.voiceRange && typeof p.voiceRange === 'object' && Number.isFinite(p.voiceRange.low) && Number.isFinite(p.voiceRange.high) && p.voiceRange.low < p.voiceRange.high) ? { low: clamp(Math.round(p.voiceRange.low), 24, 96), high: clamp(Math.round(p.voiceRange.high), 24, 96) } : null; const VKp = Object.assign({}, VOICE_KINDS, d.prefs.voiceRange ? { mine: ['My range (found by test)', tonicFromRange(exerciseRangeFor(d.prefs.voiceRange)).tonic] } : {}); if (VKp[p.voice]) d.prefs.voice = p.voice; d.prefs.names = p.names !== false;
     d.prefs.noiseFloor = (typeof p.noiseFloor === 'number' && isFinite(p.noiseFloor) && p.noiseFloor >= 0) ? clamp(p.noiseFloor, 0, 1) : null;
     d.prefs.inputDeviceId = typeof p.inputDeviceId === 'string' && p.inputDeviceId ? p.inputDeviceId : null;
@@ -1042,7 +1048,14 @@ import { register as registerPlayalong } from './ui/playalong.js';
   function failEl(msg, confKey) { const e = cur(); if (!e) return; if (!e.failed) { e.failed = true; e.reveal = true; } if (confKey) S.conf[confKey] = (S.conf[confKey] || 0) + 1; flashBad = performance.now(); say(msg, 'no'); updateDesc(); }
   let finishTask = function () {
     task.done = true; let from = lastItem, anyFail = false;
-    task.els.forEach(e => { credit(e.id, e.q || 0, from, task.warm, e.rt, gradeOutcome({ helped: !!e.helped, failed: !!e.failed, assistance: e.assistance || null, q: e.q || 0 })); from = e.id; if (!(e.q > 0)) anyFail = true; });
+    // One learning-event row per judged element (plan 6.4), warm-up
+    // included -- a warm-up still tells a later reader what was practised,
+    // it just never touches the SRS model (see credit()'s `warm` early
+    // return above). `dims.pitch` is the one dimension a built-in drill
+    // ever judges here (q > 0 is the whole pass/fail signal); `input` is
+    // left off (unknown by the time finishTask runs -- see onNote()'s
+    // `source` comment above) rather than guessed.
+    task.els.forEach(e => { credit(e.id, e.q || 0, from, task.warm, e.rt, gradeOutcome({ helped: !!e.helped, failed: !!e.failed, assistance: e.assistance || null, q: e.q || 0 })); logEvent(makeEvent({ instrument: mod, skill: e.id, source: task.warm ? 'warmup' : 'drill', assistance: e.helped ? 'shown' : (e.assistance || 'none'), dims: { pitch: e.q > 0 ? 'ok' : 'miss' }, unassessed: [], activeMs: Math.round((e.rt || 0) * 1000), bpmTarget: null, bpmActual: null }, { now: modelNow })); from = e.id; if (!(e.q > 0)) anyFail = true; });
     lastItem = from; nextTaskAt = now() + (anyFail ? 1.5 : 0.7); if (task.kind === 'ear') nextTaskAt = now() + (anyFail ? 2.6 : 1.1); save(); showAll();
   };
   function dirWord(got, want) { let d = ((pc(want) - pc(got)) + 12) % 12; if (d > 6) d -= 12; return d > 0 ? 'higher' : 'lower'; }
@@ -1577,6 +1590,16 @@ import { register as registerPlayalong } from './ui/playalong.js';
     DB.sessions.push({ d: today(), mod: rec.mod, min: Math.round(num(rec.minutes, 0, 0, 600) * 10) / 10, acc: acc, a1: acc, a2: acc, from: level, to: level, breaks: 0, source: rec.source || 'song', songId: rec.songId || null });
     DB.sessions = DB.sessions.slice(-60); save();
   }
+  // logEvent(ev): the one versioned learning-event record (plan 6.4,
+  // src/core/learning-events.js) for a single judged attempt -- a built-in
+  // drill's finishTask() and a song panel's judged step (see
+  // src/ui/songs.js's `api.logEvent` call) both push through here. A row
+  // that fails validateEvent() is dropped, not thrown, same as a bad
+  // DB.sessions row -- a caller bug must never crash a practice session.
+  function logEvent(ev) {
+    const check = validateEvent(ev); if (!check.ok) { recordError('logEvent', new Error('dropped invalid event -- ' + check.errors.join('; '))); return; }
+    DB.events.push(ev); DB.events = DB.events.slice(-500); save();
+  }
   function endSession() {
     if (!sess) return; const min = sess.active / 60; let line = 'Session ended. Too short to log.';
     if (sess.judged >= 8) { DB.sessions.push({ d: today(), mod: mod, min: Math.round(min * 10) / 10, acc: sess.ok / sess.judged, a1: mean(sess.first), a2: mean(sess.last), from: sess.from, to: S.level, breaks: sess.breaks }); DB.sessions = DB.sessions.slice(-60);
@@ -2066,6 +2089,9 @@ import { register as registerPlayalong } from './ui/playalong.js';
     // logSession(): see the logSession() helper near endSession() above --
     // lets a panel (a finished song lesson) leave its own row in DB.sessions.
     logSession: rec => logSession(rec),
+    // logEvent(): see the logEvent() helper near logSession() above -- lets
+    // a panel (a judged song step) leave its own row in DB.events.
+    logEvent: ev => logEvent(ev),
   };
   //
   //
