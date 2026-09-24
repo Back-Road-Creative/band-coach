@@ -8,6 +8,10 @@
 // clock reads: the caller (a later unit, not this one) supplies whatever
 // timestamps it measured and owns the clock; this module only does the
 // matching arithmetic. Nothing here is wired into practice.js yet.
+//
+// Helper-only (P4). Not wired: every timed step judges against its count-in
+// clock; the untimed step matches by order. Wire it only with a free-tempo
+// mode and a test of that wiring.
 
 // The span a note list covers, first note's start to last note's end, used
 // to normalise every note's position into 0..1 so tempo scale drops out of
