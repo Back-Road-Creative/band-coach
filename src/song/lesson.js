@@ -2,6 +2,7 @@ import { BLOW_STEPS, DRAW_STEPS } from '../instruments/how/harmonica.js';
 import { phraseDifficulty } from './phrase-difficulty.js';
 import { recipeForFamily } from '../audio/voices.js';
 import { barsOf } from './model.js';
+import { createSongClock } from './clock.js';
 
 // Lesson generator (plan unit 5.2, F9 "song practice never counts").
 //
@@ -438,12 +439,20 @@ export function buildLessonPlan(song, partId, instrument, opts = {}) {
     parts: song.parts.map(p => (p.id === partId ? { ...p, notes: playableNotes } : p))
   };
   const phrases = segment(fittedSong, partId);
-  // song.bpm is a single flat tempo -- a song with a tempoMap (see
-  // export-midi.js:91, which DOES honour it) speeding up or slowing down
-  // mid-piece plays every step at the wrong speed past the first change.
-  // Out of scope here (BC-12 is metre, not tempo); left as a named gap.
-  const bpm = song.bpm;
-  const slowBpm = Math.round(bpm * 0.55);
+  // src/song/clock.js's song clock merges song.bpm with song.tempoMap: a
+  // step's bpm is read at its own originTick, not one flat song.bpm, so a
+  // step opening after a tempo change plays and is judged at the tempo in
+  // force there (see export-midi.js:91, which already honours tempoMap on
+  // export). A song without a tempoMap has one clock entry (tick 0,
+  // song.bpm), so clock.bpmAt(tick) === song.bpm everywhere and every
+  // number below is unchanged from before this unit.
+  const clock = createSongClock(fittedSong);
+  // tempoScale: the fraction of the phrase's own tempo a step is played at
+  // -- 1 for full speed, the tempo-ladder rung's own fraction, phrase-slow's
+  // fixed 0.55, 0 for pitches (untimed, no tempo). Carried on every step so
+  // practice.js's phraseSec/judgeAttempt can scale a clock's raw tick-to-
+  // seconds span by exactly what this step is asking the learner to play at.
+  const bpmAt = (originTick, tempoScale) => Math.round(clock.bpmAt(originTick) * tempoScale);
 
   const bt = beatTicks(fittedSong);
 
@@ -462,25 +471,25 @@ export function buildLessonPlan(song, partId, instrument, opts = {}) {
     // phrase and are left without a `difficulty` -- a single phrase's score
     // would misrepresent them.
     const difficulty = phraseDifficulty(phrase, { beatTicks: bt, key: song.key }).score;
-    steps.push({ kind: 'listen', phraseIndex: pi, bars: phrase.bars, originTick, bpm, notes, passRule: null, difficulty });
+    steps.push({ kind: 'listen', phraseIndex: pi, bars: phrase.bars, originTick, bpm: bpmAt(originTick, 1), tempoScale: 1, notes, passRule: null, difficulty });
     steps.push({
-      kind: 'rhythm', phraseIndex: pi, bars: phrase.bars, originTick, bpm, notes, difficulty,
+      kind: 'rhythm', phraseIndex: pi, bars: phrase.bars, originTick, bpm: bpmAt(originTick, 1), tempoScale: 1, notes, difficulty,
       // maxExtras: 0 -- a wrong note struck alongside a chord (practice.js
       // judgeAttempt's extras) never lowers hitRate, so without this every
       // other rule here could still pass around it; see passesRule().
       passRule: { hitRate: hitRateFor(level, 0.8), maxMeanErrorMs: 120, maxExtras: 0 }
     });
     steps.push({
-      kind: 'pitches', phraseIndex: pi, bars: phrase.bars, originTick, bpm: 0, notes, difficulty,
+      kind: 'pitches', phraseIndex: pi, bars: phrase.bars, originTick, bpm: 0, tempoScale: 0, notes, difficulty,
       passRule: sustainRules(instrument, { hitRate: hitRateFor(level, 0.8), maxMeanErrorMs: null, maxExtras: 0 })
     });
     steps.push({
-      kind: 'phrase-slow', phraseIndex: pi, bars: phrase.bars, originTick, bpm: slowBpm, notes, difficulty,
+      kind: 'phrase-slow', phraseIndex: pi, bars: phrase.bars, originTick, bpm: bpmAt(originTick, 0.55), tempoScale: 0.55, notes, difficulty,
       passRule: sustainRules(instrument, { hitRate: hitRateFor(level, 0.8), maxMeanErrorMs: 150, maxExtras: 0 })
     });
     LADDER_FRACTIONS.forEach(fraction => {
       steps.push({
-        kind: 'tempo-ladder', phraseIndex: pi, bars: phrase.bars, originTick, bpm: Math.round(bpm * fraction), notes, difficulty,
+        kind: 'tempo-ladder', phraseIndex: pi, bars: phrase.bars, originTick, bpm: bpmAt(originTick, fraction), tempoScale: fraction, notes, difficulty,
         passRule: sustainRules(instrument, { hitRate: hitRateFor(level, 0.85), maxMeanErrorMs: 100, maxExtras: 0 })
       });
     });
@@ -489,12 +498,14 @@ export function buildLessonPlan(song, partId, instrument, opts = {}) {
   if (phrases.length > 1) {
     for (let upTo = 1; upTo < phrases.length; upTo++) {
       const chained = phrases.slice(0, upTo + 1);
+      const chainOriginTick = chained[0].startTick;
       steps.push({
         kind: 'chain',
         phraseIndex: upTo,
         bars: [chained[0].bars[0], chained[chained.length - 1].bars[1]],
-        originTick: chained[0].startTick,
-        bpm,
+        originTick: chainOriginTick,
+        bpm: bpmAt(chainOriginTick, 1),
+        tempoScale: 1,
         notes: chained.flatMap(p => p.notes),
         passRule: sustainRules(instrument, { hitRate: hitRateFor(level, 0.8), maxMeanErrorMs: 120, maxExtras: 0 })
       });
@@ -502,12 +513,14 @@ export function buildLessonPlan(song, partId, instrument, opts = {}) {
   }
 
   if (phrases.length > 0) {
+    const wholeOriginTick = phrases[0].startTick;
     steps.push({
       kind: 'whole',
       phraseIndex: null,
       bars: [phrases[0].bars[0], phrases[phrases.length - 1].bars[1]],
-      originTick: phrases[0].startTick,
-      bpm,
+      originTick: wholeOriginTick,
+      bpm: bpmAt(wholeOriginTick, 1),
+      tempoScale: 1,
       notes: playableNotes,
       passRule: sustainRules(instrument, { hitRate: hitRateFor(level, 0.8), maxMeanErrorMs: 120, maxExtras: 0 })
     });
