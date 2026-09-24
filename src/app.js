@@ -1,6 +1,7 @@
 import { judgePitch, OCTAVE_POLICY } from './core/judge.js';
 import { createDeafWindow } from './audio/deaf-window.js';
 import { exportProgress as exportProgressFile, importProgress as importProgressFile, migrate as migrateDB } from './core/progress-file.js';
+import { createLibrary, indexedDbStore, memoryStore } from './song/library.js';
 import { toAudioTime, judgeTap, medianLatency } from './core/timing.js';
 import { DEFAULT_STABILITY_DAYS, MIN_STABILITY_DAYS, MAX_STABILITY_DAYS, GRADE, retrievability, review, due, migrateItem } from './core/srs.js';
 import { handsTogetherById, fingeringLabel, gradeHandsTogetherExact, gradeHandsTogetherApprox } from './core/hands-together.js';
@@ -1892,12 +1893,15 @@ import { register as registerPlayalong } from './ui/playalong.js';
   // fallback range -- see src/audio/range.js.
   setInterval(() => { if (!TOOLS[mod] || !micReady || !anTime) return; const buf = new Float32Array(anTime.fftSize); anTime.getFloatTimeDomainData(buf); const toolRange = mod === 'tuner' ? rangeForInstrument(instrumentById[tunerKind === 'vln' ? 'violin' : tunerKind]) : FALLBACK_RANGE; const r = yin(buf, actx.sampleRate, toolRange.fmin, toolRange.fmax, gates.pitch), fr = { rms: r.rms, freq: r.freq && r.clarity > 0.8 ? r.freq : 0 }; if (r.rms > AUDIO_HEARD_RMS_FLOOR) audioHeardTicks++; if (fr.freq) fr.midi = fmidi(fr.freq); meterUpdate(fr.rms); toolPitch(fr, 0.05); }, 50);
 
-  // ---------- backups: a downloadable copy of the whole DB (E9: db.v now feeds migrateDB) ----------
+  // ---------- backups: a downloadable copy of the whole DB, plus the saved song library
+  // (E9: db.v now feeds migrateDB; song library shares the exact store learn/songs/editor
+  // panels use, same fallback-to-memory pattern as src/ui/learn.js:92-93) ----------
   function showBackupNudge(text) { $('backupNudgeText').textContent = text; $('backupNudge').hidden = false; }
   function noteBackupMade(t) { lastBackupAt = t; try { localStorage.setItem(BACKUP_AT_KEY, String(t)); } catch (e) {} }
-  function doExportProgress() { return exportProgressFile(DB, { appVersion: APP_VERSION, now: Date.now }); }
-  function saveBackup() {
-    const env = doExportProgress();
+  function backupLibrary() { try { return createLibrary(indexedDbStore(indexedDB, 'bandcoach-songs')); } catch (e) { return createLibrary(memoryStore()); } }
+  async function doExportProgress() { const songs = await backupLibrary().exportAll(); return exportProgressFile(DB, { appVersion: APP_VERSION, now: Date.now, songs }); }
+  async function saveBackup() {
+    const env = await doExportProgress();
     const blob = new Blob([JSON.stringify(env, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a'); a.href = url; a.download = 'band-coach-progress.json';
@@ -1906,12 +1910,20 @@ import { register as registerPlayalong } from './ui/playalong.js';
     noteBackupMade(Date.now()); $('backupNudge').hidden = true;
     coach(t('backup.saved'));
   }
-  function doImportProgress(text) {
+  async function doImportProgress(text) {
     const result = importProgressFile(text);
     if (!result.ok) { coach(result.error); return result; }
     const priorLatencyMs = DB && DB.latencyMs;
     modelNow = Date.now(); DB = sanitizeDB(result.db, undefined, modelNow); DB.latencyMs = num(priorLatencyMs, DB.latencyMs, 0, 300); if (!Array.isArray(DB.custom)) DB.custom = [];
-    $('optNames').checked = DB.prefs.names; $('optTheme').value = DB.prefs.theme; applyTheme(DB.prefs.theme); setNoteNaming(DB.prefs.noteNaming); $('optNoteSystem').value = DB.prefs.noteNaming.system; $('optAccidentals').value = DB.prefs.noteNaming.accidentals; setMod(DB.prefs.mod); coach(t('backup.restored'));
+    $('optNames').checked = DB.prefs.names; $('optTheme').value = DB.prefs.theme; applyTheme(DB.prefs.theme); setNoteNaming(DB.prefs.noteNaming); $('optNoteSystem').value = DB.prefs.noteNaming.system; $('optAccidentals').value = DB.prefs.noteNaming.accidentals; setMod(DB.prefs.mod);
+    // The DB restore above already succeeded on its own; a song-library failure here
+    // (e.g. IndexedDB unavailable) is reported but never rolls that back.
+    if (Array.isArray(result.songs) && result.songs.length) {
+      try { await backupLibrary().importAll(result.songs); coach(t('backup.restored')); }
+      catch (e) { coach('Your progress was restored, but the saved songs in this backup could not be.'); }
+    } else {
+      coach(t('backup.restored'));
+    }
     return result;
   }
   $('backupSaveBtn').addEventListener('click', function () { this.blur(); saveBackup(); });

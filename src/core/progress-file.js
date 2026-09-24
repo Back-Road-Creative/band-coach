@@ -8,9 +8,9 @@
 // through the app's own sanitizeDB before using it.
 
 export const PROGRESS_FORMAT = 'band-coach-progress';
-export const PROGRESS_FORMAT_VERSION = 1;
+export const PROGRESS_FORMAT_VERSION = 2;
 export const CURRENT_DB_VERSION = 1;
-export const MAX_IMPORT_BYTES = 5 * 1024 * 1024;
+export const MAX_IMPORT_BYTES = 64 * 1024 * 1024; // saved songs can each run up to 5 MB (src/song/library.js MAX_SONG_BYTES)
 
 // Migration ladder for the saved DB's own `v` field, keyed by the version a
 // db is migrating FROM. Each entry returns a db object at (key + 1). To add
@@ -36,8 +36,13 @@ export function migrate(db) {
   return out;
 }
 
-/** Wraps `db` in a JSON-serialisable backup envelope. */
-export function exportProgress(db, { appVersion, now } = {}) {
+/**
+ * Wraps `db` in a JSON-serialisable backup envelope. `songs` (optional) is
+ * the saved song library (src/song/library.js exportAll()) -- omitted, it
+ * defaults to an empty array so a caller that has no library handy (or is
+ * only testing the db side) never has to know that field exists.
+ */
+export function exportProgress(db, { appVersion, now, songs } = {}) {
   const nowMs = typeof now === 'function' ? now() : now ?? Date.now();
   return {
     format: PROGRESS_FORMAT,
@@ -45,7 +50,30 @@ export function exportProgress(db, { appVersion, now } = {}) {
     appVersion: appVersion || 'unknown',
     exportedAt: new Date(nowMs).toISOString(),
     db,
+    songs: Array.isArray(songs) ? songs : [],
   };
+}
+
+// Migration ladder for the ENVELOPE itself, keyed by the formatVersion an
+// envelope is migrating FROM -- separate from MIGRATIONS above, which is for
+// the db's own `v` field. Each entry returns an envelope at (key + 1). To
+// add the next step when the envelope shape changes again: bump
+// PROGRESS_FORMAT_VERSION and add ONE new entry here.
+const FORMAT_MIGRATIONS = {
+  // 1 -> 2: backups made before the song library was included at all.
+  1: (env) => ({ ...env, songs: [] }),
+};
+
+function migrateEnvelope(env) {
+  let out = env;
+  let v = Number.isInteger(out.formatVersion) ? out.formatVersion : 1;
+  while (v < PROGRESS_FORMAT_VERSION) {
+    const step = FORMAT_MIGRATIONS[v];
+    if (!step) break; // no path from here; caller falls back to songs: []
+    out = step(out);
+    v += 1;
+  }
+  return out;
 }
 
 function byteLength(text) {
@@ -81,5 +109,6 @@ export function importProgress(text) {
   if (!Number.isInteger(parsed.formatVersion) || parsed.formatVersion > PROGRESS_FORMAT_VERSION) {
     return { ok: false, error: 'This backup was made by a newer Band Coach. Update the app to restore it.' };
   }
-  return { ok: true, db: migrate(parsed.db) };
+  const migrated = migrateEnvelope(parsed);
+  return { ok: true, db: migrate(migrated.db), songs: Array.isArray(migrated.songs) ? migrated.songs : [] };
 }

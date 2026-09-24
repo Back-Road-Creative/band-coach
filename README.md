@@ -154,9 +154,11 @@ other a11y characterization tests above were not written to look for.
 Progress is saved in the browser, keyed to the exact file path Band Coach was opened from — moving
 or re-downloading the file can lose it, since browsers do not share that storage across paths. Open
 the "More options" menu in the side rail for "Save a backup", which downloads
-`band-coach-progress.json`, and "Restore a backup", which loads one back in. A quiet reminder
-appears once you have actually practised a while without one — never on a fresh profile, since
-there is nothing yet to lose. The "My progress" panel also shows a practice calendar (minutes and
+`band-coach-progress.json`, and "Restore a backup", which loads one back in. The backup file now
+carries your saved songs (from the Learn and Songs panels) alongside your practice progress, so
+restoring one brings both back. An older backup made before songs were included still restores —
+it just has no songs to bring back. A quiet reminder appears once you have actually practised a
+while without one — never on a fresh profile, since there is nothing yet to lose. The "My progress" panel also shows a practice calendar (minutes and
 level changes, one cell per day, for the last 8 weeks) and a daily minutes goal with a streak — the
 practice log itself only keeps the most recent 60 sessions, so days older than that say "earlier
 sessions not kept" rather than a false zero. The backup, restore and "Check for updates" messages
