@@ -166,7 +166,9 @@ or re-downloading the file can lose it, since browsers do not share that storage
 the "More options" menu in the side rail for "Save a backup", which downloads
 `band-coach-progress.json`, and "Restore a backup", which loads one back in. The backup file now
 carries your saved songs (from the Learn and Songs panels) alongside your practice progress, so
-restoring one brings both back. An older backup made before songs were included still restores —
+restoring one brings both back — a restore replaces your progress and songs together, and if the
+songs in the backup cannot be stored on this device, nothing changes: your current progress and
+songs are left exactly as they were. An older backup made before songs were included still restores —
 it just has no songs to bring back. A backup file that is damaged or was written by a newer Band
 Coach is refused with a message explaining why, and your current progress is left untouched. A quiet reminder appears once you have actually practised a
 while without one — never on a fresh profile, since there is nothing yet to lose. The "My progress" panel also shows a practice calendar (minutes and
