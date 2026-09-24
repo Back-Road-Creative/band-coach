@@ -2434,10 +2434,14 @@ import { register as registerPlayalong } from './ui/playalong.js';
   }
   // P2a: maps the currently open panel (if any) onto one of the nav's three
   // destinations -- 'songs' and 'history' are the only panels with a nav
-  // button of their own; any other open panel (theory, ear, editor, a panel
-  // reached only through the old picker) means no destination is "current",
-  // same as a screen the nav doesn't know about.
-  function navDestFor(panelId) { return panelId === 'songs' ? 'songs' : panelId === 'history' ? 'progress' : panelId ? null : 'practice'; }
+  // button of their own; any other open panel (theory, ear, a panel reached
+  // only through the old picker) means no destination is "current", same as
+  // a screen the nav doesn't know about.
+  // P3-11: 'editor' (Edit notes) and 'playalong' (Play along) are reached
+  // only from inside Songs, so they count as Songs too -- otherwise opening
+  // either would make the nav go dark, which reads as "you left Songs"
+  // even though there is no other screen to go "back" to.
+  function navDestFor(panelId) { return (panelId === 'songs' || panelId === 'editor' || panelId === 'playalong') ? 'songs' : panelId === 'history' ? 'progress' : panelId ? null : 'practice'; }
   // P2b-2: Settings isn't a panel (panels.current() knows nothing about it),
   // so the nav's notion of "current" has to check #settingsView first.
   function currentDest() { return !$('settingsView').hidden ? 'settings' : navDestFor(panels.current()); }
@@ -2459,6 +2463,13 @@ import { register as registerPlayalong } from './ui/playalong.js';
   const NAV_PANEL_FOR = { songs: 'songs', progress: 'history' };
   function routeTo(dest) {
     if (dest === 'instrument') { setInstrumentSheetOpen($('picker').hidden); return; }
+    // P3-11: navDestFor() now maps editor/playalong onto 'songs' too, so
+    // currentDest() === 'songs' while either is open -- the no-op guard
+    // below would otherwise swallow "press Songs from Edit notes/Play
+    // along" as if Songs were already showing. Only the actual songs panel
+    // counts as "already there"; every other case (including re-pressing
+    // Songs while Songs is open) still hits the guard unchanged.
+    if (dest === 'songs' && panels.current() !== 'songs') { openPanel('songs'); return; }
     if (dest === currentDest()) return;
     if (dest === 'practice') { closePanel(); return; }
     if (dest === 'settings') { openSettings(); return; }

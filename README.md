@@ -305,8 +305,11 @@ starter tunes included, straight in "Record a tune": saving a starter's edits ma
 for Settings, the instrument sheet or Songs — and coming back keeps whatever was unsaved; a plain
 status line reads "Not saved yet" until you press Save, then "Saved". Once something is saved,
 **Practise this** and **Back to songs** appear, and the song's own status in Songs updates right
-away (**Checked** once no check items are left). Export reveals the
-MIDI/MusicXML/ABC download buttons only once pressed (they no longer sit on every song row), and
+away (**Checked** once no check items are left). Edit notes and Play along count as Songs in the
+nav bar — the Songs button stays lit the whole time either is open, pressing it returns to the
+song list, and Play along has its own **Back to songs** button alongside Edit notes'. Export
+reveals the MIDI/MusicXML/ABC download buttons only once pressed (they no longer sit on every
+song row), and
 Share downloads a `.bandpack` of that one song alone. A teacher challenge's title field, "Export
 as a challenge", "Share with your band" and any read-only band-pack part assignments live under
 their own **Assignments** heading below the song list, separate from a single open song's own
