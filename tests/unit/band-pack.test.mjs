@@ -76,6 +76,20 @@ test('writeBandPack then readBandPack round-trips name, songs and parts', () => 
   assert.deepEqual(pack.parts, parts);
 });
 
+test('writeBandPack then readBandPack round-trips a percussion part with role, piece and unmapped intact', () => {
+  const drumSong = song('drums', {
+    parts: [{ id: 'kit', name: 'Kit', role: 'percussion', unmapped: 1, notes: [
+      { start: 0, dur: 480, midi: 38, piece: 'snare' },
+      { start: 480, dur: 480, midi: 39, piece: null },
+    ] }],
+  });
+  const bytes = writeBandPack({ name: 'Drum pack', songs: [drumSong] });
+  const pack = readBandPack(bytes);
+  assert.deepEqual(pack.songs[0], drumSong);
+  assert.equal(pack.songs[0].parts[0].role, 'percussion');
+  assert.equal(pack.songs[0].parts[0].unmapped, 1);
+});
+
 test('writeBandPack omits parts entirely when not given, readBandPack reports null per song', () => {
   const songs = [song('a'), song('b')];
   const bytes = writeBandPack({ name: 'No assignments yet', songs });

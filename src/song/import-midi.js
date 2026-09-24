@@ -22,7 +22,12 @@
 //
 // One `part` is produced per (track, channel) pair that has at least one
 // note. Channel 10 (0-based index 9), the General MIDI percussion channel,
-// is marked in the part name.
+// is marked in the part name and gets `role: 'percussion'`; each of its
+// notes gains `piece` (the src/instruments/drum-kit.js PIECES id that GM
+// note number maps to, or null when it doesn't map to any kit piece, e.g.
+// GM 39 hand clap), and the part carries `unmapped`, a count of those.
+
+import { pieceForMidi } from '../instruments/drum-kit.js';
 
 const MTHD = [0x4d, 0x54, 0x68, 0x64]; // "MThd"
 const MTRK = [0x4d, 0x54, 0x72, 0x6b]; // "MTrk"
@@ -333,8 +338,19 @@ export function importMidi(bytes, options = {}) {
       const rescaled = notes.map((n) => rescaleNote(n, scale)).sort((a, b) => a.start - b.start);
       let name = track.name || `Track ${trackIndex + 1}`;
       if (multiChannel) name += ` (ch ${channel + 1})`;
-      if (channel === 9) name += ' (percussion)';
-      parts.push({ id: `part-${parts.length + 1}`, name, notes: rescaled });
+      const part = { id: `part-${parts.length + 1}`, name, notes: rescaled };
+      if (channel === 9) {
+        part.name = name + ' (percussion)';
+        part.role = 'percussion';
+        let unmapped = 0;
+        part.notes = rescaled.map((n) => {
+          const piece = pieceForMidi(n.midi);
+          if (piece === null) unmapped++;
+          return { ...n, piece };
+        });
+        part.unmapped = unmapped;
+      }
+      parts.push(part);
     }
   });
 

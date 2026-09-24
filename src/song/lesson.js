@@ -179,9 +179,42 @@ function chordReductionFor(notes) {
   return { dropIndices, chordCount };
 }
 
+// Every note of `notes` marked unplayable with the same `reason` -- used
+// below for the two "wrong instrument family entirely" percussion cases,
+// where every note is unplayable for the same reason rather than each
+// failing its own range/harmonica check.
+function allUnplayable(notes, reason) {
+  return notes.map((n, index) => ({ start: n.start, dur: n.dur, originalMidi: n.midi, attemptedMidi: n.midi, reason, index }));
+}
+
 export function fitToInstrument(song, partId, instrument) {
   const part = getPart(song, partId);
   const notes = part.notes;
+
+  // Percussion parts (role 'percussion', see import-midi.js) are unpitched:
+  // the transposition/chord-reduction search below answers "which pitch
+  // fits", a question that doesn't apply here. Only the drum-kit instrument
+  // can play one at all; every other instrument gets fit 0, same as a
+  // pitched part handed to the drum kit just below.
+  if (part.role === 'percussion') {
+    if (instrument.id !== 'drum-kit') {
+      const reason = 'percussion part needs the drum kit';
+      return { notes: notes.map(n => ({ ...n })), shiftSemitones: 0, changed: false, changes: [], unplayable: allUnplayable(notes, reason), fitScore: 0, reason };
+    }
+    // fitScore is the share of this part's notes that named a real kit
+    // piece on import (piece !== null) -- an unmapped GM note (e.g. 39 hand
+    // clap) still plays (its own midi sounds fine on export/practice), it
+    // just can't be labelled, so it lowers the score without ever making a
+    // note unplayable or throwing.
+    const mapped = notes.filter(n => n.piece != null).length;
+    const fitScore = notes.length === 0 ? 1 : mapped / notes.length;
+    return { notes: notes.map(n => ({ ...n })), shiftSemitones: 0, changed: false, changes: [], unplayable: [], fitScore, reason: null };
+  }
+  if (instrument.id === 'drum-kit') {
+    const reason = 'the drum kit only plays percussion parts';
+    return { notes: notes.map(n => ({ ...n })), shiftSemitones: 0, changed: false, changes: [], unplayable: allUnplayable(notes, reason), fitScore: 0, reason };
+  }
+
   const availableSet = hasFixedPitchSet(instrument) ? harmonicaAvailableNotes(instrument) : null;
   // A single-line instrument can't sound two notes of a chord together --
   // reduce each same-start group down to its top note (chordReductionFor
@@ -243,7 +276,9 @@ export function fitToInstrument(song, partId, instrument) {
     shiftSemitones: shift,
     changed: shift !== 0,
     changes,
-    unplayable: best.details
+    unplayable: best.details,
+    fitScore: notes.length === 0 ? 1 : (notes.length - best.details.length) / notes.length,
+    reason: null
   };
 }
 

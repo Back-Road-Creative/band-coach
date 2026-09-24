@@ -250,3 +250,47 @@ test('every prefix of a valid multi-track file either imports or throws cleanly'
   assert.equal(thrown + imported, full.length + 1);
   assert.ok(imported >= 1, 'the full valid file itself must import');
 });
+
+// --- channel-10 percussion: role, piece, unmapped (U4) ---
+
+test('a channel-10 part gets role percussion and each note gets its drum-kit piece', () => {
+  const events = [
+    noteOn(0, 9, 38), noteOff(120, 9, 38), // snare
+    noteOn(0, 9, 35), noteOff(120, 9, 35), // kick
+    endOfTrack(0),
+  ];
+  const bytes = midiFile({ format: 0, ntrks: 1, ppq: 480 }, [events]);
+  const { song } = importMidi(bytes);
+
+  assert.equal(song.parts.length, 1);
+  assert.equal(song.parts[0].role, 'percussion');
+  assert.equal(song.parts[0].notes[0].midi, 38);
+  assert.equal(song.parts[0].notes[0].piece, 'snare');
+  assert.equal(song.parts[0].notes[1].midi, 35);
+  assert.equal(song.parts[0].notes[1].piece, 'kick');
+  assert.equal(song.parts[0].unmapped, 0);
+});
+
+test('an off-kit GM percussion note (hand clap) keeps piece null and is counted in unmapped', () => {
+  const events = [
+    noteOn(0, 9, 38), noteOff(120, 9, 38), // snare, mapped
+    noteOn(120, 9, 39), noteOff(120, 9, 39), // hand clap, not on the kit
+    endOfTrack(0),
+  ];
+  const bytes = midiFile({ format: 0, ntrks: 1, ppq: 480 }, [events]);
+  const { song } = importMidi(bytes);
+
+  assert.equal(song.parts[0].notes[0].piece, 'snare');
+  assert.equal(song.parts[0].notes[1].piece, null);
+  assert.equal(song.parts[0].unmapped, 1);
+});
+
+test('a non-percussion channel gets no role and no piece field on its notes', () => {
+  const events = [noteOn(0, 0, 60), noteOff(120, 0, 60), endOfTrack(0)];
+  const bytes = midiFile({ format: 0, ntrks: 1, ppq: 480 }, [events]);
+  const { song } = importMidi(bytes);
+
+  assert.equal('role' in song.parts[0], false);
+  assert.equal('piece' in song.parts[0].notes[0], false);
+  assert.equal('unmapped' in song.parts[0], false);
+});
