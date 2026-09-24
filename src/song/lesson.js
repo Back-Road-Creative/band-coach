@@ -1,6 +1,7 @@
 import { BLOW_STEPS, DRAW_STEPS } from '../instruments/how/harmonica.js';
 import { phraseDifficulty } from './phrase-difficulty.js';
 import { recipeForFamily } from '../audio/voices.js';
+import { barsOf } from './model.js';
 
 // Lesson generator (plan unit 5.2, F9 "song practice never counts").
 //
@@ -127,10 +128,65 @@ function notePlayable(shiftedMidi, instrument, availableSet) {
   return null;
 }
 
+// Instrument families that can sound more than one pitch at once (chords).
+// Verified via `git grep -h "family: '" -- src/instruments/*.js` (counts on
+// origin/main 5b5c5e7): wind 8, fretted 8, bowed 4, brass 3, voice 1,
+// percussion 1 (mallet), keys 1, free-reed 1 (harmonica). Only keys and
+// fretted (strummed/fingerpicked guitar, uke, mandolin, banjo) and
+// percussion (mallet -- two mallets at once) can genuinely sound a chord;
+// everything else here is single-line. free-reed (harmonica) is treated as
+// single-line even though a real harmonica CAN sound two adjacent holes at
+// once, because the app only ever hears one pitch at a time through the mic
+// pitch-detection path -- calling it chord-capable would just make every
+// chord step silently unpassable.
+//
+// Defined here (not in feasibility.js, which owns the public isSingleLine
+// name -- see its re-export) because fitToInstrument below needs it too,
+// and feasibility.js already imports fitToInstrument from this module;
+// defining it there and importing it back would make the two files a
+// circular pair of ES module imports for no reason.
+export const POLYPHONIC_FAMILIES = new Set(['keys', 'fretted', 'percussion']);
+export function isSingleLine(instrument) {
+  return !POLYPHONIC_FAMILIES.has(instrument.family);
+}
+
+// For a single-line instrument, which note indices belong to a chord (two or
+// more notes sharing the same `start`) and should be dropped down to just
+// the highest-pitched note of each group -- a single-line player plays one
+// note at a time, so the top note (usually the melody line in a written-out
+// chord) is what buildLessonPlan actually asks them to play; see
+// feasibility.js's "Has chords" wording for what the learner is told.
+// Overlapping-but-different-start notes (e.g. a held drone under a melody)
+// are NOT treated as chords here -- only exact same-start groups -- since
+// reducing a partial overlap would have to cut a note mid-duration rather
+// than drop it outright, a different (and unimplemented) shape of fix.
+function chordReductionFor(notes) {
+  const byStart = new Map();
+  notes.forEach((n, index) => {
+    const group = byStart.get(n.start) || [];
+    group.push(index);
+    byStart.set(n.start, group);
+  });
+  const dropIndices = new Set();
+  let chordCount = 0;
+  for (const group of byStart.values()) {
+    if (group.length < 2) continue;
+    chordCount++;
+    let topIndex = group[0];
+    for (const idx of group) { if (notes[idx].midi > notes[topIndex].midi) topIndex = idx; }
+    for (const idx of group) { if (idx !== topIndex) dropIndices.add(idx); }
+  }
+  return { dropIndices, chordCount };
+}
+
 export function fitToInstrument(song, partId, instrument) {
   const part = getPart(song, partId);
   const notes = part.notes;
   const availableSet = hasFixedPitchSet(instrument) ? harmonicaAvailableNotes(instrument) : null;
+  // A single-line instrument can't sound two notes of a chord together --
+  // reduce each same-start group down to its top note (chordReductionFor
+  // above); everything else here is unchanged.
+  const chords = isSingleLine(instrument) ? chordReductionFor(notes) : { dropIndices: new Set(), chordCount: 0 };
 
   if (notes.length === 0) {
     return { notes: [], shiftSemitones: 0, changed: false, changes: [], unplayable: [] };
@@ -141,6 +197,14 @@ export function fitToInstrument(song, partId, instrument) {
     const details = [];
     notes.forEach((n, index) => {
       const shiftedMidi = n.midi + shift;
+      // A dropped chord note is unplayable at every shift alike -- record it
+      // once per candidate (matching the range/harmonica reasons below) and
+      // skip the range/availableSet check, which would just duplicate the
+      // reason on a note that's leaving anyway.
+      if (chords.dropIndices.has(index)) {
+        details.push({ start: n.start, dur: n.dur, originalMidi: n.midi, attemptedMidi: shiftedMidi, reason: 'chord-note', index });
+        return;
+      }
       const reason = notePlayable(shiftedMidi, instrument, availableSet);
       // `index` into `notes` (== into `fittedNotes` below, same order) so a
       // caller can drop exactly the flagged notes without guessing from
@@ -150,7 +214,11 @@ export function fitToInstrument(song, partId, instrument) {
     if (best === null || details.length < best.details.length) {
       best = { shift, details };
     }
-    if (best.details.length === 0) break; // iterated friendliest-first: first perfect fit wins
+    // iterated friendliest-first: first perfect fit wins -- but a chord part
+    // never reaches zero details (its dropped notes are unplayable at every
+    // shift), so this just falls through to the last candidate, same cost
+    // as before for the common (chordless) case.
+    if (best.details.length === 0) break;
   }
 
   const shift = best.shift;
@@ -166,6 +234,9 @@ export function fitToInstrument(song, partId, instrument) {
         : 'shifted ' + abs + ' semitone' + (abs === 1 ? '' : 's') + ' ' + dir + " to fit the instrument's playable notes"
     );
   }
+  if (chords.chordCount > 0) {
+    changes.push('reduced ' + chords.chordCount + ' chord' + (chords.chordCount === 1 ? '' : 's') + ' to their top note');
+  }
 
   return {
     notes: fittedNotes,
@@ -180,6 +251,10 @@ export function fitToInstrument(song, partId, instrument) {
 // segment
 // ---------------------------------------------------------------------------
 
+// beatTicks/barTicks: the OPENING metre only (song.metre), used wherever a
+// caller needs one flat tick-per-beat number for the whole song (buildLessonPlan's
+// phraseDifficulty call below). segment() itself must NOT use these once a
+// song carries metreChanges -- see barBoundariesThrough/beatTicksAt.
 function beatTicks(song) {
   return song.ticksPerQuarter * (4 / song.metre.den);
 }
@@ -188,30 +263,71 @@ function barTicks(song) {
   return song.metre.num * beatTicks(song);
 }
 
+// The beat length (ticks) of whichever metre is in force at `tick` --
+// song.metre until the first song.metreChanges entry at or before `tick`,
+// then that entry's own num/den, and so on. Mirrors model.js's private
+// metreSegmentsOf() but kept local here (BC-12) rather than exported from
+// model.js, since lesson.js is the only caller that needs "beat" rather
+// than "bar" granularity.
+function beatTicksAt(song, tick) {
+  let metre = song.metre;
+  for (const change of song.metreChanges || []) {
+    if (change.tick <= tick) metre = change;
+    else break;
+  }
+  return song.ticksPerQuarter * (4 / metre.den);
+}
+
+// Real bar boundaries (model.js's barsOf(), the one source of truth honoring
+// metreChanges) truncated to just past `lastEnd` -- segment() only needs
+// bars the part's own notes actually reach, not the whole song's boundaries
+// when another part runs longer. Always has >=2 entries (barsOf's own
+// guarantee), so boundaries.length - 1 is always a valid bar count.
+function barBoundariesThrough(song, lastEnd) {
+  const all = barsOf(song);
+  const boundaries = [all[0]];
+  for (let i = 1; i < all.length; i++) {
+    boundaries.push(all[i]);
+    if (all[i] >= lastEnd) break;
+  }
+  return boundaries;
+}
+
+// Which bar (index into a boundaries array from barBoundariesThrough) tick
+// `tick` falls in.
+function barIndexAt(boundaries, tick) {
+  for (let i = 0; i < boundaries.length - 1; i++) {
+    if (tick < boundaries[i + 1]) return i;
+  }
+  return boundaries.length - 2;
+}
+
 export function segment(song, partId) {
   const part = getPart(song, partId);
   const notes = part.notes;
   if (notes.length === 0) return [];
 
-  const bt = barTicks(song);
-  const beat = beatTicks(song);
-  const LONG_REST = beat; // a full beat of silence is a natural breath
-  const LONG_NOTE = beat * 2; // a note held two beats or more is a natural resting point
   const MAX_PHRASE_BARS = 4;
 
   const lastEnd = notes.reduce((m, n) => Math.max(m, n.start + n.dur), 0);
-  const totalBars = Math.max(1, Math.ceil(lastEnd / bt));
+  const boundaries = barBoundariesThrough(song, lastEnd);
+  const totalBars = boundaries.length - 1;
 
   const breaksAfterBar = new Set();
   for (let i = 0; i < notes.length; i++) {
     const n = notes[i];
     const end = n.start + n.dur;
     const next = notes[i + 1];
+    // The beat in force AT this note -- a long-note/rest-break judged in the
+    // wrong metre's beat length is as wrong as a boundary on the wrong tick.
+    const beat = beatTicksAt(song, n.start);
+    const LONG_REST = beat; // a full beat of silence is a natural breath
+    const LONG_NOTE = beat * 2; // a note held two beats or more is a natural resting point
     const isLongNote = n.dur >= LONG_NOTE;
     const gapToNext = next ? next.start - end : Infinity;
     const isRestBreak = gapToNext >= LONG_REST;
     if (isLongNote || isRestBreak) {
-      breaksAfterBar.add(Math.floor((end - 1) / bt));
+      breaksAfterBar.add(barIndexAt(boundaries, end - 1));
     }
   }
 
@@ -221,8 +337,8 @@ export function segment(song, partId) {
     const barsInPhrase = bar - phraseStartBar + 1;
     const isLastBar = bar === totalBars - 1;
     if (isLastBar || barsInPhrase >= MAX_PHRASE_BARS || breaksAfterBar.has(bar)) {
-      const from = phraseStartBar * bt;
-      const to = (bar + 1) * bt;
+      const from = boundaries[phraseStartBar];
+      const to = boundaries[bar + 1];
       phrases.push({
         bars: [phraseStartBar, bar],
         startTick: from,
@@ -287,6 +403,10 @@ export function buildLessonPlan(song, partId, instrument, opts = {}) {
     parts: song.parts.map(p => (p.id === partId ? { ...p, notes: playableNotes } : p))
   };
   const phrases = segment(fittedSong, partId);
+  // song.bpm is a single flat tempo -- a song with a tempoMap (see
+  // export-midi.js:91, which DOES honour it) speeding up or slowing down
+  // mid-piece plays every step at the wrong speed past the first change.
+  // Out of scope here (BC-12 is metre, not tempo); left as a named gap.
   const bpm = song.bpm;
   const slowBpm = Math.round(bpm * 0.55);
 

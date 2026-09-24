@@ -1,11 +1,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { feasibility } from '../../src/song/feasibility.js';
+import { feasibility, isSingleLine } from '../../src/song/feasibility.js';
 import { starterSongs } from '../../src/song/starter/index.js';
 import { INSTRUMENTS } from '../../src/instruments/index.js';
+import { buildLessonPlan } from '../../src/song/lesson.js';
 import gtr from '../../src/instruments/gtr.js';
 import harp from '../../src/instruments/harp.js';
+import flute from '../../src/instruments/flute.js';
+import kbd from '../../src/instruments/kbd.js';
 
 const readyInstruments = INSTRUMENTS.filter((i) => i.status === 'ready');
 
@@ -72,6 +75,56 @@ test('a harmonica-unfriendly melody with genuinely out-of-reach notes reports pa
   const f = feasibility(song, 'melody', harp);
   assert.ok(['partial', 'unplayable'].includes(f.level));
   assert.match(f.label, /skipped/);
+});
+
+test('isSingleLine: wind/brass/bowed/voice/free-reed are single-line, keys/fretted/percussion are not', () => {
+  assert.equal(isSingleLine(flute), true); // wind
+  assert.equal(isSingleLine(gtr), false); // fretted
+  assert.equal(isSingleLine(kbd), false); // keys
+});
+
+test('a chord part on a single-line instrument reports partial/"Has chords", not a false as-written', () => {
+  // Two notes sharing the same start -- a chord -- well inside flute's range.
+  const song = {
+    schema: 'song/1', id: 'chords', title: 'Chords', composer: null, licence: null, source: null,
+    key: { tonic: 0, mode: 'major' }, metre: { num: 4, den: 4 }, bpm: 100, ticksPerQuarter: 480,
+    parts: [{ id: 'melody', name: 'Melody', notes: [
+      note(0, 480, 64), note(0, 480, 67), // one chord (two notes, same start)
+      note(480, 480, 69)
+    ] }],
+    chords: [],
+  };
+  const f = feasibility(song, 'melody', flute);
+  assert.equal(f.monophonic, false);
+  assert.equal(f.level, 'partial');
+  assert.equal(f.label, 'Has chords');
+  assert.match(f.detail, /top note/);
+
+  // A chord part on a polyphonic instrument plays as written, chords intact.
+  const kf = feasibility(song, 'melody', kbd);
+  assert.equal(kf.monophonic, true);
+  assert.equal(kf.level, 'as-written');
+});
+
+test('a single-line instrument\'s lesson plan drops chord notes to the top note; a polyphonic one keeps every note', () => {
+  const song = {
+    schema: 'song/1', id: 'chords', title: 'Chords', composer: null, licence: null, source: null,
+    key: { tonic: 0, mode: 'major' }, metre: { num: 4, den: 4 }, bpm: 100, ticksPerQuarter: 480,
+    parts: [{ id: 'melody', name: 'Melody', notes: [
+      note(0, 480, 64), note(0, 480, 67),
+      note(480, 480, 69)
+    ] }],
+    chords: [],
+  };
+  const flutePlan = buildLessonPlan(song, 'melody', flute);
+  const fluteListen = flutePlan.steps.find((s) => s.kind === 'listen');
+  const starts = fluteListen.notes.map((n) => n.start);
+  assert.equal(new Set(starts).size, starts.length, 'no two notes share a start');
+  assert.equal(fluteListen.notes.length, 2); // top note of the chord, plus the single note
+
+  const kbdPlan = buildLessonPlan(song, 'melody', kbd);
+  const kbdListen = kbdPlan.steps.find((s) => s.kind === 'listen');
+  assert.equal(kbdListen.notes.length, 3); // every note kept, chord intact
 });
 
 test('a part with no notes reports empty, not a false pass', () => {
