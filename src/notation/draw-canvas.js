@@ -2,8 +2,8 @@
 // Uses only Canvas 2D calls; music glyphs come from a Unicode music font
 // (theme.glyphFont) with a plain-letter fallback when none is set.
 
-const CLEF_GLYPH = { treble: '\u{1D11E}', bass: '\u{1D122}', alto: '\u{1D121}', tenor: '\u{1D121}' };
-const CLEF_FALLBACK = { treble: 'G', bass: 'F', alto: 'C', tenor: 'C' };
+const CLEF_GLYPH = { treble: '\u{1D11E}', bass: '\u{1D122}', alto: '\u{1D121}', tenor: '\u{1D121}', percussion: '\u{1D125}' };
+const CLEF_FALLBACK = { treble: 'G', bass: 'F', alto: 'C', tenor: 'C', percussion: '||' };
 const ACCIDENTAL_GLYPH = { '#': '♯', b: '♭', '': '♮' };
 const ACCIDENTAL_FALLBACK = { '#': '#', b: 'b', '': 'n' };
 // Keyed by the rest's undotted duration in whole notes (layout.js's durationInfo `base`).
@@ -35,7 +35,25 @@ const DRAWERS = {
   barline: (ctx, p) => drawLine(ctx, p.x, p.y1, p.x, p.y2),
   stem: (ctx, p) => drawLine(ctx, p.x, p.y1, p.x, p.y2),
 
+  // Percussion noteheads: 'x' (cymbals/hi-hat/ride) is two crossed strokes,
+  // 'circle' is the small hollow ring drawn above an 'x' for an open hi-hat.
+  // Anything else (including undefined, for pitched notes) is the usual oval.
   notehead: (ctx, p) => {
+    if (p.shape === 'x') {
+      ctx.beginPath();
+      ctx.moveTo(p.x - 4, p.y - 4);
+      ctx.lineTo(p.x + 4, p.y + 4);
+      ctx.moveTo(p.x - 4, p.y + 4);
+      ctx.lineTo(p.x + 4, p.y - 4);
+      ctx.stroke();
+      return;
+    }
+    if (p.shape === 'circle') {
+      ctx.beginPath();
+      ctx.ellipse(p.x, p.y, 2.5, 2.5, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      return;
+    }
     ctx.beginPath();
     ctx.ellipse(p.x, p.y, 5, 4, -0.4, 0, Math.PI * 2);
     if (p.filled) ctx.fill();
