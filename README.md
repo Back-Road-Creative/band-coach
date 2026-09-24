@@ -320,7 +320,11 @@ by the end of the try — so the hold/tune checks above work for a MIDI player t
 already do for the mic. Importing a challenge, a band pack or a single song captures the id the
 library actually assigned each song (never assumed from the file), so a title that collides with
 one already saved is still the song a challenge's progress or a band pack's part assignment
-points at, not a stale id nobody kept.
+points at, not a stale id nobody kept. A step that fails on the SAME thing twice in a row (the
+same missed note, late note, or hold/tune reason `firstCorrection()`'s own check already names)
+becomes a short repair on just those notes plus a neighbour either side (`repairFor()` in
+`src/core/teaching.js`), instead of a third run at the whole phrase; passing the repair returns to
+the original step where it left off.
 
 ## Play along with a recording
 
