@@ -60,6 +60,7 @@ import { writeBandPack, readBandPack } from '../song/band-pack.js';
 import { exportMidi } from '../song/export-midi.js';
 import { exportMusicXml } from '../song/export-musicxml.js';
 import { exportAbc } from '../song/export-abc.js';
+import { makeEvent } from '../core/learning-events.js';
 
 // Every playable ('ready') instrument record, for the "Play it on…" row --
 // same source src/app.js reads for notation/mic-range/how-to-play, so this
@@ -1041,6 +1042,28 @@ function mountSongsPanel(hostEl, api) {
     return count;
   }
 
+  // dims/unassessed for a judged step's learning event (plan 6.4): each
+  // dimension is read straight off judgeAttempt()'s own aggregate against
+  // the SAME numbers step.passRule already judges pass/fail with -- never a
+  // new threshold invented here. A dimension the step's passRule never set
+  // (e.g. tune/hold on a non-sustaining instrument, pitch on a rhythm step
+  // where a clap is deliberately pitch-free -- practice.js's judgeOnsets
+  // comment) is left out of `dims` and listed in `unassessed` instead of
+  // guessed at.
+  function dimsFromStep(step, result) {
+    const dims = {}, unassessed = [], rule = step.passRule || {};
+    if (!result || !result.judgedCount) { unassessed.push('pitch', 'onset', 'hold', 'tune'); return { dims, unassessed }; }
+    if (step.kind === 'rhythm') unassessed.push('pitch');
+    else dims.pitch = result.matches.every((m) => m.ok && m.pitchOk !== false) ? 'ok' : 'miss';
+    if (rule.maxMeanErrorMs != null && result.meanErrorMs != null) dims.onset = result.meanErrorMs <= rule.maxMeanErrorMs ? 'ok' : 'miss';
+    else unassessed.push('onset');
+    if (rule.minDurationScore != null && result.durationScore != null) dims.hold = result.durationScore >= rule.minDurationScore ? 'ok' : 'miss';
+    else unassessed.push('hold');
+    if (rule.maxMeanAbsCents != null && result.meanAbsCents != null) dims.tune = result.meanAbsCents <= rule.maxMeanAbsCents ? 'ok' : 'miss';
+    else unassessed.push('tune');
+    return { dims, unassessed };
+  }
+
   function advance(passed, result, elapsedMs) {
     // A repair try (src/core/teaching.js repairFor) is a handful of isolated
     // notes, not one of the plan's own steps: it never joins practice.results
@@ -1077,6 +1100,19 @@ function mountSongsPanel(hostEl, api) {
       // A rhythm step is judged on onsets only: a try with any clap or
       // wrong-pitch hit is no evidence about the notes' pitch mastery.
       if (!result || result.matches.every((m) => !m.ok || m.pitchOk !== false)) applyMasteryCredit(api, practice.instrumentId, mapped);
+      // One learning-event row per judged step (plan 6.4) -- bpmActual is
+      // the same as bpmTarget (step.bpm): no tempo estimate is measured
+      // from the attempt anywhere in this file, so nothing better is
+      // available to report.
+      if (typeof api.logEvent === 'function') {
+        const { dims, unassessed } = dimsFromStep(step, result);
+        api.logEvent(makeEvent({
+          instrument: practice.instrumentId, skill: step.kind + ':' + step.phraseIndex, source: 'song',
+          songId: practice.song.id, partId: practice.partId, assistance: 'none',
+          dims, unassessed, activeMs: Math.max(0, Math.round(elapsedMs || 0)),
+          bpmTarget: step.bpm || null, bpmActual: step.bpm || null,
+        }, { now: api.now() }));
+      }
       // A failed try gets told the FIRST concrete thing to fix -- the
       // missed note, the late note, the hold/tune reason, or the extra note
       // -- instead of the generic retry prompt, so the learner knows the

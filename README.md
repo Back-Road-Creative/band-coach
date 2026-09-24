@@ -181,6 +181,14 @@ the same table: each element carries `data-i18n="<id>"` and keeps its English te
 a pre-JS/no-JS fallback, and `applyStaticLabels` in `src/app.js` overwrites it from `t(id)` once at
 startup.
 
+## Progress
+
+Every judged drill answer, warm-up answer and judged song step leaves one small record — which
+instrument and skill it was, whether it was independent or asked for help, which parts (pitch,
+timing, hold, tune) were actually checked, and how long it took — kept alongside the practice log
+described above. The raw sound of your playing or singing is never recorded; only the judged
+result is.
+
 ## Turning an audio file into notes
 
 `src/audio/file-frames.js` is a pure function, `framesFromPCM`, that walks a decoded mono audio
