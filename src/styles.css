@@ -195,14 +195,12 @@
   .panel-songs-band-pack-parts-list { margin-top: 4px; }
   .panel-songs-band-pack-parts { margin: 2px 0; color: var(--muted); }
   .panel-songs-share-msg { min-height: 1.2em; color: var(--good); }
-  .panel-songs-learn-tip { color: var(--muted); font-size: 13px; margin: 4px 0 0; }
   @media (max-width: 400px) { .panel-songs-list { flex-direction: column; } .panel-songs-play-on-list { flex-direction: column; } }
   /* */
   .panel-editor { display: flex; flex-direction: column; gap: 12px; max-width: 100%; }
   .panel-editor .editor-record { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
   .panel-editor .editor-record input[type="text"] { font: 600 15px var(--body); color: var(--text); background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; min-width: 10ch; }
   .panel-editor .editor-status { color: var(--muted); font-size: 14px; }
-  .panel-editor .editor-learn-tip { color: var(--muted); font-size: 13px; margin: 0; }
   .panel-editor .editor-check { background: var(--panel-2); border: 1px solid var(--warn); border-radius: 8px; padding: 12px; }
   .panel-editor .editor-check ul { margin: 6px 0; padding-left: 20px; }
   .panel-editor .editor-say { color: var(--good); min-height: 1.2em; }
@@ -322,7 +320,6 @@
   .panel-playalong { display: flex; flex-direction: column; gap: 12px; }
   .panel-playalong .pa-intro { color: var(--muted); max-width: 64ch; margin: 0; }
   .panel-playalong .pa-note { color: var(--muted); font-size: 13px; margin: 0; }
-  .panel-playalong .pa-learn-tip { color: var(--muted); font-size: 13px; margin: 0; }
   .panel-playalong .pa-error { color: var(--bad); }
   .panel-playalong .pa-filename { color: var(--muted); font-size: 13px; }
   .panel-playalong .pa-progress { display: flex; align-items: center; gap: 10px; }

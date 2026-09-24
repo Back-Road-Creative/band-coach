@@ -154,17 +154,6 @@ export function register(panels) {
   });
 }
 
-// Switches to another registered panel the one real, already-shipping way
-// any panel switches to another: src/app.js's panelApi.openPanel(id) (P2b-3
-// -- panels no longer all have a button of their own to click, e.g. Learn
-// this now lives in the Songs panel's own Add-a-song row) -- same precedent
-// as src/ui/learn.js's openSongsPanel(). No-op where api carries no
-// openPanel (a host page/unit test that never wired panel switching in).
-function openOtherPanel(api, panelId) {
-  if (api && typeof api.openPanel === 'function') { api.openPanel(panelId); return true; }
-  return false;
-}
-
 function mountEditor(hostEl, api) {
   const recorder = createRecorder(api);
   debugRecorder = recorder;
@@ -301,19 +290,9 @@ function mountEditor(hostEl, api) {
     halveBtn, doubleBtn, octaveUpBtn, octaveDownBtn,
   ]);
 
-  // Pointer to the one shared door (plan §11.5.7): Listen/Stop and this file
-  // input keep working exactly as before (existing tests use them directly),
-  // this just tells a learner where the newer, simpler door is.
-  const learnTipBtn = el('button', { type: 'button', id: 'editorLearnTipBtn', class: 'small', text: 'Open Learn this' });
-  learnTipBtn.addEventListener('click', () => openOtherPanel(api, 'learn'));
-  const learnTip = el('p', { class: 'editor-learn-tip' }, [
-    document.createTextNode('Tip: Learn this takes any recording or music file in one place. '), learnTipBtn,
-  ]);
-
   const root = el('div', { class: 'panel-editor' }, [
     el('h2', { text: 'Record a tune' }),
     el('p', { text: 'Press Listen, play or sing your tune, then press Stop. It will write down what it heard so you can fix it up and practise it.' }),
-    learnTip,
     el('div', { class: 'editor-record' }, [
       el('label', { for: 'editorTitle', text: 'Title' }), titleInput, listenBtn, recordStatus,
       el('label', { for: 'editorFileInput', text: 'Or choose an audio file' }), fileInput,

@@ -206,3 +206,23 @@ test('a saved draft is listed with its status', async (t) => {
   assert.equal(row.titleBtnText.indexOf('Draft'), -1, 'the status text is not inside the title button');
   assert.equal(row.hasStatusOutsideBtn, true, 'the status sits in its own element outside the title button');
 });
+
+// P3-6: the separate Learn this screen is retired -- Songs -> Add a song
+// (P3-4) is the one place to add a song, so the panel registry no longer
+// carries a 'learn' entry, and the Record a tune / Play Along tip buttons
+// that used to point at it are gone too.
+test('there is no separate Learn this screen any more', async (t) => {
+  const page = await launchPage(htmlPath);
+  t.after(() => page.close());
+
+  const hasLearnPanel = await page.evaluate("window.__coach.panels().includes('learn')");
+  assert.equal(hasLearnPanel, false, 'the panel registry no longer carries a learn panel');
+
+  await page.evaluate("window.__coach.openPanel('editor')");
+  const editorHasTipBtn = await page.evaluate("document.querySelector('#editorLearnTipBtn') === null");
+  assert.equal(editorHasTipBtn, true, 'Record a tune no longer offers an Open Learn this button');
+
+  await page.evaluate("window.__coach.openPanel('playalong')");
+  const playalongHasTipBtn = await page.evaluate("document.querySelector('#paLearnTipBtn') === null");
+  assert.equal(playalongHasTipBtn, true, 'Play Along no longer offers an Open Learn this button');
+});
