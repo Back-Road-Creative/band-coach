@@ -45,6 +45,7 @@ export const en = {
   'stage.showMe': 'Show me',
   'side.end': 'End session',
   'side.energyEyebrow': 'Your energy this session',
+  'energy.full': 'Fresh',
   'side.easier': 'Make it easier',
   'side.harder': 'Skip ahead',
   'side.feedbackEyebrow': 'Instant feedback',
