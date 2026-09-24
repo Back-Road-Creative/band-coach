@@ -46,9 +46,11 @@ import { mixToMono } from './playalong/audio-prep.js';
 import { framesFromPCM } from '../audio/file-frames.js';
 import { transcribe } from '../song/transcribe.js';
 import { rangeForInstrument } from '../audio/range.js';
-import { renderPlayItOnCards, requestOpenSong } from './songs.js';
-import { requestOpenInEditor } from './editor.js';
-import { requestPlayalongRecording } from './playalong.js';
+import { renderReview, makeHandoffs } from './songs/review.js';
+// practiceGate now lives in songs/review.js (P3-2, a behaviour-preserving
+// move) -- re-exported here unchanged so tests/unit/learn-practice-gate.
+// test.mjs, which imports it from this file, keeps passing untouched.
+export { practiceGate } from './songs/review.js';
 import { createRecorder } from './editor/record.js';
 import { countInTimes, clampBpm, DEFAULT_BPM } from './learn/count-in.js';
 import { rmsLevel } from './learn/level.js';
@@ -80,17 +82,6 @@ function titleFromFileName(fileName) {
   const name = String(fileName || 'My recording');
   const dot = name.lastIndexOf('.');
   return (dot > 0 ? name.slice(0, dot) : name) || 'My recording';
-}
-
-// Pure decision behind renderResult()'s "Practise this" button: a song
-// whose transcription still has unresolved check items (warnings, from
-// report.needsCheck) must not be sent straight to practice with doubtful
-// notes uncorrected -- it has to go through "Fix it up" first. No DOM in
-// it, tested the same way src/ui/editor.js's chooseSaveTarget is.
-export function practiceGate(warnings) {
-  const list = Array.isArray(warnings) ? warnings : [];
-  if (!list.length) return { allowed: true, reason: null };
-  return { allowed: false, reason: 'Fix up the ' + list.length + ' flagged note' + (list.length === 1 ? '' : 's') + ' first, then practise.' };
 }
 
 function mountLearnPanel(hostEl, api) {
@@ -367,122 +358,18 @@ function mountLearnPanel(hostEl, api) {
     return { ...result, rec: { pcm, sampleRate: audioBuffer.sampleRate, duration: audioBuffer.duration, fileName: file.name } };
   }
 
-  // Opening the Songs panel's lesson from here: this panel only ever gets
-  // its own mounted instance (see src/ui/panels.js), never a reference to
-  // the shared panels registry app.js owns, so it cannot call panels.open()
-  // itself. The one real, already-shipping way any panel switches to
-  // another is src/app.js's panelApi.openPanel(id) (P2b-3 -- panels no
-  // longer all have a button of their own to click, e.g. Songs itself now
-  // lives only on the nav bar). requestOpenSong() (src/ui/songs.js) is read
-  // by Songs's own show() the moment it opens. Where api carries no
-  // openPanel (a page that never wired panel switching in), this still
-  // SAVES the song and tells the learner in plain words where to go, rather
-  // than silently doing nothing.
-  function clickPanelButton(panelId) {
-    if (api && typeof api.openPanel === 'function') { api.openPanel(panelId); return true; }
-    return false;
-  }
-
-  function openSongsPanel(songId, partId, instrumentId) {
-    requestOpenSong(api, songId, partId, instrumentId);
-    return clickPanelButton('songs');
-  }
-
-  // "Fix it up" (every result): hands the just-learned song to the older
-  // "Record a tune" editor, the one panel with note-editing ops (src/song/
-  // edit.js) this one deliberately does not reimplement -- same
-  // request+click pattern as openSongsPanel() above, mirrored in src/ui/
-  // editor.js's requestOpenInEditor()/checkOpenRequest().
-  function openEditorPanel(songId, needsCheck) {
-    requestOpenInEditor(api, songId, needsCheck);
-    return clickPanelButton('editor');
-  }
-
-  // "Play along with this recording" (audio sources only, where a decoded
-  // buffer exists -- see transcribeAudioFile's rec): hands the SAME decoded
-  // PCM to Play Along's beat/chord analysis and loop, rather than asking the
-  // learner to re-pick the file there. In-memory handoff (src/ui/
-  // playalong.js's requestPlayalongRecording()), not api.store -- audio is
-  // far too big for the 256KB panel-data budget.
-  function openPlayalongPanel(rec) {
-    requestPlayalongRecording(rec);
-    return clickPanelButton('playalong');
-  }
-
+  // The result view itself, and the three ways it can hand a learned song
+  // on, now live in src/ui/songs/review.js (P3-2, a behaviour-preserving
+  // move) -- built once per panel instance so every renderResult() call
+  // below reuses the same wiring.
+  const handoffs = makeHandoffs(api);
   function renderResult(song, warnings, audioRec) {
-    resultEl.innerHTML = '';
-    resultEl.hidden = false;
-    resultEl.appendChild(el('h4', { text: song.title }));
-
-    if (warnings.length) {
-      const list = el('ul', { class: 'panel-learn-checklist' });
-      warnings.forEach((w) => list.appendChild(el('li', { text: w })));
-      resultEl.appendChild(list);
-    }
-
-    // Confidence colours: only ever drawn from a real per-note confidence
-    // transcribe() already attached (src/song/transcribe.js's
-    // eventsToNotes -- every transcribed note carries one). A notation
-    // import's notes carry none, and this strip is simply omitted rather
-    // than inventing a number -- see the author brief's "never hide what
-    // the app heard" (also never show a confidence you did not measure).
-    const partId = song.parts[0] ? song.parts[0].id : null;
-    const notes = partId ? song.parts[0].notes : [];
-    if (notes.length && notes.every((n) => typeof n.confidence === 'number')) {
-      const strip = el('div', { class: 'panel-learn-confidence-strip', 'aria-label': 'Note confidence' });
-      notes.forEach((n) => {
-        const level = n.confidence >= 0.7 ? 'high' : n.confidence >= 0.4 ? 'medium' : 'low';
-        strip.appendChild(el('span', {
-          class: 'panel-learn-confidence-note',
-          'data-confidence': level,
-          title: Math.round(n.confidence * 100) + '% confident',
-        }));
-      });
-      resultEl.appendChild(strip);
-    }
-
-    if (partId) {
-      resultEl.appendChild(renderPlayItOnCards(song, partId, typeof api.mod === 'function' ? api.mod() : null, (instrument) => openSongsPanel(song.id, partId, instrument.id)));
-    }
-
-    // A song with unresolved check items (warnings) cannot be sent straight
-    // to practice with doubtful notes uncorrected -- see practiceGate,
-    // above. The button stays visible (never a dead end) but disabled,
-    // with the reason spelled out in plain language right next to it.
-    const gate = practiceGate(warnings);
-    const practiseBtn = el('button', { type: 'button', class: 'panel-learn-practise-btn', text: 'Practise this' });
-    if (!gate.allowed) practiseBtn.disabled = true;
-    practiseBtn.addEventListener('click', () => {
-      if (!gate.allowed) return;
-      const opened = openSongsPanel(song.id, partId, null);
-      if (!opened) say('Saved "' + song.title + '". Open the Songs panel to practise it.');
+    renderReview(resultEl, {
+      song, warnings, audioRec, api, say,
+      onPractise: handoffs.openSongsPanel,
+      onEditNotes: handoffs.openEditorPanel,
+      onPlayAlong: handoffs.openPlayalongPanel,
     });
-    resultEl.appendChild(practiseBtn);
-    if (!gate.allowed) resultEl.appendChild(el('p', { class: 'panel-learn-practise-gate-reason', text: gate.reason }));
-
-    // "Fix it up" -- every result, notation or audio, can be sent to the
-    // fuller note-editing panel. Any unresolved check items ride along
-    // (requestOpenInEditor/loadReport, src/ui/editor.js) so the editor
-    // shows the learner the SAME check list rather than losing it.
-    const fixItUpBtn = el('button', { type: 'button', class: 'panel-learn-fixitup-btn', text: 'Fix it up' });
-    fixItUpBtn.addEventListener('click', () => {
-      const opened = openEditorPanel(song.id, warnings);
-      if (!opened) say('Saved "' + song.title + '". Open Record a tune to fix it up.');
-    });
-    resultEl.appendChild(fixItUpBtn);
-
-    // "Play along with this recording" -- only ever shown where a decoded
-    // audio buffer actually exists (the file door's own recording; the mic
-    // door's recorder captures pitch frames only, never raw audio, so it has
-    // none to hand over -- never claim a hand-off the app cannot back up).
-    if (audioRec) {
-      const playAlongBtn = el('button', { type: 'button', class: 'panel-learn-playalong-btn', text: 'Play along with this recording' });
-      playAlongBtn.addEventListener('click', () => {
-        const opened = openPlayalongPanel(audioRec);
-        if (!opened) say('Saved "' + song.title + '". Open Play Along to use this recording.');
-      });
-      resultEl.appendChild(playAlongBtn);
-    }
   }
 
   return {
