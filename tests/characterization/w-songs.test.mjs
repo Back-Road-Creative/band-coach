@@ -307,15 +307,27 @@ test('a real .gp (Guitar Pro) file picked through the file input reaches the Gui
   );
 });
 
-test('a "Save as…" control exists for each song and downloads MIDI, MusicXML and ABC', async (t) => {
+test('the Export action offers MIDI, MusicXML and ABC downloads for the open song', async (t) => {
+  // P3-8: the per-row "Save as…" buttons moved inside the open song's own
+  // Export action (one row of plain actions above the practise section) --
+  // this test now opens a song and presses Export first, then keeps the
+  // same MIDI/MusicXML/ABC download assertions on .panel-songs-export.
   const page = await launchPage(htmlPath);
   t.after(() => page.close());
 
   await page.evaluate("window.__coach.openPanel('songs')");
   await page.waitFor("document.querySelectorAll('.panel-songs-row button').length > 0");
+  await page.evaluate(
+    "Array.from(document.querySelectorAll('.panel-songs-row button')).find(b => b.textContent === 'Hot Cross Buns').click()"
+  );
+  await page.waitFor("document.querySelectorAll('.panel-songs-song-actions button').length > 0");
+  await page.evaluate(
+    "Array.from(document.querySelectorAll('.panel-songs-song-actions button')).find(b => b.textContent === 'Export').click()"
+  );
+  await page.waitFor("document.querySelectorAll('.panel-songs-export button').length > 0");
 
   const exportLabels = await page.evaluate(
-    "Array.from(document.querySelectorAll('.panel-songs-row .panel-songs-export button')).map(b => b.textContent)"
+    "Array.from(document.querySelectorAll('.panel-songs-export button')).map(b => b.textContent)"
   );
   assert.ok(exportLabels.includes('MIDI'), 'a MIDI save button is present: ' + exportLabels.join(', '));
   assert.ok(exportLabels.includes('MusicXML'), 'a MusicXML save button is present: ' + exportLabels.join(', '));
@@ -336,7 +348,7 @@ test('a "Save as…" control exists for each song and downloads MIDI, MusicXML a
   `);
 
   await page.evaluate(
-    "Array.from(document.querySelectorAll('.panel-songs-row .panel-songs-export button')).find(b => b.textContent === 'MIDI').click()"
+    "Array.from(document.querySelectorAll('.panel-songs-export button')).find(b => b.textContent === 'MIDI').click()"
   );
   await page.waitFor('window.__downloads.length > 0');
   const midiDownload = await page.evaluate('window.__downloads[0]');
@@ -344,14 +356,14 @@ test('a "Save as…" control exists for each song and downloads MIDI, MusicXML a
   assert.equal(midiDownload.type, 'audio/midi');
 
   await page.evaluate(
-    "Array.from(document.querySelectorAll('.panel-songs-row .panel-songs-export button')).find(b => b.textContent === 'MusicXML').click()"
+    "Array.from(document.querySelectorAll('.panel-songs-export button')).find(b => b.textContent === 'MusicXML').click()"
   );
   await page.waitFor('window.__downloads.length > 1');
   const xmlDownload = await page.evaluate('window.__downloads[1]');
   assert.ok(xmlDownload.download.endsWith('.musicxml'), 'MusicXML download has a .musicxml extension: ' + xmlDownload.download);
 
   await page.evaluate(
-    "Array.from(document.querySelectorAll('.panel-songs-row .panel-songs-export button')).find(b => b.textContent === 'ABC').click()"
+    "Array.from(document.querySelectorAll('.panel-songs-export button')).find(b => b.textContent === 'ABC').click()"
   );
   await page.waitFor('window.__downloads.length > 2');
   const abcDownload = await page.evaluate('window.__downloads[2]');

@@ -290,6 +290,15 @@ it finished. Nothing was saved.", shown once). Ear training, How to play it and 
 their own plain home the same way: a "Tools" group inside the instrument sheet, alongside
 Tuner/Capture a melody/Interval drill/Rhythm, open with no extra click once the sheet is open.
 
+Opening any song shows one row of plain actions directly above its practise section: **Edit
+notes**, **Play along**, **Export**, **Share**, **Save a copy** — a starter tune's Edit notes
+saves a copy first (starter tunes are never edited in place) and opens that. Export reveals the
+MIDI/MusicXML/ABC download buttons only once pressed (they no longer sit on every song row), and
+Share downloads a `.bandpack` of that one song alone. A teacher challenge's title field, "Export
+as a challenge", "Share with your band" and any read-only band-pack part assignments live under
+their own **Assignments** heading below the song list, separate from a single open song's own
+actions.
+
 The Songs panel (`src/ui/songs.js`) turns a whole tune — built in, or imported from a `.mid`,
 `.midi`, `.abc`, `.xml`, `.musicxml`, compressed `.mxl`, Guitar Pro `.gp`, Guitar Pro 5 `.gp5`, or a
 recording (`.wav`, `.mp3`, `.ogg`, `.m4a`, `.flac`, `.webm`) — into a
@@ -305,9 +314,7 @@ its own list — "N of M songs passed" — with each song's own pass state remem
 sessions; a song counts as passed once its practice lesson has been played through to the end.
 "Export as a challenge" turns a learner's own saved library into a downloadable `.json` a teacher
 can pass along to another student, entirely by file exchange — no account, no server, no network
-call involved. Each song in the list also has a "Save as…" control to download it on its own, as
-MIDI (`.mid`), MusicXML (`.musicxml`) or ABC (`.abc`), using the pure exporters in
-`src/song/export-midi.js`, `src/song/export-musicxml.js` and `src/song/export-abc.js`. Each phrase
+call involved. Each phrase
 step also shows a plain-word Easy/Medium/Hard difficulty (`src/song/phrase-difficulty.js`), and
 after a judged try the panel draws a small bar-by-bar strip (`src/song/bar-heat.js`) naming which
 bars went well and which need another pass. A band can also share a whole set list at once as a
