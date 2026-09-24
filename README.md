@@ -306,9 +306,13 @@ with the song loaded, and "Play along with this recording" appears whenever a de
 exists. A song saved this way is a **Draft** until its check items are resolved — every song row
 shows its status ("Draft — N notes to check", or "Checked") next to its title, and since Songs
 cannot keep the original recording (only its notes), a Draft or Checked row from a recording also
-says so plainly. Ear training, How to play it and Music theory get their own plain home the same
-way: a "Tools" group inside the instrument sheet, alongside Tuner/Capture a melody/Interval
-drill/Rhythm, open with no extra click once the sheet is open.
+says so plainly. Stopping never leaves a half-finished song behind: a "Cancel" button shows while
+a picked audio file is being decoded and transcribed ("Stopped. Nothing was saved."), and leaving
+Songs outright mid-recording or mid-analysis stops the mic/meter and discards whatever was in
+flight the same way, saying so plainly on the next visit ("Your last recording was stopped before
+it finished. Nothing was saved.", shown once). Ear training, How to play it and Music theory get
+their own plain home the same way: a "Tools" group inside the instrument sheet, alongside
+Tuner/Capture a melody/Interval drill/Rhythm, open with no extra click once the sheet is open.
 
 The Songs panel (`src/ui/songs.js`) turns a whole tune — built in, or imported from a `.mid`,
 `.midi`, `.abc`, `.xml`, `.musicxml`, compressed `.mxl`, Guitar Pro `.gp`, Guitar Pro 5 `.gp5`, or a
