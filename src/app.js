@@ -2219,17 +2219,21 @@ import { register as registerPlayalong } from './ui/playalong.js';
   async function doImportProgress(text) {
     const result = importProgressFile(text);
     if (!result.ok) { coach(result.error); return result; }
+    // The songs go first because that is the store that can fail (e.g.
+    // IndexedDB unavailable): if it does, nothing about the live profile
+    // has changed yet, so there is nothing to roll back. Only once the
+    // songs are safely in does this replace DB, prefs, theme and mod.
+    if (Array.isArray(result.songs) && result.songs.length) {
+      try { await backupLibrary().importAll(result.songs); }
+      catch (e) { const error = 'Nothing was changed: the saved songs in this backup could not be stored on this device.'; coach(error); return { ok: false, error }; }
+    }
     const priorLatencyMs = DB && DB.latencyMs;
     modelNow = Date.now(); DB = sanitizeDB(result.db, undefined, modelNow); DB.latencyMs = num(priorLatencyMs, DB.latencyMs, 0, 300); if (!Array.isArray(DB.custom)) DB.custom = [];
     $('optNames').checked = DB.prefs.names; $('optTheme').value = DB.prefs.theme; applyTheme(DB.prefs.theme); setNoteNaming(DB.prefs.noteNaming); $('optNoteSystem').value = DB.prefs.noteNaming.system; $('optAccidentals').value = DB.prefs.noteNaming.accidentals; setMod(DB.prefs.mod);
-    // The DB restore above already succeeded on its own; a song-library failure here
-    // (e.g. IndexedDB unavailable) is reported but never rolls that back.
-    if (Array.isArray(result.songs) && result.songs.length) {
-      try { await backupLibrary().importAll(result.songs); coach(t('backup.restored')); }
-      catch (e) { coach('Your progress was restored, but the saved songs in this backup could not be.'); }
-    } else {
-      coach(t('backup.restored'));
-    }
+    writeDB();
+    let stored; try { stored = localStorage.getItem(KEY); } catch (e) {}
+    if (stored !== lastStored) { const error = 'Your restored progress could not be saved on this device (storage may be full).'; coach(error); return { ok: false, error }; }
+    coach(t('backup.restored'));
     return result;
   }
   $('backupSaveBtn').addEventListener('click', function () { this.blur(); saveBackup(); });
