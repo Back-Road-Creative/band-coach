@@ -133,24 +133,55 @@ function makeFakeIndexedDB() {
 
   class FakeObjectStore {
     constructor(map, tx) { this._map = map; this._tx = tx; }
-    get(key) { const r = new FakeRequest(); schedule(r, () => this._map.get(key), ok => this._tx._settle(ok)); return r; }
-    put(value, key) { const r = new FakeRequest(); schedule(r, () => { this._map.set(key, value); return key; }, ok => this._tx._settle(ok)); return r; }
-    delete(key) { const r = new FakeRequest(); schedule(r, () => { this._map.delete(key); return undefined; }, ok => this._tx._settle(ok)); return r; }
-    getAllKeys() { const r = new FakeRequest(); schedule(r, () => Array.from(this._map.keys()), ok => this._tx._settle(ok)); return r; }
+    get(key) { const r = new FakeRequest(); this._tx._begin(); schedule(r, () => this._map.get(key), ok => this._tx._settle(ok)); return r; }
+    put(value, key) { const r = new FakeRequest(); this._tx._begin(); schedule(r, () => { this._map.set(key, value); return key; }, ok => this._tx._settle(ok)); return r; }
+    // Like put, but throws (a ConstraintError, matching real IndexedDB) if
+    // the key already exists -- the collision-detects-itself primitive
+    // library.js's add() relies on instead of a separate read-then-write.
+    add(value, key) {
+      const r = new FakeRequest();
+      this._tx._begin();
+      schedule(r, () => {
+        if (this._map.has(key)) {
+          const err = new Error('Key already exists in the object store.');
+          err.name = 'ConstraintError';
+          throw err;
+        }
+        this._map.set(key, value);
+        return key;
+      }, ok => this._tx._settle(ok));
+      return r;
+    }
+    delete(key) { const r = new FakeRequest(); this._tx._begin(); schedule(r, () => { this._map.delete(key); return undefined; }, ok => this._tx._settle(ok)); return r; }
+    getAllKeys() { const r = new FakeRequest(); this._tx._begin(); schedule(r, () => Array.from(this._map.keys()), ok => this._tx._settle(ok)); return r; }
   }
 
+  // Multiple requests can be issued against one transaction (library.js's
+  // runTx does exactly that for its two-record writes), so completion has to
+  // wait for every issued request to settle rather than firing on the
+  // first -- otherwise oncomplete/onerror would fire multiple times, once
+  // per request, which a real IndexedDB transaction never does.
   class FakeTransaction {
-    constructor(store) { this._store = store; this.oncomplete = null; this.onerror = null; this.onabort = null; }
+    constructor(store) { this._store = store; this.oncomplete = null; this.onerror = null; this.onabort = null; this._pending = 0; this._failed = false; this._done = false; }
     objectStore() { return new FakeObjectStore(this._store, this); }
+    _begin() { this._pending++; }
     _settle(ok) {
-      if (ok) { if (this.oncomplete) this.oncomplete({ target: this }); }
-      else if (this.onerror) this.onerror({ target: this });
+      if (!ok) this._failed = true;
+      this._pending--;
+      if (this._pending === 0) {
+        queueMicrotask(() => {
+          if (this._done) return;
+          this._done = true;
+          if (this._failed) { if (this.onabort) this.onabort({ target: this }); if (this.onerror) this.onerror({ target: this }); }
+          else if (this.oncomplete) this.oncomplete({ target: this });
+        });
+      }
     }
   }
 
   class FakeDatabase {
     constructor() { this._stores = new Map(); this.objectStoreNames = { contains: name => this._stores.has(name) }; }
-    createObjectStore(name) { const map = new Map(); this._stores.set(name, map); return new FakeObjectStore(map, { _settle() {} }); }
+    createObjectStore(name) { const map = new Map(); this._stores.set(name, map); return new FakeObjectStore(map, { _begin() {}, _settle() {} }); }
     transaction(name) { return new FakeTransaction(this._stores.get(name)); }
   }
 
@@ -169,6 +200,70 @@ function makeFakeIndexedDB() {
     }
   };
 }
+
+// ---- BC-08: add() must allocate the id and write both records atomically ----
+//
+// The fake schedules every store op through queueMicrotask (openDb, get,
+// put, getAllKeys each add their own turn), so two `add()` calls started
+// together genuinely interleave the way a real IndexedDB-backed library does
+// -- unlike memoryStore, whose every op is synchronous and so never
+// reproduces the race. This is what BC-08 was actually reproduced against.
+test('add: two concurrent adds with the same preferred id get distinct ids and both are stored (BC-08)', async () => {
+  const library = createLibrary(indexedDbStore(makeFakeIndexedDB(), 'bc08-db'));
+  const [id1, id2] = await Promise.all([
+    library.add(song('hot-cross-buns', { title: 'first' }), { now: 1000 }),
+    library.add(song('hot-cross-buns', { title: 'second' }), { now: 2000 }),
+  ]);
+  assert.notEqual(id1, id2, 'two concurrent adds for the same preferred id must not collide on one id');
+  const s1 = await library.get(id1);
+  const s2 = await library.get(id2);
+  assert.ok(s1, 'the first song must actually be stored');
+  assert.ok(s2, 'the second song must actually be stored');
+  assert.notEqual(s1.title, s2.title, 'both songs must survive, not one clobbering the other');
+});
+
+// A store whose transaction fails partway through, to prove add() leaves
+// nothing behind rather than a dangling song record with no metadata (or
+// vice versa) -- the failure mode BC-08 also named.
+function faultyStoreFailingSecondWrite() {
+  const map = new Map();
+  return {
+    async get(key) { return map.has(key) ? map.get(key) : undefined; },
+    async put(key, value) { map.set(key, value); },
+    async delete(key) { map.delete(key); },
+    async keys() { return Array.from(map.keys()); },
+    async runTx(ops) {
+      // Simulates a transaction that aborts on its second write: nothing
+      // from this call is ever applied to the map, matching what a real
+      // IndexedDB transaction does when one of its requests fails.
+      if (ops.length < 2) { for (const op of ops) map.set(op.key, op.value); return; }
+      throw new Error('simulated write failure');
+    },
+  };
+}
+
+test('add: a failure partway through the transaction leaves neither record stored', async () => {
+  const library = createLibrary(faultyStoreFailingSecondWrite());
+  await assert.rejects(() => library.add(song('x'), { now: 1000 }), /simulated write failure/);
+  assert.equal(await library.get('x'), null);
+});
+
+test('update: overwrites a stored song in place, keeping its id and original addedAt', async () => {
+  const library = createLibrary(memoryStore());
+  await library.add(song('a', { title: 'first cut' }), { now: 1000 });
+  await library.update('a', song('a', { title: 'fixed up' }), { now: 5000 });
+  const stored = await library.get('a');
+  assert.equal(stored.title, 'fixed up');
+  assert.equal(stored.id, 'a');
+  const list = await library.list();
+  assert.equal(list.length, 1, 'update must not create a second entry');
+  assert.equal(list[0].addedAt, 1000, 'addedAt is preserved across an in-place update');
+});
+
+test('update: rejects an id that is not already stored', async () => {
+  const library = createLibrary(memoryStore());
+  await assert.rejects(() => library.update('missing', song('missing'), { now: 1000 }), /no song/);
+});
 
 test('indexedDbStore put/get/delete/keys round-trip via the fake indexedDB', async () => {
   const store = indexedDbStore(makeFakeIndexedDB(), 'test-db');

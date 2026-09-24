@@ -5,7 +5,11 @@
 //   library.list() -> metadata only, for a song picker; library.get(id) -> full Song or null;
 //   library.add(song, { now: Date.now() }); library.rename(id, title); library.remove(id);
 //   library.exportAll()/importAll(json) -> backup/restore.
-// `store` must implement get(key)/put(key,value)/delete(key)/keys() (all Promise-returning).
+// `store` must implement get(key)/put(key,value)/delete(key)/keys() (all Promise-returning), plus
+// runTx(ops) — ops is [{ op: 'add'|'put'|'delete', key, value }], applied as one atomic unit:
+// an 'add' whose key already exists throws (code 'KEY_EXISTS') and rolls back every op in the
+// same call; any other failure also rolls back the whole call. Both memoryStore and
+// indexedDbStore below implement it.
 // No DOM, no globals, no randomness, no clock reads here: `now` is always caller-supplied.
 
 import { normalizeSong, songDurationTicks, ticksToSeconds } from './model.js';
@@ -41,22 +45,6 @@ function metaFrom(song, addedAt) {
 
 // Wraps `store` (get/put/delete/keys) into the library API described above.
 export function createLibrary(store) {
-  async function existingIds() {
-    const keys = await store.keys();
-    return new Set(
-      keys.filter(k => k.startsWith(SONG_PREFIX)).map(k => k.slice(SONG_PREFIX.length))
-    );
-  }
-
-  // Appends -2, -3, ... until the id is free. Deterministic: no randomness,
-  // no clock reads.
-  async function freeId(preferredId, taken) {
-    if (!taken.has(preferredId)) return preferredId;
-    let n = 2;
-    while (taken.has(preferredId + '-' + n)) n++;
-    return preferredId + '-' + n;
-  }
-
   return {
     // List of { id, title, addedAt, durationTicks, durationSeconds } for
     // every stored song. No note data is read or returned.
@@ -81,6 +69,15 @@ export function createLibrary(store) {
     // a new id is assigned (song-2, song-3, ...) and the assigned id is
     // returned. `now` (a timestamp, e.g. Date.now() from the caller) is
     // required since this module never reads the clock itself.
+    //
+    // The id and both records (song + metadata) are allocated in one
+    // store.runTx call per attempt: 'add' throws instead of overwriting on a
+    // collision, so there is no read-then-decide window for two concurrent
+    // calls to both observe the same free id (BC-08) -- the store itself is
+    // the single source of truth for "is this id taken", checked and claimed
+    // atomically. A collision retries with the next suffix; any other
+    // failure propagates with nothing stored (store.runTx rolls back the
+    // whole attempt).
     async add(song, { now } = {}) {
       if (!Number.isFinite(now)) {
         throw new Error('add() requires a numeric `now` timestamp');
@@ -90,12 +87,48 @@ export function createLibrary(store) {
       if (byteLength(serialized) > MAX_SONG_BYTES) {
         throw new Error('song "' + normalized.title + '" is too large to store (over 5 MB)');
       }
-      const taken = await existingIds();
-      const id = await freeId(normalized.id, taken);
-      const stored = id === normalized.id ? normalized : { ...normalized, id };
-      await store.put(songKey(id), stored);
-      await store.put(metaKey(id), metaFrom(stored, now));
-      return id;
+      let id = normalized.id;
+      let n = 2;
+      for (;;) {
+        const stored = id === normalized.id ? normalized : { ...normalized, id };
+        try {
+          await store.runTx([
+            { op: 'add', key: songKey(id), value: stored },
+            { op: 'add', key: metaKey(id), value: metaFrom(stored, now) },
+          ]);
+          return id;
+        } catch (e) {
+          if (e && e.code === 'KEY_EXISTS') {
+            id = normalized.id + '-' + n;
+            n++;
+            continue;
+          }
+          throw e;
+        }
+      }
+    },
+
+    // Overwrites a stored song IN PLACE, keeping its id and its original
+    // addedAt (so "correct a mistake and save again" from the editor updates
+    // the one song a learner is looking at instead of leaving a trail of
+    // suffixed copies). Throws if `id` is not already stored -- callers that
+    // want "always create a new entry" should use add() instead.
+    async update(id, song, { now } = {}) {
+      if (!Number.isFinite(now)) {
+        throw new Error('update() requires a numeric `now` timestamp');
+      }
+      const existingMeta = await store.get(metaKey(id));
+      if (!existingMeta) throw new Error('no song with id "' + id + '"');
+      const normalized = normalizeSong({ ...song, id });
+      const serialized = JSON.stringify(normalized);
+      if (byteLength(serialized) > MAX_SONG_BYTES) {
+        throw new Error('song "' + normalized.title + '" is too large to store (over 5 MB)');
+      }
+      const meta = { ...metaFrom(normalized, existingMeta.addedAt), updatedAt: now };
+      await store.runTx([
+        { op: 'put', key: songKey(id), value: normalized },
+        { op: 'put', key: metaKey(id), value: meta },
+      ]);
     },
 
     // Renames a stored song's title. Throws if the id does not exist.
@@ -164,6 +197,25 @@ export function memoryStore() {
     },
     async keys() {
       return Array.from(map.keys());
+    },
+    // Validates every 'add' op against the CURRENT map before applying any
+    // of them, so a collision on one op never leaves an earlier op's write
+    // behind -- this function has no `await` in its body, so (being an
+    // async function) it runs to completion synchronously once called,
+    // leaving no gap for a second concurrent add() to observe a half-applied
+    // transaction.
+    async runTx(ops) {
+      for (const { op, key } of ops) {
+        if (op === 'add' && map.has(key)) {
+          const err = new Error('key "' + key + '" already exists');
+          err.code = 'KEY_EXISTS';
+          throw err;
+        }
+      }
+      for (const { op, key, value } of ops) {
+        if (op === 'add' || op === 'put') map.set(key, value);
+        else if (op === 'delete') map.delete(key);
+      }
     }
   };
 }
@@ -218,6 +270,46 @@ export function indexedDbStore(idbFactory, dbName) {
     },
     async keys() {
       return runRequest('readonly', store => store.getAllKeys());
+    },
+    // Runs every op in `ops` inside ONE IndexedDB readwrite transaction, so
+    // they commit or abort together. 'add' requests use IDBObjectStore.add,
+    // which raises a ConstraintError (rather than silently overwriting) when
+    // the key already exists -- exactly the failure library.js's add()
+    // retries on. Any other request failure also aborts the transaction
+    // (IndexedDB's own default: an unhandled request error aborts its
+    // transaction), so a forced failure on one write leaves nothing from
+    // this call stored.
+    async runTx(ops) {
+      const db = await openDb();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE_NAME, 'readwrite');
+        const store = tx.objectStore(STORE_NAME);
+        let keyExists = null;
+        ops.forEach(({ op, key, value }) => {
+          let request;
+          if (op === 'add') request = store.add(value, key);
+          else if (op === 'put') request = store.put(value, key);
+          else if (op === 'delete') request = store.delete(key);
+          else throw new Error('runTx: unknown op "' + op + '"');
+          request.onerror = () => {
+            if (op === 'add' && request.error && request.error.name === 'ConstraintError') {
+              keyExists = key;
+            }
+          };
+        });
+        tx.oncomplete = () => resolve();
+        const onFailure = () => {
+          if (keyExists) {
+            const err = new Error('key "' + keyExists + '" already exists');
+            err.code = 'KEY_EXISTS';
+            reject(err);
+          } else {
+            reject(tx.error || new Error('IndexedDB transaction failed'));
+          }
+        };
+        tx.onerror = onFailure;
+        tx.onabort = onFailure;
+      });
     }
   };
 }
