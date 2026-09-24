@@ -26,12 +26,13 @@ and the exact assertions: `tests/characterization/journey-first-visit.test.mjs`.
    does — and the nav Instrument button still names their saved instrument.
    Proof: same file, second test.
 
-## Known gap (not fixed by this change)
+## Fixed: Start on the fresh first paint (P7-nav)
 
-On a fresh first paint at 390×844, with the instrument sheet open, the Start button currently
-renders **below** the first screen (measured: top 1162px, bottom 1213px, against an 844px-tall
-viewport) — a first-time visitor on a phone has to scroll to find Start before choosing an
-instrument, even though it is back in the first screen (top 676px, bottom 727px) the moment an
-instrument is chosen. `tests/characterization/journey-first-visit.test.mjs`'s first test pins this
-as a real, currently-failing assertion rather than loosening it to pass — the fix (shortening or
-collapsing the open instrument sheet, or moving Start above it) belongs to its own unit.
+On a fresh first paint at 390×844, with the instrument sheet open, the Start button used to render
+below the first screen, so a first-time visitor on a phone had to scroll to find Start before
+choosing an instrument. Two phone-only rules (`@media (max-width: 600px)` in `src/styles.css`) fix
+this without touching desktop: `.side` renders as `display: contents` so Start's row can carry
+`order: -1` and appear above the stage instead of below it, and the open instrument sheet
+(`#picker`) is capped to `max-height: 40vh` with its own scroll, so the page below it — nav and
+Start — is always within reach. `tests/characterization/journey-first-visit.test.mjs`'s first test
+proves Start stays in the first screen on both the fresh paint and once an instrument is chosen.
