@@ -73,3 +73,16 @@ test('the workflow comment no longer presents the placeholder fallback as fine',
     'that comment described the old dist:appx behaviour and is now misleading',
   );
 });
+
+// The Store package must carry the RELEASE build: minified, debug hook off,
+// version stamped into the footer. `npm run build` alone writes the dev build
+// to dist/band-coach.html, and prepare-app quietly accepted it, so every .appx
+// this workflow produced shipped the dev HTML with a blank version footer.
+test('the build step produces the release file, not the dev build', () => {
+  const text = workflow();
+  assert.match(
+    text,
+    /run: \|\n\s+npm ci\n\s+npm run build -- --release$/m,
+    'the build step must run a --release build so prepare-app stages dist/release/band-coach.html',
+  );
+});

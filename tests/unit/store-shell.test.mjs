@@ -4,7 +4,8 @@
 // devDependencies (electron, electron-builder).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
@@ -235,4 +236,29 @@ test('store/package.json does not add electron to the root install', () => {
   const storePkg = JSON.parse(readFileSync(join(storeRoot, 'package.json'), 'utf8'));
   assert.equal(storePkg.devDependencies.electron, '44.4.3');
   assert.equal(storePkg.devDependencies['electron-builder'], '26.15.3');
+});
+
+// The submission target may only ever package the release build: the plain
+// build is unminified, keeps the debug hook, and has an empty version footer.
+test('scripts/prepare-app.mjs refuses the plain build when the release build is required', async () => {
+  const { resolveSourceHtml } = await import(join(storeRoot, 'scripts', 'prepare-app.mjs'));
+  const dir = mkdtempSync(join(tmpdir(), 'bc-prepare-app-'));
+  const releaseHtml = join(dir, 'release', 'band-coach.html');
+  const plainHtml = join(dir, 'band-coach.html');
+  writeFileSync(plainHtml, '<!doctype html>', 'utf8');
+  assert.equal(resolveSourceHtml({ releaseHtml, plainHtml }), plainHtml);
+  assert.throws(
+    () => resolveSourceHtml({ requireRelease: true, releaseHtml, plainHtml }),
+    /--release/,
+    'with only the plain build present, a required release build must throw',
+  );
+  mkdirSync(join(dir, 'release'), { recursive: true });
+  writeFileSync(releaseHtml, '<!doctype html>', 'utf8');
+  assert.equal(resolveSourceHtml({ requireRelease: true, releaseHtml, plainHtml }), releaseHtml);
+});
+
+test('dist:appx:submission requires the release build; plain dist:appx still falls back', () => {
+  const storePkg = JSON.parse(readFileSync(join(storeRoot, 'package.json'), 'utf8'));
+  assert.match(storePkg.scripts['dist:appx:submission'], /npm run prepare-app -- --require-release/);
+  assert.doesNotMatch(storePkg.scripts['dist:appx'], /--require-release/);
 });

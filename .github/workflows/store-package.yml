@@ -19,10 +19,27 @@ jobs:
         with:
           node-version: 22
 
+      # The same check release.yml runs. On 2026-09-23 a v1.8.0 tag pushed at a
+      # 1.7.0 commit packaged and uploaded a Store .appx stamped 1.7.0.0 while
+      # release.yml alone failed; a manual run has no tag to compare.
+      - name: tag must match package.json version
+        if: github.ref_type == 'tag'
+        shell: bash
+        run: |
+          pkg_version="v$(node -p "require('./package.json').version")"
+          if [ "$GITHUB_REF_NAME" != "$pkg_version" ]; then
+            echo "Tag $GITHUB_REF_NAME does not match package.json version $pkg_version" >&2
+            exit 1
+          fi
+
+      # A --release build: minified, debug hook off, version stamped into the
+      # footer. The plain `npm run build` writes the dev file, which
+      # prepare-app used to accept silently -- every .appx before this shipped
+      # the dev HTML with an empty version footer.
       - name: build the app file
         run: |
           npm ci
-          npm run build
+          npm run build -- --release
 
       - name: install the store shell
         working-directory: store

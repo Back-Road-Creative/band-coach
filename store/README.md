@@ -40,7 +40,9 @@ no paid CI, no paid services anywhere in this path.
   `tests/unit/store-shell.test.mjs` now walks `main.js`'s local `require`s and fails if any is
   not matched by `files`.
 - `scripts/prepare-app.mjs` — stages the built app into `store/app/band-coach.html`, preferring
-  `../dist/release/band-coach.html` and falling back to `../dist/band-coach.html`.
+  `../dist/release/band-coach.html` and falling back to `../dist/band-coach.html`. With
+  `--require-release` (what `dist:appx:submission` passes) the plain build is refused, so a
+  Store package can only ever carry the release file.
 - `scripts/apply-identity.mjs` — overlays `BC_IDENTITY_NAME` / `BC_PUBLISHER` /
   `BC_PUBLISHER_DISPLAY_NAME` from the environment onto the placeholder config, writing
   `electron-builder.generated.json` (gitignored). electron-builder's AppX target does **not**
