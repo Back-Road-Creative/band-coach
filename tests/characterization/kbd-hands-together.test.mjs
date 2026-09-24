@@ -78,3 +78,29 @@ test('hands together: a single non-MIDI pitch (mic-style, exact=false) is graded
   assert.match(msg, /approximate/i);
   assert.match(msg, /microphone/i);
 });
+
+// B3: an approximate hands-together pass is graded for real (SRS reviewed,
+// same as today) but must not raise level progress, since only one hand was
+// actually heard.
+test('hands together: an approximate pass is reviewed by the SRS but does not raise level progress', async (t) => {
+  const page = await launchPage(htmlPath);
+  t.after(() => page.close());
+  await toHandsTogether(page);
+
+  const info = await page.evaluate('window.__coach.cur().info');
+  const id = await page.evaluate('window.__coach.cur().id');
+  const now = await page.evaluate('window.__coach.modelNow()');
+  const itemBefore = await page.evaluate(`window.__coach.state().item[${JSON.stringify(id)}]`);
+  const masteryBefore = masteryOf(itemBefore, now);
+  const readyBefore = await page.evaluate('window.__coach.state().ready');
+
+  await page.evaluate(`window.__coach.note(${info.ex.rh.midi}, false)`);
+  await page.waitFor("document.getElementById('feedback').className === 'ok'");
+  await page.waitFor('window.__coach.task() && window.__coach.task().done', 5000);
+
+  const itemAfter = await page.evaluate(`window.__coach.state().item[${JSON.stringify(id)}]`);
+  const masteryAfter = masteryOf(itemAfter, now);
+  const readyAfter = await page.evaluate('window.__coach.state().ready');
+  assert.ok(masteryAfter > masteryBefore, `an approximate pass must still be reviewed by the SRS (${masteryBefore} -> ${masteryAfter})`);
+  assert.equal(readyAfter, readyBefore, 'an approximate pass must not move level progress');
+});

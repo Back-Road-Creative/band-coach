@@ -485,6 +485,13 @@ persistent capo/tuning/handedness preference into that database is a follow-up, 
 change. Mirroring the trainer's own fretboard canvas (the practice view drawn in `src/app.js`,
 separate from this reference panel) and capo-aware trainer tasks are also out of scope here.
 
+## Show me: asking for help
+
+Every drill's "Show me" button reveals the current item on request. Show me is help, not a test —
+it never counts for or against you: the spaced-repetition record and your level are left exactly
+as they were, and only the session's help counter moves (`src/app.js` `credit()` /
+`src/core/grade-outcome.js`).
+
 ## Piano hands together
 
 The keyboard mod's level 13 is "hands together": the right hand and left hand each play one note
@@ -500,7 +507,9 @@ graded exactly (`gradeHandsTogetherExact`); two hands on the computer keys count
 A single detected pitch — as a monophonic microphone pitch detector would report — can confirm at
 most one of the two notes and never both at once, so that grading is approximate
 (`gradeHandsTogetherApprox`) and the on-screen feedback says so in plain words rather than claiming
-both hands were heard.
+both hands were heard. It is still graded for real by the spaced-repetition scheduler, but since
+only one hand was actually confirmed it does not count toward level progress the way an exact pass
+does.
 
 ## Harmonica: any of the 12 keys, plus bends
 

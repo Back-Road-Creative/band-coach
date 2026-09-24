@@ -95,11 +95,15 @@ test('recall (flaw F3): the harmonica target hole is unlit and the prompt asks f
   assert.equal(lit, false, 'expected the un-revealed target hole to render unlit');
 });
 
-// "Show me" (Unit 2.3, step 3): a visible, keyboard-operable button that
-// reveals the current item on request and marks the task assisted so it
-// cannot raise mastery — reusing the same e.failed path failEl() uses for a
-// genuine miss (passEl() then forces e.q = 0, see src/app.js credit()).
-test('Show me: reveals the current item and marks it assisted so mastery cannot go up', async (t) => {
+// "Show me" (Unit 2.3, step 3; B3): a visible, keyboard-operable button that
+// reveals the current item on request. B3 changed the contract from "shown
+// counts as a failed recall" to "shown is a help event, not a test": asking
+// for help used to be recorded as a failed recall, which drove the item's
+// stability down and the learner's level back — punishing the learner for
+// asking. Now a shown-then-played element leaves the SRS record (stability,
+// lapses, due) and S.ready (level progress) exactly as they were; only the
+// session's help counter moves.
+test('Show me: reveals the current item as help, not a failure, and leaves the SRS record untouched', async (t) => {
   const page = await launchPage(htmlPath);
   t.after(() => page.close());
 
@@ -109,12 +113,16 @@ test('Show me: reveals the current item and marks it assisted so mastery cannot 
 
   const e = await driveToUnrevealed(page);
   const before = await page.evaluate(`window.__coach.state().item['${e.id}']`);
+  const readyBefore = await page.evaluate('window.__coach.state().ready');
+  const judgedBefore = await page.evaluate('window.__coach.state().judged');
+  const sessJudgedBefore = await page.evaluate('window.__coach.sess().judged');
 
   await page.evaluate('window.__coach.showMe()');
 
   const afterReveal = await page.evaluate('window.__coach.cur()');
   assert.equal(afterReveal.reveal, true, 'showMe() reveals the current element');
-  assert.equal(afterReveal.failed, true, 'showMe() marks the element failed so credit() cannot raise mastery');
+  assert.equal(afterReveal.helped, true, 'showMe() marks the element helped');
+  assert.equal(afterReveal.failed, false, 'showMe() does not mark the element failed');
 
   const hint = await page.evaluate("document.getElementById('hint').textContent");
   assert.ok(hint.includes('String ' + e.info.string), 'the hint now shows the full answer once revealed');
@@ -124,16 +132,60 @@ test('Show me: reveals the current item and marks it assisted so mastery cannot 
   await page.waitFor('window.__coach.task() && window.__coach.task().done', 5000);
 
   const after = await page.evaluate(`window.__coach.state().item['${e.id}']`);
-  // Under the srs.js retrievability model (src/core/srs.js), ANY review —
-  // including this assisted one — sets lastSeen to "now", so raw
-  // retrievability reads back as 1 immediately afterward regardless of
-  // grade (see retrievability()'s own "is 1 right at lastSeen" behaviour in
-  // tests/unit/srs-history-srs.test.mjs); comparing it before/after a
-  // review is therefore not a meaningful check any more. What must not
-  // happen is the *lasting* effect of a lapse: credit() sees e.q === 0 for
-  // an assisted answer (same failed-element path as a genuine miss), so
-  // this must be graded exactly like one — stability must not grow, and
-  // lapses must increase — per review(item, { grade: GRADE.LAPSE }).
-  assert.ok(after.stability <= before.stability, `an assisted answer must not grow stability: before=${before.stability} after=${after.stability}`);
-  assert.equal(after.lapses, before.lapses + 1, 'an assisted answer is graded as a lapse');
+  assert.equal(after.stability, before.stability, 'a shown-then-played answer must not change stability');
+  assert.equal(after.lapses, before.lapses, 'a shown-then-played answer must not add a lapse');
+  assert.equal(after.due, before.due, 'a shown-then-played answer must not move the due date');
+
+  const readyAfter = await page.evaluate('window.__coach.state().ready');
+  const judgedAfter = await page.evaluate('window.__coach.state().judged');
+  const sessJudgedAfter = await page.evaluate('window.__coach.sess().judged');
+  assert.equal(readyAfter, readyBefore, 'a help event must not move level progress');
+  assert.equal(judgedAfter, judgedBefore, 'a help event must not count as a judged answer');
+  assert.equal(sessJudgedAfter, sessJudgedBefore, 'a help event must not count toward the session judged total');
+
+  const sessHelped = await page.evaluate('window.__coach.sess().helped');
+  assert.equal(sessHelped, 1, 'the session help counter records the help event');
+});
+
+test('Show me: a later independent answer on the same item (no help) is graded normally', async (t) => {
+  const page = await launchPage(htmlPath);
+  t.after(() => page.close());
+
+  await page.evaluate("window.__coach.setMod('gtr')");
+  await page.evaluate("document.getElementById('playBtn').click()");
+  await page.waitFor('window.__coach.task()');
+
+  const e = await driveToUnrevealed(page);
+  await page.evaluate('window.__coach.showMe()');
+  const midi = await page.evaluate('window.__coach.cur().info.midi');
+  await page.evaluate(`window.__coach.note(${midi}, true)`);
+  await page.waitFor('window.__coach.task() && window.__coach.task().done', 5000);
+
+  const before = await page.evaluate(`window.__coach.state().item['${e.id}']`);
+  const judgedBefore = await page.evaluate('window.__coach.state().judged');
+
+  // Drive fresh tasks (no help this time) until the same item comes up again
+  // and answer it correctly without asking for help.
+  let hit = false;
+  for (let i = 0; i < 60 && !hit; i++) {
+    await page.waitFor('window.__coach.task() && !window.__coach.task().done', 5000);
+    for (let k = 0; k < 12; k++) {
+      const state = await page.evaluate(
+        `(function () { const t = window.__coach.task(), c = window.__coach.cur();
+          return { done: !!(t && t.done), id: c ? c.id : null, midi: c && c.info ? c.info.midi : null,
+                   paused: !document.getElementById('breakCard').hidden }; })()`
+      );
+      if (state.paused) { await page.evaluate("document.getElementById('backBtn').click()"); continue; }
+      if (state.done || state.midi === null) break;
+      if (state.id === e.id) hit = true;
+      await page.evaluate(`window.__coach.note(${state.midi}, true)`);
+    }
+    await page.waitFor('window.__coach.task() && !window.__coach.task().done', 5000);
+  }
+  assert.ok(hit, `expected item ${e.id} to reappear within 60 tasks`);
+
+  const after = await page.evaluate(`window.__coach.state().item['${e.id}']`);
+  const judgedAfter = await page.evaluate('window.__coach.state().judged');
+  assert.ok(after.stability > before.stability, `an unassisted correct answer must grow stability: before=${before.stability} after=${after.stability}`);
+  assert.ok(judgedAfter > judgedBefore, 'an unassisted answer counts as a judged answer');
 });
