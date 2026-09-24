@@ -2,7 +2,7 @@
   "name": "band-coach-store-shell",
   "version": "0.1.0",
   "private": true,
-  "description": "One coach, many instruments. Band Coach listens through your microphone or a MIDI keyboard, picks every next exercise from your own results, and watches your energy so practice stays fresh. It includes a tuner, and it hears pitch and timing — it cannot see posture, breath, bowing or hand position, so keep a teacher for those. Free, no account, and your sound never leaves your computer.",
+  "description": "One coach, many instruments, drum kit included. Band Coach listens through your microphone, a MIDI keyboard or a drum kit that sends MIDI, picks every next exercise from your own results, and watches your energy so practice stays fresh. It includes a tuner, and it hears pitch and timing — it cannot see posture, breath, bowing or hand position, so keep a teacher for those. Free, no account, and your sound never leaves your computer.",
   "license": "Apache-2.0",
   "type": "commonjs",
   "main": "main.js",
