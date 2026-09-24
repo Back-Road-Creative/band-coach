@@ -40,6 +40,9 @@ const STEP_PC = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
 const SHARP_ORDER = ['F', 'C', 'G', 'D', 'A', 'E', 'B'];
 const MAJOR_FIFTHS = { C: 0, G: 1, D: 2, A: 3, E: 4, B: 5, 'F#': 6, 'C#': 7, F: -1, Bb: -2, Eb: -3, Ab: -4, Db: -5, Gb: -6, Cb: -7 };
 
+// `\%` in a text field is a literal percent (a bare `%` starts a comment).
+function unescapePercent(text) { return text.replace(/\\%/g, '%'); }
+
 function keySignatureAccidentals(fifths) {
   const acc = { C: 0, D: 0, E: 0, F: 0, G: 0, A: 0, B: 0 };
   if (fifths > 0) for (let i = 0; i < fifths; i += 1) acc[SHARP_ORDER[i]] = 1;
@@ -126,7 +129,7 @@ export function importAbc(rawText, options = {}) {
     if (!m) return null;
     const rest = value.slice(m.index + m[0].length);
     const nm = /(?:name|nm)="([^"]*)"|(?:name|nm)=(\S+)/.exec(rest);
-    return { id: m[1], name: nm ? (nm[1] ?? nm[2]) : undefined };
+    return { id: m[1], name: nm ? unescapePercent(nm[1] ?? nm[2]) : undefined };
   }
 
   for (const rawLine of rawText.split(/\r\n|\r|\n/)) {
@@ -135,8 +138,9 @@ export function importAbc(rawText, options = {}) {
     // its neighbours -- once lines are joined into one body string a
     // comment's `$`-anchored strip can no longer tell where a line ended,
     // and its stray letters (e.g. "% Nottingham" has a real note-letter
-    // 'a') would otherwise reach the note tokenizer.
-    const line = rawLine.replace(/%.*/, '');
+    // 'a') would otherwise reach the note tokenizer. `\%` is a literal
+    // percent, not a comment (export-abc.js writes one for a title's `%`).
+    const line = rawLine.replace(/(^|[^\\])%.*/, '$1');
     if (line.trim() === '') continue;
     const m = /^([A-Za-z]):\s?(.*)$/.exec(line);
     if (m && m[1] === 'V') {
@@ -157,8 +161,8 @@ export function importAbc(rawText, options = {}) {
     }
     if (m && !sawKey) {
       const [, field, value] = m;
-      if (field === 'T') title = title === null ? value.trim() : `${title} ${value.trim()}`;
-      else if (field === 'C') composer = value.trim();
+      if (field === 'T') title = title === null ? unescapePercent(value.trim()) : `${title} ${unescapePercent(value.trim())}`;
+      else if (field === 'C') composer = unescapePercent(value.trim());
       else if (field === 'M') meter = parseMeter(value);
       else if (field === 'L') {
         const lm = /^(\d+)\s*\/\s*(\d+)$/.exec(value.trim());
@@ -291,7 +295,7 @@ function readLength(body, i) {
 
 function tokenizeAbcBody(bodyText, warnings) {
   const tokens = [];
-  const r = new TokenReader(bodyText.replace(/%.*$/gm, ''));
+  const r = new TokenReader(bodyText.replace(/(^|[^\\])%.*$/gm, '$1'));
   while (!r.atEnd()) {
     const ch = r.peek();
     if (/\s/.test(ch)) { r.i += 1; continue; }

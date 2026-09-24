@@ -188,3 +188,27 @@ test('a multi-part song round-trips through ABC: each part comes back as its own
     assert.deepEqual(noteTuples(back.parts[i].notes), noteTuples(part.notes), `${part.id}: notes must round-trip`);
   });
 });
+
+// `%` starts an ABC comment, so a title, composer or part name holding one
+// was cut short on the way back in ("100% Pure" came back as "100").
+test('a % in the title, composer and part names survives the ABC round trip', () => {
+  // Two parts, so the export writes a `V:` line carrying each part's name.
+  const base = starterSongs[0];
+  const lead = melodyOf(base);
+  const song = {
+    ...base,
+    title: '100% Pure',
+    composer: 'Trad. 50%',
+    parts: [{ ...lead, name: 'Lead 1%' }, { ...lead, id: 'harmony', name: 'Harmony' }],
+  };
+  const { song: back } = importAbc(exportAbc(song));
+  assert.equal(back.title, '100% Pure');
+  assert.equal(back.composer, 'Trad. 50%');
+  assert.equal(back.parts[0].name, 'Lead 1%');
+});
+
+test('importAbc reads \\% as a literal percent and still strips a real % comment', () => {
+  const { song } = importAbc('X:1\nT:Half 50\\% off % a comment\nM:4/4\nL:1/4\nK:C\nCDEF|\n');
+  assert.equal(song.title, 'Half 50% off');
+  assert.equal(song.parts[0].notes.length, 4);
+});

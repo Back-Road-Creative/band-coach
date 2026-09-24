@@ -177,8 +177,10 @@ export function exportAbc(song) {
 
   const lines = [];
   lines.push('X:1');
-  lines.push(`T:${song.title}`);
-  if (song.composer) lines.push(`C:${song.composer}`);
+  // A bare `%` starts an ABC comment; `\%` keeps it as text.
+  const text = (v) => String(v).replace(/%/g, '\\%');
+  lines.push(`T:${text(song.title)}`);
+  if (song.composer) lines.push(`C:${text(song.composer)}`);
   lines.push(`M:${song.metre.num}/${song.metre.den}`);
   lines.push(`L:${unitNum}/${unitDen}`);
   lines.push(`Q:${Math.round(song.bpm)}`);
@@ -189,7 +191,7 @@ export function exportAbc(song) {
     // escape for a quote inside it, and the voice id is one token.
     if (song.parts.length > 1) {
       const id = String(part.id).replace(/\s+/g, '-');
-      lines.push(part.name ? `V:${id} name="${String(part.name).replace(/"/g, "'")}"` : `V:${id}`);
+      lines.push(part.name ? `V:${id} name="${text(part.name).replace(/"/g, "'")}"` : `V:${id}`);
     }
     const barTexts = partBars[i].map((bar) => renderBar(bar, keySigAcc, preferFlats, gcdTicks));
     lines.push(barTexts.join(' | ') + ' |');
