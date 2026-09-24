@@ -8,7 +8,10 @@ import { launchPage } from '../helpers/browser.mjs';
 async function seed(page) {
   await page.evaluate(`(function () {
     const db = window.__coach.db();
-    const today = new Date().toISOString().slice(0, 10);
+    // The learner's LOCAL day, as app.js stamps sessions -- the UTC date is
+    // already tomorrow on a US evening, which put this session off the week.
+    const n = new Date();
+    const today = n.getFullYear() + '-' + String(n.getMonth() + 1).padStart(2, '0') + '-' + String(n.getDate()).padStart(2, '0');
     db.sessions = [
       { d: today, mod: 'kbd', min: 20, acc: 0.7, a1: 0.6, a2: 0.7, from: 1, to: 2, breaks: 0 },
       { d: '2026-09-10', mod: 'gtr', min: 5, acc: 0.5, a1: 0.4, a2: 0.5, from: 1, to: 1, breaks: 0 },
