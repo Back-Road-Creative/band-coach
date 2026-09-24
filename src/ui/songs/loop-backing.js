@@ -20,6 +20,7 @@
 // carries a real recording, wire stretch() the way playalong.js does.
 
 import { createTransport } from '../../audio/stretch/loop.js';
+import { passesRule } from './practice.js';
 
 // One transport per tempo-ladder step attempt cycle. durationSec/beatTimes
 // are irrelevant here -- this call site only ever uses getRate/setRate/
@@ -30,11 +31,20 @@ export function createLoopBackingTransport() {
 }
 
 // judged: a judgeAttempt() result ({ hitCount, judgedCount, ... }, see
-// src/ui/songs/practice.js). A step with nothing judged yet (judgedCount 0)
-// counts as a miss -- there is no such thing as a "clean" attempt with
-// nothing played. Returns the transport's new rate.
-export function applyAttemptToTransport(transport, judged) {
-  const clean = !!judged && judged.judgedCount > 0 && judged.hitCount === judged.judgedCount;
+// src/ui/songs/practice.js). passRule: the step's own passRule (same object
+// src/song/lesson.js's buildLessonPlan wrote, same one passesRule() judges
+// the step's pass/fail against) -- a "clean" attempt now means the attempt
+// actually PASSED that rule, not just hitCount === judgedCount: hitting
+// every note while blowing the timing, hold/tune, or extra-notes rule is
+// not clean, and should not speed the backing up. When passRule is
+// null/undefined (a caller that has none, or an older call site) this falls
+// back to the original hit-count-only check so nothing already using this
+// without a passRule changes behaviour. A step with nothing judged yet
+// (judgedCount 0) always counts as a miss -- there is no such thing as a
+// "clean" attempt with nothing played. Returns the transport's new rate.
+export function applyAttemptToTransport(transport, judged, passRule) {
+  const hasJudged = !!judged && judged.judgedCount > 0;
+  const clean = hasJudged && (passRule ? passesRule(judged, passRule) : judged.hitCount === judged.judgedCount);
   return clean ? transport.onCleanLoop() : transport.onMiss();
 }
 

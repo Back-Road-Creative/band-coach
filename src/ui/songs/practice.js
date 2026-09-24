@@ -11,6 +11,12 @@ function ticksToSec(ticks, bpm, ticksPerQuarter) {
   return (ticks / ticksPerQuarter) * (60 / bpm);
 }
 
+// Shared with judgeAttempt's own opts.durationTolerance default below and
+// holdTuneFeedback()'s per-hit direction check -- one number, not two, so a
+// hit that reads "outside the band" in the score always means the same
+// thing it means in the feedback text.
+const DEFAULT_DURATION_TOLERANCE = { min: 0.6, max: 1.5 };
+
 // The ONE phrase-local clock (BC-01): seconds from a step's originTick (its
 // phrase's segment start -- the bar src/song/lesson.js cut the phrase at,
 // so a pickup rest before the first note is kept) to `tick`. src/ui/songs.js
@@ -117,7 +123,7 @@ export function judgeAttempt(expectedNotes, playedEvents, opts = {}) {
     ticksPerQuarter = 480,
     policy = 'exact',
     timed = true,
-    durationTolerance = { min: 0.6, max: 1.5 },
+    durationTolerance = DEFAULT_DURATION_TOLERANCE,
     velocityTolerance = 24,
     originTick = 0,
     onsetsOnly = false,
@@ -254,6 +260,11 @@ export function passesRule(result, passRule) {
   if (passRule.minDurationScore != null && result.durationScore != null) {
     if (result.durationScore < passRule.minDurationScore) return false;
   }
+  // A wrong note struck alongside a chord (judgeAttempt's extras, above)
+  // never lowers hitRate -- that is deliberate chord-spread leniency, not a
+  // pass on its own -- so a step whose passRule sets maxExtras still has to
+  // gate on it separately here.
+  if (passRule.maxExtras != null && result.extras && result.extras.count > passRule.maxExtras) return false;
   return true;
 }
 
@@ -276,10 +287,32 @@ export function holdTuneFeedback(result, passRule) {
   const tuneFailed = passRule.maxMeanAbsCents != null && result.meanAbsCents != null
     && result.meanAbsCents > passRule.maxMeanAbsCents;
   if (!holdFailed && !tuneFailed) return null;
-  if (holdFailed && tuneFailed) return 'Hold each note a little longer, right in the middle of the pitch.';
-  if (holdFailed) return 'Hold each note a little longer.';
+  const holdWords = holdFailed ? holdDirectionWords(result) : null;
+  const capitalized = holdWords ? holdWords.charAt(0).toUpperCase() + holdWords.slice(1) : null;
+  if (holdFailed && tuneFailed) return capitalized + ', right in the middle of the pitch.';
+  if (holdFailed) return capitalized + '.';
   const sharp = result.meanCents == null || result.meanCents >= 0;
   return sharp
     ? 'A little sharp — aim for the middle of the note.'
     : 'A little flat — aim for the middle of the note.';
+}
+
+// durationScore (judgeAttempt, above) drops both for notes cut off early
+// (durRatio below durationTolerance.min) AND notes over-held into the next
+// one (durRatio above .max) -- the SAME low score either way, so telling the
+// learner to hold "longer" when they are actually running long sends them
+// the wrong direction. Looks at the judged hits' own durRatio (result.matches,
+// see matchOneNote above) that fall outside the band and picks a direction;
+// falls back to the old always-"longer" wording when no per-hit data is
+// available (a result built by hand, or every hit's durRatio was null).
+function holdDirectionWords(result) {
+  const outside = (result.matches || [])
+    .filter((m) => m.ok && m.durRatio != null)
+    .filter((m) => m.durRatio < DEFAULT_DURATION_TOLERANCE.min || m.durRatio > DEFAULT_DURATION_TOLERANCE.max);
+  if (outside.length === 0) return 'hold each note a little longer';
+  const long = outside.filter((m) => m.durRatio > DEFAULT_DURATION_TOLERANCE.max).length;
+  const short = outside.filter((m) => m.durRatio < DEFAULT_DURATION_TOLERANCE.min).length;
+  if (long > 0 && short === 0) return "let each note go a little sooner — it's running into the next one";
+  if (short > 0 && long === 0) return 'hold each note a little longer';
+  return "match each note's length — some ran short, some ran long";
 }
