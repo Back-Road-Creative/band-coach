@@ -60,6 +60,22 @@ test('the README has a "Capture a melody" section', () => {
   assert.ok(/##\s+Capture a melody/.test(readme), 'expected a "Capture a melody" heading describing the TOOLS.capture tool');
 });
 
+test('every instrument row shows "provisional (no reviewer yet)" in the Content reviewed column, matching a null provenance', () => {
+  const section = pathwaySection(readme);
+  for (const rec of INSTRUMENTS) {
+    assert.equal(rec.provenance, null, rec.id + ': this test only knows how to check the provisional case');
+    const line = section.split('\n').find(l => l.startsWith('|') && l.includes(rec.name));
+    assert.ok(line, 'expected a table row naming ' + rec.name);
+    assert.match(line, /provisional \(no reviewer yet\)/, rec.name + '\'s row should say its content review is provisional');
+  }
+});
+
+test('the pathway section explains what a null provenance means and how a reviewer records one', () => {
+  const section = pathwaySection(readme);
+  assert.match(section, /provenance/, 'expected the pathway section to mention `provenance`');
+  assert.match(section, /musician/i, 'expected the paragraph to explain the app\'s authors wrote the curriculum without a musician\'s review');
+});
+
 test('every keyed-woodwind and recorder/whistle instrument is marked unchecked in the table', () => {
   const section = pathwaySection(readme);
   const unchecked = INSTRUMENTS.filter(rec => UNCHECKED_KINDS.has(howKindFor(rec)));

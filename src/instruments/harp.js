@@ -15,6 +15,7 @@ export default {
   clefs: ['treble'],
   octavePolicy: 'exact',
   status: 'ready',
+  provenance: null,
   curriculum: [
     { level: 1, items: ['Blow holes 4, 5 and 6'] },
     { level: 2, items: ['Draw holes 4, 5 and 6'] },

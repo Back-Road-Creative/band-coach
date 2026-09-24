@@ -22,6 +22,7 @@ export default {
   fretted: true,
   writtenOctaveUp: true,
   status: 'ready',
+  provenance: null,
   curriculum: [
     { level: 1, items: ['The open strings'] },
     { level: 2, items: ['Low E string, frets 1 to 5'] },

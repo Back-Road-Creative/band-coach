@@ -117,5 +117,27 @@ export function validateInstrument(rec) {
     }
   }
 
+  // provenance: who (if anyone) has checked this record's curriculum against
+  // a real method book or teaching standard. Absent or null means
+  // provisional -- written by the app's authors, not yet reviewed by a
+  // musician. When present it must be an object with a non-empty `reference`
+  // (a method-book/standard name, not a URL) plus reviewedBy/reviewedAt that
+  // are either both null (reference noted, review still pending) or both
+  // filled in (a real review happened, on a real date).
+  if (rec.provenance !== undefined && rec.provenance !== null) {
+    const p = rec.provenance;
+    if (!p || typeof p !== 'object' || Array.isArray(p)) {
+      fail('provenance must be null or an object { reference, reviewedBy, reviewedAt }');
+    } else {
+      if (typeof p.reference !== 'string' || p.reference.length === 0) fail('provenance.reference must be a non-empty string naming a method book or standard');
+      const byPresent = typeof p.reviewedBy === 'string' && p.reviewedBy.length > 0;
+      const atPresent = typeof p.reviewedAt === 'string' && p.reviewedAt.length > 0;
+      if (p.reviewedBy !== null && !byPresent) fail('provenance.reviewedBy must be a non-empty string or null');
+      if (p.reviewedAt !== null && !atPresent) fail('provenance.reviewedAt must be a non-empty string or null');
+      if (byPresent !== atPresent) fail('provenance.reviewedBy and provenance.reviewedAt must both be set or both be null');
+      if (atPresent && !/^\d{4}-\d{2}-\d{2}$/.test(p.reviewedAt)) fail('provenance.reviewedAt must be a YYYY-MM-DD date string');
+    }
+  }
+
   return { ok: errors.length === 0, errors };
 }

@@ -45,6 +45,7 @@ export default {
   clefs: ['treble'],
   octavePolicy: 'exact',
   status: 'ready',
+  provenance: null,
   curriculum: [
     { level: 1, items: ['C, D and E'] },
     { level: 2, items: ['Add F and G'] },

@@ -372,7 +372,8 @@ Each instrument is a plain data record under `src/instruments/`, validated by
 `validateInstrument` in `src/instruments/schema.js` (id, name, family, input,
 pitch range, transposition, clefs, an octave-matching policy, an optional
 string tuning, and an ordered curriculum). `src/instruments/index.js` exports
-`INSTRUMENTS` and `byId`.
+`INSTRUMENTS` and `byId`. Every record also carries a `provenance` field — null
+until a musician has reviewed its curriculum, see "Beginner pathway status" below.
 
 To add an instrument: create `src/instruments/<id>.js` exporting a default
 object matching the schema, import it in `index.js`, and add it to the
@@ -448,35 +449,43 @@ computed at runtime (fretboard, fingerboard, brass, harmonica — no per-note ta
 wind-and-brass picker, and mallet percussion): a learner still gets a curriculum and mic-matched
 pitch detection, just no diagram.
 
-| Instrument | Status | Curriculum | Fingering/how chart | Chart reviewed |
-| --- | --- | --- | --- | --- |
-| Keyboard | ready | yes | none | n/a |
-| Guitar | ready | yes | fretboard (computed) | yes (formula, not a typed table) |
-| Bass | ready | yes | fretboard (computed) | yes (formula, not a typed table) |
-| Ukulele | ready | yes | fretboard (computed) | yes (formula, not a typed table) |
-| Voice | ready | yes | none (sing the pitch) | n/a |
-| Wind and brass (choose your instrument) | ready | yes | none | n/a |
-| Harmonica | ready | yes | harmonica (computed) | yes (formula, not a typed table) |
-| Violin | ready | yes | fingerboard (computed) | yes (formula, not a typed table) |
-| Viola | ready | yes | fingerboard (computed) | yes (formula, not a typed table) |
-| Cello | ready | yes | fingerboard (computed) | yes (formula, not a typed table) |
-| Double bass | ready | yes | fingerboard (computed) | yes (formula, not a typed table) |
-| Mandolin | ready | yes | fretboard (computed) | yes (formula, not a typed table) |
-| 5-string banjo | ready | yes | fretboard (computed) | yes (formula, not a typed table) |
-| Baritone ukulele | ready | yes | fretboard (computed) | yes (formula, not a typed table) |
-| Low-G ukulele | ready | yes | fretboard (computed) | yes (formula, not a typed table) |
-| 5-string bass | ready | yes | fretboard (computed) | yes (formula, not a typed table) |
-| Trumpet (B flat) | ready | yes | brass valves (computed) | yes (formula, not a typed table) |
-| Clarinet (B flat) | ready | yes | keyed-woodwind chart | no -- unchecked |
-| Alto sax (E flat) | ready | yes | keyed-woodwind chart | no -- unchecked |
-| Tenor sax (B flat) | ready | yes | keyed-woodwind chart | no -- unchecked |
-| Flute | ready | yes | keyed-woodwind chart | no -- unchecked |
-| French horn (F) | ready | yes | brass valves (computed) | yes (formula, not a typed table) |
-| Trombone | ready | yes | brass slide (computed) | yes (formula, not a typed table) |
-| Descant recorder | ready | yes | recorder chart | no -- unchecked |
-| Tin whistle (D) | ready | yes | whistle chart | no -- unchecked |
-| Oboe | ready | yes | keyed-woodwind chart | no -- unchecked |
-| Mallet percussion (bells) | ready | yes | none | n/a |
+| Instrument | Status | Curriculum | Fingering/how chart | Chart reviewed | Content reviewed |
+| --- | --- | --- | --- | --- | --- |
+| Keyboard | ready | yes | none | n/a | provisional (no reviewer yet) |
+| Guitar | ready | yes | fretboard (computed) | yes (formula, not a typed table) | provisional (no reviewer yet) |
+| Bass | ready | yes | fretboard (computed) | yes (formula, not a typed table) | provisional (no reviewer yet) |
+| Ukulele | ready | yes | fretboard (computed) | yes (formula, not a typed table) | provisional (no reviewer yet) |
+| Voice | ready | yes | none (sing the pitch) | n/a | provisional (no reviewer yet) |
+| Wind and brass (choose your instrument) | ready | yes | none | n/a | provisional (no reviewer yet) |
+| Harmonica | ready | yes | harmonica (computed) | yes (formula, not a typed table) | provisional (no reviewer yet) |
+| Violin | ready | yes | fingerboard (computed) | yes (formula, not a typed table) | provisional (no reviewer yet) |
+| Viola | ready | yes | fingerboard (computed) | yes (formula, not a typed table) | provisional (no reviewer yet) |
+| Cello | ready | yes | fingerboard (computed) | yes (formula, not a typed table) | provisional (no reviewer yet) |
+| Double bass | ready | yes | fingerboard (computed) | yes (formula, not a typed table) | provisional (no reviewer yet) |
+| Mandolin | ready | yes | fretboard (computed) | yes (formula, not a typed table) | provisional (no reviewer yet) |
+| 5-string banjo | ready | yes | fretboard (computed) | yes (formula, not a typed table) | provisional (no reviewer yet) |
+| Baritone ukulele | ready | yes | fretboard (computed) | yes (formula, not a typed table) | provisional (no reviewer yet) |
+| Low-G ukulele | ready | yes | fretboard (computed) | yes (formula, not a typed table) | provisional (no reviewer yet) |
+| 5-string bass | ready | yes | fretboard (computed) | yes (formula, not a typed table) | provisional (no reviewer yet) |
+| Trumpet (B flat) | ready | yes | brass valves (computed) | yes (formula, not a typed table) | provisional (no reviewer yet) |
+| Clarinet (B flat) | ready | yes | keyed-woodwind chart | no -- unchecked | provisional (no reviewer yet) |
+| Alto sax (E flat) | ready | yes | keyed-woodwind chart | no -- unchecked | provisional (no reviewer yet) |
+| Tenor sax (B flat) | ready | yes | keyed-woodwind chart | no -- unchecked | provisional (no reviewer yet) |
+| Flute | ready | yes | keyed-woodwind chart | no -- unchecked | provisional (no reviewer yet) |
+| French horn (F) | ready | yes | brass valves (computed) | yes (formula, not a typed table) | provisional (no reviewer yet) |
+| Trombone | ready | yes | brass slide (computed) | yes (formula, not a typed table) | provisional (no reviewer yet) |
+| Descant recorder | ready | yes | recorder chart | no -- unchecked | provisional (no reviewer yet) |
+| Tin whistle (D) | ready | yes | whistle chart | no -- unchecked | provisional (no reviewer yet) |
+| Oboe | ready | yes | keyed-woodwind chart | no -- unchecked | provisional (no reviewer yet) |
+| Mallet percussion (bells) | ready | yes | none | n/a | provisional (no reviewer yet) |
+
+"Content reviewed" comes straight from each record's own `provenance` field
+(`src/instruments/schema.js`). A `provenance` of `null` means the curriculum was written by the
+app's authors from general knowledge of the instrument, not checked against a method book or
+teaching standard by a working musician -- every row above is `null` today. A reviewer records
+their pass by editing that instrument's record in `src/instruments/*.js`, setting `provenance` to
+`{ reference: '<method book or standard name>', reviewedBy: '<name>', reviewedAt: 'YYYY-MM-DD' }`
+(all three filled in together, never just one or two).
 
 ## Capo, alternate tunings and a left-handed view
 

@@ -19,6 +19,7 @@ export default {
   tuning: [48, 55, 62, 69],
   fretted: false,
   status: 'ready',
+  provenance: null,
   curriculum: [
     { level: 1, items: ['The open strings'] },
     { level: 2, items: ['C string, positions 1 to 5'] },

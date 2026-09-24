@@ -28,6 +28,7 @@ export default {
   clefs: ['treble'],
   octavePolicy: 'exact',
   status: 'ready',
+  provenance: null,
   curriculum: [
     { level: 1, items: ['First three notes: B, A, G'] },
     { level: 2, items: ['Two more, going up: high C and D'] },
