@@ -17,7 +17,11 @@ test('a backup can be exported and restored into a fresh profile', async (t) => 
   await page.waitFor(`window.__coach.db().mods.kbd.item['n' + ${midi}]`, 3000);
 
   const before = await page.evaluate(`window.__coach.db().mods.kbd.item['n' + ${midi}].m`);
-  const backupText = await page.evaluate('JSON.stringify(window.__coach.exportProgress())');
+  // exportProgress() is now async (it reads the song library too), so the
+  // expression itself must be a promise for evaluate()'s awaitPromise to wait
+  // on it -- JSON.stringify(exportProgress()) would stringify the Promise
+  // object itself, not its resolved value.
+  const backupText = await page.evaluate('(async () => JSON.stringify(await window.__coach.exportProgress()))()');
 
   const fresh = await launchPage(htmlPath);
   t.after(() => fresh.close());

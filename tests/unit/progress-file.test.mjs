@@ -98,3 +98,43 @@ test('migration ladder: a non-object db does not throw', () => {
   const migrated = migrate(null);
   assert.equal(migrated.v, CURRENT_DB_VERSION);
 });
+
+test('export carries the song library alongside the db', () => {
+  const env = exportProgress(sampleDB(), { appVersion: '1.2.3', now: () => 1, songs: [{ id: 'song-1', title: 'A' }] });
+  assert.deepEqual(env.songs, [{ id: 'song-1', title: 'A' }]);
+});
+
+test('export defaults songs to an empty array when none are given', () => {
+  const env = exportProgress(sampleDB(), { appVersion: '1.2.3', now: () => 1 });
+  assert.deepEqual(env.songs, []);
+});
+
+test('a v1 backup file (no songs field at all) still imports, with an empty song list', () => {
+  const text = JSON.stringify({ format: PROGRESS_FORMAT, formatVersion: 1, appVersion: '1.0.0', exportedAt: 'x', db: sampleDB() });
+  const result = importProgress(text);
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.db, sampleDB());
+  assert.deepEqual(result.songs, []);
+});
+
+test('round trip: export then import recovers the song library too', () => {
+  const songs = [{ id: 'song-1', title: 'A' }, { id: 'song-2', title: 'B' }];
+  const text = JSON.stringify(exportProgress(sampleDB(), { appVersion: '1.2.3', now: () => 1, songs }));
+  const result = importProgress(text);
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.songs, songs);
+});
+
+test('a non-array songs field is treated as no songs, never throws', () => {
+  const text = JSON.stringify({ format: PROGRESS_FORMAT, formatVersion: PROGRESS_FORMAT_VERSION, appVersion: 'x', exportedAt: 'x', db: sampleDB(), songs: 'not-an-array' });
+  const result = importProgress(text);
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.songs, []);
+});
+
+test('rejects a formatVersion this app has never known about (3)', () => {
+  const text = JSON.stringify({ format: PROGRESS_FORMAT, formatVersion: 3, db: {} });
+  const result = importProgress(text);
+  assert.equal(result.ok, false);
+  assert.match(result.error, /newer Band Coach/i);
+});
