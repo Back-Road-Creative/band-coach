@@ -30,7 +30,7 @@ import { stepTuner } from './core/tuner.js';
 import { shouldReveal, promptFor, hintFor as coreHintFor } from './core/reveal.js';
 import { gradeOutcome } from './core/grade-outcome.js';
 import { makeEvent, validateEvent } from './core/learning-events.js';
-import { planSession, describePlan } from './core/curriculum.js';
+import { planSession, describePlan, nextPlanStep } from './core/curriculum.js';
 //
 import * as RHY from './core/rhythm.js';
 //
@@ -975,7 +975,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
   const byStrength = (pool, now) => pool.slice().sort((a, c) => (retrievability(it(c, now), now) - retrievability(it(a, now), now)) || (a < c ? -1 : 1));
 
   // ---------- session monitor: fatigue, frustration, breaks ----------
-  let sess = null, playing = false, paused = false, pauseInfo = null, task = null, lastItem = null, recent = [], streak = 0, errCount = 0, lastInputAt = 0, nextTaskAt = 0, sessionPlan = [];
+  let sess = null, playing = false, paused = false, pauseInfo = null, task = null, lastItem = null, recent = [], streak = 0, errCount = 0, lastInputAt = 0, nextTaskAt = 0, sessionPlan = [], planProgress = { review: 0, weak: 0, apply: 0, check: 0 };
   const newSession = () => ({ mod: mod, active: 0, sinceBreak: 0, judged: 0, ok: 0, first: [], last: [], w30: [], best30: 0, rts: [], bestRt: null, downs: 0, breaks: 0, failRun: 0, reliefIn: 0, warm: 0, tiredFor: 0, snoozeUntil: 0, from: S.level, bestStreak: 0, F: 0, m0: JSON.parse(JSON.stringify(S.item)), capWarned: false, target: 0, cal: [], idleBars: 0 });
   function fatigue() {
     const acc30 = sess.w30.length >= 24 ? mean(sess.w30) : null; if (acc30 !== null) sess.best30 = Math.max(sess.best30, acc30);
@@ -1035,10 +1035,61 @@ import { register as registerPlayalong } from './ui/playalong.js';
     const dd = Object.assign({}, d, { task: kind }); if (d.task === 'mix') { if (kind === 'chord') dd.pool = 'c'; if (kind === 'hands') dd.pool = 'j'; if (kind === 'seq' && !dd.len) dd.len = 3; }
     pool = poolFor(dd);
     if (sess.warm > 0) { sess.warm--; warm = true; const base = kind === 'bar' || kind === 'kit' ? kind : kind === 'chord' ? 'chord' : 'one'; kind = base; pool = byStrength(pool, modelNow).slice(0, Math.max(2, Math.ceil(pool.length / 2))); }
-    const t = { kind: kind, els: [], idx: 0, warm: warm, limit: d.limit || 8, ref: d.ref || 'none', blind: !!d.blind, t0: now(), done: false, revealed: false };
-    const mk = id => { S.tick++; it(id, modelNow).seen = S.tick; return { id: id, info: inf(id), failed: false, t0: 0, rt: 0, reveal: shouldReveal({ exposures: it(id, modelNow).reps }) && !d.blind }; };
+    // Today's plan (src/core/curriculum.js's planSession, ordered by
+    // nextPlanStep) steers an ordinary (non-warm-up) level task through its
+    // four blocks in turn -- review what came due, drill the weakest active
+    // skill on its own, use it inside a short phrase, then check it blind --
+    // before falling back to this level's usual chooser once nextPlanStep()
+    // returns null. Warm-up keeps its existing precedence: while `warm` is
+    // true above the plan is left untouched, so it resumes exactly where it
+    // left off once the warm-up run ends.
+    let planKind = null, planBlind = !!d.blind, seqLen = d.len || 2, planApplyId = null;
+    // The plan only ever steers a pitched-item drill (one/chord/seq, or a
+    // mix level that draws from those) with a real answer to give -- ear
+    // training (M.input === 'answer') and the non-pitched level kinds
+    // (hands, bar, kit, bar2, run, hold) build their own items/choices from
+    // this level's own pool and must come out of buildLevelTask untouched,
+    // never forced into a plan-shaped 'one'/'chord'/'seq' task.
+    const planEligible = !warm && M.input !== 'answer' && (d.task === 'one' || d.task === 'chord' || d.task === 'seq' || d.task === 'mix' || !d.task);
+    if (planEligible && sessionPlan && sessionPlan.length) {
+      const step = nextPlanStep(sessionPlan, planProgress);
+      if (step) {
+        // Every plan step's ids are filtered to this level's OWN current
+        // pool (poolFor(dd), computed above), never the wider activeItems
+        // list -- an id the level itself would never hand out is not one
+        // the plan may force on it either. An empty result after that
+        // filter just means this step has nothing this level can use right
+        // now: consume it (advance planProgress) and fall through to the
+        // level's ordinary chooser for this one task, same as if no plan
+        // were active.
+        const stepIds = step.ids.filter(id => pool.indexOf(id) >= 0);
+        if (!stepIds.length) { planProgress[step.kind] = (planProgress[step.kind] || 0) + 1; }
+        else if (step.kind === 'apply') { planKind = step.kind; planBlind = !!step.blind; kind = 'seq'; seqLen = 3; planApplyId = stepIds[0]; }
+        else {
+          // The plan's very first task of the session landing on a single-id
+          // pool that is exactly whatever task (warm-up, or none) just
+          // finished would force mk() below to touch that S.item entry
+          // twice back to back with no anti-repeat guard possible -- a
+          // one-id pool gives pick() no other candidate. That is a
+          // coincidence of the warm-up/session-start handoff, not one of
+          // the plan's own intentional repeats (review handing straight to
+          // weak on the SAME id, or weak's own three-in-a-row, are both
+          // fine and left alone here since planProgress is no longer all
+          // zero by the time those run). Leave the plan unconsumed just
+          // this once; a normal task runs instead and moves lastItem on,
+          // so the plan's next call always succeeds.
+          const firstPlanTask = !planProgress.review && !planProgress.weak && !planProgress.apply && !planProgress.check;
+          if (!(firstPlanTask && stepIds.length === 1 && stepIds[0] === lastItem)) {
+            planKind = step.kind; planBlind = !!step.blind;
+            pool = stepIds; kind = stepIds.every(id => id[0] === 'c') ? 'chord' : 'one';
+          }
+        }
+      }
+    }
+    const t = { kind: kind, els: [], idx: 0, warm: warm, limit: d.limit || 8, ref: d.ref || 'none', blind: planBlind, t0: now(), done: false, revealed: false };
+    const mk = id => { S.tick++; it(id, modelNow).seen = S.tick; return { id: id, info: inf(id), failed: false, t0: 0, rt: 0, reveal: shouldReveal({ exposures: it(id, modelNow).reps }) && !planBlind }; };
     if (kind === 'one' || kind === 'chord' || kind === 'hold' || kind === 'hands') t.els.push(mk(pick(lastItem, pool, modelNow)));
-    else if (kind === 'seq') { let from = lastItem; for (let i = 0; i < (d.len || 2); i++) { const id = pick(from, pool, modelNow); t.els.push(mk(id)); from = id; } }
+    else if (kind === 'seq') { let from = lastItem; for (let i = 0; i < seqLen; i++) { const id = pick(from, pool, modelNow); t.els.push(mk(id)); from = id; } if (planApplyId && !t.els.some(e => e.id === planApplyId)) t.els[t.els.length - 1] = mk(planApplyId); }
     else if (kind === 'run') {
       const notes = pool.filter(id => id[0] === 'n' || id[0] === 'w'), start = pick(lastItem, notes, modelNow), pre = start[0], all = notes.map(id => +id.slice(1)).sort((a, b) => a - b), lo = all[0], hi = all[all.length - 1], white = [0, 2, 4, 5, 7, 9, 11];
       let m = +start.slice(1), dir = gate('runDir', 0.5) ? 1 : -1; if (white.indexOf(pc(m)) < 0) m++; const seq = [m];
@@ -1050,6 +1101,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
     else if (kind === 'kit') { const L = d.bars ? d : M.levels[S.tick % M.levels.length], b = L.bars[S.tick % L.bars.length]; S.tick++; t.kit = { metre: L.metre, bpm: d.bars ? L.bpm : L.bpm + 6 * (S.level - M.levels.length), swing: L.swing || 0, bar: b, name: L.name }; t.els = [{ id: 'kit', info: { label: L.name }, failed: false, t0: 0, rt: 0, reveal: false }]; }
     else if (kind === 'bar2') { const variants = d.bars || [[['qr']]], cells = variants[S.tick % variants.length]; S.tick++; t.rCells = cells; t.els = [{ id: 'bar2', info: { label: d.name }, failed: false, t0: 0, rt: 0, reveal: false }]; }
     if (M.input === 'answer') { t.kind = 'ear'; if (!t.els.length) t.els.push(mk(pick(lastItem, pool, modelNow))); const e = t.els[0], fam = pool.filter(id => id[0] === e.id[0] && (e.id[0] !== 'i' || id.slice(-1) === e.id.slice(-1))); t.choices = fam.slice().sort((a, b) => (inf(a).semi || 0) - (inf(b).semi || 0) || (a < b ? -1 : 1)); t.root = 55 + ((S.tick * 5) % 12); }
+    if (planKind) planProgress[planKind] = (planProgress[planKind] || 0) + 1;
     return t;
   }
 
@@ -1789,7 +1841,8 @@ import { register as registerPlayalong } from './ui/playalong.js';
     // Plan this sitting (review what's due, the weakest active skill, apply it, check it) --
     // pure, so it only needs today's active ids/items/events, not anything DOM/task-shaped.
     sessionPlan = planSession({ instrumentId: mod, level: S.level, activeIds: activeItems(mod, S.level), items: S.item, events: DB.events, now: modelNow, due: due });
-    msg += ' ' + describePlan(sessionPlan);
+    planProgress = { review: 0, weak: 0, apply: 0, check: 0 };
+    msg += ' ' + describePlan(sessionPlan, id => inf(id).short);
     playing = true; paused = false; $('playBtn').textContent = 'Pause'; $('endBtn').hidden = false; coach(msg); showAll(); wakeLock.acquire();
   }
   // logSession(): a panel (e.g. a song lesson) logs its own practice as a
@@ -2424,7 +2477,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
   }
   applyStaticLabels(document);
   loadDB(); if (!Array.isArray(DB.custom)) DB.custom = []; $('optNames').checked = DB.prefs.names; $('optTheme').value = DB.prefs.theme; applyTheme(DB.prefs.theme); $('optNoteSystem').value = DB.prefs.noteNaming.system; $('optAccidentals').value = DB.prefs.noteNaming.accidentals; buildPicker(); pickerAsSheet = hasSavedMod; setInstrumentSheetOpen(!hasSavedMod); buildNav(); setMod(mod); requestAnimationFrame(frame);
-  const hook = !__DEBUG_HOOK__ ? null : { state: () => S, db: () => DB, sess: () => sess, task: () => task, cur: cur, note: onNote, answer: answer, tap: onTap, bar: () => bar, playing: () => playing, setMod: setMod, testSource: testSource, heard: () => heard, yin: yin, cap: () => cap, tuner: () => tunerState, tunerLock: () => tunerLock, deaf: () => deafWindow.isDeaf(), deafUntil: () => deafWindow.until(), exportProgress: doExportProgress, importProgress: doImportProgress, audioNow: audioNow, modelNow: () => modelNow, plan: () => sessionPlan };
+  const hook = !__DEBUG_HOOK__ ? null : { state: () => S, db: () => DB, sess: () => sess, task: () => task, cur: cur, note: onNote, answer: answer, tap: onTap, bar: () => bar, playing: () => playing, setMod: setMod, testSource: testSource, heard: () => heard, yin: yin, cap: () => cap, tuner: () => tunerState, tunerLock: () => tunerLock, deaf: () => deafWindow.isDeaf(), deafUntil: () => deafWindow.until(), exportProgress: doExportProgress, importProgress: doImportProgress, audioNow: audioNow, modelNow: () => modelNow, plan: () => sessionPlan, planProgress: () => planProgress };
   // Debug-hook slots: replace ONLY your own line with
   //   if (__DEBUG_HOOK__) Object.assign(hook, { … });
   if (__DEBUG_HOOK__) Object.assign(hook, { errors: getErrors });
