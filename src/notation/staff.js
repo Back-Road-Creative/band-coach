@@ -20,6 +20,10 @@ function diatonicStep({ letter, octave }) {
 // Integer steps (half a line-space each) from the clef's bottom line.
 // 0 = bottom line, 8 = top line, negative = below the staff.
 export function staffPosition(note, clef) {
+  // Percussion notes aren't real pitches: a percussion "note" is a drum-key
+  // slot (src/notation/percussion.js's PERCUSSION_SLOTS) that already carries
+  // its own staff position, so there's no letter/octave to look up.
+  if (clef === 'percussion') return note.position;
   const ref = CLEF_BOTTOM_LINE[clef];
   if (!ref) throw new Error(`unknown clef: ${clef}`);
   return diatonicStep(note) - diatonicStep(ref);

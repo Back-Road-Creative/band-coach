@@ -44,7 +44,8 @@ export function layoutMeasure({ clef, key, time, notes, width }) {
   const [num, den] = time;
   const grand = clef === 'grand';
   const staves = grand ? ['treble', 'bass'] : [clef];
-  const altered = keyAccidentals(key);
+  // Percussion has no pitch, so no key signature and no accidentals.
+  const altered = clef === 'percussion' ? [] : keyAccidentals(key);
 
   const primitives = [];
 
@@ -101,6 +102,35 @@ export function layoutMeasure({ clef, key, time, notes, width }) {
     const info = durationInfo(note.dur);
     const nx = notesStartX + (onset / totalBeats) * (notesEndX - notesStartX);
     onset += note.dur;
+
+    // A percussion hit (or a stacked chord of hits, e.g. kick + hi-hat on the
+    // same beat): note.perc.hits carries one { position, notehead, stem, mark }
+    // per piece sounding at this onset (from src/notation/percussion.js).
+    // Simplification: a chord shares one stem rather than a per-voice stem.
+    if (note.perc) {
+      const s = clef; // percussion measures are never a grand staff
+      for (const hit of note.perc.hits) {
+        const position = staffPosition(hit, 'percussion');
+        const y = positionToY(staffBottomY[s], position);
+        primitives.push({ type: 'notehead', x: nx, y, filled: info.filled, shape: hit.notehead });
+        if (hit.mark === 'open') primitives.push({ type: 'notehead', x: nx, y: y - 10, filled: false, shape: 'circle' });
+        for (const ledgerPos of ledgerLines(position)) {
+          primitives.push({ type: 'ledger', x: nx, y: positionToY(staffBottomY[s], ledgerPos), length: LINE_GAP * 1.6 });
+        }
+      }
+      if (info.hasStem) {
+        const up = note.perc.stem !== 'down';
+        const positions = note.perc.hits.map((hit) => staffPosition(hit, 'percussion'));
+        const stemPosition = up ? Math.min(...positions) : Math.max(...positions);
+        const y = positionToY(staffBottomY[s], stemPosition);
+        const y2 = up ? y - STEM_LENGTH : y + STEM_LENGTH;
+        primitives.push({ type: 'stem', x: nx, y1: y, y2, up });
+        for (let f = 0; f < info.flags; f++) {
+          primitives.push({ type: 'flag', x: nx, y: y2 + (up ? f * STEP : -f * STEP), up });
+        }
+      }
+      continue;
+    }
 
     if (note.midi === null) {
       const s = grand ? 'treble' : clef;

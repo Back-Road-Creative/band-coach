@@ -3,8 +3,8 @@
 // worker, a save/print path with no <canvas> in reach). Geometry mirrors draw-canvas.js
 // primitive-for-primitive; keep the two in sync by hand when either changes.
 
-const CLEF_GLYPH = { treble: '\u{1D11E}', bass: '\u{1D122}', alto: '\u{1D121}', tenor: '\u{1D121}' };
-const CLEF_FALLBACK = { treble: 'G', bass: 'F', alto: 'C', tenor: 'C' };
+const CLEF_GLYPH = { treble: '\u{1D11E}', bass: '\u{1D122}', alto: '\u{1D121}', tenor: '\u{1D121}', percussion: '\u{1D125}' };
+const CLEF_FALLBACK = { treble: 'G', bass: 'F', alto: 'C', tenor: 'C', percussion: '||' };
 const ACCIDENTAL_GLYPH = { '#': '♯', b: '♭', '': '♮' };
 const ACCIDENTAL_FALLBACK = { '#': '#', b: 'b', '': 'n' };
 // Keyed by the rest's undotted duration in whole notes (layout.js's durationInfo `base`).
@@ -42,7 +42,15 @@ const DRAWERS = {
   barline: (p) => svgLine(p.x, p.y1, p.x, p.y2),
   stem: (p) => svgLine(p.x, p.y1, p.x, p.y2),
 
+  // Mirrors draw-canvas.js's notehead shapes: 'x' for cymbals/hi-hat/ride,
+  // 'circle' for the small open-hi-hat ring, else the usual oval.
   notehead: (p) => {
+    if (p.shape === 'x') {
+      return svgLine(p.x - 4, p.y - 4, p.x + 4, p.y + 4) + svgLine(p.x - 4, p.y + 4, p.x + 4, p.y - 4);
+    }
+    if (p.shape === 'circle') {
+      return `<circle cx="${p.x}" cy="${p.y}" r="2.5" fill="none" stroke="black"/>`;
+    }
     const fill = p.filled ? 'black' : 'none';
     const stroke = p.filled ? 'none' : 'black';
     return `<ellipse cx="${p.x}" cy="${p.y}" rx="5" ry="4" fill="${fill}" stroke="${stroke}" transform="rotate(${(-0.4 * 180) / Math.PI} ${p.x} ${p.y})"/>`;
