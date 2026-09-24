@@ -27,6 +27,7 @@ import { makeGrid, scoreTake, tempoLadder } from './core/groove.js';
 import { stepTuner } from './core/tuner.js';
 //
 import { shouldReveal, promptFor, hintFor as coreHintFor } from './core/reveal.js';
+import { gradeOutcome } from './core/grade-outcome.js';
 //
 import * as RHY from './core/rhythm.js';
 //
@@ -909,18 +910,23 @@ import { register as registerPlayalong } from './ui/playalong.js';
     const drop = acc30 === null ? 0 : c01((sess.best30 - acc30) / 0.25), slow = (rt === null || !sess.bestRt) ? 0 : c01((rt / Math.max(0.4, sess.bestRt) - 1.15) / 0.6);
     sess.F = 0.45 * drop + 0.25 * slow + 0.2 * c01((sess.sinceBreak / 60 - 12) / 18) + 0.1 * c01(sess.downs / 3); return sess.F;
   }
-  function credit(id, q, from, warm, rt) {
-    recent.push(q > 0 ? 1 : 0); if (recent.length > 20) recent.shift(); streak = q > 0 ? streak + 1 : 0;
+  function credit(id, q, from, warm, rt, outcome) {
     // A warm-up task is told "does not count" (see the hint text set at task
     // render: `t.warm ? 'Warm-up, does not count. ' : ''`, and the startSession()
     // coach message "First a short warm-up through what you know; it does not
     // count."), so it must not touch the spaced-repetition model either: no
     // S.item/S.trans write, and no S.judged/S.ready/session counters below.
     if (warm) return;
+    const out = outcome || gradeOutcome({ helped: false, assistance: null, q: q });
+    // A helped element (Show me) is not a test: no review, no streak, no
+    // level move, no judged count -- only the session's help counter moves.
+    // See src/core/grade-outcome.js.
+    if (!out.review) { sess.helped = (sess.helped || 0) + 1; return; }
+    recent.push(q > 0 ? 1 : 0); if (recent.length > 20) recent.shift(); streak = q > 0 ? streak + 1 : 0;
     const grade = GRADE_FOR_Q(q), before = it(id, modelNow);
     S.item[id] = Object.assign({ seen: before.seen }, review(before, { grade, now: modelNow }));
     if (from && from !== id) S.trans[from + '>' + id] = review(tr(from, id, modelNow), { grade, now: modelNow });
-    S.judged++; S.ready = clamp(S.ready + (q > 0 ? S.gain * q : -0.08), 0, 1);
+    S.judged++; if (out.level) S.ready = clamp(S.ready + (q > 0 ? S.gain * q : -0.08), 0, 1);
     sess.judged++; if (q > 0) sess.ok++; if (sess.first.length < 30) sess.first.push(q > 0 ? 1 : 0); sess.last.push(q > 0 ? 1 : 0); if (sess.last.length > 30) sess.last.shift();
     sess.w30.push(q > 0 ? 1 : 0); if (sess.w30.length > 30) sess.w30.shift(); sess.bestStreak = Math.max(sess.bestStreak, streak);
     if (q > 0 && rt) { sess.rts.push(rt); if (sess.rts.length > 14) sess.rts.shift(); }
@@ -1017,16 +1023,16 @@ import { register as registerPlayalong } from './ui/playalong.js';
 
   // ---------- judging ----------
   const timeQ = (rt, limit) => rt <= 0.4 * limit ? 1 : clamp(1 - 0.4 * (rt - 0.4 * limit) / (0.6 * limit), 0.6, 1);
-  function passEl(extraQ, msg) {
-    const e = cur(); e.rt = now() - e.t0; e.q = e.failed ? 0 : timeQ(e.rt, task.limit) * (extraQ === undefined ? 1 : extraQ); flashGood = performance.now(); lastInputAt = now();
-    if (!e.failed) say(msg || (inf(e.id).short + ': yes, in ' + e.rt.toFixed(1) + ' s.'), 'ok'); else say('That is the one. ' + inf(e.id).short + (e.info.string ? ' lives on string ' + e.info.string + (e.info.fret ? ', fret ' + e.info.fret : ', open') : '') + '.', '');
+  function passEl(extraQ, msg, assistance) {
+    const e = cur(); e.rt = now() - e.t0; e.q = e.failed ? 0 : timeQ(e.rt, task.limit) * (extraQ === undefined ? 1 : extraQ); if (assistance) e.assistance = assistance; flashGood = performance.now(); lastInputAt = now();
+    if (!e.failed && !e.helped) say(msg || (inf(e.id).short + ': yes, in ' + e.rt.toFixed(1) + ' s.'), 'ok'); else say('That is the one. ' + inf(e.id).short + (e.info.string ? ' lives on string ' + e.info.string + (e.info.fret ? ', fret ' + e.info.fret : ', open') : '') + '.', '');
     task.idx++; held = []; holdFor = 0; holdCents = []; wrongFor = 0;
     if (task.idx >= task.els.length) finishTask(); else { cur().t0 = now(); refreshPrompt(); }
   }
   function failEl(msg, confKey) { const e = cur(); if (!e) return; if (!e.failed) { e.failed = true; e.reveal = true; } if (confKey) S.conf[confKey] = (S.conf[confKey] || 0) + 1; flashBad = performance.now(); say(msg, 'no'); updateDesc(); }
   let finishTask = function () {
     task.done = true; let from = lastItem, anyFail = false;
-    task.els.forEach(e => { credit(e.id, e.q || 0, from, task.warm, e.rt); from = e.id; if (!(e.q > 0)) anyFail = true; });
+    task.els.forEach(e => { credit(e.id, e.q || 0, from, task.warm, e.rt, gradeOutcome({ helped: !!e.helped, failed: !!e.failed, assistance: e.assistance || null, q: e.q || 0 })); from = e.id; if (!(e.q > 0)) anyFail = true; });
     lastItem = from; nextTaskAt = now() + (anyFail ? 1.5 : 0.7); if (task.kind === 'ear') nextTaskAt = now() + (anyFail ? 2.6 : 1.1); save(); showAll();
   };
   function dirWord(got, want) { let d = ((pc(want) - pc(got)) + 12) % 12; if (d > 6) d -= 12; return d > 0 ? 'higher' : 'lower'; }
@@ -1046,7 +1052,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
     if (i.kind === 'chord') { if (!exact) return; held.push({ p: pc(midi), t: now() }); held = held.filter(x => now() - x.t < 1.5); const got = {}; held.forEach(x => { got[x.p] = 1; }); if (i.pcs.indexOf(pc(midi)) < 0) { failEl(nname(midi) + ' is not in ' + i.label + ' (' + i.pcs.map(x => NAMES[x]).join(', ') + ').', e.id + '>x' + pc(midi)); held = []; return; } if (i.pcs.every(x => got[x])) passEl(); return; }
     if (i.kind === 'hands-together') {
       const ex = i.ex;
-      if (!exact) { const g = gradeHandsTogetherApprox(ex, midi); if (!g.ok) { failEl(nname(midi) + ' is not part of ' + ex.short + ' (approximate: a microphone only hears one note at a time).', e.id + '>xa' + midi); return; } passEl(0.7, 'Approximate (one note heard, microphone): ' + (g.hand === 'rh' ? 'right' : 'left') + ' hand, ' + nname(midi) + '. Connect a MIDI keyboard to grade both hands together.'); return; }
+      if (!exact) { const g = gradeHandsTogetherApprox(ex, midi); if (!g.ok) { failEl(nname(midi) + ' is not part of ' + ex.short + ' (approximate: a microphone only hears one note at a time).', e.id + '>xa' + midi); return; } passEl(0.7, 'Approximate (one note heard, microphone): ' + (g.hand === 'rh' ? 'right' : 'left') + ' hand, ' + nname(midi) + '. Connect a MIDI keyboard to grade both hands together.', 'approximate'); return; }
       // Real MIDI: heldMidis comes from actual note-on/note-off state
       // (realMidiHeld, kept current by handleMidiMessage below), so holding a
       // chord for longer than the old 0.6s note-on timer window still
@@ -1796,7 +1802,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
   cv.addEventListener('keydown', ev => { if (mod !== 'kbd') return; const order = kbdOrder(); if (!order.length) return; if (ev.key === 'ArrowRight' || ev.key === 'ArrowUp') { ev.preventDefault(); kbdFocusIdx = Math.min(order.length - 1, kbdFocusIdx + 1); } else if (ev.key === 'ArrowLeft' || ev.key === 'ArrowDown') { ev.preventDefault(); kbdFocusIdx = Math.max(0, kbdFocusIdx - 1); } else if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); const k = order[Math.min(kbdFocusIdx, order.length - 1)]; if (k) { ensureAudio(); tone(k.m, now() + 0.01, 0.5, 0.15); onNote(k.m, true); } } });
   $('tapPad').addEventListener('pointerdown', ev => { ev.preventDefault(); ensureAudio(); onTap(ev); });
   $('replayBtn').addEventListener('click', function () { this.blur(); if (task && !task.done) { playRef(task); lastInputAt = now(); } });
-  $('showMeBtn').addEventListener('click', function () { this.blur(); const e = cur(); if (!task || task.done || !e) return; if (!e.failed) { e.failed = true; e.reveal = true; } say('Shown. This one will not count toward mastery.', ''); refreshPrompt(); });
+  $('showMeBtn').addEventListener('click', function () { this.blur(); const e = cur(); if (!task || task.done || !e) return; if (!e.failed && !e.helped) { e.helped = true; e.reveal = true; } say('Shown. This one is help, not a test: no credit and no penalty.', ''); refreshPrompt(); });
   $('playBtn').addEventListener('click', function () { this.blur(); if (!sess) startSession(); else if (paused) resume(); else takeBreak('user'); });
   $('endBtn').addEventListener('click', function () { this.blur(); endSession(); }); $('endBtn2').addEventListener('click', endSession); $('backBtn').addEventListener('click', resume);
   $('snoozeBtn').addEventListener('click', () => { sess.snoozeUntil = Date.now() + 5 * 60000; sess.tiredFor = 0; S.ready = Math.min(S.ready, 0.6); pauseInfo = { at: Date.now(), secs: 0 }; resume(); coach('Five more minutes, then I will ask again. I have eased off the pace meanwhile.'); });
