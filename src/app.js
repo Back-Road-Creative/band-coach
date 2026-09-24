@@ -1035,12 +1035,28 @@ import { register as registerPlayalong } from './ui/playalong.js';
     // true above the plan is left untouched, so it resumes exactly where it
     // left off once the warm-up run ends.
     let planKind = null, planBlind = !!d.blind, seqLen = d.len || 2, planApplyId = null;
-    if (!warm && sessionPlan && sessionPlan.length) {
+    // The plan only ever steers a pitched-item drill (one/chord/seq, or a
+    // mix level that draws from those) with a real answer to give -- ear
+    // training (M.input === 'answer') and the non-pitched level kinds
+    // (hands, bar, kit, bar2, run, hold) build their own items/choices from
+    // this level's own pool and must come out of buildLevelTask untouched,
+    // never forced into a plan-shaped 'one'/'chord'/'seq' task.
+    const planEligible = !warm && M.input !== 'answer' && (d.task === 'one' || d.task === 'chord' || d.task === 'seq' || d.task === 'mix' || !d.task);
+    if (planEligible && sessionPlan && sessionPlan.length) {
       const step = nextPlanStep(sessionPlan, planProgress);
       if (step) {
-        if (step.kind === 'apply') { planKind = step.kind; planBlind = !!step.blind; kind = 'seq'; seqLen = 3; planApplyId = step.ids[0]; }
+        // Every plan step's ids are filtered to this level's OWN current
+        // pool (poolFor(dd), computed above), never the wider activeItems
+        // list -- an id the level itself would never hand out is not one
+        // the plan may force on it either. An empty result after that
+        // filter just means this step has nothing this level can use right
+        // now: consume it (advance planProgress) and fall through to the
+        // level's ordinary chooser for this one task, same as if no plan
+        // were active.
+        const stepIds = step.ids.filter(id => pool.indexOf(id) >= 0);
+        if (!stepIds.length) { planProgress[step.kind] = (planProgress[step.kind] || 0) + 1; }
+        else if (step.kind === 'apply') { planKind = step.kind; planBlind = !!step.blind; kind = 'seq'; seqLen = 3; planApplyId = stepIds[0]; }
         else {
-          const act = activeItems(mod, S.level), stepIds = step.ids.filter(id => act.indexOf(id) >= 0);
           // The plan's very first task of the session landing on a single-id
           // pool that is exactly whatever task (warm-up, or none) just
           // finished would force mk() below to touch that S.item entry
@@ -1056,7 +1072,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
           const firstPlanTask = !planProgress.review && !planProgress.weak && !planProgress.apply && !planProgress.check;
           if (!(firstPlanTask && stepIds.length === 1 && stepIds[0] === lastItem)) {
             planKind = step.kind; planBlind = !!step.blind;
-            if (stepIds.length) { pool = stepIds; kind = stepIds.every(id => id[0] === 'c') ? 'chord' : 'one'; }
+            pool = stepIds; kind = stepIds.every(id => id[0] === 'c') ? 'chord' : 'one';
           }
         }
       }
