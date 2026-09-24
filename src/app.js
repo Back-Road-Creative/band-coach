@@ -1049,7 +1049,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
   // so a panel's say() would be invisible. Mirror it into the panel's own
   // status line whenever one is open.
   const say = (t, cls) => { const f = $('feedback'); f.textContent = t; f.className = cls || ''; $('feedbackCard').hidden = !t; const p = $('panelSay'); if (p) { p.textContent = panels.current() ? t : ''; p.className = 'panel-say ' + (cls || ''); } };
-  const coach = t => { $('coach').textContent = t; };
+  const coach = t => { $('coach').textContent = t; if (!$('settingsView').hidden) $('settingsSay').textContent = t; };
   const cur = () => task && task.els[task.idx];
   let pressed = {}, heard = null, held = [], holdFor = 0, holdCents = [], wrongFor = 0, lastFired = -1, stableN = 0, stableMidi = -1, released = true, flashBad = -1e12, flashGood = -1e12;
   // Field report: a strummed chord on a single-note item clears no gate the
@@ -2345,14 +2345,24 @@ import { register as registerPlayalong } from './ui/playalong.js';
     if (sess) endSession(); task = null;
     const panelDisclosure = $('panelPickerDisclosure'); if (panelDisclosure) panelDisclosure.open = true;
     document.querySelectorAll('#panelPicker button, #picker button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.panel === id)));
-    $('mainArea').hidden = true; $('panelHost').hidden = false; $('panelSay').textContent = ''; $('panelSay').hidden = false;
+    $('settingsView').hidden = true; $('mainArea').hidden = true; $('panelHost').hidden = false; $('panelSay').textContent = ''; $('panelSay').hidden = false;
     try { panels.open(id, $('panelHost'), panelApi); } catch (e) { recordError('panel:' + id, e); say('That screen could not open.', 'no'); }
     updateNavState();
   }
   function closePanel() {
-    if (!panels.current()) { updateNavState(); return; }
+    $('settingsView').hidden = true;
+    if (!panels.current()) { $('mainArea').hidden = false; updateNavState(); return; }
     panels.close(); $('panelHost').hidden = true; $('panelSay').hidden = true; $('mainArea').hidden = false;
     document.querySelectorAll('#panelPicker button').forEach(b => b.setAttribute('aria-pressed', 'false'));
+    updateNavState();
+  }
+  // P2b-2: Settings is a fourth real nav destination (unlike Instrument,
+  // it claims aria-current) that shows #settingsView instead of a panel --
+  // closePanel() first so any open panel (Songs/Progress/etc) is shut the
+  // same way Practice shuts it, then #settingsView replaces #mainArea.
+  function openSettings() {
+    closePanel();
+    $('mainArea').hidden = true; $('panelHost').hidden = true; $('settingsView').hidden = false;
     updateNavState();
   }
   // P2a: maps the currently open panel (if any) onto one of the nav's three
@@ -2361,8 +2371,11 @@ import { register as registerPlayalong } from './ui/playalong.js';
   // reached only through the old picker) means no destination is "current",
   // same as a screen the nav doesn't know about.
   function navDestFor(panelId) { return panelId === 'songs' ? 'songs' : panelId === 'history' ? 'progress' : panelId ? null : 'practice'; }
+  // P2b-2: Settings isn't a panel (panels.current() knows nothing about it),
+  // so the nav's notion of "current" has to check #settingsView first.
+  function currentDest() { return !$('settingsView').hidden ? 'settings' : navDestFor(panels.current()); }
   function updateNavState() {
-    const dest = navDestFor(panels.current());
+    const dest = currentDest();
     document.querySelectorAll('#mainNav button[data-route]').forEach(b => { if (b.dataset.route === dest) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
   }
   // routeTo() is the nav bar's only entry point: 'practice' closes whatever
@@ -2379,8 +2392,9 @@ import { register as registerPlayalong } from './ui/playalong.js';
   const NAV_PANEL_FOR = { songs: 'songs', progress: 'history' };
   function routeTo(dest) {
     if (dest === 'instrument') { setInstrumentSheetOpen($('picker').hidden); return; }
-    if (dest === navDestFor(panels.current())) return;
+    if (dest === currentDest()) return;
     if (dest === 'practice') { closePanel(); return; }
+    if (dest === 'settings') { openSettings(); return; }
     const panelId = NAV_PANEL_FOR[dest]; if (!panelId) return;
     openPanel(panelId);
   }
