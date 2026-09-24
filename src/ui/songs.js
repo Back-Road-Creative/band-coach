@@ -450,6 +450,13 @@ function mountSongsPanel(hostEl, api) {
   const addSongHeading = el('h3', { text: 'Add a song', tabindex: '-1' });
   const importLabel = el('label', { for: 'songsFileInput', text: ADD_HELP_LINE });
   const importInput = el('input', { type: 'file', id: 'songsFileInput', accept: ADD_ACCEPT });
+  // P3-12: moved from Edit notes' own file-import path (src/ui/editor.js) --
+  // off by default, since multipitch detection (src/song/transcribe.js's
+  // opts.polyphonic) costs real accuracy on a single clean melody line, so a
+  // learner importing just one instrument should get the plain monophonic
+  // path unless they ask for more.
+  const polyphonicLabel = el('label', { for: 'songsPolyphonic', text: 'More than one note at a time' });
+  const polyphonicCheckbox = el('input', { type: 'checkbox', id: 'songsPolyphonic' });
   const importMsg = el('div', { class: 'panel-songs-msg', role: 'status' });
   // Read-only part assignments from the last imported band pack -- one line
   // per song that carries an assignment (a song with no assignment gets no
@@ -491,7 +498,8 @@ function mountSongsPanel(hostEl, api) {
   });
 
   const addSongSection = el('section', { class: 'add-song-section', hidden: 'hidden', 'aria-label': 'Add a song' }, [
-    addSongHeading, door.el, importLabel, importInput, addSongCancelBtn, importMsg, bandPackPartsEl, resultEl,
+    addSongHeading, door.el, importLabel, importInput, polyphonicLabel, polyphonicCheckbox,
+    addSongCancelBtn, importMsg, bandPackPartsEl, resultEl,
   ]);
   hostEl.appendChild(addSongSection);
 
@@ -1568,7 +1576,10 @@ function mountSongsPanel(hostEl, api) {
       const gen = door.generation();
       let result;
       try {
-        result = await transcribeAudioFile(file, api, { isStale: () => destroyed || door.generation() !== gen });
+        result = await transcribeAudioFile(file, api, {
+          isStale: () => destroyed || door.generation() !== gen,
+          polyphonic: polyphonicCheckbox.checked,
+        });
       } catch (e) {
         analysing = false;
         addSongCancelBtn.hidden = true;

@@ -4,6 +4,12 @@
 // of raw pitch frames instead of depending on the fake microphone device to
 // produce a detectable tone, so the transcription this asserts on is
 // deterministic.
+// P3-12: recording itself (mic and file) moved to Songs -> Add a song
+// (src/ui/songs/record-door.js) -- editorSetFrames/editorRecording moved
+// with it (same window.__coach hook names, src/app.js), so recordFrames()
+// below now opens Songs, records through the door, then reaches Edit notes
+// via the review's "Edit notes" ("Fix it up") button, same as a learner
+// would.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { HTML_PATH } from '../helpers/html-path.mjs';
@@ -21,27 +27,41 @@ async function openEditor(page) {
   await page.waitFor("window.__coach.panelOpen() === 'editor'");
 }
 
+async function openAddSongSection(page) {
+  await page.evaluate("window.__coach.openPanel('songs')");
+  await page.waitFor("document.querySelector('.add-song-row')");
+  await page.evaluate(
+    "Array.from(document.querySelectorAll('.add-song-row button')).find(b => b.textContent.trim() === 'Add a song').click()",
+  );
+  await page.waitFor("!!document.querySelector('.panel-songs-record-btn')");
+}
+
+// Records through the Songs door, reviews, then "Edit notes" into the
+// editor with the check list already showing.
 async function recordFrames(page, frames) {
+  await openAddSongSection(page);
   await page.evaluate(`window.__coach.editorSetFrames(${JSON.stringify(frames)})`);
-  await page.evaluate("document.getElementById('editorListenBtn').click()");
+  await page.evaluate("document.querySelector('.panel-songs-record-btn').click()");
   await page.waitFor('window.__coach.editorRecording()');
-  await page.evaluate("document.getElementById('editorListenBtn').click()");
+  await page.evaluate("document.querySelector('.panel-songs-record-btn').click()");
+  await page.waitFor("document.querySelector('.panel-learn-result').hidden === false");
+  await page.evaluate("document.querySelector('.panel-learn-fixitup-btn').click()");
+  await page.waitFor("window.__coach.panelOpen() === 'editor'");
   await page.waitFor("document.getElementById('editorCheck').hidden === false");
 }
 
-test('opens as a registered panel with the record controls visible', async (t) => {
+test('opens with no record controls -- recording happens in Add a song now', async (t) => {
   const page = await launchPage(HTML_PATH);
   t.after(() => page.close());
   await openEditor(page);
-  assert.equal(await page.evaluate("!!document.getElementById('editorListenBtn')"), true);
-  assert.equal(await page.evaluate("document.getElementById('editorListenBtn').textContent"), 'Listen');
+  assert.equal(await page.evaluate("!!document.getElementById('editorListenBtn')"), false, 'no Listen button');
+  assert.equal(await page.evaluate("!!document.getElementById('editorFileInput')"), false, 'no file input');
   assert.equal(await page.evaluate("document.getElementById('editorSaveBtn').disabled"), true, 'save is disabled before anything is transcribed');
 });
 
 test('Listen/Stop transcribes the captured frames and gates practise/save behind the needsCheck list', async (t) => {
   const page = await launchPage(HTML_PATH);
   t.after(() => page.close());
-  await openEditor(page);
 
   await recordFrames(page, TWO_NOTE_FRAMES);
 
@@ -56,60 +76,68 @@ test('Listen/Stop transcribes the captured frames and gates practise/save behind
   assert.equal(await page.evaluate("document.getElementById('editorPlayBtn').disabled"), false, 'acknowledging the check list unlocks play');
 });
 
-test('Stop shows "Working it out..." before the transcription result overwrites it, and Listen is disabled meanwhile', async (t) => {
+test('Stop shows "Working it out..." before the transcription result overwrites it', async (t) => {
   const page = await launchPage(HTML_PATH);
   t.after(() => page.close());
-  await openEditor(page);
+  await openAddSongSection(page);
 
   await page.evaluate(`window.__coach.editorSetFrames(${JSON.stringify(TWO_NOTE_FRAMES)})`);
-  await page.evaluate("document.getElementById('editorListenBtn').click()");
+  await page.evaluate("document.querySelector('.panel-songs-record-btn').click()");
   await page.waitFor('window.__coach.editorRecording()');
 
   // click() and the read happen inside the SAME Runtime.evaluate call, with
   // no CDP round trip between them, so this genuinely observes what the
   // click handler did synchronously before its first await -- transcribe()
-  // (synchronous CPU work) must not have run yet. Before the fix, Stop set
-  // "Working it out..." and then called transcribe() in the very same task,
-  // so this would already read the transcription's own status text instead.
+  // (synchronous CPU work) must not have run yet. Before the original fix
+  // (src/ui/editor.js, pre-P3-12), Stop set "Working it out..." and then
+  // called transcribe() in the very same task, so this would already read
+  // the transcription's own status text instead.
+  // P3-12: moved to the Songs record door (src/ui/songs/record-door.js);
+  // the status is the caller's own say() line (src/ui/songs.js) and the
+  // button is the door's Record button, which the door disables across the
+  // paint yield exactly as editor.js's Listen used to be.
   const rightAfterClick = await page.evaluate(`(function(){
-    document.getElementById('editorListenBtn').click();
+    document.querySelector('.panel-songs-record-btn').click();
     return {
-      status: document.querySelector('.editor-status').textContent,
-      disabled: document.getElementById('editorListenBtn').disabled,
+      status: document.querySelector('.panel-songs-msg').textContent,
+      disabled: document.querySelector('.panel-songs-record-btn').disabled,
     };
   })()`);
   assert.equal(rightAfterClick.status, 'Working it out…', 'the "Working it out..." status must be set (and get a chance to paint) before transcribe() runs');
-  assert.equal(rightAfterClick.disabled, true, 'Listen must be disabled while the capture is being worked out, so a second tap cannot race the same transcribe');
+  assert.equal(rightAfterClick.disabled, true, 'Record must be disabled while the take is being worked out, so a second tap cannot start a new recording over this one');
 
-  await page.waitFor("document.getElementById('editorCheck').hidden === false");
-  assert.equal(await page.evaluate("document.getElementById('editorListenBtn').disabled"), false, 'Listen must re-enable once the transcription has landed');
+  await page.waitFor("document.querySelector('.panel-learn-result').hidden === false");
+  assert.equal(await page.evaluate("document.querySelector('.panel-songs-record-btn').disabled"), false, 'Record must re-enable once the take has landed');
 });
 
-test('a double-tapped Listen click cannot leave the mic-polling interval running after Stop', async (t) => {
+test('a double-tapped Record click cannot leave the mic-polling interval running after Stop', async (t) => {
   const page = await launchPage(HTML_PATH);
   t.after(() => page.close());
-  await openEditor(page);
+  await openAddSongSection(page);
+  await page.evaluate(`window.__coach.editorSetFrames(${JSON.stringify(TWO_NOTE_FRAMES)})`);
 
   // Two rapid taps before openMic() has had a chance to resolve -- the real
-  // defect this guards: without the fix the second tap opened a second,
-  // un-clearable interval that kept polling (and appending frames) even
-  // after Stop closed the panel down.
+  // defect this guards (src/ui/editor.js's original Listen/Stop, before
+  // P3-12 moved recording here): without the fix the second tap opened a
+  // second, un-clearable interval that kept polling (and appending frames)
+  // even after Stop closed the panel down. The door's own startMicRecording
+  // guard (`if (counting || recording) return;`, set synchronously before
+  // its first await) is what src/ui/songs/record-door.js carries forward.
   await page.evaluate(`(function(){
-    const b = document.getElementById('editorListenBtn');
+    const b = document.querySelector('.panel-songs-record-btn');
     b.click();
     b.click();
   })()`);
   await page.waitFor('window.__coach.editorRecording()');
 
-  await page.evaluate("document.getElementById('editorListenBtn').click()");
-  await page.waitFor("document.getElementById('editorCheck').hidden === false");
+  await page.evaluate("document.querySelector('.panel-songs-record-btn').click()");
+  await page.waitFor("document.querySelector('.panel-learn-result').hidden === false");
   assert.equal(await page.evaluate("window.__coach.editorRecording()"), false, 'no interval should still be running once Stop has finished');
 });
 
 test('keyboard: arrow keys select and move a note, +/- repitches, Delete removes, Ctrl+Z undoes', async (t) => {
   const page = await launchPage(HTML_PATH);
   t.after(() => page.close());
-  await openEditor(page);
   await recordFrames(page, TWO_NOTE_FRAMES);
   await page.evaluate("document.getElementById('editorAck').click()");
 
@@ -145,7 +173,6 @@ test('keyboard: arrow keys select and move a note, +/- repitches, Delete removes
 test('save validates and stores the song in the shared library', async (t) => {
   const page = await launchPage(HTML_PATH);
   t.after(() => page.close());
-  await openEditor(page);
   await recordFrames(page, TWO_NOTE_FRAMES);
   await page.evaluate("document.getElementById('editorAck').click()");
   await page.evaluate("document.getElementById('editorTitle').value = 'My Test Tune'");

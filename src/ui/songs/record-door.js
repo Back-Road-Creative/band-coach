@@ -58,6 +58,10 @@ function titleFromFileName(fileName) {
 // before it finished, instead of transcribing and saving it anyway. Learn
 // this's own 2-arg call (no opts) is unaffected -- isStale defaults to
 // nothing, so nothing is ever checked there.
+// P3-12: `opts.polyphonic` (boolean), when true, hands transcribe() the same
+// { pcm, sampleRate } shape src/ui/editor.js's own file-import path used to
+// pass -- multipitch detection for a file carrying more than one note at a
+// time, now read from Songs' #songsPolyphonic checkbox instead.
 export async function transcribeAudioFile(file, api, opts = {}) {
   const isStale = typeof opts.isStale === 'function' ? opts.isStale : null;
   const actx = typeof api.audio === 'function' ? api.audio() : null;
@@ -69,8 +73,25 @@ export async function transcribeAudioFile(file, api, opts = {}) {
   const pcm = mixToMono(channels);
   const { fmin, fmax } = rangeForInstrument(typeof api.instrument === 'function' ? api.instrument() : null);
   const { frames, onsets } = framesFromPCM(pcm, audioBuffer.sampleRate, { fmin, fmax });
-  const result = transcribe(frames, { title: titleFromFileName(file.name), onsets });
+  const polyphonic = opts.polyphonic ? { pcm, sampleRate: audioBuffer.sampleRate } : undefined;
+  const result = transcribe(frames, { title: titleFromFileName(file.name), onsets, polyphonic });
   return { ...result, rec: { pcm, sampleRate: audioBuffer.sampleRate, duration: audioBuffer.duration, fileName: file.name } };
+}
+
+// P3-12: same debug seams src/ui/editor.js's own Listen/Stop used to carry
+// (window.__coach.editorSetFrames/editorRecording) -- moved here now that
+// this door, not the editor panel, is the only place a learner records.
+// Only one door is ever mounted (learn.js's own copy retired in P3-6), so a
+// module-level pointer is enough, same precedent as editor.js's debugRecorder.
+let debugFrames = null;
+export function __setDebugFrames(frames) {
+  debugFrames = frames;
+}
+
+let debugRecorder = null;
+let debugIsRecording = () => false;
+export function __isRecording() {
+  return !!(debugRecorder && debugRecorder.listening && debugIsRecording());
 }
 
 // createRecordDoor(api, { onTake, say, idPrefix }): builds the mic section
@@ -90,6 +111,8 @@ export function createRecordDoor(api, { onTake, say, onStart, idPrefix = 'learn'
   // frame recorder "Record a tune" drives) against this door's own panelApi,
   // so the capture itself is not reimplemented here.
   const recorder = createRecorder(api);
+  debugRecorder = recorder;
+  debugIsRecording = () => recording;
   const micSection = el('div', { class: `panel-${idPrefix}-mic` });
   micSection.appendChild(el('h4', { text: 'Or sing, hum or play into the mic' }));
   const bpmId = `${idPrefix}Bpm`;
@@ -270,12 +293,29 @@ export function createRecordDoor(api, { onTake, say, onStart, idPrefix = 'learn'
   async function stopMicRecording() {
     if (counting) { clearCountInTimers(); resetMicUi(); say(''); return; }
     if (!recording) return;
-    const frames = recorder.stop();
+    // P3-12: the same window.__coach.editorSetFrames escape hatch editor.js's
+    // Listen/Stop used to carry (src/ui/editor.js's own debugFrames comment) --
+    // recorder.stop() always runs, for its real side effects (releasing the
+    // mic, clearing recorder.listening), but a test-supplied frame set
+    // overrides what actually reaches transcribe().
+    const captured = recorder.stop();
+    const frames = debugFrames !== null ? debugFrames : captured;
+    debugFrames = null;
     stopTakeCapture();
     const rec = takeAccumulator ? { ...takeAccumulator.finish(), fileName: 'My recording' } : null;
     takeAccumulator = null;
     resetMicUi();
+    // Disabled across the yield below (and the async onTake) so a tap landing
+    // in this gap cannot start a new recording over the one still being
+    // worked out -- the same guard editor.js's Listen carried before P3-12
+    // moved recording here; re-enabled in the finally once the take landed.
+    recordBtn.disabled = true;
     say('Working it out…');
+    // One task yield so the browser actually paints "Working it out…" before
+    // transcribe() -- synchronous CPU work -- runs; without it the status
+    // text would be overwritten by the very same task (same precedent as
+    // src/ui/editor.js's own Listen/Stop handler before P3-12 moved it here).
+    await new Promise((resolve) => setTimeout(resolve, 0));
     try {
       const { song, report } = transcribe(frames, { title: 'My recording' });
       const notes = song.parts[0] ? song.parts[0].notes : [];
@@ -289,6 +329,8 @@ export function createRecordDoor(api, { onTake, say, onStart, idPrefix = 'learn'
     } catch (e) {
       if (typeof api.recordError === 'function') api.recordError('learn:mic', e);
       say('That recording could not be analysed. Try again, or drop a recording instead.');
+    } finally {
+      recordBtn.disabled = false;
     }
   }
 

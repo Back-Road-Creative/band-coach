@@ -217,16 +217,19 @@ are done.
 
 `src/audio/file-frames.js` is a pure function, `framesFromPCM`, that walks a decoded mono audio
 clip (a plain `Float32Array` of samples plus its real sample rate) and produces the same
-`frames`/`onsets` shape `src/song/transcribe.js` already reads from a live "Record a tune" mic
-capture — so it feeds transcribe.js exactly the way a live capture does, teaching that module
-nothing new. The "Record a tune" panel wires this in directly: alongside Listen/Stop, "Or choose
-an audio file" lets a learner pick a recording instead of using the microphone, and it goes
-through the same check-list step before anything can be practised or saved. Like the rest of this
+`frames`/`onsets` shape `src/song/transcribe.js` already reads from a live mic capture — so it
+feeds transcribe.js exactly the way a live capture does, teaching that module nothing new. Songs'
+own "Add a song" section wires this in directly (`src/ui/songs/record-door.js`'s
+`transcribeAudioFile`): its file input lets a learner pick a recording instead of using the
+microphone, and it goes through the same check-list step before anything can be practised or
+saved — recording and file import both happen only there now; "Record a tune" (`src/ui/editor.js`)
+edits an already-transcribed song and carries no record controls of its own. Like the rest of this
 app's pitch tracking, it is monophonic by default: a chord or a second voice reads as whichever
 single pitch the detector locks onto, not as separate notes — so this writes down one melody line
 at a time, from a file the same as from the mic — unless "More than one note at a time" is
 checked, in which case a multipitch detector (`src/audio/analysis/multipitch.js`) splits the file
-into a melody/bass/inner part per voice it hears, each shown as its own labelled lane.
+into a melody/bass/inner part per voice it hears, each shown as its own labelled lane once opened
+for editing.
 
 Both frame sources (`framesFromPCM` and `record.js`'s `sampleFrame`) only ever emit a frame for a
 window the tracker actually heard clearly — a rest is simply the absence of a frame, never a fake
@@ -271,7 +274,8 @@ pack — one input, one help line naming every accepted extension (`ADD_ACCEPT`/
 `src/ui/songs/add-source.js`). A recording or a score lands on the same review screen "Learn this"
 shows (`src/ui/songs/review.js`) without leaving Songs: "Practise this" opens the lesson (a
 multi-part song shows its part choice first), "Edit notes" (was "Fix it up") opens "Record a tune"
-with the song loaded, and "Play along with this recording" appears whenever a decoded audio buffer
+with the song loaded — recording and file import happen only in Add a song; "Record a tune" only
+edits — and "Play along with this recording" appears whenever a decoded audio buffer
 exists. The review also lets you hear what was recorded next to what it turned into: **Play
 original** plays the actual decoded recording back (only where one exists — a file, or now a mic
 take too, since the mic door captures raw PCM alongside its usual pitch frames), and **Play

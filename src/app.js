@@ -56,7 +56,8 @@ import { estimateRange, classify, exerciseRangeFor, tonicFromRange } from './ins
 // slot:import:w-songs
 import { register as registerSongs, forwardNote as forwardSongNote, requestOpenSong } from './ui/songs.js';
 import { itemIdForMidi } from './ui/songs/mastery.js';
-import { register as registerEditor, __setDebugFrames, __getDebugSong, __isRecording } from './ui/editor.js';
+import { __setDebugFrames as __editorSetDebugFrames, __isRecording as __editorIsRecording } from './ui/songs/record-door.js';
+import { register as registerEditor, __getDebugSong } from './ui/editor.js';
 //
 //
 import { registerEar, __earTestHook } from './ui/ear.js';
@@ -2520,7 +2521,11 @@ import { register as registerPlayalong } from './ui/playalong.js';
   // slot:hook:w-songs
   if (__DEBUG_HOOK__) Object.assign(hook, { songsNote: forwardSongNote });
   //
-  if (__DEBUG_HOOK__) Object.assign(hook, { editorSetFrames: __setDebugFrames, editorSong: __getDebugSong, editorRecording: __isRecording });
+  // P3-12: the recording debug seams now live in the Songs record door
+  // (src/ui/songs/record-door.js), not the editor panel; the hook's own
+  // names (editorSetFrames/editorRecording) are unchanged so tests change
+  // little.
+  if (__DEBUG_HOOK__) Object.assign(hook, { editorSetFrames: __editorSetDebugFrames, editorSong: __getDebugSong, editorRecording: __editorIsRecording });
   //
   //
   if (__DEBUG_HOOK__) Object.assign(hook, { ear: __earTestHook });
