@@ -514,6 +514,34 @@ async function launchPageOnce(htmlPath, options = {}) {
     await send('Emulation.setDeviceMetricsOverride', { width, height, mobile, deviceScaleFactor, screenWidth: width, screenHeight: height });
   }
 
+  // Dispatches a real keyDown+keyUp pair over CDP's Input domain -- the same
+  // physical event stream a real keyboard produces, so a journey test can
+  // reach and activate controls with Tab/Enter/Space alone and never fall
+  // back to `.click()`. `key` is the DOM key name ('Tab', 'Enter', ' ' for
+  // Space); `text` (only needed for a character the page's own keypress
+  // handler reads) and `modifiers` (CDP's bitmask: Alt 1, Ctrl 2, Meta 4,
+  // Shift 8) default to what a plain, unmodified press sends. Chrome's
+  // Input.dispatchKeyEvent also wants `windowsVirtualKeyCode` for the keys
+  // this suite presses -- Tab 9, Enter 13, Space 32 -- so callers that name
+  // one of those three get it filled in for free.
+  // Chrome only runs a key's native default action (a focused button's
+  // Enter/Space activation, Tab moving focus) off a 'keyDown' event that
+  // ALSO carries the character it produces as `text` -- the same shape
+  // Puppeteer's own keyboard.press() sends. Measured directly against this
+  // build: 'keyDown' with no `text` (or CDP's 'rawKeyDown') left a focused
+  // #playBtn un-clicked and #picker still open on Enter; adding `text`
+  // fixed it. Tab produces no character of its own but still needs an
+  // explicit empty `text` marker for the same reason -- Chrome otherwise
+  // treats the event as a no-op key with nothing to act on.
+  const VIRTUAL_KEY_CODES = { Tab: 9, Enter: 13, ' ': 32 };
+  const DEFAULT_TEXT = { Tab: '', Enter: '\r', ' ': ' ' };
+  async function press(key, { text = DEFAULT_TEXT[key] ?? '', modifiers = 0 } = {}) {
+    const windowsVirtualKeyCode = VIRTUAL_KEY_CODES[key];
+    const base = { key, code: key === ' ' ? 'Space' : key, modifiers, windowsVirtualKeyCode, nativeVirtualKeyCode: windowsVirtualKeyCode };
+    await send('Input.dispatchKeyEvent', { type: 'keyDown', text, unmodifiedText: text, ...base });
+    await send('Input.dispatchKeyEvent', { type: 'keyUp', ...base });
+  }
+
   // Captures the current viewport as a PNG and writes it to `outputPath`,
   // creating any missing parent directory (dist/ may not exist yet on a
   // clean checkout). `Page.captureScreenshot` returns base64; there is no
@@ -559,6 +587,7 @@ async function launchPageOnce(htmlPath, options = {}) {
     waitFor,
     setFileInput,
     setViewport,
+    press,
     screenshot,
     close,
     consoleErrors,
