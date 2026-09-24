@@ -37,7 +37,10 @@ import { recipeForFamily } from '../audio/voices.js';
 //     -> pitches-only (out of time) -> phrase at 50-60% tempo -> a tempo ladder
 //     up to full speed; then, for a multi-phrase song, cumulative phrase-chain
 //     steps; then one whole-piece step. Each step is plain data:
-//     { kind, phraseIndex, bars: [from, to], bpm, notes, passRule }.
+//     { kind, phraseIndex, bars: [from, to], originTick, bpm, notes, passRule }.
+//     originTick is the step's first phrase's segment start tick: time zero
+//     for playing it back, capturing the learner and judging the try. The
+//     rhythm-only step is judged on onsets alone (any pitch, or a clap).
 //   nextStep(plan, results) -> stepIndex (or plan.steps.length when done)
 //     results is the chronological attempt history: [{ stepIndex, passed }, ...].
 //     Deterministic function of that history: repeats a failed step, drops a
@@ -292,6 +295,11 @@ export function buildLessonPlan(song, partId, instrument, opts = {}) {
   const steps = [];
   phrases.forEach((phrase, pi) => {
     const notes = phrase.notes;
+    // originTick: the phrase's segment start (a bar line), the zero of the
+    // one phrase-local clock playback, capture and judging share
+    // (src/ui/songs/practice.js phraseSec) -- NOT notes[0].start, which
+    // would drop a pickup rest before the first note.
+    const originTick = phrase.startTick;
     // Difficulty (plan unit "phrase difficulty on steps"): one score per
     // phrase, shared by every per-phrase step kind so the learner sees the
     // same "Easy/Medium/Hard" word from the first listen through the top of
@@ -299,22 +307,22 @@ export function buildLessonPlan(song, partId, instrument, opts = {}) {
     // phrase and are left without a `difficulty` -- a single phrase's score
     // would misrepresent them.
     const difficulty = phraseDifficulty(phrase, { beatTicks: bt, key: song.key }).score;
-    steps.push({ kind: 'listen', phraseIndex: pi, bars: phrase.bars, bpm, notes, passRule: null, difficulty });
+    steps.push({ kind: 'listen', phraseIndex: pi, bars: phrase.bars, originTick, bpm, notes, passRule: null, difficulty });
     steps.push({
-      kind: 'rhythm', phraseIndex: pi, bars: phrase.bars, bpm, notes, difficulty,
+      kind: 'rhythm', phraseIndex: pi, bars: phrase.bars, originTick, bpm, notes, difficulty,
       passRule: { hitRate: hitRateFor(level, 0.8), maxMeanErrorMs: 120 }
     });
     steps.push({
-      kind: 'pitches', phraseIndex: pi, bars: phrase.bars, bpm: 0, notes, difficulty,
+      kind: 'pitches', phraseIndex: pi, bars: phrase.bars, originTick, bpm: 0, notes, difficulty,
       passRule: sustainRules(instrument, { hitRate: hitRateFor(level, 0.8), maxMeanErrorMs: null })
     });
     steps.push({
-      kind: 'phrase-slow', phraseIndex: pi, bars: phrase.bars, bpm: slowBpm, notes, difficulty,
+      kind: 'phrase-slow', phraseIndex: pi, bars: phrase.bars, originTick, bpm: slowBpm, notes, difficulty,
       passRule: sustainRules(instrument, { hitRate: hitRateFor(level, 0.8), maxMeanErrorMs: 150 })
     });
     LADDER_FRACTIONS.forEach(fraction => {
       steps.push({
-        kind: 'tempo-ladder', phraseIndex: pi, bars: phrase.bars, bpm: Math.round(bpm * fraction), notes, difficulty,
+        kind: 'tempo-ladder', phraseIndex: pi, bars: phrase.bars, originTick, bpm: Math.round(bpm * fraction), notes, difficulty,
         passRule: sustainRules(instrument, { hitRate: hitRateFor(level, 0.85), maxMeanErrorMs: 100 })
       });
     });
@@ -327,6 +335,7 @@ export function buildLessonPlan(song, partId, instrument, opts = {}) {
         kind: 'chain',
         phraseIndex: upTo,
         bars: [chained[0].bars[0], chained[chained.length - 1].bars[1]],
+        originTick: chained[0].startTick,
         bpm,
         notes: chained.flatMap(p => p.notes),
         passRule: sustainRules(instrument, { hitRate: hitRateFor(level, 0.8), maxMeanErrorMs: 120 })
@@ -339,6 +348,7 @@ export function buildLessonPlan(song, partId, instrument, opts = {}) {
       kind: 'whole',
       phraseIndex: null,
       bars: [phrases[0].bars[0], phrases[phrases.length - 1].bars[1]],
+      originTick: phrases[0].startTick,
       bpm,
       notes: playableNotes,
       passRule: sustainRules(instrument, { hitRate: hitRateFor(level, 0.8), maxMeanErrorMs: 120 })

@@ -48,7 +48,7 @@ import { buildLessonPlan, nextStep, creditFor } from '../song/lesson.js';
 import { feasibility } from '../song/feasibility.js';
 import { INSTRUMENTS } from '../instruments/index.js';
 import { routeImportFile, importerFor } from './songs/import-route.js';
-import { judgeAttempt, passesRule, holdTuneFeedback } from './songs/practice.js';
+import { judgeAttempt, passesRule, holdTuneFeedback, phraseSec } from './songs/practice.js';
 import { barHeat, worstBars } from '../song/bar-heat.js';
 import { createLoopBackingTransport, applyAttemptToTransport, backingBpm, rateLabel } from './songs/loop-backing.js';
 import { mapMasteryKeys } from './songs/mastery.js';
@@ -660,7 +660,7 @@ function mountSongsPanel(hostEl, api) {
       const recordBtn = el('button', {
         type: 'button',
         text: practice.recording ? 'Stop and check' : 'Your turn',
-        onclick: () => (practice.recording ? finishRecording(step) : startRecording()),
+        onclick: () => (practice.recording ? finishRecording(step) : startRecording(step)),
       });
       practiceSection.appendChild(recordBtn);
       countEl = el('p', { class: 'panel-songs-count', text: practice.recording ? 'Notes heard so far: ' + practice.playedEvents.length : '' });
@@ -718,15 +718,16 @@ function mountSongsPanel(hostEl, api) {
     if (!notes.length) return;
     const at0 = api.now() + 0.15;
     const spacing = 0.55;
-    // Schedule by real tick offsets when the step has a tempo; otherwise
+    // Schedule by real tick offsets when the step has a tempo -- on the same
+    // phrase-local clock the try is judged on (phraseSec from step.originTick,
+    // the phrase's bar line, so a pickup rest is heard as a rest); otherwise
     // (the "pitches" step, bpm 0) space notes evenly since there is no
     // tempo to follow.
     if (step.bpm > 0) {
       const ticksPerQuarter = practice.song.ticksPerQuarter;
-      const t0 = notes[0].start;
       const bpm = effectiveBpm(step);
       notes.forEach((n) => {
-        const secOffset = ((n.start - t0) / ticksPerQuarter) * (60 / bpm);
+        const secOffset = phraseSec(n.start, step.originTick, bpm, ticksPerQuarter);
         const dur = Math.max(0.12, (n.dur / ticksPerQuarter) * (60 / bpm));
         api.tone(n.midi, at0 + secOffset, dur, 0.22);
       });
@@ -735,7 +736,11 @@ function mountSongsPanel(hostEl, api) {
     }
   }
 
-  function startRecording() {
+  // Capture's zero IS the phrase origin (step.originTick): an event at atSec
+  // 0 is played on the phrase's first bar line, exactly where playPhrase()'s
+  // own schedule starts, and judgeAttempt() compares on that same clock.
+  function startRecording(step) {
+    const onsetsOnly = !!step && step.kind === 'rhythm';
     practice.recording = true;
     practice.playedEvents = [];
     // Starting a new try retires the previous try's bar strip.
@@ -781,7 +786,13 @@ function mountSongsPanel(hostEl, api) {
           }
           return;
         }
-        if (!r.freq || !(r.clarity > 0.7)) { openEvent = null; return; }
+        if (!r.freq || !(r.clarity > 0.7)) {
+          openEvent = null;
+          // "Clap the rhythm": an attack with no clear pitch (a clap, a tap)
+          // is still a beat, so a rhythm step keeps it as an unpitched event.
+          if (onsetsOnly) { practice.playedEvents.push({ midi: null, atSec: nowSec }); updateCount(); }
+          return;
+        }
         const midi = Math.round(69 + 12 * Math.log2(r.freq / 440));
         const event = playedEventFrom(r.freq, midi, nowSec);
         practice.playedEvents.push(event);
@@ -807,6 +818,9 @@ function mountSongsPanel(hostEl, api) {
       ticksPerQuarter: practice.song.ticksPerQuarter,
       policy: practice.instrument.octavePolicy,
       timed,
+      originTick: step.originTick,
+      // "Clap the rhythm" judges WHEN, not what: any pitch or a clap counts.
+      onsetsOnly: step.kind === 'rhythm',
     });
     // Feed this attempt's outcome to the tempo ladder BEFORE passesRule()
     // reads step.passRule -- rate only affects the NEXT attempt's backing
@@ -820,8 +834,10 @@ function mountSongsPanel(hostEl, api) {
     // Every correctly-pitched note counts toward the trainer's own streak
     // and level-up path, not just this song's mastery record (applyMasteryCredit
     // below), whether or not the whole step ends up passing.
+    // A rhythm step's hit is an onset, so it only credits when the pitch
+    // happened to be right too (pitchOk, practice.js) -- a clap never does.
     if (typeof api.creditNote === 'function') {
-      result.matches.forEach((m) => { if (m.ok) api.creditNote(); });
+      result.matches.forEach((m) => { if (m.ok && m.pitchOk !== false) api.creditNote(); });
     }
     advance(passed, result, elapsedMs);
   }
@@ -832,7 +848,9 @@ function mountSongsPanel(hostEl, api) {
     if (step.passRule) {
       const credit = creditFor({ step, passed, elapsedMs: elapsedMs || 0, judgedCount: result ? result.judgedCount : undefined });
       const mapped = mapMasteryKeys(credit.masteryKeys, practice.instrumentId, (api.db().prefs || {}));
-      applyMasteryCredit(api, practice.instrumentId, mapped);
+      // A rhythm step is judged on onsets only: a try with any clap or
+      // wrong-pitch hit is no evidence about the notes' pitch mastery.
+      if (!result || result.matches.every((m) => !m.ok || m.pitchOk !== false)) applyMasteryCredit(api, practice.instrumentId, mapped);
       // A step that failed ONLY on holding the note or playing it in tune
       // (hit rate and timing were both fine) gets the specific plain-word
       // reason instead of the generic retry prompt, so a sustaining
