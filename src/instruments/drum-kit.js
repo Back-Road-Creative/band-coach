@@ -9,12 +9,18 @@
 // FIRST note in each list is the piece's canonical note, the one the app
 // uses when it sounds that piece itself.
 //
-// input is 'midi' for now: a drum kit has no pitch for the mic's pitch
-// detector (src/audio/yin.js) to lock onto, so telling a snare from a tom
-// by ear needs its own onset/timbre work, which comes later. The trainer
-// (MODS['drum-kit'] in src/app.js) takes a MIDI kit, the computer keys
-// below, or a click on the drawn kit; its levels are TRAINER_LEVELS below,
-// and the record's curriculum is derived from them so the two never drift.
+// input is 'mic+midi': a drum kit has no pitch for the mic's pitch detector
+// (src/audio/yin.js) to lock onto, so the mic path (src/app.js's onset
+// detector plus src/audio/drum-classify.js) hears an onset and its
+// band-energy shape rather than a note. That only tells kick, snare and
+// hi-hat apart -- toms, crash and ride come back as "a hit, unknown drum"
+// (piece null) -- so a level whose bars need those pieces is judged
+// leniently on a mic hit rather than pretending the mic can name them (see
+// src/app.js's onHit/tickKitBar). The trainer (MODS['drum-kit'] in
+// src/app.js) takes a MIDI kit, the computer keys below, a click on the
+// drawn kit, or a real kit through the microphone; its levels are
+// TRAINER_LEVELS below, and the record's curriculum is derived from them so
+// the two never drift.
 //
 // `key` is the suggested computer key for each piece when the trainer takes
 // the keyboard. The keys are laid out like the kit itself, seen from the
@@ -89,7 +95,7 @@ export default {
   id: 'drum-kit',
   name: 'Drum kit',
   family: 'percussion',
-  input: 'midi',
+  input: 'mic+midi',
   range: { low: 35, high: 59 },
   transposition: 0,
   clefs: ['percussion'],

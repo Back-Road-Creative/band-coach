@@ -20,6 +20,7 @@ import { createPitchNode } from './audio/pitch-worklet.js';
 import { noiseFloor, gatesFor, meterLevel, releaseFloor } from './audio/levels.js';
 import { diagnoseInput } from './audio/input-diagnosis.js';
 import { createOnsetDetector } from './audio/onset.js';
+import { createDrumClassifier } from './audio/drum-classify.js';
 //
 import { chroma, judgeChord } from './audio/chords.js';
 //
@@ -407,6 +408,25 @@ import { register as registerPlayalong } from './ui/playalong.js';
     });
     return startAt;
   }
+  // test hook: synthetic hits through the SAME analyser chain openMic()
+  // uses (not drumHit()'s speaker-only synth, which never reaches the
+  // classifier), so a characterization test can drive listenDrums() without
+  // a real kit or a fixture WAV. hits is [{ kind, atMs }, ...]; kind is
+  // 'kick' (low sine sweep, matching drum-classify.js's measured
+  // low-dominant shape) or 'hihat' (highpassed noise, high-dominant). All
+  // hits are scheduled in one call -- unlike testPluck/testSource, this does
+  // NOT stop previously scheduled nodes first, so a whole bar's worth of
+  // future hits can be queued without cutting off an earlier one still
+  // waiting to fire. Returns each hit's audio-clock start time.
+  async function testDrumHit(hits) {
+    ensureAudio(); const mix = actx.createGain(); mix.gain.value = 1; wireAnalysers(mix); micReady = true;
+    return hits.map(h => {
+      const at = now() + (h.atMs || 0) / 1000, len = 0.05;
+      if (h.kind === 'kick') { const o = actx.createOscillator(), v = actx.createGain(); o.frequency.setValueAtTime(120, at); o.frequency.exponentialRampToValueAtTime(50, at + len); v.gain.setValueAtTime(0.8, at); v.gain.exponentialRampToValueAtTime(0.0001, at + len); o.connect(v); v.connect(mix); o.start(at); o.stop(at + len + 0.02); testNodes.push(o); }
+      else { const n = Math.ceil(actx.sampleRate * len), b = actx.createBuffer(1, n, actx.sampleRate), d = b.getChannelData(0); for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1; const src = actx.createBufferSource(); src.buffer = b; const hp = actx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 6000; const v = actx.createGain(); v.gain.setValueAtTime(0.8, at); v.gain.exponentialRampToValueAtTime(0.0001, at + len); src.connect(hp); hp.connect(v); v.connect(mix); src.start(at); testNodes.push(src); }
+      return at;
+    });
+  }
 
   // ---------- instruments: each is a curriculum plus a way of hearing you ----------
   const N = (...ms) => ms.map(m => 'n' + m), Wn = (...ms) => ms.map(m => 'w' + m), SF = (s, ...fs) => fs.map(f => 's' + s + 'f' + f), V = (...ds) => ds.map(d => 'v' + d);
@@ -671,7 +691,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
     ] };
   // Drum kit (src/instruments/drum-kit.js): a percussion-staff bar like rhythm reading, but each
   // note names a drum, so task 'kit' judges WHICH piece and WHEN (startKitBar/tickKitBar below).
-  MODS['drum-kit'] = { name: instrumentById['drum-kit'].name, tag: 'MIDI / keys', color: '#f08a4b', input: 'midi', kit: true, help: 'Drum kit: plug in an electronic kit over MIDI, or use the keys (F kick, J snare, D closed hat, E open hat, C hat pedal, U high tom, I mid tom, K floor tom, R crash, O ride) or click the drawn kit. Read the bar, listen to the count, play it. Marks under the notes: green on time, yellow a little early or late, red missed or the wrong drum.', levels: KIT_LEVELS.map(l => Object.assign({ task: 'kit' }, l)) };
+  MODS['drum-kit'] = { name: instrumentById['drum-kit'].name, tag: 'MIDI / keys / mic', color: '#f08a4b', input: 'mic+midi', kit: true, help: 'Drum kit: plug in an electronic kit over MIDI, use the keys (F kick, J snare, D closed hat, E open hat, C hat pedal, U high tom, I mid tom, K floor tom, R crash, O ride), click the drawn kit, or press Connect and play a real kit in front of your microphone. Read the bar, listen to the count, play it. Marks under the notes: green on time, yellow a little early or late, red missed or the wrong drum. Through a microphone the app hears kick, snare and hi-hat only; a tom, crash or ride comes back as a hit with no drum name, so a level that needs one of those still passes it on time, just without naming the drum -- for a chart that grades which drum, plug in MIDI or use the keys instead.', levels: KIT_LEVELS.map(l => Object.assign({ task: 'kit' }, l)) };
   const MOD_IDS = Object.keys(MODS);
   // Instruments the notation engine (src/notation/) is wired into. Wind
   // already draws its own hand-built staff (drawStaff below); it is not
@@ -1251,11 +1271,21 @@ import { register as registerPlayalong } from './ui/playalong.js';
     const staff = layoutPercussionMeasure({ hits: [].concat(...onsets.map(o => o.pieces.map(p => ({ piece: p, start: o.beat })))), time: [tick / RHY.TPQ, 4], width: 400 }).primitives; staff.forEach(q => { if (q.type === 'timeSig') { q.top = mt[0]; q.bottom = mt[1]; } });
     bar = { spb: beatSec, t0: t0, playAt: playAt, end: playAt + tick * (60 / k.bpm) / RHY.TPQ + 0.3, clicks: 0, countBeats: M.beats, metre: k.metre, onsets: onsets, staff: staff, noteX: [...new Set(staff.filter(q => q.type === 'notehead').map(q => q.x))].sort((a, b) => a - b), taps: [], judged: false };
   }
+  // A drum-name a mic hit cannot give (toms, crash, ride -- drum-classify.js
+  // only tells kick/snare/hihat apart) is judged leniently rather than
+  // pretending the mic can name it: an unnamed mic hit (piece null, source
+  // 'mic') stands in for ANY of these when the bar wants one of them. Timing
+  // is still judged normally; only the drum name is not held against you.
+  const KIT_MIC_UNNAMED = new Set(['tom-floor', 'tom-mid', 'tom-high', 'crash', 'ride']);
+  // src/audio/drum-classify.js's three classes, named to this kit's piece ids.
+  const DRUM_KIND_TO_PIECE = { kick: 'kick', snare: 'snare', hihat: 'hihat-closed' };
   function onHit(piece, t, source) {
-    lastInputAt = now(); if (piece) { kitFlash = { piece: piece, at: performance.now() }; if (source !== 'midi') drumHit(piece, now() + 0.005); }
+    // A real mic hit already made its own sound; only a silent input (key,
+    // click, or an e-kit's own MIDI voice) needs the app's synthesized one.
+    lastInputAt = now(); if (piece) { kitFlash = { piece: piece, at: performance.now() }; if (source !== 'midi' && source !== 'mic') drumHit(piece, now() + 0.005); }
     if (!playing || !task || task.kind !== 'kit' || !bar || bar.judged) return;
     const latencyMs = DB.latencyMs != null ? DB.latencyMs : (actx ? (actx.outputLatency || actx.baseLatency || 0) * 1000 : 0), at = t - S.offset - latencyMs / 1000;
-    if (at >= bar.playAt - 0.25) bar.taps.push({ t: at, piece: piece, used: false });
+    if (at >= bar.playAt - 0.25) bar.taps.push({ t: at, piece: piece, used: false, source: source });
   }
   function tickKitBar() {
     if (!bar || !task || task.kind !== 'kit') return; const t = now();
@@ -1263,8 +1293,10 @@ import { register as registerPlayalong } from './ui/playalong.js';
     if (bar.judged || t <= bar.end) return;
     bar.judged = true; const win = S.level > MODS[mod].levels.length ? 0.11 : 0.15, deltas = [];
     const near = (o, ok) => { let best = null; bar.taps.forEach(tp => { if (!tp.used && ok(tp) && Math.abs(tp.t - o.t) <= win && (!best || Math.abs(tp.t - o.t) < Math.abs(best.t - o.t))) best = tp; }); if (best) best.used = true; return best; };
+    // A mic hit the classifier could not name (piece null, source 'mic') still counts for a tom/crash/ride onset -- the mic can only tell kick, snare and hi-hat apart.
+    const tapMatches = (tp, p) => tp.piece === p || (tp.piece === null && tp.source === 'mic' && KIT_MIC_UNNAMED.has(p));
     // right drum first (a flam wants a second snare hit within 40 ms), then an on-time hit on another drum is "wrong drum"; what is left over is extra
-    bar.onsets.forEach(o => { o.res = o.pieces.map(p => { const hit = near(o, tp => tp.piece === p); if (!hit) return { p: p, miss: true }; deltas.push(hit.t - o.t); if (!o.flam) return { p: p, dt: hit.t - o.t }; const two = near(o, tp => tp.piece === p), gap = two ? Math.abs(two.t - hit.t) : null; return gap !== null && gap <= 0.04 ? { p: p, dt: hit.t - o.t } : { p: p, flam: gap }; }); });
+    bar.onsets.forEach(o => { o.res = o.pieces.map(p => { const hit = near(o, tp => tapMatches(tp, p)); if (!hit) return { p: p, miss: true }; deltas.push(hit.t - o.t); if (!o.flam) return { p: p, dt: hit.t - o.t }; const two = near(o, tp => tapMatches(tp, p)), gap = two ? Math.abs(two.t - hit.t) : null; return gap !== null && gap <= 0.04 ? { p: p, dt: hit.t - o.t } : { p: p, flam: gap }; }); });
     bar.onsets.forEach(o => o.res.forEach(r => { if (!r.miss) return; const other = near(o, tp => tp.piece && tp.piece !== r.p); if (other) { r.miss = false; r.wrong = other.piece; } }));
     const all = [].concat(...bar.onsets.map(o => o.res)), misses = all.filter(r => r.miss).length, wrong = all.filter(r => r.wrong), flams = all.filter(r => r.flam !== undefined), extra = bar.taps.filter(tp => !tp.used), e = cur(), bad = misses + wrong.length + flams.length + extra.length, parts = [];
     if (misses) parts.push(misses + ' missed');
@@ -1359,7 +1391,20 @@ import { register as registerPlayalong } from './ui/playalong.js';
     if (!sess.capWarned && todayMinutes() >= 45) { sess.capWarned = true; coach('That is 45 minutes of practice today across your instruments. Skill settles in while you rest, so more today buys little. Finish this level bar and call it.'); }
   }
   let lastFrame = 0, lastPitchAt = 0, listenOnsetDetector = null;
+  // Drum-kit mic path: a persistent onset detector and classifier (both
+  // stateful, so they live here rather than being rebuilt every tick) plus a
+  // small rolling raw-sample ring the classifier reads its one analysis frame
+  // from. drumMicHits is a short debug trail (see the __DEBUG_HOOK__ below),
+  // not used for judging -- onHit()/tickKitBar() are the source of truth.
+  let drumOnsetDetector = null, drumClassifier = null, drumRing = null, drumMicHits = [];
+  const DRUM_FRAME = 2048, DRUM_HOP = 512;
   function listen() {
+    // A drum kit has no pitch for the worklet's YIN tracker to lock onto, so
+    // it is checked first and returns either way: it must run even once
+    // openMic() has built a pitch worklet (kit's ioBtn click opens the mic
+    // for a real e-kit/room mic alongside MIDI -- see the ioBtn handler),
+    // and it must NEVER fall through into the YIN path below.
+    const km = MODS[mod]; if (km && km.kit && km.input === 'mic+midi') { listenDrums(); return; }
     if (pitchWorkletNode) return; // the worklet's own onmessage handler is feeding onPitch instead
     const M = MODS[mod]; if (!M || !micReady || !anTime || !(M.input === 'pluck' || M.input === 'sustain')) return; const t = now(), dt = Math.min(0.2, t - (lastPitchAt || t)); lastPitchAt = t;
     const buf = new Float32Array(anTime.fftSize); anTime.getFloatTimeDomainData(buf); const r = yin(buf, actx.sampleRate, M.fmin, M.fmax, gates.pitch);
@@ -1393,6 +1438,77 @@ import { register as registerPlayalong } from './ui/playalong.js';
     if (task && cur() && cur().info.kind === 'chord') { const db = new Float32Array(anFreq.frequencyBinCount); anFreq.getFloatFrequencyData(db); fr.chroma = chroma(db, actx.sampleRate); }
     meterUpdate(fr.rms);
     try { onPitch(fr, dt); } catch (e) { errCount++; recordError('onPitch', e); }
+  }
+  // Drum-kit mic path: same "split the analyser's newest audio into small
+  // hops and push each one, oldest first" technique as listen()'s pluck
+  // path above, but feeding src/audio/drum-classify.js instead of YIN -- a
+  // kit has no pitch to lock onto, only onsets and their band-energy shape.
+  //
+  // classify() expects a frame that STARTS just before the attack (only a
+  // small preroll, mostly looking forward): classifyHits() can do that
+  // because it already has the whole recording. Live, at the moment an
+  // onset is detected there IS no "forward" yet -- those samples have not
+  // been captured. So classification is deliberately held for
+  // (DRUM_FRAME - preroll) worth of audio (~41 ms) after the attack, queued
+  // in drumPending, and only then read out of the analyser's rolling
+  // window, which by then safely covers it. Confirmed by measurement: a
+  // synthesized kick classified with the frame ending AT the attack (no
+  // wait) came back kind: null half the time -- the attack sat in the last
+  // Hann-windowed hop, exactly where the window weights it away.
+  const DRUM_PREROLL = DRUM_FRAME >> 3;
+  let drumPending = [];
+  function listenDrums() {
+    if (!micReady || !anTime) return; const t = now(), dt = Math.min(0.2, t - (lastPitchAt || t)); lastPitchAt = t;
+    const buf = new Float32Array(anTime.fftSize); anTime.getFloatTimeDomainData(buf);
+    const wait = (DRUM_FRAME - DRUM_PREROLL) / actx.sampleRate;
+    // Tuning mirrors src/audio/drum-classify.js's own classifyHits() (that
+    // file is not this unit's to change, so its two overrides on onset.js's
+    // defaults -- ~100ms of flux history instead of ~1s, and a 0.0005 RMS
+    // minFlux floor instead of 0.02 -- are repeated here, not imported: it
+    // has no exported streaming entry point, only the whole-buffer driver.
+    if (!drumOnsetDetector) drumOnsetDetector = createOnsetDetector({ sampleRate: actx.sampleRate, frameSize: DRUM_HOP, hop: DRUM_HOP, historyFrames: Math.max(4, Math.round(0.1 * actx.sampleRate / DRUM_HOP)), minFlux: 0.0005 });
+    if (!drumClassifier) drumClassifier = createDrumClassifier({ sampleRate: actx.sampleRate, frameSize: DRUM_FRAME });
+    const newSamples = Math.max(0, Math.min(anTime.fftSize, Math.round((dt || 0.05) * actx.sampleRate)));
+    const nHops = Math.floor(newSamples / DRUM_HOP);
+    let lastRms = 0;
+    for (let c = nHops - 1; c >= 0; c--) {
+      const end = buf.length - c * DRUM_HOP, chunk = buf.subarray(end - DRUM_HOP, end);
+      let ss = 0; for (let i = 0; i < chunk.length; i++) ss += chunk[i] * chunk[i]; lastRms = Math.sqrt(ss / chunk.length);
+      const o = drumOnsetDetector.push(chunk);
+      if (!o.onset) continue;
+      const attackT = t - c * (DRUM_HOP / actx.sampleRate);
+      // classifyHits()'s REL_JUMP guard, repeated here for the same reason: the
+      // tiny 0.0005 minFlux floor above (needed to keep hearing a quiet real
+      // kit) also lets a STEADY tone or hum wobble over threshold; requiring
+      // the flux spike to be a real jump relative to the samples around it
+      // is what rejects that (measured in drum-classify.js: 0-2 false hits on
+      // steady noise with this check, 2-13 without it). frameE is read from
+      // whatever of the frame this hop's snapshot already covers -- close
+      // enough for a relative-jump check, not the classifier's own input.
+      let frameE = 0; const fs = buf.subarray(Math.max(0, end - DRUM_FRAME), end); for (let i = 0; i < fs.length; i++) frameE += fs[i] * fs[i];
+      if (o.strength < 0.1 * Math.sqrt(frameE / DRUM_FRAME)) continue;
+      drumPending.push({ attackT: attackT, dueT: attackT + wait });
+    }
+    meterUpdate(lastRms);
+    // Drain whatever pending onsets have now waited long enough to classify.
+    drumPending = drumPending.filter(p => {
+      if (t < p.dueT) return true;
+      const offset = Math.max(0, Math.round((t - p.dueT) * actx.sampleRate)), from = Math.max(0, buf.length - offset - DRUM_FRAME), fend = from + DRUM_FRAME;
+      const r = drumClassifier.classify(buf.subarray(from, Math.min(buf.length, fend)));
+      handleDrumHit(r.kind, r.confidence, p.attackT);
+      return false;
+    });
+  }
+  // A mic hit names kick, snare or hi-hat (kind non-null, confidence always
+  // >= 0.5 by drum-classify.js's construction) or comes back kind null
+  // ("a hit, could not tell which drum") -- either way it is still a real
+  // hit at a real time, so it always reaches onHit(); tickKitBar()'s
+  // tapMatches() is what judges an unnamed hit leniently against a
+  // tom/crash/ride onset rather than as a miss.
+  function handleDrumHit(kind, confidence, t) {
+    const piece = kind ? DRUM_KIND_TO_PIECE[kind] || null : null;
+    drumMicHits.push({ piece: piece, confidence: confidence, t: t }); if (drumMicHits.length > 50) drumMicHits.shift();
+    onHit(piece, t, 'mic');
   }
   setInterval(listen, 50);
   function frame() {
@@ -1877,7 +1993,14 @@ import { register as registerPlayalong } from './ui/playalong.js';
   $('ioBtn').addEventListener('click', () => {
     ensureAudio();
     if (needsMic()) { if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { ioState('off', 'This browser cannot open a microphone here. Open the standalone copy in Chrome.'); return; } openMic().then(ioRefresh).catch(() => ioState('off', 'The microphone was blocked. Allow it in the browser, or open the standalone copy in Chrome.')); return; }
-    if (!navigator.requestMIDIAccess) { ioState('off', 'This browser cannot read MIDI. Use Chrome or Edge. Screen and computer keys still work.'); return; }
+    if (!navigator.requestMIDIAccess) {
+      // A drum kit still has the mic to fall back on even when this browser
+      // cannot read MIDI at all (needsMic() stays false for 'mic+midi' so an
+      // e-kit is tried FIRST; see the empty-inputs branch below for the same
+      // fallback when MIDI is readable but nothing is plugged in).
+      if (MODS[mod] && MODS[mod].input === 'mic+midi' && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) { openMic().then(ioRefresh).catch(() => ioState('off', 'The microphone was blocked. Allow it in the browser, or open the standalone copy in Chrome.')); return; }
+      ioState('off', 'This browser cannot read MIDI. Use Chrome or Edge. Screen and computer keys still work.'); return;
+    }
     navigator.requestMIDIAccess().then(a => {
       const wire = () => {
         const inputs = []; a.inputs.forEach(i => inputs.push(i));
@@ -1897,7 +2020,13 @@ import { register as registerPlayalong } from './ui/playalong.js';
           midiPortInputs = results.map(r => r.input);
           midiOn = results.some((r, i) => r.ok || midiWorks(i));
           ioRefresh();
-          if (!inputs.length) ioState('off', 'No MIDI device found. Plug it in and it will be picked up.');
+          // No MIDI input at all: an e-kit was tried and genuinely is not
+          // there, so a drum kit falls back to the mic (kick/snare/hi-hat
+          // only, see listenDrums()) rather than leaving Connect a dead end.
+          // A kit whose e-kit IS found never reaches here, so this can never
+          // fight real MIDI note-ons for the same tap.
+          if (!inputs.length && MODS[mod] && MODS[mod].input === 'mic+midi' && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) openMic().then(ioRefresh).catch(() => ioState('off', 'No MIDI device found, and the microphone was blocked. Allow it, or plug in a kit.'));
+          else if (!inputs.length) ioState('off', 'No MIDI device found. Plug it in and it will be picked up.');
           else if (!midiOn) ioState('off', 'Another program may be using this keyboard. Close it and press Connect again.');
         });
       };
@@ -2234,6 +2363,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
   if (__DEBUG_HOOK__) Object.assign(hook, { errors: getErrors });
   //
   if (__DEBUG_HOOK__) Object.assign(hook, { testPluck: testPluck, pitchWorkletActive: () => !!pitchWorkletNode });
+  if (__DEBUG_HOOK__) Object.assign(hook, { testDrumHit: testDrumHit });
   //
   if (__DEBUG_HOOK__) Object.assign(hook, { gates: () => gates, calibrate: calibrateNoiseFloor, devices: () => micDevices, pitchWorkletGate: () => lastWorkletGateSent, monoRoute: () => lastMonoRoute,
     // Test-only seam (mic-gate-and-capture): drives the exact same
@@ -2285,6 +2415,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
   if (__DEBUG_HOOK__) Object.assign(hook, { flash: () => ({ bad: flashBad, good: flashGood }), pitchWorkletRange: () => lastWorkletRangeSent, pitchWorkletFrameSize: () => lastWorkletFrameSize, kbdFocus: kbdFocusInfo });
   if (__DEBUG_HOOK__) Object.assign(hook, { audioHeardTicks: () => audioHeardTicks });
   if (__DEBUG_HOOK__) Object.assign(hook, { rangeHeld: () => rangeTest && rangeTest.curMidi !== null ? { stage: rangeTest.stage, midi: rangeTest.curMidi, ms: performance.now() - rangeTest.curSince } : null });
+  if (__DEBUG_HOOK__) Object.assign(hook, { micHits: () => drumMicHits.slice() });
   if (__DEBUG_HOOK__) window.__coach = hook;
 
   // Boot is over. Announce it so anything driving the page has a condition to
