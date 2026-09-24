@@ -389,3 +389,46 @@ test('creditFor respects an explicit judgedCount override', () => {
   assert.equal(credit.judged, 40);
   assert.equal(credit.ok, 40);
 });
+
+// creditFor + per-note `matches` (result.matches from src/ui/songs/practice.js
+// judgeAttempt): a step that passes overall can still have missed one of its
+// notes, and a step that fails overall can still have gotten some notes
+// right -- mastery credit should reflect the NOTE's own outcome, not just
+// the step's pass/fail, when matches is available.
+test('creditFor with matches scores each note by its own outcome, not the step pass/fail', () => {
+  const step = { kind: 'pitches', phraseIndex: 0, bars: [0, 0], bpm: 0, notes: [note(0, 480, 60), note(480, 480, 62)] };
+  const matches = [
+    { note: { midi: 60 }, ok: true, pitchOk: true },
+    { note: { midi: 62 }, ok: false, pitchOk: null },
+  ];
+  // Step overall failed (a missed note failed the whole step), but the
+  // first note was actually played correctly.
+  const credit = creditFor({ step, passed: false, elapsedMs: 10000, matches });
+  assert.deepEqual(credit.masteryKeys.sort((a, b) => a.key.localeCompare(b.key)), [
+    { key: 'midi:60', hit: true },
+    { key: 'midi:62', hit: false },
+  ]);
+});
+
+test('creditFor with matches treats a clap-only hit (ok true, pitchOk false) as a miss', () => {
+  const step = { kind: 'rhythm', phraseIndex: 0, bars: [0, 0], bpm: 100, notes: [note(0, 480, 60)] };
+  const matches = [{ note: { midi: 60 }, ok: true, pitchOk: false }];
+  const credit = creditFor({ step, passed: true, elapsedMs: 10000, matches });
+  assert.deepEqual(credit.masteryKeys, [{ key: 'midi:60', hit: false }]);
+});
+
+test('creditFor with matches: a key hit once and missed once counts as missed', () => {
+  const step = { kind: 'pitches', phraseIndex: 0, bars: [0, 0], bpm: 0, notes: [note(0, 240, 60), note(240, 240, 60)] };
+  const matches = [
+    { note: { midi: 60 }, ok: true, pitchOk: true },
+    { note: { midi: 60 }, ok: false, pitchOk: null },
+  ];
+  const credit = creditFor({ step, passed: false, elapsedMs: 10000, matches });
+  assert.deepEqual(credit.masteryKeys, [{ key: 'midi:60', hit: false }]);
+});
+
+test('creditFor falls back to step.notes + passed when matches is not given (back-compat)', () => {
+  const step = { kind: 'pitches', phraseIndex: 0, bars: [0, 0], bpm: 0, notes: [note(0, 480, 60)] };
+  const credit = creditFor({ step, passed: true, elapsedMs: 10000 });
+  assert.deepEqual(credit.masteryKeys, [{ key: 'midi:60', hit: true }]);
+});

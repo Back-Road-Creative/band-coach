@@ -260,7 +260,10 @@ clean chunking a built-in curriculum level uses.
 The Songs panel (`src/ui/songs.js`) turns a whole tune — built in, or imported from a `.mid`,
 `.midi`, `.abc`, `.xml`, `.musicxml`, compressed `.mxl`, Guitar Pro `.gp`, or Guitar Pro 5 `.gp5` file — into a
 step-by-step practice lesson (`src/song/lesson.js`), tracking each learner's own pass/fail record
-and crediting every correctly played note toward the same mastery store a built-in drill uses. A
+and crediting every correctly played note toward the same mastery store a built-in drill uses —
+credit always lands on whichever instrument the song is actually being played on, even if a
+different instrument is showing on the main screen, and a finished lesson leaves its own row in
+the practice log (`source: "song"`) alongside built-in drill sessions. A
 teacher can also hand a student a whole set of songs at once as a **challenge**: a plain `.json`
 file (`src/song/challenge.js`, schema `challenge/1`) holding a title, an optional note, and a list
 of songs. Picking one through the same file input adds every song to the library and shows it as

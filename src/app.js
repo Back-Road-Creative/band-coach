@@ -1547,6 +1547,19 @@ import { register as registerPlayalong } from './ui/playalong.js';
     if (S.judged > 5 && !customOn) { sess.warm = 4; msg += ' First a short warm-up through what you know; it does not count.'; }
     playing = true; paused = false; $('playBtn').textContent = 'Pause'; $('endBtn').hidden = false; coach(msg); showAll(); wakeLock.acquire();
   }
+  // logSession(): a panel (e.g. a song lesson) logs its own practice as a
+  // DB.sessions row the same way endSession() below logs a built-in drill's
+  // -- a1/a2 both get the panel's own single accuracy number (a panel has
+  // no separate "first 30" vs "last 30" split to report), from/to both get
+  // that instrument's CURRENT level (a song lesson does not move S.level),
+  // and breaks is always 0 (no break tracking runs while a panel is open).
+  // `source`/`songId` ride along for a reader that wants to tell a song
+  // session from a drill session apart.
+  function logSession(rec) {
+    const modState = DB.mods[rec.mod], level = modState ? modState.level : 1, acc = num(rec.acc, 0, 0, 1);
+    DB.sessions.push({ d: today(), mod: rec.mod, min: Math.round(num(rec.minutes, 0, 0, 600) * 10) / 10, acc: acc, a1: acc, a2: acc, from: level, to: level, breaks: 0, source: rec.source || 'song', songId: rec.songId || null });
+    DB.sessions = DB.sessions.slice(-60); save();
+  }
   function endSession() {
     if (!sess) return; const min = sess.active / 60; let line = 'Session ended. Too short to log.';
     if (sess.judged >= 8) { DB.sessions.push({ d: today(), mod: mod, min: Math.round(min * 10) / 10, acc: sess.ok / sess.judged, a1: mean(sess.first), a2: mean(sess.last), from: sess.from, to: S.level, breaks: sess.breaks }); DB.sessions = DB.sessions.slice(-60);
@@ -1990,8 +2003,26 @@ import { register as registerPlayalong } from './ui/playalong.js';
     tone: tone, click: click, now: now, say: say, coach: coach, recordError: recordError, close: () => closePanel(),
     // store(id): this panel's saved data, kept in DB.panels[id] (plain JSON, 256 KB max; see sanitizePanelData)
     store: id => ({ get: () => (DB.panels && DB.panels[id]) || null, set: obj => { if (!DB.panels) DB.panels = {}; DB.panels[id] = obj; save(); } }),
-    // creditNote(): a panel-judged correct note feeds the current mod's streak and level-up path, same as credit() does for a built-in drill (no session log update, since no session runs while a panel is open).
-    creditNote: () => { streak++; S.ready = clamp(S.ready + S.gain, 0, 1); evaluate(); save(); },
+    // creditNote(instrumentId): a panel-judged correct note feeds THAT
+    // instrument's streak and level-up path (e.g. a song practised on
+    // guitar credits guitar even if keyboard is still showing on the main
+    // screen), same as credit() does for a built-in drill (no session log
+    // update, since no session runs while a panel is open). streak is
+    // global UI state (the on-screen streak counter), so it always ticks;
+    // evaluate() reads/writes the CURRENT mod's S and D() (its own level
+    // thresholds), so it only runs when instrumentId is the mod actually
+    // showing -- crediting a different instrument's readiness must not
+    // silently level up whatever happens to be on screen.
+    creditNote: (instrumentId) => {
+      streak++;
+      const id = MODS[instrumentId] ? instrumentId : mod;
+      if (id === mod) { S.ready = clamp(S.ready + S.gain, 0, 1); evaluate(); }
+      else { const other = DB.mods[id]; if (other) other.ready = clamp(other.ready + (other.gain || 0.05), 0, 1); }
+      save();
+    },
+    // logSession(): see the logSession() helper near endSession() above --
+    // lets a panel (a finished song lesson) leave its own row in DB.sessions.
+    logSession: rec => logSession(rec),
   };
   //
   //
