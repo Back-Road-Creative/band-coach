@@ -274,12 +274,21 @@ carries an original recording to time-stretch, so `src/audio/stretch/wsola.js` s
 into the Play Along panel below. On a sustaining instrument (bowed, wind, free-reed or voice —
 anything without a natural decay) a practice step also checks that each note was actually held
 and played in tune, not just hit; a try that misses on holding or tuning alone is told so in plain
-words ("Hold each note a little longer." / "A little sharp — aim for the middle of the note.")
-instead of the generic retry prompt. Each step is played back, captured and judged on one
+words, and it names the actual direction — held too short says "Hold each note a little longer.",
+held too long (running into the next note) says "Let each note go a little sooner — it's running
+into the next one.", a mix of both says "Match each note's length — some ran short, some ran
+long."; being out of tune says "A little sharp — aim for the middle of the note." (or "flat") —
+instead of the generic retry prompt. A chord step also refuses a wrong extra note struck alongside
+the right ones (`maxExtras` on every judged step's passRule, `src/song/lesson.js`): hitting every
+expected note is not enough to pass if the learner also struck a note that was not asked for.
+Each step is played back, captured and judged on one
 clock that starts at the phrase's first bar line (`originTick` on every lesson step,
 `phraseSec` in `src/ui/songs/practice.js`), so a pickup rest is kept; the "Clap the rhythm"
 step judges only *when* you played — any pitch, or a clap, counts — and a clap or wrong pitch
-never counts as evidence of the right note toward mastery.
+never counts as evidence of the right note toward mastery. The tempo-ladder's Riff Repeater
+(above) only speeds up on an attempt that actually PASSES the step's own passRule — hitting every
+note while still failing on timing, hold/tune or an extra note does not read as "clean" and does
+not raise the backing's speed.
 
 ## Play along with a recording
 

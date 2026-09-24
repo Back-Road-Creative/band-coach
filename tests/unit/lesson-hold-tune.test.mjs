@@ -66,19 +66,23 @@ test('voice (family voice) also gets hold and tune rules', () => {
 
 // ===================== non-sustaining families are untouched =====================
 
-test('a non-sustaining instrument (guitar, family fretted) has byte-identical passRules to before this change', () => {
+// Wave: extras hold-clean added `maxExtras: 0` to every judged step's
+// passRule (tests/unit/lesson-maxextras.test.mjs), so these two tests no
+// longer pin a byte-identical shape -- they now pin "identical except for
+// maxExtras".
+test('a non-sustaining instrument (guitar, family fretted) has the same passRules as before this change, plus maxExtras', () => {
   const plan = buildLessonPlan(oneNoteSong(), 'melody', gtr);
   const byKind = Object.fromEntries(plan.steps.map(s => [s.kind, s]));
-  assert.deepEqual(byKind.pitches.passRule, { hitRate: 0.8, maxMeanErrorMs: null });
-  assert.deepEqual(byKind['phrase-slow'].passRule, { hitRate: 0.8, maxMeanErrorMs: 150 });
-  assert.deepEqual(byKind['tempo-ladder'].passRule, { hitRate: 0.85, maxMeanErrorMs: 100 });
-  assert.deepEqual(byKind.whole.passRule, { hitRate: 0.8, maxMeanErrorMs: 120 });
+  assert.deepEqual(byKind.pitches.passRule, { hitRate: 0.8, maxMeanErrorMs: null, maxExtras: 0 });
+  assert.deepEqual(byKind['phrase-slow'].passRule, { hitRate: 0.8, maxMeanErrorMs: 150, maxExtras: 0 });
+  assert.deepEqual(byKind['tempo-ladder'].passRule, { hitRate: 0.85, maxMeanErrorMs: 100, maxExtras: 0 });
+  assert.deepEqual(byKind.whole.passRule, { hitRate: 0.8, maxMeanErrorMs: 120, maxExtras: 0 });
 });
 
-test('a non-sustaining instrument (piano/keys, kbd) has byte-identical passRules to before this change', () => {
+test('a non-sustaining instrument (piano/keys, kbd) has the same passRules as before this change, plus maxExtras', () => {
   const plan = buildLessonPlan(oneNoteSong(), 'melody', kbd);
   const pitches = plan.steps.find(s => s.kind === 'pitches');
-  assert.deepEqual(pitches.passRule, { hitRate: 0.8, maxMeanErrorMs: null });
+  assert.deepEqual(pitches.passRule, { hitRate: 0.8, maxMeanErrorMs: null, maxExtras: 0 });
 });
 
 // ===================== passesRule with hold/tune =====================

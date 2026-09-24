@@ -310,20 +310,23 @@ export function buildLessonPlan(song, partId, instrument, opts = {}) {
     steps.push({ kind: 'listen', phraseIndex: pi, bars: phrase.bars, originTick, bpm, notes, passRule: null, difficulty });
     steps.push({
       kind: 'rhythm', phraseIndex: pi, bars: phrase.bars, originTick, bpm, notes, difficulty,
-      passRule: { hitRate: hitRateFor(level, 0.8), maxMeanErrorMs: 120 }
+      // maxExtras: 0 -- a wrong note struck alongside a chord (practice.js
+      // judgeAttempt's extras) never lowers hitRate, so without this every
+      // other rule here could still pass around it; see passesRule().
+      passRule: { hitRate: hitRateFor(level, 0.8), maxMeanErrorMs: 120, maxExtras: 0 }
     });
     steps.push({
       kind: 'pitches', phraseIndex: pi, bars: phrase.bars, originTick, bpm: 0, notes, difficulty,
-      passRule: sustainRules(instrument, { hitRate: hitRateFor(level, 0.8), maxMeanErrorMs: null })
+      passRule: sustainRules(instrument, { hitRate: hitRateFor(level, 0.8), maxMeanErrorMs: null, maxExtras: 0 })
     });
     steps.push({
       kind: 'phrase-slow', phraseIndex: pi, bars: phrase.bars, originTick, bpm: slowBpm, notes, difficulty,
-      passRule: sustainRules(instrument, { hitRate: hitRateFor(level, 0.8), maxMeanErrorMs: 150 })
+      passRule: sustainRules(instrument, { hitRate: hitRateFor(level, 0.8), maxMeanErrorMs: 150, maxExtras: 0 })
     });
     LADDER_FRACTIONS.forEach(fraction => {
       steps.push({
         kind: 'tempo-ladder', phraseIndex: pi, bars: phrase.bars, originTick, bpm: Math.round(bpm * fraction), notes, difficulty,
-        passRule: sustainRules(instrument, { hitRate: hitRateFor(level, 0.85), maxMeanErrorMs: 100 })
+        passRule: sustainRules(instrument, { hitRate: hitRateFor(level, 0.85), maxMeanErrorMs: 100, maxExtras: 0 })
       });
     });
   });
@@ -338,7 +341,7 @@ export function buildLessonPlan(song, partId, instrument, opts = {}) {
         originTick: chained[0].startTick,
         bpm,
         notes: chained.flatMap(p => p.notes),
-        passRule: sustainRules(instrument, { hitRate: hitRateFor(level, 0.8), maxMeanErrorMs: 120 })
+        passRule: sustainRules(instrument, { hitRate: hitRateFor(level, 0.8), maxMeanErrorMs: 120, maxExtras: 0 })
       });
     }
   }
@@ -351,7 +354,7 @@ export function buildLessonPlan(song, partId, instrument, opts = {}) {
       originTick: phrases[0].startTick,
       bpm,
       notes: playableNotes,
-      passRule: sustainRules(instrument, { hitRate: hitRateFor(level, 0.8), maxMeanErrorMs: 120 })
+      passRule: sustainRules(instrument, { hitRate: hitRateFor(level, 0.8), maxMeanErrorMs: 120, maxExtras: 0 })
     });
   }
 
