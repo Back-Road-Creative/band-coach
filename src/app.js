@@ -39,6 +39,9 @@ import { byId as instrumentById } from './instruments/index.js';
 import { rangeForInstrument, FALLBACK_RANGE, frameSizeForInstrument } from './audio/range.js';
 import { renderVoice } from './audio/voices.js';
 import { layoutFor as harpLayoutFor } from './instruments/how/harmonica.js';
+import { pieceForMidi, TRAINER_LEVELS as KIT_LEVELS } from './instruments/drum-kit.js';
+import { kitLayout, pieceAt } from './instruments/how/drum-kit.js';
+import { layoutPercussionMeasure } from './notation/percussion.js';
 // slot:import:notation-wire
 //
 // slot:import:a11y
@@ -238,6 +241,18 @@ import { register as registerPlayalong } from './ui/playalong.js';
     src.start(at);
     const seconds = samples.length / actx.sampleRate;
     deafWindow.open(Math.max(0, (at + seconds - now()) * 1000));
+  }
+  // A synthesized drum for a kit key or click (no samples): kick a 150->50 Hz sine sweep, snare
+  // noise plus a 200 Hz body, hi-hats highpassed noise (40 ms closed/pedal, 200 ms open), toms a
+  // falling sine, crash and ride long noise. Opens the deaf window for its own length, like click().
+  const DRUM_LEN = { kick: 0.12, snare: 0.15, 'hihat-closed': 0.04, 'hihat-pedal': 0.04, 'hihat-open': 0.2, 'tom-high': 0.2, 'tom-mid': 0.2, 'tom-floor': 0.2, crash: 0.8, ride: 0.8 }, TOM_HZ = { 'tom-high': 200, 'tom-mid': 160, 'tom-floor': 110 };
+  function drumHit(piece, at) {
+    if (!actx || !DRUM_LEN[piece]) return; const len = DRUM_LEN[piece];
+    const env = (node, peak) => { const v = actx.createGain(); v.gain.setValueAtTime(peak, at); v.gain.exponentialRampToValueAtTime(0.0001, at + len); node.connect(v); v.connect(actx.destination); };
+    const sine = (f0, f1, peak) => { const o = actx.createOscillator(); o.frequency.setValueAtTime(f0, at); o.frequency.exponentialRampToValueAtTime(f1, at + len); env(o, peak); o.start(at); o.stop(at + len + 0.02); };
+    const noise = (peak, hp) => { const n = Math.ceil(actx.sampleRate * len), b = actx.createBuffer(1, n, actx.sampleRate), d = b.getChannelData(0); for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1; const src = actx.createBufferSource(); src.buffer = b; let node = src; if (hp) { node = actx.createBiquadFilter(); node.type = 'highpass'; node.frequency.value = hp; src.connect(node); } env(node, peak); src.start(at); };
+    if (piece === 'kick') sine(150, 50, 0.6); else if (piece === 'snare') { noise(0.3); sine(200, 180, 0.2); } else if (TOM_HZ[piece]) sine(TOM_HZ[piece], TOM_HZ[piece] * 0.8, 0.45); else noise(piece === 'crash' || piece === 'ride' ? 0.12 : 0.2, piece === 'crash' || piece === 'ride' ? 5000 : 7000);
+    deafWindow.open(Math.max(0, (at + len - now()) * 1000));
   }
   function click(at, accent) { if (!actx) return; const o = actx.createOscillator(), v = actx.createGain(); o.type = 'square'; o.frequency.value = accent ? 1500 : 1000; v.gain.setValueAtTime(0.0001, at); v.gain.exponentialRampToValueAtTime(0.16, at + 0.002); v.gain.exponentialRampToValueAtTime(0.0001, at + 0.05); o.connect(v); v.connect(actx.destination); o.start(at); o.stop(at + 0.06); deafWindow.open(Math.max(0, (at + 0.06 - now()) * 1000)); }
 
@@ -654,6 +669,9 @@ import { register as registerPlayalong } from './ui/playalong.js';
       { name: 'Sharps and flats: E flat and C sharp', add: Wn(63, 61), limit: 12 },
       { name: 'Moves: two notes', task: 'seq', len: 2, limit: 10 }, { name: 'Moves: three notes', task: 'seq', len: 3, limit: 9 }, { name: 'Five-note runs', task: 'run', limit: 8 }
     ] };
+  // Drum kit (src/instruments/drum-kit.js): a percussion-staff bar like rhythm reading, but each
+  // note names a drum, so task 'kit' judges WHICH piece and WHEN (startKitBar/tickKitBar below).
+  MODS['drum-kit'] = { name: instrumentById['drum-kit'].name, tag: 'MIDI / keys', color: '#f08a4b', input: 'midi', kit: true, help: 'Drum kit: plug in an electronic kit over MIDI, or use the keys (F kick, J snare, D closed hat, E open hat, C hat pedal, U high tom, I mid tom, K floor tom, R crash, O ride) or click the drawn kit. Read the bar, listen to the count, play it. Marks under the notes: green on time, yellow a little early or late, red missed or the wrong drum.', levels: KIT_LEVELS.map(l => Object.assign({ task: 'kit' }, l)) };
   const MOD_IDS = Object.keys(MODS);
   // Instruments the notation engine (src/notation/) is wired into. Wind
   // already draws its own hand-built staff (drawStaff below); it is not
@@ -680,7 +698,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
     if (k === 'r') return { kind: 'cell', cell: rest, beats: CELLS[rest].b, on: CELLS[rest].on, label: CELLS[rest].say, short: CELLS[rest].say };
     return { kind: 'note', midi: 60, label: id, short: id };
   };
-  let validId = function (mod, id) { try { if (typeof id !== 'string' || id.length > 10) return false; if (id === 'bar2') return true; const k = id[0], r = id.slice(1); if (k === 'n' || k === 'w' || k === 'p' || k === 'v') return /^\d{1,3}$/.test(r); if (k === 's') return /^\d+f\d+$/.test(r) && MODS[mod].tuning && +r.split('f')[0] <= MODS[mod].tuning.length && +r.split('f')[0] >= 1; if (k === 'c') return !!CHORDS[r]; if (k === 'i') return /^\d{1,2}[adh]$/.test(r) && !!INTERVALS[parseInt(r, 10)]; if (k === 'q') return !!QUALS[r]; if (k === 'r') return !!CELLS[r]; return false; } catch (e) { return false; } };
+  let validId = function (mod, id) { try { if (typeof id !== 'string' || id.length > 10) return false; if (id === 'bar2' || id === 'kit') return true; const k = id[0], r = id.slice(1); if (k === 'n' || k === 'w' || k === 'p' || k === 'v') return /^\d{1,3}$/.test(r); if (k === 's') return /^\d+f\d+$/.test(r) && MODS[mod].tuning && +r.split('f')[0] <= MODS[mod].tuning.length && +r.split('f')[0] >= 1; if (k === 'c') return !!CHORDS[r]; if (k === 'i') return /^\d{1,2}[adh]$/.test(r) && !!INTERVALS[parseInt(r, 10)]; if (k === 'q') return !!QUALS[r]; if (k === 'r') return !!CELLS[r]; return false; } catch (e) { return false; } };
 
   // ---------- harmonica (10-hole diatonic, any of the 12 keys) and the two tools ----------
   const H = (...xs) => xs.map(x => 'h' + x);
@@ -775,6 +793,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
   // (see tests/unit/w-songs-mastery.test.mjs's "every ready record maps"
   // check) except harp, which is diatonic and still maps plenty of notes.
   function hasMasteryScheme(mod) {
+    if (MODS[mod] && MODS[mod].kit) return false; // a captured melody has no drums in it
     const probe = instrumentById[mod] ? instrumentById[mod].range.low : 60;
     return customItem(mod, probe, DB.prefs) !== null;
   }
@@ -978,7 +997,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
     if (kind === 'mix') { kind = mixKind(); }
     const dd = Object.assign({}, d, { task: kind }); if (d.task === 'mix') { if (kind === 'chord') dd.pool = 'c'; if (kind === 'hands') dd.pool = 'j'; if (kind === 'seq' && !dd.len) dd.len = 3; }
     pool = poolFor(dd);
-    if (sess.warm > 0) { sess.warm--; warm = true; const base = kind === 'bar' ? 'bar' : kind === 'chord' ? 'chord' : 'one'; kind = base; pool = byStrength(pool, modelNow).slice(0, Math.max(2, Math.ceil(pool.length / 2))); }
+    if (sess.warm > 0) { sess.warm--; warm = true; const base = kind === 'bar' || kind === 'kit' ? kind : kind === 'chord' ? 'chord' : 'one'; kind = base; pool = byStrength(pool, modelNow).slice(0, Math.max(2, Math.ceil(pool.length / 2))); }
     const t = { kind: kind, els: [], idx: 0, warm: warm, limit: d.limit || 8, ref: d.ref || 'none', blind: !!d.blind, t0: now(), done: false, revealed: false };
     const mk = id => { S.tick++; it(id, modelNow).seen = S.tick; return { id: id, info: inf(id), failed: false, t0: 0, rt: 0, reveal: shouldReveal({ exposures: it(id, modelNow).reps }) && !d.blind }; };
     if (kind === 'one' || kind === 'chord' || kind === 'hold' || kind === 'hands') t.els.push(mk(pick(lastItem, pool, modelNow)));
@@ -991,6 +1010,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
     }
     else if (kind === 'ear') { }
     else if (kind === 'bar') { let left = 4, from = lastItem, guard = 0; while (left > 0 && guard++ < 12) { const fit = pool.filter(id => CELLS[id.slice(1)].b <= left); const id = pick(from, fit.length ? fit : ['rq'], modelNow); t.els.push(mk(id)); left -= CELLS[id.slice(1)].b; from = id; } if (!t.els.some(e => e.info.on.length)) { t.els[0] = mk('rq'); } }
+    else if (kind === 'kit') { const L = d.bars ? d : M.levels[S.tick % M.levels.length], b = L.bars[S.tick % L.bars.length]; S.tick++; t.kit = { metre: L.metre, bpm: d.bars ? L.bpm : L.bpm + 6 * (S.level - M.levels.length), swing: L.swing || 0, bar: b, name: L.name }; t.els = [{ id: 'kit', info: { label: L.name }, failed: false, t0: 0, rt: 0, reveal: false }]; }
     else if (kind === 'bar2') { const variants = d.bars || [[['qr']]], cells = variants[S.tick % variants.length]; S.tick++; t.rCells = cells; t.els = [{ id: 'bar2', info: { label: d.name }, failed: false, t0: 0, rt: 0, reveal: false }]; }
     if (M.input === 'answer') { t.kind = 'ear'; if (!t.els.length) t.els.push(mk(pick(lastItem, pool, modelNow))); const e = t.els[0], fam = pool.filter(id => id[0] === e.id[0] && (e.id[0] !== 'i' || id.slice(-1) === e.id.slice(-1))); t.choices = fam.slice().sort((a, b) => (inf(a).semi || 0) - (inf(b).semi || 0) || (a < b ? -1 : 1)); t.root = 55 + ((S.tick * 5) % 12); }
     return t;
@@ -1023,11 +1043,12 @@ import { register as registerPlayalong } from './ui/playalong.js';
   }
   function present() {
     const t = task, M = MODS[mod], e = cur(); t.t0 = now(); if (e) e.t0 = now(); held = []; holdFor = 0; holdCents = []; wrongFor = 0; released = true;
-    $('choices').hidden = t.kind !== 'ear'; $('replayBtn').hidden = !(t.kind === 'ear' || mod === 'voice'); $('showMeBtn').hidden = t.kind === 'ear' || t.kind === 'bar' || t.kind === 'bar2';
+    $('choices').hidden = t.kind !== 'ear'; $('replayBtn').hidden = !(t.kind === 'ear' || mod === 'voice'); $('showMeBtn').hidden = t.kind === 'ear' || t.kind === 'bar' || t.kind === 'bar2' || t.kind === 'kit';
     let p = '', h = '';
     if (t.kind === 'ear') { p = e.info.kind === 'interval' ? 'Which <b>interval</b>?' : 'Which <b>chord</b>?'; h = 'Listen, then choose. Number keys work too.'; const box = $('choices'); box.innerHTML = ''; t.choices.forEach((id, k) => { const b = document.createElement('button'); b.type = 'button'; b.id = 'ch-' + id; b.textContent = (k + 1) + '. ' + inf(id).label; b.addEventListener('click', () => { b.blur(); answer(id); }); box.appendChild(b); }); playRef(t); }
     else if (t.kind === 'bar') { p = 'Read it, then <b>tap it</b>'; h = 'Four clicks to get ready, then tap the bar in time.'; startBar(); }
     else if (t.kind === 'bar2') { p = 'Read it, then <b>tap it</b>'; h = 'Listen for the count-in, then tap the bar (or bars) in time.'; startBar2(); }
+    else if (t.kind === 'kit') { p = 'Read it, then <b>play it</b>'; h = (t.kit.bar.tip ? t.kit.bar.tip + ' ' : '') + 'Listen for the count-in, then play the bar on the drums it shows.'; startKitBar(); }
     else if (t.kind === 'groove') { p = 'Get ready — <b>play it in time</b>'; h = 'Four clicks to count in, then play each note on the beat.'; startGroove(); }
     else { const verb = mod === 'voice' ? 'Sing' : 'Play'; p = verb + ' ' + t.els.map((el, k) => (k === t.idx ? '<b>' : '') + promptFor(el.info, el.reveal) + (k === t.idx ? '</b>' : '')).join(' → '); if (t.kind === 'hold') p = (mod === 'voice' ? 'Hold ' : 'Hold ') + '<b>' + e.info.label + '</b> for two seconds'; h = hintFor(e); playRef(t); }
     $('prompt').innerHTML = p; $('hint').textContent = (t.warm ? 'Warm-up, does not count. ' : '') + h; updateDesc();
@@ -1036,7 +1057,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
   function refreshPrompt() { if (!task || task.kind === 'ear' || task.kind === 'bar' || task.kind === 'hold') return; const verb = mod === 'voice' ? 'Sing' : 'Play'; $('prompt').innerHTML = verb + ' ' + task.els.map((el, k) => (k === task.idx ? '<b>' : '') + promptFor(el.info, el.reveal) + (k === task.idx ? '</b>' : '')).join(' → '); const e = cur(); if (e) $('hint').textContent = (task.warm ? 'Warm-up, does not count. ' : '') + hintFor(e); updateDesc(); }
   // text mirror of the canvas for the visually-hidden #cvDesc element (unit 7.7 item 1):
   // revealed mirrors the current element's own reveal/failed flag, never invents one.
-  function updateDesc() { const el = $('cvDesc'); if (!el) return; const e = cur(); const revealed = task && task.kind === 'ear' ? !!task.revealed : !!(e && (e.reveal || e.failed)); el.textContent = describeTask(task, { revealed: revealed }); }
+  function updateDesc() { const el = $('cvDesc'); if (!el) return; const e = cur(); const revealed = task && task.kind === 'ear' ? !!task.revealed : !!(e && (e.reveal || e.failed)); el.textContent = task && task.kind === 'kit' ? 'Drum kit, ' + task.kit.name + ': ' + task.kit.bar.hits.map(h => (h.flam ? 'a flam on ' : '') + h.pieces.map(kitName).join(' with ')).join(', then ') + '. Play it after the count-in.' : describeTask(task, { revealed: revealed }); }
 
   // ---------- judging ----------
   const timeQ = (rt, limit) => rt <= 0.4 * limit ? 1 : clamp(1 - 0.4 * (rt - 0.4 * limit) / (0.6 * limit), 0.6, 1);
@@ -1068,6 +1089,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
   // held-note set instead of the note-on timer window, never anything else.
   function onNote(midi, exact, source) {
     forwardSongNote(midi, exact);
+    if (MODS[mod] && MODS[mod].kit) { const p = pieceForMidi(midi); if (p === null) coach('MIDI note ' + midi + ' is not one of the drums on this kit' + (playing ? ', so it counts as an extra hit.' : '.')); else if (!playing) coach(kitName(p) + ' heard -- start an exercise to see it judged.'); onHit(p, tapAudioTime(), source); return; }
     lastInputAt = now(); pressed[midi] = performance.now();
     if (source === 'midi') { const notJudging = !playing || !task || task.done; const outOfView = !notJudging && mod === 'kbd' && (midi < kbdRange()[0] || midi > kbdRange()[1]); if (notJudging) coach(nname(midi) + ' heard' + (playing ? '.' : ' -- start an exercise to see it judged.')); else if (outOfView) coach(nname(midi) + ' heard, but that key is not drawn on screen right now.'); }
     if (!playing || !task || task.done) return; const e = cur(); if (!e) return; const i = e.info;
@@ -1215,12 +1237,53 @@ import { register as registerPlayalong } from './ui/playalong.js';
     }
   }
 
+  // ---------- drum kit: a count-in, then one bar where every note names a drum ----------
+  // bar.onsets: one per sounding note, { t, beat (quarter beats into the bar), pieces, flam }.
+  // A MIDI note, a kit key and a click on the drawn kit all land in onHit() as one tap { t, piece }.
+  const KIT = instrumentById['drum-kit'].kit, KIT_KEYS = {}; KIT.forEach(p => { KIT_KEYS[p.key] = p.id; });
+  const kitName = id => { const p = KIT.find(k => k.id === id); return p ? p.name : 'a note off the kit'; };
+  let kitFlash = { piece: null, at: -1e12 }, kitBox = null;
+  function startKitBar() {
+    const k = task.kit, M = RHY.METRES[k.metre], phrase = RHY.buildPhrase({ metre: k.metre, cells: k.bar.cells }), beatSec = (60 / k.bpm) * (M.beatUnit / RHY.TPQ), t0 = now() + 0.15, playAt = t0 + M.beats * beatSec, times = RHY.onsetsOf(phrase.events, { bpm: k.bpm, swing: k.swing });
+    let tick = 0; const beats = [], mt = k.metre.split('/').map(Number); phrase.events.forEach(ev => { if (!ev.rest && !ev.tied) beats.push(tick / RHY.TPQ); tick += ev.dur; });
+    const onsets = times.map((t, i) => ({ t: playAt + t, beat: beats[i], pieces: k.bar.hits[i].pieces, flam: k.bar.hits[i].flam }));
+    // laid out in quarter beats (a 6/8 bar is three), then the time signature shows the real metre
+    const staff = layoutPercussionMeasure({ hits: [].concat(...onsets.map(o => o.pieces.map(p => ({ piece: p, start: o.beat })))), time: [tick / RHY.TPQ, 4], width: 400 }).primitives; staff.forEach(q => { if (q.type === 'timeSig') { q.top = mt[0]; q.bottom = mt[1]; } });
+    bar = { spb: beatSec, t0: t0, playAt: playAt, end: playAt + tick * (60 / k.bpm) / RHY.TPQ + 0.3, clicks: 0, countBeats: M.beats, metre: k.metre, onsets: onsets, staff: staff, noteX: [...new Set(staff.filter(q => q.type === 'notehead').map(q => q.x))].sort((a, b) => a - b), taps: [], judged: false };
+  }
+  function onHit(piece, t, source) {
+    lastInputAt = now(); if (piece) { kitFlash = { piece: piece, at: performance.now() }; if (source !== 'midi') drumHit(piece, now() + 0.005); }
+    if (!playing || !task || task.kind !== 'kit' || !bar || bar.judged) return;
+    const latencyMs = DB.latencyMs != null ? DB.latencyMs : (actx ? (actx.outputLatency || actx.baseLatency || 0) * 1000 : 0), at = t - S.offset - latencyMs / 1000;
+    if (at >= bar.playAt - 0.25) bar.taps.push({ t: at, piece: piece, used: false });
+  }
+  function tickKitBar() {
+    if (!bar || !task || task.kind !== 'kit') return; const t = now();
+    while (bar.clicks < bar.countBeats && bar.t0 + bar.clicks * bar.spb < t + 0.12) { const at = bar.t0 + bar.clicks * bar.spb; if (at > t - 0.01) click(at, bar.clicks === 0); bar.clicks++; }
+    if (bar.judged || t <= bar.end) return;
+    bar.judged = true; const win = S.level > MODS[mod].levels.length ? 0.11 : 0.15, deltas = [];
+    const near = (o, ok) => { let best = null; bar.taps.forEach(tp => { if (!tp.used && ok(tp) && Math.abs(tp.t - o.t) <= win && (!best || Math.abs(tp.t - o.t) < Math.abs(best.t - o.t))) best = tp; }); if (best) best.used = true; return best; };
+    // right drum first (a flam wants a second snare hit within 40 ms), then an on-time hit on another drum is "wrong drum"; what is left over is extra
+    bar.onsets.forEach(o => { o.res = o.pieces.map(p => { const hit = near(o, tp => tp.piece === p); if (!hit) return { p: p, miss: true }; deltas.push(hit.t - o.t); if (!o.flam) return { p: p, dt: hit.t - o.t }; const two = near(o, tp => tp.piece === p), gap = two ? Math.abs(two.t - hit.t) : null; return gap !== null && gap <= 0.04 ? { p: p, dt: hit.t - o.t } : { p: p, flam: gap }; }); });
+    bar.onsets.forEach(o => o.res.forEach(r => { if (!r.miss) return; const other = near(o, tp => tp.piece && tp.piece !== r.p); if (other) { r.miss = false; r.wrong = other.piece; } }));
+    const all = [].concat(...bar.onsets.map(o => o.res)), misses = all.filter(r => r.miss).length, wrong = all.filter(r => r.wrong), flams = all.filter(r => r.flam !== undefined), extra = bar.taps.filter(tp => !tp.used), e = cur(), bad = misses + wrong.length + flams.length + extra.length, parts = [];
+    if (misses) parts.push(misses + ' missed');
+    if (wrong.length) parts.push(wrong.length + ' on the wrong drum (' + wrong.map(r => 'wanted ' + kitName(r.p) + ', heard ' + kitName(r.wrong)).filter((x, i, a) => a.indexOf(x) === i).join('; ') + ')');
+    if (flams.length) parts.push(flams.length + ' flam' + (flams.length > 1 ? 's' : '') + (flams[0].flam === null ? ' with one hit, not two' : ' ' + Math.round(flams[0].flam * 1000) + ' ms apart; keep the two snare hits within 40 ms'));
+    if (extra.length) parts.push(extra.length + ' extra hit' + (extra.length > 1 ? 's' : ''));
+    e.rt = 1; e.q = bad ? 0 : 1; e.failed = !!bad; const bias = deltas.length ? mean(deltas) : 0;
+    say(bad ? parts.join(', ') + '.' : 'Clean bar. Average ' + Math.round(Math.abs(bias) * 1000) + ' ms ' + (bias < 0 ? 'early' : 'late') + '.', bad ? 'no' : 'ok');
+    if (!bar.taps.length) sess.idleBars++; else sess.idleBars = 0;
+    if (sess.idleBars >= 2) { sess.idleBars = 0; task.done = true; takeBreak('away'); return; }
+    task.idx = task.els.length; finishTask(); nextTaskAt = now() + 0.4;
+  }
+
   // ---------- play in time: a count-in, then the shown notes played on the beat (F7) ----------
   // Only instruments whose note events surface through onNote() (MIDI/keys,
   // or a mic pluck once its pitch is stable) can be judged this way; voice,
   // wind and harp are held-pitch ('sustain') with no discrete attack to time.
   let grooveOn = false, groove = null, grooveLast = null;
-  function groovable(m) { const M = MODS[m]; return !!M && (M.input === 'midi' || M.input === 'pluck'); }
+  function groovable(m) { const M = MODS[m]; return !!M && !M.kit && (M.input === 'midi' || M.input === 'pluck'); }
   // A metronome tick for a groove exercise deliberately does NOT open the
   // shared deaf window (compare click(), which does): a click that blinds
   // the mic for its usual 60ms + 250ms tail would make playing ON the beat
@@ -1283,6 +1346,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
     if (!task || (task.done && now() >= nextTaskAt)) { task = buildTask(); present(); }
     if (task.kind === 'bar') tickBar();
     else if (task.kind === 'bar2') tickBar2();
+    else if (task.kind === 'kit') tickKitBar();
     else if (task.kind === 'groove') tickGroove();
     else if (!task.done) {
       const e = cur(), el = now() - e.t0, lim = task.limit * (task.kind === 'hold' ? 1.4 : 1);
@@ -1438,6 +1502,18 @@ import { register as registerPlayalong } from './ui/playalong.js';
     if (t < bar.playAt) { const left = Math.ceil((bar.playAt - t) / bar.spb); g.fillStyle = accent(); font(H * 0.22); g.textAlign = 'center'; g.fillText(String(clamp(left, 1, 4)), W * 0.5, H * 0.22); } else if (t < bar.end) { const px = X((t - bar.playAt) / bar.spb - 0); g.strokeStyle = accent(); g.lineWidth = 3; g.beginPath(); g.moveTo(px, y - H * 0.34); g.lineTo(px, y + H * 0.2); g.stroke(); bar.taps.forEach(tp => { g.fillStyle = '#93a0bd'; g.fillRect(X((tp.t - bar.playAt) / bar.spb) - 2, y + H * 0.2, 4, H * 0.06); }); }
   }
   // rests, ties, triplet brackets, dots and the time signature, for the rhythm-vocabulary bars
+  // The bar on a percussion staff (top), the kit from above (bottom): the bar's drums outlined, filled
+  // while the count-in runs, the piece just hit flashing; after judging, a mark under each note.
+  function drawKit(W, H) {
+    const on = bar && task && task.kind === 'kit' && bar.staff, t = now(), pre = on && t < bar.playAt, want = {}, s = Math.min(H * 0.5, W * 0.5), box = { x: (W - s) / 2, y: H * 0.48, s: s };
+    kitBox = box; if (on) { bar.kitBox = box; bar.onsets.forEach(o => o.pieces.forEach(p => { want[p] = 1; }));
+      const sc = Math.min(W * 0.9 / 400, H * 0.42 / 130), x0 = (W - 400 * sc) / 2, y0 = H * 0.02;
+      g.save(); g.translate(x0, y0); g.scale(sc, sc); g.strokeStyle = '#c9ced9'; g.fillStyle = '#e9edf6'; g.lineWidth = 1.5 / sc; drawPrimitives(g, bar.staff, {}); g.restore();
+      bar.onsets.forEach((o, i) => { const x = x0 + (bar.noteX[i] || 0) * sc; if (o.flam) { g.fillStyle = '#93a0bd'; font(11 * sc, 700); g.textAlign = 'center'; g.fillText('flam', x, y0 + 10 * sc); } if (!bar.judged || !o.res) return; const bad = o.res.some(r => r.dt === undefined), off = Math.max(...o.res.map(r => Math.abs(r.dt || 0))); g.fillStyle = bad ? '#ff6b5e' : off > 0.05 ? '#f3c52f' : '#5be08a'; g.beginPath(); g.arc(x, y0 + 122 * sc, 5 * sc, 0, 7); g.fill(); }); }
+    kitLayout().forEach(p => { const x = box.x + p.x * s, y = box.y + p.y * s, flash = kitFlash.piece === p.id && performance.now() - kitFlash.at < 160, lit = flash || (pre && want[p.id]);
+      g.beginPath(); g.arc(x, y, p.r * s, 0, 7); g.fillStyle = flash ? '#f3c52f' : lit ? '#f08a4b' : p.shape === 'cymbal' ? '#2a3140' : '#1b2130'; g.fill(); g.strokeStyle = want[p.id] ? '#f08a4b' : '#93a0bd'; g.lineWidth = want[p.id] ? 3 : 1.5; g.stroke();
+      g.fillStyle = lit ? '#05070c' : '#e9edf6'; font(Math.max(11, s * 0.05), 700); g.textAlign = 'center'; g.fillText(KIT.find(k => k.id === p.id).key.toUpperCase(), x, y + s * 0.018); });
+  }
   function drawBar2(W, H) {
     if (!bar || !task) return; const x0 = W * 0.1, x1 = W * 0.94, y = H * 0.48, t = now(), stem = H * 0.26, nh = H * 0.045;
     const total = RHY.totalTicks(bar.phrase.events) || 1, X = tick => x0 + (tick / total) * (x1 - x0);
@@ -1502,6 +1578,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
     if (mod === 'kbd') { const kr = kbdRange(); const tg = []; if (e) { if (e.info.kind === 'chord') { if (e.reveal || e.failed) e.info.pcs.forEach(x => tg.push(60 + x)); } else if (e.info.kind === 'hands-together') { if (e.reveal || e.failed) tg.push(e.info.ex.rh.midi, e.info.ex.lh.midi); } else if (e.reveal || e.failed) tg.push(e.info.midi); } const good = performance.now() - flashGood < 300 && task ? task.els.slice(0, task.idx).map(x => x.info.midi).filter(x => x) : []; drawKeys(W * 0.03, H * 0.18, W * 0.94, H * 0.7, kr[0], kr[1], { target: tg, good: good, names: DB.prefs.names }); if (e && e.info.kind === 'chord') { g.fillStyle = '#e9edf6'; font(H * 0.11); g.textAlign = 'center'; g.fillText(e.info.sym, W / 2, H * 0.13); } if (document.activeElement === cv) { const fi = kbdFocusInfo(); if (fi) { g.strokeStyle = '#ffd23f'; g.lineWidth = 4; g.strokeRect(fi.x + 2, fi.y + 2, fi.w - 4, fi.h - 4); } } }
     else if (M.tuning) drawFret(M, e, W, H); else if (mod === 'voice') drawVoice(e, W, H); else if (M.staff) drawStaff(M, e, W, H); else if (mod === 'harp') drawHarp(e, W, H);
     else if (mod === 'mallet-percussion') { const rec = instrumentById['mallet-percussion'], tg = e && e.info.kind === 'note' && (e.reveal || e.failed) ? [e.info.midi] : []; drawKeys(W * 0.03, H * 0.18, W * 0.94, H * 0.7, rec.range.low, rec.range.high, { target: tg, good: [], names: DB.prefs.names }); }
+    else if (M.kit) drawKit(W, H);
     else if (mod === 'ear') drawEar(W, H); else if (mod === 'rhy') { if (task && task.kind === 'bar2') drawBar2(W, H); else drawBar(W, H); }
     if (NOTATE_MOD_IDS.indexOf(mod) >= 0) drawNotation(e, W, H); else lastStaff = null;
     if (!reducedMotion && performance.now() - flashBad < 220) { g.strokeStyle = '#ff6b5e'; g.lineWidth = 8; g.strokeRect(4, 4, W - 8, H - 8); g.fillStyle = '#ff6b5e'; font(H * 0.06, 700); g.textAlign = 'left'; g.fillText('✗', 14, H * 0.09); } else if (!reducedMotion && performance.now() - flashGood < 220) { g.strokeStyle = '#5be08a'; g.lineWidth = 8; g.strokeRect(4, 4, W - 8, H - 8); g.fillStyle = '#5be08a'; font(H * 0.06, 700); g.textAlign = 'left'; g.fillText('✓', 14, H * 0.09); }
@@ -1654,9 +1731,9 @@ import { register as registerPlayalong } from './ui/playalong.js';
     const tool = !!TOOLS[mod], accentRaw = (MODS[mod] || TOOLS[mod]).color === '#e9edf6' ? '#9fb4d8' : (MODS[mod] || TOOLS[mod]).color;
     document.documentElement.style.setProperty('--accent', accentRaw); document.documentElement.style.setProperty('--accent-ink', accentInkFor(accentRaw)); document.documentElement.style.setProperty('--accent-display', accentDisplayFor(accentRaw));
     $('helpText').innerHTML = ''; const st = document.createElement('strong'); st.textContent = 'How this one works: '; $('helpText').appendChild(st); $('helpText').appendChild(document.createTextNode((MODS[mod] || TOOLS[mod]).help));
-    document.querySelectorAll('.side .card, .side .stats, #playBtn, #resetBtn').forEach(el => { el.style.display = tool ? 'none' : ''; }); $('tapPad').hidden = mod !== 'rhy'; $('timeFill').parentElement.style.visibility = tool || mod === 'rhy' ? 'hidden' : 'visible';
+    document.querySelectorAll('.side .card, .side .stats, #playBtn, #resetBtn').forEach(el => { el.style.display = tool ? 'none' : ''; }); $('tapPad').hidden = mod !== 'rhy'; $('timeFill').parentElement.style.visibility = tool || mod === 'rhy' || (MODS[mod] && MODS[mod].kit) ? 'hidden' : 'visible';
     if (tool) { $('prompt').textContent = ''; $('hint').textContent = mod === 'tuner' ? 'One open string at a time.' : 'One note at a time.'; $('choices').hidden = true; $('replayBtn').hidden = true; $('showMeBtn').hidden = true; return; }
-    const d = D(); $('levelNum').textContent = 'Level ' + S.level; $('levelName').textContent = customOn ? 'Your captured melody' : d.name; $('limitOut').textContent = d.task === 'bar' || mod === 'rhy' ? (d.bpm || 72) + ' bpm' : (d.limit || 8) + ' s per answer';
+    const d = D(); $('levelNum').textContent = 'Level ' + S.level; $('levelName').textContent = customOn ? 'Your captured melody' : d.name; $('limitOut').textContent = d.task === 'bar' || mod === 'rhy' || MODS[mod].kit ? (d.bpm || 72) + ' bpm' : (d.limit || 8) + ' s per answer';
     const pct = Math.round(S.ready * 100); $('readyFill').style.width = pct + '%'; $('readyFill').style.background = S.ready < 0.25 ? 'var(--bad)' : S.ready < 0.6 ? 'var(--warn)' : 'var(--good)'; $('readyBar').setAttribute('aria-valuenow', pct);
     const e = sess ? 1 - sess.F : 1, ep = Math.round(e * 100); $('energyFill').style.width = ep + '%'; $('energyFill').style.background = e < 0.4 ? 'var(--bad)' : e < 0.65 ? 'var(--warn)' : 'var(--good)'; $('energyBar').setAttribute('aria-valuenow', ep);
     const ds = dayStreak(), lastS = DB.sessions.filter(x => x.mod === mod).slice(-1)[0];
@@ -1845,10 +1922,11 @@ import { register as registerPlayalong } from './ui/playalong.js';
   document.addEventListener('keydown', ev => {
     if (ev.repeat || ev.ctrlKey || ev.metaKey || ev.altKey) return; const tag = ev.target.tagName; if (tag === 'SELECT' || (tag === 'INPUT' && ev.target.type !== 'checkbox')) return;
     if (mod === 'rhy' && (ev.key === ' ' || ev.key.length === 1)) { if (tag === 'BUTTON' && ev.key === ' ' && ev.target.id !== 'tapPad') return; ev.preventDefault(); ensureAudio(); onTap(ev); return; }
+    if (MODS[mod] && MODS[mod].kit && KIT_KEYS[ev.key.toLowerCase()]) { ev.preventDefault(); ensureAudio(); onHit(KIT_KEYS[ev.key.toLowerCase()], tapAudioTime(ev), 'key'); return; }
     if (mod === 'ear' && task && task.choices && /^[1-9]$/.test(ev.key)) { const id = task.choices[+ev.key - 1]; if (id) answer(id); return; }
     if (mod === 'kbd' && PCKEYS[ev.key.toLowerCase()] !== undefined) { ev.preventDefault(); ensureAudio(); const m = PCKEYS[ev.key.toLowerCase()]; tone(m, now() + 0.01, 0.5, 0.15); onNote(m, true); }
   });
-  cv.addEventListener('pointerdown', ev => { const r = cv.getBoundingClientRect(), x = (ev.clientX - r.left) * cv.width / r.width, y = (ev.clientY - r.top) * cv.height / r.height; ensureAudio(); if (mod === 'kbd') { const k = keyRects.find(q => x >= q.x && x <= q.x + q.w && y >= q.y && y <= q.y + q.h); if (k) { tone(k.m, now() + 0.01, 0.5, 0.15); onNote(k.m, true); } } if (mod === 'tuner') { const play = playRects.find(q => x >= q.x && x <= q.x + q.w && y >= q.y && y <= q.y + q.h); if (play) { tone(play.m, now() + 0.02, 1.6, 0.2); return; } const row = rowRects.find(q => x >= q.x && x <= q.x + q.w && y >= q.y && y <= q.y + q.h); if (row) tunerLock = tunerLock === row.idx ? null : row.idx; } });
+  cv.addEventListener('pointerdown', ev => { const r = cv.getBoundingClientRect(), x = (ev.clientX - r.left) * cv.width / r.width, y = (ev.clientY - r.top) * cv.height / r.height; ensureAudio(); if (MODS[mod] && MODS[mod].kit && kitBox) { const p = pieceAt((x - kitBox.x) / kitBox.s, (y - kitBox.y) / kitBox.s); if (p) onHit(p, tapAudioTime(ev), 'click'); } if (mod === 'kbd') { const k = keyRects.find(q => x >= q.x && x <= q.x + q.w && y >= q.y && y <= q.y + q.h); if (k) { tone(k.m, now() + 0.01, 0.5, 0.15); onNote(k.m, true); } } if (mod === 'tuner') { const play = playRects.find(q => x >= q.x && x <= q.x + q.w && y >= q.y && y <= q.y + q.h); if (play) { tone(play.m, now() + 0.02, 1.6, 0.2); return; } const row = rowRects.find(q => x >= q.x && x <= q.x + q.w && y >= q.y && y <= q.y + q.h); if (row) tunerLock = tunerLock === row.idx ? null : row.idx; } });
   // item 3 (Wave W, w-fixes): keyboard path onto the same canvas piano -- arrow keys move the focus cursor, Enter/Space plays the focused key.
   cv.addEventListener('keydown', ev => { if (mod !== 'kbd') return; const order = kbdOrder(); if (!order.length) return; if (ev.key === 'ArrowRight' || ev.key === 'ArrowUp') { ev.preventDefault(); kbdFocusIdx = Math.min(order.length - 1, kbdFocusIdx + 1); } else if (ev.key === 'ArrowLeft' || ev.key === 'ArrowDown') { ev.preventDefault(); kbdFocusIdx = Math.max(0, kbdFocusIdx - 1); } else if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); const k = order[Math.min(kbdFocusIdx, order.length - 1)]; if (k) { ensureAudio(); tone(k.m, now() + 0.01, 0.5, 0.15); onNote(k.m, true); } } });
   $('tapPad').addEventListener('pointerdown', ev => { ev.preventDefault(); ensureAudio(); onTap(ev); });

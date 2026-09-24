@@ -86,3 +86,10 @@ test('every keyed-woodwind and recorder/whistle instrument is marked unchecked i
     assert.match(line, /no/i, rec.name + '\'s row should flag its chart as not reviewed');
   }
 });
+
+test('the drum kit row says ready with a curriculum, now that its trainer ships', () => {
+  const section = pathwaySection(readme);
+  const line = section.split('\n').find(l => l.startsWith('|') && l.includes('Drum kit'));
+  assert.ok(line, 'expected a table row naming Drum kit');
+  assert.match(line, /^\| Drum kit \| ready \| yes \|/);
+});

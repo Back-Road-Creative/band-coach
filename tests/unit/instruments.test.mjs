@@ -219,7 +219,7 @@ const DRUM_CONTRACT = {
   ride: [51, 53, 59]
 };
 
-test('drum-kit is a planned percussion record with the contract kit and no curriculum yet', async () => {
+test('drum-kit is a ready percussion record with the contract kit and a curriculum', async () => {
   const rec = byId['drum-kit'];
   assert.ok(rec, 'expected a drum-kit record in INSTRUMENTS');
   assert.equal(rec.name, 'Drum kit');
@@ -227,8 +227,8 @@ test('drum-kit is a planned percussion record with the contract kit and no curri
   assert.equal(rec.input, 'midi');
   assert.deepEqual(rec.range, { low: 35, high: 59 });
   assert.deepEqual(rec.clefs, ['percussion']);
-  assert.equal(rec.status, 'planned');
-  assert.deepEqual(rec.curriculum, []);
+  assert.equal(rec.status, 'ready');
+  assert.ok(rec.curriculum.length > 0, 'a ready record needs its curriculum');
   const { ok, errors } = validateInstrument(rec);
   assert.equal(ok, true, errors.join('; '));
   const got = Object.fromEntries(rec.kit.map(p => [p.id, p.midi]));

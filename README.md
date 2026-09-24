@@ -478,7 +478,7 @@ pitch detection, just no diagram.
 | Tin whistle (D) | ready | yes | whistle chart | no -- unchecked | provisional (no reviewer yet) |
 | Oboe | ready | yes | keyed-woodwind chart | no -- unchecked | provisional (no reviewer yet) |
 | Mallet percussion (bells) | ready | yes | none | n/a | provisional (no reviewer yet) |
-| Drum kit | planned | not yet | drum kit (drawn) | no -- unchecked (drawn layout) | provisional (no reviewer yet) |
+| Drum kit | ready | yes | drum kit (drawn) | no -- unchecked (drawn layout) | provisional (no reviewer yet) |
 
 "Content reviewed" comes straight from each record's own `provenance` field
 (`src/instruments/schema.js`). A `provenance` of `null` means the curriculum was written by the
@@ -598,14 +598,35 @@ struck bar does not ring long enough to hold a steady pitch. Its
 detectability measurement (a synthesized inharmonic bar tone through
 `yin()`) that justified shipping it `status: 'ready'` rather than `'planned'`.
 
-The drum kit (`drum-kit`) is in the "How to play it" panel only: pick a piece
-(bass drum, snare, hi-hat closed/open/pedal, three toms, crash, ride) and see a
-top-down kit with that piece highlighted and a plain-words sentence saying where
-it sits and what plays it. The drawing comes from
-`src/instruments/how/drum-kit.js`; each piece's General MIDI percussion notes and
-suggested computer key live in `src/instruments/drum-kit.js`. Its trainer
-(curriculum, practice and judging) is not shipped yet, so the record is
-`status: 'planned'` with an empty curriculum, and no drum sound plays yet.
+The drum kit (`drum-kit`) has its own trainer. Each exercise is one bar on a
+percussion staff, with the kit drawn from above underneath it. The drums the bar
+uses are outlined, and they fill in while the count-in plays. Play the bar on an
+electronic kit over MIDI, on the computer keys (F bass drum, J snare, D closed
+hi-hat, E open hi-hat, C hi-hat pedal, U/I/K high/mid/floor tom, R crash, O
+ride), or by clicking the drawn kit. All three go to one judge. A note only
+counts when it is the right drum and within 150 ms of the beat (110 ms once you
+are past the last level). The right time on the wrong drum is reported as
+"wrong drum", with the drum it wanted. A MIDI note that isn't on the kit counts
+as an extra hit, and the coach line says so. The nine levels (in
+`TRAINER_LEVELS`, `src/instruments/drum-kit.js`, which is also where the record's
+curriculum comes from) are:
+
+1. one drum at a time
+2. bass drum and snare
+3. the eighth-note rock beat
+4. bass drum variations
+5. tom fills
+6. snare rudiments: singles, doubles, paradiddle and a flam (two snare hits
+   within 40 ms)
+7. 3/4
+8. 6/8
+9. a swing ride pattern
+
+Stickings (which hand) are not judged, since a key, click or MIDI note only says
+which drum and when; a rudiment's sticking is shown as a tip. Keys and clicks
+sound a synthesized drum (no samples). MIDI hits do not, because an e-kit sounds
+itself. The drawing comes from `src/instruments/how/drum-kit.js`. The "How to
+play it" panel still shows each piece with a plain-words sentence.
 
 Ready beginner brass (`trumpet-bb`, `horn-f`, `trombone`) each get their own
 MODS entry instead of reusing the generic `MODS.wind` trainer: `MODS.wind`'s
