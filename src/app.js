@@ -836,12 +836,20 @@ import { register as registerPlayalong } from './ui/playalong.js';
   // after it runs can never tell a genuine returning learner apart from a
   // brand-new profile. A saved TOOL id (Tuner, Ear training, ...) does not
   // count: this only tracks whether an INSTRUMENT was ever chosen. Drives
-  // buildPicker()'s decision to render the instrument row collapsed.
+  // whether #picker (now the nav Instrument button's chooser sheet, see
+  // pickerAsSheet below) starts shut or open.
   // A saved VARIANT id (e.g. 'ukulele-low-g') does not count either: U2
   // already gives a saved variant its own always-open family disclosure so
-  // it stays directly reachable, and collapsing the whole row on top of
+  // it stays directly reachable, and shutting the whole sheet on top of
   // that would hide it two levels deep behind two different controls.
   let hasSavedMod = false;
+  // P2b-1: once true, #picker behaves as a sheet that shuts itself after
+  // every instrument pick, not just the always-visible first-run list. It
+  // starts equal to hasSavedMod (a returning learner's sheet is already
+  // shut) and flips permanently true the moment a first-time visitor makes
+  // their first choice -- from then on picking an instrument always closes
+  // the sheet again, same as any returning learner reopening it to switch.
+  let pickerAsSheet = false;
   // Frozen once per page load (loadDB()) / import, never re-sampled during
   // play: every retrievability/review computation for the life of this tab
   // uses this single value, so choice never depends on how much real wall
@@ -2082,7 +2090,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
     if (pitchWorkletNode && MODS[m] && MODS[m].fmin && MODS[m].fmax) { lastWorkletRangeSent = { fmin: MODS[m].fmin, fmax: MODS[m].fmax }; pitchWorkletNode.port.postMessage({ type: 'range', fmin: MODS[m].fmin, fmax: MODS[m].fmax }); }
     if (pitchWorkletNode && actx) { const neededFrameSize = frameSizeForInstrument(instrumentById[m], actx.sampleRate); if (neededFrameSize !== lastWorkletFrameSize) { lastWorkletFrameSize = neededFrameSize; pitchWorkletNode.port.postMessage({ type: 'frameSize', frameSize: neededFrameSize }); } }
     document.querySelectorAll('#picker button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.mod === m)));
-    updatePickerCollapseSummary();
+    updateNavInstrumentLabel();
     const toolsGroup = $('pickerTools'); if (toolsGroup && TOOL_MOD_IDS.concat(Object.keys(TOOLS)).indexOf(m) >= 0) toolsGroup.open = true;
     // U2: a returning learner whose saved mod is a variant (e.g.
     // 'ukulele-low-g') lands with that variant's family disclosure already
@@ -2112,23 +2120,36 @@ import { register as registerPlayalong } from './ui/playalong.js';
   // them -- see .picker-tools in styles.css). setMod() below forces it back
   // open whenever the selected mod lives inside it, so a returning learner
   // never loses sight of where they are.
-  function buildPickerButton(m, o) { const b = document.createElement('button'); b.type = 'button'; b.dataset.mod = m; b.style.setProperty('--c', o.color); b.setAttribute('aria-pressed', 'false'); b.appendChild(document.createTextNode(o.name)); const sm = document.createElement('small'); sm.textContent = o.tag; b.appendChild(sm); b.addEventListener('click', () => { b.blur(); closePanel(); setMod(m); }); return b; }
+  function buildPickerButton(m, o) { const b = document.createElement('button'); b.type = 'button'; b.dataset.mod = m; b.style.setProperty('--c', o.color); b.setAttribute('aria-pressed', 'false'); b.appendChild(document.createTextNode(o.name)); const sm = document.createElement('small'); sm.textContent = o.tag; b.appendChild(sm); b.addEventListener('click', () => { b.blur(); closePanel(); pickerAsSheet = true; setMod(m); setInstrumentSheetOpen(false); }); return b; }
   // U2: children[parentId] lists the variant ids grouped under it, built
   // from VARIANT_PARENTS rather than a second hand-written map, so the two
   // stay impossible to drift apart.
   function variantChildrenByParent() { const out = {}; Object.keys(VARIANT_PARENTS).forEach(v => { const p = VARIANT_PARENTS[v]; (out[p] = out[p] || []).push(v); }); return out; }
-  // U5: reads the currently-pressed instrument button's own label straight
-  // out of the real DOM (rather than a second `mod`/`MODS[mod]` lookup that
-  // could drift from what setMod() actually marked pressed) and writes it
-  // into the collapsed row's summary, e.g. "Guitar -- change instrument". A
-  // no-op when there is nothing to collapse (#pickerCollapse absent for a
-  // first-time visitor) or nothing pressed yet (mid-boot, before setMod()'s
-  // first call finishes marking a button).
-  function updatePickerCollapseSummary() {
-    const collapse = $('pickerCollapse'); if (!collapse) return;
-    const summary = collapse.querySelector('summary'); if (!summary) return;
-    const pressed = collapse.querySelector('.picker-full button[aria-pressed="true"]');
-    summary.textContent = pressed ? (pressed.firstChild.textContent + ' — change instrument') : 'Choose an instrument';
+  // P2b-1: reads the currently-pressed instrument button's own label
+  // straight out of the real DOM (rather than a second `mod`/`MODS[mod]`
+  // lookup that could drift from what setMod() actually marked pressed) and
+  // writes it into the nav Instrument button, e.g. "Instrument: Guitar".
+  // The one way to change instrument now: replaces the old collapsed
+  // "<Instrument> — change instrument" summary line inside the picker
+  // itself with a single always-visible nav control. A no-op before
+  // setMod()'s first call finishes marking a button pressed.
+  function updateNavInstrumentLabel() {
+    const btn = $('navInstrument'); if (!btn) return;
+    // A fresh profile has SOME mod pressed (setMod(mod) always runs at boot,
+    // on the model default) even though nothing has genuinely been chosen
+    // yet -- pickerAsSheet, not "is anything pressed", is what tells a
+    // first-time visitor ("Choose an instrument") apart from a real choice
+    // ("Instrument: <name>"), same distinction hasSavedMod always drew.
+    const pressed = pickerAsSheet && document.querySelector('#picker button[aria-pressed="true"]');
+    btn.textContent = pressed ? t('nav.instrument', { name: pressed.firstChild.textContent }) : t('nav.chooseInstrument');
+  }
+  // Toggled by the nav Instrument button (routeTo('instrument')) and by
+  // buildPickerButton's own click handler, which always shuts the sheet
+  // again once a real choice is made -- never touches aria-current, since
+  // the instrument sheet is not one of the nav's three destinations.
+  function setInstrumentSheetOpen(open) {
+    const box = $('picker'); if (box) box.hidden = !open;
+    const btn = $('navInstrument'); if (btn) btn.setAttribute('aria-expanded', String(open));
   }
   function buildPicker() {
     const box = $('picker'), instrumentIds = MOD_IDS.filter(m => TOOL_MOD_IDS.indexOf(m) < 0), toolIds = TOOL_MOD_IDS.concat(Object.keys(TOOLS)), children = variantChildrenByParent();
@@ -2140,21 +2161,18 @@ import { register as registerPlayalong } from './ui/playalong.js';
     // is skipped from the flat top-level loop entirely (VARIANT_PARENTS[m]
     // check) -- it only ever renders inside its family's disclosure.
     //
-    // U5: the whole instrument row is the biggest remaining block on the
-    // page (fills a 390px-wide first paint on its own), so once a learner
-    // has a REAL prior choice (hasSavedMod, sampled in loadDB() before
-    // sanitizeDB's 'kbd' default hides "nothing saved yet") the row renders
-    // into a shut <details>#pickerCollapse instead of straight into #picker
-    // -- reusing .picker-tools' own disclosure idiom (shut by default,
-    // native, no JS to toggle) rather than inventing a third one. A
-    // first-time visitor has hasSavedMod false and gets the exact same flat
-    // markup as before this unit -- nothing to collapse, since picking an
-    // instrument is still the one thing this page is for.
-    const renderTarget = hasSavedMod ? document.createElement('div') : box;
-    if (hasSavedMod) renderTarget.className = 'picker-full';
+    // P2b-1: the row itself always renders straight into #picker now --
+    // #picker IS the chooser sheet the nav Instrument button opens and
+    // shuts (setInstrumentSheetOpen()), so there is exactly one disclosure
+    // controlling visibility, not the old #picker-always-visible plus a
+    // second <details>#pickerCollapse nested inside it for a returning
+    // learner. Which state the sheet starts in (shut for a returning
+    // learner, open for a first-time visitor) is decided once at boot from
+    // hasSavedMod, see the setInstrumentSheetOpen() call in the boot
+    // sequence below.
     instrumentIds.filter(m => !VARIANT_PARENTS[m]).forEach(m => {
       const kids = children[m];
-      if (!kids) { renderTarget.appendChild(buildPickerButton(m, MODS[m])); return; }
+      if (!kids) { box.appendChild(buildPickerButton(m, MODS[m])); return; }
       const group = document.createElement('span'); group.className = 'picker-variant-group'; group.dataset.modGroup = m;
       group.appendChild(buildPickerButton(m, MODS[m]));
       const toggle = document.createElement('details'); toggle.className = 'variant-toggle';
@@ -2167,23 +2185,8 @@ import { register as registerPlayalong } from './ui/playalong.js';
       toggle.appendChild(list);
       if (kids.indexOf(mod) >= 0) toggle.open = true;
       group.appendChild(toggle);
-      renderTarget.appendChild(group);
+      box.appendChild(group);
     });
-    if (hasSavedMod) {
-      const collapse = document.createElement('details'); collapse.className = 'picker-collapse'; collapse.id = 'pickerCollapse';
-      const collapseSummary = document.createElement('summary'); collapse.appendChild(collapseSummary);
-      // Delegated rather than one listener per button: covers every current
-      // instrument AND variant button (buildPickerButton's own click
-      // listener runs first, in the target phase, and has already called
-      // setMod() -- which marks aria-pressed and refreshes the summary text
-      // -- by the time this bubbles up) with one place to maintain. Only a
-      // genuine mod pick re-collapses the row; opening/closing a variant
-      // family's own <summary> is not a `button[data-mod]` click and leaves
-      // the outer row exactly as the learner left it.
-      renderTarget.addEventListener('click', ev => { if (ev.target.closest('button[data-mod]')) collapse.open = false; });
-      collapse.appendChild(renderTarget);
-      box.appendChild(collapse);
-    }
     const toolsGroup = document.createElement('details'); toolsGroup.className = 'picker-tools'; toolsGroup.id = 'pickerTools';
     // The label names what is inside, but is BUILT from the tool names
     // rather than repeating them: a hand-written list silently goes stale
@@ -2368,8 +2371,14 @@ import { register as registerPlayalong } from './ui/playalong.js';
   // BEFORE calling openPanel -- openPanel() unconditionally ends a running
   // session, so without this guard clicking Songs again while Songs is
   // already open would silently end the learner's session for nothing.
+  // P2b-1: 'instrument' is not one of those three destinations -- it never
+  // claims aria-current (navDestFor/updateNavState don't know it exists)
+  // and never touches an open panel, closed or otherwise. It only flips
+  // whether the chooser sheet (#picker) is shown, so a learner can open it
+  // from any screen -- e.g. from Songs -- without losing their place.
   const NAV_PANEL_FOR = { songs: 'songs', progress: 'history' };
   function routeTo(dest) {
+    if (dest === 'instrument') { setInstrumentSheetOpen($('picker').hidden); return; }
     if (dest === navDestFor(panels.current())) return;
     if (dest === 'practice') { closePanel(); return; }
     const panelId = NAV_PANEL_FOR[dest]; if (!panelId) return;
@@ -2390,7 +2399,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
     panels.list().forEach(p => { const b = document.createElement('button'); b.type = 'button'; b.dataset.panel = p.id; b.style.setProperty('--c', p.color || '#93a0bd'); b.setAttribute('aria-pressed', 'false'); b.appendChild(document.createTextNode(p.name)); const sm = document.createElement('small'); sm.textContent = p.tag || ''; b.appendChild(sm); b.addEventListener('click', () => { b.blur(); openPanel(p.id); }); box.appendChild(b); });
   }
   applyStaticLabels(document);
-  loadDB(); if (!Array.isArray(DB.custom)) DB.custom = []; $('optNames').checked = DB.prefs.names; $('optTheme').value = DB.prefs.theme; applyTheme(DB.prefs.theme); $('optNoteSystem').value = DB.prefs.noteNaming.system; $('optAccidentals').value = DB.prefs.noteNaming.accidentals; buildPicker(); buildPanelPicker(); buildNav(); setMod(mod); requestAnimationFrame(frame);
+  loadDB(); if (!Array.isArray(DB.custom)) DB.custom = []; $('optNames').checked = DB.prefs.names; $('optTheme').value = DB.prefs.theme; applyTheme(DB.prefs.theme); $('optNoteSystem').value = DB.prefs.noteNaming.system; $('optAccidentals').value = DB.prefs.noteNaming.accidentals; buildPicker(); pickerAsSheet = hasSavedMod; setInstrumentSheetOpen(!hasSavedMod); buildPanelPicker(); buildNav(); setMod(mod); requestAnimationFrame(frame);
   const hook = !__DEBUG_HOOK__ ? null : { state: () => S, db: () => DB, sess: () => sess, task: () => task, cur: cur, note: onNote, answer: answer, tap: onTap, bar: () => bar, playing: () => playing, setMod: setMod, testSource: testSource, heard: () => heard, yin: yin, cap: () => cap, tuner: () => tunerState, tunerLock: () => tunerLock, deaf: () => deafWindow.isDeaf(), deafUntil: () => deafWindow.until(), exportProgress: doExportProgress, importProgress: doImportProgress, audioNow: audioNow, modelNow: () => modelNow, plan: () => sessionPlan };
   // Debug-hook slots: replace ONLY your own line with
   //   if (__DEBUG_HOOK__) Object.assign(hook, { … });

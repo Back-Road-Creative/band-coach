@@ -4,6 +4,9 @@
 // is the nav's only entry point; openPanel()/closePanel() keep the nav
 // honest no matter how a panel was actually reached (old picker, a panel's
 // own back control, or the nav itself).
+// P2b-1: a fourth button, Instrument, joins the row -- it opens/shuts the
+// instrument chooser sheet (#picker) rather than routing to a panel, so it
+// never claims aria-current and never disturbs whatever panel is open.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { HTML_PATH } from '../helpers/html-path.mjs';
@@ -11,15 +14,18 @@ import { launchPage } from '../helpers/browser.mjs';
 
 const htmlPath = HTML_PATH;
 
-test('the nav bar shows exactly Practice, Songs, Progress in order, Practice current at boot', async (t) => {
+test('the nav bar shows exactly Practice, Songs, Progress, Instrument in order, Practice current at boot', async (t) => {
   const page = await launchPage(htmlPath);
   t.after(() => page.close());
 
   const labels = await page.evaluate("Array.from(document.querySelectorAll('#mainNav button')).map(b => b.textContent.trim())");
-  assert.deepEqual(labels, ['Practice', 'Songs', 'Progress']);
+  assert.equal(labels.length, 4);
+  assert.deepEqual(labels.slice(0, 3), ['Practice', 'Songs', 'Progress']);
+  assert.match(labels[3], /^(Choose an instrument|Instrument: )/, 'the fourth button is the Instrument control: ' + JSON.stringify(labels[3]));
   assert.equal(await page.evaluate("document.querySelector('#mainNav button[data-route=\"practice\"]').getAttribute('aria-current')"), 'page');
   assert.equal(await page.evaluate("document.querySelector('#mainNav button[data-route=\"songs\"]').getAttribute('aria-current')"), null);
   assert.equal(await page.evaluate("document.querySelector('#mainNav button[data-route=\"progress\"]').getAttribute('aria-current')"), null);
+  assert.equal(await page.evaluate("document.querySelector('#mainNav button[data-route=\"instrument\"]').getAttribute('aria-current')"), null, 'Instrument is never "current" -- it opens a sheet, not a destination');
 });
 
 test('clicking Songs opens the songs panel and marks Songs current', async (t) => {
@@ -67,6 +73,21 @@ test('a panel opened through the old picker (not a nav destination) leaves no na
 
   await page.evaluate('window.__coach.closePanel()');
   assert.equal(await page.evaluate("document.querySelector('#mainNav button[data-route=\"practice\"]').getAttribute('aria-current')"), 'page');
+});
+
+test('clicking Instrument while Songs is open opens the sheet but leaves Songs current and its panel open', async (t) => {
+  const initScript = "localStorage.setItem('bandcoach.v1', JSON.stringify({ prefs: { mod: 'gtr' } }));";
+  const page = await launchPage(htmlPath, { initScript });
+  t.after(() => page.close());
+
+  await page.evaluate("document.querySelector('#mainNav button[data-route=\"songs\"]').click()");
+  await page.waitFor("window.__coach.panelOpen() === 'songs'");
+
+  await page.evaluate("document.getElementById('navInstrument').click()");
+
+  assert.equal(await page.evaluate('window.__coach.panelOpen()'), 'songs', 'Songs panel stays open');
+  assert.equal(await page.evaluate("document.querySelector('#mainNav button[data-route=\"songs\"]').getAttribute('aria-current')"), 'page', 'Songs stays current');
+  assert.equal(await page.evaluate("document.getElementById('picker').hidden"), false, 'the instrument sheet opens');
 });
 
 // browser.mjs's page handle has no real keyboard-dispatch primitive (only

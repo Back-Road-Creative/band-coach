@@ -67,9 +67,13 @@
 
   /* P2a: the one always-visible way to reach the three destinations
      (Practice/Songs/Progress) -- never wraps, even at a 390px phone width,
-     so it stays a single reachable row instead of stacking. */
+     so it stays a single reachable row instead of stacking.
+     P2b-1: a fourth button (Instrument) joins the row -- its label carries
+     the current instrument's name, so it is the longest and most likely to
+     run out of room first; the ellipsis keeps all four on one line rather
+     than wrapping or squeezing the others. */
   .main-nav { display: flex; flex-wrap: nowrap; gap: 8px; }
-  .main-nav button { flex: 1 1 0; text-align: center; }
+  .main-nav button { flex: 1 1 0; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .main-nav button[aria-current="page"] { background: var(--text); color: var(--ground); border-color: var(--text); }
 
   .picker { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-start; }
@@ -122,21 +126,6 @@
   .picker-variant-group > .variant-toggle[open] > summary::before { content: '\25be  '; }
   .picker-variant-group > .variant-toggle > .variant-buttons { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; padding-left: 10px; border-left: 2px solid var(--line); }
   .picker-variant-group > .variant-toggle > .variant-buttons button { padding: 6px 10px; font-size: 13px; }
-  /* U5: once a returning learner has a saved instrument, the whole row
-     collapses behind this one disclosure -- reusing .picker-tools' own
-     idiom (triangle marker, muted summary, shut by default) rather than a
-     third look, but sized like the top-level heading it now stands in for:
-     14px, same weight as "More ways to practise", not the quieter 12px
-     .picker-tools label. Its own class, never `.picker-tools`, since a
-     first-time visitor gets no wrapper here at all -- see buildPicker(). */
-  .picker-collapse { flex-basis: 100%; }
-  .picker-collapse > summary { cursor: pointer; list-style: none; font: 600 14px var(--body); color: var(--muted); }
-  .picker-collapse > summary::-webkit-details-marker { display: none; }
-  .picker-collapse > summary::before { content: '\25b8  '; }
-  .picker-collapse[open] > summary { color: var(--text); margin-bottom: 8px; }
-  .picker-collapse[open] > summary::before { content: '\25be  '; }
-  .picker-collapse > .picker-full { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-start; }
-
   /* R10 P9: one 8px scale (8 inside a group, 16 between groups, 24 between
      sections) instead of ad hoc numbers -- 18px between the stage and the
      side rail rounds down to the 16px "between groups" step. */

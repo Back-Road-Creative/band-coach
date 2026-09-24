@@ -34,6 +34,8 @@ export const en = {
   'nav.practice': 'Practice',
   'nav.songs': 'Songs',
   'nav.progress': 'Progress',
+  'nav.instrument': 'Instrument: {name}',
+  'nav.chooseInstrument': 'Choose an instrument',
   'panel.more': 'More ways to practise',
   'setup.button': 'Set up input',
   'setup.connect': 'Connect',
