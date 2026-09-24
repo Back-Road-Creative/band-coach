@@ -155,14 +155,13 @@ export function register(panels) {
 }
 
 // Switches to another registered panel the one real, already-shipping way
-// any panel switches to another: a click on the app's own panel-picker
-// button (src/app.js's buildPanelPicker()/openPanel()) -- same precedent as
-// src/ui/learn.js's openSongsPanel(). No-op where no such button exists (a
-// host page that never wired panel switching in).
-function openOtherPanel(hostEl, panelId) {
-  const doc = hostEl.ownerDocument || document;
-  const btn = doc.querySelector('#panelPicker button[data-panel="' + panelId + '"]') || doc.querySelector('button[data-panel="' + panelId + '"]');
-  if (btn) { btn.click(); return true; }
+// any panel switches to another: src/app.js's panelApi.openPanel(id) (P2b-3
+// -- panels no longer all have a button of their own to click, e.g. Learn
+// this now lives in the Songs panel's own Add-a-song row) -- same precedent
+// as src/ui/learn.js's openSongsPanel(). No-op where api carries no
+// openPanel (a host page/unit test that never wired panel switching in).
+function openOtherPanel(api, panelId) {
+  if (api && typeof api.openPanel === 'function') { api.openPanel(panelId); return true; }
   return false;
 }
 
@@ -306,7 +305,7 @@ function mountEditor(hostEl, api) {
   // input keep working exactly as before (existing tests use them directly),
   // this just tells a learner where the newer, simpler door is.
   const learnTipBtn = el('button', { type: 'button', id: 'editorLearnTipBtn', class: 'small', text: 'Open Learn this' });
-  learnTipBtn.addEventListener('click', () => openOtherPanel(hostEl, 'learn'));
+  learnTipBtn.addEventListener('click', () => openOtherPanel(api, 'learn'));
   const learnTip = el('p', { class: 'editor-learn-tip' }, [
     document.createTextNode('Tip: Learn this takes any recording or music file in one place. '), learnTipBtn,
   ]);

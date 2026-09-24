@@ -445,11 +445,10 @@ function mountPlayalong(el, api) {
     cancelled = true;
   });
 
-  learnTipBtn.addEventListener('click', () => {
-    const doc = el.ownerDocument || document;
-    const btn = doc.querySelector('#panelPicker button[data-panel="learn"]') || doc.querySelector('button[data-panel="learn"]');
-    if (btn) btn.click();
-  });
+  // P2b-3: Learn this now has a real home of its own in the Songs panel's
+  // Add-a-song row -- this tip's button just opens it directly through the
+  // same panelApi.openPanel() that row uses.
+  learnTipBtn.addEventListener('click', () => { if (api && typeof api.openPanel === 'function') api.openPanel('learn'); });
 
   // A pending requestPlayalongRecording() (src/ui/learn.js's "Play along
   // with this recording") -- read once, on the very next show(), then

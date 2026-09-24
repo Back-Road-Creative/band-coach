@@ -3,8 +3,8 @@
 // src/ui/songs.js's hide() -- so "I judged a step or two, then bailed out"
 // counts toward today's minutes the same way finishing the lesson does
 // (tests/characterization/songs-session-log.test.mjs). Switches panels
-// through the REAL picker buttons (#panelPicker), not the __coach hook, so
-// this proves the shipped click path, not just the debug shortcut.
+// through the REAL instrument-sheet Tools-group button, not the __coach
+// hook, so this proves the shipped click path, not just the debug shortcut.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
@@ -71,9 +71,12 @@ test('leaving the Songs panel after a judged step logs exactly one session row, 
 
   assert.equal(await page.evaluate('window.__coach.db().sessions.length'), 0, 'sanity check: no session logged yet, mid-lesson');
 
-  // Leave the Songs panel through the real panel picker (not the __coach
-  // hook), the same click path a learner uses.
-  await page.evaluate("document.querySelector('#panelPicker button[data-panel=\"ear\"]').click()");
+  // Leave the Songs panel through the real instrument-sheet Tools-group
+  // button (not the __coach hook), the same click path a learner uses. This
+  // profile never saved an instrument (only __coach.setMod() was used
+  // above, which does not touch the sheet), so the sheet is still open from
+  // first paint -- no navInstrument click needed to reach it.
+  await page.evaluate("document.querySelector('#picker .picker-tools button[data-panel=\"ear\"]').click()");
   await page.waitFor('window.__coach.db().sessions.length > 0');
 
   const afterLeave = await page.evaluate('window.__coach.db().sessions');

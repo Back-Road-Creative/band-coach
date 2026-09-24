@@ -60,11 +60,15 @@ function threeToneWav(path) {
 // -- see the practiceGate coverage below, which relies on that).
 const ABC = 'X:1\nT:Learn Test\nM:4/4\nL:1/8\nQ:120\nK:C\nCDEFGABc|\n';
 
-test('the panel picker offers a "Learn this" panel', async (t) => {
+test('the Songs panel\'s Add-a-song row offers a "Learn this" button', async (t) => {
   const page = await launchPage(htmlPath);
   t.after(() => page.close());
-  const exists = await page.evaluate("!!document.querySelector('#panelPicker button[data-panel=\"learn\"]')");
-  assert.equal(exists, true, 'a Learn this panel button is registered in the real app\'s panel picker');
+  await page.evaluate("window.__coach.openPanel('songs')");
+  await page.waitFor("document.querySelector('.add-song-row')");
+  const exists = await page.evaluate(
+    "Array.from(document.querySelectorAll('.add-song-row button')).some(b => b.textContent.trim() === 'Learn this')",
+  );
+  assert.equal(exists, true, 'a Learn this button is offered in the Songs panel\'s Add-a-song row');
 });
 
 test('a real .abc file dropped in becomes a practisable song, title + Play it on cards + library entry', async (t) => {

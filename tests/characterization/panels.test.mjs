@@ -11,8 +11,7 @@ test('a registered panel opens in place of the trainer and an instrument closes 
   t.after(() => page.close());
   await page.evaluate(`window.__coach.registerPanel({ id: 'demo', name: 'Demo', tag: 'test',
     mount: el => { el.innerHTML = '<p id="demoBody">hello</p>'; window.__demoShown = 0; return { show: () => window.__demoShown++ }; } })`);
-  assert.equal(await page.evaluate("document.getElementById('panelPicker').hidden"), false);
-  await page.evaluate("document.querySelector('#panelPicker button[data-panel=\"demo\"]').click()");
+  await page.evaluate("window.__coach.openPanel('demo')");
   assert.equal(await page.evaluate('window.__coach.panelOpen()'), 'demo');
   assert.equal(await page.evaluate("document.getElementById('mainArea').hidden"), true);
   assert.equal(await page.evaluate("document.getElementById('demoBody').textContent"), 'hello');

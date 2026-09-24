@@ -1,6 +1,6 @@
 // P2a: one always-visible, plain-language nav bar (Practice/Songs/Progress)
-// so a learner never has to discover "More ways to practise" (still present,
-// removed in P2b) to find their songs or their practice history. routeTo()
+// so a learner never has to discover "More ways to practise" (removed for
+// good in P2b-3) to find their songs or their practice history. routeTo()
 // is the nav's only entry point; openPanel()/closePanel() keep the nav
 // honest no matter how a panel was actually reached (old picker, a panel's
 // own back control, or the nav itself).
@@ -67,11 +67,14 @@ test('clicking Practice closes whatever panel is open and marks Practice current
   assert.equal(await page.evaluate("document.querySelector('#mainNav button[data-route=\"practice\"]').getAttribute('aria-current')"), 'page');
 });
 
-test('a panel opened through the old picker (not a nav destination) leaves no nav button current, and closing it restores Practice', async (t) => {
-  const page = await launchPage(htmlPath);
+test('a panel opened through the instrument sheet\'s Tools group (not a nav destination) leaves no nav button current, and closing it restores Practice', async (t) => {
+  const initScript = "localStorage.setItem('bandcoach.v1', JSON.stringify({ prefs: { mod: 'gtr' } }));";
+  const page = await launchPage(htmlPath, { initScript });
   t.after(() => page.close());
 
-  await page.evaluate("document.querySelector('#panelPicker button[data-panel=\"theory\"]').click()");
+  await page.evaluate("document.getElementById('navInstrument').click()");
+  await page.waitFor("document.getElementById('picker').hidden === false");
+  await page.evaluate("document.querySelector('#picker .picker-tools button[data-panel=\"theory\"]').click()");
   await page.waitFor("window.__coach.panelOpen() === 'theory'");
   const anyCurrent = await page.evaluate("!!document.querySelector('#mainNav button[aria-current]')");
   assert.equal(anyCurrent, false, 'no nav button should claim to be current for a panel the nav does not route to');

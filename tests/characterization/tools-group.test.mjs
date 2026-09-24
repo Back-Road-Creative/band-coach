@@ -4,8 +4,9 @@
 // -- with nothing telling them apart. This pins three things: (a) a tool
 // button is visually distinguishable from an instrument button via its
 // container/class, (b) "Ear training" is exactly one control in the whole
-// document (the mod-picker entry and the #panelPicker Ear training panel
-// used to duplicate the label), (c) clicking a tool still selects that mod
+// document (the mod-picker entry and the Tools group's own Ear training
+// panel button, its P2b-3 home, used to duplicate the label), (c) clicking
+// a tool still selects that mod
 // exactly as before -- dataset.mod and the aria-pressed contract are
 // untouched by the regrouping.
 import { test } from 'node:test';
