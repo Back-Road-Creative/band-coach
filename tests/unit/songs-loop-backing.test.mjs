@@ -60,3 +60,43 @@ test('rateLabel reads "Full speed" at the ceiling, and a plain percentage below 
   assert.equal(rateLabel(0.9), 'Playing at 90% speed');
   assert.equal(rateLabel(0.5), 'Playing at 50% speed');
 });
+
+// Wave: extras hold-clean. Before this, "clean" only meant hitCount ===
+// judgedCount -- an attempt that hit every note but blew the step's own
+// timing/hold/tune/extras rule still sped the backing up. Passing the
+// step's passRule now decides "clean", via passesRule() (./practice.js).
+test('an attempt with hitCount === judgedCount but a meanErrorMs above the passRule does NOT read as clean', () => {
+  const transport = createLoopBackingTransport();
+  const passRule = { hitRate: 0.8, maxMeanErrorMs: 50 };
+  const judged = { hitCount: 3, judgedCount: 3, hitRate: 1, meanErrorMs: 200 };
+  const before = transport.getRate();
+  const rate = applyAttemptToTransport(transport, judged, passRule);
+  assert.ok(rate <= before, 'a rule-failing attempt should not raise the rate: before=' + before + ' after=' + rate);
+  assert.equal(transport.getRate(), rate);
+});
+
+test('an attempt with hitCount === judgedCount but extras over the passRule does NOT read as clean', () => {
+  const transport = createLoopBackingTransport();
+  const passRule = { hitRate: 0.8, maxExtras: 0 };
+  const judged = { hitCount: 3, judgedCount: 3, hitRate: 1, meanErrorMs: 0, extras: { count: 1, list: [] } };
+  const before = transport.getRate();
+  const rate = applyAttemptToTransport(transport, judged, passRule);
+  assert.ok(rate <= before, 'an attempt with a stray extra note should not raise the rate: before=' + before + ' after=' + rate);
+});
+
+test('an attempt that actually passes the passRule DOES read as clean and raises the rate', () => {
+  const transport = createLoopBackingTransport();
+  applyAttemptToTransport(transport, { hitCount: 0, judgedCount: 3, hitRate: 0 }); // miss first, room to rise
+  const before = transport.getRate();
+  const passRule = { hitRate: 0.8, maxMeanErrorMs: 50 };
+  const judged = { hitCount: 3, judgedCount: 3, hitRate: 1, meanErrorMs: 10 };
+  const rate = applyAttemptToTransport(transport, judged, passRule);
+  assert.ok(rate > before, 'a rule-passing attempt should raise the rate: before=' + before + ' after=' + rate);
+});
+
+test('applyAttemptToTransport keeps the old hit-count-only behaviour when no passRule is given', () => {
+  const transport = createLoopBackingTransport();
+  const rate = applyAttemptToTransport(transport, { hitCount: 3, judgedCount: 3, hitRate: 1, meanErrorMs: 9999 });
+  assert.equal(rate, transport.getRate());
+  assert.ok(rate >= 1.0, 'with no passRule, hitCount === judgedCount alone should still read as clean');
+});

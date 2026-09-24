@@ -823,12 +823,15 @@ function mountSongsPanel(hostEl, api) {
       onsetsOnly: step.kind === 'rhythm',
     });
     // Feed this attempt's outcome to the tempo ladder BEFORE passesRule()
-    // reads step.passRule -- rate only affects the NEXT attempt's backing
-    // and judging (effectiveBpm() above already ran for THIS one), so a
-    // miss on a rung the learner is about to be dropped from still slows
-    // the backing down for anyone retrying it.
+    // (below) reads step.passRule for `passed` -- rate only affects the
+    // NEXT attempt's backing and judging (effectiveBpm() above already ran
+    // for THIS one), so a miss on a rung the learner is about to be dropped
+    // from still slows the backing down for anyone retrying it. Passing
+    // step.passRule here too means "clean" (speeds the rate up) requires
+    // actually PASSING the step -- hitting every note while failing on
+    // timing, hold/tune or an extra note is not clean.
     if (step.kind === 'tempo-ladder' && practice.loopTransport) {
-      applyAttemptToTransport(practice.loopTransport, result);
+      applyAttemptToTransport(practice.loopTransport, result, step.passRule);
     }
     const passed = passesRule(result, step.passRule);
     // Every correctly-pitched note counts toward the trainer's own streak
