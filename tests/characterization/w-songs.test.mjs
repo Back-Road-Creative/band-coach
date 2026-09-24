@@ -30,13 +30,17 @@ test('the file input accepts the supported song and challenge extensions', async
   t.after(() => page.close());
 
   await page.evaluate("window.__coach.openPanel('songs')");
+  // P3-4: Add a song's single file input now also takes a recording
+  // (src/ui/songs/add-source.js's ADD_ACCEPT), so the accept string and its
+  // help line grew a .wav mention alongside the existing extensions.
   const accept = await page.evaluate("document.getElementById('songsFileInput').getAttribute('accept')");
-  assert.equal(accept, '.mid,.midi,.abc,.xml,.musicxml,.mxl,.gp,.gp5,.bandpack,.json');
+  assert.equal(accept, '.mid,.midi,.abc,.xml,.musicxml,.mxl,.gp,.gp5,.bandpack,.json,.wav,.mp3,.ogg,.m4a,.flac,.webm');
   const label = await page.evaluate("document.querySelector('label[for=\"songsFileInput\"]').textContent");
   assert.ok(label.includes('.mid'));
   assert.ok(label.includes('.mxl'), 'label mentions compressed MusicXML: ' + label);
   assert.ok(label.includes('.gp'), 'label mentions Guitar Pro: ' + label);
   assert.ok(label.includes('.bandpack'), 'label mentions band packs: ' + label);
+  assert.ok(label.includes('.wav'), 'label mentions recordings: ' + label);
 });
 
 test('choosing a one-part starter song opens a practice lesson, starting with a listen step', async (t) => {

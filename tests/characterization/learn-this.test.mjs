@@ -60,15 +60,24 @@ function threeToneWav(path) {
 // -- see the practiceGate coverage below, which relies on that).
 const ABC = 'X:1\nT:Learn Test\nM:4/4\nL:1/8\nQ:120\nK:C\nCDEFGABc|\n';
 
-test('the Songs panel\'s Add-a-song row offers a "Learn this" button', async (t) => {
+// P3-4: the Songs panel's Add-a-song row no longer points at this panel by
+// name -- it opens its own record-or-open-file section built from the same
+// record-door.js/review.js this panel uses (tests/characterization/
+// songs-add-a-song.test.mjs covers it in full). Renamed from "...offers a
+// 'Learn this' button".
+test('Add a song offers a way to record or open a recording', async (t) => {
   const page = await launchPage(htmlPath);
   t.after(() => page.close());
   await page.evaluate("window.__coach.openPanel('songs')");
   await page.waitFor("document.querySelector('.add-song-row')");
-  const exists = await page.evaluate(
-    "Array.from(document.querySelectorAll('.add-song-row button')).some(b => b.textContent.trim() === 'Learn this')",
+  await page.evaluate(
+    "Array.from(document.querySelectorAll('.add-song-row button')).find(b => b.textContent.trim() === 'Add a song').click()",
   );
-  assert.equal(exists, true, 'a Learn this button is offered in the Songs panel\'s Add-a-song row');
+  await page.waitFor("!!document.querySelector('.panel-songs-record-btn')");
+  const hasRecordBtn = await page.evaluate("!!document.querySelector('.panel-songs-record-btn')");
+  const hasFileInput = await page.evaluate("!!document.getElementById('songsFileInput')");
+  assert.equal(hasRecordBtn, true, 'a Record button is offered');
+  assert.equal(hasFileInput, true, 'an Open file input is offered');
 });
 
 test('a real .abc file dropped in becomes a practisable song, title + Play it on cards + library entry', async (t) => {

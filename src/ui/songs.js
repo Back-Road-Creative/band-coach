@@ -62,26 +62,25 @@ import { exportMusicXml } from '../song/export-musicxml.js';
 import { exportAbc } from '../song/export-abc.js';
 import { makeEvent } from '../core/learning-events.js';
 import { t } from '../core/i18n.js';
+import { classifyAddFile, ADD_ACCEPT, ADD_HELP_LINE, UNSUPPORTED_MESSAGE } from './songs/add-source.js';
+import { createRecordDoor, transcribeAudioFile } from './songs/record-door.js';
+import { renderReview, makeHandoffs } from './songs/review.js';
+import { sanitizeStatusLedger, markDraft, markChecked, statusFor, statusLabel } from './songs/song-status.js';
 
 // Every playable ('ready') instrument record, for the "Play it on…" row --
 // same source src/app.js reads for notation/mic-range/how-to-play, so this
 // panel never invents an instrument list of its own.
 const READY_INSTRUMENTS = INSTRUMENTS.filter((i) => i.status === 'ready');
 
-// P2b-3: the plain home for three sibling panels that used to sit behind
-// the now-deleted "More ways to practise" disclosure -- Record a tune
-// (src/ui/editor.js), Learn this (src/ui/learn.js) and Play Along
-// (src/ui/playalong.js) are all ways to ADD a song to practise, so they sit
-// in one row at the very top of this panel rather than getting three
-// separate nav buttons of their own. Labels match each panel's own
-// registered `name` exactly (panels.register in the files above), so a
-// rename there never goes stale here.
-const ADD_SONG_PANELS = [
-  { id: 'editor', label: 'Record a tune' },
-  { id: 'learn', label: 'Learn this' },
-  { id: 'playalong', label: 'Play Along' },
-];
-
+// P3-4: one "Add a song" button, at the very top of this panel, replaces the
+// old three-panel Add-a-song row (Record a tune / Learn this / Play Along --
+// each of those still exists as its own registered panel, reached now only
+// from a song's own "Edit notes"/"Play along" hand-offs, see below). Pressing
+// it reveals a section with the SAME record door and review screen "Learn
+// this" (src/ui/learn.js) uses (src/ui/songs/record-door.js,
+// src/ui/songs/review.js -- both P3-2/P3-3 moves out of learn.js), so adding
+// a song never leaves the Songs panel at all.
+//
 // ---------------------------------------------------------------------------
 // onNote() forwarding (the one permitted src/app.js line)
 // ---------------------------------------------------------------------------
@@ -387,6 +386,15 @@ function mountSongsPanel(hostEl, api) {
   // "N of M songs passed" line from (plan D7: a ledger of pass/fail, no
   // XP or leagues).
   const progressStore = api.store('songs-progress');
+  // Draft/Checked status per song, saved through Add a song (P3-4/P3-5:
+  // src/ui/songs/song-status.js). Read fresh every time through
+  // sanitizeStatusLedger() -- never trusted as already-clean, the same rule
+  // every other api.store() read in this file follows.
+  const statusStore = api.store('song-status');
+  function songStatusLedger() { return sanitizeStatusLedger(statusStore.get()); }
+  function setSongStatus(fn, songId, opts) {
+    statusStore.set(opts !== undefined ? fn(songStatusLedger(), songId, opts) : fn(songStatusLedger(), songId));
+  }
   // The challenge currently being shown in challengeSection, or null.
   let currentChallenge = null;
 
@@ -400,15 +408,60 @@ function mountSongsPanel(hostEl, api) {
   let countEl = null;
 
   hostEl.innerHTML = '';
-  // FIRST inside the container, ahead of even the heading -- the three
-  // ways to add a song are the thing a learner arriving from the nav's
-  // Songs button is most likely to want before they have any songs of
-  // their own to pick from.
-  const addSongRow = el('div', { class: 'add-song-row', role: 'group', 'aria-label': t('songs.addRow') });
-  ADD_SONG_PANELS.forEach((p) => {
-    addSongRow.appendChild(el('button', { type: 'button', text: p.label, onclick: () => api.openPanel(p.id) }));
+  // FIRST inside the container, ahead of even the heading -- adding a song
+  // is the thing a learner arriving from the nav's Songs button is most
+  // likely to want before they have any songs of their own to pick from.
+  // The wrapper keeps the same `add-song-row` class the old three-button row
+  // used, so it stays the panel's first child either way.
+  let addSongOpen = false;
+  const addSongToggleBtn = el('button', {
+    type: 'button', text: 'Add a song', 'aria-expanded': 'false',
+    onclick: () => toggleAddSong(),
   });
+  const addSongRow = el('div', { class: 'add-song-row', role: 'group', 'aria-label': t('songs.addRow') }, [addSongToggleBtn]);
   hostEl.appendChild(addSongRow);
+
+  // Focus target once the section opens (plain-language equivalent of a
+  // dialog's own initial focus, without an actual <dialog> -- this section
+  // never traps focus or blocks the rest of the panel).
+  const addSongHeading = el('h3', { text: 'Add a song', tabindex: '-1' });
+  const importLabel = el('label', { for: 'songsFileInput', text: ADD_HELP_LINE });
+  const importInput = el('input', { type: 'file', id: 'songsFileInput', accept: ADD_ACCEPT });
+  const importMsg = el('div', { class: 'panel-songs-msg', role: 'status' });
+  // Read-only part assignments from the last imported band pack -- one line
+  // per song that carries an assignment (a song with no assignment gets no
+  // line at all). Cleared at the top of every handleFile() so it never shows
+  // a stale pack's assignments after a different file is picked.
+  const bandPackPartsEl = el('div', { class: 'panel-songs-band-pack-parts-list' });
+  // The shared review screen (src/ui/songs/review.js) a recording or a score
+  // lands on, reusing its own `panel-learn-result` class unchanged -- every
+  // characterization test that already proved that screen (learn-this.test.
+  // mjs, learn-handoffs.test.mjs) keeps working the same way here.
+  const resultEl = el('div', { class: 'panel-learn-result' });
+  resultEl.hidden = true;
+
+  // The mic door (src/ui/songs/record-door.js), reused with idPrefix
+  // 'songs' so its ids/classes (songsBpm, panel-songs-beat, panel-songs-
+  // record-btn, panel-songs-meter, ...) never collide with Learn this's own
+  // copy (idPrefix 'learn') if both happen to be mounted at once.
+  const door = createRecordDoor(api, {
+    say,
+    idPrefix: 'songs',
+    onStart() { resultEl.hidden = true; resultEl.innerHTML = ''; },
+    onTake: onMicTake,
+  });
+
+  const addSongSection = el('section', { class: 'add-song-section', hidden: 'hidden', 'aria-label': 'Add a song' }, [
+    addSongHeading, door.el, importLabel, importInput, importMsg, bandPackPartsEl, resultEl,
+  ]);
+  hostEl.appendChild(addSongSection);
+
+  function toggleAddSong() {
+    addSongOpen = !addSongOpen;
+    addSongSection.hidden = !addSongOpen;
+    addSongToggleBtn.setAttribute('aria-expanded', String(addSongOpen));
+    if (addSongOpen) addSongHeading.focus();
+  }
 
   const heading = el('h2', { text: 'Songs' });
   const intro = el('p', { class: 'panel-songs-intro', text: 'Pick a tune to practise, or add your own from a file.' });
@@ -416,28 +469,6 @@ function mountSongsPanel(hostEl, api) {
   const listSection = el('section', { 'aria-label': 'Your songs' });
   const listUl = el('ul', { class: 'panel-songs-list' });
   listSection.appendChild(listUl);
-
-  const importLabel = el('label', { for: 'songsFileInput', text: 'Add a song, a teacher’s challenge, or a band pack, from a file (.mid, .midi, .abc, .xml, .musicxml, .mxl, .gp, .gp5, .bandpack or .json)' });
-  const importInput = el('input', { type: 'file', id: 'songsFileInput', accept: '.mid,.midi,.abc,.xml,.musicxml,.mxl,.gp,.gp5,.bandpack,.json' });
-  // Pointer to the one shared door (plan §11.5.7): this file input keeps
-  // working exactly as before (existing tests use it directly), this just
-  // tells a learner where the newer, simpler door is -- for a recording
-  // especially, which this input does not transcribe.
-  // P2b-3: Learn this now has a real home of its own in the Add-a-song row
-  // above -- this tip's button just opens it directly through the same
-  // api.openPanel() that row uses, rather than hunting the DOM for a button
-  // that may or may not still exist.
-  const learnTipBtn = el('button', { type: 'button', id: 'songsLearnTipBtn', text: 'Open Learn this', onclick: () => api.openPanel('learn') });
-  const learnTip = el('p', { class: 'panel-songs-learn-tip' }, [
-    document.createTextNode('Tip: Learn this takes any recording or music file in one place. '), learnTipBtn,
-  ]);
-  const importMsg = el('div', { class: 'panel-songs-msg', role: 'status' });
-  // Read-only part assignments from the last imported band pack -- one line
-  // per song that carries an assignment (a song with no assignment gets no
-  // line at all). Cleared at the top of every handleFile() so it never shows
-  // a stale pack's assignments after a different file is picked.
-  const bandPackPartsEl = el('div', { class: 'panel-songs-band-pack-parts-list' });
-  const importSection = el('section', {}, [importLabel, importInput, learnTip, importMsg, bandPackPartsEl]);
 
   const challengeSection = el('section', { class: 'panel-songs-challenge', hidden: 'hidden' });
 
@@ -462,7 +493,6 @@ function mountSongsPanel(hostEl, api) {
   hostEl.appendChild(heading);
   hostEl.appendChild(intro);
   hostEl.appendChild(listSection);
-  hostEl.appendChild(importSection);
   hostEl.appendChild(challengeSection);
   hostEl.appendChild(exportSection);
   hostEl.appendChild(practiceSection);
@@ -499,6 +529,16 @@ function mountSongsPanel(hostEl, api) {
       },
     });
     li.appendChild(btn);
+    // Draft/Checked status (P3-4, src/ui/songs/song-status.js): a plain
+    // label in its OWN element, never appended into the title button's own
+    // text, so the title stays exactly what the learner typed/imported and
+    // a screen reader announces the status as a separate fact. A starter
+    // tune (no libraryId) and a library song with no ledger entry get no
+    // label at all, rather than an empty one.
+    if (libraryId) {
+      const label = statusLabel(statusFor(songStatusLedger(), libraryId));
+      if (label) li.appendChild(el('span', { class: 'panel-songs-status', text: label }));
+    }
     li.appendChild(songExportControls(songOrMeta, libraryId));
     return li;
   }
@@ -1188,16 +1228,85 @@ function mountSongsPanel(hostEl, api) {
     renderPractice();
   }
 
+  // Shared save-then-review step for a recording, whichever door it came
+  // from (mic or Open file): save to the library, mark it Draft in the
+  // status ledger (originalAudioKept: false -- Songs cannot keep the
+  // original audio, see src/ui/songs/song-status.js's own comment), then
+  // show the shared review screen. Mirrors src/ui/learn.js's
+  // saveAndRenderResult, kept as its own copy here (not shared) since the
+  // status-ledger write is Songs-only.
+  async function onMicTake(song, warnings) {
+    let storedId;
+    try {
+      storedId = await library.add(song, { now: Date.now() });
+    } catch (e) {
+      say('The song could not be saved: ' + (e && e.message ? e.message : String(e)), 'no');
+      return;
+    }
+    say('');
+    setSongStatus(markDraft, storedId, { needsCheck: (warnings || []).length, source: 'mic', originalAudioKept: false });
+    renderAddReview({ ...song, id: storedId }, warnings || [], null);
+    await refreshList();
+  }
+
+  // Built once per panel instance (src/ui/songs/review.js), same precedent
+  // as src/ui/learn.js's own handoffs -- "Practise this" opens THIS panel's
+  // own lesson directly (api.openPanel('songs') on an already-open Songs
+  // just re-shows it, src/ui/panels.js), "Edit notes" opens the editor, and
+  // "Play along with this recording" opens Play Along.
+  const addSongHandoffs = makeHandoffs(api);
+  function renderAddReview(song, warnings, audioRec) {
+    renderReview(resultEl, {
+      song, warnings, audioRec, api, say,
+      onPractise: addSongHandoffs.openSongsPanel,
+      onEditNotes: addSongHandoffs.openEditorPanel,
+      onPlayAlong: addSongHandoffs.openPlayalongPanel,
+    });
+  }
+
   async function handleFile() {
     const file = importInput.files && importInput.files[0];
     importInput.value = '';
     if (!file) return;
     bandPackPartsEl.innerHTML = '';
-    const route = routeImportFile(file.name);
-    if (route.kind === 'unknown') {
-      say('That file type is not supported yet. Use a .mid, .midi, .abc, .xml, .musicxml, .mxl, .gp, .gp5, .bandpack or .json file.', 'no');
+    resultEl.hidden = true;
+    resultEl.innerHTML = '';
+    // classifyAddFile (src/ui/songs/add-source.js) tells a recording from a
+    // score/challenge/band-pack from an unknown file, so this one input
+    // never has to ask -- routeImportFile still decides how a notation kind
+    // reads/imports (classified.route), unchanged from before.
+    const classified = classifyAddFile(file.name, file.type);
+    if (classified.kind === 'unknown') {
+      say(UNSUPPORTED_MESSAGE, 'no');
       return;
     }
+    if (classified.kind === 'audio') {
+      say('Working it out…');
+      let result;
+      try {
+        result = await transcribeAudioFile(file, api);
+      } catch (e) {
+        say('That recording could not be read.', 'no');
+        return;
+      }
+      const { song, report, rec } = result;
+      const warnings = (report && report.needsCheck) || [];
+      const { ok, errors } = validateSong(song);
+      if (!ok) { say('That recording did not turn into a usable song: ' + errors.join('; '), 'no'); return; }
+      let storedId;
+      try {
+        storedId = await library.add(song, { now: Date.now() });
+      } catch (e) {
+        say('The song could not be saved: ' + (e && e.message ? e.message : String(e)), 'no');
+        return;
+      }
+      say('');
+      setSongStatus(markDraft, storedId, { needsCheck: warnings.length, source: 'file', originalAudioKept: false });
+      renderAddReview({ ...song, id: storedId }, warnings, rec);
+      await refreshList();
+      return;
+    }
+    const route = classified.route;
     if (route.kind === 'band-pack') {
       let pack;
       try {
@@ -1295,6 +1404,13 @@ function mountSongsPanel(hostEl, api) {
     const idNote = storedId !== song.id ? ' (saved as "' + storedId + '" -- a song with that id was already saved)' : '';
     if (warnings && warnings.length) say('Added "' + song.title + '". ' + warnings.join(' ') + idNote, 'ok');
     else say('Added "' + song.title + '" to your songs.' + idNote, 'ok');
+    // A notation import carries no warnings most of the time (an unresolved
+    // check item is the exception, e.g. a tempo-less ABC file) -- Checked
+    // the moment it lands when there is nothing to check, a Draft when
+    // there is, same as a transcribed recording just above.
+    if (warnings && warnings.length) setSongStatus(markDraft, storedId, { needsCheck: warnings.length, source: 'file', originalAudioKept: false });
+    else setSongStatus(markChecked, storedId);
+    renderAddReview({ ...song, id: storedId }, warnings || [], null);
     await refreshList();
   }
 
@@ -1337,6 +1453,18 @@ function mountSongsPanel(hostEl, api) {
         const summary = summarizePracticeSession(practice, api.now());
         if (summary) { practice.sessionLogged = true; api.logSession(summary); }
       }
+      // P3-4: leaving Songs mid-recording (Add a song open, count-in or
+      // capture running) must stop the door's own meter/count-in the same
+      // way switching away from "Learn this" already does (src/ui/learn.js)
+      // -- otherwise its RAF loop and timers keep running for a panel that
+      // is no longer on screen.
+      door.hide();
+    },
+    // Mirrors hide()'s door.hide() -- called when the panel itself is torn
+    // down rather than merely hidden, so nothing of the door's own state
+    // (its stream, its timers) survives past the panel's own lifetime.
+    destroy() {
+      door.destroy();
     },
   };
 }

@@ -86,7 +86,11 @@ test('collapse rows: selecting a tool in the sheet marks it pressed without need
   assert.equal(await page.evaluate("document.querySelector('#picker button[data-mod=\"tuner\"]').getAttribute('aria-pressed')"), 'true');
 });
 
-test('collapse rows: Learn this, Record a tune and Play Along are reachable from the Songs panel\'s Add-a-song row, not from the instrument sheet', async (t) => {
+// P3-4: the row's three buttons became one "Add a song" button (see
+// tests/characterization/songs-add-a-song.test.mjs); this test keeps only
+// the "no learn button in the instrument sheet" assertion the row's label
+// change doesn't touch.
+test('collapse rows: Add a song is reachable from the Songs panel\'s Add-a-song row, not from the instrument sheet', async (t) => {
   const page = await launchPage(htmlPath);
   t.after(() => page.close());
 
@@ -96,6 +100,6 @@ test('collapse rows: Learn this, Record a tune and Play Along are reachable from
   const labels = await page.evaluate(
     "Array.from(document.querySelectorAll('.add-song-row button')).map(b => b.textContent.trim())",
   );
-  assert.deepEqual(labels, ['Record a tune', 'Learn this', 'Play Along']);
+  assert.deepEqual(labels, ['Add a song']);
   assert.equal(await page.evaluate("!!document.querySelector('#picker button[data-panel=\"learn\"]')"), false, 'Learn this has no button inside the instrument sheet');
 });
