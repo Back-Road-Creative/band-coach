@@ -899,11 +899,16 @@ import { register as registerPlayalong } from './ui/playalong.js';
     sess.F = 0.45 * drop + 0.25 * slow + 0.2 * c01((sess.sinceBreak / 60 - 12) / 18) + 0.1 * c01(sess.downs / 3); return sess.F;
   }
   function credit(id, q, from, warm, rt) {
+    recent.push(q > 0 ? 1 : 0); if (recent.length > 20) recent.shift(); streak = q > 0 ? streak + 1 : 0;
+    // A warm-up task is told "does not count" (see the hint text set at task
+    // render: `t.warm ? 'Warm-up, does not count. ' : ''`, and the startSession()
+    // coach message "First a short warm-up through what you know; it does not
+    // count."), so it must not touch the spaced-repetition model either: no
+    // S.item/S.trans write, and no S.judged/S.ready/session counters below.
+    if (warm) return;
     const grade = GRADE_FOR_Q(q), before = it(id, modelNow);
     S.item[id] = Object.assign({ seen: before.seen }, review(before, { grade, now: modelNow }));
     if (from && from !== id) S.trans[from + '>' + id] = review(tr(from, id, modelNow), { grade, now: modelNow });
-    recent.push(q > 0 ? 1 : 0); if (recent.length > 20) recent.shift(); streak = q > 0 ? streak + 1 : 0;
-    if (warm) return;
     S.judged++; S.ready = clamp(S.ready + (q > 0 ? S.gain * q : -0.08), 0, 1);
     sess.judged++; if (q > 0) sess.ok++; if (sess.first.length < 30) sess.first.push(q > 0 ? 1 : 0); sess.last.push(q > 0 ? 1 : 0); if (sess.last.length > 30) sess.last.shift();
     sess.w30.push(q > 0 ? 1 : 0); if (sess.w30.length > 30) sess.w30.shift(); sess.bestStreak = Math.max(sess.bestStreak, streak);
