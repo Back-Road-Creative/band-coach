@@ -36,6 +36,12 @@ export const en = {
   'nav.progress': 'Progress',
   'nav.instrument': 'Instrument: {name}',
   'nav.chooseInstrument': 'Choose an instrument',
+  'nav.settings': 'Settings',
+  'settings.title': 'Settings',
+  'settings.look': 'Look and names',
+  'settings.backups': 'Backups and reset',
+  'settings.updates': 'Updates',
+  'settings.how': 'How this works',
   'panel.more': 'More ways to practise',
   'setup.button': 'Set up input',
   'setup.connect': 'Connect',
@@ -60,13 +66,11 @@ export const en = {
   'stats.rtLabel': 'sec to answer',
   'side.weakEyebrow': 'What the coach is leaning on',
   'side.backupDismiss': 'Dismiss',
-  'rail.summary': 'More options',
   'rail.reset': 'Reset this instrument (clears progress)',
   'rail.backupSave': 'Save a backup',
   'rail.backupRestore': 'Restore a backup',
   'rail.checkUpdates': 'Check for updates',
   'rail.updateHelp': 'Asks the Band Coach website for the latest version number. Sends nothing about your playing.',
-  'help.summary': 'How this works',
 };
 
 const locales = { en };

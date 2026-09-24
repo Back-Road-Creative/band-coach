@@ -17,6 +17,7 @@
     <button type="button" data-route="songs" data-i18n="nav.songs">Songs</button>
     <button type="button" data-route="progress" data-i18n="nav.progress">Progress</button>
     <button type="button" data-route="instrument" id="navInstrument" aria-expanded="true" aria-controls="picker">Choose an instrument</button>
+    <button type="button" data-route="settings" data-i18n="nav.settings">Settings</button>
   </nav>
 
   <div class="picker" id="picker" role="group" aria-label="Instrument"></div>
@@ -44,6 +45,38 @@
 
   <p class="panel-say" id="panelSay" role="status" hidden></p>
   <section class="panel-host" id="panelHost" aria-live="polite" hidden></section>
+
+  <section id="settingsView" class="settings-view" hidden aria-labelledby="settingsTitle">
+    <h2 id="settingsTitle" data-i18n="settings.title">Settings</h2>
+    <p id="settingsSay" role="status"></p>
+    <div class="settings-group">
+      <h3 data-i18n="settings.look">Look and names</h3>
+      <label for="optNames"><input type="checkbox" id="optNames" checked> Show note names</label>
+      <label for="optTheme">Theme <select id="optTheme"><option value="system">Match system</option><option value="light">Light</option><option value="dark">Dark</option></select></label>
+      <label for="optNoteSystem">Note names <select id="optNoteSystem"><option value="letters">Letters (C, D, E...)</option><option value="german">German (H/B)</option><option value="solfege">Fixed do (Do, Re, Mi...)</option></select></label>
+      <label for="optAccidentals">Sharps/flats <select id="optAccidentals"><option value="mixed">Mixed (today's spelling)</option><option value="sharps">Always sharps (♯)</option><option value="flats">Always flats (♭)</option></select></label>
+    </div>
+    <div class="settings-group">
+      <h3 data-i18n="settings.backups">Backups and reset</h3>
+      <button type="button" class="small danger" id="resetBtn" data-i18n="rail.reset">Reset this instrument (clears progress)</button>
+      <button type="button" class="small" id="backupSaveBtn" data-i18n="rail.backupSave">Save a backup</button>
+      <label class="small file-label" for="backupRestoreInput" data-i18n="rail.backupRestore">Restore a backup</label>
+      <input type="file" accept=".json,application/json" id="backupRestoreInput" hidden>
+    </div>
+    <div class="settings-group">
+      <h3 data-i18n="settings.updates">Updates</h3>
+      <div class="update-check">
+        <button type="button" class="small" id="updateCheckBtn" data-i18n="rail.checkUpdates">Check for updates</button>
+        <p class="update-check-help" id="updateCheckHelp" data-i18n="rail.updateHelp">Asks the Band Coach website for the latest version number. Sends nothing about your playing.</p>
+        <span id="updateCheckResult" role="status"></span>
+      </div>
+    </div>
+    <div class="settings-group">
+      <h3 data-i18n="settings.how">How this works</h3>
+      <p id="helpText"></p>
+      <p><strong>How it decides:</strong> no dice. The next exercise is always the item or move with the largest need score (low knowledge, weak move, not seen lately), so the same results always give the same lesson. Knowledge fades if you stay away, so old material comes back.</p>
+    </div>
+  </section>
 
   <div class="main" id="mainArea">
     <section class="stage" aria-label="Exercise">
@@ -91,35 +124,10 @@
         <div class="stat"><b id="sRt">0.0</b><span id="sRtLabel" data-i18n="stats.rtLabel">sec to answer</span></div>
       </div>
       <div class="card weak" id="weakCard" hidden><div class="eyebrow" data-i18n="side.weakEyebrow">What the coach is leaning on</div><ul id="weakList"></ul></div>
-      <div class="opts">
-        <label for="optNames"><input type="checkbox" id="optNames" checked> Show note names</label>
-        <label for="optTheme">Theme <select id="optTheme"><option value="system">Match system</option><option value="light">Light</option><option value="dark">Dark</option></select></label>
-        <label for="optNoteSystem">Note names <select id="optNoteSystem"><option value="letters">Letters (C, D, E...)</option><option value="german">German (H/B)</option><option value="solfege">Fixed do (Do, Re, Mi...)</option></select></label>
-        <label for="optAccidentals">Sharps/flats <select id="optAccidentals"><option value="mixed">Mixed (today's spelling)</option><option value="sharps">Always sharps (♯)</option><option value="flats">Always flats (♭)</option></select></label>
-      </div>
       <div class="backup-nudge" id="backupNudge" hidden>
         <span id="backupNudgeText"></span>
         <button type="button" class="small" id="backupNudgeDismiss" data-i18n="side.backupDismiss">Dismiss</button>
       </div>
-      <details class="rail-menu" id="railMenu">
-        <summary class="small" data-i18n="rail.summary">More options</summary>
-        <div class="rail-menu-body">
-          <button type="button" class="small danger" id="resetBtn" data-i18n="rail.reset">Reset this instrument (clears progress)</button>
-          <button type="button" class="small" id="backupSaveBtn" data-i18n="rail.backupSave">Save a backup</button>
-          <label class="small file-label" for="backupRestoreInput" data-i18n="rail.backupRestore">Restore a backup</label>
-          <input type="file" accept=".json,application/json" id="backupRestoreInput" hidden>
-          <div class="update-check">
-            <button type="button" class="small" id="updateCheckBtn" data-i18n="rail.checkUpdates">Check for updates</button>
-            <p class="update-check-help" id="updateCheckHelp" data-i18n="rail.updateHelp">Asks the Band Coach website for the latest version number. Sends nothing about your playing.</p>
-            <span id="updateCheckResult" role="status"></span>
-          </div>
-        </div>
-      </details>
-      <details class="help">
-        <summary data-i18n="help.summary">How this works</summary>
-        <p id="helpText"></p>
-        <p><strong>How it decides:</strong> no dice. The next exercise is always the item or move with the largest need score (low knowledge, weak move, not seen lately), so the same results always give the same lesson. Knowledge fades if you stay away, so old material comes back.</p>
-      </details>
     </aside>
   </div>
   <footer id="verFooter" aria-hidden="true"></footer>

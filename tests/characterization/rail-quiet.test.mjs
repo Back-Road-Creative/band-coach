@@ -2,11 +2,12 @@
 // it has nothing to say in. On a fresh profile, before Start is ever
 // pressed, the "Instant feedback" card, the last-20/streak/answer-time
 // stats block and "What the coach is leaning on" card are all absent --
-// they earn their place once they have real content. The three help
-// paragraphs collapse behind one "How this works" disclosure, and the
-// housekeeping controls (reset, backup save/restore, check for updates)
-// move into one overflow menu so they stop competing for attention with
-// the controls a learner actually needs on every visit.
+// they earn their place once they have real content.
+// P2b-2: the help paragraphs and the housekeeping controls (reset, backup
+// save/restore, check for updates) no longer live on the Practice screen at
+// all -- they moved to the Settings destination (tests/characterization/
+// settings-view.test.mjs covers Settings itself; this file only proves
+// Practice stays quiet).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { HTML_PATH } from '../helpers/html-path.mjs';
@@ -27,34 +28,34 @@ test('fresh profile: feedback, stats and weak-list cards are not shown before St
   assert.equal(await page.evaluate("document.getElementById('backupNudge').hidden"), true);
 });
 
-test('the two help paragraphs collapse behind one disclosure', async (t) => {
+test('the help paragraphs are not on the Practice screen -- they live in Settings', async (t) => {
   const page = await launchPage(htmlPath);
   t.after(() => page.close());
 
-  const helpParas = await page.evaluate("document.querySelectorAll('.help p').length");
-  assert.equal(helpParas, 2); // was 3 until the Kit Coach paragraph (a page that never existed) was removed
-  assert.equal(await page.evaluate("document.querySelector('.help').tagName"), 'DETAILS');
-  assert.equal(await page.evaluate("document.querySelector('.help').open"), false);
-  assert.ok(await page.evaluate("Boolean(document.querySelector('.help summary'))"));
+  assert.equal(await page.evaluate("document.querySelectorAll('.side .help, .side details.help').length"), 0);
+  assert.equal(await page.evaluate("document.getElementById('settingsView').contains(document.getElementById('helpText'))"), true);
+  assert.equal(await page.evaluate("document.getElementById('settingsView').hidden"), true, 'Settings is not shown at boot');
 });
 
-test('housekeeping controls live behind one closed overflow menu', async (t) => {
+test('housekeeping controls are not on the Practice screen -- they live in Settings, hidden at boot', async (t) => {
   const page = await launchPage(htmlPath);
   t.after(() => page.close());
 
-  const menu = await page.evaluate("document.getElementById('railMenu')");
-  assert.ok(menu !== null, 'a #railMenu element exists');
-  assert.equal(await page.evaluate("document.getElementById('railMenu').tagName"), 'DETAILS');
-  assert.equal(await page.evaluate("document.getElementById('railMenu').open"), false);
+  assert.equal(await page.evaluate("document.getElementById('railMenu')"), null, 'no #railMenu on the page at all');
   for (const id of ['resetBtn', 'backupSaveBtn', 'backupRestoreInput', 'updateCheckBtn', 'updateCheckHelp', 'updateCheckResult']) {
     assert.ok(
-      await page.evaluate(`document.getElementById('railMenu').contains(document.getElementById('${id}'))`),
-      `#${id} lives inside #railMenu`
+      await page.evaluate(`document.getElementById('settingsView').contains(document.getElementById('${id}'))`),
+      `#${id} lives inside #settingsView`
+    );
+    assert.equal(
+      await page.evaluate(`document.querySelector('.side').contains(document.getElementById('${id}'))`),
+      false,
+      `#${id} is no longer in the Practice side rail`
     );
   }
   assert.ok(
     await page.evaluate("document.getElementById('resetBtn').className.indexOf('danger') !== -1"),
-    'reset is marked as destructive, distinct from the other menu items'
+    'reset is marked as destructive, distinct from the other settings controls'
   );
 });
 

@@ -18,15 +18,18 @@ That is the whole app — one page, nothing to install, no account, and it keeps
 network off. Open it in Chrome or Edge. Microphone instruments ask for permission the first time;
 a MIDI keyboard is optional. To put it away, delete the file.
 
-A **Practice / Songs / Progress / Instrument** bar sits at the top of the page at all times.
-Practice is the instrument trainer this page opens on; Songs takes you straight to your saved and
-imported tunes; Progress takes you straight to your practice history. Pressing whichever one
-you're already on does nothing, so it's always safe to press. Instrument is the one place to
+A **Practice / Songs / Progress / Instrument / Settings** bar sits at the top of the page at all
+times. Practice is the instrument trainer this page opens on; Songs takes you straight to your
+saved and imported tunes; Progress takes you straight to your practice history. Pressing whichever
+one you're already on does nothing, so it's always safe to press. Instrument is the one place to
 change what you're playing: it names your current instrument (or invites you to choose one the
 first time) and opens the full instrument list as a sheet; picking one closes the sheet again.
+Settings gathers everything you rarely touch — theme, note naming, backups, reset, update checks
+and the "How this works" explainer — in one plain screen, away from the controls you use every
+practice session.
 
 A downloaded file cannot update itself — that's a browser security boundary, not a missing
-feature — so the "More options" menu in the side rail carries a "Check for updates" button
+feature — so the Settings screen carries a "Check for updates" button
 instead. Press it and it asks the
 Band Coach website for the current version number (nothing about your playing is sent) and
 answers right there: up to date, a newer version is out with a link to get it, or it couldn't
@@ -34,7 +37,7 @@ reach the server, also with a link to get the current file. It never checks on i
 a press — and a development build (one you built yourself rather than downloaded) says so instead
 of checking, since there is nothing meaningful to compare.
 
-The app follows your system's light/dark setting automatically, or pick Light/Dark yourself from the Theme control next to "Show note names" in the side rail. Two more controls next to Theme let you pick how notes are named -- letters, German (H/B), or fixed-do solfege (Do, Re, Mi...) -- and whether the black keys are spelled with sharps, flats, or today's mixed spelling.
+The app follows your system's light/dark setting automatically, or pick Light/Dark yourself from the Theme control next to "Show note names" on the Settings screen. Two more controls next to Theme let you pick how notes are named -- letters, German (H/B), or fixed-do solfege (Do, Re, Mi...) -- and whether the black keys are spelled with sharps, flats, or today's mixed spelling.
 
 If your microphone or keyboard is not being heard, the next two sections are the ones to read.
 Everything from "Build it from source" down is for people working on the app itself.
@@ -170,7 +173,7 @@ the small, formative human pilot this eval feeds into.
 
 Progress is saved in the browser, keyed to the exact file path Band Coach was opened from — moving
 or re-downloading the file can lose it, since browsers do not share that storage across paths. Open
-the "More options" menu in the side rail for "Save a backup", which downloads
+the Settings screen for "Save a backup", which downloads
 `band-coach-progress.json`, and "Restore a backup", which loads one back in. The backup file now
 carries your saved songs (from the Learn and Songs panels) alongside your practice progress, so
 restoring one brings both back — a restore replaces your progress and songs together, and if the
@@ -890,7 +893,7 @@ mark a step passed just because nothing looked obviously wrong.
    reload the page (F5), and open the same instrument again. **Pass** if your recent result is
    still there. **Fail** if progress is back to zero. (Reminder: this only works from the exact
    same file path/location each time — see "Backups" above.)
-6. **Check for updates (30s).** Open the "More options" menu in the side rail and press "Check for
+6. **Check for updates (30s).** Open the Settings screen and press "Check for
    updates". This is the only real network request the app ever makes, and it is made from a
    `file://` page, so nothing
    in the automated suite can stand in for it — the unit tests inject a fake fetch and the browser

@@ -30,7 +30,7 @@ test('src/styles.css has a @media print block', () => {
 
 test('print block hides controls, nav and tab chrome', () => {
   const block = printBlock();
-  const hiddenSelectors = ['header', '.picker', '.io', '.setup-sheet', '.side', 'footer', '.editor-toolbar', '.rail-menu', '.help'];
+  const hiddenSelectors = ['header', '.picker', '.io', '.setup-sheet', '.side', 'footer', '.editor-toolbar', '.settings-view', '.main-nav'];
   for (const sel of hiddenSelectors) {
     const re = new RegExp(sel.replace(/[.[\]]/g, '\\$&') + '[^{]*\\{[^}]*display:\\s*none', 'i');
     assert.match(block, re, `expected the print block to set display: none on ${sel}`);
