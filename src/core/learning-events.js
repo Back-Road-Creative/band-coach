@@ -64,11 +64,15 @@ export function validateEvent(ev) {
   return { ok: errors.length === 0, errors: errors };
 }
 
-// summarizeEvents(events, { instrument?, skill? }) -> counts per one of the
-// plan's understandable states (6.4 lists five; this is the minimal three
-// a UI can already tell apart from one event's own fields -- "retained on
-// review" and "applied in a new phrase" need cross-event history and are
-// left for the later unit that builds that UI):
+// RETAIN_GAP_MS: how long after an earlier independent-ok attempt a later
+// independent-ok attempt on the same skill/instrument counts as evidence the
+// skill was *retained*, not just repeated in the same sitting. 20h clears a
+// same-day repeat while still catching a "yesterday and today" practice
+// rhythm; a caller can override it per summarizeEvents call.
+export const RETAIN_GAP_MS = 20 * 3600 * 1000;
+
+// summarizeEvents(events, { instrument?, skill?, retainGapMs? }) -> counts
+// per one of the plan's understandable states (6.4 lists five):
 //   - withHelp: assistance was not 'none' (a Show me / guided / approximate
 //     attempt -- practice happened, but it is not independent evidence).
 //   - independent: no assistance, and every dimension this event DID assess
@@ -76,17 +80,48 @@ export function validateEvent(ev) {
 //     it was never judged, not judged wrong).
 //   - introduced: everything else (no assistance, but at least one assessed
 //     dimension came back 'miss') -- first contact or still-shaky attempts.
-export function summarizeEvents(events, { instrument, skill } = {}) {
-  const out = { introduced: 0, withHelp: 0, independent: 0 };
-  (events || []).forEach((ev) => {
-    if (!ev || typeof ev !== 'object') return;
-    if (instrument !== undefined && ev.instrument !== instrument) return;
-    if (skill !== undefined && ev.skill !== skill) return;
-    if (ev.assistance && ev.assistance !== 'none') { out.withHelp++; return; }
+//   - retained: an independent-ok attempt that lands at least retainGapMs
+//     (default RETAIN_GAP_MS) after an earlier independent-ok attempt on the
+//     same instrument+skill -- evidence the skill survived a break, not
+//     just a lucky second try in the same sitting.
+//   - applied: an independent-ok attempt whose source is 'song' or whose
+//     songId is set, landing after an earlier independent-ok attempt on the
+//     same instrument+skill from a non-song source -- evidence the skill
+//     transferred out of drilling into real playing.
+// retained and applied are refinements of independent, not separate buckets
+// -- every event counted as either is also counted in independent, so the
+// five numbers do not sum to the event count. History is built from ALL
+// events regardless of the instrument/skill filter (a filter narrows what
+// gets counted, never what counts as "earlier"), and events are walked in
+// `at` order regardless of array order -- a copy is sorted, the caller's
+// array is never touched.
+export function summarizeEvents(events, { instrument, skill, retainGapMs } = {}) {
+  const gapMs = isFiniteNumber(retainGapMs) ? retainGapMs : RETAIN_GAP_MS;
+  const out = { introduced: 0, withHelp: 0, independent: 0, retained: 0, applied: 0 };
+  const sorted = (events || []).filter((ev) => ev && typeof ev === 'object').slice().sort((a, b) => a.at - b.at);
+  const groups = new Map(); // instrument|skill -> { earliestOkAt, earliestNonSongOkAt }
+  sorted.forEach((ev) => {
+    const key = ev.instrument + '\u0001' + ev.skill;
+    let g = groups.get(key);
+    if (!g) { g = { earliestOkAt: null, earliestNonSongOkAt: null }; groups.set(key, g); }
+    const matches = (instrument === undefined || ev.instrument === instrument) && (skill === undefined || ev.skill === skill);
+    const withHelp = !!(ev.assistance && ev.assistance !== 'none');
     const dims = ev.dims || {};
     const assessed = Object.keys(dims).filter((k) => dims[k] !== 'unassessed');
-    const allOk = assessed.length > 0 && assessed.every((k) => dims[k] === 'ok');
-    if (allOk) out.independent++; else out.introduced++;
+    const independentOk = !withHelp && assessed.length > 0 && assessed.every((k) => dims[k] === 'ok');
+    if (matches) {
+      if (withHelp) out.withHelp++;
+      else if (independentOk) {
+        out.independent++;
+        if (g.earliestOkAt !== null && (ev.at - g.earliestOkAt) >= gapMs) out.retained++;
+        const songSourced = ev.source === 'song' || !!ev.songId;
+        if (songSourced && g.earliestNonSongOkAt !== null && ev.at > g.earliestNonSongOkAt) out.applied++;
+      } else out.introduced++;
+    }
+    if (independentOk) {
+      if (g.earliestOkAt === null || ev.at < g.earliestOkAt) g.earliestOkAt = ev.at;
+      if (ev.source !== 'song' && (g.earliestNonSongOkAt === null || ev.at < g.earliestNonSongOkAt)) g.earliestNonSongOkAt = ev.at;
+    }
   });
   return out;
 }
