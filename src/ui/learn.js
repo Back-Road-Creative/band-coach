@@ -42,18 +42,17 @@ import { learnSourceFor } from './learn/source.js';
 import { routeImportFile, importerFor } from './songs/import-route.js';
 import { validateSong } from '../song/model.js';
 import { createLibrary, memoryStore, indexedDbStore } from '../song/library.js';
-import { mixToMono } from './playalong/audio-prep.js';
-import { framesFromPCM } from '../audio/file-frames.js';
-import { transcribe } from '../song/transcribe.js';
-import { rangeForInstrument } from '../audio/range.js';
 import { renderReview, makeHandoffs } from './songs/review.js';
 // practiceGate now lives in songs/review.js (P3-2, a behaviour-preserving
 // move) -- re-exported here unchanged so tests/unit/learn-practice-gate.
 // test.mjs, which imports it from this file, keeps passing untouched.
 export { practiceGate } from './songs/review.js';
-import { createRecorder } from './editor/record.js';
-import { countInTimes, clampBpm, DEFAULT_BPM } from './learn/count-in.js';
-import { rmsLevel } from './learn/level.js';
+// The mic door (Record button, count-in, meter, capture -> transcribe) and
+// the audio-file transcription pipeline it shares now live in
+// songs/record-door.js (P3-3, a behaviour-preserving move) -- built once per
+// panel instance below with idPrefix 'learn' so its ids/classes come out
+// exactly as they always have.
+import { createRecordDoor, transcribeAudioFile } from './songs/record-door.js';
 
 const ACCEPT = '.mid,.midi,.abc,.xml,.musicxml,.mxl,.gp,.gp5,.wav,.mp3,.ogg,.m4a,.flac,.webm';
 
@@ -78,12 +77,6 @@ function readFile(file, as) {
   });
 }
 
-function titleFromFileName(fileName) {
-  const name = String(fileName || 'My recording');
-  const dot = name.lastIndexOf('.');
-  return (dot > 0 ? name.slice(0, dot) : name) || 'My recording';
-}
-
 function mountLearnPanel(hostEl, api) {
   // Shares the exact library Songs reads from (same store name), so a song
   // saved here shows up in Songs's own list without either panel knowing
@@ -106,181 +99,44 @@ function mountLearnPanel(hostEl, api) {
   drop.appendChild(input);
   root.appendChild(drop);
 
-  // ---- mic door: Record -> a four-beat count-in -> capture -> Stop -------
-  // Reuses src/ui/editor/record.js's createRecorder unchanged (the same
-  // frame recorder "Record a tune" drives) against this panel's own
-  // panelApi, so the capture itself is not reimplemented here -- this file
-  // only adds the count-in, the level meter, and routing the result through
-  // the shared renderResult() below.
-  const recorder = createRecorder(api);
-  const micSection = el('div', { class: 'panel-learn-mic' });
-  micSection.appendChild(el('h4', { text: 'Or sing, hum or play into the mic' }));
-  const bpmInput = el('input', {
-    type: 'number', id: 'learnBpm', min: '40', max: '200', value: String(DEFAULT_BPM),
-    class: 'panel-learn-bpm', 'aria-label': 'Tempo (beats per minute)',
-  });
-  const bpmRow = el('div', { class: 'panel-learn-bpm-row' }, [
-    el('label', { for: 'learnBpm', text: 'Tempo (beats per minute)' }), bpmInput,
-  ]);
-  const meterFill = el('div', { class: 'panel-learn-meter-fill' });
-  const meterBox = el('div', {
-    class: 'panel-learn-meter', role: 'progressbar', 'aria-label': 'Microphone level',
-    'aria-valuemin': '0', 'aria-valuemax': '100', 'aria-valuenow': '0',
-  }, [meterFill]);
-  const beatEl = el('p', { class: 'panel-learn-beat', 'aria-live': 'polite' });
-  const recordBtn = el('button', { type: 'button', class: 'panel-learn-record-btn', text: 'Record' });
-  micSection.append(bpmRow, meterBox, beatEl, recordBtn);
-  root.appendChild(micSection);
-
   const statusEl = el('p', { class: 'panel-learn-status', role: 'status' });
-  root.appendChild(statusEl);
   const resultEl = el('div', { class: 'panel-learn-result' });
   resultEl.hidden = true;
-  root.appendChild(resultEl);
-  hostEl.appendChild(root);
 
   function say(text) { statusEl.textContent = text; }
 
-  // ---- mic level meter: a plain requestAnimationFrame loop reading RMS off
-  // the SAME time-domain analyser the rest of the app already keeps running
-  // (panelApi.analysers().time) through the pure rmsLevel() (src/ui/learn/
-  // level.js) -- started only while the mic door is actually listening
-  // (count-in or capture), stopped on Stop or when the panel is hidden, so
-  // it never spins in the background once a learner leaves this screen.
-  let meterRaf = null;
-  function setLevel(v) {
-    const pct = Math.round(v * 100);
-    meterFill.style.width = pct + '%';
-    meterBox.setAttribute('aria-valuenow', String(pct));
+  // ---- mic door: Record -> a four-beat count-in -> capture -> Stop -------
+  // Built by songs/record-door.js (P3-3, a behaviour-preserving move):
+  // idPrefix 'learn' keeps every id/class (learnBpm, panel-learn-beat,
+  // panel-learn-record-btn, panel-learn-meter, ...) exactly as it always
+  // was, `say` is this panel's own status line (shared with the file door
+  // below), `onStart` clears any earlier result the moment Record is
+  // pressed, and `onTake` keeps this panel's save-before-review order --
+  // library.add happens here, in the caller, not inside the door.
+  function onMicTake(song, warnings) {
+    return saveAndRenderResult(song, warnings, null);
   }
-  function startMeterLoop() {
-    function loop() {
-      const analysers = typeof api.analysers === 'function' ? api.analysers() : null;
-      const time = analysers && analysers.time;
-      if (time) {
-        const buf = new Float32Array(time.fftSize);
-        time.getFloatTimeDomainData(buf);
-        setLevel(rmsLevel(buf));
-      }
-      meterRaf = requestAnimationFrame(loop);
-    }
-    meterRaf = requestAnimationFrame(loop);
-  }
-  function stopMeterLoop() {
-    if (meterRaf !== null) cancelAnimationFrame(meterRaf);
-    meterRaf = null;
-    setLevel(0);
-  }
-
-  let counting = false;
-  let recording = false;
-  let countInTimers = [];
-  function clearCountInTimers() {
-    countInTimers.forEach((id) => clearTimeout(id));
-    countInTimers = [];
-  }
-  function resetMicUi() {
-    counting = false;
-    recording = false;
-    clearCountInTimers();
-    stopMeterLoop();
-    beatEl.textContent = '';
-    recordBtn.textContent = 'Record';
-    recordBtn.disabled = false;
-    bpmInput.disabled = false;
-  }
-
-  // Record -> Counting in… (four clicks, "1 2 3 4") -> recording starts on
-  // the downbeat -> Stop. The mic itself is opened (and any denial reported)
-  // BEFORE the count-in is scheduled, so a learner who has no mic, or has
-  // blocked it, sees the plain message immediately rather than after
-  // watching a count-in that was never going to record anything.
-  async function startMicRecording() {
-    if (counting || recording) return;
-    // Claimed synchronously, before the `await` below, so a second Record
-    // click landing while the microphone permission prompt (or a slow
-    // device) is still pending is turned away by the guard above instead of
-    // running this whole function a second time. recordBtn is disabled for
-    // this (usually brief) stretch too -- it still reads "Record" and there
-    // is nothing yet to cancel back to -- and re-enabled the moment the
-    // count-in itself begins, below, so a learner CAN cancel a count-in in
-    // progress. Both are reset in the catch if opening the mic fails, so a
-    // denial does not leave the slot, or the button, stuck.
-    counting = true;
-    recordBtn.disabled = true;
-    resultEl.hidden = true;
-    resultEl.innerHTML = '';
-    say('Getting the microphone ready…');
-    try { await api.openMic(); }
-    catch (e) {
-      counting = false;
-      recordBtn.disabled = false;
-      say('The microphone is not available. You can drop a recording instead.');
-      return;
-    }
-    recordBtn.textContent = 'Counting in…';
-    recordBtn.disabled = false;
-    bpmInput.disabled = true;
-    say('Get ready…');
-    startMeterLoop();
-    const bpm = clampBpm(bpmInput.value);
-    const spb = 60 / bpm;
-    const startAt = api.now() + 0.15;
-    const times = countInTimes(bpm, 4, startAt);
-    times.forEach((t, i) => {
-      api.click(t, i === 0);
-      const delayMs = Math.max(0, (t - api.now()) * 1000);
-      countInTimers.push(setTimeout(() => { beatEl.textContent = String(i + 1); }, delayMs));
-    });
-    const lastBeat = times[times.length - 1];
-    const captureDelayMs = Math.max(0, (lastBeat + spb - api.now()) * 1000);
-    countInTimers.push(setTimeout(beginCapture, captureDelayMs));
-  }
-
-  async function beginCapture() {
-    if (!counting) return; // Stop was pressed mid count-in
-    counting = false;
-    beatEl.textContent = '';
-    try { await recorder.start(); }
-    catch (e) {
-      resetMicUi();
-      say('The microphone is not available. You can drop a recording instead.');
-      return;
-    }
-    recording = true;
-    say('Recording…');
-    recordBtn.textContent = 'Stop';
-    recordBtn.disabled = false;
-  }
-
-  async function stopMicRecording() {
-    if (counting) { clearCountInTimers(); resetMicUi(); say(''); return; }
-    if (!recording) return;
-    const frames = recorder.stop();
-    resetMicUi();
-    say('Working it out…');
-    try {
-      const { song, report } = transcribe(frames, { title: 'My recording' });
-      const notes = song.parts[0] ? song.parts[0].notes : [];
-      if (!notes.length) {
-        say('Nothing was heard clearly enough to turn into notes. Try again a little closer to the mic, or drop a recording instead.');
-        return;
-      }
-      const { ok, errors } = validateSong(song);
-      if (!ok) { say('That recording did not turn into a usable song: ' + errors.join('; ')); return; }
-      const id = await library.add(song, { now: Date.now() });
-      say('');
-      renderResult({ ...song, id }, (report && report.needsCheck) || []);
-    } catch (e) {
-      if (typeof api.recordError === 'function') api.recordError('learn:mic', e);
-      say('That recording could not be analysed. Try again, or drop a recording instead.');
-    }
-  }
-
-  recordBtn.addEventListener('click', () => {
-    if (recording || counting) stopMicRecording();
-    else startMicRecording();
+  const door = createRecordDoor(api, {
+    say,
+    idPrefix: 'learn',
+    onStart() { resultEl.hidden = true; resultEl.innerHTML = ''; },
+    onTake: onMicTake,
   });
+  root.appendChild(door.el);
+  root.appendChild(statusEl);
+  root.appendChild(resultEl);
+  hostEl.appendChild(root);
+
+  // Shared save-then-render step both doors (file and mic) end on: save the
+  // learned song to the library, clear the status line, then show the
+  // shared result view (songs/review.js). Left to throw up to each caller's
+  // own try/catch (the mic door's, or handleFile's below), same as before
+  // this file split into two modules.
+  async function saveAndRenderResult(song, warnings, audioRec) {
+    const id = await library.add(song, { now: Date.now() });
+    say('');
+    renderResult({ ...song, id }, warnings || [], audioRec);
+  }
 
   // Drag-and-drop is the file input's own better-known sibling gesture, not
   // a separate code path: a dropped file is handed to the SAME handleFile()
@@ -326,36 +182,13 @@ function mountLearnPanel(hostEl, api) {
       }
       const { ok, errors } = validateSong(song);
       if (!ok) { say('That file did not turn into a usable song: ' + errors.join('; ')); return; }
-      const id = await library.add(song, { now: Date.now() });
-      say('');
-      renderResult({ ...song, id }, warnings || [], audioRec);
+      await saveAndRenderResult(song, warnings, audioRec);
     } catch (e) {
       if (typeof api.recordError === 'function') api.recordError('learn:file', e);
       say(source === 'audio'
         ? 'That recording could not be opened or analysed. Try a different file, such as a .wav or .mp3.'
         : 'That file could not be read: ' + (e && e.message ? e.message : String(e)));
     }
-  }
-
-  // Reads the picked file's own filename as this song's working title (the
-  // notation importers already do this for a title-less file); a learner
-  // can rename it from Songs afterwards the same way any imported song is
-  // renamed.
-  // Also hands back the decoded { pcm, sampleRate, duration, fileName } this
-  // file just became -- so a "Play along with this recording" button can
-  // hand the SAME decoded audio to Play Along (src/ui/playalong.js's
-  // requestPlayalongRecording()) without decoding the file a second time.
-  async function transcribeAudioFile(file, api) {
-    const actx = typeof api.audio === 'function' ? api.audio() : null;
-    if (!actx) throw new Error('audio is not available');
-    const audioBuffer = await actx.decodeAudioData(await file.arrayBuffer());
-    const channels = [];
-    for (let c = 0; c < audioBuffer.numberOfChannels; c++) channels.push(audioBuffer.getChannelData(c));
-    const pcm = mixToMono(channels);
-    const { fmin, fmax } = rangeForInstrument(typeof api.instrument === 'function' ? api.instrument() : null);
-    const { frames, onsets } = framesFromPCM(pcm, audioBuffer.sampleRate, { fmin, fmax });
-    const result = transcribe(frames, { title: titleFromFileName(file.name), onsets });
-    return { ...result, rec: { pcm, sampleRate: audioBuffer.sampleRate, duration: audioBuffer.duration, fileName: file.name } };
   }
 
   // The result view itself, and the three ways it can hand a learned song
@@ -378,11 +211,9 @@ function mountLearnPanel(hostEl, api) {
     // meter's requestAnimationFrame loop or a pending count-in click running
     // in the background -- stop them, and any in-flight capture's frames are
     // simply discarded (nothing was played to the learner suggesting it was
-    // saved).
+    // saved). Delegated to the mic door itself (songs/record-door.js).
     hide() {
-      if (counting) clearCountInTimers();
-      if (recording) recorder.stop();
-      resetMicUi();
+      door.hide();
     },
   };
 }
