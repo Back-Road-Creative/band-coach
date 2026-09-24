@@ -207,6 +207,98 @@ test('a saved draft is listed with its status', async (t) => {
   assert.equal(row.hasStatusOutsideBtn, true, 'the status sits in its own element outside the title button');
 });
 
+// P3-7: Review offers Play original (only where a decoded audio buffer
+// exists) and Play notes (always), plus a plain-words list of which notes
+// the transcription itself was not sure about.
+test('Review offers Play original and Play notes for a recording', async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'band-coach-add-song-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const wavPath = threeToneWav(join(dir, 'three-notes.wav'));
+
+  const page = await launchPage(htmlPath);
+  t.after(() => page.close());
+
+  await page.evaluate("window.__coach.setMod('kbd')");
+  await openAddSongSection(page);
+  await page.setFileInput('#songsFileInput', wavPath);
+  await page.waitFor("document.querySelector('.panel-learn-result').hidden === false", 20000);
+
+  assert.equal(await page.evaluate("!!document.querySelector('.panel-learn-play-original-btn')"), true, 'Play original is offered for a recording');
+  assert.equal(await page.evaluate("!!document.querySelector('.panel-learn-play-notes-btn')"), true, 'Play notes is offered');
+
+  await page.evaluate("document.querySelector('.panel-learn-play-original-btn').click()");
+  await page.evaluate("document.querySelector('.panel-learn-play-notes-btn').click()");
+  await new Promise((r) => setTimeout(r, 200));
+
+  assert.deepEqual(page.exceptions, [], 'no uncaught exceptions clicking Play original or Play notes');
+});
+
+test('a score has no Play original', async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'band-coach-add-song-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const abcPath = join(dir, 'tune.abc');
+  writeFileSync(abcPath, ABC, 'utf8');
+
+  const page = await launchPage(htmlPath);
+  t.after(() => page.close());
+
+  await page.evaluate("window.__coach.setMod('kbd')");
+  await openAddSongSection(page);
+  await page.setFileInput('#songsFileInput', abcPath);
+  await page.waitFor("document.querySelector('.panel-learn-result').hidden === false", 20000);
+
+  assert.equal(await page.evaluate("!!document.querySelector('.panel-learn-play-original-btn')"), false, 'a score carries no decoded audio to play back');
+  assert.equal(await page.evaluate("!!document.querySelector('.panel-learn-play-notes-btn')"), true, 'Play notes is still offered');
+});
+
+test('a microphone take can go to Play along', async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'band-coach-add-song-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const wavPath = threeToneWav(join(dir, 'mic-source.wav'));
+
+  const page = await launchPage(htmlPath, { fakeAudioFile: wavPath });
+  t.after(() => page.close());
+
+  await page.evaluate("window.__coach.setMod('kbd')");
+  await openAddSongSection(page);
+  await page.waitFor("!!document.querySelector('.panel-songs-record-btn')");
+  await page.evaluate("document.querySelector('.panel-songs-record-btn').click()");
+  await page.waitFor("document.querySelector('.panel-songs-record-btn').textContent === 'Stop'", 15000);
+  // Let a few seconds of the fake mic stream actually get captured.
+  await new Promise((r) => setTimeout(r, 3000));
+  await page.evaluate("document.querySelector('.panel-songs-record-btn').click()");
+  await page.waitFor("document.querySelector('.panel-learn-result').hidden === false", 20000);
+
+  assert.deepEqual(page.exceptions, [], 'no uncaught exceptions capturing raw PCM alongside the pitch-frame recorder');
+  assert.equal(await page.evaluate("!!document.querySelector('.panel-learn-playalong-btn')"), true, 'a mic take can be handed to Play along, now that it carries decoded PCM');
+
+  await page.evaluate(
+    "document.querySelector('.panel-learn-playalong-btn').click()",
+  );
+  await page.waitFor("window.__coach.panelOpen() === 'playalong'");
+});
+
+test('a draft says the original recording is not kept', async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'band-coach-add-song-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const wavPath = threeToneWav(join(dir, 'three-notes.wav'));
+
+  const page = await launchPage(htmlPath);
+  t.after(() => page.close());
+
+  await page.evaluate("window.__coach.setMod('kbd')");
+  await openAddSongSection(page);
+  await page.setFileInput('#songsFileInput', wavPath);
+  await page.waitFor("document.querySelector('.panel-learn-result').hidden === false", 20000);
+  await page.evaluate("window.__coach.openPanel('songs')");
+  await page.waitFor("Array.from(document.querySelectorAll('.panel-songs-row')).some(r => r.textContent.indexOf('Draft') >= 0)");
+
+  const statusText = await page.evaluate(
+    "(() => { var rows = Array.from(document.querySelectorAll('.panel-songs-row')); var r = rows.find(x => x.textContent.indexOf('Draft') >= 0); return r ? r.querySelector('.panel-songs-status').textContent : ''; })()",
+  );
+  assert.match(statusText, /not kept/);
+});
+
 // P3-6: the separate Learn this screen is retired -- Songs -> Add a song
 // (P3-4) is the one place to add a song, so the panel registry no longer
 // carries a 'learn' entry, and the Record a tune / Play Along tip buttons

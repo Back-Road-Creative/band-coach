@@ -8,6 +8,7 @@
 import { renderPlayItOnCards, requestOpenSong } from '../songs.js';
 import { requestOpenInEditor } from '../editor.js';
 import { requestPlayalongRecording } from '../playalong.js';
+import { uncertainNotesText, playbackPlanFor } from './review-playback.js';
 
 function el(tag, attrs, children) {
   const node = document.createElement(tag);
@@ -109,6 +110,70 @@ export function renderReview(resultEl, { song, warnings, audioRec, api, onPracti
       }));
     });
     resultEl.appendChild(strip);
+  }
+
+  // Unsure notes, named in words (P3-7): the SAME "low" confidence band the
+  // strip above colours red (review-playback.js's default threshold, 0.4,
+  // mirrors this file's own line above) -- never colour alone, so a learner
+  // who cannot tell the strip's colours apart, or is reading with a screen
+  // reader, still knows which notes to check and roughly where. A song with
+  // no unsure notes gets one plain line saying so instead of an empty list.
+  if (notes.length) {
+    const unsureList = el('ul', { class: 'panel-learn-unsure-list' });
+    const unsure = uncertainNotesText(song);
+    if (unsure.length) unsure.forEach((line) => unsureList.appendChild(el('li', { text: line })));
+    else unsureList.appendChild(el('li', { text: 'No notes are unsure.' }));
+    resultEl.appendChild(unsureList);
+  }
+
+  // Play original / Play notes (P3-7): hearing the raw recording next to
+  // what the transcription heard is how a learner actually judges whether a
+  // flagged note is a real mistake or the transcriber mishearing them. Both
+  // buttons are disabled for the duration of whichever one is playing --
+  // scheduling both audio sources onto the SAME AudioContext clock at once
+  // would just layer two overlapping, confusing sounds, not let a learner
+  // compare them. Play original only appears where a decoded buffer exists
+  // (audioRec) -- see the "Play along" button below for the same rule.
+  let playing = false;
+  function setPlaying(v) {
+    playing = v;
+    playOriginalBtn.disabled = v || !audioRec;
+    playNotesBtn.disabled = v;
+  }
+  const playNotesBtn = el('button', { type: 'button', class: 'panel-learn-play-notes-btn', text: 'Play notes' });
+  playNotesBtn.addEventListener('click', () => {
+    if (playing || typeof api.tone !== 'function' || typeof api.now !== 'function') return;
+    const plan = playbackPlanFor(song);
+    if (!plan.length) return;
+    setPlaying(true);
+    const t0 = api.now() + 0.1;
+    let endAt = 0;
+    plan.forEach((n) => {
+      api.tone(n.midi, t0 + n.at, n.dur, 0.22);
+      endAt = Math.max(endAt, n.at + n.dur);
+    });
+    setTimeout(() => setPlaying(false), (endAt + 0.2) * 1000);
+  });
+  resultEl.appendChild(playNotesBtn);
+
+  const playOriginalBtn = el('button', { type: 'button', class: 'panel-learn-play-original-btn', text: 'Play original' });
+  if (audioRec) {
+    playOriginalBtn.addEventListener('click', () => {
+      if (playing) return;
+      const actx = typeof api.audio === 'function' ? api.audio() : null;
+      if (!actx || !audioRec.pcm || !audioRec.pcm.length) return;
+      const buffer = actx.createBuffer(1, audioRec.pcm.length, audioRec.sampleRate);
+      buffer.copyToChannel(audioRec.pcm, 0);
+      const source = actx.createBufferSource();
+      source.buffer = buffer;
+      source.connect(actx.destination);
+      setPlaying(true);
+      source.onended = () => setPlaying(false);
+      source.start();
+    });
+    resultEl.appendChild(playOriginalBtn);
+  } else {
+    playOriginalBtn.disabled = true;
   }
 
   if (partId) {
