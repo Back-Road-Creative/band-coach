@@ -149,6 +149,15 @@ started, each side panel open, and the settings sheet — and fails on any WCAG 
 violation. It is a real scanner check, not a hand-picked list of rules, so it catches whatever the
 other a11y characterization tests above were not written to look for.
 
+`src/song/eval/roundtrip.js` scores transcription against *synthetic* pitch frames rendered from
+the starter songs — useful for catching a pipeline regression, but it never runs real audio
+through the detector. `src/song/eval/pcm.js` does: it runs a labelled real-audio clip through the
+same `framesFromPCM` → `transcribe` path Learn this uses, and scores the result (precision,
+recall, F1, onset/release timing error, octave errors) against hand-made ground truth.
+`tests/fixtures/audio/README.md` documents the corpus manifest format the eval reads and ships
+with no clips (nothing here is downloaded — a corpus is added by hand). `docs/pilot.md` lays out
+the small, formative human pilot this eval feeds into.
+
 ## Backups
 
 Progress is saved in the browser, keyed to the exact file path Band Coach was opened from — moving
