@@ -154,6 +154,14 @@ test('a sustaining instrument that plays the right note but holds it too short i
         let rhythmPassed = false;
         for (let i = 0; i < 8 && !rhythmPassed; i++) {
           await clickButton(page, 'Your turn');
+          // "Your turn" now opens with a four-beat count-in (N2) before it
+          // actually starts listening -- wait for that to finish (the count
+          // element switches from "Counting in…" to "Notes heard so far: 0")
+          // before capturing the fixed listening window below, or the pulse
+          // train would be heard only during, not after, the count-in.
+          await page.waitFor(
+            "document.querySelector('.panel-songs-count') && document.querySelector('.panel-songs-count').textContent.startsWith('Notes heard so far')"
+          );
           await new Promise((r) => setTimeout(r, 400));
           await clickButton(page, 'Stop and check');
           await page.waitFor(hasButtonExpr('Your turn'));
@@ -165,6 +173,10 @@ test('a sustaining instrument that plays the right note but holds it too short i
         // passed rhythm above are, deliberately, far too short to satisfy
         // this song's 1.44-3.6s hold band.
         await clickButton(page, 'Your turn');
+        // As above -- wait out the count-in before the fixed listening window.
+        await page.waitFor(
+          "document.querySelector('.panel-songs-count') && document.querySelector('.panel-songs-count').textContent.startsWith('Notes heard so far')"
+        );
         await new Promise((r) => setTimeout(r, 400));
         await clickButton(page, 'Stop and check');
         await page.waitFor("document.querySelector('.panel-say').textContent.length > 0");

@@ -94,6 +94,13 @@ test('recording via the keyboard/MIDI note forward counts notes and can be judge
     "Array.from(document.querySelectorAll('.panel-songs-practice button')).some(b => b.textContent === 'Stop and check')"
   );
 
+  // "Your turn" now opens with a four-beat count-in (N2) before it actually
+  // starts listening -- wait for that to finish (the count element switches
+  // from "Counting in…" to "Notes heard so far: 0") before playing a note,
+  // or it would land during the clicks and never be heard at all.
+  await page.waitFor(
+    "document.querySelector('.panel-songs-count').textContent.startsWith('Notes heard so far')"
+  );
   // Simulate the app's own onNote() forwarding a played keyboard note, the
   // way a real MIDI keyboard or the on-screen keys would (app.js's onNote()
   // forwards to this via the single added line, exposed here for testing as
@@ -136,6 +143,11 @@ test('a correctly played song note feeds the trainer\'s readiness/level-up path,
     "Array.from(document.querySelectorAll('.panel-songs-practice button')).some(b => b.textContent === 'Stop and check')"
   );
 
+  // "Your turn" now opens with a four-beat count-in (N2) before it actually
+  // starts listening -- wait for that to finish before playing a note.
+  await page.waitFor(
+    "document.querySelector('.panel-songs-count').textContent.startsWith('Notes heard so far')"
+  );
   // Hot Cross Buns' first phrase begins on E4 (midi 64): a correctly pitched note.
   await page.evaluate('window.__coach.songsNote(64, true)');
   await page.waitFor("document.querySelector('.panel-songs-count').textContent.includes('1')");
@@ -183,6 +195,11 @@ test('capturing a note while recording does not steal keyboard focus from the re
   );
   assert.equal(await page.evaluate('document.activeElement.dataset.testMarker'), 'kept');
 
+  // "Your turn" now opens with a four-beat count-in (N2) before it actually
+  // starts listening -- wait for that to finish before playing a note.
+  await page.waitFor(
+    "document.querySelector('.panel-songs-count').textContent.startsWith('Notes heard so far')"
+  );
   await page.evaluate('window.__coach.songsNote(64, true)');
   await page.waitFor("document.querySelector('.panel-songs-count').textContent.includes('1')");
 

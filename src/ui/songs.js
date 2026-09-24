@@ -41,6 +41,7 @@
 import { yin } from '../audio/yin.js';
 import { createOnsetDetector } from '../audio/onset.js';
 import { rangeForInstrument } from '../audio/range.js';
+import { countInTimes, clampBpm, DEFAULT_BPM } from './learn/count-in.js';
 import { starterSongs } from '../song/starter/index.js';
 import { createLibrary, memoryStore, indexedDbStore } from '../song/library.js';
 import { validateSong } from '../song/model.js';
@@ -112,6 +113,62 @@ export function extendHeldEvent(event, freq, midi, nowSec) {
   event._centsN = n;
   event.durSec = Math.max(MIC_TICK_SEC, nowSec - event.atSec);
   return event;
+}
+
+// Count-in before every "Your turn" try (N2): four clicks at the step's own
+// EFFECTIVE tempo (its written bpm, ladder-slowed rate already applied by
+// the caller's effectiveBpm() -- see startRecording() below) so a learner
+// following a slowed-down backing hears a count-in at the same speed, or
+// DEFAULT_BPM for an untimed step (bpm 0, e.g. "pitches" -- there is no
+// tempo to count in AT, but a beat still gives a moment to get ready). Same
+// four-beat scheduler src/ui/learn.js's mic door already uses
+// (src/ui/learn/count-in.js countInTimes, MIN/MAX-clamped there). Pure:
+// `times` are phrase-local offsets from 0 -- the caller adds its own real
+// clock's `at0` before scheduling real clicks.
+export function countInFor(step, effectiveStepBpm) {
+  const bpm = clampBpm(effectiveStepBpm > 0 ? effectiveStepBpm : DEFAULT_BPM);
+  return { bpm, times: countInTimes(bpm, 4, 0) };
+}
+
+// A keyboard/on-screen-key note has no note-off in this listener (app.js's
+// handleMidiMessage forwards only the 'on' half via forwardNote() -- see
+// this file's header comment), so a played note's length is read as "until
+// the next press of the SAME pitch" -- pushes a new open event (durSec:
+// null) and, if an earlier event of the same midi is still open, closes it
+// at this press's atSec. A different pitch pressed in between does not
+// close it early: a keyboard player's hands are not required to release one
+// note before starting the next. Mutates and returns `playedEvents`.
+export function pushMidiEvent(playedEvents, midi, atSec) {
+  for (let i = playedEvents.length - 1; i >= 0; i--) {
+    if (playedEvents[i].midi === midi && playedEvents[i].durSec == null) {
+      playedEvents[i].durSec = Math.max(0, atSec - playedEvents[i].atSec);
+      break;
+    }
+  }
+  playedEvents.push({ midi, atSec, durSec: null });
+  return playedEvents;
+}
+
+// Whatever MIDI note is still open (no next same-pitch press arrived) when
+// the try ends is closed at the end of the try itself, rather than left with
+// no length at all -- called once from finishRecording() below.
+export function closeOpenMidiEvents(playedEvents, atSec) {
+  playedEvents.forEach((e) => { if (e.durSec == null) e.durSec = Math.max(0, atSec - e.atSec); });
+  return playedEvents;
+}
+
+// Reconciles a batch of songs (as authored, possibly carrying an id that
+// collides with one already in the library) with the ids library.add()
+// actually assigned to each (collision-renamed to song-2, song-3, ... --
+// src/song/library.js) -- used by the challenge/band-pack/single-file import
+// paths so anything shown or stored afterward (a challenge's own
+// progress[s.id] lookup, openSong(song)) references the id that is actually
+// stored, never the id the file happened to carry (D2). `storedIds[i]` is
+// the id library.add(songs[i], ...) returned; a song whose id did not change
+// is returned unchanged (same reference), so a caller can cheaply tell
+// nothing moved.
+export function withStoredIds(songs, storedIds) {
+  return songs.map((s, i) => (storedIds[i] === s.id ? s : { ...s, id: storedIds[i] }));
 }
 
 function onMidiNote(fn) {
@@ -577,7 +634,7 @@ function mountSongsPanel(hostEl, api) {
     // skipping ahead after a clean first try): each rung already has its own
     // fixed bpm, so starting that rung's fine-grained rate back at full
     // speed is the simplest reading of "fresh rung, fresh ladder".
-    practice = { song, partId, instrument, instrumentId, plan, results: [], stepIndex: 0, recording: false, playedEvents: [], recordStartSec: 0, stop: null, loopTransport: null, loopTransportStepIndex: null };
+    practice = { song, partId, instrument, instrumentId, plan, results: [], stepIndex: 0, recording: false, countingIn: false, countInTimer: null, playedEvents: [], recordStartSec: 0, stop: null, loopTransport: null, loopTransportStepIndex: null };
     store.set({ songId: song.id, partId, instrumentId, level });
     renderPractice();
   }
@@ -593,8 +650,19 @@ function mountSongsPanel(hostEl, api) {
     return renderPlayItOnCards(song, partId, currentInstrumentId, (instrument) => startPractice(song, partId, instrument));
   }
 
+  // The count element's own text for the current practice state: "Counting
+  // in…" while the pre-try count-in is still clicking (practice.countingIn,
+  // set by startRecording() below and cleared the moment real listening
+  // begins), "Notes heard so far: N" once it does, empty otherwise -- shared
+  // by updateCount() and renderPractice() so the two never drift apart.
+  function countLabel() {
+    if (!practice.recording) return '';
+    if (practice.countingIn) return 'Counting in…';
+    return 'Notes heard so far: ' + practice.playedEvents.length;
+  }
+
   function updateCount() {
-    if (countEl) countEl.textContent = practice.recording ? 'Notes heard so far: ' + practice.playedEvents.length : '';
+    if (countEl) countEl.textContent = countLabel();
     else renderPractice();
   }
 
@@ -663,7 +731,7 @@ function mountSongsPanel(hostEl, api) {
         onclick: () => (practice.recording ? finishRecording(step) : startRecording(step)),
       });
       practiceSection.appendChild(recordBtn);
-      countEl = el('p', { class: 'panel-songs-count', text: practice.recording ? 'Notes heard so far: ' + practice.playedEvents.length : '' });
+      countEl = el('p', { class: 'panel-songs-count', text: countLabel() });
       practiceSection.appendChild(countEl);
     } else {
       practiceSection.appendChild(el('button', { type: 'button', text: 'Next', onclick: () => advance(true, null) }));
@@ -739,78 +807,114 @@ function mountSongsPanel(hostEl, api) {
   // Capture's zero IS the phrase origin (step.originTick): an event at atSec
   // 0 is played on the phrase's first bar line, exactly where playPhrase()'s
   // own schedule starts, and judgeAttempt() compares on that same clock.
+  //
+  // N2: every try now opens with a four-beat count-in (countInFor(), same
+  // scheduler src/ui/learn.js's mic door uses) instead of starting to listen
+  // the instant the button is pressed -- a learner's own reaction time was
+  // otherwise the very first thing being judged. practice.recordStartSec is
+  // set to the moment the count-in ENDS (one beat after its last click, the
+  // downbeat of the phrase itself), and nothing subscribes to notes/mic
+  // input until then, so a note played during the clicks is not heard at
+  // all -- never counted as an early hit or a stray extra.
   function startRecording(step) {
     const onsetsOnly = !!step && step.kind === 'rhythm';
     practice.recording = true;
+    practice.countingIn = true;
     practice.playedEvents = [];
     // Starting a new try retires the previous try's bar strip.
     practice.lastHeat = null;
     practice.lastHeatBars = null;
-    practice.recordStartSec = api.now();
-    if (practice.instrument.input === 'midi') {
-      const unsubscribe = onMidiNote((midi) => {
-        practice.playedEvents.push({ midi, atSec: api.now() - practice.recordStartSec });
-        updateCount();
-      });
-      practice.stop = unsubscribe;
-    } else {
-      api.openMic().catch(() => say('The microphone was blocked. Allow microphone access, or switch to the keyboard.', 'no'));
-      let onset;
-      // The played event still being sounded, so a sustained instrument's
-      // hold/tune rules (src/song/lesson.js) have something real to judge
-      // (durSec/cents) -- every tick this SAME pitch keeps being heard, its
-      // durSec is stamped forward; the moment it drops out (silence, or the
-      // pitch moves on to the next note) durSec is left at that last-seen
-      // value rather than kept open forever. A MIDI/on-screen-key note (see
-      // onMidiNote above) never gets either field: there is no "still
-      // sounding" signal to poll for a discrete key press.
-      let openEvent = null;
-      const timer = setInterval(() => {
-        const analysers = api.analysers();
-        const audio = api.audio();
-        if (!analysers.time || !audio) return;
-        if (!onset) onset = createOnsetDetector({ sampleRate: audio.sampleRate, frameSize: analysers.time.fftSize });
-        const buf = new Float32Array(analysers.time.fftSize);
-        analysers.time.getFloatTimeDomainData(buf);
-        const o = onset.push(buf);
-        // No onset and nothing still sounding: skip YIN entirely this tick.
-        if (!o.onset && !openEvent) return;
-        const toolRange = rangeForInstrument(practice.instrument);
-        const r = yin(buf, audio.sampleRate, toolRange.fmin, toolRange.fmax, api.gates().pitch);
-        const nowSec = api.now() - practice.recordStartSec;
-        if (!o.onset) {
-          if (openEvent && r.freq && r.clarity > 0.5 && Math.round(69 + 12 * Math.log2(r.freq / 440)) === openEvent.midi) {
-            extendHeldEvent(openEvent, r.freq, openEvent.midi, nowSec);
-          } else {
-            openEvent = null;
+
+    // Real listening only begins once the count-in ends (below); this is the
+    // rest of the old startRecording() body, unchanged, just deferred.
+    function beginListening() {
+      if (practice.instrument.input === 'midi') {
+        const unsubscribe = onMidiNote((midi) => {
+          pushMidiEvent(practice.playedEvents, midi, api.now() - practice.recordStartSec);
+          updateCount();
+        });
+        practice.stop = unsubscribe;
+      } else {
+        api.openMic().catch(() => say('The microphone was blocked. Allow microphone access, or switch to the keyboard.', 'no'));
+        let onset;
+        // The played event still being sounded, so a sustained instrument's
+        // hold/tune rules (src/song/lesson.js) have something real to judge
+        // (durSec/cents) -- every tick this SAME pitch keeps being heard, its
+        // durSec is stamped forward; the moment it drops out (silence, or the
+        // pitch moves on to the next note) durSec is left at that last-seen
+        // value rather than kept open forever. A MIDI/on-screen-key note (see
+        // onMidiNote above) never gets either field: there is no "still
+        // sounding" signal to poll for a discrete key press.
+        let openEvent = null;
+        const timer = setInterval(() => {
+          const analysers = api.analysers();
+          const audio = api.audio();
+          if (!analysers.time || !audio) return;
+          if (!onset) onset = createOnsetDetector({ sampleRate: audio.sampleRate, frameSize: analysers.time.fftSize });
+          const buf = new Float32Array(analysers.time.fftSize);
+          analysers.time.getFloatTimeDomainData(buf);
+          const o = onset.push(buf);
+          // No onset and nothing still sounding: skip YIN entirely this tick.
+          if (!o.onset && !openEvent) return;
+          const toolRange = rangeForInstrument(practice.instrument);
+          const r = yin(buf, audio.sampleRate, toolRange.fmin, toolRange.fmax, api.gates().pitch);
+          const nowSec = api.now() - practice.recordStartSec;
+          if (!o.onset) {
+            if (openEvent && r.freq && r.clarity > 0.5 && Math.round(69 + 12 * Math.log2(r.freq / 440)) === openEvent.midi) {
+              extendHeldEvent(openEvent, r.freq, openEvent.midi, nowSec);
+            } else {
+              openEvent = null;
+            }
+            return;
           }
-          return;
-        }
-        if (!r.freq || !(r.clarity > 0.7)) {
-          openEvent = null;
-          // "Clap the rhythm": an attack with no clear pitch (a clap, a tap)
-          // is still a beat, so a rhythm step keeps it as an unpitched event.
-          if (onsetsOnly) { practice.playedEvents.push({ midi: null, atSec: nowSec }); updateCount(); }
-          return;
-        }
-        const midi = Math.round(69 + 12 * Math.log2(r.freq / 440));
-        const event = playedEventFrom(r.freq, midi, nowSec);
-        practice.playedEvents.push(event);
-        openEvent = event;
-        updateCount();
-      }, 50);
-      practice.stop = () => clearInterval(timer);
+          if (!r.freq || !(r.clarity > 0.7)) {
+            openEvent = null;
+            // "Clap the rhythm": an attack with no clear pitch (a clap, a tap)
+            // is still a beat, so a rhythm step keeps it as an unpitched event.
+            if (onsetsOnly) { practice.playedEvents.push({ midi: null, atSec: nowSec }); updateCount(); }
+            return;
+          }
+          const midi = Math.round(69 + 12 * Math.log2(r.freq / 440));
+          const event = playedEventFrom(r.freq, midi, nowSec);
+          practice.playedEvents.push(event);
+          openEvent = event;
+          updateCount();
+        }, 50);
+        practice.stop = () => clearInterval(timer);
+      }
     }
+
+    const { bpm, times } = countInFor(step, effectiveBpm(step));
+    const spb = 60 / bpm;
+    const at0 = api.now() + 0.15;
+    times.forEach((t, i) => api.click(at0 + t, i === 0));
+    // The phrase origin (atSec 0 for judging) is one beat AFTER the last
+    // click -- the downbeat the count-in was leading up to.
+    practice.recordStartSec = at0 + times[times.length - 1] + spb;
+    const delayMs = Math.max(0, (practice.recordStartSec - api.now()) * 1000);
+    practice.countInTimer = setTimeout(() => {
+      practice.countInTimer = null;
+      practice.countingIn = false;
+      beginListening();
+      updateCount();
+    }, delayMs);
     renderPractice();
   }
 
   function stopRecording() {
+    if (practice && practice.countInTimer) { clearTimeout(practice.countInTimer); practice.countInTimer = null; }
     if (practice && practice.stop) { practice.stop(); practice.stop = null; }
-    if (practice) practice.recording = false;
+    if (practice) { practice.recording = false; practice.countingIn = false; }
   }
 
   function finishRecording(step) {
     const elapsedMs = Math.max(0, (api.now() - practice.recordStartSec) * 1000);
+    // A MIDI note still "held" (no later same-pitch press closed it) gets its
+    // length from the moment the try itself ended, rather than being left
+    // with no durSec at all -- see pushMidiEvent()/closeOpenMidiEvents()
+    // above. A no-op for a mic-captured event, which always carries durSec
+    // already.
+    closeOpenMidiEvents(practice.playedEvents, Math.max(0, (api.now() - practice.recordStartSec)));
     stopRecording();
     const timed = step.kind !== 'pitches';
     const result = judgeAttempt(step.notes, practice.playedEvents, {
@@ -900,12 +1004,19 @@ function mountSongsPanel(hostEl, api) {
         say(e && e.message ? e.message : String(e), 'no');
         return;
       }
+      let storedIds;
       try {
-        for (const s of pack.songs) await library.add(s, { now: Date.now() });
+        storedIds = [];
+        for (const s of pack.songs) storedIds.push(await library.add(s, { now: Date.now() }));
       } catch (e) {
         say('The band pack could not be fully saved: ' + (e && e.message ? e.message : String(e)), 'no');
         return;
       }
+      // D2: a song whose id collided with one already in the library was
+      // reassigned (song-2, song-3, ...) by library.add() above -- reconciled
+      // here so the part-assignment lines below (and anything read from
+      // pack.songs after this point) name the id that is actually stored.
+      pack.songs = withStoredIds(pack.songs, storedIds);
       say('Added ' + pack.songs.length + ' song' + (pack.songs.length === 1 ? '' : 's') + ' from band pack "' + pack.name + '".', 'ok');
       // Part assignments, read-only: one line per song that carries one,
       // "<title>: <member> plays <part name>, ...". A song with no
@@ -930,12 +1041,19 @@ function mountSongsPanel(hostEl, api) {
         say('That file could not be read: ' + (e && e.message ? e.message : String(e)), 'no');
         return;
       }
+      let storedIds;
       try {
-        for (const s of challenge.songs) await library.add(s, { now: Date.now() });
+        storedIds = [];
+        for (const s of challenge.songs) storedIds.push(await library.add(s, { now: Date.now() }));
       } catch (e) {
         say('The challenge could not be fully saved: ' + (e && e.message ? e.message : String(e)), 'no');
         return;
       }
+      // D2: reconcile any collision-reassigned id BEFORE renderChallenge()
+      // reads challenge.songs -- its progress[s.id] lookup and each song's
+      // own "Open" button (openSong(song)) must reference the id that is
+      // actually stored, not the id the file happened to carry.
+      challenge.songs = withStoredIds(challenge.songs, storedIds);
       say('Added the "' + challenge.title + '" challenge (' + challenge.songs.length + ' song' + (challenge.songs.length === 1 ? '' : 's') + ').', 'ok');
       renderChallenge(challenge);
       await refreshList();
@@ -960,14 +1078,20 @@ function mountSongsPanel(hostEl, api) {
       say('That file did not turn into a usable song: ' + errors.join('; '), 'no');
       return;
     }
+    let storedId;
     try {
-      await library.add(song, { now: Date.now() });
+      storedId = await library.add(song, { now: Date.now() });
     } catch (e) {
       say('The song could not be saved: ' + (e && e.message ? e.message : String(e)), 'no');
       return;
     }
-    if (warnings && warnings.length) say('Added "' + song.title + '". ' + warnings.join(' '), 'ok');
-    else say('Added "' + song.title + '" to your songs.', 'ok');
+    // D2: a single import mentions the stored id in its own message only
+    // when it actually changed (a same-titled song already in the library) --
+    // nothing else here reads song.id afterward, so there is no other place
+    // to reconcile.
+    const idNote = storedId !== song.id ? ' (saved as "' + storedId + '" -- a song with that id was already saved)' : '';
+    if (warnings && warnings.length) say('Added "' + song.title + '". ' + warnings.join(' ') + idNote, 'ok');
+    else say('Added "' + song.title + '" to your songs.' + idNote, 'ok');
     await refreshList();
   }
 

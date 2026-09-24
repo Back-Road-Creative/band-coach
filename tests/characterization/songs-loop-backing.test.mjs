@@ -23,6 +23,14 @@ async function playAttempt(page, delaysMs) {
     (async () => {
       const turnBtn = Array.from(document.querySelectorAll('.panel-songs-practice button')).find(b => b.textContent === 'Your turn');
       if (turnBtn) turnBtn.click();
+      // "Your turn" now opens with a four-beat count-in (N2) before it
+      // starts listening -- wait for the count element to say real
+      // listening has begun so delaysMs below (measured against the
+      // step's own phrase clock) starts from the actual recordStartSec,
+      // not the button click.
+      while (!(document.querySelector('.panel-songs-count') && document.querySelector('.panel-songs-count').textContent.startsWith('Notes heard so far'))) {
+        await new Promise(r => setTimeout(r, 15));
+      }
       const seq = ${JSON.stringify(PHRASE_MIDI.map((midi, i) => ({ midi, delayMs: delaysMs[i] })))};
       for (const { midi, delayMs } of seq) {
         await new Promise(r => setTimeout(r, delayMs));
