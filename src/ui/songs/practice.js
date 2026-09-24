@@ -11,6 +11,17 @@ function ticksToSec(ticks, bpm, ticksPerQuarter) {
   return (ticks / ticksPerQuarter) * (60 / bpm);
 }
 
+// The ONE phrase-local clock (BC-01): seconds from a step's originTick (its
+// phrase's segment start -- the bar src/song/lesson.js cut the phrase at,
+// so a pickup rest before the first note is kept) to `tick`. src/ui/songs.js
+// schedules playback with this, starts capture at this clock's zero, and
+// judgeAttempt() below computes every expected onset with it -- so what the
+// learner hears, when they are told to start, and what they are judged
+// against can never disagree.
+export function phraseSec(tick, originTick, bpm, ticksPerQuarter) {
+  return ticksToSec(tick - (originTick || 0), bpm, ticksPerQuarter);
+}
+
 // A keyboard player's MIDI events for a chord (several expected notes at the
 // same `start` tick) arrive in whatever order fingers land — reverse order,
 // or a few ms apart (a "rolled" chord) — never guaranteed to match the order
@@ -48,6 +59,33 @@ function missedNote(note) {
   return { note, played: null, ok: false, errorMs: null, durRatio: null, cents: null, velocityError: null };
 }
 
+// Onset-only matching for a "rhythm" step: every played event is assigned to
+// the expected onset (chord) nearest it in time; each onset keeps its nearest
+// assigned event, which then counts for every note of that chord (one clap
+// covers a chord). Unclaimed events are extras. Order-free and pitch-free, so
+// one stray clap never shifts every later beat, and a missed beat is a miss.
+function judgeOnsets(chords, played, onsetAt, matches, extraList, bpm, ticksPerQuarter, policy) {
+  const times = chords.map((c) => onsetAt(c[0].start));
+  const best = times.map(() => -1);
+  played.forEach((ev, i) => {
+    let k = -1;
+    times.forEach((t, j) => { if (k === -1 || Math.abs(ev.atSec - t) < Math.abs(ev.atSec - times[k])) k = j; });
+    if (k === -1) return;
+    if (best[k] === -1 || Math.abs(ev.atSec - times[k]) < Math.abs(played[best[k]].atSec - times[k])) best[k] = i;
+  });
+  const used = new Set(best);
+  played.forEach((ev, i) => { if (!used.has(i)) extraList.push(ev); });
+  // pitchOk: whether the hit also had this note's pitch (false for a clap) --
+  // never part of passing, only so a caller credits pitch practice truthfully.
+  chords.forEach((chord, k) => chord.forEach((note) => {
+    if (best[k] === -1) { matches.push(missedNote(note)); return; }
+    const hit = played[best[k]];
+    const m = matchOneNote(note, hit, true, times[k], bpm, ticksPerQuarter);
+    m.pitchOk = hit.midi != null && judgePitch({ heardMidi: hit.midi, targetMidi: note.midi, policy }).ok;
+    matches.push(m);
+  }));
+}
+
 // expectedNotes: [{ start, dur, midi, velocity? }] in ticks (a step's
 // `notes`, already fitted to the instrument by buildLessonPlan/fitToInstrument).
 // playedEvents: [{ midi, atSec, durSec?, cents?, velocity? }], in the order
@@ -57,6 +95,12 @@ function missedNote(note) {
 // every field they feed (durRatio, cents, velocityError, meanAbsCents,
 // durationScore, dynamicsScore) stays null until a caller starts passing
 // them, and every existing field is computed exactly as before.
+// opts.originTick: the step's phrase origin (see phraseSec above); playedEvents'
+// atSec are seconds from that same origin. Defaults to 0 (song start).
+// opts.onsetsOnly: true for the "rhythm" step kind (Clap the rhythm) --
+// pitch is ignored, so any pitch or an unpitched clap ({ midi: null }) counts;
+// each expected onset takes the played event nearest to it in time (see
+// judgeOnsets below) and early/late still fails through passRule's timing.
 // opts.timed: false for the "pitches" step kind (out of time; matched by
 // order only, no timing error computed) — every other kind is timed.
 // opts.policy: the instrument's octave policy (src/core/judge.js), so e.g.
@@ -75,18 +119,22 @@ export function judgeAttempt(expectedNotes, playedEvents, opts = {}) {
     timed = true,
     durationTolerance = { min: 0.6, max: 1.5 },
     velocityTolerance = 24,
+    originTick = 0,
+    onsetsOnly = false,
   } = opts;
   const notes = expectedNotes || [];
   const played = playedEvents || [];
   const matches = [];
   const extraList = [];
+  const onsetAt = (tick) => phraseSec(tick, originTick, bpm, ticksPerQuarter);
   let cursor = 0;
-  for (const chord of groupIntoChords(notes)) {
+  if (onsetsOnly) judgeOnsets(groupIntoChords(notes), played, onsetAt, matches, extraList, bpm, ticksPerQuarter, policy);
+  for (const chord of onsetsOnly ? [] : groupIntoChords(notes)) {
     if (chord.length === 1) {
       // Single expected note at this tick: the original forward-only
       // search, unchanged — no chord window, no extras.
       const note = chord[0];
-      const expectedAt = timed ? ticksToSec(note.start, bpm, ticksPerQuarter) : null;
+      const expectedAt = timed ? onsetAt(note.start) : null;
       let foundAt = -1;
       for (let i = cursor; i < played.length; i++) {
         if (judgePitch({ heardMidi: played[i].midi, targetMidi: note.midi, policy }).ok) {
@@ -124,7 +172,7 @@ export function judgeAttempt(expectedNotes, playedEvents, opts = {}) {
     let windowEndIdx = anchorIndex;
     for (let i = anchorIndex + 1; i < played.length && played[i].atSec <= windowEnd; i++) windowEndIdx = i;
     const usedIdx = new Set();
-    const expectedAt = timed ? ticksToSec(chord[0].start, bpm, ticksPerQuarter) : null;
+    const expectedAt = timed ? onsetAt(chord[0].start) : null;
     for (const note of chord) {
       let foundIdx = -1;
       for (let i = anchorIndex; i <= windowEndIdx; i++) {
