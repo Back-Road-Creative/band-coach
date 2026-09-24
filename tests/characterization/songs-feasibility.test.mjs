@@ -20,10 +20,10 @@ test('every ready instrument gets a "Play it on…" card with a feasibility badg
   await page.waitFor("document.querySelectorAll('.panel-songs-instrument-card').length > 0");
 
   const cardCount = await page.evaluate("document.querySelectorAll('.panel-songs-instrument-card').length");
-  // 27 ready instrument records as of this change (src/instruments/index.js);
+  // 28 ready instrument records as of this change (src/instruments/index.js; the drum kit is the 28th);
   // pinned here so a future added/removed instrument fails this test loudly
   // instead of silently drifting the card count.
-  assert.equal(cardCount, 27, 'exactly one card per ready instrument');
+  assert.equal(cardCount, 28, 'exactly one card per ready instrument');
 
   // Every card carries a non-empty badge with a known feasibility level.
   const badges = await page.evaluate(
