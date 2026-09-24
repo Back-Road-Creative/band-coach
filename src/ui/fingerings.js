@@ -6,6 +6,7 @@
 import { INSTRUMENTS } from '../instruments/index.js';
 import { howKindFor, computeHow, defaultNoteFor, alternateTuningsFor } from './fingerings/how.js';
 import { noteName, chromaticRange } from './fingerings/notes.js';
+import { readFingeringSetup } from './fingerings/setup.js';
 
 // Human-readable labels for fretboard.js's named-tuning keys (alternateTuningsFor).
 const TUNING_LABELS = {
@@ -206,6 +207,9 @@ export function registerFingerings(panels) {
       // Reads and validates the store; never throws, never trusts what's in
       // it — a corrupt or hand-edited localStorage blob must not wedge the
       // panel. Unrecognised shapes fall back to an empty byInstrument map.
+      // (src/ui/fingerings/setup.js's readFingeringSetup does the per-
+      // instrument validation below; this wrapper only adds the try/catch
+      // around api.store('fingerings').get() itself.)
       function loadStore() {
         try {
           const raw = api.store('fingerings').get();
@@ -221,16 +225,11 @@ export function registerFingerings(panels) {
       // Validates one instrument's saved entry against what THIS instrument
       // currently allows (alternate tunings differ per instrument, and an
       // instrument swap in instruments/index.js must never resurrect a
-      // capo/tuning value that no longer makes sense).
+      // capo/tuning value that no longer makes sense) — delegated to
+      // setup.js's readFingeringSetup (P4-5) so Songs can read the same
+      // rule without importing this panel.
       function rememberedFor(id) {
-        const store = loadStore();
-        const entry = store.byInstrument[id];
-        if (!entry || typeof entry !== 'object') return { capo: 0, tuning: null, leftHanded: false };
-        const alts = alternateTuningsFor(instrument);
-        const validCapo = Number.isInteger(entry.capo) && entry.capo >= 0 && entry.capo <= 11 ? entry.capo : 0;
-        const validTuning = alts && typeof entry.tuning === 'string' && alts.includes(entry.tuning) ? entry.tuning : null;
-        const validLeftHanded = typeof entry.leftHanded === 'boolean' ? entry.leftHanded : false;
-        return { capo: validCapo, tuning: validTuning, leftHanded: validLeftHanded };
+        return readFingeringSetup(loadStore(), instrument && instrument.id === id ? instrument : null);
       }
 
       function rememberCurrent() {
