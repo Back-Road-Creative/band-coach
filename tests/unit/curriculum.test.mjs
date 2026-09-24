@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { planSession, describePlan } from '../../src/core/curriculum.js';
+import { planSession, describePlan, nextPlanStep } from '../../src/core/curriculum.js';
 import { due } from '../../src/core/srs.js';
 
 const DAY = 86400000;
@@ -96,4 +96,76 @@ test('describePlan: review only', () => {
 
 test('describePlan: nothing at all', () => {
   assert.equal(describePlan([]), 'Today: nothing new due -- free practice.');
+});
+
+test('describePlan: nameOf names the weak skill in plain words instead of its raw id', () => {
+  const blocks = [
+    { kind: 'weak', id: 'n67', why: 'the one practiced least so far' },
+    { kind: 'apply', skill: 'n67' }
+  ];
+  const text = describePlan(blocks, id => (id === 'n67' ? 'G4' : id));
+  assert.equal(text, 'Today: G4, then use it in a phrase.');
+  assert.doesNotMatch(text, /\bn67\b/);
+});
+
+test('describePlan: no nameOf given falls back to the raw id, unchanged', () => {
+  const blocks = [{ kind: 'weak', id: 'n67', why: 'x' }];
+  assert.equal(describePlan(blocks), 'Today: n67.');
+});
+
+// ---------- nextPlanStep ----------
+
+test('nextPlanStep: no blocks -> null', () => {
+  assert.equal(nextPlanStep([], {}), null);
+  assert.equal(nextPlanStep([], undefined), null);
+});
+
+test('nextPlanStep: review block serves one task per id, then hands off', () => {
+  const blocks = [{ kind: 'review', ids: ['a', 'b'] }];
+  assert.deepEqual(nextPlanStep(blocks, { review: 0 }), { kind: 'review', ids: ['a', 'b'], blind: false });
+  assert.deepEqual(nextPlanStep(blocks, { review: 1 }), { kind: 'review', ids: ['a', 'b'], blind: false });
+  assert.equal(nextPlanStep(blocks, { review: 2 }), null);
+});
+
+test('nextPlanStep: weak repeats its single id three times before moving on', () => {
+  const blocks = [{ kind: 'weak', id: 'G4', why: 'x' }];
+  assert.deepEqual(nextPlanStep(blocks, { weak: 0 }), { kind: 'weak', ids: ['G4'], blind: false });
+  assert.deepEqual(nextPlanStep(blocks, { weak: 2 }), { kind: 'weak', ids: ['G4'], blind: false });
+  assert.equal(nextPlanStep(blocks, { weak: 3 }), null);
+});
+
+test('nextPlanStep: apply gets two goes, named by skill', () => {
+  const blocks = [{ kind: 'apply', skill: 'G4' }];
+  assert.deepEqual(nextPlanStep(blocks, { apply: 0 }), { kind: 'apply', ids: ['G4'], blind: false });
+  assert.deepEqual(nextPlanStep(blocks, { apply: 1 }), { kind: 'apply', ids: ['G4'], blind: false });
+  assert.equal(nextPlanStep(blocks, { apply: 2 }), null);
+});
+
+test('nextPlanStep: check is blind and serves one task per id', () => {
+  const blocks = [{ kind: 'check', ids: ['a', 'G4'] }];
+  const step = nextPlanStep(blocks, { check: 0 });
+  assert.deepEqual(step, { kind: 'check', ids: ['a', 'G4'], blind: true });
+});
+
+test('nextPlanStep: walks review -> weak -> apply -> check in order as each is exhausted', () => {
+  const blocks = [
+    { kind: 'review', ids: ['a'] },
+    { kind: 'weak', id: 'G4', why: 'x' },
+    { kind: 'apply', skill: 'G4' },
+    { kind: 'check', ids: ['a', 'G4'] }
+  ];
+  assert.equal(nextPlanStep(blocks, { review: 0, weak: 0, apply: 0, check: 0 }).kind, 'review');
+  assert.equal(nextPlanStep(blocks, { review: 1, weak: 0, apply: 0, check: 0 }).kind, 'weak');
+  assert.equal(nextPlanStep(blocks, { review: 1, weak: 3, apply: 0, check: 0 }).kind, 'apply');
+  assert.equal(nextPlanStep(blocks, { review: 1, weak: 3, apply: 2, check: 0 }).kind, 'check');
+  assert.equal(nextPlanStep(blocks, { review: 1, weak: 3, apply: 2, check: 2 }), null);
+});
+
+test('nextPlanStep: a block the plan never produced (no review due) is skipped, not stuck', () => {
+  const blocks = [
+    { kind: 'weak', id: 'G4', why: 'x' },
+    { kind: 'apply', skill: 'G4' },
+    { kind: 'check', ids: ['G4'] }
+  ];
+  assert.equal(nextPlanStep(blocks, {}).kind, 'weak');
 });
