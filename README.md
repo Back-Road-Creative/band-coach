@@ -291,13 +291,14 @@ their own plain home the same way: a "Tools" group inside the instrument sheet, 
 Tuner/Capture a melody/Interval drill/Rhythm, open with no extra click once the sheet is open.
 
 Opening any song shows one row of plain actions directly above its practise section: **Edit
-notes**, **Play along**, **Export**, **Share**, **Save a copy** — a starter tune's Edit notes
-saves a copy first (starter tunes are never edited in place) and opens that. Export reveals the
-MIDI/MusicXML/ABC download buttons only once pressed (they no longer sit on every song row), and
-Share downloads a `.bandpack` of that one song alone. A teacher challenge's title field, "Export
-as a challenge", "Share with your band" and any read-only band-pack part assignments live under
-their own **Assignments** heading below the song list, separate from a single open song's own
-actions.
+notes**, **Play along**, **Export**, **Share**, **Save a copy**, **Print** — a starter tune's Edit
+notes saves a copy first (starter tunes are never edited in place) and opens that. Export reveals
+the MIDI/MusicXML/ABC download buttons only once pressed (they no longer sit on every song row),
+Share downloads a `.bandpack` of that one song alone, and Print sends just that song's notation to
+plain paper, black on white, with nothing else on the page. A teacher challenge's title field,
+"Export as a challenge", "Share with your band" and any read-only band-pack part assignments live
+under their own **Assignments** heading below the song list, separate from a single open song's
+own actions.
 
 The Songs panel (`src/ui/songs.js`) turns a whole tune — built in, or imported from a `.mid`,
 `.midi`, `.abc`, `.xml`, `.musicxml`, compressed `.mxl`, Guitar Pro `.gp`, Guitar Pro 5 `.gp5`, or a

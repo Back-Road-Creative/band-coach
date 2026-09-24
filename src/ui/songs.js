@@ -66,6 +66,13 @@ import { classifyAddFile, ADD_ACCEPT, ADD_HELP_LINE, UNSUPPORTED_MESSAGE } from 
 import { createRecordDoor, transcribeAudioFile } from './songs/record-door.js';
 import { renderReview, makeHandoffs } from './songs/review.js';
 import { sanitizeStatusLedger, markDraft, markChecked, statusFor, statusLabel } from './songs/song-status.js';
+import { layoutSong } from './editor/layout-song.js';
+import { drawPrimitives } from '../notation/draw-canvas.js';
+
+// P3-9 Print: the same pitch-class-to-key-name tables editor.js keeps (not exported there) --
+// see songHeader()'s Print button below for the one place this file needs a key name.
+const PC_TO_MAJOR_KEY = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B'];
+const PC_TO_MINOR_KEY = ['Cm', 'C#m', 'Dm', 'D#m', 'Em', 'Fm', 'F#m', 'Gm', 'G#m', 'Am', 'A#m', 'Bm'];
 
 // Every playable ('ready') instrument record, for the "Play it on…" row --
 // same source src/app.js reads for notation/mic-range/how-to-play, so this
@@ -542,6 +549,11 @@ function mountSongsPanel(hostEl, api) {
 
   const practiceSection = el('section', { class: 'panel-songs-practice', hidden: 'hidden' });
 
+  // P3-9: the hidden sheet Print draws a song's notation into, appended to hostEl once (not
+  // to songHeaderSection, which songHeader() below clears on every open song -- same reasoning
+  // as history.js's own #historyPrintReport living outside the section it prints from).
+  let printSheetEl = null;
+
   hostEl.appendChild(heading);
   hostEl.appendChild(intro);
   hostEl.appendChild(listSection);
@@ -864,11 +876,68 @@ function mountSongsPanel(hostEl, api) {
       },
     });
 
+    // "Print": lays out part 1 of THIS song (src/ui/editor/layout-song.js -- the same call
+    // editor.js's own render() makes for the notation canvas) onto a hidden black-on-white
+    // sheet (printSheetEl above), then opens the browser's print dialog the same way
+    // "Print this week's report" does (src/ui/history.js): styles.css's @media print block
+    // scopes its rules to body.printing-song so nothing but this sheet ends up on the page.
+    const printBtn = el('button', {
+      type: 'button', class: 'panel-songs-action-print', text: 'Print',
+      onclick: () => {
+        if (!printSheetEl) {
+          printSheetEl = el('div', { class: 'songs-print-sheet', 'aria-hidden': 'true' }, [
+            el('h1'),
+            document.createElement('canvas'),
+          ]);
+          hostEl.appendChild(printSheetEl);
+        }
+        printSheetEl.querySelector('h1').textContent = song.title;
+        const canvas = printSheetEl.querySelector('canvas');
+
+        // Clef: the same rule clefFor() in editor.js applies to the CURRENT instrument's
+        // record (rec.clefs) -- a grand-staff instrument (kbd) gets 'grand', anything else
+        // its own first listed clef, 'treble' when no instrument is picked yet.
+        const rec = api.instrument(api.mod());
+        const clef = rec && Array.isArray(rec.clefs) && rec.clefs.length
+          ? (rec.clefs.indexOf('grand') >= 0 ? 'grand' : rec.clefs[0])
+          : 'treble';
+        // Key name: the same PC-to-key-name table keyName() in editor.js uses, for the same
+        // { tonic, mode } shape (src/song/model.js) -- not exported there, so kept here too.
+        const key = song.key
+          ? (song.key.mode === 'minor' ? PC_TO_MINOR_KEY[song.key.tonic] : PC_TO_MAJOR_KEY[song.key.tonic])
+          : 'C';
+        const width = 340;
+        const layout = layoutSong(song, 0, { clef, key, width });
+        canvas.width = width;
+        canvas.height = layout.barCount * layout.rowHeight;
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#000';
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = 1.2;
+        ctx.font = '20px serif';
+        layout.rows.forEach((row) => {
+          ctx.save();
+          ctx.translate(0, row.y0);
+          drawPrimitives(ctx, row.primitives, {});
+          ctx.restore();
+        });
+
+        // Song mode (styles.css body.printing-song) stays on until the print dialog closes;
+        // print() does not block in every browser, so afterprint is what ends it -- the exact
+        // pattern history.js uses for body.printing-report.
+        document.body.classList.add('printing-song');
+        window.addEventListener('afterprint', () => document.body.classList.remove('printing-song'), { once: true });
+        window.print();
+      },
+    });
+
     songHeaderSection.appendChild(editBtn);
     songHeaderSection.appendChild(playAlongBtn);
     songHeaderSection.appendChild(exportBtn);
     songHeaderSection.appendChild(shareBtn);
     songHeaderSection.appendChild(saveCopyBtn);
+    songHeaderSection.appendChild(printBtn);
   }
 
   function openSong(song, libraryId) {

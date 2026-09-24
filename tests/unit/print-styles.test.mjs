@@ -55,7 +55,24 @@ test('the weekly report\'s hide-everything print rule is scoped to body.printing
 
 test('printing the report does not also hide the report via the page-print chrome rules', () => {
   // the page-print rules hide buttons, the side rail, etc.; they must not apply in report mode,
-  // or an ancestor of the report could be display:none and the report prints empty.
+  // or an ancestor of the report could be display:none and the report prints empty. P3-9 adds a
+  // third print mode (printing a single song), so the chrome rules are now scoped away from BOTH
+  // body.printing-report and body.printing-song -- updated from a bare :not(.printing-report).
   const block = printBlock();
-  assert.match(block, /body:not\(\.printing-report\)\s+header/, 'page-print chrome rules should be scoped to body:not(.printing-report)');
+  assert.match(block, /body:not\(\.printing-report\):not\(\.printing-song\)\s+header/, 'page-print chrome rules should be scoped to body:not(.printing-report):not(.printing-song)');
+});
+
+// P3-9: printing a single song's notation from its action row (Print button in songHeader())
+// is a third print mode, alongside printing the page and printing the weekly report -- see the
+// comment above the @media print block in src/styles.css for how the three stay out of each
+// other's way.
+test('printing a song hides everything but the song sheet', () => {
+  const block = printBlock();
+  assert.match(block, /body\.printing-song\s+\*\s*\{[^}]*visibility:\s*hidden/, 'the song print rule should key off body.printing-song');
+  assert.match(block, /body\.printing-song\s+\.songs-print-sheet[^{]*\{[^}]*visibility:\s*visible/, 'the song sheet itself stays visible under body.printing-song');
+});
+
+test('page-print chrome rules do not hide the song sheet', () => {
+  const block = printBlock();
+  assert.match(block, /body:not\(\.printing-report\):not\(\.printing-song\)\s+header/, 'page-print chrome rules should be scoped away from body.printing-song too, or the sheet\'s ancestors could be display:none');
 });

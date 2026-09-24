@@ -41,7 +41,8 @@ test('an open song shows one row of named actions', async (t) => {
   const actionTexts = await page.evaluate(
     "Array.from(document.querySelectorAll('.panel-songs-song-actions button')).map(b => b.textContent)"
   );
-  assert.deepEqual(actionTexts, ['Edit notes', 'Play along', 'Export', 'Share', 'Save a copy']);
+  // P3-9 adds Print at the end of the row.
+  assert.deepEqual(actionTexts, ['Edit notes', 'Play along', 'Export', 'Share', 'Save a copy', 'Print']);
 
   const practiceVisible = await page.evaluate("document.querySelector('.panel-songs-practice').hidden === false");
   assert.ok(practiceVisible, 'the practise section is visible below the action row');
@@ -159,4 +160,38 @@ test('the song list has no per-row format buttons', async (t) => {
 
   const rowExportCount = await page.evaluate("document.querySelectorAll('.panel-songs-row .panel-songs-export').length");
   assert.equal(rowExportCount, 0, 'no row carries its own export controls any more');
+});
+
+// P3-9: Print lays out and draws the open song's notation into a hidden sheet, then calls
+// window.print() the same way "Print this week's report" does (src/ui/history.js) -- headless
+// Chromium has no real print pipeline, so window.print is replaced with a fake before the page's
+// own script runs (same pattern as w-history-print.test.mjs).
+const FAKE_SONG_PRINT_INIT = `
+  window.__printed = false;
+  window.print = () => {
+    window.__printed = true;
+    window.__printedWithClass = document.body.classList.contains('printing-song');
+  };
+`;
+
+test('Print draws the song and calls print', async (t) => {
+  const page = await launchPage(htmlPath, { initScript: FAKE_SONG_PRINT_INIT });
+  t.after(() => page.close());
+
+  await openHotCrossBuns(page);
+
+  await page.evaluate(
+    "Array.from(document.querySelectorAll('.panel-songs-song-actions button')).find(b => b.textContent === 'Print').click()"
+  );
+  await page.waitFor('window.__printed === true');
+
+  assert.equal(await page.evaluate('window.__printed'), true);
+  assert.equal(await page.evaluate('window.__printedWithClass'), true, 'body.printing-song was set while window.print() ran');
+
+  const canvasWidth = await page.evaluate("(document.querySelector('.songs-print-sheet canvas') || {}).width");
+  assert.ok(canvasWidth > 0, 'the song sheet canvas was drawn with a real width: ' + canvasWidth);
+
+  // print mode ends when the (faked) print dialog closes, same as report mode.
+  await page.evaluate("window.dispatchEvent(new Event('afterprint'))");
+  assert.equal(await page.evaluate("document.body.classList.contains('printing-song')"), false, 'song print mode must end after printing');
 });
