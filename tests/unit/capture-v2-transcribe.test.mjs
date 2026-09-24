@@ -102,6 +102,49 @@ test('eventsToNotes honours an onset to split two notes at the same pitch', () =
   assert.ok(Math.abs(notes[1].start - 0.30) < 0.02);
 });
 
+// BC-04: two bursts of the same pitch separated by real silence (no frames
+// at all across the gap -- the honest contract both record.js and
+// file-frames.js already use, omitting a window whenever nothing is heard
+// clearly enough) must read as two notes, and the first must end where the
+// evidence for it actually stops (its release), never stretched forward to
+// cover the silence just because nothing contradicted it.
+test('eventsToNotes ends a same-pitch note at its release, not at the next attack after a silent gap', () => {
+  const frames = [];
+  for (let i = 0; i < 20; i++) frames.push({ t: i * 0.01, midi: 60 }); // burst 1: 0-190ms
+  for (let i = 0; i < 20; i++) frames.push({ t: 2.0 + i * 0.01, midi: 60 }); // burst 2: 2.0-2.19s
+  const notes = eventsToNotes(frames, { minNoteMs: 60 });
+  assert.equal(notes.length, 2, `expected two notes, got ${JSON.stringify(notes)}`);
+  assert.ok(notes[0].end < 0.3, `first note should end near its release (~0.2s), not extend across the gap, got end=${notes[0].end}`);
+  assert.ok(Math.abs(notes[1].start - 2.0) < 0.02);
+});
+
+test('eventsToNotes preserves the silent gap between different-pitch bursts rather than filling it', () => {
+  const frames = [];
+  for (let i = 0; i < 20; i++) frames.push({ t: i * 0.01, midi: 60 }); // burst 1: C4
+  for (let i = 0; i < 20; i++) frames.push({ t: 2.0 + i * 0.01, midi: 64 }); // burst 2: E4
+  const notes = eventsToNotes(frames, { minNoteMs: 60 });
+  assert.equal(notes.length, 2);
+  assert.ok(notes[0].end < 0.3, `first note should not extend across the silent gap, got end=${notes[0].end}`);
+  assert.ok(notes[1].start - notes[0].end > 1, 'the silent gap should remain a rest between the notes');
+});
+
+test('eventsToNotes does not split a sustained note on a brief tracker dropout', () => {
+  const frames = [];
+  for (let i = 0; i < 10; i++) frames.push({ t: i * 0.01, midi: 60 }); // 0-90ms
+  for (let i = 0; i < 10; i++) frames.push({ t: 0.13 + i * 0.01, midi: 60 }); // resumes after a 40ms dropout
+  const notes = eventsToNotes(frames, { minNoteMs: 60 });
+  assert.equal(notes.length, 1, `a brief dropout must not split the note, got ${JSON.stringify(notes)}`);
+});
+
+test('eventsToNotes with an onset hint still splits same-pitch bursts without extending the first note across the gap', () => {
+  const frames = [];
+  for (let i = 0; i < 20; i++) frames.push({ t: i * 0.01, midi: 60 });
+  for (let i = 0; i < 20; i++) frames.push({ t: 2.0 + i * 0.01, midi: 60 });
+  const notes = eventsToNotes(frames, { onsets: [2.0], minNoteMs: 60 });
+  assert.equal(notes.length, 2);
+  assert.ok(notes[0].end < 0.3, `onset-triggered split must still end the first note at its release, got end=${notes[0].end}`);
+});
+
 // ---- estimateTempo --------------------------------------------------------
 
 for (const bpm of [72, 100, 132]) {

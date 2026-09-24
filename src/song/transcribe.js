@@ -32,6 +32,22 @@ const TICKS_PER_QUARTER = 480;
 
 // ---- eventsToNotes -----------------------------------------------------
 
+// Both frame sources feed eventsToNotes the same honest contract: a frame is
+// only ever emitted for a window the pitch tracker actually heard clearly
+// (src/audio/file-frames.js's `if (r.freq)`, src/ui/editor/record.js's
+// `sampleFrame` returning null on silence/noise) -- an unvoiced window is
+// simply never pushed, rather than pushed with a fake pitch. That means a
+// wide jump between two consecutive frames' own `t` IS the tracker
+// reporting silence, without needing a separate "rest" event: the release
+// already shows up as a gap in the timeline we're already walking. A single
+// dropped frame from an ordinary tracker hiccup (a hard consonant, one bad
+// window) must not read as a release, so only a gap wider than this
+// tolerance counts -- named here, not left as a magic number, because it is
+// the one number a real recording's brief detector glitches gets measured
+// against.
+const DROPOUT_TOLERANCE_MS = 80;
+const DROPOUT_TOLERANCE_SEC = DROPOUT_TOLERANCE_MS / 1000;
+
 export function eventsToNotes(frames, opts = {}) {
   const { onsets = [], minNoteMs = 60, glitchWindow = 5, glitchMaxRunMs = 90 } = opts;
   const fr = (Array.isArray(frames) ? frames : [])
@@ -46,12 +62,26 @@ export function eventsToNotes(frames, opts = {}) {
   const corrected = correctGlitches(fr, glitchWindow, glitchMaxRunMs);
   const onsetTimes = (Array.isArray(onsets) ? onsets : []).slice().sort((a, b) => a - b);
 
+  // The clip's typical inter-frame spacing, computed once up front: it is
+  // both how far past a note's own last frame its evidence is trusted to
+  // extend (its release, not the start of whatever comes next) and, via
+  // DROPOUT_TOLERANCE_SEC above, the yardstick a gap is measured against.
+  const interFrameGaps = [];
+  for (let i = 1; i < corrected.length; i++) interFrameGaps.push(corrected[i].t - corrected[i - 1].t);
+  const typicalGap = interFrameGaps.length ? median(interFrameGaps) : 0.05;
+
   const notes = [];
   let cur = null;
   let onsetCursor = 0;
 
-  const flush = (endT) => {
+  // A note always ends at its own last frame's evidence plus one typical
+  // hop -- never at whatever frame or gap triggered the flush. For directly
+  // adjacent frames (the common case) that lands within a hop of the next
+  // frame's own `t` anyway; across a real silent gap it stops the note at
+  // its actual release instead of stretching it across the silence.
+  const flush = () => {
     if (!cur) return;
+    const endT = cur.lastT + typicalGap;
     const dur = endT - cur.start;
     if (dur * 1000 >= minNoteMs) {
       notes.push({ start: cur.start, end: endT, midi: cur.midi, confidence: cur.confSum / cur.n });
@@ -66,21 +96,24 @@ export function eventsToNotes(frames, opts = {}) {
       onsetHere = true;
       onsetCursor++;
     }
+    // A wide gap since the current note's last frame is a release even when
+    // the pitch either side matches (a re-picked note at the same pitch) --
+    // the next attack is no longer treated as evidence that the previous
+    // note sustained all the way to it.
+    const gapHere = cur && f.t - cur.lastT > DROPOUT_TOLERANCE_SEC;
     if (!cur) {
-      cur = { start: f.t, midi: f.midi, confSum: conf(f), n: 1 };
-    } else if (f.midi !== cur.midi || (onsetHere && f.t > cur.start + 1e-9)) {
-      flush(f.t);
-      cur = { start: f.t, midi: f.midi, confSum: conf(f), n: 1 };
+      cur = { start: f.t, lastT: f.t, midi: f.midi, confSum: conf(f), n: 1 };
+    } else if (f.midi !== cur.midi || gapHere || (onsetHere && f.t > cur.start + 1e-9)) {
+      flush();
+      cur = { start: f.t, lastT: f.t, midi: f.midi, confSum: conf(f), n: 1 };
     } else {
+      cur.lastT = f.t;
       cur.confSum += conf(f);
       cur.n += 1;
     }
   }
 
-  const gaps = [];
-  for (let i = 1; i < corrected.length; i++) gaps.push(corrected[i].t - corrected[i - 1].t);
-  const lastDur = gaps.length ? median(gaps) : 0.05;
-  flush(corrected[corrected.length - 1].t + lastDur);
+  flush();
 
   return notes;
 }

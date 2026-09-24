@@ -185,6 +185,13 @@ at a time, from a file the same as from the mic — unless "More than one note a
 checked, in which case a multipitch detector (`src/audio/analysis/multipitch.js`) splits the file
 into a melody/bass/inner part per voice it hears, each shown as its own labelled lane.
 
+Both frame sources (`framesFromPCM` and `record.js`'s `sampleFrame`) only ever emit a frame for a
+window the tracker actually heard clearly — a rest is simply the absence of a frame, never a fake
+one. `eventsToNotes` (`src/song/transcribe.js`) reads that gap directly: a note ends at its own
+last frame's release, and a silence wider than a brief detector dropout (80ms) always ends a note
+there, even when the next note picks the same pitch back up — the next attack is evidence of a new
+note, never evidence that the previous one kept sounding until then.
+
 ## Learn this
 
 The "Learn this" panel (`src/ui/learn.js`) is one drop zone: drop or pick a music file (`.mid`,
