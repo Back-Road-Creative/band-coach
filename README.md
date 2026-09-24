@@ -208,8 +208,11 @@ clearly enough to turn into notes, says so in plain words rather than saving not
 Every result also offers hand-offs to the older, fuller panels rather than duplicating their
 features: "Fix it up" opens "Record a tune" (`src/ui/editor.js`) with the learned song already
 loaded for note-editing (`requestOpenInEditor`, read once by the editor's own `show()`, the same
-cross-panel request pattern Songs' `requestOpenSong` already uses); and, only when the source was
-a recording with a decoded audio buffer to hand over, "Play along with this recording" opens Play
+cross-panel request pattern Songs' `requestOpenSong` already uses) — pressing "Save to my songs"
+afterwards corrects that same saved song in place rather than leaving a new suffixed copy behind;
+a separate "Save a copy" button is there for when a new entry is actually wanted. And, only when
+the source was a recording with a decoded audio buffer to hand over, "Play along with this
+recording" opens Play
 Along (`src/ui/playalong.js`) already analysing that same audio (`requestPlayalongRecording`, an
 in-memory hand-off — audio is far too big for the panel-data store). The Listen/file-input row in
 "Record a tune", the file input in Play Along, and the file button in Songs each carry a short

@@ -71,6 +71,18 @@ function keyName(key) {
   return key.mode === 'minor' ? PC_TO_MINOR_KEY[key.tonic] : PC_TO_MAJOR_KEY[key.tonic];
 }
 
+// Pure decision behind saveSong(): does "Save to my songs" overwrite the
+// song this panel loaded, or create a new entry? A song this panel never
+// loaded (freshly transcribed) has nothing to overwrite, so it always adds.
+// A loaded song saves in place UNLESS the explicit "Save a copy" action
+// asked for a new entry -- BC-08's editor half was every correction save
+// silently forking off a new suffixed copy instead of fixing the one the
+// learner opened via "Fix it up".
+export function chooseSaveTarget({ loadedId, asCopy }) {
+  if (loadedId && !asCopy) return { mode: 'update', id: loadedId };
+  return { mode: 'add' };
+}
+
 function clefFor(rec) {
   if (!rec || !Array.isArray(rec.clefs) || !rec.clefs.length) return 'treble';
   return rec.clefs.indexOf('grand') >= 0 ? 'grand' : rec.clefs[0];
@@ -148,6 +160,12 @@ function mountEditor(hostEl, api) {
   let hitboxes = [];
   let library = null;
   let playing = false;
+  // The id this panel loaded the current song under (loadSong sets it,
+  // loadTranscription clears it), or null for a fresh transcription that
+  // has never been saved. Read by saveSong via chooseSaveTarget to decide
+  // whether "Save to my songs" corrects that song in place or creates a
+  // new one -- see chooseSaveTarget's own comment for why.
+  let loadedId = null;
 
   // ---- library (lazy: IndexedDB in the real app, memory when it throws) ---
   function getLibrary() {
@@ -207,7 +225,12 @@ function mountEditor(hostEl, api) {
   const btn = (label, onClick, extra = {}) => el('button', { type: 'button', text: label, onclick: onClick, ...extra });
 
   const playBtn = btn('Play', playSong, { id: 'editorPlayBtn' });
-  const saveBtn = btn('Save to my songs', saveSong, { id: 'editorSaveBtn' });
+  const saveBtn = btn('Save to my songs', () => saveSong(false), { id: 'editorSaveBtn' });
+  // Only meaningful once a song has been loaded from the library (via "Fix
+  // it up") -- a freshly transcribed song has nothing to copy FROM, so this
+  // behaves exactly like Save until one is loaded (chooseSaveTarget already
+  // adds in that case regardless of asCopy).
+  const saveCopyBtn = btn('Save a copy', () => saveSong(true), { id: 'editorSaveCopyBtn' });
   const undoBtn = btn('Undo', () => { if (!history) return; setSongState(history.undo()); render(); }, { id: 'editorUndoBtn' });
   const redoBtn = btn('Redo', () => { if (!history) return; setSongState(history.redo()); render(); }, { id: 'editorRedoBtn' });
   const deleteBtn = btn('Delete note', () => {
@@ -255,7 +278,7 @@ function mountEditor(hostEl, api) {
   metreDen.addEventListener('change', applyMetre);
 
   const toolbar = el('div', { class: 'editor-toolbar' }, [
-    playBtn, saveBtn, undoBtn, redoBtn, deleteBtn, splitBtn, mergeBtn, tieBtn, insertBtn,
+    playBtn, saveBtn, saveCopyBtn, undoBtn, redoBtn, deleteBtn, splitBtn, mergeBtn, tieBtn, insertBtn,
     el('label', { for: 'editorBpm', text: 'Tempo (bpm)' }), bpmInput,
     el('label', { for: 'editorMetreNum', text: 'Beats/bar' }), metreNum, metreDen,
     el('label', { for: 'editorPickup', text: 'Pickup (ticks)' }), pickupInput, pickupBtn,
@@ -368,6 +391,7 @@ function mountEditor(hostEl, api) {
   function loadSong(loadedSong) {
     song = loadedSong;
     debugSong = song;
+    loadedId = loadedSong.id;
     report = { notesCaptured: song.parts[0] ? song.parts[0].notes.length : 0, needsCheck: [] };
     history = createHistory(song);
     selected = null;
@@ -397,6 +421,7 @@ function mountEditor(hostEl, api) {
   function loadTranscription(result) {
     song = result.song;
     debugSong = song;
+    loadedId = null;
     report = result.report;
     history = createHistory(song);
     selected = null;
@@ -421,7 +446,7 @@ function mountEditor(hostEl, api) {
   });
 
   function setControlsEnabled(on) {
-    [playBtn, saveBtn, undoBtn, redoBtn, deleteBtn, splitBtn, mergeBtn, tieBtn, insertBtn,
+    [playBtn, saveBtn, saveCopyBtn, undoBtn, redoBtn, deleteBtn, splitBtn, mergeBtn, tieBtn, insertBtn,
       bpmInput, metreNum, metreDen, pickupInput, pickupBtn, halveBtn, doubleBtn, octaveUpBtn, octaveDownBtn,
       canvas].forEach((node) => { node.disabled = !on; });
     canvas.setAttribute('aria-disabled', String(!on));
@@ -617,7 +642,10 @@ function mountEditor(hostEl, api) {
   }
 
   // ---- save ----------------------------------------------------------
-  async function saveSong() {
+  // `asCopy`: true only for the explicit "Save a copy" button. Otherwise
+  // chooseSaveTarget decides, from loadedId, whether this corrects the
+  // song already open (update, same id) or creates a new one (add).
+  async function saveSong(asCopy) {
     if (!song) return;
     const named = { ...song, title: titleInput.value || song.title };
     const { ok, errors } = validateSong(named);
@@ -626,9 +654,16 @@ function mountEditor(hostEl, api) {
       tell('That song could not be saved: ' + errors[0], 'no');
       return;
     }
+    const target = chooseSaveTarget({ loadedId, asCopy: !!asCopy });
     try {
-      await getLibrary().add(named, { now: Date.now() });
-      tell('Saved to your songs.', 'ok');
+      if (target.mode === 'update') {
+        await getLibrary().update(target.id, named, { now: Date.now() });
+        tell('Saved to your songs.', 'ok');
+      } else {
+        const id = await getLibrary().add(named, { now: Date.now() });
+        loadedId = id; // further plain Saves now correct this same entry.
+        tell(asCopy ? 'Saved as a new copy in your songs.' : 'Saved to your songs.', 'ok');
+      }
     } catch (e) {
       api.recordError('editor:save', e);
       tell('That song could not be saved.', 'no');
