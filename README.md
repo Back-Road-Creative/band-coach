@@ -252,7 +252,11 @@ into the Play Along panel below. On a sustaining instrument (bowed, wind, free-r
 anything without a natural decay) a practice step also checks that each note was actually held
 and played in tune, not just hit; a try that misses on holding or tuning alone is told so in plain
 words ("Hold each note a little longer." / "A little sharp — aim for the middle of the note.")
-instead of the generic retry prompt.
+instead of the generic retry prompt. Each step is played back, captured and judged on one
+clock that starts at the phrase's first bar line (`originTick` on every lesson step,
+`phraseSec` in `src/ui/songs/practice.js`), so a pickup rest is kept; the "Clap the rhythm"
+step judges only *when* you played — any pitch, or a clap, counts — and a clap or wrong pitch
+never counts as evidence of the right note toward mastery.
 
 ## Play along with a recording
 
