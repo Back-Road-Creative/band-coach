@@ -2,6 +2,7 @@ import { judgePitch, OCTAVE_POLICY } from './core/judge.js';
 import { createDeafWindow } from './audio/deaf-window.js';
 import { exportProgress as exportProgressFile, importProgress as importProgressFile, migrate as migrateDB } from './core/progress-file.js';
 import { createLibrary, indexedDbStore, memoryStore } from './song/library.js';
+import { captureToSong } from './song/capture.js';
 import { toAudioTime, judgeTap, medianLatency } from './core/timing.js';
 import { DEFAULT_STABILITY_DAYS, MIN_STABILITY_DAYS, MAX_STABILITY_DAYS, GRADE, retrievability, review, due, migrateItem } from './core/srs.js';
 import { handsTogetherById, fingeringLabel, gradeHandsTogetherExact, gradeHandsTogetherApprox } from './core/hands-together.js';
@@ -48,7 +49,7 @@ import { estimateRange, classify, exerciseRangeFor, tonicFromRange } from './ins
 import { register as registerLearn } from './ui/learn.js';
 //
 // slot:import:w-songs
-import { register as registerSongs, forwardNote as forwardSongNote } from './ui/songs.js';
+import { register as registerSongs, forwardNote as forwardSongNote, requestOpenSong } from './ui/songs.js';
 import { itemIdForMidi } from './ui/songs/mastery.js';
 import { register as registerEditor, __setDebugFrames, __getDebugSong, __isRecording } from './ui/editor.js';
 //
@@ -1676,7 +1677,33 @@ import { register as registerPlayalong } from './ui/playalong.js';
     if (mod === 'tuner') { sel('optTune', 'Instrument', TUNINGS, tunerKind, v => { tunerKind = v; tunerState = null; tunerLock = null; }); btn('tuneReset', 'Start over', () => { tuned = {}; tunerLock = null; }); }
     if (mod === 'harp') sel('optHarpKey', 'My harmonica is in the key of', HARP_KEY_OPTS, DB.prefs.harpKey, v => { DB.prefs.harpKey = +v; task = null; if (pitchWorkletNode) { lastWorkletRangeSent = { fmin: MODS.harp.fmin, fmax: MODS.harp.fmax }; pitchWorkletNode.port.postMessage({ type: 'range', fmin: MODS.harp.fmin, fmax: MODS.harp.fmax }); } save(); });
     if (mod === 'rhy') btn('calBtn', calRun ? 'Listening for 8 taps…' : 'Calibrate timing (' + Math.round(DB.latencyMs || 0) + ' ms)', startCalibrate, false);
-    if (mod === 'capture') { btn('capGo', cap.on ? 'Stop' : 'Listen', () => { if (cap.on) capStop(); else { ensureAudio(); cap.on = true; cap.notes = []; cap.start = now(); cap.curM = -1; renderOpts(); } }, true); btn('capPlay', 'Play it back', () => { ensureAudio(); const t0 = now() + 0.1; cap.notes.forEach(n => tone(n.m, t0 + n.t - (cap.notes[0] ? cap.notes[0].t : 0), Math.max(0.2, n.d))); }); const lessons = {}; MOD_IDS.filter(m => hasMasteryScheme(m)).forEach(m => { lessons[m] = [MODS[m].name]; }); sel('capTo', cap.notes.length + ' notes. Practise on', lessons, 'kbd', () => {}); btn('capUse', 'Make it a lesson', () => { if (!cap.notes.length) { say('Nothing captured yet.', 'no'); return; } DB.custom = cap.notes.map(n => n.m).slice(0, 300); save(); const to = $('capTo').value; setMod(to); customOn = true; renderOpts(); showAll(); coach('Your captured tune is loaded: ' + DB.custom.length + ' notes, four at a time. Each group repeats until it is clean. Press Start.'); }); }
+    if (mod === 'capture') { btn('capGo', cap.on ? 'Stop' : 'Listen', () => { if (cap.on) capStop(); else { ensureAudio(); cap.on = true; cap.notes = []; cap.start = now(); cap.curM = -1; renderOpts(); } }, true); btn('capPlay', 'Play it back', () => { ensureAudio(); const t0 = now() + 0.1; cap.notes.forEach(n => tone(n.m, t0 + n.t - (cap.notes[0] ? cap.notes[0].t : 0), Math.max(0.2, n.d))); }); const lessons = {}; MOD_IDS.filter(m => hasMasteryScheme(m)).forEach(m => { lessons[m] = [MODS[m].name]; }); sel('capTo', cap.notes.length + ' notes. Practise on', lessons, 'kbd', () => {});
+      // 'Make it a lesson': the captured tune becomes a draft Song (src/song/
+      // capture.js), added to the same library the Songs panel reads, then
+      // opened there -- requestOpenSong() + openPanel() is the same
+      // request+switch pattern src/ui/learn.js's "Practise this" uses, but
+      // this file IS the app shell (not a sandboxed panel module) so it can
+      // call panelApi/openPanel directly instead of clicking a button.
+      btn('capUse', 'Make it a lesson', async () => {
+        if (!cap.notes.length) { say('Nothing captured yet.', 'no'); return; }
+        try {
+          const song = captureToSong(cap.notes, { now: Date.now() });
+          const id = await backupLibrary().add(song, { now: Date.now() });
+          // The 'Practise on' select (capTo) is the only place this tool
+          // asks which instrument the captured tune is for -- Songs' own
+          // checkOpenRequest() otherwise falls back to api.mod(), which at
+          // this point is still 'capture' (a tool, not an instrument) and
+          // would leave the learner staring at "pick an instrument first".
+          const to = $('capTo').value;
+          requestOpenSong(panelApi, id, undefined, to);
+          openPanel('songs');
+          coach('Your captured tune, "' + song.title + '", is now a song in your library with a full lesson ready.');
+        } catch (e) { recordError('capture:makeLesson', e); say('That capture could not be turned into a song: ' + e.message, 'no'); }
+      }, true);
+      // 'Drill the notes': today's four-note-at-a-time drill, unchanged --
+      // pitch only, no timing, loaded into DB.custom.
+      btn('capDrill', 'Drill the notes', () => { if (!cap.notes.length) { say('Nothing captured yet.', 'no'); return; } DB.custom = cap.notes.map(n => n.m).slice(0, 300); save(); const to = $('capTo').value; setMod(to); customOn = true; renderOpts(); showAll(); coach('Your captured tune is loaded: ' + DB.custom.length + ' notes, four at a time. Each group repeats until it is clean. Press Start.'); });
+    }
     if (MODS[mod] && DB.custom && DB.custom.length && hasMasteryScheme(mod)) chk('optCustom', 'Practise my captured melody (' + DB.custom.length + ' notes)', customOn, v => { customOn = v; chunk = 0; task = null; showAll(); });
     if (groovable(mod)) chk('optGroove', 'Play in time (metronome, ' + (S.grooveBpm || 80) + ' bpm)', grooveOn, v => { grooveOn = v; task = null; groove = null; showAll(); });
   }
