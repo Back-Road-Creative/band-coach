@@ -300,6 +300,70 @@ export function holdTuneFeedback(result, passRule) {
     : 'A little flat — aim for the middle of the note.';
 }
 
+// Which rule passesRule (above) found wrong FIRST -- same check order it
+// runs in -- shared by firstCorrection (below, the plain-word message) and
+// src/core/teaching.js's repairFor (which notes to isolate into a repair
+// step). Returns { dim, noteIndices }: dim is null when the try actually
+// passed or nothing enumerated here explains the failure (a hand-built
+// result whose hitRate disagrees with its matches, say); noteIndices index
+// into result.matches, which judgeAttempt (above) always builds in the same
+// order as the step's own `notes` array, so a caller can map straight back
+// to the notes that need isolating.
+export function failedDimension(result, passRule) {
+  if (!passRule || passesRule(result, passRule)) return { dim: null, noteIndices: [] };
+  if (result.hitRate < passRule.hitRate) {
+    const indices = (result.matches || []).reduce((acc, m, i) => { if (!m.ok) acc.push(i); return acc; }, []);
+    if (indices.length) return { dim: 'pitch', noteIndices: indices };
+  }
+  if (passRule.maxMeanErrorMs != null) {
+    const timingFailed = result.meanErrorMs == null
+      ? result.judgedCount !== 0
+      : result.meanErrorMs > passRule.maxMeanErrorMs;
+    if (timingFailed) {
+      const timed = (result.matches || [])
+        .map((m, i) => ({ m, i }))
+        .filter(({ m }) => m.ok && m.errorMs != null);
+      if (timed.length) {
+        let indices = timed.filter(({ m }) => Math.abs(m.errorMs) > passRule.maxMeanErrorMs).map(({ i }) => i);
+        // No single hit individually clears the threshold (the MEAN did, so
+        // several smaller errors added up) -- fall back to the single worst
+        // one, same note firstCorrection's own late/early line already names.
+        if (!indices.length) {
+          const worst = timed.reduce((a, b) => (Math.abs(b.m.errorMs) > Math.abs(a.m.errorMs) ? b : a));
+          indices = [worst.i];
+        }
+        return { dim: 'onset', noteIndices: indices };
+      }
+    }
+  }
+  const holdFailed = passRule.minDurationScore != null && result.durationScore != null
+    && result.durationScore < passRule.minDurationScore;
+  const tuneFailed = passRule.maxMeanAbsCents != null && result.meanAbsCents != null
+    && result.meanAbsCents > passRule.maxMeanAbsCents;
+  // passesRule checks maxMeanAbsCents (tune) before minDurationScore (hold),
+  // so tune is the "first" of the two when both are actually wrong.
+  if (tuneFailed) {
+    const indices = (result.matches || [])
+      .reduce((acc, m, i) => { if (m.ok && m.cents != null && Math.abs(m.cents) > passRule.maxMeanAbsCents) acc.push(i); return acc; }, []);
+    if (indices.length) return { dim: 'tune', noteIndices: indices };
+  }
+  if (holdFailed) {
+    const indices = (result.matches || [])
+      .reduce((acc, m, i) => {
+        if (m.ok && m.durRatio != null
+          && (m.durRatio < DEFAULT_DURATION_TOLERANCE.min || m.durRatio > DEFAULT_DURATION_TOLERANCE.max)) acc.push(i);
+        return acc;
+      }, []);
+    if (indices.length) return { dim: 'hold', noteIndices: indices };
+  }
+  if (passRule.maxExtras != null && result.extras && result.extras.count > passRule.maxExtras) {
+    // An extra note isn't one of the expected notes -- nothing in `notes` to
+    // isolate a repair around, so this is deliberately empty.
+    return { dim: 'extras', noteIndices: [] };
+  }
+  return { dim: null, noteIndices: [] };
+}
+
 // Plain-word feedback for a FAILED step, naming the FIRST thing passesRule
 // (above) found wrong -- same order passesRule checks in -- instead of the
 // generic "try that again" src/ui/songs.js used to always fall back to.
@@ -308,7 +372,8 @@ export function holdTuneFeedback(result, passRule) {
 export function firstCorrection(result, passRule) {
   if (!passRule) return null;
   if (passesRule(result, passRule)) return null;
-  if (result.hitRate < passRule.hitRate) {
+  const { dim } = failedDimension(result, passRule);
+  if (dim === 'pitch') {
     const miss = (result.matches || []).find((m) => !m.ok);
     if (miss) {
       const midi = miss.note && miss.note.midi;
@@ -318,26 +383,23 @@ export function firstCorrection(result, passRule) {
       return 'Missed the ' + noteName(midi) + ' — ' + result.hitCount + ' of ' + result.judgedCount + ' notes.';
     }
   }
-  if (passRule.maxMeanErrorMs != null) {
-    const timingFailed = result.meanErrorMs == null
-      ? result.judgedCount !== 0
-      : result.meanErrorMs > passRule.maxMeanErrorMs;
-    if (timingFailed) {
-      const timed = (result.matches || []).filter((m) => m.ok && m.errorMs != null);
-      if (timed.length) {
-        const worst = timed.reduce((a, b) => (Math.abs(b.errorMs) > Math.abs(a.errorMs) ? b : a));
-        const midi = worst.note && worst.note.midi;
-        if (midi != null) {
-          const ms = Math.round(Math.abs(worst.errorMs));
-          const direction = worst.errorMs >= 0 ? 'late' : 'early';
-          return noteName(midi) + ' was ' + direction + ' by ' + ms + ' ms — aim for the beat.';
-        }
+  if (dim === 'onset') {
+    const timed = (result.matches || []).filter((m) => m.ok && m.errorMs != null);
+    if (timed.length) {
+      const worst = timed.reduce((a, b) => (Math.abs(b.errorMs) > Math.abs(a.errorMs) ? b : a));
+      const midi = worst.note && worst.note.midi;
+      if (midi != null) {
+        const ms = Math.round(Math.abs(worst.errorMs));
+        const direction = worst.errorMs >= 0 ? 'late' : 'early';
+        return noteName(midi) + ' was ' + direction + ' by ' + ms + ' ms — aim for the beat.';
       }
     }
   }
-  const holdTune = holdTuneFeedback(result, passRule);
-  if (holdTune) return holdTune;
-  if (passRule.maxExtras != null && result.extras && result.extras.count > passRule.maxExtras) {
+  if (dim === 'tune' || dim === 'hold') {
+    const holdTune = holdTuneFeedback(result, passRule);
+    if (holdTune) return holdTune;
+  }
+  if (dim === 'extras') {
     const first = result.extras.list && result.extras.list[0];
     const midi = first && first.midi;
     return midi != null
