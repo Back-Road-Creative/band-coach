@@ -310,6 +310,9 @@ long."; being out of tune says "A little sharp — aim for the middle of the not
 instead of the generic retry prompt. A chord step also refuses a wrong extra note struck alongside
 the right ones (`maxExtras` on every judged step's passRule, `src/song/lesson.js`): hitting every
 expected note is not enough to pass if the learner also struck a note that was not asked for.
+A failed try always names the first concrete thing to fix — the missed note, the late note, the
+hold/tune reason above, or the extra note — instead of a generic retry prompt
+(`firstCorrection()` in `src/ui/songs/practice.js`).
 Each step is played back, captured and judged on one
 clock that starts at the phrase's first bar line (`originTick` on every lesson step,
 `phraseSec` in `src/ui/songs/practice.js`), so a pickup rest is kept; the "Clap the rhythm"
@@ -325,7 +328,11 @@ by the end of the try — so the hold/tune checks above work for a MIDI player t
 already do for the mic. Importing a challenge, a band pack or a single song captures the id the
 library actually assigned each song (never assumed from the file), so a title that collides with
 one already saved is still the song a challenge's progress or a band pack's part assignment
-points at, not a stale id nobody kept.
+points at, not a stale id nobody kept. A step that fails on the SAME thing twice in a row (the
+same missed note, late note, or hold/tune reason `firstCorrection()`'s own check already names)
+becomes a short repair on just those notes plus a neighbour either side (`repairFor()` in
+`src/core/teaching.js`), instead of a third run at the whole phrase; passing the repair returns to
+the original step where it left off.
 
 ## Play along with a recording
 
@@ -661,6 +668,16 @@ The songs panel (`src/ui/songs.js`) shows one "Play it on…" card per ready
 instrument, badge included, on a lesson's first (listen) step, before the
 learner has attempted anything; picking a card starts that same song on the
 chosen instrument without leaving the panel.
+
+`segment` (`src/song/lesson.js`) cuts phrases at real bar lines even when a
+song changes metre partway through (`song.metreChanges`), always agreeing
+with `src/song/model.js`'s `barsOf` -- the one place bar boundaries are
+computed -- instead of a single fixed metre. A part with a chord (two or
+more notes starting together) on a single-line instrument -- anything but
+keyboard, guitar/uke/mandolin/banjo, or mallet percussion -- shows a "Has
+chords" badge and plays only the top note of each chord in the lesson,
+since that instrument (and the app's own pitch-listening mic path) can only
+sound one note at a time.
 
 ## Rhythm vocabulary
 

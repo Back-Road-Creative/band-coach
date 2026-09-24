@@ -17,7 +17,13 @@
 //     "this song was ... to fit your instrument" line, so the badge and the
 //     practice screen never disagree about what happened to the song.
 
-import { fitToInstrument } from './lesson.js';
+import { fitToInstrument, isSingleLine } from './lesson.js';
+
+// Re-exported so a caller of this module never has to know isSingleLine's
+// canonical home is lesson.js (fitToInstrument needs it too -- see the
+// comment on POLYPHONIC_FAMILIES there for why it isn't defined here
+// instead, which would make this file and lesson.js a circular import pair).
+export { isSingleLine };
 
 const PITCH_CLASS_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 
@@ -40,10 +46,20 @@ export function feasibility(song, partId, instrument) {
   const fit = fitToInstrument(song, partId, instrument);
 
   if (fit.notes.length === 0) {
-    return { level: 'empty', label: 'No notes yet', detail: 'This part has no notes to practise yet.' };
+    return { level: 'empty', label: 'No notes yet', detail: 'This part has no notes to practise yet.', monophonic: true };
   }
 
-  const unplayableCount = fit.unplayable.length;
+  // fit.unplayable mixes two different reasons a note doesn't reach the
+  // lesson: genuinely out of the instrument's reach ('out-of-range' /
+  // 'not-on-instrument') vs. a chord note on a single-line instrument
+  // ('chord-note', see lesson.js's chordReductionFor) -- the latter isn't
+  // dropped from the SONG, it's still played as the top note of its chord,
+  // so it gets its own message below rather than being counted as "skipped".
+  const chordEntries = fit.unplayable.filter(u => u.reason === 'chord-note');
+  const otherUnplayable = fit.unplayable.filter(u => u.reason !== 'chord-note');
+  const monophonic = chordEntries.length === 0;
+
+  const unplayableCount = otherUnplayable.length;
 
   if (unplayableCount > 0) {
     const level = unplayableCount >= fit.notes.length ? 'unplayable' : 'partial';
@@ -51,16 +67,23 @@ export function feasibility(song, partId, instrument) {
     const prefix = fit.changes.length ? 'This song was ' + fit.changes.join('; ') + ', but ' : 'This song has ';
     const detail = prefix + unplayableCount + ' note' + (unplayableCount === 1 ? '' : 's') +
       ' that cannot be played on this instrument and will be skipped.';
-    return { level, label, detail };
+    return { level, label, detail, monophonic };
+  }
+
+  if (!monophonic) {
+    const chordCount = new Set(chordEntries.map(u => u.start)).size;
+    const detail = 'This part has ' + chordCount + ' chord' + (chordCount === 1 ? '' : 's') + '; a ' + instrument.name +
+      ' plays one note at a time, so the lesson uses the top note of each chord.';
+    return { level: 'partial', label: 'Has chords', detail, monophonic };
   }
 
   if (fit.changed) {
     const keyName = transposedKeyName(song, fit.shiftSemitones);
     const label = keyName ? 'Transposed to ' + keyName : capitalize(fit.changes[0]);
-    return { level: 'transposed', label, detail: 'This song was ' + fit.changes.join('; ') + ' to fit this instrument.' };
+    return { level: 'transposed', label, detail: 'This song was ' + fit.changes.join('; ') + ' to fit this instrument.', monophonic };
   }
 
-  return { level: 'as-written', label: 'Fits as written', detail: 'Every note in this song is playable on this instrument, unchanged.' };
+  return { level: 'as-written', label: 'Fits as written', detail: 'Every note in this song is playable on this instrument, unchanged.', monophonic };
 }
 
 function capitalize(text) {

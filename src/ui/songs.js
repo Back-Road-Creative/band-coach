@@ -49,7 +49,8 @@ import { buildLessonPlan, nextStep, creditFor } from '../song/lesson.js';
 import { feasibility } from '../song/feasibility.js';
 import { INSTRUMENTS } from '../instruments/index.js';
 import { routeImportFile, importerFor } from './songs/import-route.js';
-import { judgeAttempt, passesRule, holdTuneFeedback, phraseSec } from './songs/practice.js';
+import { judgeAttempt, passesRule, holdTuneFeedback, firstCorrection, phraseSec } from './songs/practice.js';
+import { phaseOf, repairFor } from '../core/teaching.js';
 import { barHeat, worstBars } from '../song/bar-heat.js';
 import { createLoopBackingTransport, applyAttemptToTransport, backingBpm, rateLabel } from './songs/loop-backing.js';
 import { mapMasteryKeys } from './songs/mastery.js';
@@ -215,6 +216,21 @@ function stepHint(step) {
   if (step.kind === 'tempo-ladder') return 'Play along at ' + step.bpm + ' beats a minute.';
   if (step.bpm) return 'Play along at ' + step.bpm + ' beats a minute.';
   return 'Play along.';
+}
+
+// Plain words for a repair step's dim (src/core/teaching.js repairFor) --
+// what practice.js's failedDimension decided was the FIRST thing wrong,
+// turned into the same kind of everyday phrase firstCorrection already uses
+// for the failure message itself, just short enough to sit in a title.
+const REPAIR_DIM_WORDS = {
+  pitch: 'the missed note(s)',
+  onset: 'the late note',
+  tune: 'the pitch centre',
+  hold: 'holding the note',
+};
+
+function repairTitle(step) {
+  return 'Fix one thing: ' + (REPAIR_DIM_WORDS[step.dim] || 'this part');
 }
 
 // ---------------------------------------------------------------------------
@@ -665,7 +681,13 @@ function mountSongsPanel(hostEl, api) {
     // skipping ahead after a clean first try): each rung already has its own
     // fixed bpm, so starting that rung's fine-grained rate back at full
     // speed is the simplest reading of "fresh rung, fresh ladder".
-    practice = { song, partId, instrument, instrumentId, plan, results: [], stepIndex: 0, recording: false, countingIn: false, countInTimer: null, playedEvents: [], recordStartSec: 0, stop: null, loopTransport: null, loopTransportStepIndex: null };
+    // repair: null | { step, returnTo } -- a short isolated exercise (see
+    // advance() below and src/core/teaching.js repairFor) that a check-phase
+    // step's SECOND consecutive fail on the SAME thing drops into. Starting
+    // (or re-starting) a lesson here always begins with a fresh object, so
+    // switching songs/instruments or hitting "Practise again" clears any
+    // repair in progress along with everything else practice-local.
+    practice = { song, partId, instrument, instrumentId, plan, results: [], stepIndex: 0, repair: null, recording: false, countingIn: false, countInTimer: null, playedEvents: [], recordStartSec: 0, stop: null, loopTransport: null, loopTransportStepIndex: null };
     store.set({ songId: song.id, partId, instrumentId, level });
     renderPractice();
   }
@@ -707,6 +729,10 @@ function mountSongsPanel(hostEl, api) {
       practiceSection.appendChild(el('p', { text: 'Nicely done. You have played through the whole piece.' }));
       practiceSection.appendChild(el('button', { type: 'button', text: 'Practise again', onclick: () => startPractice(practice.song, practice.partId) }));
       practiceSection.appendChild(el('button', { type: 'button', text: 'Back to songs', onclick: () => { practice = null; practiceSection.hidden = true; } }));
+      return;
+    }
+    if (practice.repair) {
+      renderRepairStep(practice.repair.step);
       return;
     }
     const step = plan.steps[stepIndex];
@@ -771,6 +797,27 @@ function mountSongsPanel(hostEl, api) {
     // The last judged try's bar-by-bar result (advance() below), kept on
     // screen until the learner starts another try (startRecording() clears
     // it) so they can read it while deciding what to do next.
+    if (practice.lastHeat) {
+      practiceSection.appendChild(renderBarStrip(practice.lastHeat, practice.lastHeatBars));
+    }
+  }
+
+  // A repair step (src/core/teaching.js repairFor) is a handful of notes,
+  // not a phrase -- no "Play it on…" cards, no unplayable-note warning, no
+  // difficulty badge (repairFor's step never carries one). Just what it is
+  // ("Fix one thing: …"), what to do ("Just these notes…"), and the same
+  // play/record controls every other passRule'd step gets.
+  function renderRepairStep(step) {
+    practiceSection.appendChild(el('h4', { text: repairTitle(step) }));
+    practiceSection.appendChild(el('p', { text: 'Just these notes, then back to the phrase.' }));
+    practiceSection.appendChild(el('button', { type: 'button', text: 'Play it', onclick: () => playPhrase(step) }));
+    practiceSection.appendChild(el('button', {
+      type: 'button',
+      text: practice.recording ? 'Stop and check' : 'Your turn',
+      onclick: () => (practice.recording ? finishRecording(step) : startRecording(step)),
+    }));
+    countEl = el('p', { class: 'panel-songs-count', text: countLabel() });
+    practiceSection.appendChild(countEl);
     if (practice.lastHeat) {
       practiceSection.appendChild(renderBarStrip(practice.lastHeat, practice.lastHeatBars));
     }
@@ -980,6 +1027,21 @@ function mountSongsPanel(hostEl, api) {
     advance(passed, result, elapsedMs);
   }
 
+  // Trailing consecutive FAILURES on this exact step -- src/song/lesson.js's
+  // own nextStep() keeps a private copy of this same idea for the tempo
+  // ladder's rung-drop; this one reads practice.results (results.push()
+  // above already includes the just-finished try) to decide whether a
+  // check-phase step's SECOND miss on the SAME thing should drop into a
+  // repair instead of just repeating the whole phrase again.
+  function trailingFailsOnStep(results, stepIndex) {
+    let count = 0;
+    for (let i = results.length - 1; i >= 0; i--) {
+      if (results[i].stepIndex !== stepIndex || results[i].passed) break;
+      count++;
+    }
+    return count;
+  }
+
   // dims/unassessed for a judged step's learning event (plan 6.4): each
   // dimension is read straight off judgeAttempt()'s own aggregate against
   // the SAME numbers step.passRule already judges pass/fail with -- never a
@@ -1003,6 +1065,26 @@ function mountSongsPanel(hostEl, api) {
   }
 
   function advance(passed, result, elapsedMs) {
+    // A repair try (src/core/teaching.js repairFor) is a handful of isolated
+    // notes, not one of the plan's own steps: it never joins practice.results
+    // (nextStep and the tempo-ladder streak logic stay blind to it) and
+    // never earns mastery credit on its own (the per-note credit in
+    // finishRecording already ran; crediting the STEP too would double-count
+    // the same few notes against the original step's own credit). A pass
+    // clears the repair and returns to the step it isolated FROM (returnTo);
+    // a miss keeps it -- try again, same isolated notes.
+    if (practice.repair) {
+      const repairStep = practice.repair.step;
+      say(passed ? 'Good. Back to the phrase.' : (firstCorrection(result, repairStep.passRule) || 'Not quite yet — try that again.'), passed ? 'ok' : 'no');
+      if (result) {
+        practice.lastHeat = barHeat(practice.song, result.matches);
+        practice.lastHeatBars = repairStep.bars;
+      }
+      if (passed) practice.repair = null;
+      practice.playedEvents = [];
+      renderPractice();
+      return;
+    }
     const step = practice.plan.steps[practice.stepIndex];
     practice.results.push({ stepIndex: practice.stepIndex, passed });
     if (step.passRule) {
@@ -1031,17 +1113,34 @@ function mountSongsPanel(hostEl, api) {
           bpmTarget: step.bpm || null, bpmActual: step.bpm || null,
         }, { now: api.now() }));
       }
-      // A step that failed ONLY on holding the note or playing it in tune
-      // (hit rate and timing were both fine) gets the specific plain-word
-      // reason instead of the generic retry prompt, so a sustaining
-      // instrument's learner knows the ONE thing to fix.
-      const holdTuneReason = !passed && result ? holdTuneFeedback(result, step.passRule) : null;
+      // A failed try gets told the FIRST concrete thing to fix -- the
+      // missed note, the late note, the hold/tune reason, or the extra note
+      // -- instead of the generic retry prompt, so the learner knows the
+      // ONE thing to work on next.
+      const correction = !passed && result ? firstCorrection(result, step.passRule) : null;
       say(passed
         ? 'Nice. ' + (result ? result.hitCount + ' of ' + result.judgedCount + ' notes.' : '')
-        : holdTuneReason || 'Not quite yet — try that again.', passed ? 'ok' : 'no');
+        : correction || 'Not quite yet — try that again.', passed ? 'ok' : 'no');
       if (result) {
         practice.lastHeat = barHeat(practice.song, result.matches);
         practice.lastHeatBars = step.bars;
+      }
+      // A check-phase step's SECOND consecutive miss on the SAME thing
+      // (failedDimension, inside repairFor) becomes a short repair on just
+      // those notes instead of a third run at the whole phrase -- see
+      // trailingFailsOnStep above. practice.stepIndex is deliberately left
+      // alone here (repairFor's returnTo): the plan position does not move,
+      // the repair sits on top of it until passed.
+      if (!passed && result && phaseOf(step) === 'check' && trailingFailsOnStep(practice.results, practice.stepIndex) >= 2) {
+        const repairStep = repairFor(step, result, step.passRule);
+        if (repairStep) {
+          repairStep.returnTo = practice.stepIndex;
+          practice.repair = { step: repairStep, returnTo: practice.stepIndex };
+          practice.playedEvents = [];
+          store.set({ songId: practice.song.id, partId: practice.partId, instrumentId: practice.instrumentId, level: practice.plan.level });
+          renderPractice();
+          return;
+        }
       }
     } else {
       // A listen step (passRule: null) is judged nothing itself -- clicking
