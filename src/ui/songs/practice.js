@@ -96,11 +96,13 @@ function judgeOnsets(chords, played, onsetAt, matches, extraList, bpm, ticksPerQ
 // `notes`, already fitted to the instrument by buildLessonPlan/fitToInstrument).
 // playedEvents: [{ midi, atSec, durSec?, cents?, velocity? }], in the order
 // they were detected, atSec measured from the moment the learner was told
-// to start playing. durSec/cents/velocity are optional — nothing upstream
-// supplies them yet (the mic pipeline only reports pitch and onset time), so
-// every field they feed (durRatio, cents, velocityError, meanAbsCents,
-// durationScore, dynamicsScore) stays null until a caller starts passing
-// them, and every existing field is computed exactly as before.
+// to start playing. durSec/cents/velocity are optional — a MIDI keyboard
+// supplies durSec (closed by that same note's next press, or by the end of
+// the try; see songs.js's pushMidiEvent/closeOpenMidiEvents), but cents and
+// velocity, and durSec from the mic pipeline (which only reports pitch and
+// onset time), are not supplied yet, so every field they alone feed (cents,
+// velocityError, meanAbsCents, dynamicsScore) stays null until a caller
+// starts passing them, and every existing field is computed exactly as before.
 // opts.originTick: the step's phrase origin (see phraseSec above); playedEvents'
 // atSec are seconds from that same origin. Defaults to 0 (song start).
 // opts.onsetsOnly: true for the "rhythm" step kind (Clap the rhythm) --

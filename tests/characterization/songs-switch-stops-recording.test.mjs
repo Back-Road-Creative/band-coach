@@ -54,6 +54,13 @@ test('opening a different song while recording stops the old song\'s listener, i
   await page.waitFor(
     "Array.from(document.querySelectorAll('.panel-songs-practice button')).some(b => b.textContent === 'Stop and check')"
   );
+  // "Your turn" now opens with a four-beat count-in before it actually
+  // starts listening (N2) -- wait for that to finish (the count element
+  // switches from "Counting in…" to "Notes heard so far: 0") before playing
+  // a note, or it would land during the clicks and never be heard at all.
+  await page.waitFor(
+    "document.querySelector('.panel-songs-count').textContent.startsWith('Notes heard so far')"
+  );
 
   // Keep a live JS reference to the count element -- once the panel is
   // rebuilt to show the OTHER song's part list, this node is detached from
@@ -147,13 +154,17 @@ test('a listen step\'s "Next" does not carry a stale bar-by-bar result onto the 
   for (let i = 0; i < 10; i++) {
     const title = await page.evaluate("document.querySelector('.panel-songs-practice h4').textContent");
     if (title.includes('bars 2-2')) break; // reached phrase 1's own listen step
-    await page.evaluate(`
-      (function () {
-        const btn = Array.from(document.querySelectorAll('.panel-songs-practice button')).find(b => b.textContent === 'Your turn');
-        btn.click();
-        window.__coach.songsNote(60, true);
-      })();
-    `);
+    await page.evaluate(
+      "Array.from(document.querySelectorAll('.panel-songs-practice button')).find(b => b.textContent === 'Your turn').click()"
+    );
+    // Wait out the four-beat count-in (N2) -- pressing the note the instant
+    // "Your turn" is clicked would now land during the clicks and never be
+    // heard, so this waits for the count element to say real listening has
+    // begun before pressing the phrase's one note.
+    await page.waitFor(
+      "document.querySelector('.panel-songs-count') && document.querySelector('.panel-songs-count').textContent.startsWith('Notes heard so far')"
+    );
+    await page.evaluate('window.__coach.songsNote(60, true)');
     await page.waitFor(
       "Array.from(document.querySelectorAll('.panel-songs-practice button')).some(b => b.textContent === 'Stop and check')"
     );

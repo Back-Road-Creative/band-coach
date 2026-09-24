@@ -29,6 +29,12 @@ async function getToRecordingStep(page) {
   await page.waitFor(
     "Array.from(document.querySelectorAll('.panel-songs-practice button')).some(b => b.textContent === 'Stop and check')"
   );
+  // "Your turn" now opens with a four-beat count-in (N2) before it actually
+  // starts listening -- wait for that to finish before a caller plays a
+  // note, or it would land during the clicks and never be heard.
+  await page.waitFor(
+    "document.querySelector('.panel-songs-count').textContent.startsWith('Notes heard so far')"
+  );
 }
 
 test('a phrase step shows its Easy/Medium/Hard difficulty word', async (t) => {

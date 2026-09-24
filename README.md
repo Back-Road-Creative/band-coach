@@ -303,7 +303,15 @@ step judges only *when* you played — any pitch, or a clap, counts — and a cl
 never counts as evidence of the right note toward mastery. The tempo-ladder's Riff Repeater
 (above) only speeds up on an attempt that actually PASSES the step's own passRule — hitting every
 note while still failing on timing, hold/tune or an extra note does not read as "clean" and does
-not raise the backing's speed.
+not raise the backing's speed. Every "Your turn" opens with a four-beat count-in at the step's own
+tempo, played through the same clicks as the Learn panel's, so listening only starts once the
+count-in ends and a learner's reaction time to the click no longer reads as a late first note. On
+a MIDI keyboard, each note's length is tracked too — closed off by that note's own next press, or
+by the end of the try — so the hold/tune checks above work for a MIDI player the same way they
+already do for the mic. Importing a challenge, a band pack or a single song captures the id the
+library actually assigned each song (never assumed from the file), so a title that collides with
+one already saved is still the song a challenge's progress or a band pack's part assignment
+points at, not a stale id nobody kept.
 
 ## Play along with a recording
 
