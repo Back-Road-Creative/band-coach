@@ -294,7 +294,8 @@ Picking one through the same file input adds every song to the library and shows
 assignments read-only, one line per song ("Song title: Alex plays Melody, Sam plays Bass"). "Share
 with your band" bundles a learner's own saved library into a downloadable `.bandpack` with no
 assignments, the same file-exchange pattern as a challenge — no account, no server, no network
-call. Each phrase's tempo-ladder rungs run their own "Riff Repeater" loop
+call. A MIDI file's drum track (channel 10) imports as a drum-kit part; the trainer reads it on
+the percussion staff. Each phrase's tempo-ladder rungs run their own "Riff Repeater" loop
 (`src/ui/songs/loop-backing.js`, wiring `src/audio/stretch/loop.js`'s difficulty ladder into the
 lesson): a missed attempt steps the synthesized backing's speed down, a fully clean attempt steps
 it back up, and the panel always shows the current rate in plain words ("Playing at 90% speed",

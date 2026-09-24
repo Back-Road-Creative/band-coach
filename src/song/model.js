@@ -54,6 +54,17 @@ function validateNote(note, index, prev, path, errors) {
       errors.push(path + '.velocity must be an integer 1-127 (got ' + JSON.stringify(note.velocity) + ')');
     }
   }
+  // `piece` names which drum-kit piece (src/instruments/drum-kit.js PIECES
+  // id) a percussion-part note belongs to -- null for a channel-10 note
+  // that doesn't map to any kit piece (e.g. GM 39 hand clap). Only meaningful
+  // on a part with role 'percussion' (see validatePart's part.unmapped
+  // below), but validated here regardless of role so a malformed value is
+  // always caught, never silently ignored on a part missing its role.
+  if ('piece' in note) {
+    if (!isStringOrNull(note.piece)) {
+      errors.push(path + '.piece must be a string or null (got ' + JSON.stringify(note.piece) + ')');
+    }
+  }
   if (index > 0 && isNonNegInt(note.start) && prev && isNonNegInt(prev.start)) {
     if (note.start < prev.start) {
       errors.push(path + ': notes must be sorted by start (got ' + note.start + ' after ' + prev.start + ')');
@@ -87,6 +98,13 @@ function validatePart(part, pIndex, errors) {
   }
   if ('instrumentHint' in part && typeof part.instrumentHint !== 'string') {
     errors.push(path + '.instrumentHint must be a string (got ' + JSON.stringify(part.instrumentHint) + ')');
+  }
+  // `unmapped` -- how many of this part's notes carry piece: null (import-
+  // midi.js's count of channel-10 notes it could not name a drum-kit piece
+  // for). Optional: absent on any part that was never imported from a
+  // channel-10 MIDI track.
+  if ('unmapped' in part && !isNonNegInt(part.unmapped)) {
+    errors.push(path + '.unmapped must be a non-negative integer (got ' + JSON.stringify(part.unmapped) + ')');
   }
   if (!Array.isArray(part.notes)) {
     errors.push(path + '.notes must be an array');
@@ -269,6 +287,12 @@ function normalizeNote(raw, path) {
     }
     note.velocity = raw.velocity;
   }
+  if ('piece' in raw) {
+    if (!isStringOrNull(raw.piece)) {
+      throw new Error(path + '.piece must be a string or null');
+    }
+    note.piece = raw.piece;
+  }
   return note;
 }
 
@@ -308,6 +332,12 @@ function normalizePart(raw, index) {
       throw new Error('parts[' + index + '].instrumentHint must be a string');
     }
     part.instrumentHint = raw.instrumentHint;
+  }
+  if ('unmapped' in raw) {
+    if (!isNonNegInt(raw.unmapped)) {
+      throw new Error('parts[' + index + '].unmapped must be a non-negative integer');
+    }
+    part.unmapped = raw.unmapped;
   }
   return part;
 }

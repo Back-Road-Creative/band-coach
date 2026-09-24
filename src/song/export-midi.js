@@ -22,6 +22,7 @@
 // off an unordered structure).
 
 import { TICKS_PER_QUARTER } from './model.js';
+import { canonicalMidi } from '../instruments/drum-kit.js';
 
 const DEFAULT_VELOCITY = 80;
 
@@ -126,12 +127,25 @@ function conductorTrackEvents(song) {
 
 // --- per-part note track ------------------------------------------------
 
+// A percussion part (role 'percussion', see import-midi.js) writes to
+// channel 10 (0-based index 9: status 0x99 note-on / 0x89 note-off, the GM
+// convention every synth reads as "unpitched kit", not "pitched instrument
+// 10") instead of channel 1. Every other part is unaffected.
 function partTrackEvents(part) {
+  const percussion = part.role === 'percussion';
+  const noteOnStatus = percussion ? 0x99 : 0x90;
+  const noteOffStatus = percussion ? 0x89 : 0x80;
   const events = [{ tick: 0, bytes: [0xff, 0x03, ...vlq(textBytes(part.name || '').length), ...textBytes(part.name || '')] }];
   for (const note of part.notes) {
     const velocity = Number.isInteger(note.velocity) ? note.velocity : DEFAULT_VELOCITY;
-    events.push({ tick: note.start, kind: 0, bytes: [0x90, note.midi, velocity] });
-    events.push({ tick: note.start + note.dur, kind: -1, bytes: [0x80, note.midi, 0] });
+    // A hand-authored/edited percussion note can carry `piece` with no
+    // `midi` of its own; canonicalMidi falls back to that piece's own
+    // sounding note. A normal note (validated by model.js) always has
+    // `midi`, so this fallback never fires for anything import-midi.js
+    // itself produced.
+    const midi = Number.isInteger(note.midi) ? note.midi : canonicalMidi(note.piece);
+    events.push({ tick: note.start, kind: 0, bytes: [noteOnStatus, midi, velocity] });
+    events.push({ tick: note.start + note.dur, kind: -1, bytes: [noteOffStatus, midi, 0] });
   }
   // Note-off events sort before note-on events at the same tick so a note
   // that ends exactly when the next one starts is fully closed first.

@@ -46,31 +46,35 @@ test('beat.mid: real format-1 drum loop, 120 ppq, SMPTE-offset meta, 390 velocit
   // ones in import-midi.test.mjs.
   assert.equal(song.parts.length, 1);
   assert.equal(song.parts[0].name, 'Track 1 (percussion)');
+  assert.equal(song.parts[0].role, 'percussion');
   const notes = song.parts[0].notes;
   assert.equal(notes.length, 390);
 
   // Source ppq 120 -> scale 480/120 = 4. First 12 notes decoded by hand by
   // walking track 1's raw delta-times and matching each velocity-0
   // note-on to the earliest still-open note-on for that pitch (FIFO), then
-  // multiplying every tick by 4.
+  // multiplying every tick by 4. `piece` (U4) is derived straight from
+  // `midi` via src/instruments/drum-kit.js's own GM map: 42 -> hihat-closed,
+  // 35 -> kick, 37 -> snare, 75 (GM claves) isn't one of this kit's pieces,
+  // so it's null.
   assert.deepEqual(notes.slice(0, 12), [
-    { start: 0, dur: 40, midi: 42 },
-    { start: 0, dur: 40, midi: 35 },
-    { start: 120, dur: 40, midi: 42 },
-    { start: 240, dur: 40, midi: 42 },
-    { start: 360, dur: 40, midi: 42 },
-    { start: 480, dur: 40, midi: 42 },
-    { start: 480, dur: 40, midi: 37 },
-    { start: 480, dur: 40, midi: 75 },
-    { start: 600, dur: 40, midi: 42 },
-    { start: 720, dur: 40, midi: 42 },
-    { start: 720, dur: 40, midi: 35 },
-    { start: 840, dur: 40, midi: 42 },
+    { start: 0, dur: 40, midi: 42, piece: 'hihat-closed' },
+    { start: 0, dur: 40, midi: 35, piece: 'kick' },
+    { start: 120, dur: 40, midi: 42, piece: 'hihat-closed' },
+    { start: 240, dur: 40, midi: 42, piece: 'hihat-closed' },
+    { start: 360, dur: 40, midi: 42, piece: 'hihat-closed' },
+    { start: 480, dur: 40, midi: 42, piece: 'hihat-closed' },
+    { start: 480, dur: 40, midi: 37, piece: 'snare' },
+    { start: 480, dur: 40, midi: 75, piece: null },
+    { start: 600, dur: 40, midi: 42, piece: 'hihat-closed' },
+    { start: 720, dur: 40, midi: 42, piece: 'hihat-closed' },
+    { start: 720, dur: 40, midi: 35, piece: 'kick' },
+    { start: 840, dur: 40, midi: 42, piece: 'hihat-closed' },
   ]);
   assert.deepEqual(notes.slice(-3), [
-    { start: 30720, dur: 40, midi: 42 },
-    { start: 30720, dur: 40, midi: 35 },
-    { start: 30840, dur: 40, midi: 42 },
+    { start: 30720, dur: 40, midi: 42, piece: 'hihat-closed' },
+    { start: 30720, dur: 40, midi: 35, piece: 'kick' },
+    { start: 30840, dur: 40, midi: 42, piece: 'hihat-closed' },
   ]);
 
   // No note in a real 390-event percussion loop may come out zero-length
