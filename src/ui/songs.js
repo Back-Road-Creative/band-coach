@@ -362,6 +362,14 @@ export function requestOpenSong(api, songId, partId, instrumentId) {
   api.store(OPEN_REQUEST_STORE_ID).set({ songId, partId: partId || null, instrumentId: instrumentId || null });
 }
 
+// P3-5: written by hide() below when Add a song was busy (the mic door
+// counting-in/recording, or a file's recording still being analysed) at the
+// moment a learner left Songs -- read once by the very next show(), then
+// cleared, same one-shot store-and-clear precedent as OPEN_REQUEST_STORE_ID
+// above, so "your last recording was stopped before it finished" is
+// something the learner is told, not something that just silently vanished.
+const ADD_STATE_STORE_ID = 'songs-add-state';
+
 function readFile(file, as) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -414,6 +422,13 @@ function mountSongsPanel(hostEl, api) {
   // The wrapper keeps the same `add-song-row` class the old three-button row
   // used, so it stays the panel's first child either way.
   let addSongOpen = false;
+  // P3-5: destroyed guards an in-flight save/render from writing to a
+  // torn-down instance's DOM/store once this mount is gone for good (Play
+  // Along's own destroyed flag, src/ui/playalong.js:135, is the precedent);
+  // analysing is true only while a picked audio file is being decoded and
+  // transcribed (the window the Cancel button below is shown for).
+  let destroyed = false;
+  let analysing = false;
   const addSongToggleBtn = el('button', {
     type: 'button', text: 'Add a song', 'aria-expanded': 'false',
     onclick: () => toggleAddSong(),
@@ -451,8 +466,24 @@ function mountSongsPanel(hostEl, api) {
     onTake: onMicTake,
   });
 
+  // P3-5: shown only while a picked audio file is being decoded and
+  // transcribed (handleFile's audio branch below) -- pressing it bumps the
+  // door's own generation counter (door.cancel(), src/ui/songs/record-door.js),
+  // which is what actually stops the in-flight analysis from being saved;
+  // this button only reports that decision, plain-language, the instant a
+  // learner makes it.
+  const addSongCancelBtn = el('button', {
+    type: 'button', class: 'panel-songs-cancel-btn', text: 'Cancel', hidden: 'hidden',
+    onclick: () => {
+      door.cancel();
+      analysing = false;
+      addSongCancelBtn.hidden = true;
+      say('Stopped. Nothing was saved.');
+    },
+  });
+
   const addSongSection = el('section', { class: 'add-song-section', hidden: 'hidden', 'aria-label': 'Add a song' }, [
-    addSongHeading, door.el, importLabel, importInput, importMsg, bandPackPartsEl, resultEl,
+    addSongHeading, door.el, importLabel, importInput, addSongCancelBtn, importMsg, bandPackPartsEl, resultEl,
   ]);
   hostEl.appendChild(addSongSection);
 
@@ -1236,6 +1267,13 @@ function mountSongsPanel(hostEl, api) {
   // saveAndRenderResult, kept as its own copy here (not shared) since the
   // status-ledger write is Songs-only.
   async function onMicTake(song, warnings) {
+    // P3-5: notes already exist by the time this runs (transcribe() finished
+    // synchronously inside record-door.js), but a learner can still have
+    // left Songs in the instant since -- checked again immediately before
+    // the save and again before the review renders, same two checkpoints
+    // the file path in handleFile() below uses.
+    const gen = door.generation();
+    if (destroyed || door.generation() !== gen) return;
     let storedId;
     try {
       storedId = await library.add(song, { now: Date.now() });
@@ -1243,6 +1281,7 @@ function mountSongsPanel(hostEl, api) {
       say('The song could not be saved: ' + (e && e.message ? e.message : String(e)), 'no');
       return;
     }
+    if (destroyed || door.generation() !== gen) return;
     say('');
     setSongStatus(markDraft, storedId, { needsCheck: (warnings || []).length, source: 'mic', originalAudioKept: false });
     renderAddReview({ ...song, id: storedId }, warnings || [], null);
@@ -1282,17 +1321,35 @@ function mountSongsPanel(hostEl, api) {
     }
     if (classified.kind === 'audio') {
       say('Working it out…');
+      // P3-5: Cancel shows only for this branch -- decodeAudioData is the
+      // one real async gap in this pipeline, long enough on a real
+      // recording for a learner to change their mind mid-way. `gen` is this
+      // attempt's own snapshot of the door's shared generation counter
+      // (src/ui/songs/record-door.js); Cancel and leaving Songs (hide()
+      // below) both bump it, which is how a still-running analysis is told
+      // it is no longer the current one.
+      analysing = true;
+      addSongCancelBtn.hidden = false;
+      const gen = door.generation();
       let result;
       try {
-        result = await transcribeAudioFile(file, api);
+        result = await transcribeAudioFile(file, api, { isStale: () => destroyed || door.generation() !== gen });
       } catch (e) {
+        analysing = false;
+        addSongCancelBtn.hidden = true;
+        if (destroyed || e.cancelled) return; // Cancel/leaving already said its own piece
         say('That recording could not be read.', 'no');
         return;
       }
+      analysing = false;
+      addSongCancelBtn.hidden = true;
       const { song, report, rec } = result;
       const warnings = (report && report.needsCheck) || [];
       const { ok, errors } = validateSong(song);
       if (!ok) { say('That recording did not turn into a usable song: ' + errors.join('; '), 'no'); return; }
+      // Never save an analysis that outlived Cancel or leaving Songs: notes
+      // exist by now, but this attempt is no longer the current one.
+      if (destroyed || door.generation() !== gen) return;
       let storedId;
       try {
         storedId = await library.add(song, { now: Date.now() });
@@ -1300,6 +1357,7 @@ function mountSongsPanel(hostEl, api) {
         say('The song could not be saved: ' + (e && e.message ? e.message : String(e)), 'no');
         return;
       }
+      if (destroyed || door.generation() !== gen) return;
       say('');
       setSongStatus(markDraft, storedId, { needsCheck: warnings.length, source: 'file', originalAudioKept: false });
       renderAddReview({ ...song, id: storedId }, warnings, rec);
@@ -1439,6 +1497,16 @@ function mountSongsPanel(hostEl, api) {
     show() {
       refreshList();
       checkOpenRequest();
+      // P3-5: cleared here whether or not there is anything to show, so a
+      // repeat openPanel('songs') call on an already-open instance (no
+      // remount) does not keep displaying a leaving message from earlier in
+      // this same session -- it is meant to be read once.
+      importMsg.textContent = '';
+      const addState = api.store(ADD_STATE_STORE_ID).get();
+      if (addState && addState.interrupted) {
+        api.store(ADD_STATE_STORE_ID).set(null);
+        say('Your last recording was stopped before it finished. Nothing was saved.');
+      }
     },
     hide() {
       stopRecording();
@@ -1458,12 +1526,23 @@ function mountSongsPanel(hostEl, api) {
       // way switching away from "Learn this" already does (src/ui/learn.js)
       // -- otherwise its RAF loop and timers keep running for a panel that
       // is no longer on screen.
+      // P3-5: read busy()/analysing BEFORE door.hide() resets the door's own
+      // flags -- door.hide() also bumps generation regardless, which is
+      // what actually stops a still-running save/analysis; this only
+      // decides whether the NEXT show() has something to tell the learner.
+      const wasBusy = door.busy() || analysing;
       door.hide();
+      if (wasBusy) api.store(ADD_STATE_STORE_ID).set({ interrupted: true });
     },
     // Mirrors hide()'s door.hide() -- called when the panel itself is torn
     // down rather than merely hidden, so nothing of the door's own state
     // (its stream, its timers) survives past the panel's own lifetime.
+    // destroyed additionally guards an in-flight save/render (onMicTake,
+    // handleFile's audio branch) still running in this closure from writing
+    // to a store or a resultEl that is about to be removed from the
+    // document.
     destroy() {
+      destroyed = true;
       door.destroy();
     },
   };

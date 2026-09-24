@@ -45,10 +45,18 @@ function titleFromFileName(fileName) {
 // recording" button can hand the SAME decoded audio to Play Along (src/ui/
 // playalong.js's requestPlayalongRecording()) without decoding the file a
 // second time.
-export async function transcribeAudioFile(file, api) {
+// P3-5: `opts.isStale`, if given, is checked right after decode (the one
+// real async gap in this pipeline -- transcribe() itself is synchronous) so
+// a caller can discard a recording the learner already cancelled or left
+// before it finished, instead of transcribing and saving it anyway. Learn
+// this's own 2-arg call (no opts) is unaffected -- isStale defaults to
+// nothing, so nothing is ever checked there.
+export async function transcribeAudioFile(file, api, opts = {}) {
+  const isStale = typeof opts.isStale === 'function' ? opts.isStale : null;
   const actx = typeof api.audio === 'function' ? api.audio() : null;
   if (!actx) throw new Error('audio is not available');
   const audioBuffer = await actx.decodeAudioData(await file.arrayBuffer());
+  if (isStale && isStale()) { const cancelled = new Error('cancelled'); cancelled.cancelled = true; throw cancelled; }
   const channels = [];
   for (let c = 0; c < audioBuffer.numberOfChannels; c++) channels.push(audioBuffer.getChannelData(c));
   const pcm = mixToMono(channels);
@@ -127,6 +135,13 @@ export function createRecordDoor(api, { onTake, say, onStart, idPrefix = 'learn'
 
   let counting = false;
   let recording = false;
+  // P3-5: bumped by teardown() -- so by hide(), destroy() AND cancel() below,
+  // all three are the same "whatever was in flight for this door no longer
+  // counts" event -- so a caller (Songs) holding a generation snapshot from
+  // before an async save/analyse started can tell it apart from a still-
+  // current one, without this door knowing anything about what that caller
+  // is doing with it.
+  let generation = 0;
   let countInTimers = [];
   function clearCountInTimers() {
     countInTimers.forEach((id) => clearTimeout(id));
@@ -239,6 +254,7 @@ export function createRecordDoor(api, { onTake, say, onStart, idPrefix = 'learn'
   // saved). destroy() does the same, for a caller that unmounts this door
   // outright rather than just hiding it.
   function teardown() {
+    generation++;
     if (counting) clearCountInTimers();
     if (recording) recorder.stop();
     resetMicUi();
@@ -248,6 +264,13 @@ export function createRecordDoor(api, { onTake, say, onStart, idPrefix = 'learn'
     el: micSection,
     hide: teardown,
     destroy: teardown,
+    // P3-5: the Cancel button in Songs' own Add a song calls this directly
+    // while a file (not this door's own mic) is being analysed -- teardown()
+    // is a harmless no-op on the mic side when neither counting nor
+    // recording, and its generation bump is the only part that call cares
+    // about.
+    cancel: teardown,
     busy() { return counting || recording; },
+    generation() { return generation; },
   };
 }
