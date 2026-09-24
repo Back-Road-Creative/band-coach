@@ -93,6 +93,40 @@ export function validateInstrument(rec) {
     fail('writtenOctaveUp must be a boolean when present');
   }
 
+  // kit: an unpitched percussion record's drawn pieces (src/instruments/drum-kit.js).
+  // Each piece's General MIDI notes must sit inside the record's range, and a
+  // note may belong to only one piece, so a note heard always names exactly
+  // one drum. `key` is the one computer key suggested for playing that piece.
+  if (rec.kit !== undefined) {
+    if (!Array.isArray(rec.kit) || rec.kit.length === 0) {
+      fail('kit must be a non-empty array of pieces when present');
+    } else {
+      const ids = new Set();
+      const keys = new Set();
+      const notes = new Map();
+      rec.kit.forEach((p, i) => {
+        const at = 'kit[' + i + ']';
+        if (!p || typeof p !== 'object') { fail(at + ' must be an object { id, name, midi, key }'); return; }
+        if (typeof p.id !== 'string' || !ID_RE.test(p.id)) fail(at + '.id must be a lowercase kebab-case string (got ' + JSON.stringify(p.id) + ')');
+        else if (ids.has(p.id)) fail(at + '.id ' + JSON.stringify(p.id) + ' is repeated in the kit');
+        else ids.add(p.id);
+        if (typeof p.name !== 'string' || p.name.length === 0) fail(at + '.name must be a non-empty string');
+        if (!Array.isArray(p.midi) || p.midi.length === 0 || !p.midi.every(isMidi)) {
+          fail(at + '.midi must be a non-empty array of integer MIDI notes');
+        } else {
+          p.midi.forEach(n => {
+            if (rec.range && isMidi(rec.range.low) && isMidi(rec.range.high) && (n < rec.range.low || n > rec.range.high)) fail(at + ' kit note ' + n + ' falls outside range');
+            if (notes.has(n)) fail(at + ' kit note ' + n + ' already belongs to ' + JSON.stringify(notes.get(n)));
+            else notes.set(n, p.id);
+          });
+        }
+        if (typeof p.key !== 'string' || !/^[a-z]$/.test(p.key)) fail(at + '.key must be one lowercase letter (got ' + JSON.stringify(p.key) + ')');
+        else if (keys.has(p.key)) fail(at + '.key ' + JSON.stringify(p.key) + ' is repeated in the kit');
+        else keys.add(p.key);
+      });
+    }
+  }
+
   if (typeof rec.status !== 'string' || !STATUSES.includes(rec.status)) {
     fail('status must be one of ' + STATUSES.join('|') + ' (got ' + JSON.stringify(rec.status) + ')');
   }

@@ -478,6 +478,7 @@ pitch detection, just no diagram.
 | Tin whistle (D) | ready | yes | whistle chart | no -- unchecked | provisional (no reviewer yet) |
 | Oboe | ready | yes | keyed-woodwind chart | no -- unchecked | provisional (no reviewer yet) |
 | Mallet percussion (bells) | ready | yes | none | n/a | provisional (no reviewer yet) |
+| Drum kit | planned | not yet | drum kit (drawn) | no -- unchecked (drawn layout) | provisional (no reviewer yet) |
 
 "Content reviewed" comes straight from each record's own `provenance` field
 (`src/instruments/schema.js`). A `provenance` of `null` means the curriculum was written by the
@@ -596,6 +597,15 @@ struck bar does not ring long enough to hold a steady pitch. Its
 `src/instruments/mallet-percussion.js` record documents the mic
 detectability measurement (a synthesized inharmonic bar tone through
 `yin()`) that justified shipping it `status: 'ready'` rather than `'planned'`.
+
+The drum kit (`drum-kit`) is in the "How to play it" panel only: pick a piece
+(bass drum, snare, hi-hat closed/open/pedal, three toms, crash, ride) and see a
+top-down kit with that piece highlighted and a plain-words sentence saying where
+it sits and what plays it. The drawing comes from
+`src/instruments/how/drum-kit.js`; each piece's General MIDI percussion notes and
+suggested computer key live in `src/instruments/drum-kit.js`. Its trainer
+(curriculum, practice and judging) is not shipped yet, so the record is
+`status: 'planned'` with an empty curriculum, and no drum sound plays yet.
 
 Ready beginner brass (`trumpet-bb`, `horn-f`, `trombone`) each get their own
 MODS entry instead of reusing the generic `MODS.wind` trainer: `MODS.wind`'s
