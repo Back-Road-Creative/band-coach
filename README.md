@@ -654,6 +654,16 @@ instrument, badge included, on a lesson's first (listen) step, before the
 learner has attempted anything; picking a card starts that same song on the
 chosen instrument without leaving the panel.
 
+`segment` (`src/song/lesson.js`) cuts phrases at real bar lines even when a
+song changes metre partway through (`song.metreChanges`), always agreeing
+with `src/song/model.js`'s `barsOf` -- the one place bar boundaries are
+computed -- instead of a single fixed metre. A part with a chord (two or
+more notes starting together) on a single-line instrument -- anything but
+keyboard, guitar/uke/mandolin/banjo, or mallet percussion -- shows a "Has
+chords" badge and plays only the top note of each chord in the lesson,
+since that instrument (and the app's own pitch-listening mic path) can only
+sound one note at a time.
+
 ## Rhythm vocabulary
 
 `src/core/rhythm.js` is a pure rhythm-notation module: cells (quarter, eighth pairs, rests, ties,
