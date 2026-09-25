@@ -46,6 +46,54 @@ export function phraseSec(tick, originTick, bpm, ticksPerQuarter, clock) {
 // "part of this chord" rather than the start of the next thing.
 const CHORD_SPREAD_MS = 80;
 
+// A drum-name a mic hit cannot give (toms, crash, ride -- the mic's onset
+// classifier only tells kick/snare/hihat apart, see src/audio/drum-classify.js
+// and app.js's own KIT_MIC_UNNAMED, app.js:1347, which this copies) is judged
+// leniently rather than pretending the mic can name it: a mic hit on one of
+// these pieces leaves pieceOk null (below) instead of false, so it is never
+// held against the learner, only the onset timing is.
+export const MIC_UNNAMEABLE = new Set(['tom-floor', 'tom-mid', 'tom-high', 'crash', 'ride']);
+
+// Whether a played drum's piece id counts as hitting `expectedPiece`. A MIDI
+// kit names the exact piece (hihat-closed vs hihat-open vs hihat-pedal), but
+// the mic's onset classifier only ever reports the generic 'hihat' kind (it
+// cannot tell foot from stick, open from closed) -- so a mic 'hihat' matches
+// any of the three expected hi-hat pieces, while a MIDI hit still has to name
+// the exact one.
+function pieceMatches(expectedPiece, playedPiece) {
+  if (playedPiece === expectedPiece) return true;
+  if (playedPiece === 'hihat' && typeof expectedPiece === 'string' && expectedPiece.indexOf('hihat') === 0) return true;
+  return false;
+}
+
+// pieceOk for one matched onset: null (not assessed) when the hit named no
+// piece at all, or when it came from the mic and the expected piece is one
+// the mic cannot tell apart from the others (MIC_UNNAMEABLE) -- checked
+// before the null-piece check since a mic hit on one of those pieces is
+// unassessed even on the rare tick its classifier happens to report a kind.
+// true/false otherwise, from pieceMatches above.
+function pieceOkFor(note, hit) {
+  if (!hit) return null;
+  if (hit.source === 'mic' && MIC_UNNAMEABLE.has(note.piece)) return null;
+  if (hit.piece == null) return null;
+  return pieceMatches(note.piece, hit.piece);
+}
+
+// Plain words for a piece id, for firstCorrection's "That was the X — this
+// beat wants the Y." (below); named to match src/instruments/drum-kit.js's
+// own PIECES names, lowercased to sit mid-sentence. An id not listed here
+// (there is none in drum-kit.js today) falls back to the id itself rather
+// than throwing.
+const PIECE_WORDS = {
+  kick: 'bass drum', snare: 'snare',
+  'hihat-closed': 'hi-hat', 'hihat-open': 'hi-hat', 'hihat-pedal': 'hi-hat', hihat: 'hi-hat',
+  'tom-floor': 'floor tom', 'tom-mid': 'mid tom', 'tom-high': 'high tom',
+  crash: 'crash cymbal', ride: 'ride cymbal',
+};
+function pieceWord(piece) {
+  return PIECE_WORDS[piece] || piece || 'drum';
+}
+
 // Group expected notes into chords: consecutive notes sharing the same
 // `start` tick are one chord (a single note is a chord of size 1, and takes
 // the exact old forward-only path so single-note judging never changes).
@@ -78,7 +126,10 @@ function matchOneNote(note, hit, timed, expectedAt, bpm, ticksPerQuarter, onsetA
 }
 
 function missedNote(note) {
-  return { note, played: null, ok: false, errorMs: null, durRatio: null, cents: null, velocityError: null };
+  // pieceOk: null (not applicable, nothing was played -- pieceOk only ever
+  // exists on a matched onset) so a percussion caller's pieceRate math
+  // (judgeAttempt below) never sees a missed onset as evidence either way.
+  return { note, played: null, ok: false, errorMs: null, durRatio: null, cents: null, velocityError: null, pieceOk: null };
 }
 
 // Onset-only matching for a "rhythm" step: every played event is assigned to
@@ -86,7 +137,10 @@ function missedNote(note) {
 // assigned event, which then counts for every note of that chord (one clap
 // covers a chord). Unclaimed events are extras. Order-free and pitch-free, so
 // one stray clap never shifts every later beat, and a missed beat is a miss.
-function judgeOnsets(chords, played, onsetAt, matches, extraList, bpm, ticksPerQuarter, policy, clock) {
+// percussion: true for a drum step (opts.percussion, judgeAttempt below) --
+// the hit carries a `piece` (which drum), not a pitch, so this scores
+// pieceOk (pieceOkFor above) instead of pitchOk.
+function judgeOnsets(chords, played, onsetAt, matches, extraList, bpm, ticksPerQuarter, policy, clock, percussion) {
   const times = chords.map((c) => onsetAt(c[0].start));
   const best = times.map(() => -1);
   played.forEach((ev, i) => {
@@ -103,7 +157,8 @@ function judgeOnsets(chords, played, onsetAt, matches, extraList, bpm, ticksPerQ
     if (best[k] === -1) { matches.push(missedNote(note)); return; }
     const hit = played[best[k]];
     const m = matchOneNote(note, hit, true, times[k], bpm, ticksPerQuarter, onsetAt, clock);
-    m.pitchOk = hit.midi != null && judgePitch({ heardMidi: hit.midi, targetMidi: note.midi, policy }).ok;
+    if (percussion) { m.pieceOk = pieceOkFor(note, hit); }
+    else { m.pitchOk = hit.midi != null && judgePitch({ heardMidi: hit.midi, targetMidi: note.midi, policy }).ok; }
     matches.push(m);
   }));
 }
@@ -150,6 +205,11 @@ export function judgeAttempt(expectedNotes, playedEvents, opts = {}) {
     velocityTolerance = 24,
     originTick = 0,
     onsetsOnly = false,
+    // percussion: a drum step (P4-11) -- there is no pitch to match in
+    // order, only an onset and, maybe, which piece of the kit sounded it, so
+    // this always takes the onset-matching path below (judgeOnsets), same as
+    // onsetsOnly, and scores pieceOk instead of pitchOk on each match.
+    percussion = false,
     clock,
   } = opts;
   const notes = expectedNotes || [];
@@ -158,8 +218,9 @@ export function judgeAttempt(expectedNotes, playedEvents, opts = {}) {
   const extraList = [];
   const onsetAt = (tick) => phraseSec(tick, originTick, bpm, ticksPerQuarter, clock);
   let cursor = 0;
-  if (onsetsOnly) judgeOnsets(groupIntoChords(notes), played, onsetAt, matches, extraList, bpm, ticksPerQuarter, policy, clock);
-  for (const chord of onsetsOnly ? [] : groupIntoChords(notes)) {
+  const onsetMatched = onsetsOnly || percussion;
+  if (onsetMatched) judgeOnsets(groupIntoChords(notes), played, onsetAt, matches, extraList, bpm, ticksPerQuarter, policy, clock, percussion);
+  for (const chord of onsetMatched ? [] : groupIntoChords(notes)) {
     if (chord.length === 1) {
       // Single expected note at this tick: the original forward-only
       // search, unchanged — no chord window, no extras.
@@ -251,6 +312,14 @@ export function judgeAttempt(expectedNotes, playedEvents, opts = {}) {
   const dynamicsScore = notesHaveVelocity && velocityErrors.length
     ? velocityErrors.filter((v) => Math.abs(v) <= velocityTolerance).length / velocityErrors.length
     : notesHaveVelocity ? null : null;
+  // pieceRate: which-drum accuracy, over only the onsets that COULD be named
+  // (pieceOk !== null -- see pieceOkFor above); a missed onset or one only
+  // the mic heard and could not name never enters this count either way.
+  // null (not 0) when nothing could be named at all, so a step can still
+  // pass on timing alone -- passesRule below ignores minPieceRate whenever
+  // pieceRate is null, exactly the mic's-limits case this exists for.
+  const pieceJudged = matches.filter((m) => m.pieceOk != null);
+  const pieceRate = percussion ? (pieceJudged.length ? pieceJudged.filter((m) => m.pieceOk).length / pieceJudged.length : null) : null;
   return {
     matches,
     judgedCount: notes.length,
@@ -261,6 +330,7 @@ export function judgeAttempt(expectedNotes, playedEvents, opts = {}) {
     meanCents,
     durationScore,
     dynamicsScore,
+    pieceRate,
     // Wrong notes struck alongside a chord, inside its spread window —
     // reported so the learner sees what they actually played, but never
     // counted against hitRate (see the chord-matching loop above).
@@ -283,6 +353,12 @@ export function passesRule(result, passRule) {
   }
   if (passRule.minDurationScore != null && result.durationScore != null) {
     if (result.durationScore < passRule.minDurationScore) return false;
+  }
+  // minPieceRate (a percussion step, P4-11) is ignored whenever pieceRate is
+  // null -- nothing the mic could name, so there is nothing to hold the
+  // learner to; the step can still pass on hitRate/timing alone.
+  if (passRule.minPieceRate != null && result.pieceRate != null) {
+    if (result.pieceRate < passRule.minPieceRate) return false;
   }
   // A wrong note struck alongside a chord (judgeAttempt's extras, above)
   // never lowers hitRate -- that is deliberate chord-spread leniency, not a
@@ -377,6 +453,13 @@ export function failedDimension(result, passRule) {
       }, []);
     if (indices.length) return { dim: 'hold', noteIndices: indices };
   }
+  // minPieceRate (P4-11): checked in the same order as passesRule, right
+  // after tune/hold and before extras -- a wrong-drum hit is worth naming
+  // even though the onset itself landed on time.
+  if (passRule.minPieceRate != null && result.pieceRate != null && result.pieceRate < passRule.minPieceRate) {
+    const indices = (result.matches || []).reduce((acc, m, i) => { if (m.pieceOk === false) acc.push(i); return acc; }, []);
+    if (indices.length) return { dim: 'piece', noteIndices: indices };
+  }
   if (passRule.maxExtras != null && result.extras && result.extras.count > passRule.maxExtras) {
     // An extra note isn't one of the expected notes -- nothing in `notes` to
     // isolate a repair around, so this is deliberately empty.
@@ -419,6 +502,14 @@ export function firstCorrection(result, passRule) {
   if (dim === 'tune' || dim === 'hold') {
     const holdTune = holdTuneFeedback(result, passRule);
     if (holdTune) return holdTune;
+  }
+  if (dim === 'piece') {
+    const miss = (result.matches || []).find((m) => m.pieceOk === false);
+    if (miss) {
+      const heard = miss.played && miss.played.piece;
+      const wanted = miss.note && miss.note.piece;
+      return 'That was the ' + pieceWord(heard) + ' — this beat wants the ' + pieceWord(wanted) + '.';
+    }
   }
   if (dim === 'extras') {
     const first = result.extras.list && result.extras.list[0];
