@@ -63,9 +63,15 @@ export function register(panels) {
 function mountPlayalong(el, api) {
   el.innerHTML =
     '<div class="panel-playalong">' +
+    // P3-11: this panel is reached only from inside Songs, so its heading
+    // takes focus in show() (screen readers announce "Play along" the
+    // moment it opens, same as editor.js's) and Back to songs sits in the
+    // first row, alongside Edit notes' own Back to songs.
+    '<h2 id="paHeading" tabindex="-1">Play along</h2>' +
     '<p class="pa-intro">Open a recording of a song, or record yourself playing one — a duet with your own earlier take. This finds its tempo, key and chords, then lets you loop any section slower — without changing the pitch — to learn your part. The recording never leaves this device.</p>' +
     '<p id="paSavedHint" class="pa-note" hidden></p>' +
     '<div class="row pa-open">' +
+    '<button type="button" id="paBackToSongsBtn" class="small">Back to songs</button>' +
     '<label class="small file-label" for="paFileInput">Open a recording</label>' +
     '<input type="file" accept="audio/*" id="paFileInput" hidden>' +
     '<button type="button" id="paRecordBtn" class="small">Record a take</button>' +
@@ -100,6 +106,8 @@ function mountPlayalong(el, api) {
     '</div>';
 
   const $ = (id) => el.querySelector('#' + id);
+  const heading = $('paHeading');
+  const backToSongsBtn = $('paBackToSongsBtn');
   const fileInput = $('paFileInput');
   const fileNameEl = $('paFileName');
   const recordBtn = $('paRecordBtn');
@@ -530,12 +538,15 @@ function mountPlayalong(el, api) {
     else startRecordingCapture();
   });
 
+  backToSongsBtn.addEventListener('click', () => { api.openPanel('songs'); });
+
   showSavedHint();
 
   return {
     show() {
       showSavedHint();
       checkPendingRecording();
+      heading.focus();
     },
     hide() {
       stopLoop();

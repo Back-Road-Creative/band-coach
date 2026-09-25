@@ -328,8 +328,11 @@ function mountEditor(hostEl, api) {
     halveBtn, doubleBtn, octaveUpBtn, octaveDownBtn,
   ]);
 
+  // P3-11: focused by show() so a screen reader announces "Record a tune"
+  // the moment this panel opens, the same as songs.js's addSongHeading.
+  const heading = el('h2', { text: 'Record a tune', tabindex: '-1' });
   const root = el('div', { class: 'panel-editor' }, [
-    el('h2', { text: 'Record a tune' }),
+    heading,
     el('p', { text: 'Press Listen, play or sing your tune, then press Stop. It will write down what it heard so you can fix it up and practise it.' }),
     el('div', { class: 'editor-record' }, [
       el('label', { for: 'editorTitle', text: 'Title' }), titleInput, listenBtn, recordStatus,
@@ -778,6 +781,7 @@ function mountEditor(hostEl, api) {
         if (restored) applyRestoredWorking(restored);
       }
       render();
+      heading.focus();
     },
     hide() {
       if (recorder.listening) {
