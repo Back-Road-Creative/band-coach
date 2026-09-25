@@ -70,6 +70,8 @@ import { requestOpenInEditor } from './editor.js';
 import { sanitizeStatusLedger, markDraft, markChecked, statusFor, statusLabel } from './songs/song-status.js';
 import { layoutSong } from './editor/layout-song.js';
 import { drawPrimitives } from '../notation/draw-canvas.js';
+import { instrumentSetup } from './fingerings/setup.js';
+import { arrangeFor, songForArrangement } from '../song/arrange/index.js';
 
 // P3-9 Print: the same pitch-class-to-key-name tables editor.js keeps (not exported there) --
 // see songHeader()'s Print button below for the one place this file needs a key name.
@@ -1023,7 +1025,25 @@ function mountSongsPanel(hostEl, api) {
     }
     const saved = store.get();
     const level = saved && saved.songId === song.id && saved.partId === partId && Number.isFinite(saved.level) ? saved.level : 1;
-    const plan = buildLessonPlan(song, partId, instrument, { level });
+    let plan = buildLessonPlan(song, partId, instrument, { level });
+    // arrangement: how THIS instrument's saved setup (capo/tuning,
+    // harmonica key, a measured voice range) and the song's own key change
+    // what the learner is about to see (P4-6 src/song/arrange/index.js) --
+    // built from the fit-to-instrument notes buildLessonPlan just produced,
+    // never from the raw song, so a chord reduction or transposing search
+    // fitToInstrument already applied is what gets arranged too.
+    const setup = instrumentSetup(instrument, { fingeringsStore: api.store('fingerings').get(), prefs: api.db().prefs });
+    const arrangement = arrangeFor(plan.fit.notes, instrument, setup, { songKey: song.key });
+    // Only a voice arrangement's key move changes what is actually judged
+    // (songForArrangement, P4-6): every other family's arrangement is
+    // display and advice, so `arrangedSong` is `song` right back and the
+    // lesson plan/clock built above stand unchanged. `practice.clock` is
+    // built here too (not lazily in renderPractice) so a transposed song
+    // keeps ONE source of truth for both the plan and its clock (P4-3
+    // caveat) -- a transpose keeps every tick, so the clock's numbers are
+    // unchanged either way, only which song they were built from differs.
+    const arrangedSong = songForArrangement(song, partId, arrangement);
+    if (arrangedSong !== song) plan = buildLessonPlan(arrangedSong, partId, instrument, { level });
     // loopTransport/loopTransportStepIndex: the tempo-ladder rung's own
     // src/audio/stretch/loop.js transport (Riff Repeater pattern) -- created
     // fresh the first time renderPractice() sees a given tempo-ladder step
@@ -1045,7 +1065,7 @@ function mountSongsPanel(hostEl, api) {
     // on -- built once per practice session, not per step, so a phrase
     // crossing a tempoMap change plays, counts in and is judged against the
     // same tempo curve throughout.
-    practice = { song, partId, instrument, instrumentId, plan, results: [], stepIndex: 0, repair: null, recording: false, countingIn: false, countInTimer: null, playedEvents: [], recordStartSec: 0, stop: null, loopTransport: null, loopTransportStepIndex: null, clock: createSongClock(song) };
+    practice = { song: arrangedSong, partId, instrument, instrumentId, plan, arrangement, results: [], stepIndex: 0, repair: null, recording: false, countingIn: false, countInTimer: null, playedEvents: [], recordStartSec: 0, stop: null, loopTransport: null, loopTransportStepIndex: null, clock: createSongClock(arrangedSong) };
     store.set({ songId: song.id, partId, instrumentId, level });
     renderPractice();
   }
@@ -1077,10 +1097,30 @@ function mountSongsPanel(hostEl, api) {
     else renderPractice();
   }
 
+  // The arrangement line's own text (P4-7): P4-6's `summary` already covers
+  // fretted/voice/wind/brass ("Arranged for…"/"Moved…"/"Written for…"),
+  // `harpAdvice` covers the one family with no summary of its own
+  // (harmonica, which reports a best-fit key instead of a written change);
+  // `null` when neither has anything to say (no saved setup, no shift, no
+  // written-pitch difference) means this instrument needs no line at all.
+  // Arrangement "unplayable" (a note this song's arranger, not the
+  // instrument's own range/chord fit, could not place -- e.g. no fingering
+  // reaches it under the saved capo/tuning) is appended here rather than to
+  // `.panel-songs-warn`, which is reserved for fitToInstrument's own count.
+  function arrangementText(arrangement) {
+    const base = arrangement.summary != null ? arrangement.summary : arrangement.harpAdvice;
+    if (!base) return null;
+    if (!arrangement.unplayable.length) return base;
+    const n = arrangement.unplayable.length;
+    return base + ' ' + n + ' note' + (n === 1 ? ' has' : 's have') + ' no comfortable fingering.';
+  }
+
   function renderPractice() {
     countEl = null;
     practiceSection.innerHTML = '';
     practiceSection.appendChild(el('h3', { text: practice.song.title }));
+    const arrangementLine = arrangementText(practice.arrangement);
+    if (arrangementLine) practiceSection.appendChild(el('p', { class: 'panel-songs-arrangement', text: arrangementLine }));
     const { plan, stepIndex } = practice;
     if (stepIndex >= plan.steps.length) {
       markSongPassed(practice.song.id);
