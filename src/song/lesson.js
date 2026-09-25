@@ -417,6 +417,19 @@ function sustainRules(instrument, passRule) {
   return { ...passRule, minDurationScore: HOLD_MIN_DURATION_SCORE, maxMeanAbsCents: TUNE_MAX_MEAN_ABS_CENTS };
 }
 
+// P4-11: which drum, within what the mic can tell. A percussion part's
+// notes carry `piece` (src/song/model.js), not a pitch to judge, so every
+// timed step also has to name the right drum: minPieceRate 0.8 added to the
+// passRule, same shape as sustainRules above -- unchanged (same object, same
+// keys) for a non-percussion part. src/ui/songs/practice.js's passesRule
+// ignores minPieceRate whenever a try's pieceRate comes back null (nothing
+// the mic could name), so this never blocks a pass on timing alone.
+export const MIN_PIECE_RATE = 0.8;
+function percussionRules(isPercussion, passRule) {
+  if (!passRule || !isPercussion) return passRule;
+  return { ...passRule, minPieceRate: MIN_PIECE_RATE };
+}
+
 function hitRateFor(level, base) {
   const bonus = Math.min(Math.max((level || 1) - 1, 0), 5) * 0.02;
   return Math.min(0.95, Math.round((base + bonus) * 1000) / 1000);
@@ -424,6 +437,11 @@ function hitRateFor(level, base) {
 
 export function buildLessonPlan(song, partId, instrument, opts = {}) {
   const level = opts.level || 1;
+  // isPercussion: this part has no pitches (percussionRules/pitches-step
+  // skip below) -- read once here off the song's own part record, same
+  // 'percussion' role import-midi.js and fitToInstrument (above) already key
+  // off, so this never disagrees with how the part's notes were fitted.
+  const isPercussion = getPart(song, partId).role === 'percussion';
   const fit = fitToInstrument(song, partId, instrument);
   // fit.notes keeps every input note (fitToInstrument's own contract); a
   // practice step must not, or a note flagged unplayable in fit.unplayable
@@ -477,20 +495,25 @@ export function buildLessonPlan(song, partId, instrument, opts = {}) {
       // maxExtras: 0 -- a wrong note struck alongside a chord (practice.js
       // judgeAttempt's extras) never lowers hitRate, so without this every
       // other rule here could still pass around it; see passesRule().
-      passRule: { hitRate: hitRateFor(level, 0.8), maxMeanErrorMs: 120, maxExtras: 0 }
+      passRule: percussionRules(isPercussion, { hitRate: hitRateFor(level, 0.8), maxMeanErrorMs: 120, maxExtras: 0 })
     });
-    steps.push({
-      kind: 'pitches', phraseIndex: pi, bars: phrase.bars, originTick, bpm: 0, tempoScale: 0, notes, difficulty,
-      passRule: sustainRules(instrument, { hitRate: hitRateFor(level, 0.8), maxMeanErrorMs: null, maxExtras: 0 })
-    });
+    // A percussion part has no pitches to play out of time -- drums have no
+    // pitch at all (module header) -- so this step simply does not exist for
+    // one; every other step kind still runs for it.
+    if (!isPercussion) {
+      steps.push({
+        kind: 'pitches', phraseIndex: pi, bars: phrase.bars, originTick, bpm: 0, tempoScale: 0, notes, difficulty,
+        passRule: sustainRules(instrument, { hitRate: hitRateFor(level, 0.8), maxMeanErrorMs: null, maxExtras: 0 })
+      });
+    }
     steps.push({
       kind: 'phrase-slow', phraseIndex: pi, bars: phrase.bars, originTick, bpm: bpmAt(originTick, 0.55), tempoScale: 0.55, notes, difficulty,
-      passRule: sustainRules(instrument, { hitRate: hitRateFor(level, 0.8), maxMeanErrorMs: 150, maxExtras: 0 })
+      passRule: percussionRules(isPercussion, sustainRules(instrument, { hitRate: hitRateFor(level, 0.8), maxMeanErrorMs: 150, maxExtras: 0 }))
     });
     LADDER_FRACTIONS.forEach(fraction => {
       steps.push({
         kind: 'tempo-ladder', phraseIndex: pi, bars: phrase.bars, originTick, bpm: bpmAt(originTick, fraction), tempoScale: fraction, notes, difficulty,
-        passRule: sustainRules(instrument, { hitRate: hitRateFor(level, 0.85), maxMeanErrorMs: 100, maxExtras: 0 })
+        passRule: percussionRules(isPercussion, sustainRules(instrument, { hitRate: hitRateFor(level, 0.85), maxMeanErrorMs: 100, maxExtras: 0 }))
       });
     });
   });
@@ -507,7 +530,7 @@ export function buildLessonPlan(song, partId, instrument, opts = {}) {
         bpm: bpmAt(chainOriginTick, 1),
         tempoScale: 1,
         notes: chained.flatMap(p => p.notes),
-        passRule: sustainRules(instrument, { hitRate: hitRateFor(level, 0.8), maxMeanErrorMs: 120, maxExtras: 0 })
+        passRule: percussionRules(isPercussion, sustainRules(instrument, { hitRate: hitRateFor(level, 0.8), maxMeanErrorMs: 120, maxExtras: 0 }))
       });
     }
   }
@@ -522,7 +545,7 @@ export function buildLessonPlan(song, partId, instrument, opts = {}) {
       bpm: bpmAt(wholeOriginTick, 1),
       tempoScale: 1,
       notes: playableNotes,
-      passRule: sustainRules(instrument, { hitRate: hitRateFor(level, 0.8), maxMeanErrorMs: 120, maxExtras: 0 })
+      passRule: percussionRules(isPercussion, sustainRules(instrument, { hitRate: hitRateFor(level, 0.8), maxMeanErrorMs: 120, maxExtras: 0 }))
     });
   }
 
