@@ -68,6 +68,34 @@ test('a song lesson picks up at the same step after the app is closed and reopen
   assert.deepEqual(page.exceptions, []);
 });
 
+test('opening an untouched song a second time does not say it is picking up', async (t) => {
+  const page = await launchPage(htmlPath);
+  t.after(() => page.close());
+
+  await page.evaluate("window.__coach.setMod('kbd')");
+  await page.evaluate("window.__coach.openPanel('songs')");
+  await page.waitFor("document.querySelectorAll('.panel-songs-row button').length > 0");
+  await page.evaluate(
+    "Array.from(document.querySelectorAll('.panel-songs-row button')).find(b => b.textContent === 'Hot Cross Buns').click()"
+  );
+  await page.waitFor("document.querySelector('.panel-songs-practice h4')");
+  await page.waitFor(
+    "(() => { try { return JSON.parse(localStorage.getItem('bandcoach.v1')).panels.songs.lessons[0].stepIndex === 0; } catch (e) { return false; } })()"
+  );
+
+  // Back to the list (still on screen next to the open lesson) and open the
+  // same, still-untouched song a second time.
+  await page.evaluate(
+    "Array.from(document.querySelectorAll('.panel-songs-row button')).find(b => b.textContent === 'Hot Cross Buns').click()"
+  );
+  await page.waitFor("document.querySelector('.panel-songs-practice h4')");
+
+  const said = await page.evaluate("document.querySelector('.panel-songs-msg').textContent");
+  assert.ok(!said.includes('Picking up'), 'no false resume message on an untouched lesson: ' + said);
+
+  assert.deepEqual(page.exceptions, []);
+});
+
 test('switching instrument starts the same song fresh', async (t) => {
   const page = await launchPage(htmlPath);
   t.after(() => page.close());

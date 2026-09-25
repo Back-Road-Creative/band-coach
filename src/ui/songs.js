@@ -76,7 +76,7 @@ import { arrangeFor, songForArrangement } from '../song/arrange/index.js';
 import { staffView, renderStepView, tabView, fingeringLine, kitView } from './songs/step-view.js';
 import { createDrumCapture } from './songs/drum-capture.js';
 import { pieceForMidi } from '../instruments/drum-kit.js';
-import { lessonKey, sameLessonKey, sanitizeLessonList, sanitizeLessonEntry, rememberLesson, findLesson, resultsTail } from '../song/lesson-resume.js';
+import { lessonKey, sanitizeLessonList, sanitizeLessonEntry, rememberLesson, findLesson, resultsTail } from '../song/lesson-resume.js';
 
 // P3-9 Print: the same pitch-class-to-key-name tables editor.js keeps (not exported there) --
 // see songHeader()'s Print button below for the one place this file needs a key name.
@@ -1074,7 +1074,12 @@ function mountSongsPanel(hostEl, api) {
     // tempo change) means no match, so the lesson starts at step 1 with no
     // message, same as always.
     const lessonKeyValue = lessonKey({ song: arrangedSong, partId, instrumentId, setup, arrangement, assistance: 'none' });
-    const resumeEntry = opts.fresh ? null : sanitizeLessonEntry(findLesson(sanitizeLessonList((store.get() || {}).lessons), lessonKeyValue), plan.steps.length);
+    const foundEntry = opts.fresh ? null : sanitizeLessonEntry(findLesson(sanitizeLessonList((store.get() || {}).lessons), lessonKeyValue), plan.steps.length);
+    // A saved entry still sitting at step 0 with an empty trailing tail
+    // carries no actual progress (every fresh open writes one via
+    // saveLesson() below) -- resuming it would be a false "Picking up where
+    // you left off." on a lesson nothing was ever attempted on.
+    const resumeEntry = foundEntry && (foundEntry.stepIndex > 0 || foundEntry.tail.length > 0) ? foundEntry : null;
     if (resumeEntry && resumeEntry.level !== level) plan = buildLessonPlan(arrangedSong, partId, instrument, { level: resumeEntry.level });
     // loopTransport/loopTransportStepIndex: the tempo-ladder rung's own
     // src/audio/stretch/loop.js transport (Riff Repeater pattern) -- created
