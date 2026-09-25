@@ -107,6 +107,13 @@ test('Stop shows "Working it out..." before the transcription result overwrites 
   assert.equal(rightAfterClick.disabled, true, 'Record must be disabled while the take is being worked out, so a second tap cannot start a new recording over this one');
 
   await page.waitFor("document.querySelector('.panel-learn-result').hidden === false");
+  // The take landing (onTake, awaited inside stopMicRecording) and Record
+  // re-enabling (the finally after it, src/ui/songs/record-door.js) are two
+  // steps of one async handler, so a poll can see the result before the
+  // button flips: reading it the instant the result showed failed CI runs
+  // 36078386778 and 36079097375 and a loaded local box, and never alone.
+  // Wait for the flip itself; the assertion still fails if it never comes.
+  await page.waitFor("document.querySelector('.panel-songs-record-btn').disabled === false");
   assert.equal(await page.evaluate("document.querySelector('.panel-songs-record-btn').disabled"), false, 'Record must re-enable once the take has landed');
 });
 
