@@ -73,7 +73,9 @@ import { layoutSong } from './editor/layout-song.js';
 import { drawPrimitives } from '../notation/draw-canvas.js';
 import { instrumentSetup } from './fingerings/setup.js';
 import { arrangeFor, songForArrangement } from '../song/arrange/index.js';
-import { staffView, renderStepView, tabView, fingeringLine } from './songs/step-view.js';
+import { staffView, renderStepView, tabView, fingeringLine, kitView } from './songs/step-view.js';
+import { createDrumCapture } from './songs/drum-capture.js';
+import { pieceForMidi } from '../instruments/drum-kit.js';
 
 // P3-9 Print: the same pitch-class-to-key-name tables editor.js keeps (not exported there) --
 // see songHeader()'s Print button below for the one place this file needs a key name.
@@ -1176,7 +1178,14 @@ function mountSongsPanel(hostEl, api) {
     // things. Skipped only when the step has no notes at all (a repair step
     // never reaches here; a chained/whole step with real notes always has
     // step.bars).
-    if (step.notes.length) renderStepView(practiceSection, staffView(practice.song, step, practice.instrument, practice.arrangement));
+    // A percussion part (P4-12) gets its own kit staff instead of the
+    // pitched staffView -- a drum piece has no pitch/key/transposition for
+    // staffView's writtenMidi to resolve.
+    if (step.notes.length && practice.instrument.kit) {
+      renderStepView(practiceSection, kitView(practice.song, step));
+    } else if (step.notes.length) {
+      renderStepView(practiceSection, staffView(practice.song, step, practice.instrument, practice.arrangement));
+    }
     // Tab / fingering row (P4-9): the SAME arrangement as arrangementLine
     // above, so a capo/tuning caption and a tab diagram never disagree --
     // fretted gets a drawn tab, bowed/keys/harmonica get a one-line caption,
@@ -1330,10 +1339,17 @@ function mountSongsPanel(hostEl, api) {
         const secOffset = phraseSec(n.start, step.originTick, bpm, ticksPerQuarter, practice.clock);
         const secEnd = phraseSec(n.start + n.dur, step.originTick, bpm, ticksPerQuarter, practice.clock);
         const dur = Math.max(0.12, secEnd - secOffset);
-        api.tone(n.midi, at0 + secOffset, dur, 0.22);
+        // A percussion part (P4-12) plays real drum sounds (api.drum,
+        // src/app.js's drumHit) rather than a tone -- a drum piece has no
+        // pitch for api.tone's oscillator to play.
+        if (practice.instrument.kit && typeof api.drum === 'function') api.drum(n.piece, at0 + secOffset);
+        else api.tone(n.midi, at0 + secOffset, dur, 0.22);
       });
     } else {
-      notes.forEach((n, i) => api.tone(n.midi, at0 + i * spacing, spacing * 0.85, 0.22));
+      notes.forEach((n, i) => {
+        if (practice.instrument.kit && typeof api.drum === 'function') api.drum(n.piece, at0 + i * spacing);
+        else api.tone(n.midi, at0 + i * spacing, spacing * 0.85, 0.22);
+      });
     }
   }
 
@@ -1363,7 +1379,58 @@ function mountSongsPanel(hostEl, api) {
     // Real listening only begins once the count-in ends (below); this is the
     // rest of the old startRecording() body, unchanged, just deferred.
     function beginListening() {
-      if (practice.instrument.input === 'midi') {
+      // A drum kit (P4-12) hears both an e-kit's own MIDI notes AND a real
+      // kit through the microphone, in the SAME try -- unlike every other
+      // instrument, whose input is either 'midi' or a mic pitch, never both.
+      // MIDI names the exact piece (pieceForMidi); the mic can only tell
+      // kick/snare/hi-hat apart (src/audio/drum-classify.js), which is why
+      // judgeAttempt's pieceOkFor (practice.js) treats an unnamed or
+      // MIC_UNNAMEABLE mic hit as not-assessed rather than a miss.
+      if (practice.instrument.kit) {
+        const unsubscribe = onMidiNote((midi) => {
+          practice.playedEvents.push({ piece: pieceForMidi(midi), atSec: api.now() - practice.recordStartSec, source: 'midi' });
+          updateCount();
+        });
+        // Best effort: an e-kit alone (no room mic permission) still works
+        // fully through MIDI, so a blocked/denied mic here is silent, not a
+        // dead end -- unlike the mic-only path below, which has nothing else
+        // to fall back on and so DOES say so.
+        api.openMic().catch(() => {});
+        const DRUM_HOP = 512;
+        let capture = null;
+        let lastDrumT = null;
+        const timer = setInterval(() => {
+          const analysers = api.analysers();
+          const audio = api.audio();
+          if (!analysers.time || !audio) return;
+          if (!capture) capture = createDrumCapture({ sampleRate: audio.sampleRate });
+          const buf = new Float32Array(analysers.time.fftSize);
+          analysers.time.getFloatTimeDomainData(buf);
+          const t = api.now();
+          const dt = Math.min(0.2, t - (lastDrumT || t));
+          lastDrumT = t;
+          // Same "split the analyser's newest audio into small hops and push
+          // each one, oldest first" technique as app.js's own listenDrums()
+          // (app.js:1528-1569) -- the analyser's window is a ROLLING read of
+          // its newest samples, so only the hops new since the last tick may
+          // be pushed, or drum-capture.js's onset detector would see the
+          // same audio more than once.
+          const newSamples = Math.max(0, Math.min(buf.length, Math.round((dt || 0.05) * audio.sampleRate)));
+          const nHops = Math.floor(newSamples / DRUM_HOP);
+          let heard = false;
+          for (let c = nHops - 1; c >= 0; c--) {
+            const end = buf.length - c * DRUM_HOP;
+            const chunk = buf.subarray(end - DRUM_HOP, end);
+            const hopAtSec = (t - c * (DRUM_HOP / audio.sampleRate)) - practice.recordStartSec;
+            capture.push(chunk, hopAtSec).forEach((hit) => {
+              practice.playedEvents.push({ piece: hit.piece, atSec: hit.atSec, source: 'mic' });
+              heard = true;
+            });
+          }
+          if (heard) updateCount();
+        }, 50);
+        practice.stop = () => { unsubscribe(); clearInterval(timer); };
+      } else if (practice.instrument.input === 'midi') {
         const unsubscribe = onMidiNote((midi) => {
           pushMidiEvent(practice.playedEvents, midi, api.now() - practice.recordStartSec);
           updateCount();
@@ -1465,6 +1532,10 @@ function mountSongsPanel(hostEl, api) {
       // scale the clock by bpm / clock.bpmAt(from) = 0, a zero-length
       // phrase. An untimed step keeps judging by order alone, unchanged.
       clock: step.bpm > 0 ? practice.clock : undefined,
+      // A drum-kit step (P4-12) is judged on which piece was hit, not pitch
+      // (practice.js's judgeOnsets/pieceOkFor) -- practice.instrument.kit is
+      // only ever truthy for the drum-kit instrument record.
+      percussion: !!practice.instrument.kit,
     });
     // Feed this attempt's outcome to the tempo ladder BEFORE passesRule()
     // (below) reads step.passRule for `passed` -- rate only affects the
