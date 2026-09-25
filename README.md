@@ -201,7 +201,8 @@ Every judged drill answer, warm-up answer and judged song step leaves one small 
 instrument and skill it was, whether it was independent or asked for help, which parts (pitch,
 timing, hold, tune) were actually checked, and how long it took — kept alongside the practice log
 described above. The raw sound of your playing or singing is never recorded; only the judged
-result is.
+result is. The record keeps the most recent 500 attempts plus, for each skill, the first time it
+was played right (from a drill, and from anywhere), so it never grows without limit.
 
 ## Today's plan
 
