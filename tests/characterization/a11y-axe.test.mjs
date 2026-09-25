@@ -93,13 +93,71 @@ test('axe-core finds no WCAG 2/2.1 A/AA violations across the app\'s main states
     });
   }
 
-  // "Set up input" is Band Coach's settings surface (mic/MIDI device,
-  // calibration) -- there is no separate settings panel module, this sheet
-  // is it (src/index.html's #setupSheet, toggled by src/app.js's real
-  // #setupBtn click listener).
-  await t.test('settings (set up input) sheet open', async () => {
+  // "Set up input" is a device-calibration sheet (mic/MIDI device,
+  // calibration), separate from the Settings nav destination -- Settings
+  // (theme/mode toggles, #settingsView, src/index.html:45-75) has its own
+  // axe scan in tests/characterization/settings-view.test.mjs:83. This sheet
+  // is toggled by src/app.js's real #setupBtn click listener.
+  await t.test('input set-up sheet open', async () => {
     await page.evaluate("document.getElementById('setupBtn').click()");
     await page.waitFor("document.getElementById('setupSheet').hidden === false");
-    await scan(page, 'settings sheet open');
+    await scan(page, 'input set-up sheet open');
+  });
+
+  // Songs internal screens: a song open at its first practice step, and Add
+  // a song's own section -- both reached through Songs' real controls (P7-5:
+  // songs.js's panel-songs-row title button, and its Add a song toggle).
+  // Re-opened from the nav here rather than reused from the panel loop
+  // above, since the fingerings/theory scans in between switched the open
+  // panel away from Songs.
+  // P7-5: both of these hit a REAL axe violation once a song is open --
+  // "Play it on..." instrument-card feasibility badges (.panel-songs-badge,
+  // .panel-songs-diff-badge) fail color-contrast (serious). This is a src
+  // finding for JP, not a test-file problem, so both stay `todo` with the
+  // violation named rather than weakened/excluded -- see the handback report
+  // for the verbatim axe output.
+  await t.test('songs: song open', { todo: 'color-contrast: "Play it on..." instrument-card feasibility badges fail contrast (serious)' }, async () => {
+    await page.evaluate('document.querySelector(\'#mainNav button[data-route="songs"]\').click()');
+    await page.waitFor("window.__coach.panelOpen() === 'songs'");
+    await page.evaluate(
+      "Array.from(document.querySelectorAll('.panel-songs-row button')).find(b => b.textContent === 'Hot Cross Buns').click()",
+    );
+    await page.waitFor("document.querySelector('.panel-songs-practice') && !document.querySelector('.panel-songs-practice').hidden");
+    await scan(page, 'songs: song open');
+  });
+
+  await t.test('songs: add a song open', { todo: 'color-contrast: "Play it on..." instrument-card feasibility badges (still open behind Add a song) fail contrast (serious)' }, async () => {
+    await page.evaluate(
+      "Array.from(document.querySelectorAll('button')).find(b => b.textContent === 'Add a song').click()",
+    );
+    await page.waitFor("document.querySelector('.add-song-section') && !document.querySelector('.add-song-section').hidden");
+    await scan(page, 'songs: add a song open');
+  });
+
+  // Edit notes and Play along are reached in real use only from an open
+  // song inside Songs; opening them here through the same debug entry
+  // songs-internal-screens.test.mjs already uses (__coach.openPanel) avoids
+  // needing to import/save a song first just to reach them for a scan --
+  // Songs' own navigation is covered separately, not by this file.
+  await t.test('editor panel open', async () => {
+    await page.evaluate("window.__coach.openPanel('editor')");
+    await page.waitFor("document.querySelector('.panel-editor') !== null");
+    await scan(page, 'editor panel open');
+  });
+
+  await t.test('playalong panel open', async () => {
+    await page.evaluate("window.__coach.openPanel('playalong')");
+    await page.waitFor("document.querySelector('.panel-playalong') !== null");
+    await scan(page, 'playalong panel open');
+  });
+
+  await t.test('ear panel open', async () => {
+    await page.evaluate("document.getElementById('navInstrument').click()");
+    await page.waitFor("document.getElementById('picker').hidden === false");
+    await page.evaluate(
+      "document.querySelector('#picker .picker-tools button[data-panel=\"ear\"]').click()",
+    );
+    await page.waitFor("window.__coach.panelOpen() === 'ear'");
+    await scan(page, 'ear panel open');
   });
 });
