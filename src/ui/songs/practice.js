@@ -25,8 +25,17 @@ const DEFAULT_DURATION_TOLERANCE = { min: 0.6, max: 1.5 };
 // judgeAttempt() below computes every expected onset with it -- so what the
 // learner hears, when they are told to start, and what they are judged
 // against can never disagree.
-export function phraseSec(tick, originTick, bpm, ticksPerQuarter) {
-  return ticksToSec(tick - (originTick || 0), bpm, ticksPerQuarter);
+// opts's fifth argument, `clock` (src/song/clock.js's createSongClock(song)),
+// is optional: when given, a phrase spanning a tempoMap change is timed on
+// the clock's own tempo profile between originTick and tick, scaled by how
+// much slower/faster than the clock's natural tempo this step is asking for
+// (bpm / clock.bpmAt(originTick) -- e.g. 0.55 for a phrase-slow step, 1 for
+// full speed) rather than one flat bpm for the whole phrase. No clock: the
+// original flat-tempo calculation, byte-identical to before this unit.
+export function phraseSec(tick, originTick, bpm, ticksPerQuarter, clock) {
+  const from = originTick || 0;
+  if (clock) return clock.sec(from, tick, bpm / clock.bpmAt(from));
+  return ticksToSec(tick - from, bpm, ticksPerQuarter);
 }
 
 // A keyboard player's MIDI events for a chord (several expected notes at the
@@ -50,11 +59,17 @@ function groupIntoChords(notes) {
   return groups;
 }
 
-function matchOneNote(note, hit, timed, expectedAt, bpm, ticksPerQuarter) {
+// onsetAt/clock: when a clock is present, a held note's expected duration is
+// onsetAt(note.start + note.dur) - onsetAt(note.start) -- the clock's own
+// tempo profile across the note's span, not the step's single bpm -- so a
+// note that starts right after a tempoMap change is expected to last as
+// long as the tempo THERE says, not the tempo the phrase began at. No
+// clock: the original flat ticksToSec(note.dur, bpm, ticksPerQuarter).
+function matchOneNote(note, hit, timed, expectedAt, bpm, ticksPerQuarter, onsetAt, clock) {
   const errorMs = timed ? (hit.atSec - expectedAt) * 1000 : null;
   let durRatio = null;
   if (hit.durSec != null && note.dur != null) {
-    const expectedDurSec = ticksToSec(note.dur, bpm, ticksPerQuarter);
+    const expectedDurSec = clock ? (onsetAt(note.start + note.dur) - onsetAt(note.start)) : ticksToSec(note.dur, bpm, ticksPerQuarter);
     durRatio = expectedDurSec > 0 ? hit.durSec / expectedDurSec : null;
   }
   const cents = hit.cents != null ? hit.cents : null;
@@ -71,7 +86,7 @@ function missedNote(note) {
 // assigned event, which then counts for every note of that chord (one clap
 // covers a chord). Unclaimed events are extras. Order-free and pitch-free, so
 // one stray clap never shifts every later beat, and a missed beat is a miss.
-function judgeOnsets(chords, played, onsetAt, matches, extraList, bpm, ticksPerQuarter, policy) {
+function judgeOnsets(chords, played, onsetAt, matches, extraList, bpm, ticksPerQuarter, policy, clock) {
   const times = chords.map((c) => onsetAt(c[0].start));
   const best = times.map(() => -1);
   played.forEach((ev, i) => {
@@ -87,7 +102,7 @@ function judgeOnsets(chords, played, onsetAt, matches, extraList, bpm, ticksPerQ
   chords.forEach((chord, k) => chord.forEach((note) => {
     if (best[k] === -1) { matches.push(missedNote(note)); return; }
     const hit = played[best[k]];
-    const m = matchOneNote(note, hit, true, times[k], bpm, ticksPerQuarter);
+    const m = matchOneNote(note, hit, true, times[k], bpm, ticksPerQuarter, onsetAt, clock);
     m.pitchOk = hit.midi != null && judgePitch({ heardMidi: hit.midi, targetMidi: note.midi, policy }).ok;
     matches.push(m);
   }));
@@ -106,6 +121,11 @@ function judgeOnsets(chords, played, onsetAt, matches, extraList, bpm, ticksPerQ
 // starts passing them, and every existing field is computed exactly as before.
 // opts.originTick: the step's phrase origin (see phraseSec above); playedEvents'
 // atSec are seconds from that same origin. Defaults to 0 (song start).
+// opts.clock: a song clock (src/song/clock.js's createSongClock(song)); when
+// given, every expected onset and held-note duration is timed on the clock's
+// tempo profile (see phraseSec/matchOneNote above), so a phrase crossing a
+// tempoMap change is judged at the tempo in force at each tick, not at one
+// flat opts.bpm for the whole phrase. Omitted: the original flat-tempo path.
 // opts.onsetsOnly: true for the "rhythm" step kind (Clap the rhythm) --
 // pitch is ignored, so any pitch or an unpitched clap ({ midi: null }) counts;
 // each expected onset takes the played event nearest to it in time (see
@@ -130,14 +150,15 @@ export function judgeAttempt(expectedNotes, playedEvents, opts = {}) {
     velocityTolerance = 24,
     originTick = 0,
     onsetsOnly = false,
+    clock,
   } = opts;
   const notes = expectedNotes || [];
   const played = playedEvents || [];
   const matches = [];
   const extraList = [];
-  const onsetAt = (tick) => phraseSec(tick, originTick, bpm, ticksPerQuarter);
+  const onsetAt = (tick) => phraseSec(tick, originTick, bpm, ticksPerQuarter, clock);
   let cursor = 0;
-  if (onsetsOnly) judgeOnsets(groupIntoChords(notes), played, onsetAt, matches, extraList, bpm, ticksPerQuarter, policy);
+  if (onsetsOnly) judgeOnsets(groupIntoChords(notes), played, onsetAt, matches, extraList, bpm, ticksPerQuarter, policy, clock);
   for (const chord of onsetsOnly ? [] : groupIntoChords(notes)) {
     if (chord.length === 1) {
       // Single expected note at this tick: the original forward-only
@@ -155,7 +176,7 @@ export function judgeAttempt(expectedNotes, playedEvents, opts = {}) {
         matches.push(missedNote(note));
         continue;
       }
-      matches.push(matchOneNote(note, played[foundAt], timed, expectedAt, bpm, ticksPerQuarter));
+      matches.push(matchOneNote(note, played[foundAt], timed, expectedAt, bpm, ticksPerQuarter, onsetAt, clock));
       cursor = foundAt + 1;
       continue;
     }
@@ -196,7 +217,7 @@ export function judgeAttempt(expectedNotes, playedEvents, opts = {}) {
         continue;
       }
       usedIdx.add(foundIdx);
-      matches.push(matchOneNote(note, played[foundIdx], timed, expectedAt, bpm, ticksPerQuarter));
+      matches.push(matchOneNote(note, played[foundIdx], timed, expectedAt, bpm, ticksPerQuarter, onsetAt, clock));
     }
     // Anything struck inside the chord's window that no expected note
     // claimed is a wrong extra note, not a miss — it does not lower
