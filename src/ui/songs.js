@@ -65,6 +65,7 @@ import { t } from '../core/i18n.js';
 import { classifyAddFile, ADD_ACCEPT, ADD_HELP_LINE, UNSUPPORTED_MESSAGE } from './songs/add-source.js';
 import { createRecordDoor, transcribeAudioFile } from './songs/record-door.js';
 import { renderReview, makeHandoffs } from './songs/review.js';
+import { requestOpenInEditor } from './editor.js';
 import { sanitizeStatusLedger, markDraft, markChecked, statusFor, statusLabel } from './songs/song-status.js';
 import { layoutSong } from './editor/layout-song.js';
 import { drawPrimitives } from '../notation/draw-canvas.js';
@@ -807,18 +808,21 @@ function mountSongsPanel(hostEl, api) {
     songHeaderSection.innerHTML = '';
 
     // "Edit notes": a library song goes straight to the editor; a starter
-    // tune has no id of its own to edit in place, so it is saved as a copy
-    // first (same helper "Save a copy" uses) and THAT copy is opened --
-    // editing must never mutate the shipped starter tune itself.
+    // tune has no id of its own to edit in place, so its own id rides along
+    // under starterId instead (requestOpenInEditor) -- the editor panel
+    // (src/ui/editor.js's checkOpenRequest) resolves that through
+    // starterSongs itself and saves any edit as a brand new "My copy of…"
+    // entry, so editing never touches the shipped starter tune (P3-10;
+    // replaces the earlier "save a copy first" stop-gap).
     const editBtn = el('button', {
       type: 'button', class: 'panel-songs-action-edit', text: 'Edit notes',
-      onclick: async () => {
-        let targetId = libraryId;
-        if (!targetId) {
-          targetId = await saveCopyOf(song);
-          say('Saved a copy to edit.');
+      onclick: () => {
+        if (libraryId) {
+          addSongHandoffs.openEditorPanel(libraryId, []);
+        } else {
+          requestOpenInEditor(api, null, [], { starterId: song.id });
+          api.openPanel('editor');
         }
-        addSongHandoffs.openEditorPanel(targetId, []);
       },
     });
 

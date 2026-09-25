@@ -299,6 +299,18 @@ plain paper, black on white, with nothing else on the page. A teacher challenge'
 "Export as a challenge", "Share with your band" and any read-only band-pack part assignments live
 under their own **Assignments** heading below the song list, separate from a single open song's
 own actions.
+notes**, **Play along**, **Export**, **Share**, **Save a copy** — Edit notes opens *any* song,
+starter tunes included, straight in "Record a tune": saving a starter's edits makes "My copy of
+&lt;title&gt;" in your own songs, never touching the shipped starter itself. Leaving the editor —
+for Settings, the instrument sheet or Songs — and coming back keeps whatever was unsaved; a plain
+status line reads "Not saved yet" until you press Save, then "Saved". Once something is saved,
+**Practise this** and **Back to songs** appear, and the song's own status in Songs updates right
+away (**Checked** once no check items are left). Export reveals the
+MIDI/MusicXML/ABC download buttons only once pressed (they no longer sit on every song row), and
+Share downloads a `.bandpack` of that one song alone. A teacher challenge's title field, "Export
+as a challenge", "Share with your band" and any read-only band-pack part assignments live under
+their own **Assignments** heading below the song list, separate from a single open song's own
+actions.
 
 The Songs panel (`src/ui/songs.js`) turns a whole tune — built in, or imported from a `.mid`,
 `.midi`, `.abc`, `.xml`, `.musicxml`, compressed `.mxl`, Guitar Pro `.gp`, Guitar Pro 5 `.gp5`, or a
