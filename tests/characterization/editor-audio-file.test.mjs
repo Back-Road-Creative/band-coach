@@ -1,9 +1,11 @@
-// "Record a tune" panel (src/ui/editor.js): choosing an audio file instead
-// of using the microphone. Drives the built page exactly as a learner would
-// — a real file picked via the OS file dialog (simulated with CDP's
-// DOM.setFileInputFiles — see tests/helpers/browser.mjs's setFileInput) —
-// through the same transcribe() -> loadTranscription() path Listen/Stop
-// uses, landing in the same mandatory "check these" step.
+// Choosing an audio file to add a song. Drives the built page exactly as a
+// learner would — a real file picked via the OS file dialog (simulated with
+// CDP's DOM.setFileInputFiles — see tests/helpers/browser.mjs's
+// setFileInput) — landing on the review screen, then "Edit notes"
+// (src/ui/editor.js) for the same mandatory "check these" step.
+// P3-12: this file input moved from "Record a tune" itself to Songs -> Add
+// a song (src/ui/songs/record-door.js's transcribeAudioFile) -- every
+// assertion below still holds, just reached through the new door.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
@@ -51,9 +53,16 @@ function twoToneWav(path) {
   return writeWav(path, pcm, sr);
 }
 
-async function openEditor(page) {
-  await page.evaluate("window.__coach.openPanel('editor')");
-  await page.waitFor("window.__coach.panelOpen() === 'editor'");
+// P3-12: the file input lives in Songs -> Add a song now, not "Record a
+// tune" -- open the section the same way tests/characterization/songs-add-
+// a-song.test.mjs's own openAddSongSection does.
+async function openAddSongSection(page) {
+  await page.evaluate("window.__coach.openPanel('songs')");
+  await page.waitFor("document.querySelector('.add-song-row')");
+  await page.evaluate(
+    "Array.from(document.querySelectorAll('.add-song-row button')).find(b => b.textContent.trim() === 'Add a song').click()",
+  );
+  await page.waitFor("!!document.getElementById('songsFileInput')");
 }
 
 test('choosing an audio file transcribes it through the same check-list path as the mic', async (t) => {
@@ -63,12 +72,18 @@ test('choosing an audio file transcribes it through the same check-list path as 
 
   const page = await launchPage(HTML_PATH);
   t.after(() => page.close());
-  await openEditor(page);
+  await openAddSongSection(page);
 
-  assert.equal(await page.evaluate("!!document.getElementById('editorFileInput')"), true, 'a file input is offered alongside Listen');
+  assert.equal(await page.evaluate("!!document.getElementById('songsFileInput')"), true, 'a file input is offered alongside Record');
 
-  await page.setFileInput('#editorFileInput', wavPath);
-  await page.waitFor("document.getElementById('editorCheck').hidden === false", 20000);
+  await page.setFileInput('#songsFileInput', wavPath);
+  await page.waitFor("document.querySelector('.panel-learn-result').hidden === false", 20000);
+  await page.evaluate("document.querySelector('.panel-learn-fixitup-btn').click()");
+  await page.waitFor("window.__coach.panelOpen() === 'editor'");
+  // loadSong() (src/ui/editor.js) sets the title synchronously once the
+  // song actually lands, past checkOpenRequest's own await -- the same wait
+  // precedent tests/characterization/learn-handoffs.test.mjs already uses.
+  await page.waitFor("document.getElementById('editorTitle') && document.getElementById('editorTitle').value === 'two-notes'", 10000);
 
   assert.deepEqual(page.exceptions, [], 'no uncaught exceptions while decoding and transcribing a file');
   const notes = await page.evaluate('window.__coach.editorSong().parts[0].notes.map(n => Math.round(n.midi))');
@@ -84,11 +99,14 @@ test('an unreadable file shows a plain-words message instead of a dead end', asy
 
   const page = await launchPage(HTML_PATH);
   t.after(() => page.close());
-  await openEditor(page);
+  await openAddSongSection(page);
 
-  await page.setFileInput('#editorFileInput', badPath);
-  await page.waitFor("document.querySelector('.editor-say').textContent.length > 0", 20000);
+  await page.setFileInput('#songsFileInput', badPath);
+  // P3-12: the message now lands on Songs' own status line (src/ui/songs.js's
+  // say(), .panel-songs-msg) instead of the editor's -- Add a song's file
+  // door is the one place a bad file is reported now.
+  await page.waitFor("document.querySelector('.panel-songs-msg').textContent.length > 0", 20000);
 
-  const message = await page.evaluate("document.querySelector('.editor-say').textContent");
+  const message = await page.evaluate("document.querySelector('.panel-songs-msg').textContent");
   assert.match(message, /could not/i);
 });

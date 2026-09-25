@@ -1,15 +1,13 @@
-// "Record a tune" panel: Listen/Stop capture -> transcribe() (src/song/
-// transcribe.js) -> a mandatory "check these" step -> edit with the ops in
-// src/song/edit.js, drawn with the notation engine (src/notation/) and
-// hit-tested with hitTest -> play back with api.tone -> save to the shared
-// song library (src/song/library.js).
+// "Record a tune" panel: edits a transcribed or already-saved song with the
+// ops in src/song/edit.js, drawn with the notation engine (src/notation/)
+// and hit-tested with hitTest -> play back with api.tone -> save to the
+// shared song library (src/song/library.js). P3-12: recording and file
+// import (transcribe(), src/song/transcribe.js) moved to Songs -> Add a
+// song (src/ui/songs/record-door.js) -- this panel only ever receives an
+// already-transcribed Song, via loadSong()/checkOpenRequest() below.
 //
 // Registered as panel "editor" per the Wave-W contract (src/ui/panels.js):
 // `register(panels)` calls `panels.register({ id, name, tag, color, mount })`.
-import { transcribe } from '../song/transcribe.js';
-import { framesFromPCM } from '../audio/file-frames.js';
-import { mixToMono } from './playalong/audio-prep.js';
-import { rangeForInstrument } from '../audio/range.js';
 import {
   moveNote,
   repitch,
@@ -30,7 +28,6 @@ import {
 import { validateSong, ticksToSeconds } from '../song/model.js';
 import { createLibrary, indexedDbStore, memoryStore } from '../song/library.js';
 import { drawPrimitives } from '../notation/draw-canvas.js';
-import { createRecorder } from './editor/record.js';
 import { layoutSong } from './editor/layout-song.js';
 import { stashWorking, restoreWorking } from './editor/working-copy.js';
 import { starterSongs } from '../song/starter/index.js';
@@ -134,30 +131,14 @@ function el(tag, attrs = {}, children = []) {
   return node;
 }
 
-// Test-only escape hatch (wired to window.__coach.editorSetFrames by the
-// app.js debug hook, compiled out of the release build with everything else
-// __DEBUG_HOOK__ gates): lets a browser test hand Stop a fixed, known set of
-// raw pitch frames instead of whatever a fake microphone device produced, so
-// transcribe()'s output is deterministic to assert on.
-let debugFrames = null;
-export function __setDebugFrames(frames) {
-  debugFrames = frames;
-}
-
-// Same escape hatch, for reading the current Song back out in a test
+// Test-only escape hatch, for reading the current Song back out in a test
 // (wired to window.__coach.editorSong). Only one editor panel is ever
-// mounted, so a module-level pointer is enough.
+// mounted, so a module-level pointer is enough. P3-12: the recording debug
+// seams (__setDebugFrames/__isRecording) moved to src/ui/songs/record-
+// door.js, the only place a learner records now.
 let debugSong = null;
 export function __getDebugSong() {
   return debugSong;
-}
-
-// True once recorder.start()'s openMic() has actually resolved and the
-// sampling timer is running -- lets a test wait past that async gap instead
-// of racing Stop against Listen's own in-flight await.
-let debugRecorder = null;
-export function __isRecording() {
-  return !!(debugRecorder && debugRecorder.listening);
 }
 
 export function register(panels) {
@@ -173,8 +154,6 @@ export function register(panels) {
 }
 
 function mountEditor(hostEl, api) {
-  const recorder = createRecorder(api);
-  debugRecorder = recorder;
   let song = null;
   let history = null;
   let report = null;
@@ -183,11 +162,12 @@ function mountEditor(hostEl, api) {
   let hitboxes = [];
   let library = null;
   let playing = false;
-  // The id this panel loaded the current song under (loadSong sets it,
-  // loadTranscription clears it), or null for a fresh transcription that
-  // has never been saved. Read by saveSong via chooseSaveTarget to decide
-  // whether "Save to my songs" corrects that song in place or creates a
-  // new one -- see chooseSaveTarget's own comment for why.
+  // The id this panel loaded the current song under (loadSong sets it), or
+  // null for a starter tune, which checkOpenRequest() below deliberately
+  // resets to null (never the starter's own id). Read by saveSong via
+  // chooseSaveTarget to decide whether "Save to my songs" corrects that song
+  // in place or creates a new one -- see chooseSaveTarget's own comment for
+  // why.
   let loadedId = null;
 
   // ---- library (lazy: IndexedDB in the real app, memory when it throws) ---
@@ -211,15 +191,11 @@ function mountEditor(hostEl, api) {
     // this is safe even though it is wired up before that point textually.
     oninput: () => markDirty(),
   });
-  const listenBtn = el('button', { type: 'button', id: 'editorListenBtn', text: 'Listen' });
+  // P3-12: recording and file import moved to Songs -> Add a song
+  // (src/ui/songs/record-door.js) -- this status line stays, for loadSong()/
+  // checkOpenRequest()/applyRestoredWorking() below, which all still report
+  // through it once a song lands here already transcribed.
   const recordStatus = el('span', { class: 'editor-status', 'aria-live': 'polite' });
-  const fileInput = el('input', { type: 'file', id: 'editorFileInput', accept: 'audio/*' });
-  // Off by default: multipitch detection (src/song/transcribe.js's
-  // opts.polyphonic) costs real accuracy on a single clean melody line, so a
-  // learner recording just one instrument should get the plain monophonic
-  // path unless they ask for more. Read only from the file-import path — the
-  // live-mic Listen/Stop path is unchanged.
-  const polyphonicCheckbox = el('input', { type: 'checkbox', id: 'editorPolyphonic' });
 
   const checkBox = el('div', { class: 'editor-check', id: 'editorCheck', hidden: 'hidden' });
   const checkList = el('ul');
@@ -333,11 +309,9 @@ function mountEditor(hostEl, api) {
   const heading = el('h2', { text: 'Record a tune', tabindex: '-1' });
   const root = el('div', { class: 'panel-editor' }, [
     heading,
-    el('p', { text: 'Press Listen, play or sing your tune, then press Stop. It will write down what it heard so you can fix it up and practise it.' }),
+    el('p', { text: 'Fix up the notes, then save. To record or open a file, use Add a song in Songs.' }),
     el('div', { class: 'editor-record' }, [
-      el('label', { for: 'editorTitle', text: 'Title' }), titleInput, listenBtn, recordStatus,
-      el('label', { for: 'editorFileInput', text: 'Or choose an audio file' }), fileInput,
-      el('label', { for: 'editorPolyphonic', text: 'More than one note at a time' }), polyphonicCheckbox,
+      el('label', { for: 'editorTitle', text: 'Title' }), titleInput, recordStatus,
     ]),
     checkBox,
     toolbar,
@@ -348,79 +322,6 @@ function mountEditor(hostEl, api) {
   ]);
   hostEl.appendChild(root);
   setControlsEnabled(false);
-
-  // ---- recording -----------------------------------------------------
-  listenBtn.addEventListener('click', async () => {
-    if (recorder.listening) {
-      const captured = recorder.stop();
-      const frames = debugFrames !== null ? debugFrames : captured;
-      debugFrames = null;
-      listenBtn.textContent = 'Listen';
-      recordStatus.textContent = 'Working it out…';
-      // Disabled across the yield below so a click landing in this gap can't
-      // race Stop's own transcribe() -- the button re-enables once
-      // loadTranscription has run. One task yield (not e.g. a promise
-      // microtask) so the browser actually paints "Working it out…" before
-      // transcribe() -- synchronous CPU work -- runs; without it the status
-      // text is overwritten by loadTranscription() in the very same task and
-      // a learner never sees it (src/ui/editor.js's own setTimeout(...,
-      // duration) pattern below is the precedent this borrows).
-      listenBtn.disabled = true;
-      await new Promise((resolve) => setTimeout(resolve, 0));
-      const result = transcribe(frames, { title: titleInput.value || 'My recording' });
-      loadTranscription(result);
-      listenBtn.disabled = false;
-      return;
-    }
-    // Disabled synchronously, before the await, so a second tap while
-    // openMic() is still pending can't reach recorder.start() at all --
-    // mirrors src/ui/playalong.js's startRecordingCapture(), which disables
-    // its own record button the same way before opening the mic.
-    listenBtn.disabled = true;
-    try {
-      listenBtn.textContent = 'Stop';
-      recordStatus.textContent = 'Listening…';
-      await recorder.start();
-      listenBtn.disabled = false;
-    } catch (e) {
-      api.recordError('editor:listen', e);
-      listenBtn.textContent = 'Listen';
-      recordStatus.textContent = '';
-      listenBtn.disabled = false;
-      tell('The microphone could not be opened.', 'no');
-    }
-  });
-
-  // ---- transcribing from a chosen audio file (instead of the microphone) --
-  // Same destination as Listen/Stop: decode the file to mono PCM (mirroring
-  // src/ui/playalong.js's loadFile), walk it with framesFromPCM
-  // (src/audio/file-frames.js) into the same frame/onset shape the mic
-  // produces, then hand it to the same transcribe() -> loadTranscription()
-  // path so a file-picked tune lands in the same mandatory check-list step.
-  fileInput.addEventListener('change', async () => {
-    const file = fileInput.files && fileInput.files[0];
-    if (!file) return;
-    try {
-      recordStatus.textContent = 'Working it out…';
-      const actx = api.audio();
-      if (!actx) throw new Error('audio is not available');
-      const audioBuffer = await actx.decodeAudioData(await file.arrayBuffer());
-      const channels = [];
-      for (let c = 0; c < audioBuffer.numberOfChannels; c++) channels.push(audioBuffer.getChannelData(c));
-      const pcm = mixToMono(channels);
-      const { fmin, fmax } = rangeForInstrument(typeof api.instrument === 'function' ? api.instrument() : null);
-      const { frames, onsets } = framesFromPCM(pcm, audioBuffer.sampleRate, { fmin, fmax });
-      const polyphonic = polyphonicCheckbox.checked ? { pcm, sampleRate: audioBuffer.sampleRate } : undefined;
-      const result = transcribe(frames, { title: titleInput.value || 'My recording', onsets, polyphonic });
-      loadTranscription(result);
-    } catch (e) {
-      api.recordError('editor:file', e);
-      recordStatus.textContent = '';
-      tell('That file could not be read as audio. Try a different file, such as a .wav or .mp3.', 'no');
-    } finally {
-      fileInput.value = '';
-    }
-  });
 
   // A song handed over already-built (src/ui/learn.js's "Fix it up"), rather
   // than one just transcribed here. It was already validated by whoever
@@ -474,23 +375,6 @@ function mountEditor(hostEl, api) {
     const loaded = await getLibrary().get(req.songId);
     if (!loaded) return;
     loadSong(loaded, req.needsCheck);
-  }
-
-  function loadTranscription(result) {
-    song = result.song;
-    debugSong = song;
-    loadedId = null;
-    report = result.report;
-    history = createHistory(song);
-    selected = null;
-    activePartIndex = 0;
-    acknowledged = false;
-    renderCheckList();
-    recordStatus.textContent = 'Captured ' + report.notesCaptured + ' notes.';
-    setControlsEnabled(false);
-    markDirty();
-    hidePostSaveButtons();
-    render();
   }
 
   function renderCheckList() {
@@ -784,10 +668,6 @@ function mountEditor(hostEl, api) {
       heading.focus();
     },
     hide() {
-      if (recorder.listening) {
-        recorder.stop();
-        listenBtn.textContent = 'Listen';
-      }
       // The title box is read only at save time (saveSong builds `named`
       // from it), never synced back onto `song.title` live -- stash the
       // EDITED title here, or a title changed but never saved would be

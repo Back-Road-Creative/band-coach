@@ -1,8 +1,11 @@
-// "Record a tune" panel (src/ui/editor.js): the "More than one note at a
-// time" checkbox next to the file-import picker. Off (the default), file
-// import behaves exactly as tests/characterization/editor-audio-file.test.mjs
-// already proves; on, a two-voice recording comes back as two parts, each
-// shown as its own labelled lane in the notation.
+// The "More than one note at a time" checkbox next to Songs' Add-a-song file
+// picker. Off (the default), file import behaves exactly as
+// tests/characterization/editor-audio-file.test.mjs already proves; on, a
+// two-voice recording comes back as two parts, each shown as its own
+// labelled lane in the notation once opened for editing.
+// P3-12: moved here from "Record a tune" (src/ui/editor.js) alongside the
+// file input itself -- every assertion still holds, reached through Add a
+// song then "Edit notes".
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
@@ -55,18 +58,22 @@ function twoVoiceWav(path) {
   return writeWav(path, pcm, sr);
 }
 
-async function openEditor(page) {
-  await page.evaluate("window.__coach.openPanel('editor')");
-  await page.waitFor("window.__coach.panelOpen() === 'editor'");
+async function openAddSongSection(page) {
+  await page.evaluate("window.__coach.openPanel('songs')");
+  await page.waitFor("document.querySelector('.add-song-row')");
+  await page.evaluate(
+    "Array.from(document.querySelectorAll('.add-song-row button')).find(b => b.textContent.trim() === 'Add a song').click()",
+  );
+  await page.waitFor("!!document.getElementById('songsFileInput')");
 }
 
 test('the "More than one note at a time" checkbox is off by default and offered next to the file input', async (t) => {
   const page = await launchPage(HTML_PATH);
   t.after(() => page.close());
-  await openEditor(page);
+  await openAddSongSection(page);
 
-  assert.equal(await page.evaluate("!!document.getElementById('editorPolyphonic')"), true, 'the checkbox exists');
-  assert.equal(await page.evaluate("document.getElementById('editorPolyphonic').checked"), false, 'off by default');
+  assert.equal(await page.evaluate("!!document.getElementById('songsPolyphonic')"), true, 'the checkbox exists');
+  assert.equal(await page.evaluate("document.getElementById('songsPolyphonic').checked"), false, 'off by default');
 });
 
 test('checking it before choosing a two-voice file shows two labelled lanes', async (t) => {
@@ -76,11 +83,14 @@ test('checking it before choosing a two-voice file shows two labelled lanes', as
 
   const page = await launchPage(HTML_PATH);
   t.after(() => page.close());
-  await openEditor(page);
+  await openAddSongSection(page);
 
-  await page.evaluate("document.getElementById('editorPolyphonic').checked = true");
-  await page.setFileInput('#editorFileInput', wavPath);
-  await page.waitFor("document.getElementById('editorCheck').hidden === false", 20000);
+  await page.evaluate("document.getElementById('songsPolyphonic').checked = true");
+  await page.setFileInput('#songsFileInput', wavPath);
+  await page.waitFor("document.querySelector('.panel-learn-result').hidden === false", 20000);
+  await page.evaluate("document.querySelector('.panel-learn-fixitup-btn').click()");
+  await page.waitFor("window.__coach.panelOpen() === 'editor'");
+  await page.waitFor("document.getElementById('editorCheck').hidden === false");
 
   assert.deepEqual(page.exceptions, [], 'no uncaught exceptions transcribing a two-voice file');
 
@@ -110,10 +120,15 @@ test('leaving the checkbox unchecked still transcribes a file as one part, uncha
 
   const page = await launchPage(HTML_PATH);
   t.after(() => page.close());
-  await openEditor(page);
+  await openAddSongSection(page);
 
-  await page.setFileInput('#editorFileInput', wavPath);
-  await page.waitFor("document.getElementById('editorCheck').hidden === false", 20000);
+  await page.setFileInput('#songsFileInput', wavPath);
+  await page.waitFor("document.querySelector('.panel-learn-result').hidden === false", 20000);
+  await page.evaluate("document.querySelector('.panel-learn-fixitup-btn').click()");
+  await page.waitFor("window.__coach.panelOpen() === 'editor'");
+  // loadSong() (src/ui/editor.js) sets the title synchronously once the
+  // song actually lands, past checkOpenRequest's own await.
+  await page.waitFor("document.getElementById('editorTitle') && document.getElementById('editorTitle').value === 'two-voices'", 10000);
 
   const partCount = await page.evaluate('window.__coach.editorSong().parts.length');
   assert.equal(partCount, 1, 'unchecked checkbox means the plain monophonic path, one part');

@@ -299,6 +299,26 @@ test('a draft says the original recording is not kept', async (t) => {
   assert.match(statusText, /not kept/);
 });
 
+// P3-12: recording (mic and file) moves out of Edit notes entirely -- it
+// happens only in Add a song now, so Edit notes carries no record controls
+// of its own.
+test('Edit notes has no Listen button; Add a song records instead', async (t) => {
+  const page = await launchPage(htmlPath);
+  t.after(() => page.close());
+
+  await page.evaluate("window.__coach.openPanel('editor')");
+  await page.waitFor("window.__coach.panelOpen() === 'editor'");
+  assert.equal(await page.evaluate("!!document.getElementById('editorListenBtn')"), false, 'Edit notes has no Listen button');
+  assert.equal(await page.evaluate("!!document.getElementById('editorFileInput')"), false, 'Edit notes has no file input');
+  assert.equal(await page.evaluate("!!document.getElementById('editorPolyphonic')"), false, 'Edit notes has no polyphonic checkbox');
+
+  await openAddSongSection(page);
+  await page.waitFor("!!document.querySelector('.panel-songs-record-btn')");
+  assert.equal(await page.evaluate("!!document.querySelector('.panel-songs-record-btn')"), true, 'Add a song offers Record');
+  assert.equal(await page.evaluate("!!document.getElementById('songsFileInput')"), true, 'Add a song offers a file input');
+  assert.equal(await page.evaluate("!!document.getElementById('songsPolyphonic')"), true, 'Add a song offers the polyphonic checkbox');
+});
+
 // P3-6: the separate Learn this screen is retired -- Songs -> Add a song
 // (P3-4) is the one place to add a song, so the panel registry no longer
 // carries a 'learn' entry, and the Record a tune / Play Along tip buttons
