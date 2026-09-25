@@ -72,7 +72,7 @@ import { layoutSong } from './editor/layout-song.js';
 import { drawPrimitives } from '../notation/draw-canvas.js';
 import { instrumentSetup } from './fingerings/setup.js';
 import { arrangeFor, songForArrangement } from '../song/arrange/index.js';
-import { staffView, renderStepView } from './songs/step-view.js';
+import { staffView, renderStepView, tabView, fingeringLine } from './songs/step-view.js';
 
 // P3-9 Print: the same pitch-class-to-key-name tables editor.js keeps (not exported there) --
 // see songHeader()'s Print button below for the one place this file needs a key name.
@@ -1176,6 +1176,16 @@ function mountSongsPanel(hostEl, api) {
     // never reaches here; a chained/whole step with real notes always has
     // step.bars).
     if (step.notes.length) renderStepView(practiceSection, staffView(practice.song, step, practice.instrument, practice.arrangement));
+    // Tab / fingering row (P4-9): the SAME arrangement as arrangementLine
+    // above, so a capo/tuning caption and a tab diagram never disagree --
+    // fretted gets a drawn tab, bowed/keys/harmonica get a one-line caption,
+    // everything else (wind/brass/percussion/voice) has nothing more to add.
+    if (step.notes.length && practice.arrangement.family === 'fretted') {
+      renderStepView(practiceSection, tabView(step, practice.arrangement, practice.instrument, practice.plan.fit.notes));
+    } else if (step.notes.length) {
+      const fingering = fingeringLine(step, practice.arrangement, practice.instrument, practice.plan.fit.notes);
+      if (fingering) practiceSection.appendChild(el('p', { class: 'panel-songs-fingering', text: fingering.text }));
+    }
     practiceSection.appendChild(el('p', { text: stepHint(step) }));
     // A phrase whose own span crosses a tempoMap change (practice.clock's
     // changesBetween, src/song/clock.js) is told so before the learner plays
