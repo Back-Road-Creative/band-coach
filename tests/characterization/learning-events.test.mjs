@@ -95,6 +95,32 @@ test('a malformed events row saved in localStorage is dropped on load, not throw
   assert.deepEqual(page.exceptions, []);
 });
 
+test('a long saved history is trimmed on load but keeps the oldest proof of a skill', async (t) => {
+  const rows = [];
+  rows.push({
+    v: 1, id: 'first', at: 1, instrument: 'kbd', skill: 'n60', source: 'drill',
+    assistance: 'none', dims: { pitch: 'ok' }, unassessed: [], activeMs: 100,
+  });
+  for (let i = 0; i < 699; i++) {
+    rows.push({
+      v: 1, id: 'm' + i, at: i + 2, instrument: 'kbd', skill: 'n62', source: 'drill',
+      assistance: 'none', dims: { pitch: 'miss' }, unassessed: [], activeMs: 100,
+    });
+  }
+  const page = await launchPage(htmlPath, {
+    initScript: `
+      const KEY = 'bandcoach.v1';
+      localStorage.setItem(KEY, JSON.stringify({ v: 1, mods: {}, sessions: [], events: ${JSON.stringify(rows)}, prefs: { mod: 'kbd' } }));
+    `,
+  });
+  t.after(() => page.close());
+  await page.waitFor('window.__coach && window.__coach.db()');
+  const events = await page.evaluate('window.__coach.db().events');
+  assert.equal(events.length, 501);
+  assert.equal(events[0].skill, 'n60');
+  assert.deepEqual(page.exceptions, []);
+});
+
 function challengeJson() {
   return JSON.stringify({
     schema: 'challenge/1',

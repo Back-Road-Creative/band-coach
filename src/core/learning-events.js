@@ -95,6 +95,19 @@ export const RETAIN_GAP_MS = 20 * 3600 * 1000;
 // gets counted, never what counts as "earlier"), and events are walked in
 // `at` order regardless of array order -- a copy is sorted, the caller's
 // array is never touched.
+// isIndependentOk(ev): no assistance, and every dimension this event DID
+// assess came back 'ok' (an unassessed dimension does not count against it,
+// and an event that assessed nothing is not evidence of anything). This is
+// the same test summarizeEvents uses internally, pulled out because
+// boundEvents (below) needs it too, to find the rows worth keeping as
+// anchors past the plain size cut.
+export function isIndependentOk(ev) {
+  const withHelp = !!(ev.assistance && ev.assistance !== 'none');
+  const dims = ev.dims || {};
+  const assessed = Object.keys(dims).filter((k) => dims[k] !== 'unassessed');
+  return !withHelp && assessed.length > 0 && assessed.every((k) => dims[k] === 'ok');
+}
+
 export function summarizeEvents(events, { instrument, skill, retainGapMs } = {}) {
   const gapMs = isFiniteNumber(retainGapMs) ? retainGapMs : RETAIN_GAP_MS;
   const out = { introduced: 0, withHelp: 0, independent: 0, retained: 0, applied: 0 };
@@ -106,9 +119,7 @@ export function summarizeEvents(events, { instrument, skill, retainGapMs } = {})
     if (!g) { g = { earliestOkAt: null, earliestNonSongOkAt: null }; groups.set(key, g); }
     const matches = (instrument === undefined || ev.instrument === instrument) && (skill === undefined || ev.skill === skill);
     const withHelp = !!(ev.assistance && ev.assistance !== 'none');
-    const dims = ev.dims || {};
-    const assessed = Object.keys(dims).filter((k) => dims[k] !== 'unassessed');
-    const independentOk = !withHelp && assessed.length > 0 && assessed.every((k) => dims[k] === 'ok');
+    const independentOk = isIndependentOk(ev);
     if (matches) {
       if (withHelp) out.withHelp++;
       else if (independentOk) {
@@ -124,4 +135,96 @@ export function summarizeEvents(events, { instrument, skill, retainGapMs } = {})
     }
   });
   return out;
+}
+
+// EVENT_HISTORY_MAX: today's flat cap on DB.events (app.js used to
+// `slice(-500)` in two places -- on load and on every append). At roughly
+// 300 bytes/row (a typical drill row with a handful of dims) that alone is
+// about 150 KB, well under localStorage's usual several-MB budget.
+export const EVENT_HISTORY_MAX = 500;
+
+// EVENT_ANCHOR_MAX: the most "anchor" rows (see boundEvents below) kept on
+// top of the window. 200 covers far more distinct instrument|skill pairs
+// than a beginner curriculum activates; only a learner who has played over
+// 200 distinct skills, none of them in the last 500 rows, would ever lose
+// the oldest anchor. Worst case size: 500 window rows + 200 anchor rows =
+// 700 rows, about 210 KB at ~300 bytes/row -- still far below what
+// localStorage allows.
+export const EVENT_ANCHOR_MAX = 200;
+
+// boundEvents(events, { max, anchorMax }) -> a NEW array, capped at `max`
+// plus a handful of "anchor" rows. A flat `slice(-max)` (what app.js used to
+// do) throws away exactly the rows summarizeEvents needs most: the FIRST
+// time a skill was played independently-ok, and the first time that
+// happened outside a song. Those two rows are what `retained` and `applied`
+// (above) compare every later attempt against -- lose them and a skill that
+// really was retained over weeks quietly stops counting as retained, only
+// because the learner practised a lot in between.
+//
+// So boundEvents keeps the newest `max` rows exactly as `slice(-max)` did,
+// then walks the OLDER, dropped rows and keeps, per instrument|skill group,
+// its earliest independent-ok row and its earliest non-song independent-ok
+// row -- but only when the window does not already hold an equal-or-earlier
+// row of that same kind for that group (no point keeping a stale anchor the
+// window already proves). When the same dropped row is the earliest for
+// both kinds, it is kept once. If more anchors than `anchorMax` survive,
+// only the ones with the latest `at` are kept, so a learner who has played
+// far more than 200 distinct skills loses the oldest evidence first, not at
+// random. The result never mutates its input: anchors first (in their
+// original order), then the window.
+export function boundEvents(events, { max = EVENT_HISTORY_MAX, anchorMax = EVENT_ANCHOR_MAX } = {}) {
+  const list = Array.isArray(events) ? events : [];
+  const window = list.slice(-max);
+  const dropped = list.slice(0, Math.max(0, list.length - max));
+  if (dropped.length === 0) return window;
+
+  const groupKey = (ev) => ev.instrument + '\u0001' + ev.skill;
+  const isSongSourced = (ev) => ev.source === 'song' || !!ev.songId;
+
+  const windowOkAt = new Map(); // group -> earliest `at` of an independent-ok row already in the window
+  const windowNonSongOkAt = new Map();
+  window.forEach((ev) => {
+    if (!isIndependentOk(ev)) return;
+    const key = groupKey(ev);
+    if (!windowOkAt.has(key) || ev.at < windowOkAt.get(key)) windowOkAt.set(key, ev.at);
+    if (!isSongSourced(ev) && (!windowNonSongOkAt.has(key) || ev.at < windowNonSongOkAt.get(key))) windowNonSongOkAt.set(key, ev.at);
+  });
+
+  const droppedEarliestOk = new Map(); // group -> the earliest independent-ok row among the dropped rows
+  const droppedEarliestNonSongOk = new Map();
+  dropped.forEach((ev) => {
+    if (!isIndependentOk(ev)) return;
+    const key = groupKey(ev);
+    const curOk = droppedEarliestOk.get(key);
+    if (!curOk || ev.at < curOk.at) droppedEarliestOk.set(key, ev);
+    if (!isSongSourced(ev)) {
+      const curNonSong = droppedEarliestNonSongOk.get(key);
+      if (!curNonSong || ev.at < curNonSong.at) droppedEarliestNonSongOk.set(key, ev);
+    }
+  });
+
+  const anchorSeen = new Set();
+  const anchors = [];
+  const considerAnchor = (row) => { if (row && !anchorSeen.has(row)) { anchorSeen.add(row); anchors.push(row); } };
+  droppedEarliestOk.forEach((row, key) => {
+    const coveredByWindow = windowOkAt.has(key) && windowOkAt.get(key) <= row.at;
+    if (!coveredByWindow) considerAnchor(row);
+  });
+  droppedEarliestNonSongOk.forEach((row, key) => {
+    const coveredByWindow = windowNonSongOkAt.has(key) && windowNonSongOkAt.get(key) <= row.at;
+    if (!coveredByWindow) considerAnchor(row);
+  });
+
+  const originalIndex = new Map();
+  dropped.forEach((ev, i) => originalIndex.set(ev, i));
+  anchors.sort((a, b) => originalIndex.get(a) - originalIndex.get(b));
+
+  let kept = anchors;
+  if (kept.length > anchorMax) {
+    const latestFirst = kept.slice().sort((a, b) => b.at - a.at).slice(0, anchorMax);
+    const keepSet = new Set(latestFirst);
+    kept = kept.filter((row) => keepSet.has(row));
+  }
+
+  return kept.concat(window);
 }

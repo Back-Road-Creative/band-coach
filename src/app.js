@@ -29,7 +29,7 @@ import { stepTuner } from './core/tuner.js';
 //
 import { shouldReveal, promptFor, hintFor as coreHintFor } from './core/reveal.js';
 import { gradeOutcome } from './core/grade-outcome.js';
-import { makeEvent, validateEvent } from './core/learning-events.js';
+import { makeEvent, validateEvent, boundEvents } from './core/learning-events.js';
 import { planSession, describePlan, nextPlanStep } from './core/curriculum.js';
 //
 import * as RHY from './core/rhythm.js';
@@ -919,7 +919,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
     // the SAME validateEvent() a writer runs before push -- a corrupt or
     // hand-edited row is dropped here, never thrown, exactly like an
     // invalid DB.sessions row above is filtered rather than crashing load.
-    if (Array.isArray(v.events)) d.events = v.events.filter(x => validateEvent(x).ok).slice(-500);
+    if (Array.isArray(v.events)) d.events = boundEvents(v.events.filter(x => validateEvent(x).ok));
     const p = v.prefs || {}; if (MODS[p.mod]) d.prefs.mod = p.mod; if (WIND_KINDS[p.wind]) d.prefs.wind = p.wind; d.prefs.voiceRange = (p.voiceRange && typeof p.voiceRange === 'object' && Number.isFinite(p.voiceRange.low) && Number.isFinite(p.voiceRange.high) && p.voiceRange.low < p.voiceRange.high) ? { low: clamp(Math.round(p.voiceRange.low), 24, 96), high: clamp(Math.round(p.voiceRange.high), 24, 96) } : null; const VKp = Object.assign({}, VOICE_KINDS, d.prefs.voiceRange ? { mine: ['My range (found by test)', tonicFromRange(exerciseRangeFor(d.prefs.voiceRange)).tonic] } : {}); if (VKp[p.voice]) d.prefs.voice = p.voice; d.prefs.names = p.names !== false;
     d.prefs.noiseFloor = (typeof p.noiseFloor === 'number' && isFinite(p.noiseFloor) && p.noiseFloor >= 0) ? clamp(p.noiseFloor, 0, 1) : null;
     d.prefs.inputDeviceId = typeof p.inputDeviceId === 'string' && p.inputDeviceId ? p.inputDeviceId : null;
@@ -1865,7 +1865,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
   // DB.sessions row -- a caller bug must never crash a practice session.
   function logEvent(ev) {
     const check = validateEvent(ev); if (!check.ok) { recordError('logEvent', new Error('dropped invalid event -- ' + check.errors.join('; '))); return; }
-    DB.events.push(ev); DB.events = DB.events.slice(-500); save();
+    DB.events.push(ev); DB.events = boundEvents(DB.events); save();
   }
   function endSession() {
     if (!sess) return; const min = sess.active / 60; let line = 'Session ended. Too short to log.';

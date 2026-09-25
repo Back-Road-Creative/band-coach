@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { EVENT_VERSION, RETAIN_GAP_MS, makeEvent, validateEvent, summarizeEvents } from '../../src/core/learning-events.js';
+import { EVENT_VERSION, RETAIN_GAP_MS, EVENT_HISTORY_MAX, EVENT_ANCHOR_MAX, makeEvent, validateEvent, summarizeEvents, isIndependentOk, boundEvents } from '../../src/core/learning-events.js';
 
 // ---------- makeEvent ----------
 
@@ -174,4 +174,77 @@ test('summarizeEvents: filtering by instrument and skill still applies to retain
   assert.equal(s.independent, 2);
   assert.equal(s.retained, 1);
   assert.equal(s.applied, 1);
+});
+
+// ---------- isIndependentOk / boundEvents (P5-3c) ----------
+
+test('EVENT_HISTORY_MAX and EVENT_ANCHOR_MAX are the documented caps', () => {
+  assert.equal(EVENT_HISTORY_MAX, 500);
+  assert.equal(EVENT_ANCHOR_MAX, 200);
+});
+
+test('isIndependentOk ignores unassessed dimensions and rejects any help', () => {
+  assert.equal(isIndependentOk(validDrillEvent({ dims: { pitch: 'ok', onset: 'unassessed' } })), true);
+  assert.equal(isIndependentOk(validDrillEvent({ dims: { pitch: 'ok' }, assistance: 'shown' })), false);
+  assert.equal(isIndependentOk(validDrillEvent({ dims: { pitch: 'miss' } })), false);
+  assert.equal(isIndependentOk(validDrillEvent({ dims: { onset: 'unassessed' } })), false, 'nothing assessed is not ok evidence');
+});
+
+test('boundEvents keeps the newest rows when nothing older matters', () => {
+  const events = [];
+  for (let i = 0; i < 600; i++) events.push(validDrillEvent({ id: 'm' + i, at: i, instrument: 'kbd', skill: 'n62', dims: { pitch: 'miss' } }));
+  const trimmed = boundEvents(events);
+  assert.equal(trimmed.length, 500);
+  assert.deepEqual(trimmed.map((ev) => ev.id), events.slice(-500).map((ev) => ev.id));
+});
+
+test('boundEvents keeps the first time a skill was played right, even after hundreds of newer rows', () => {
+  const first = validDrillEvent({ id: 'first', at: 0, instrument: 'kbd', skill: 'n60', source: 'drill' });
+  const misses = [];
+  for (let i = 0; i < 600; i++) misses.push(validDrillEvent({ id: 'm' + i, at: i + 1, instrument: 'kbd', skill: 'n62', dims: { pitch: 'miss' } }));
+  const trimmed = boundEvents([first, ...misses]);
+  assert.equal(trimmed.length, 501);
+  assert.equal(trimmed[0].skill, 'n60');
+  assert.equal(trimmed[0].id, 'first');
+});
+
+test('a trimmed history reports the same retained and applied counts as the full one', () => {
+  const anchorOk = validDrillEvent({ id: 'anchor-song', at: 0, instrument: 'kbd', skill: 'n60', source: 'song', songId: 'sg1' });
+  const anchorNonSongOk = validDrillEvent({ id: 'anchor-drill', at: 1, instrument: 'kbd', skill: 'n60', source: 'drill' });
+  const filler = [];
+  for (let i = 0; i < 500; i++) filler.push(validDrillEvent({ id: 'f' + i, at: 10 + i, instrument: 'kbd', skill: 'n62', dims: { pitch: 'miss' } }));
+  const later = validDrillEvent({ id: 'later', at: 3 * 24 * 3600 * 1000, instrument: 'kbd', skill: 'n60', source: 'song', songId: 'sg1' });
+  const full = [anchorOk, anchorNonSongOk, ...filler, later];
+  const trimmed = boundEvents(full, { max: 500 });
+  assert.deepEqual(
+    summarizeEvents(trimmed, { instrument: 'kbd', skill: 'n60' }),
+    summarizeEvents(full, { instrument: 'kbd', skill: 'n60' })
+  );
+});
+
+test('boundEvents keeps the first ok from a drill so a later song attempt still counts as applied', () => {
+  const first = validDrillEvent({ id: 'first', at: 0, instrument: 'kbd', skill: 'n60', source: 'drill' });
+  const filler = [];
+  for (let i = 0; i < 500; i++) filler.push(validDrillEvent({ id: 'f' + i, at: 10 + i, instrument: 'kbd', skill: 'n62', dims: { pitch: 'miss' } }));
+  const applied = validDrillEvent({ id: 'applied', at: 100000000, instrument: 'kbd', skill: 'n60', source: 'song', songId: 'sg1' });
+  const trimmed = boundEvents([first, ...filler, applied]);
+  assert.equal(summarizeEvents(trimmed, { instrument: 'kbd', skill: 'n60' }).applied, 1);
+});
+
+test('old anchors are capped too, oldest dropped first', () => {
+  const anchors = [1, 2, 3, 4, 5].map((n) => validDrillEvent({ id: 'anchor' + n, at: n, instrument: 'kbd', skill: 'n' + n, source: 'drill' }));
+  const filler = [];
+  for (let i = 0; i < 500; i++) filler.push(validDrillEvent({ id: 'f' + i, at: 10 + i, instrument: 'kbd', skill: 'n99', dims: { pitch: 'miss' } }));
+  const trimmed = boundEvents([...anchors, ...filler], { anchorMax: 3 });
+  const keptAnchorIds = trimmed.filter((ev) => ev.id.startsWith('anchor')).map((ev) => ev.id);
+  assert.deepEqual(keptAnchorIds.sort(), ['anchor3', 'anchor4', 'anchor5']);
+});
+
+test('boundEvents never changes the array it was given', () => {
+  const events = [];
+  for (let i = 0; i < 10; i++) events.push(validDrillEvent({ id: 'e' + i, at: i, instrument: 'kbd', skill: 'n60', dims: { pitch: 'miss' } }));
+  const beforeIds = events.map((ev) => ev.id);
+  const result = boundEvents(events, { max: 5 });
+  assert.deepEqual(events.map((ev) => ev.id), beforeIds);
+  assert.notEqual(result, events);
 });
