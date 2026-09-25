@@ -20,6 +20,7 @@ import { layoutMeasure } from '../../notation/layout.js';
 import { spellMidi } from '../../notation/spell.js';
 import { drawPrimitives } from '../../notation/draw-canvas.js';
 import { writtenMidi, writtenKeyName } from '../../song/arrange/transposing.js';
+import { layoutPercussionMeasure } from '../../notation/percussion.js';
 
 const MAX_BARS = 16;
 const ROW_HEIGHT_SINGLE = 100;
@@ -124,6 +125,51 @@ export function staffView(song, step, instrument, arrangement) {
     + humanKeyName(firstWrittenKey) + ': ' + barLabels.join(', ') + (capped ? ' (first 16 bars shown)' : '');
 
   return { kind: 'staff', rows, height: rows.length * rowHeight, label };
+}
+
+// Plain-words name for a percussion piece id -- 'hihat-closed' -> 'hi-hat
+// closed' -- read out by the canvas's aria-label the same way staffView's
+// note letters are.
+function piecePrettyName(pieceId) {
+  return pieceId.replace('hihat', 'hi-hat').replace(/-/g, ' ');
+}
+
+// kitView(song, step) -> { kind: 'kit', rows: [{ primitives, y0 }], height,
+// label }. A percussion step's own drum-kit staff, one row per bar, drawn
+// via the shared percussion notation layer (src/notation/percussion.js) the
+// same way staffView() above uses the pitched one -- unlike staffView, there
+// is no clef/key/transposition to resolve (a drum piece is not a pitch), so
+// this reads only step.notes' own `.piece`. Capped at MAX_BARS bars for the
+// same reason staffView is.
+export function kitView(song, step) {
+  const tpq = song.ticksPerQuarter;
+  const boundaries = barsOf(song);
+  const [from, rawTo] = step.bars;
+  const lastBar = Math.min(rawTo, boundaries.length - 2);
+  const capped = lastBar - from + 1 > MAX_BARS;
+  const to = capped ? from + MAX_BARS - 1 : lastBar;
+
+  const rowHeight = ROW_HEIGHT_SINGLE;
+  const rows = [];
+  const barLabels = [];
+
+  for (let bar = from; bar <= to; bar++) {
+    const barStart = boundaries[bar];
+    const barEnd = boundaries[bar + 1];
+    const metre = metreAt(song, boundaries, bar);
+    const barHits = step.notes
+      .filter((n) => n.piece && n.start >= barStart && n.start < barEnd)
+      .sort((a, b) => a.start - b.start)
+      .map((n) => ({ piece: n.piece, start: (n.start - barStart) / tpq }));
+    const { primitives } = layoutPercussionMeasure({ hits: barHits, time: [metre.num, metre.den], width: CANVAS_WIDTH });
+    rows.push({ primitives, y0: (bar - from) * rowHeight });
+    barLabels.push(barHits.map((h) => piecePrettyName(h.piece)).join(' '));
+  }
+
+  const label = 'Bars ' + (from + 1) + '-' + (to + 1) + ', percussion staff: '
+    + barLabels.join(', ') + (capped ? ' (first 16 bars shown)' : '');
+
+  return { kind: 'kit', rows, height: rows.length * rowHeight, label };
 }
 
 // Draws `view` (staffView()'s result) onto one canvas inside a fresh

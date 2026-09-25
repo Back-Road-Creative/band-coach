@@ -19,7 +19,12 @@
 // guessed at. Moved unchanged from src/ui/songs.js (P4-10).
 export function dimsFromStep(step, result) {
   const dims = {}, unassessed = [], rule = step.passRule || {};
-  if (!result || !result.judgedCount) { unassessed.push('pitch', 'onset', 'hold', 'tune'); return { dims, unassessed }; }
+  // A percussion step (src/song/lesson.js's percussionRules) is the only
+  // kind of step that ever sets minPieceRate -- that is the one signal
+  // available here (no instrument param) that this step's fifth "which
+  // drum" dimension applies at all.
+  const isPercussion = rule.minPieceRate != null;
+  if (!result || !result.judgedCount) { unassessed.push('pitch', 'onset', 'hold', 'tune'); if (isPercussion) unassessed.push('drum'); return { dims, unassessed }; }
   if (step.kind === 'rhythm') unassessed.push('pitch');
   else dims.pitch = result.matches.every((m) => m.ok && m.pitchOk !== false) ? 'ok' : 'miss';
   if (rule.maxMeanErrorMs != null && result.meanErrorMs != null) dims.onset = result.meanErrorMs <= rule.maxMeanErrorMs ? 'ok' : 'miss';
@@ -28,13 +33,17 @@ export function dimsFromStep(step, result) {
   else unassessed.push('hold');
   if (rule.maxMeanAbsCents != null && result.meanAbsCents != null) dims.tune = result.meanAbsCents <= rule.maxMeanAbsCents ? 'ok' : 'miss';
   else unassessed.push('tune');
+  if (isPercussion) {
+    if (result.pieceRate != null) dims.drum = result.pieceRate >= rule.minPieceRate ? 'ok' : 'miss';
+    else unassessed.push('drum');
+  }
   return { dims, unassessed };
 }
 
 // Plain-word label for every dim key this panel ever renders -- never the
-// key itself (P4-11 will add a fifth, percussion-only dim later; this list
-// stays open to that but does not invent it now).
-const DIM_LABEL = { pitch: 'Notes', onset: 'Timing', hold: 'Holding notes', tune: 'In tune' };
+// key itself. `drum` (P4-12) is the fifth, percussion-only dim: whether the
+// mic/e-kit hits it heard named the right piece.
+const DIM_LABEL = { pitch: 'Notes', onset: 'Timing', hold: 'Holding notes', tune: 'In tune', drum: 'Which drum' };
 const DIM_ORDER = ['pitch', 'onset', 'hold', 'tune'];
 
 // Why a dim is unassessed, in the learner's own words -- never the raw dim
@@ -47,23 +56,28 @@ function reasonFor(dim, step, instrument) {
   if (dim === 'pitch') return 'a clapped rhythm has no pitches';
   if (dim === 'onset') return 'an untimed step';
   if (dim === 'hold') return instrument && instrument.family === 'keys' ? "a keyboard key can't be judged for length here" : 'not judged on this step';
+  if (dim === 'drum') return "the microphone can't tell toms and cymbals apart";
   return instrument && (instrument.family === 'keys' || instrument.fretted) ? 'keyboards are always in tune' : 'not judged on this step';
 }
 
 // `dims`/`unassessed` straight from dimsFromStep(); `{step, instrument}` is
 // only ever read for the not-assessed reason text above, never to re-derive
 // ok/miss (dimsFromStep already decided that). Returns one entry per dim, in
-// the fixed pitch/onset/hold/tune order, `{dim, state, text}` where `text`
-// is the whole display line ("Notes: Right", "In tune: Not assessed
-// (keyboards are always in tune)") -- never the dim key alone.
+// the fixed pitch/onset/hold/tune order (plus `drum` last, only for a
+// percussion step), `{dim, state, text}` where `text` is the whole display
+// line ("Notes: Right", "In tune: Not assessed (keyboards are always in
+// tune)") -- never the dim key alone.
 //
 // A judged-nothing try (dimsFromStep's `!result || !result.judgedCount`
-// branch: `dims` empty, all four in `unassessed`) gets one shared, honest
-// reason instead of four different structural reasons that would otherwise
-// misdescribe a step that WAS timed/sustaining but simply heard nothing.
+// branch: `dims` empty, all four -- or five, for a percussion step -- in
+// `unassessed`) gets one shared, honest reason instead of four different
+// structural reasons that would otherwise misdescribe a step that WAS
+// timed/sustaining but simply heard nothing.
 export function assessmentLines(dims, unassessed, { step, instrument } = {}) {
-  const nothingHeard = Object.keys(dims).length === 0 && unassessed.length === 4;
-  return DIM_ORDER.map((dim) => {
+  const isPercussion = dims.drum !== undefined || unassessed.includes('drum');
+  const order = isPercussion ? DIM_ORDER.concat('drum') : DIM_ORDER;
+  const nothingHeard = Object.keys(dims).length === 0 && DIM_ORDER.every((d) => unassessed.includes(d));
+  return order.map((dim) => {
     const label = DIM_LABEL[dim];
     if (dims[dim]) return { dim, state: dims[dim], text: label + ': ' + (dims[dim] === 'ok' ? 'Right' : 'Miss') };
     const reason = nothingHeard ? 'nothing was heard this try' : reasonFor(dim, step, instrument);

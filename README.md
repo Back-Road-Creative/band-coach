@@ -343,6 +343,10 @@ after a judged try the panel draws a small bar-by-bar strip (`src/song/bar-heat.
 bars went well and which need another pass, plus a plain-word list (`src/ui/songs/assessed.js`)
 saying what each dimension — notes, timing, holding notes, in tune — showed, or, for one this step
 never grades (a clapped rhythm's pitch, a keyboard's fixed pitch and length), Not assessed and why.
+A drum part practises the same way, on its own kit staff instead of a pitched one, "Play it"
+sounding real drum hits, and hits heard from an e-kit's MIDI or a real kit through the microphone
+both counted; a fifth "Which drum" line reads Not assessed when the mic heard a hit but could not
+tell which drum (a tom, crash or ride) from another.
 A band can also share a whole set list at once as a
 **band pack**: a `.bandpack` file (`src/song/band-pack.js`, a small zip of song files plus a
 manifest) holding several songs and, optionally, who in the band plays which part of each.

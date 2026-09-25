@@ -2353,6 +2353,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
     db: () => DB, save: save, mod: () => mod, setMod: m => { closePanel(); setMod(m); }, instrument: id => instrumentById[id || mod],
     audio: () => { ensureAudio(); return actx; }, openMic: openMic, analysers: () => ({ time: anTime, freq: anFreq }), gates: () => gates,
     tone: tone, click: click, now: now, say: say, coach: coach, recordError: recordError, close: () => closePanel(),
+    drum: (piece, at) => drumHit(piece, at),
     // openPanel(id): P2b-3, lets one panel open a sibling panel directly --
     // first user, the Songs panel's "Add a song" row (src/ui/songs.js),
     // opening Learn this/Record a tune/Play Along the same way a nav click
