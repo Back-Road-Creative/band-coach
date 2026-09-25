@@ -175,6 +175,9 @@
      390px-wide phone screen. */
   .panel-songs-view { max-width: 100%; overflow: hidden; }
   .panel-songs-view canvas { display: block; width: 100%; height: auto; }
+  /* P4-9: the plain-words fingering line shown instead of a tab for a bowed,
+     keyboard or harmonica step. */
+  .panel-songs-fingering { color: var(--muted); }
   .panel-songs-practice button { align-self: flex-start; }
   .panel-songs-count { color: var(--muted); }
   .panel-songs-play-on-list { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }

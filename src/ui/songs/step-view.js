@@ -135,6 +135,10 @@ export function renderStepView(container, view) {
   const wrap = document.createElement('div');
   wrap.className = 'panel-songs-view';
   wrap.setAttribute('data-view', view.kind);
+  // Tab views (P4-9) carry a saved capo alongside the kind, so a test (or a
+  // learner's own inspection) can see which capo the diagram it is looking
+  // at was drawn for without re-parsing the label text.
+  if (view.capo !== undefined) wrap.setAttribute('data-capo', String(view.capo));
   const canvas = document.createElement('canvas');
   canvas.setAttribute('role', 'img');
   canvas.setAttribute('aria-label', view.label);
@@ -150,4 +154,132 @@ export function renderStepView(container, view) {
   wrap.appendChild(canvas);
   container.appendChild(wrap);
   return wrap;
+}
+
+// P4-9 -- tab and fingering row: drawn from the arrangement's `placements`
+// (src/song/arrange/index.js), one per note, keyed by that note's position
+// in `fitNotes` (practice.plan.fit.notes, the WHOLE fitted part). A step's
+// own `notes` is a time slice of that same array built by lesson.js's
+// segment()/buildLessonPlan() with `.filter()` alone (never `.map()`), so a
+// step note is the SAME object reference as its element of `fitNotes` --
+// matching by identity here is exact and robust to two notes sharing both
+// start and pitch, which the plan's fallback (matching by start+midi) is
+// not.
+function placementFor(note, fitNotes, arrangement) {
+  const index = fitNotes.indexOf(note);
+  return index === -1 ? null : arrangement.placements.get(index);
+}
+
+const TAB_STRING_GAP = 10;
+const TAB_MARGIN_X = 20;
+const TAB_NOTE_SPACING = 26;
+
+// tabView(step, arrangement, instrument, fitNotes) -> { kind: 'tab', rows,
+// height, label, capo, blankCount }. Draws its own string lines (one
+// `line` primitive per string) plus one `fretNumber` primitive per placed
+// note -- NOT tab.js's layoutTab(), which picks its own frets from a raw
+// tuning and knows nothing of a saved capo or alternate tuning. Strings are
+// numbered 1 = highest (the standard tab-staff convention, the OPPOSITE of
+// fretboard.js's own stringIndex, which counts 0 = lowest, and of the
+// fingerings panel's "string N" in src/ui/fingerings/how.js, which is
+// stringIndex + 1 = 1 = lowest) -- P4-9's own convention, chosen to match
+// how a guitarist reads a tab on paper, not how.js's device-facing one.
+export function tabView(step, arrangement, instrument, fitNotes) {
+  const stringCount = instrument.tuning.length;
+  const primitives = [];
+  for (let s = 1; s <= stringCount; s++) primitives.push({ type: 'line', x: 0, y: s * TAB_STRING_GAP, length: CANVAS_WIDTH });
+  const labelParts = [];
+  let blankCount = 0;
+  step.notes.forEach((note, i) => {
+    const placement = placementFor(note, fitNotes, arrangement);
+    if (!placement) { blankCount++; return; }
+    const displayString = stringCount - placement.string;
+    primitives.push({ type: 'fretNumber', x: TAB_MARGIN_X + i * TAB_NOTE_SPACING, string: displayString, fret: placement.fret });
+    labelParts.push('string ' + displayString + ' fret ' + placement.fret);
+  });
+  const capo = arrangement.capo || 0;
+  let label = 'Tab' + (capo ? ', capo ' + capo : '') + ': ' + labelParts.join(', ');
+  if (blankCount) label += ' (' + blankCount + ' note' + (blankCount === 1 ? '' : 's') + ' with no comfortable fingering)';
+  return { kind: 'tab', rows: [{ primitives, y0: 0 }], height: (stringCount + 1) * TAB_STRING_GAP, label, capo, blankCount };
+}
+
+function ordinal(n) {
+  const mod100 = n % 100;
+  if (mod100 >= 11 && mod100 <= 13) return n + 'th';
+  const mod10 = n % 10;
+  if (mod10 === 1) return n + 'st';
+  if (mod10 === 2) return n + 'nd';
+  if (mod10 === 3) return n + 'rd';
+  return n + 'th';
+}
+
+// Bowed strings (violin/viola/cello/double-bass) have no fret diagram to
+// draw, so this is a plain-words line grouped by string+position runs (a
+// beginner phrase rarely shifts position note-to-note): "A string, 1st
+// position: 1 2 0". The string's own name is spelled off its open pitch
+// (instrument.tuning) rather than kept as separate data -- every bowed
+// instrument's open strings are natural notes, so a plain 'C' key spelling
+// is always the right letter with no accidental.
+function bowedLine(step, arrangement, instrument, fitNotes) {
+  const tuning = instrument.tuning;
+  const segments = [];
+  let blankCount = 0;
+  step.notes.forEach((note) => {
+    const placement = placementFor(note, fitNotes, arrangement);
+    if (!placement) { blankCount++; return; }
+    const last = segments[segments.length - 1];
+    if (last && last.string === placement.string && last.position === placement.position) last.fingers.push(placement.finger);
+    else segments.push({ string: placement.string, position: placement.position, fingers: [placement.finger] });
+  });
+  if (!segments.length) return null;
+  const text = segments.map((seg) => {
+    const name = prettyLetter(spellMidi(tuning[seg.string], 'C'));
+    return name + ' string, ' + ordinal(seg.position) + ' position: ' + seg.fingers.join(' ');
+  }).join('; ');
+  return { text, blankCount };
+}
+
+// Keyboard: right- and left-hand finger numbers, in playing order, one
+// clause per hand actually used in this step.
+function keysLine(step, arrangement, fitNotes) {
+  const rh = [];
+  const lh = [];
+  let blankCount = 0;
+  step.notes.forEach((note) => {
+    const placement = placementFor(note, fitNotes, arrangement);
+    if (!placement) { blankCount++; return; }
+    (placement.hand === 'lh' ? lh : rh).push(placement.finger);
+  });
+  const parts = [];
+  if (rh.length) parts.push('Right hand: ' + rh.join(' '));
+  if (lh.length) parts.push('Left hand: ' + lh.join(' '));
+  if (!parts.length) return null;
+  return { text: parts.join('. ') + '.', blankCount };
+}
+
+// Harmonica: "Blow 4, Draw 4, Blow 4 …" -- a bent note's own action is
+// already named 'bend' by arrangeHarmonica (src/song/arrange/harmonica.js),
+// so it reads e.g. "Bend 4" with no separate wording needed here.
+function harmonicaLine(step, arrangement, fitNotes) {
+  const parts = [];
+  let blankCount = 0;
+  step.notes.forEach((note) => {
+    const placement = placementFor(note, fitNotes, arrangement);
+    if (!placement) { blankCount++; return; }
+    parts.push(placement.action.charAt(0).toUpperCase() + placement.action.slice(1) + ' ' + placement.hole);
+  });
+  if (!parts.length) return null;
+  return { text: parts.join(', '), blankCount };
+}
+
+// fingeringLine(step, arrangement, instrument, fitNotes) -> { text,
+// blankCount } | null. Only the three families with a placement but no
+// fret diagram of their own have anything to say here; fretted uses
+// tabView() above instead, and wind/brass/percussion/voice have neither
+// (their arrangementText() summary line, songs.js, already covers them).
+export function fingeringLine(step, arrangement, instrument, fitNotes) {
+  if (arrangement.family === 'bowed') return bowedLine(step, arrangement, instrument, fitNotes);
+  if (arrangement.family === 'keys') return keysLine(step, arrangement, fitNotes);
+  if (arrangement.family === 'free-reed') return harmonicaLine(step, arrangement, fitNotes);
+  return null;
 }
