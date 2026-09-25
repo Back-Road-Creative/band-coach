@@ -156,9 +156,12 @@ not something to "fix" by editing the test.
 `tests/characterization/a11y-axe.test.mjs` runs [axe-core](https://github.com/dequelabs/axe-core)
 (an exact-pinned devDependency, the one runtime npm package the app itself never ships) over the
 built `dist/band-coach.html` in its main states — first load, an instrument selected and a lesson
-started, each side panel open, and the settings sheet — and fails on any WCAG 2/2.1 A/AA
-violation. It is a real scanner check, not a hand-picked list of rules, so it catches whatever the
-other a11y characterization tests above were not written to look for.
+started, each side panel open (Songs' own internal screens and Ear training included), and the
+input set-up sheet (mic/MIDI device, calibration) — and fails on any WCAG 2/2.1 A/AA violation. The
+separate Settings nav destination (theme/mode toggles, `#settingsView`) has its own axe scan,
+`tests/characterization/settings-view.test.mjs`. It is a real scanner check, not a hand-picked list
+of rules, so it catches whatever the other a11y characterization tests above were not written to
+look for.
 
 `src/song/eval/roundtrip.js` scores transcription against *synthetic* pitch frames rendered from
 the starter songs — useful for catching a pipeline regression, but it never runs real audio
@@ -184,11 +187,9 @@ Coach is refused with a message explaining why, and your current progress is lef
 while without one — never on a fresh profile, since there is nothing yet to lose. The "My progress" panel also shows a practice calendar (minutes and
 level changes, one cell per day, for the last 8 weeks) and a daily minutes goal with a streak — the
 practice log itself only keeps the most recent 60 sessions, so days older than that say "earlier
-sessions not kept" rather than a false zero. The backup, restore and "Check for updates" messages
-above are read from the English string table in `src/core/i18n.js` (`t(id, params)`) rather than
-hardcoded — a scaffold for a future locale, though only English ships today.
 sessions not kept" rather than a false zero. "Print this week's report" turns the last 7 days into a
-one-page, printer-friendly summary for a teacher or parent.
+one-page, printer-friendly summary for a teacher or parent. The backup, restore and "Check for updates" messages
+above are read from the English string table in `src/core/i18n.js` (`t(id, params)`) rather than
 hardcoded — a scaffold for a future locale, though only English ships today. `src/index.html`'s own
 static labels (headings, button text, help copy `src/app.js` never rewrites at runtime) go through
 the same table: each element carries `data-i18n="<id>"` and keeps its English text in the markup as
@@ -251,8 +252,8 @@ disabled until any unresolved check items are fixed) lives in `src/ui/songs/revi
 
 ## Capture a melody
 
-The "Capture a melody" tool (`TOOLS.capture` in `src/app.js`) is a simpler cousin of "Learn this" and
-"Record a tune": press Connect, then Listen, and play, sing, hum or whistle a tune, or hold the
+The "Capture a melody" tool (`TOOLS.capture` in `src/app.js`) is the fast, no-file path from a sound
+to something practisable: press Connect, then Listen, and play, sing, hum or whistle a tune, or hold the
 microphone up to a recording of one instrument playing one note at a time. Like the rest of this
 app's pitch tracking it is monophonic and hears one note at a time — it cannot pull a separate part
 out of a full band recording. Once notes are captured, two buttons turn them into practice: "Make
@@ -311,6 +312,8 @@ list offers the most recent one whenever no lesson is on screen. Editing the son
 choosing another part or instrument, changing capo, tuning or harmonica key, or a tempo change
 starts the lesson fresh at the first step instead, with no message, since any of those makes it a
 different lesson to learn. "Practise again" always starts at the beginning, whatever was saved.
+
+Opening the editor screen (via a song's own **Edit notes**) shows its own row: **Edit
 notes**, **Play along**, **Export**, **Share**, **Save a copy** — Edit notes opens *any* song,
 starter tunes included, straight in "Record a tune": saving a starter's edits makes "My copy of
 &lt;title&gt;" in your own songs, never touching the shipped starter itself. Leaving the editor —
@@ -319,13 +322,7 @@ status line reads "Not saved yet" until you press Save, then "Saved". Once somet
 **Practise this** and **Back to songs** appear, and the song's own status in Songs updates right
 away (**Checked** once no check items are left). Edit notes and Play along count as Songs in the
 nav bar — the Songs button stays lit the whole time either is open, pressing it returns to the
-song list, and Play along has its own **Back to songs** button alongside Edit notes'. Export
-reveals the MIDI/MusicXML/ABC download buttons only once pressed (they no longer sit on every
-song row), and
-Share downloads a `.bandpack` of that one song alone. A teacher challenge's title field, "Export
-as a challenge", "Share with your band" and any read-only band-pack part assignments live under
-their own **Assignments** heading below the song list, separate from a single open song's own
-actions.
+song list, and Play along has its own **Back to songs** button alongside Edit notes'.
 
 The Songs panel (`src/ui/songs.js`) turns a whole tune — built in, or imported from a `.mid`,
 `.midi`, `.abc`, `.xml`, `.musicxml`, compressed `.mxl`, Guitar Pro `.gp`, Guitar Pro 5 `.gp5`, or a
@@ -390,8 +387,9 @@ never counts as evidence of the right note toward mastery. The tempo-ladder's Ri
 (above) only speeds up on an attempt that actually PASSES the step's own passRule — hitting every
 note while still failing on timing, hold/tune or an extra note does not read as "clean" and does
 not raise the backing's speed. Every "Your turn" opens with a four-beat count-in at the step's own
-tempo, played through the same clicks as the Learn panel's, so listening only starts once the
-count-in ends and a learner's reaction time to the click no longer reads as a late first note. On
+tempo, played through the same clicks the Record door's own count-in uses (`src/ui/learn/count-in.js`),
+so listening only starts once the count-in ends and a learner's reaction time to the click no longer
+reads as a late first note. On
 a MIDI keyboard, each note's length is tracked too — closed off by that note's own next press, or
 by the end of the try — so the hold/tune checks above work for a MIDI player the same way they
 already do for the mic. Importing a challenge, a band pack or a single song captures the id the
