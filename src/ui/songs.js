@@ -50,6 +50,7 @@ import { feasibility } from '../song/feasibility.js';
 import { INSTRUMENTS } from '../instruments/index.js';
 import { routeImportFile, importerFor } from './songs/import-route.js';
 import { judgeAttempt, passesRule, holdTuneFeedback, firstCorrection, phraseSec } from './songs/practice.js';
+import { createSongClock } from '../song/clock.js';
 import { phaseOf, repairFor } from '../core/teaching.js';
 import { barHeat, worstBars } from '../song/bar-heat.js';
 import { createLoopBackingTransport, applyAttemptToTransport, backingBpm, rateLabel } from './songs/loop-backing.js';
@@ -238,6 +239,30 @@ function stepHint(step) {
   if (step.kind === 'tempo-ladder') return 'Play along at ' + step.bpm + ' beats a minute.';
   if (step.bpm) return 'Play along at ' + step.bpm + ' beats a minute.';
   return 'Play along.';
+}
+
+// Bar length in ticks for the song's OPENING metre only -- the same
+// simplification src/song/lesson.js's own private barTicks() makes (a metre
+// change elsewhere in the song is not this readout's concern), just placing
+// a tempoMap change's tick on a bar number a learner can find on the page.
+function barTicksFor(song) {
+  return song.ticksPerQuarter * song.metre.num * (4 / song.metre.den);
+}
+
+// Plain words for a step whose phrase crosses one or more tempoMap changes
+// (renderPractice above, via practice.clock.changesBetween). A change's bpm
+// is scaled by the step's own tempoScale (src/song/lesson.js's bpmAt) so a
+// phrase-slow/tempo-ladder step reports the tempo IT will actually play the
+// change at, not the song's raw tempoMap number -- the same scaling
+// src/ui/songs/practice.js's phraseSec already applies to the timing itself.
+function tempoChangeText(step, changes, song) {
+  const parts = changes.map((c) => {
+    const bpm = Math.round(c.bpm * step.tempoScale);
+    const bar = Math.floor(c.tick / barTicksFor(song)) + 1;
+    const direction = bpm < step.bpm ? 'slowing' : 'speeding up';
+    return direction + ' to ' + bpm + ' at bar ' + bar;
+  });
+  return 'Tempo: ' + step.bpm + ', ' + parts.join('; ') + '.';
 }
 
 // Plain words for a repair step's dim (src/core/teaching.js repairFor) --
@@ -1014,7 +1039,13 @@ function mountSongsPanel(hostEl, api) {
     // (or re-starting) a lesson here always begins with a fresh object, so
     // switching songs/instruments or hitting "Practise again" clears any
     // repair in progress along with everything else practice-local.
-    practice = { song, partId, instrument, instrumentId, plan, results: [], stepIndex: 0, repair: null, recording: false, countingIn: false, countInTimer: null, playedEvents: [], recordStartSec: 0, stop: null, loopTransport: null, loopTransportStepIndex: null };
+    // clock: the ONE song clock (src/song/clock.js createSongClock) every
+    // step's playback (playPhrase), capture judging (finishRecording) and
+    // this song's own tempo-change readout (renderPractice below) are timed
+    // on -- built once per practice session, not per step, so a phrase
+    // crossing a tempoMap change plays, counts in and is judged against the
+    // same tempo curve throughout.
+    practice = { song, partId, instrument, instrumentId, plan, results: [], stepIndex: 0, repair: null, recording: false, countingIn: false, countInTimer: null, playedEvents: [], recordStartSec: 0, stop: null, loopTransport: null, loopTransportStepIndex: null, clock: createSongClock(song) };
     store.set({ songId: song.id, partId, instrumentId, level });
     renderPractice();
   }
@@ -1097,6 +1128,18 @@ function mountSongsPanel(hostEl, api) {
     }
     practiceSection.appendChild(titleRow);
     practiceSection.appendChild(el('p', { text: stepHint(step) }));
+    // A phrase whose own span crosses a tempoMap change (practice.clock's
+    // changesBetween, src/song/clock.js) is told so before the learner plays
+    // it -- never for an untimed (bpm 0, "pitches") step, which has no
+    // tempo to name in the first place. Skipped only when nothing (no
+    // notes) is judged in the step at all.
+    if (step.bpm > 0 && practice.clock && step.notes.length) {
+      const stepEndTick = Math.max(...step.notes.map((n) => n.start + n.dur));
+      const changes = practice.clock.changesBetween(step.originTick, stepEndTick);
+      if (changes.length) {
+        practiceSection.appendChild(el('p', { class: 'panel-songs-tempo', text: tempoChangeText(step, changes, practice.song) }));
+      }
+    }
     // Plain-word readout of the tempo ladder's own current rate (100% =
     // this rung's written bpm; a miss earlier steps it down, a clean loop
     // steps it back up -- see finishRecording() below and
@@ -1199,9 +1242,15 @@ function mountSongsPanel(hostEl, api) {
     if (step.bpm > 0) {
       const ticksPerQuarter = practice.song.ticksPerQuarter;
       const bpm = effectiveBpm(step);
+      // Both the note's onset and its length are read off the SAME clock
+      // (practice.clock, src/song/clock.js) finishRecording() below judges
+      // against, so a phrase crossing a tempoMap change is both heard and
+      // judged at the tempo in force at each tick, not one flat bpm for the
+      // whole phrase.
       notes.forEach((n) => {
-        const secOffset = phraseSec(n.start, step.originTick, bpm, ticksPerQuarter);
-        const dur = Math.max(0.12, (n.dur / ticksPerQuarter) * (60 / bpm));
+        const secOffset = phraseSec(n.start, step.originTick, bpm, ticksPerQuarter, practice.clock);
+        const secEnd = phraseSec(n.start + n.dur, step.originTick, bpm, ticksPerQuarter, practice.clock);
+        const dur = Math.max(0.12, secEnd - secOffset);
         api.tone(n.midi, at0 + secOffset, dur, 0.22);
       });
     } else {
@@ -1330,6 +1379,11 @@ function mountSongsPanel(hostEl, api) {
       originTick: step.originTick,
       // "Clap the rhythm" judges WHEN, not what: any pitch or a clap counts.
       onsetsOnly: step.kind === 'rhythm',
+      // Never handed to an untimed step (bpm 0, "pitches" -- N2's caveat):
+      // opts.bpm above would be 0 too, and judgeAttempt/phraseSec would
+      // scale the clock by bpm / clock.bpmAt(from) = 0, a zero-length
+      // phrase. An untimed step keeps judging by order alone, unchanged.
+      clock: step.bpm > 0 ? practice.clock : undefined,
     });
     // Feed this attempt's outcome to the tempo ladder BEFORE passesRule()
     // (below) reads step.passRule for `passed` -- rate only affects the
