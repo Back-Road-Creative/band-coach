@@ -121,9 +121,67 @@ function waitForOpen(ws) {
 // retryOnBootDeadline retries it with a fresh browser.
 export const LAUNCH_TIMEOUT_CODE = 'LAUNCH_TIMEOUT';
 
+// Every browser group this process has spawned and not yet killed, keyed by
+// the group id (= the launched process's pid), with its profile dir. A browser
+// lives in its own detached process group so close() can kill all of it --
+// and that same detachment lets it outlive the process that launched it. The
+// per-test `t.after(() => page.close())` covers a failing assertion, not the
+// test PROCESS ending first: an uncaught error outside a test body, node:test
+// aborting the file (SIGTERM), Ctrl-C (SIGINT) or a hung-up terminal (SIGHUP).
+// 21 orphan groups, the oldest 43 hours old, were counted on the dev box on
+// 2026-09-24. So the launcher itself is the fixture's finally block: on exit,
+// and on those signals, every group still registered is killed and its
+// profile dir removed. SIGKILL cannot be caught; a runner killed that way
+// still leaks, which is why close() stays the normal path.
+const liveGroups = new Map();
+let exitHooksInstalled = false;
+
+function killGroupNow(pgid) {
+  try {
+    process.kill(-pgid, 'SIGKILL');
+  } catch (e) {
+    // already gone
+  }
+}
+
+function killLiveGroups() {
+  for (const [pgid, profileDir] of liveGroups) {
+    killGroupNow(pgid);
+    try {
+      rmSync(profileDir, { recursive: true, force: true });
+    } catch (e) {
+      // best-effort cleanup
+    }
+  }
+  liveGroups.clear();
+}
+
+function trackGroup(pgid, profileDir) {
+  liveGroups.set(pgid, profileDir);
+  if (exitHooksInstalled) return;
+  exitHooksInstalled = true;
+  // 'exit' runs synchronously at the very end, whatever the exit code:
+  // a normal finish, process.exit(), or an uncaught error.
+  process.once('exit', killLiveGroups);
+  // A signal handler replaces the default action (die), so after cleaning up
+  // the same signal is re-raised with the handler gone: the process still
+  // dies of the signal it was sent, exactly as if nothing had been listening.
+  for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
+    process.once(sig, () => {
+      killLiveGroups();
+      process.kill(process.pid, sig);
+    });
+  }
+}
+
+function untrackGroup(pgid) {
+  liveGroups.delete(pgid);
+}
+
 // Spawns the browser and resolves once "DevTools listening on ws://..." is
 // seen on stderr, extracting the port that was actually bound (we always ask
-// for port 0 so parallel test files never collide).
+// for port 0 so parallel test files never collide). The group is registered
+// for exit cleanup from the moment it exists.
 export function spawnBrowser(bin, userDataDir, extraArgs = [], { launchTimeoutMs = 15000 } = {}) {
   const args = [
     '--headless',
@@ -142,6 +200,7 @@ export function spawnBrowser(bin, userDataDir, extraArgs = [], { launchTimeoutMs
   // separate processes that a plain child.kill() never touches, and they
   // survive as orphans (101 observed piled up on the box before this fix).
   const child = spawn(bin, args, { stdio: ['ignore', 'ignore', 'pipe'], detached: true });
+  if (child.pid) trackGroup(child.pid, userDataDir);
   return new Promise((resolve, reject) => {
     let buf = '';
     // A launch that fails before resolving has handed nobody a child to kill,
@@ -156,10 +215,9 @@ export function spawnBrowser(bin, userDataDir, extraArgs = [], { launchTimeoutMs
       if (settled) return;
       settled = true;
       clearTimeout(timer);
-      try {
-        process.kill(-child.pid, 'SIGKILL');
-      } catch (e) {
-        // already gone, or never started
+      if (child.pid) {
+        killGroupNow(child.pid);
+        untrackGroup(child.pid);
       }
       child.stderr.destroy();
       err.child = child;
@@ -314,11 +372,8 @@ async function launchPageOnce(htmlPath, options = {}) {
   // process — a surviving renderer/GPU/zygote process would otherwise
   // recreate userDataDir the instant rmSync below removes it.
   function killGroup() {
-    try {
-      process.kill(-child.pid, 'SIGKILL');
-    } catch (e) {
-      // already gone
-    }
+    killGroupNow(child.pid);
+    untrackGroup(child.pid);
   }
 
   // Anything below this point can throw before launchPage returns a handle
@@ -595,6 +650,7 @@ async function launchPageOnce(htmlPath, options = {}) {
     requests,
     binary: bin,
     pid: child.pid,
+    profileDir: userDataDir,
   };
   }
 }
