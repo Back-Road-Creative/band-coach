@@ -200,6 +200,10 @@
   .panel-songs-bar[data-grade="shaky"] { background: var(--warn); }
   .panel-songs-bar[data-grade="miss"] { background: var(--bad); color: #fff; }
   .panel-songs-bar-worst { flex-basis: 100%; color: var(--muted); }
+  .panel-songs-assessed { list-style: none; margin: 4px 0 0; padding: 0; font-size: 0.9em; }
+  .panel-songs-assessed li[data-state="ok"] { color: var(--good); }
+  .panel-songs-assessed li[data-state="miss"] { color: var(--bad); }
+  .panel-songs-assessed li[data-state="not-assessed"] { color: var(--muted); }
   .panel-songs-band-pack-parts-list { margin-top: 4px; }
   .panel-songs-band-pack-parts { margin: 2px 0; color: var(--muted); }
   .panel-songs-share-msg { min-height: 1.2em; color: var(--good); }

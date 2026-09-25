@@ -340,7 +340,10 @@ a keyboard reads a grand staff, a B flat clarinet reads its part a tone higher t
 a plain-language text alternative on the canvas for a screen reader. Each phrase
 step also shows a plain-word Easy/Medium/Hard difficulty (`src/song/phrase-difficulty.js`), and
 after a judged try the panel draws a small bar-by-bar strip (`src/song/bar-heat.js`) naming which
-bars went well and which need another pass. A band can also share a whole set list at once as a
+bars went well and which need another pass, plus a plain-word list (`src/ui/songs/assessed.js`)
+saying what each dimension — notes, timing, holding notes, in tune — showed, or, for one this step
+never grades (a clapped rhythm's pitch, a keyboard's fixed pitch and length), Not assessed and why.
+A band can also share a whole set list at once as a
 **band pack**: a `.bandpack` file (`src/song/band-pack.js`, a small zip of song files plus a
 manifest) holding several songs and, optionally, who in the band plays which part of each.
 Picking one through the same file input adds every song to the library and shows any part

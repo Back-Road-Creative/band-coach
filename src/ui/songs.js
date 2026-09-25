@@ -53,6 +53,7 @@ import { judgeAttempt, passesRule, holdTuneFeedback, firstCorrection, phraseSec 
 import { createSongClock } from '../song/clock.js';
 import { phaseOf, repairFor } from '../core/teaching.js';
 import { barHeat, worstBars } from '../song/bar-heat.js';
+import { dimsFromStep, assessmentLines } from './songs/assessed.js';
 import { createLoopBackingTransport, applyAttemptToTransport, backingBpm, rateLabel } from './songs/loop-backing.js';
 import { mapMasteryKeys } from './songs/mastery.js';
 import { GRADE, review, migrateItem } from '../core/srs.js';
@@ -1229,6 +1230,9 @@ function mountSongsPanel(hostEl, api) {
     if (practice.lastHeat) {
       practiceSection.appendChild(renderBarStrip(practice.lastHeat, practice.lastHeatBars));
     }
+    if (practice.lastAssessed) {
+      practiceSection.appendChild(renderAssessedList(practice.lastAssessed));
+    }
   }
 
   // A repair step (src/core/teaching.js repairFor) is a handful of notes,
@@ -1249,6 +1253,9 @@ function mountSongsPanel(hostEl, api) {
     practiceSection.appendChild(countEl);
     if (practice.lastHeat) {
       practiceSection.appendChild(renderBarStrip(practice.lastHeat, practice.lastHeatBars));
+    }
+    if (practice.lastAssessed) {
+      practiceSection.appendChild(renderAssessedList(practice.lastAssessed));
     }
   }
 
@@ -1274,6 +1281,19 @@ function mountSongsPanel(hostEl, api) {
       wrap.appendChild(el('p', { class: 'panel-songs-bar-worst', text: 'Work on bar ' + (worst.bar + 1) + ' next.' }));
     }
     return wrap;
+  }
+
+  // One line per dim (src/ui/songs/assessed.js assessmentLines) naming what
+  // the last judged try showed -- ok, miss, or, for a dim this step never
+  // grades, plainly Not assessed and why. Sits right under the bar strip
+  // until the learner starts another try (startRecording() clears
+  // lastAssessed the same moment it clears lastHeat).
+  function renderAssessedList(lines) {
+    const list = el('ul', { class: 'panel-songs-assessed' });
+    lines.forEach((line) => {
+      list.appendChild(el('li', { 'data-dim': line.dim, 'data-state': line.state, text: line.text }));
+    });
+    return list;
   }
 
   // A tempo-ladder step's EFFECTIVE bpm: its own written rung bpm, scaled by
@@ -1334,9 +1354,11 @@ function mountSongsPanel(hostEl, api) {
     practice.recording = true;
     practice.countingIn = true;
     practice.playedEvents = [];
-    // Starting a new try retires the previous try's bar strip.
+    // Starting a new try retires the previous try's bar strip and its
+    // Not-assessed list.
     practice.lastHeat = null;
     practice.lastHeatBars = null;
+    practice.lastAssessed = null;
 
     // Real listening only begins once the count-in ends (below); this is the
     // rest of the old startRecording() body, unchanged, just deferred.
@@ -1482,28 +1504,6 @@ function mountSongsPanel(hostEl, api) {
     return count;
   }
 
-  // dims/unassessed for a judged step's learning event (plan 6.4): each
-  // dimension is read straight off judgeAttempt()'s own aggregate against
-  // the SAME numbers step.passRule already judges pass/fail with -- never a
-  // new threshold invented here. A dimension the step's passRule never set
-  // (e.g. tune/hold on a non-sustaining instrument, pitch on a rhythm step
-  // where a clap is deliberately pitch-free -- practice.js's judgeOnsets
-  // comment) is left out of `dims` and listed in `unassessed` instead of
-  // guessed at.
-  function dimsFromStep(step, result) {
-    const dims = {}, unassessed = [], rule = step.passRule || {};
-    if (!result || !result.judgedCount) { unassessed.push('pitch', 'onset', 'hold', 'tune'); return { dims, unassessed }; }
-    if (step.kind === 'rhythm') unassessed.push('pitch');
-    else dims.pitch = result.matches.every((m) => m.ok && m.pitchOk !== false) ? 'ok' : 'miss';
-    if (rule.maxMeanErrorMs != null && result.meanErrorMs != null) dims.onset = result.meanErrorMs <= rule.maxMeanErrorMs ? 'ok' : 'miss';
-    else unassessed.push('onset');
-    if (rule.minDurationScore != null && result.durationScore != null) dims.hold = result.durationScore >= rule.minDurationScore ? 'ok' : 'miss';
-    else unassessed.push('hold');
-    if (rule.maxMeanAbsCents != null && result.meanAbsCents != null) dims.tune = result.meanAbsCents <= rule.maxMeanAbsCents ? 'ok' : 'miss';
-    else unassessed.push('tune');
-    return { dims, unassessed };
-  }
-
   function advance(passed, result, elapsedMs) {
     // A repair try (src/core/teaching.js repairFor) is a handful of isolated
     // notes, not one of the plan's own steps: it never joins practice.results
@@ -1519,6 +1519,8 @@ function mountSongsPanel(hostEl, api) {
       if (result) {
         practice.lastHeat = barHeat(practice.song, result.matches);
         practice.lastHeatBars = repairStep.bars;
+        const { dims, unassessed } = dimsFromStep(repairStep, result);
+        practice.lastAssessed = assessmentLines(dims, unassessed, { step: repairStep, instrument: practice.instrument });
       }
       if (passed) practice.repair = null;
       practice.playedEvents = [];
@@ -1544,8 +1546,8 @@ function mountSongsPanel(hostEl, api) {
       // the same as bpmTarget (step.bpm): no tempo estimate is measured
       // from the attempt anywhere in this file, so nothing better is
       // available to report.
+      const { dims, unassessed } = dimsFromStep(step, result);
       if (typeof api.logEvent === 'function') {
-        const { dims, unassessed } = dimsFromStep(step, result);
         api.logEvent(makeEvent({
           instrument: practice.instrumentId, skill: step.kind + ':' + step.phraseIndex, source: 'song',
           songId: practice.song.id, partId: practice.partId, assistance: 'none',
@@ -1564,6 +1566,7 @@ function mountSongsPanel(hostEl, api) {
       if (result) {
         practice.lastHeat = barHeat(practice.song, result.matches);
         practice.lastHeatBars = step.bars;
+        practice.lastAssessed = assessmentLines(dims, unassessed, { step, instrument: practice.instrument });
       }
       // A check-phase step's SECOND consecutive miss on the SAME thing
       // (failedDimension, inside repairFor) becomes a short repair on just
@@ -1590,6 +1593,7 @@ function mountSongsPanel(hostEl, api) {
       // never-yet-attempted step's own result.
       practice.lastHeat = null;
       practice.lastHeatBars = null;
+      practice.lastAssessed = null;
     }
     practice.stepIndex = nextStep(practice.plan, practice.results);
     practice.playedEvents = [];
