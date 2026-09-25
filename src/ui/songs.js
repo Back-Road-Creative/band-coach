@@ -76,6 +76,7 @@ import { arrangeFor, songForArrangement } from '../song/arrange/index.js';
 import { staffView, renderStepView, tabView, fingeringLine, kitView } from './songs/step-view.js';
 import { createDrumCapture } from './songs/drum-capture.js';
 import { pieceForMidi } from '../instruments/drum-kit.js';
+import { lessonKey, sanitizeLessonList, sanitizeLessonEntry, rememberLesson, findLesson, resultsTail } from '../song/lesson-resume.js';
 
 // P3-9 Print: the same pitch-class-to-key-name tables editor.js keeps (not exported there) --
 // see songHeader()'s Print button below for the one place this file needs a key name.
@@ -446,7 +447,7 @@ function mountSongsPanel(hostEl, api) {
   let currentChallenge = null;
 
   // practice state for the currently chosen song+part, or null
-  let practice = null; // { song, partId, instrument, plan, results, stepIndex, recording, playedEvents, recordStartSec, stop }
+  let practice = null; // { song, partId, instrument, plan, results, stepIndex, recording, playedEvents, recordStartSec, stop, assistance, lessonKey, resumeRate }
   // The "Notes heard so far" paragraph from the last renderPractice(), when
   // a recording is possible for the current step. Captured notes update its
   // text in place (updateCount()) instead of rebuilding practiceSection, so
@@ -544,6 +545,14 @@ function mountSongsPanel(hostEl, api) {
   const heading = el('h2', { text: 'Songs' });
   const intro = el('p', { class: 'panel-songs-intro', text: 'Pick a tune to practise, or add your own from a file.' });
 
+  // "Carry on: <title>" (P5-3): shown above the list, only while no lesson
+  // is open, only for the most recent saved place still short of the last
+  // step -- never auto-opened (that would hide the list from a learner who
+  // came here to pick something else instead), and silently absent when the
+  // song it names cannot be found any more, same rule checkOpenRequest()
+  // below already follows.
+  const carryOnBtn = el('button', { type: 'button', class: 'panel-songs-carry-on', hidden: 'hidden' });
+
   const listSection = el('section', { 'aria-label': 'Your songs' });
   const listUl = el('ul', { class: 'panel-songs-list' });
   listSection.appendChild(listUl);
@@ -596,6 +605,7 @@ function mountSongsPanel(hostEl, api) {
 
   hostEl.appendChild(heading);
   hostEl.appendChild(intro);
+  hostEl.appendChild(carryOnBtn);
   hostEl.appendChild(listSection);
   hostEl.appendChild(assignmentsSection);
   hostEl.appendChild(songHeaderSection);
@@ -1016,9 +1026,15 @@ function mountSongsPanel(hostEl, api) {
   // starts the lesson on THAT instrument instead of the learner's current
   // main-screen instrument -- picking a card never calls api.setMod(), which
   // would close this panel and jump back to the main screen; it only swaps
-  // which instrument this song's lesson (and its saved songId/partId/
-  // instrumentId, restored on the panel's next open) is built for.
-  function startPractice(song, partId, instrumentOverride) {
+  // which instrument this song's lesson is built for. The saved songId/
+  // partId/instrumentId, PLUS a small bounded list of saved lesson places
+  // (`lessons`, src/song/lesson-resume.js), are restored on the panel's next
+  // open: reopening the same song+part+instrument+arrangement+setup+tempo
+  // (the seven-field `lessonKey`) lands back on the step it was left on,
+  // at the same tempo-ladder rung speed; anything in that key changing
+  // starts the lesson fresh, same as today. `opts.fresh` (the "Practise
+  // again" button) skips the lookup outright.
+  function startPractice(song, partId, instrumentOverride, opts = {}) {
     stopRecording();
     const instrumentId = instrumentOverride ? instrumentOverride.id : api.mod();
     const instrument = instrumentOverride || api.instrument(instrumentId);
@@ -1048,6 +1064,23 @@ function mountSongsPanel(hostEl, api) {
     // unchanged either way, only which song they were built from differs.
     const arrangedSong = songForArrangement(song, partId, arrangement);
     if (arrangedSong !== song) plan = buildLessonPlan(arrangedSong, partId, instrument, { level });
+    // lessonKey (src/song/lesson-resume.js): the seven fields that together
+    // say "this is the same lesson" -- song identity+revision, part,
+    // arrangement, the setup that changes what is played, the song's own
+    // tempo curve, and the assistance scope (always 'none' in Songs today).
+    // Unless a fresh start was asked for, a saved place matching this exact
+    // key is looked up and resumed; anything in the key differing (a note
+    // edit, another part, a capo/tuning/harp-key/instrument change, a
+    // tempo change) means no match, so the lesson starts at step 1 with no
+    // message, same as always.
+    const lessonKeyValue = lessonKey({ song: arrangedSong, partId, instrumentId, setup, arrangement, assistance: 'none' });
+    const foundEntry = opts.fresh ? null : sanitizeLessonEntry(findLesson(sanitizeLessonList((store.get() || {}).lessons), lessonKeyValue), plan.steps.length);
+    // A saved entry still sitting at step 0 with an empty trailing tail
+    // carries no actual progress (every fresh open writes one via
+    // saveLesson() below) -- resuming it would be a false "Picking up where
+    // you left off." on a lesson nothing was ever attempted on.
+    const resumeEntry = foundEntry && (foundEntry.stepIndex > 0 || foundEntry.tail.length > 0) ? foundEntry : null;
+    if (resumeEntry && resumeEntry.level !== level) plan = buildLessonPlan(arrangedSong, partId, instrument, { level: resumeEntry.level });
     // loopTransport/loopTransportStepIndex: the tempo-ladder rung's own
     // src/audio/stretch/loop.js transport (Riff Repeater pattern) -- created
     // fresh the first time renderPractice() sees a given tempo-ladder step
@@ -1069,9 +1102,35 @@ function mountSongsPanel(hostEl, api) {
     // on -- built once per practice session, not per step, so a phrase
     // crossing a tempoMap change plays, counts in and is judged against the
     // same tempo curve throughout.
-    practice = { song: arrangedSong, partId, instrument, instrumentId, plan, arrangement, results: [], stepIndex: 0, repair: null, recording: false, countingIn: false, countInTimer: null, playedEvents: [], recordStartSec: 0, stop: null, loopTransport: null, loopTransportStepIndex: null, clock: createSongClock(arrangedSong) };
-    store.set({ songId: song.id, partId, instrumentId, level });
+    practice = { song: arrangedSong, partId, instrument, instrumentId, plan, arrangement, results: resumeEntry ? resumeEntry.tail.slice() : [], stepIndex: resumeEntry ? resumeEntry.stepIndex : 0, repair: null, recording: false, countingIn: false, countInTimer: null, playedEvents: [], recordStartSec: 0, stop: null, loopTransport: null, loopTransportStepIndex: null, clock: createSongClock(arrangedSong), assistance: 'none', lessonKey: lessonKeyValue, resumeRate: resumeEntry ? resumeEntry.rate : null };
+    if (resumeEntry) say('Picking up where you left off.', 'ok');
+    saveLesson();
     renderPractice();
+  }
+
+  // Replaces the three separate `store.set({...})` writes startPractice()/
+  // advance() used to make (one per song open, repair drop and step move):
+  // ALWAYS writes the top-level { songId, partId, instrumentId, level }
+  // three characterization tests read (w-songs.test.mjs:387-390,
+  // songs-feasibility.test.mjs:77, songs-progress-contract.test.mjs:30),
+  // plus the bounded `lessons` list (src/song/lesson-resume.js) a finished
+  // lesson (stepIndex past the end) is dropped from -- so the NEXT time this
+  // song+part+instrument is opened there is nothing to resume.
+  function saveLesson() {
+    const level = practice.plan.level;
+    const prevLessons = sanitizeLessonList((store.get() || {}).lessons);
+    const finished = practice.stepIndex >= practice.plan.steps.length;
+    const sameSlot = (e) => e.key.songId === practice.lessonKey.songId && e.key.partId === practice.lessonKey.partId && e.key.setup.split('|')[0] === practice.lessonKey.setup.split('|')[0];
+    const lessons = finished
+      ? prevLessons.filter((e) => !sameSlot(e))
+      : rememberLesson(prevLessons, {
+        key: practice.lessonKey,
+        stepIndex: practice.stepIndex,
+        tail: resultsTail(practice.results, practice.stepIndex),
+        level,
+        rate: practice.loopTransport ? practice.loopTransport.getRate() : null,
+      });
+    store.set({ songId: practice.song.id, partId: practice.partId, instrumentId: practice.instrumentId, level, lessons });
   }
 
   // "Play it on…" row (plan D8): one card per ready instrument with a
@@ -1129,7 +1188,7 @@ function mountSongsPanel(hostEl, api) {
     if (stepIndex >= plan.steps.length) {
       markSongPassed(practice.song.id);
       practiceSection.appendChild(el('p', { text: 'Nicely done. You have played through the whole piece.' }));
-      practiceSection.appendChild(el('button', { type: 'button', text: 'Practise again', onclick: () => startPractice(practice.song, practice.partId) }));
+      practiceSection.appendChild(el('button', { type: 'button', text: 'Practise again', onclick: () => startPractice(practice.song, practice.partId, undefined, { fresh: true }) }));
       practiceSection.appendChild(el('button', { type: 'button', text: 'Back to songs', onclick: () => { practice = null; practiceSection.hidden = true; } }));
       return;
     }
@@ -1145,6 +1204,13 @@ function mountSongsPanel(hostEl, api) {
       if (practice.loopTransportStepIndex !== stepIndex) {
         practice.loopTransport = createLoopBackingTransport();
         practice.loopTransportStepIndex = stepIndex;
+        // A resumed lesson's saved ladder rate applies once, to the rung it
+        // was left on -- cleared immediately after, so it never re-applies
+        // if the ladder later drops back to an earlier rung.
+        if (typeof practice.resumeRate === 'number') {
+          practice.loopTransport.setRate(practice.resumeRate);
+          practice.resumeRate = null;
+        }
       }
     } else {
       practice.loopTransport = null;
@@ -1621,7 +1687,7 @@ function mountSongsPanel(hostEl, api) {
       if (typeof api.logEvent === 'function') {
         api.logEvent(makeEvent({
           instrument: practice.instrumentId, skill: step.kind + ':' + step.phraseIndex, source: 'song',
-          songId: practice.song.id, partId: practice.partId, assistance: 'none',
+          songId: practice.song.id, partId: practice.partId, assistance: practice.assistance,
           dims, unassessed, activeMs: Math.max(0, Math.round(elapsedMs || 0)),
           bpmTarget: step.bpm || null, bpmActual: step.bpm || null,
         }, { now: api.now() }));
@@ -1651,7 +1717,7 @@ function mountSongsPanel(hostEl, api) {
           repairStep.returnTo = practice.stepIndex;
           practice.repair = { step: repairStep, returnTo: practice.stepIndex };
           practice.playedEvents = [];
-          store.set({ songId: practice.song.id, partId: practice.partId, instrumentId: practice.instrumentId, level: practice.plan.level });
+          saveLesson();
           renderPractice();
           return;
         }
@@ -1668,7 +1734,7 @@ function mountSongsPanel(hostEl, api) {
     }
     practice.stepIndex = nextStep(practice.plan, practice.results);
     practice.playedEvents = [];
-    store.set({ songId: practice.song.id, partId: practice.partId, instrumentId: practice.instrumentId, level: practice.plan.level });
+    saveLesson();
     // The lesson just reached its end (the "whole piece" step passed): log
     // this practice session once, the same moment endSession() logs a
     // built-in drill's session.
@@ -1933,12 +1999,39 @@ function mountSongsPanel(hostEl, api) {
     startPractice(song, partId, instrument);
   }
 
+  // "Carry on: <title>": the newest saved lesson place still short of the
+  // last step (a finished lesson's entry was already dropped by
+  // saveLesson()), so `lessons[0]`, when there is one, is exactly it.
+  // Clicking opens that song the same way clicking its row would --
+  // openSong() itself auto-starts a one-part song, so startPractice() is
+  // only called here on top of it for a multi-part song, naming the saved
+  // part; either way it is startPractice()'s own key check, not this
+  // button, that decides whether the lesson actually resumes.
+  async function renderCarryOn() {
+    if (practice) { carryOnBtn.hidden = true; return; }
+    const lessons = sanitizeLessonList((store.get() || {}).lessons);
+    const entry = lessons[0];
+    if (!entry) { carryOnBtn.hidden = true; return; }
+    const songId = entry.key.songId;
+    let song = starterSongs.find((s) => s.id === songId);
+    const libraryId = song ? null : songId;
+    if (!song) { try { song = await library.get(songId); } catch (e) { song = null; } }
+    if (!song) { carryOnBtn.hidden = true; return; }
+    carryOnBtn.textContent = 'Carry on: ' + song.title;
+    carryOnBtn.hidden = false;
+    carryOnBtn.onclick = () => {
+      openSong(song, libraryId);
+      if (song.parts.length > 1) startPractice(song, entry.key.partId);
+    };
+  }
+
   refreshList();
 
   return {
     show() {
       refreshList();
       checkOpenRequest();
+      renderCarryOn();
       // P3-5: cleared here whether or not there is anything to show, so a
       // repeat openPanel('songs') call on an already-open instance (no
       // remount) does not keep displaying a leaving message from earlier in

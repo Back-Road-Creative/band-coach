@@ -304,6 +304,13 @@ plain paper, black on white, with nothing else on the page. A teacher challenge'
 "Export as a challenge", "Share with your band" and any read-only band-pack part assignments live
 under their own **Assignments** heading below the song list, separate from a single open song's
 own actions.
+
+Reopening a song carries on from the step you left off on, at the same practice speed, with a
+plain "Picking up where you left off." line — a **"Carry on: &lt;title&gt;"** button above the
+list offers the most recent one whenever no lesson is on screen. Editing the song's notes,
+choosing another part or instrument, changing capo, tuning or harmonica key, or a tempo change
+starts the lesson fresh at the first step instead, with no message, since any of those makes it a
+different lesson to learn. "Practise again" always starts at the beginning, whatever was saved.
 notes**, **Play along**, **Export**, **Share**, **Save a copy** — Edit notes opens *any* song,
 starter tunes included, straight in "Record a tune": saving a starter's edits makes "My copy of
 &lt;title&gt;" in your own songs, never touching the shipped starter itself. Leaving the editor —
