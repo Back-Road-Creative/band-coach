@@ -170,6 +170,11 @@
   .panel-songs-msg { min-height: 1.2em; color: var(--good); }
   .panel-songs-warn { color: var(--warn); }
   .panel-songs-practice { border: 1px solid var(--line); border-radius: 10px; padding: 12px; margin-top: 12px; display: flex; flex-direction: column; gap: 8px; }
+  /* P4-8: the step's staff view -- a fixed-pixel-width canvas (step-view.js)
+     scaled down by width: 100% so it never forces horizontal scroll on a
+     390px-wide phone screen. */
+  .panel-songs-view { max-width: 100%; overflow: hidden; }
+  .panel-songs-view canvas { display: block; width: 100%; height: auto; }
   .panel-songs-practice button { align-self: flex-start; }
   .panel-songs-count { color: var(--muted); }
   .panel-songs-play-on-list { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }

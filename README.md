@@ -334,7 +334,10 @@ its own list — "N of M songs passed" — with each song's own pass state remem
 sessions; a song counts as passed once its practice lesson has been played through to the end.
 "Export as a challenge" turns a learner's own saved library into a downloadable `.json` a teacher
 can pass along to another student, entirely by file exchange — no account, no server, no network
-call involved. Each phrase
+call involved. Between the step title and "Play it", each step also shows its own bars on a real staff
+(`src/ui/songs/step-view.js`), on the instrument's own clef and in its own written pitch and key —
+a keyboard reads a grand staff, a B flat clarinet reads its part a tone higher than it sounds, with
+a plain-language text alternative on the canvas for a screen reader. Each phrase
 step also shows a plain-word Easy/Medium/Hard difficulty (`src/song/phrase-difficulty.js`), and
 after a judged try the panel draws a small bar-by-bar strip (`src/song/bar-heat.js`) naming which
 bars went well and which need another pass. A band can also share a whole set list at once as a
