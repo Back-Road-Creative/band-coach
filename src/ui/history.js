@@ -5,6 +5,7 @@
 // teacher report, ranking items by how well they will be remembered) lives
 // in src/core/history.js and src/core/srs.js — this module is the DOM glue.
 import { summarize, sparkline, toTeacherSummary, ledger, weeklyReport } from '../core/history.js';
+import { summarizeEvents } from '../core/learning-events.js';
 import { due } from '../core/srs.js';
 import { itemLabel } from './history/item-label.js';
 import { sanitizeHistoryStore } from './history/store.js';
@@ -101,6 +102,7 @@ export function registerHistory(panels) {
           <h2>My progress</h2>
           <p>What your practice has looked like, in plain numbers — no account, nothing sent anywhere.</p>
           <div class="history-summary" id="historySummary"></div>
+          <div class="history-retention" id="historyRetention"></div>
           <h3>Practice calendar</h3>
           <label for="historyGoalInput">Daily minutes goal</label>
           <input type="number" id="historyGoalInput" min="5" max="120" step="1">
@@ -162,6 +164,19 @@ export function registerHistory(panels) {
         el.querySelector('#historySummary').innerHTML = s.totalSessions
           ? `<p>${s.totalSessions} session${s.totalSessions === 1 ? '' : 's'} logged. Current streak: ${s.currentStreak} day${s.currentStreak === 1 ? '' : 's'} (best ${s.bestStreak}). Accuracy is trending <strong>${esc(s.accuracyTrend.direction)}</strong>.</p>`
           : '<p>No sessions logged yet. Practice a little and come back.</p>';
+
+        // Passed-with-help / passed-on-your-own / retained / applied come from
+        // DB.events (src/core/learning-events.js summarizeEvents), a separate,
+        // finer-grained record from the plain session log above. withHelp +
+        // independent + introduced is every counted event (retained/applied are
+        // refinements of independent, not extra buckets -- see that module's own
+        // comment), so it doubles as "were there any checks at all" without a
+        // second read of db.events.length.
+        const ev = summarizeEvents(db.events || []);
+        const checkedCount = ev.withHelp + ev.independent + ev.introduced;
+        el.querySelector('#historyRetention').innerHTML = checkedCount
+          ? `<p>Passed with help: ${ev.withHelp} · Passed on your own: ${ev.independent} · Retained on a later check: ${ev.retained} · Applied in a song: ${ev.applied}</p>`
+          : '<p>No checks recorded yet — nothing here is counted as retained.</p>';
 
         const l = ledger(db.sessions, { now, goalMin: store.goalMin });
         el.querySelector('#historyCalendar').innerHTML = calendarHtml(l);

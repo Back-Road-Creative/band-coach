@@ -7,11 +7,11 @@
 // hand-build items and a stub `due` without pulling in the real forgetting
 // model (though the real tests use the real one).
 //
-// `events` (src/core/learning-events.js records) is accepted but unused
-// today: it is reserved for a later unit that adds a "retained on review"
-// / "applied in a new phrase" block, which needs cross-event history this
-// module does not otherwise touch (see learning-events.js's own comment on
-// summarizeEvents).
+// `events` (src/core/learning-events.js records) is accepted but unused here:
+// the "retained on review" / "applied in a new phrase" reporting this module
+// used to reserve a slot for is now src/ui/history.js's #historyRetention
+// block, built directly from summarizeEvents() (see that module's own
+// comment) rather than from planSession's own ordering.
 
 // planSession({ instrumentId, level, activeIds, items, events, now, due })
 // -> ordered array of up to four blocks:
