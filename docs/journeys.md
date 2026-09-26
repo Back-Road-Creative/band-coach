@@ -97,11 +97,14 @@ Proof: `node --test --test-concurrency=1 tests/characterization/a11y-axe.test.mj
   on a later check / Applied in a song" line (`src/ui/history.js`'s `#historyRetention`, built from
   `summarizeEvents()` in `src/core/learning-events.js`), with a plain "No checks recorded yet" line
   when there is nothing to count. Proof: `node --test tests/characterization/w-history-retained.test.mjs`.
-- **F2 — activating a nav button drops focus to `<body>`, not to the new screen.** After Tab/Enter
-  (or Space) on any nav button, the browser's focus lands on `<body>` instead of moving to the
-  destination's own heading, so a screen-reader user gets no spoken cue that the screen changed.
-  `journey-keyboard-nav.test.mjs` records this as a plain fact at every stop, so a future fix is a
-  one-line change to that recorded assertion, not a rewrite.
+- **F2 — fixed: activating a nav button moves focus to the destination's own heading.** After
+  Tab/Enter (or Space) on a nav button that actually changes screen, focus lands on that screen's
+  heading (Songs, Progress and Settings each have one; the Instrument sheet gets a small
+  screen-reader-only heading of its own since it had none) instead of dropping to `<body>`, so a
+  screen-reader user gets a spoken cue that the screen changed. Re-pressing the destination already
+  showing (Practice at boot, or the Instrument sheet's own second press, which closes it) is a
+  no-op, so those two leave focus on the nav button itself. `journey-keyboard-nav.test.mjs` asserts
+  this directly.
 - **F3 (fixed) — colour-contrast on Songs' "Play it on…" badges.** Once a song is open, axe-core
   used to find the instrument-card feasibility badges (`.panel-songs-badge`,
   `.panel-songs-diff-badge`) failing WCAG colour-contrast (serious), because their ink was a

@@ -542,7 +542,10 @@ function mountSongsPanel(hostEl, api) {
     if (addSongOpen) addSongHeading.focus();
   }
 
-  const heading = el('h2', { text: 'Songs' });
+  // F2 (src/app.js's focusDestination()): id + tabindex so a real nav
+  // activation of Songs can focus this heading instead of dropping focus to
+  // <body>.
+  const heading = el('h2', { text: 'Songs', id: 'songsHeading', tabindex: '-1' });
   const intro = el('p', { class: 'panel-songs-intro', text: 'Pick a tune to practise, or add your own from a file.' });
 
   // "Carry on: <title>" (P5-3): shown above the list, only while no lesson

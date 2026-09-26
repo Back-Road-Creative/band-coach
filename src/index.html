@@ -20,7 +20,14 @@
     <button type="button" data-route="settings" data-i18n="nav.settings">Settings</button>
   </nav>
 
-  <div class="picker" id="picker" role="group" aria-label="Instrument"></div>
+  <!-- F2 (src/app.js's focusDestination()): #picker itself is built with no
+       heading of its own (buildPicker() only ever appends buttons/groups),
+       so a nav activation that opens this sheet had nowhere honest to move
+       focus but <body> -- this heading is the fix's one new element, kept
+       out of view since the sheet's own aria-label already names it for a
+       screen reader; buildPicker() appends after it, so it always stays
+       the sheet's first child. -->
+  <div class="picker" id="picker" role="group" aria-label="Instrument"><h2 id="pickerHeading" tabindex="-1" class="visually-hidden">Instrument</h2></div>
 
   <div class="io">
     <span class="dot" id="ioDot"></span>
@@ -43,7 +50,7 @@
   <section class="panel-host" id="panelHost" aria-live="polite" hidden></section>
 
   <section id="settingsView" class="settings-view" hidden aria-labelledby="settingsTitle">
-    <h2 id="settingsTitle" data-i18n="settings.title">Settings</h2>
+    <h2 id="settingsTitle" tabindex="-1" data-i18n="settings.title">Settings</h2>
     <p id="settingsSay" role="status"></p>
     <div class="settings-group">
       <h3 data-i18n="settings.look">Look and names</h3>
