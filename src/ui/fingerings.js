@@ -7,6 +7,8 @@ import { INSTRUMENTS } from '../instruments/index.js';
 import { howKindFor, computeHow, defaultNoteFor, alternateTuningsFor } from './fingerings/how.js';
 import { noteName, chromaticRange } from './fingerings/notes.js';
 import { readFingeringSetup } from './fingerings/setup.js';
+import { isReviewed } from '../instruments/review.js';
+import { t } from '../core/i18n.js';
 
 // Human-readable labels for fretboard.js's named-tuning keys (alternateTuningsFor).
 const TUNING_LABELS = {
@@ -146,6 +148,46 @@ function voiceDiagram(instrument, how) {
   ]);
 }
 
+// Keyed Boehm-system woodwinds (flute, clarinet, oboe, sax): the underlying
+// chart (src/instruments/how/keyed-woodwind.js) is typed prose, not a
+// structured set of key positions like a fretboard or brass valve, so there
+// is no diagram to draw here that wouldn't be invented -- just the plain
+// text the chart actually carries for this pitch, same wording as
+// how.description (describeKeyedWoodwind in fingerings/how.js), plus a
+// standalone note for the half-hole technique when the entry flags it.
+function keyedWoodwindDiagram(instrument, how) {
+  const box = el('div', { className: 'fing-keyed-woodwind', role: 'img', 'aria-label': how.description });
+  if (!how.entry) {
+    box.appendChild(el('p', { className: 'fing-keyed-keys', text: 'No fingering shown: this pitch is outside the beginner fingering chart for this instrument.' }));
+    return box;
+  }
+  box.appendChild(el('p', { className: 'fing-keyed-keys', text: how.entry.keys }));
+  if (how.entry.halfHole) box.appendChild(el('p', { className: 'fing-warn', text: 'Uses the half-hole technique.' }));
+  return box;
+}
+
+// Any `how.kind` this app has no diagram module for (a future instrument
+// family, or `how` itself missing) -- a truthful "not ready yet" state,
+// never a thrown error and never the voice fallback that used to catch
+// every unmatched kind (the keyed-woodwind bug: flute, clarinet, oboe and
+// both saxes fell through to "Sing this pitch", src/ui/fingerings.js history).
+function unavailableDiagram() {
+  return el('div', { className: 'fing-unavailable', role: 'img', 'aria-label': t('fingerings.unavailable') }, [
+    el('p', { className: 'fing-unavailable', text: t('fingerings.unavailable') })
+  ]);
+}
+
+// Pure routing: which diagram kind applies to a computeHow() result. Kept
+// separate from the DOM-building functions above (which need a real
+// `document`, browser-tested only) so the ROUTING itself -- the part that
+// was actually wrong -- is unit testable without one. An unrecognised or
+// missing `how.kind` maps to 'unavailable', never silently falling through
+// to 'voice'.
+const DIAGRAM_KINDS = ['drum-kit', 'fretboard', 'fingerboard', 'brass-valves', 'brass-slide', 'harmonica', 'recorder', 'whistle', 'keyed-woodwind', 'voice'];
+export function diagramKindFor(how) {
+  return (how && DIAGRAM_KINDS.includes(how.kind)) ? how.kind : 'unavailable';
+}
+
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
 function svgEl(tag, attrs) {
@@ -177,13 +219,19 @@ export function drumKitDiagram(instrument, how) {
 }
 
 function diagramFor(instrument, how) {
-  if (how.kind === 'drum-kit') return drumKitDiagram(instrument, how);
-  if (how.kind === 'fretboard') return fretboardDiagram(instrument, how);
-  if (how.kind === 'fingerboard') return fingerboardDiagram(instrument, how);
-  if (how.kind === 'brass-valves' || how.kind === 'brass-slide') return brassDiagram(instrument, how);
-  if (how.kind === 'harmonica') return harmonicaDiagram(instrument, how);
-  if (how.kind === 'recorder' || how.kind === 'whistle') return recorderDiagram(instrument, how);
-  return voiceDiagram(instrument, how);
+  switch (diagramKindFor(how)) {
+    case 'drum-kit': return drumKitDiagram(instrument, how);
+    case 'fretboard': return fretboardDiagram(instrument, how);
+    case 'fingerboard': return fingerboardDiagram(instrument, how);
+    case 'brass-valves':
+    case 'brass-slide': return brassDiagram(instrument, how);
+    case 'harmonica': return harmonicaDiagram(instrument, how);
+    case 'recorder':
+    case 'whistle': return recorderDiagram(instrument, how);
+    case 'keyed-woodwind': return keyedWoodwindDiagram(instrument, how);
+    case 'voice': return voiceDiagram(instrument, how);
+    default: return unavailableDiagram();
+  }
 }
 
 export function registerFingerings(panels) {
@@ -245,6 +293,13 @@ export function registerFingerings(panels) {
 
       const title = el('h2', { text: 'How to play it' });
       const help = el('p', { className: 'small', text: 'Pick an instrument and a note to see how to play it, drawn clearly with a plain-text description underneath.' });
+      // A visible, honest flag for a record no musician has checked yet
+      // (src/instruments/review.js's isReviewed) -- reference help AND the
+      // "Show me" inline lesson prompt both funnel through this same panel,
+      // so one badge here covers both. Every instrument in this app
+      // currently qualifies (all 28 provenance fields are still null), so
+      // this is visible on first load, not a rare edge case.
+      const reviewHost = el('div', { className: 'fing-review-host' });
       const instrLabel = el('label', { htmlFor: 'fingInstrument', text: 'Instrument' });
       const instrSelect = el('select', { id: 'fingInstrument' });
       PLAYABLE.forEach(rec => instrSelect.appendChild(el('option', { value: rec.id, text: rec.name })));
@@ -263,11 +318,21 @@ export function registerFingerings(panels) {
       const descHost = el('p', { id: 'fingDesc', className: 'fing-desc' });
 
       hostEl.appendChild(el('div', { className: 'panel-fingerings' }, [
-        title, help,
+        title, help, reviewHost,
         el('div', { className: 'fing-row' }, [instrLabel, instrSelect]),
         controlsHost,
         rangeHost, notesHost, diagramHost, descHost
       ]));
+
+      // Reflects instrument.provenance, not the picked note -- only needs
+      // recomputing on an instrument switch, in selectInstrument() below.
+      function renderReview() {
+        reviewHost.innerHTML = '';
+        if (isReviewed(instrument.provenance)) return;
+        const reference = instrument.provenance && instrument.provenance.reference;
+        const text = reference ? t('review.unreviewedWithRef', { reference }) : t('review.unreviewed');
+        reviewHost.appendChild(el('p', { className: 'fing-review-badge', role: 'note', text }));
+      }
 
       // Which of the capo/tuning/left-handed controls apply depends on the
       // diagram kind: a capo and a named alternate tuning are a fretted
@@ -334,6 +399,7 @@ export function registerFingerings(panels) {
         capo = remembered.capo;
         tuningName = remembered.tuning;
         leftHanded = remembered.leftHanded;
+        renderReview();
         renderControls();
         midi = defaultNoteFor(instrument, {});
         renderNotePicker();

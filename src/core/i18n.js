@@ -50,6 +50,16 @@ export const en = {
   'setup.inputLabel': 'Input',
   'setup.defaultMic': 'Default microphone',
   'setup.checkMic': 'Check my microphone',
+
+  // "How to play it" panel (src/ui/fingerings.js): the routing fallback for
+  // an instrument this app cannot yet draw guidance for, and the badge that
+  // marks a fingering/curriculum record no musician has checked yet (see
+  // src/instruments/review.js's isReviewed -- null or reference-only
+  // provenance both count as unreviewed).
+  'fingerings.unavailable': "Guidance for this instrument isn't ready here yet.",
+  'review.unreviewed': 'Not yet checked by a musician.',
+  'review.unreviewedWithRef': 'Not yet checked by a musician (noted against {reference}).',
+
   'break.back': "I'm back, resume",
   'break.snooze': 'Keep going 5 more minutes',
   'break.end': 'End session',

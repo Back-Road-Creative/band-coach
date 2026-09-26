@@ -84,6 +84,54 @@ test('fingerings panel opens, shows a default fretboard diagram, and reacts to a
   assert.equal(await page.evaluate('window.__coach.panelOpen()'), 'fingerings');
 });
 
+test('fingerings panel: every keyed-woodwind instrument shows its own guidance, never the voice fallback', async (t) => {
+  const page = await launchPage(HTML_PATH);
+  t.after(() => page.close());
+
+  await page.evaluate("window.__coach.openPanel('fingerings')");
+  const pick = id => page.evaluate(`(function () {
+    const sel = document.getElementById('fingInstrument');
+    sel.value = '${id}'; sel.dispatchEvent(new Event('change'));
+  })()`);
+
+  // Regression: these five all fell through to the voice diagram ("Sing
+  // this pitch — no fingering needed.") before the keyed-woodwind branch
+  // existed in diagramFor.
+  for (const id of ['flute', 'clarinet-bb', 'oboe', 'sax-alto-eb', 'sax-tenor-bb']) {
+    await pick(id);
+    assert.equal(await page.evaluate("document.querySelectorAll('.fing-voice').length"), 0, id + ' must not render the voice diagram');
+    assert.equal(await page.evaluate("document.querySelectorAll('.fing-keyed-woodwind').length"), 1, id + ' should render the keyed-woodwind diagram');
+    const desc = await page.evaluate("document.getElementById('fingDesc').textContent");
+    assert.doesNotMatch(desc, /Sing this pitch/, id + ' description must not be the voice text');
+    const diagramText = await page.evaluate("document.querySelector('.fing-keyed-woodwind').textContent");
+    assert.doesNotMatch(diagramText, /Sing this pitch/, id + ' diagram must not contain the voice text');
+  }
+
+  // Clarinet specifically: the rendered help contains the actual keyed-
+  // woodwind chart text for the current pitch (audit's G3 example uses the
+  // written low-G3 fingering — same table, low C4 is this app's default
+  // note and names the footjoint keys instead).
+  await pick('clarinet-bb');
+  const clarinetDesc = await page.evaluate("document.getElementById('fingDesc').textContent");
+  assert.match(clarinetDesc, /left hand: thumb/);
+  assert.doesNotMatch(clarinetDesc, /Sing this pitch/);
+});
+
+test('fingerings panel: an unreviewed instrument shows the "not yet checked by a musician" badge', async (t) => {
+  const page = await launchPage(HTML_PATH);
+  t.after(() => page.close());
+
+  await page.evaluate("window.__coach.openPanel('fingerings')");
+  await page.evaluate(`(function () {
+    const sel = document.getElementById('fingInstrument');
+    sel.value = 'gtr'; sel.dispatchEvent(new Event('change'));
+  })()`);
+  // Every instrument record currently ships provenance: null, so the badge
+  // is visible on ordinary startup, not a rare edge case.
+  const badge = await page.evaluate("document.querySelector('.fing-review-badge')?.textContent");
+  assert.match(badge, /not yet checked by a musician/i);
+});
+
 test('fingerings panel: capo, alternate tuning and left-handed controls', async (t) => {
   const page = await launchPage(HTML_PATH);
   t.after(() => page.close());
