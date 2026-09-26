@@ -102,9 +102,10 @@ Proof: `node --test --test-concurrency=1 tests/characterization/a11y-axe.test.mj
   destination's own heading, so a screen-reader user gets no spoken cue that the screen changed.
   `journey-keyboard-nav.test.mjs` records this as a plain fact at every stop, so a future fix is a
   one-line change to that recorded assertion, not a rewrite.
-- **F3 — a real, unfixed colour-contrast violation on Songs' "Play it on…" badges.** Once a song is
-  open, axe-core finds the instrument-card feasibility badges (`.panel-songs-badge`,
-  `.panel-songs-diff-badge`) fail WCAG colour-contrast (serious). This is left as `{ todo: '...' }`
-  on the `songs: song open` and `songs: add a song open` subtests in `a11y-axe.test.mjs` — named
-  and unresolved on purpose, not excluded or weakened, since it is a real finding for the app's
-  styling to fix.
+- **F3 (fixed) — colour-contrast on Songs' "Play it on…" badges.** Once a song is open, axe-core
+  used to find the instrument-card feasibility badges (`.panel-songs-badge`,
+  `.panel-songs-diff-badge`) failing WCAG colour-contrast (serious), because their ink was a
+  hard-coded `#000`/`#fff` instead of following the active theme. `src/styles.css` now gives each
+  meaning colour (`--good`/`--warn`/`--bad`/`--muted`) its own `--*-ink` token tuned per theme (see
+  `tests/unit/badge-contrast.test.mjs` for the WCAG AA numbers), and the `songs: song open` and
+  `songs: add a song open` subtests in `a11y-axe.test.mjs` are real assertions again, not `todo`.
