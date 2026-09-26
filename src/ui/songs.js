@@ -454,6 +454,11 @@ function mountSongsPanel(hostEl, api) {
   // a learner tabbed onto the record button keeps keyboard focus while
   // playing a phrase.
   let countEl = null;
+  // A9: the current lesson's own <h3> (practice.song.title), rebuilt on
+  // every renderPractice() call -- kept so startPractice() can focus it
+  // exactly once, when a session actually begins, without renderPractice()
+  // itself (called again on every step advance) needing to know why.
+  let practiceHeadingEl = null;
 
   hostEl.innerHTML = '';
   // FIRST inside the container, ahead of even the heading -- adding a song
@@ -601,18 +606,36 @@ function mountSongsPanel(hostEl, api) {
 
   const practiceSection = el('section', { class: 'panel-songs-practice', hidden: 'hidden' });
 
+  // A9: heading/intro/Carry-on/the song list/Assignments, together, used to
+  // sit ahead of practiceSection in the DOM (append order below), which put
+  // every saved song's row, the whole Assignments block and the "Play it
+  // on…" instrument row above an open song's own lesson -- 3.9 phone
+  // screens of scrolling before a learner who just picked a song saw so
+  // much as its title (measured at 390x844: the lesson heading landed at
+  // y=2984 on a document 3458px tall). Wrapping them in one <details>,
+  // closed the moment a song opens (songHeader() below), keeps every one of
+  // them a single click away (the native disclosure triangle) while putting
+  // songHeaderSection/practiceSection -- appended below, so they render
+  // ahead of this <details> -- first on screen; nothing here loses an id,
+  // class or listener, so every existing selector (including #songsHeading,
+  // F2's own nav-focus target) still finds exactly the same element.
+  const libraryDetails = el('details', { class: 'panel-songs-library', open: 'open' });
+  const librarySummary = el('summary', { text: t('songs.libraryToggle') });
+  libraryDetails.appendChild(librarySummary);
+  libraryDetails.appendChild(heading);
+  libraryDetails.appendChild(intro);
+  libraryDetails.appendChild(carryOnBtn);
+  libraryDetails.appendChild(listSection);
+  libraryDetails.appendChild(assignmentsSection);
+
   // P3-9: the hidden sheet Print draws a song's notation into, appended to hostEl once (not
   // to songHeaderSection, which songHeader() below clears on every open song -- same reasoning
   // as history.js's own #historyPrintReport living outside the section it prints from).
   let printSheetEl = null;
 
-  hostEl.appendChild(heading);
-  hostEl.appendChild(intro);
-  hostEl.appendChild(carryOnBtn);
-  hostEl.appendChild(listSection);
-  hostEl.appendChild(assignmentsSection);
   hostEl.appendChild(songHeaderSection);
   hostEl.appendChild(practiceSection);
+  hostEl.appendChild(libraryDetails);
 
   function say(text, kind) {
     importMsg.textContent = text;
@@ -858,6 +881,12 @@ function mountSongsPanel(hostEl, api) {
   function songHeader(song, libraryId) {
     songHeaderSection.hidden = false;
     songHeaderSection.innerHTML = '';
+    // A9: every real path into a song (a row click via openSong(), a
+    // deep-link via checkOpenRequest(), Carry on's own openSong() call)
+    // runs through this one function first, so this is the one place that
+    // needs to close the library -- reopened by the "Back to songs" button
+    // below once the whole piece is finished.
+    libraryDetails.open = false;
 
     // "Edit notes": a library song goes straight to the editor; a starter
     // tune has no id of its own to edit in place, so its own id rides along
@@ -1008,7 +1037,8 @@ function mountSongsPanel(hostEl, api) {
     songHeader(song, libraryId || null);
     practiceSection.hidden = false;
     practiceSection.innerHTML = '';
-    practiceSection.appendChild(el('h3', { text: song.title }));
+    practiceHeadingEl = el('h3', { text: song.title, id: 'songsPracticeHeading', tabindex: '-1' });
+    practiceSection.appendChild(practiceHeadingEl);
     if (song.parts.length > 1) {
       const partList = el('ul', {});
       song.parts.forEach((part) => {
@@ -1018,10 +1048,15 @@ function mountSongsPanel(hostEl, api) {
         partList.appendChild(li);
       });
       practiceSection.appendChild(partList);
+      // A9: a multi-part song stops here for the part choice -- startPractice()
+      // (and its own focus() call) is never reached until a part is picked, so
+      // this heading gets the same one-time focus right here instead.
+      practiceHeadingEl.focus();
     } else if (song.parts.length === 1) {
       startPractice(song, song.parts[0].id);
     } else {
       practiceSection.appendChild(el('p', { text: 'This song has no notes to practise yet.' }));
+      practiceHeadingEl.focus();
     }
   }
 
@@ -1109,6 +1144,15 @@ function mountSongsPanel(hostEl, api) {
     if (resumeEntry) say('Picking up where you left off.', 'ok');
     saveLesson();
     renderPractice();
+    // A9: focus moves to the lesson's own heading exactly once, here --
+    // where a fresh (or resumed) practice session actually begins -- never
+    // from renderPractice() itself, which also reruns on every step advance
+    // (Next/Your turn/Stop and check); refocusing the heading on each of
+    // those would yank keyboard focus away from the control the learner
+    // just pressed. F2's own nav-into-Songs focus (src/app.js, #songsHeading)
+    // is unrelated -- this is the SONG's heading, reached only once a
+    // specific song is opened.
+    if (practiceHeadingEl) practiceHeadingEl.focus();
   }
 
   // Replaces the three separate `store.set({...})` writes startPractice()/
@@ -1184,7 +1228,8 @@ function mountSongsPanel(hostEl, api) {
   function renderPractice() {
     countEl = null;
     practiceSection.innerHTML = '';
-    practiceSection.appendChild(el('h3', { text: practice.song.title }));
+    practiceHeadingEl = el('h3', { text: practice.song.title, id: 'songsPracticeHeading', tabindex: '-1' });
+    practiceSection.appendChild(practiceHeadingEl);
     const arrangementLine = arrangementText(practice.arrangement);
     if (arrangementLine) practiceSection.appendChild(el('p', { class: 'panel-songs-arrangement', text: arrangementLine }));
     const { plan, stepIndex } = practice;
@@ -1192,7 +1237,10 @@ function mountSongsPanel(hostEl, api) {
       markSongPassed(practice.song.id);
       practiceSection.appendChild(el('p', { text: 'Nicely done. You have played through the whole piece.' }));
       practiceSection.appendChild(el('button', { type: 'button', text: 'Practise again', onclick: () => startPractice(practice.song, practice.partId, undefined, { fresh: true }) }));
-      practiceSection.appendChild(el('button', { type: 'button', text: 'Back to songs', onclick: () => { practice = null; practiceSection.hidden = true; } }));
+      practiceSection.appendChild(el('button', {
+        type: 'button', text: 'Back to songs',
+        onclick: () => { practice = null; practiceSection.hidden = true; libraryDetails.open = true; },
+      }));
       return;
     }
     if (practice.repair) {
@@ -1227,9 +1275,6 @@ function mountSongsPanel(hostEl, api) {
     }
     if (plan.fit.changes.length) {
       practiceSection.appendChild(el('p', { text: 'This song was ' + plan.fit.changes.join('; ') + ' to fit your instrument.' }));
-    }
-    if (stepIndex === 0) {
-      practiceSection.appendChild(renderPlayItOn(practice.song, practice.partId, practice.instrumentId));
     }
     const titleRow = el('h4', { text: stepTitle(step) + ' (bars ' + (step.bars[0] + 1) + '-' + (step.bars[1] + 1) + ')' });
     if (typeof step.difficulty === 'number') {
@@ -1310,6 +1355,15 @@ function mountSongsPanel(hostEl, api) {
     }
     if (practice.lastAssessed) {
       practiceSection.appendChild(renderAssessedList(practice.lastAssessed));
+    }
+    // A9: moved from ahead of titleRow/the notation/the transport (playBtn
+    // above) to here, below all of it -- 28 instrument cards used to sit
+    // between the song title and "Play it", pushing the transport itself
+    // out of a phone's first screen even once the library (above) stopped
+    // doing the same. Still exactly one step's worth of scrolling, still
+    // shown only on the lesson's first (listen) step, same as before.
+    if (stepIndex === 0) {
+      practiceSection.appendChild(renderPlayItOn(practice.song, practice.partId, practice.instrumentId));
     }
   }
 

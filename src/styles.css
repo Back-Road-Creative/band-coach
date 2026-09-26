@@ -184,7 +184,12 @@
   .panel-songs-intro { color: var(--muted); }
   .panel-songs-msg { min-height: 1.2em; color: var(--good); }
   .panel-songs-warn { color: var(--warn); }
-  .panel-songs-practice { border: 1px solid var(--line); border-radius: 10px; padding: 12px; margin-top: 12px; display: flex; flex-direction: column; gap: 8px; }
+  /* A9: margin/padding/gap trimmed from 12/12/8 -- with the library and the
+     "Play it on…" row moved out of the way (src/ui/songs.js), this section's
+     own spacing was the last few pixels standing between "Play it" and a
+     390x844 phone's first screen; every other panel-songs-* rule is
+     unchanged. */
+  .panel-songs-practice { border: 1px solid var(--line); border-radius: 10px; padding: 8px; margin-top: 6px; display: flex; flex-direction: column; gap: 5px; }
   /* P4-8: the step's staff view -- a fixed-pixel-width canvas (step-view.js)
      scaled down by width: 100% so it never forces horizontal scroll on a
      390px-wide phone screen. */
