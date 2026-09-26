@@ -374,8 +374,19 @@
      the :root block above) means every descendant resolves to dark-palette
      colours regardless of the active theme, with no selector to enumerate;
      color-scheme: dark carries the same intent to native controls. Checked
-     by tests/unit/stage-contrast.test.mjs. */
-  .stage { position: relative; background: linear-gradient(#0d111c, #05070c); border: 1px solid var(--line); border-radius: 8px; padding: 8px; display: flex; flex-direction: column; gap: 8px; color-scheme: dark; --ground: #0a0d14; --panel: #121726; --panel-2: #1a2033; --line: #2a3350; --text: #e9edf6; --muted: #93a0bd; --accent: #2f93ee; --accent-ink: #2f93ee; --good: #5be08a; --warn: #f3c52f; --bad: #ff6b5e; --good-ink: #000; --warn-ink: #000; --bad-ink: #000; --muted-ink: #000; }
+     by tests/unit/stage-contrast.test.mjs.
+     BC-10 follow-up: re-pinning a custom property alone does not repaint an
+     element that never declares its own `color` -- `color` is an inherited
+     used value, and `body { color: var(--text) }` is the only rule that
+     resolves --text into one; a descendant that never sets `color` (#prompt,
+     the break card's <h2>, #tapPad, ...) simply inherited that already-
+     resolved page-level colour, which in the light theme is a near-black
+     navy on this near-black gradient (~1.05:1, see
+     tests/characterization/theme-toggle.test.mjs). Declaring `color:
+     var(--text)` here, using the pinned value above, gives every such
+     descendant a correct inherited colour with no per-selector enumeration
+     either. */
+  .stage { position: relative; background: linear-gradient(#0d111c, #05070c); border: 1px solid var(--line); border-radius: 8px; padding: 8px; display: flex; flex-direction: column; gap: 8px; color: var(--text); color-scheme: dark; --ground: #0a0d14; --panel: #121726; --panel-2: #1a2033; --line: #2a3350; --text: #e9edf6; --muted: #93a0bd; --accent: #2f93ee; --accent-ink: #2f93ee; --good: #5be08a; --warn: #f3c52f; --bad: #ff6b5e; --good-ink: #000; --warn-ink: #000; --bad-ink: #000; --muted-ink: #000; }
   /* R10 P3: sentence case -- uppercase display type stays only on the h1
      wordmark and the Start button. */
   #prompt { font: 700 40px/1.05 var(--display); text-wrap: balance; min-height: 1.1em; }
