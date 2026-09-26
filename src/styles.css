@@ -342,8 +342,10 @@
   .panel-fingerings .fing-recorder-hole { display: inline-flex; align-items: center; justify-content: center; width: 1.8em; height: 1.8em; border-radius: 50%; border: 2px solid var(--line); font-size: 12px; }
   .panel-fingerings .fing-recorder-hole.fing-hit { background: var(--muted); }
   .panel-fingerings .fing-recorder-hole.fing-half { background: linear-gradient(90deg, var(--muted) 50%, transparent 50%); }
-  /* */
-  /* */
+  .panel-fingerings .fing-keyed-woodwind { display: flex; flex-direction: column; gap: 6px; max-width: 60ch; }
+  .panel-fingerings .fing-keyed-keys { margin: 0; font-size: 15px; }
+  .panel-fingerings .fing-unavailable { color: var(--muted); margin: 0; }
+  .panel-fingerings .fing-review-badge { color: var(--warn); font-size: 13px; margin: 0 0 8px; }
   .panel-playalong { display: flex; flex-direction: column; gap: 12px; }
   .panel-playalong .pa-intro { color: var(--muted); max-width: 64ch; margin: 0; }
   .panel-playalong .pa-note { color: var(--muted); font-size: 13px; margin: 0; }

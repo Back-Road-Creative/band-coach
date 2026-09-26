@@ -446,6 +446,20 @@ string tuning, and an ordered curriculum). `src/instruments/index.js` exports
 `INSTRUMENTS` and `byId`. Every record also carries a `provenance` field — null
 until a musician has reviewed its curriculum, see "Beginner pathway status" below.
 
+The "How to play it" panel (`src/ui/fingerings.js`) never leaves that gap
+implicit: `src/instruments/review.js`'s `isReviewed()` treats a record's
+provenance as reviewed only when `reviewedBy` and `reviewedAt` are both
+filled in, and the panel shows a plain-language "Not yet checked by a
+musician" badge whenever it isn't — including the reference name when one is
+on file. Since every record currently ships `provenance: null`, that badge is
+visible for all 28 instruments today, not a rare edge case. The panel's
+routing is equally strict about what it draws: an instrument kind it has no
+diagram for renders a truthful "guidance isn't ready here yet" state rather
+than silently reusing another instrument family's renderer (`diagramKindFor`
+in `src/ui/fingerings.js` — this is the fix for a defect where every keyed-
+Boehm-system woodwind, see `src/instruments/how/keyed-woodwind.js` below,
+rendered the voice family's "Sing this pitch" help instead of its own chart).
+
 To add an instrument: create `src/instruments/<id>.js` exporting a default
 object matching the schema, import it in `index.js`, and add it to the
 `INSTRUMENTS` array. Set `status: 'planned'` and `curriculum: []` if its
