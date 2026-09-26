@@ -122,3 +122,35 @@ test('fingeringLine is null for a family with nothing to say', () => {
   const line = fingeringLine({ notes: [] }, arr, kbd, []);
   assert.equal(line, null);
 });
+
+const CANVAS_WIDTH = 340;
+
+// A dense single bar (16 notes) must wrap into extra rows rather than run its
+// fret numbers off the right edge of the 340px canvas -- every note stays
+// visible.
+test('a dense 16-note bar wraps into rows instead of overrunning the canvas', () => {
+  const fitNotes = Array.from({ length: 16 }, (_, i) => ({ start: i * 120, dur: 120, midi: 60 + (i % 5) }));
+  const arr = arrangement('fretted', fitNotes.map((_, i) => [i, { string: 0, fret: i }]));
+  const step = { notes: fitNotes };
+  const view = tabView(step, arr, gtr, fitNotes);
+  const frets = view.rows.flatMap((r) => r.primitives.filter((p) => p.type === 'fretNumber'));
+  assert.equal(frets.length, 16, 'every note is still visible, none dropped');
+  for (const f of frets) assert.ok(f.x <= CANVAS_WIDTH, `fret number x (${f.x}) stays on the canvas`);
+  assert.ok(view.rows.length > 1, 'a 16-note bar needs more than one row at this width');
+  assert.ok(view.height > (gtr.tuning.length + 1) * 10, 'canvas height grows to fit the extra row(s)');
+});
+
+// A longer, multibar phrase must wrap the same way, and every string's line
+// primitive is still drawn once per row so no string/finger line goes missing.
+test('a multibar phrase wraps every row\'s string lines too', () => {
+  const fitNotes = Array.from({ length: 30 }, (_, i) => ({ start: i * 120, dur: 120, midi: 60 }));
+  const arr = arrangement('fretted', fitNotes.map((_, i) => [i, { string: 0, fret: 0 }]));
+  const step = { notes: fitNotes };
+  const view = tabView(step, arr, gtr, fitNotes);
+  const frets = view.rows.flatMap((r) => r.primitives.filter((p) => p.type === 'fretNumber'));
+  assert.equal(frets.length, 30);
+  for (const f of frets) assert.ok(f.x <= CANVAS_WIDTH);
+  for (const row of view.rows) {
+    assert.equal(row.primitives.filter((p) => p.type === 'line').length, gtr.tuning.length, 'every row draws its own string lines');
+  }
+});

@@ -58,6 +58,10 @@ const DRAWERS = {
 
   dot: (p) => `<circle cx="${p.x}" cy="${p.y}" r="1.5" fill="black"/>`,
 
+  // Mirrors draw-canvas.js's tie arc, marking a note continued from the
+  // previous bar.
+  tie: (p) => `<path d="M ${p.x - 9} ${p.y} A 6 6 0 0 0 ${p.x + 3} ${p.y}" fill="none" stroke="black"/>`,
+
   clef: (p, theme) => svgText(glyphOrFallback(theme, CLEF_GLYPH[p.clef], CLEF_FALLBACK[p.clef]), p.x, p.y),
 
   keyAccidental: (p, theme) => svgText(glyphOrFallback(theme, ACCIDENTAL_GLYPH[p.accidental], ACCIDENTAL_FALLBACK[p.accidental]), p.x, p.y),

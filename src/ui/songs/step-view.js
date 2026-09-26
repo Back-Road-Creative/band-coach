@@ -66,22 +66,56 @@ function prettyLetter(spelled) {
   return spelled.letter + (spelled.accidental === '#' ? '♯' : spelled.accidental === 'b' ? '♭' : '');
 }
 
-// One bar's {midi, dur} list (dur in quarter-note units, what layoutMeasure
-// expects), rests filling every gap and a note crossing the barline clipped
-// to it for this display only -- same convention as
-// src/ui/editor/layout-song.js's own barNotes(), but built from the step's
-// own already-arranged notes rather than a whole song part.
-function barNoteList(notes, barStart, barEnd, tpq) {
-  const out = [];
-  let cursor = barStart;
-  const inBar = notes.filter((n) => n.start >= barStart && n.start < barEnd).sort((a, b) => a.start - b.start);
-  for (const n of inBar) {
-    if (n.start > cursor) out.push({ midi: null, dur: (n.start - cursor) / tpq });
-    const end = Math.min(n.start + n.dur, barEnd);
-    if (end > n.start) { out.push({ midi: n.midi, dur: (end - n.start) / tpq }); cursor = end; }
+// One bar's {midi, dur, onset, id, tied} list (dur/onset in quarter-note
+// units, what layoutMeasure expects -- onset is beats from this bar's own
+// start). Unlike a single-voice cursor walk, this keeps every note that
+// sounds during the bar at its OWN onset, so two notes sharing an onset (a
+// chord) both survive at the same onset and a held note under a moving line
+// keeps its own position rather than being displaced by later notes. A note
+// that began in an EARLIER bar (crosses the barline) is kept too, clipped to
+// this bar's start, at onset 0, `tied: true` -- a continuation, not a fresh
+// attack, and never silently dropped. A note running past this bar's end is
+// clipped to it for this display only, same convention as
+// src/ui/editor/layout-song.js's own barNotes() -- but that module's own
+// notes/indexMap are a DIFFERENT (whole-song-part) shape and are not shared
+// with this one. Rests fill only the gaps left uncovered by every note
+// together (found by merging their [start, end) ranges), not gaps in any one
+// voice, so a beat already sounding from a held note gets no rest under it.
+export function barNoteList(notes, barStart, barEnd, tpq) {
+  const overlapping = notes
+    .map((n, i) => ({ n, i }))
+    .filter(({ n }) => n.start < barEnd && n.start + n.dur > barStart);
+
+  const events = overlapping.map(({ n, i }) => {
+    const tied = n.start < barStart;
+    const clipStart = tied ? barStart : n.start;
+    const clipEnd = Math.min(n.start + n.dur, barEnd);
+    return {
+      midi: n.midi, dur: (clipEnd - clipStart) / tpq, onset: (clipStart - barStart) / tpq,
+      id: n.id !== undefined ? n.id : i, tied, _start: clipStart, _end: clipEnd,
+    };
+  });
+
+  // Merge covered tick ranges (they may overlap -- a chord, or a held note
+  // under moving ones) to find the real silences to fill with rests.
+  const ranges = events.map((e) => [e._start, e._end]).sort((a, b) => a[0] - b[0]);
+  const merged = [];
+  for (const [s, e] of ranges) {
+    const last = merged[merged.length - 1];
+    if (last && s <= last[1]) last[1] = Math.max(last[1], e);
+    else merged.push([s, e]);
   }
-  if (cursor < barEnd) out.push({ midi: null, dur: (barEnd - cursor) / tpq });
-  return out;
+  const rests = [];
+  let cursor = barStart;
+  for (const [s, e] of merged) {
+    if (s > cursor) rests.push({ midi: null, dur: (s - cursor) / tpq, onset: (cursor - barStart) / tpq });
+    cursor = Math.max(cursor, e);
+  }
+  if (cursor < barEnd) rests.push({ midi: null, dur: (barEnd - cursor) / tpq, onset: (cursor - barStart) / tpq });
+
+  return events.concat(rests)
+    .map(({ _start, _end, ...rest }) => rest)
+    .sort((a, b) => a.onset - b.onset);
 }
 
 // staffView(song, step, instrument, arrangement) -> { kind: 'staff', rows:
@@ -109,11 +143,12 @@ export function staffView(song, step, instrument, arrangement) {
     const metre = metreAt(song, boundaries, bar);
     const key = keyAt(song, boundaries, bar);
     const writtenKey = writtenKeyName(instrument, key);
+    const barBeats = metre.num * (4 / metre.den);
     const barNotes = barNoteList(step.notes, barStart, barEnd, tpq)
       .map((n) => (n.midi === null ? n : { ...n, midi: writtenMidi(instrument, n.midi) }));
     const { primitives } = layoutMeasure({
-      clef, key: writtenKey, time: [metre.num, metre.den], width: CANVAS_WIDTH,
-      notes: barNotes.length ? barNotes : [{ midi: null, dur: metre.num * (4 / metre.den) }],
+      clef, key: writtenKey, time: [metre.num, metre.den], width: CANVAS_WIDTH, barBeats,
+      notes: barNotes.length ? barNotes : [{ midi: null, dur: barBeats, onset: 0 }],
     });
     rows.push({ primitives, y0: (bar - from) * rowHeight });
     const names = barNotes.filter((n) => n.midi !== null).map((n) => prettyLetter(spellMidi(n.midi, writtenKey)));
@@ -219,9 +254,14 @@ function placementFor(note, fitNotes, arrangement) {
 const TAB_STRING_GAP = 10;
 const TAB_MARGIN_X = 20;
 const TAB_NOTE_SPACING = 26;
+const TAB_ROW_MARGIN_X = 10; // right-hand margin so a fret number's own glyph width stays inside the canvas
+// How many notes fit on one row before the next one's fret number would run
+// past the canvas's right edge -- a dense bar (or a long multibar phrase)
+// wraps into extra rows rather than overrunning it (A6).
+const TAB_NOTES_PER_ROW = Math.floor((CANVAS_WIDTH - TAB_MARGIN_X - TAB_ROW_MARGIN_X) / TAB_NOTE_SPACING) + 1;
 
 // tabView(step, arrangement, instrument, fitNotes) -> { kind: 'tab', rows,
-// height, label, capo, blankCount }. Draws its own string lines (one
+// height, label, capo, blankCount }. Each row draws its own string lines (one
 // `line` primitive per string) plus one `fretNumber` primitive per placed
 // note -- NOT tab.js's layoutTab(), which picks its own frets from a raw
 // tuning and knows nothing of a saved capo or alternate tuning. Strings are
@@ -229,24 +269,39 @@ const TAB_NOTE_SPACING = 26;
 // fretboard.js's own stringIndex, which counts 0 = lowest, and of the
 // fingerings panel's "string N" in src/ui/fingerings/how.js, which is
 // stringIndex + 1 = 1 = lowest) -- P4-9's own convention, chosen to match
-// how a guitarist reads a tab on paper, not how.js's device-facing one.
+// how a guitarist reads a tab on paper, not how.js's device-facing one. A bar
+// with more than TAB_NOTES_PER_ROW notes wraps into extra rows (each its own
+// full set of string lines) rather than letting fret numbers run off the
+// fixed-width canvas (A6) -- renderStepView() already draws every row in
+// turn, so a wrapped tab needs no change there.
 export function tabView(step, arrangement, instrument, fitNotes) {
   const stringCount = instrument.tuning.length;
-  const primitives = [];
-  for (let s = 1; s <= stringCount; s++) primitives.push({ type: 'line', x: 0, y: s * TAB_STRING_GAP, length: CANVAS_WIDTH });
+  const rowHeight = (stringCount + 1) * TAB_STRING_GAP;
   const labelParts = [];
   let blankCount = 0;
+  let maxRow = 0;
+  const byRow = [];
   step.notes.forEach((note, i) => {
     const placement = placementFor(note, fitNotes, arrangement);
     if (!placement) { blankCount++; return; }
     const displayString = stringCount - placement.string;
-    primitives.push({ type: 'fretNumber', x: TAB_MARGIN_X + i * TAB_NOTE_SPACING, string: displayString, fret: placement.fret });
+    const row = Math.floor(i / TAB_NOTES_PER_ROW);
+    const col = i % TAB_NOTES_PER_ROW;
+    maxRow = Math.max(maxRow, row);
+    (byRow[row] || (byRow[row] = [])).push({ type: 'fretNumber', x: TAB_MARGIN_X + col * TAB_NOTE_SPACING, string: displayString, fret: placement.fret });
     labelParts.push('string ' + displayString + ' fret ' + placement.fret);
   });
+  const rows = [];
+  for (let r = 0; r <= maxRow; r++) {
+    const primitives = [];
+    for (let s = 1; s <= stringCount; s++) primitives.push({ type: 'line', x: 0, y: s * TAB_STRING_GAP, length: CANVAS_WIDTH });
+    for (const p of byRow[r] || []) primitives.push(p);
+    rows.push({ primitives, y0: r * rowHeight });
+  }
   const capo = arrangement.capo || 0;
   let label = 'Tab' + (capo ? ', capo ' + capo : '') + ': ' + labelParts.join(', ');
   if (blankCount) label += ' (' + blankCount + ' note' + (blankCount === 1 ? '' : 's') + ' with no comfortable fingering)';
-  return { kind: 'tab', rows: [{ primitives, y0: 0 }], height: (stringCount + 1) * TAB_STRING_GAP, label, capo, blankCount };
+  return { kind: 'tab', rows, height: rows.length * rowHeight, label, capo, blankCount };
 }
 
 function ordinal(n) {

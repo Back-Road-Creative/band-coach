@@ -431,6 +431,22 @@ and a target MIDI note into what the engine needs (clef, the written pitch —
 guitar and bass print an octave above their sounding pitch, per each
 record's `writtenOctaveUp` — and a tab position for fretted instruments).
 
+`layoutMeasure()` normally places each note by a single cumulative walk (each
+note's x follows straight on from the last), which only ever draws one voice.
+A caller that already knows each note's own onset (beats from the bar start)
+can pass it explicitly as `note.onset`, alongside `barBeats` (the bar's total
+length) — that is what keeps a song's practice-step "step view"
+(`src/ui/songs/step-view.js`) musically honest: two notes starting together
+land at the same x and are drawn as a chord, a note held under a moving line
+keeps its own onset rather than drifting with the notes above it, and a note
+that began in an earlier bar is carried into this one as a continuation at
+onset 0 (`note.tied`, drawn as a small tie arc) instead of being silently
+dropped. Neither field is required — omitting both keeps the original
+cumulative walk, so every other caller of `layoutMeasure()` is unaffected.
+The step view's own tab row (`tabView()`) wraps a dense bar or a long phrase
+into extra rows rather than letting fret numbers run past its fixed-width
+canvas.
+
 Keyboard, guitar, bass, ukulele and voice each have a per-instrument "Show"
 preference (note names, staff, or both) that draws this staff as an overlay
 alongside the existing display; it defaults to "Note names (today)", so

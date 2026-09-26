@@ -40,7 +40,21 @@ function staffLines(primitives, x0, x1, bottomY) {
 }
 
 // One measure on a single clef, or a grand staff (clef: 'grand').
-export function layoutMeasure({ clef, key, time, notes, width }) {
+//
+// Each note is normally placed by a single cumulative walk (`onset` starts at
+// 0 and advances by each note's own `dur` in turn), which only ever produces
+// one voice's worth of x positions -- fine for a plain melody but wrong for
+// a chord (two notes starting together must share an x) or a held note under
+// a moving line (its x must stay where it started, not drift with every
+// later note). A caller that already knows each note's own onset (beats from
+// the bar start -- src/ui/songs/step-view.js does, via its barNoteList()) may
+// pass it directly as `note.onset`, alongside `barBeats` (the bar's total
+// length in beats, since with overlapping notes the notes' own durations no
+// longer sum to it). Neither is required: omitting both keeps the original
+// cumulative walk byte-for-byte, so every other caller (src/ui/editor/layout-song.js,
+// src/notation/percussion.js, src/notation/for-instrument.js, src/ui/theory.js)
+// needs no change.
+export function layoutMeasure({ clef, key, time, notes, width, barBeats }) {
   const [num, den] = time;
   const grand = clef === 'grand';
   const staves = grand ? ['treble', 'bass'] : [clef];
@@ -94,13 +108,14 @@ export function layoutMeasure({ clef, key, time, notes, width }) {
 
   const notesStartX = cursorX + 10;
   const notesEndX = x1 - 12;
-  const totalBeats = notes.reduce((sum, n) => sum + n.dur, 0) || 1;
+  const totalBeats = barBeats || (notes.reduce((sum, n) => sum + n.dur, 0) || 1);
 
   const barState = { treble: {}, bass: {} };
   let onset = 0;
   for (const note of notes) {
     const info = durationInfo(note.dur);
-    const nx = notesStartX + (onset / totalBeats) * (notesEndX - notesStartX);
+    const noteOnset = note.onset !== undefined ? note.onset : onset;
+    const nx = notesStartX + (noteOnset / totalBeats) * (notesEndX - notesStartX);
     onset += note.dur;
 
     // A percussion hit (or a stacked chord of hits, e.g. kick + hi-hat on the
@@ -146,6 +161,12 @@ export function layoutMeasure({ clef, key, time, notes, width }) {
     const y = positionToY(staffBottomY[s], position);
 
     primitives.push({ type: 'notehead', x: nx, y, filled: info.filled });
+
+    // A note already sounding when this bar started (step-view.js's
+    // barNoteList() marks it `tied`) draws a small continuation arc to its
+    // left instead of being drawn as a fresh attack -- the note is not
+    // dropped, but it must not read as a new onset either.
+    if (note.tied) primitives.push({ type: 'tie', x: nx, y });
 
     for (const ledgerPos of ledgerLines(position)) {
       primitives.push({ type: 'ledger', x: nx, y: positionToY(staffBottomY[s], ledgerPos), length: LINE_GAP * 1.6 });

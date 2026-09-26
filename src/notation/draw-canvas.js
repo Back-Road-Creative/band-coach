@@ -66,6 +66,14 @@ const DRAWERS = {
     ctx.fill();
   },
 
+  // A small arc to a note's left marking it as a continuation of a note held
+  // from the previous bar (layout.js only emits this for `note.tied`).
+  tie: (ctx, p) => {
+    ctx.beginPath();
+    ctx.arc(p.x - 3, p.y, 6, Math.PI * 0.15, Math.PI * 0.85);
+    ctx.stroke();
+  },
+
   clef: (ctx, p, theme) => drawText(ctx, glyphOrFallback(theme, CLEF_GLYPH[p.clef], CLEF_FALLBACK[p.clef]), p.x, p.y, theme && theme.glyphFont),
 
   keyAccidental: (ctx, p, theme) => drawText(ctx, glyphOrFallback(theme, ACCIDENTAL_GLYPH[p.accidental], ACCIDENTAL_FALLBACK[p.accidental]), p.x, p.y, theme && theme.glyphFont),
