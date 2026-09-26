@@ -79,3 +79,19 @@ test('.stage sets color-scheme: dark so native controls inside the stage follow 
   assert.ok(stageBlock, 'could not find the .stage rule block in src/styles.css');
   assert.match(stageBlock, /color-scheme\s*:\s*dark\s*;/, '.stage must set color-scheme: dark');
 });
+
+// `body { color: var(--text) }` (src/styles.css) is the only rule that ever
+// turns the --text custom property into a used `color` value; that resolved
+// colour is then simply inherited down the tree as a plain colour. Re-pinning
+// --text as a custom property inside `.stage` (the test above) does nothing
+// for a descendant that never declares its own `color` -- `#prompt`, the
+// break card's `<h2>`, `#tapPad` all fell through this way (contrast
+// ~1.05:1 in the light theme, see tests/characterization/theme-toggle.test
+// .mjs for the rendered-page proof). `.stage` must declare `color:` itself
+// so every descendant that doesn't set its own inherits the pinned value.
+test('.stage declares its own `color` so descendants without one inherit the pinned dark-palette text colour, not the page theme\'s', () => {
+  const stageBlock = extractRuleBlock(css, /\.stage\s*\{/);
+  assert.ok(stageBlock, 'could not find the .stage rule block in src/styles.css');
+  const colourDecl = stageBlock.match(/(?:^|;)\s*color\s*:\s*([^;]+);/);
+  assert.ok(colourDecl, '.stage must declare `color:` explicitly (a custom property alone never repaints text that already inherited a colour)');
+});
