@@ -144,3 +144,56 @@ test('layoutMeasure: an accidental differing from the key gets an accidental pri
   });
   assert.equal(byType(primitives, 'accidental').length, 1);
 });
+
+// A caller (src/ui/songs/step-view.js) that already knows each note's onset
+// (beats from the bar start) can pass it explicitly, alongside the bar's
+// total length -- two notes sharing an onset (a chord) must then land at the
+// SAME x, not one after the other via the old cumulative walk.
+test('layoutMeasure: notes sharing an explicit onset (a chord) land at the same x', () => {
+  const { primitives } = layoutMeasure({
+    clef: 'treble', key: 'C', time: [4, 4], width: 400, barBeats: 4,
+    notes: [{ midi: 60, dur: 4, onset: 0 }, { midi: 64, dur: 4, onset: 0 }],
+  });
+  const heads = byType(primitives, 'notehead');
+  assert.equal(heads.length, 2);
+  assert.equal(heads[0].x, heads[1].x);
+});
+
+test('layoutMeasure: a note held under a moving line keeps its own onset x, not the cumulative one', () => {
+  const { primitives } = layoutMeasure({
+    clef: 'treble', key: 'C', time: [4, 4], width: 400, barBeats: 4,
+    notes: [
+      { midi: 48, dur: 4, onset: 0 }, // held bass, sounds the whole bar
+      { midi: 60, dur: 1, onset: 0 },
+      { midi: 62, dur: 1, onset: 1 },
+      { midi: 64, dur: 1, onset: 2 },
+      { midi: 65, dur: 1, onset: 3 },
+    ],
+  });
+  const heads = byType(primitives, 'notehead');
+  assert.equal(heads.length, 5);
+  // The held bass note (first in the list) shares the melody's first onset...
+  assert.equal(heads[0].x, heads[1].x);
+  // ...and does not drift to sit under the LAST melody note either.
+  assert.notEqual(heads[0].x, heads[4].x);
+});
+
+test('layoutMeasure: a note flagged `tied` (continued from the previous bar) gets a tie primitive', () => {
+  const { primitives } = layoutMeasure({
+    clef: 'treble', key: 'C', time: [4, 4], width: 400, barBeats: 4,
+    notes: [{ midi: 60, dur: 4, onset: 0, tied: true }],
+  });
+  assert.equal(byType(primitives, 'tie').length, 1);
+  assert.equal(byType(primitives, 'notehead').length, 1); // not dropped
+});
+
+test('layoutMeasure: with no onset/barBeats given, x still derives from the cumulative walk (regression guard)', () => {
+  const { primitives } = layoutMeasure({
+    clef: 'treble', key: 'C', time: [4, 4], width: 400,
+    notes: [{ midi: 60, dur: 1 }, { midi: 62, dur: 1 }, { midi: 64, dur: 2 }],
+  });
+  const heads = byType(primitives, 'notehead');
+  const gap01 = heads[1].x - heads[0].x;
+  const gap12 = heads[2].x - heads[1].x;
+  assert.ok(Math.abs(gap01 - gap12) < 1e-9, 'equal 1-beat gaps stay equal (no onset field changes nothing)');
+});
