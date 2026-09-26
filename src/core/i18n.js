@@ -54,6 +54,11 @@ export const en = {
   'settings.updates': 'Updates',
   'settings.how': 'How this works',
   'songs.addRow': 'Add a song',
+  // A9: the collapsible <summary> wrapping the song list, Carry-on banner
+  // and Assignments (challenges/band packs) so opening a song puts its
+  // lesson in the first screen instead of below the whole library -- see
+  // the .panel-songs-library <details> in mountSongsPanel().
+  'songs.libraryToggle': 'Your song library',
   'picker.tools': 'Tools',
   'setup.button': 'Set up input',
   'setup.connect': 'Connect',

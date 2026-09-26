@@ -65,6 +65,26 @@ navigation away and back, not just a page reload.
 2. **Carry on is reachable and activatable by keyboard alone**, a real Tab stop, not skipped over.
    Proof: same file, test `Carry on resumes by keyboard alone`.
 
+## Opening a song shows its lesson, not the whole library
+
+Opening (or resuming) a song used to put its own title, current step, notation and "Play it" 
+behind the whole song list, the Assignments group and a 28-card "Play it on…" instrument row —
+at a 390×844 phone viewport, the lesson heading landed nearly four screens down. Opening a song
+now collapses the library (and moves the instrument-picker row below the transport) so the
+lesson itself is what a learner sees first, with focus moved to the song's own heading; the
+library stays one click (its `<summary>`) away, with the song just opened still in it.
+
+1. **The song's title, current step and "Play it" all sit inside the first phone screen**, and
+   focus lands on the song heading.
+   Proof: `node --test tests/characterization/songs-lesson-first.test.mjs`, test `opening a song
+   puts its title, step and "Play it" inside a phone's first screen`.
+2. **The library, Assignments and the instrument-picker row are one click away, not gone.**
+   Proof: same file, test `the library, Assignments and the 28-card "Play it on…" row are
+   collapsed or moved below, still reachable in one action`.
+3. **Enlarging the page text still leaves the transport reachable and unobstructed.**
+   Proof: same file, test `with enlarged text the transport still reaches the learner,
+   unobstructed`.
+
 ## Every destination is reachable with the keyboard alone
 
 A returning learner (saved instrument) Tabs and presses Enter/Space to reach each of the five nav

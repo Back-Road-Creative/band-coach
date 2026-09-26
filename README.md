@@ -335,7 +335,13 @@ step-by-step practice lesson (`src/song/lesson.js`), tracking each learner's own
 and crediting every correctly played note toward the same mastery store a built-in drill uses —
 credit always lands on whichever instrument the song is actually being played on, even if a
 different instrument is showing on the main screen, and a finished lesson leaves its own row in
-the practice log (`source: "song"`) alongside built-in drill sessions. A
+the practice log (`source: "song"`) alongside built-in drill sessions. Opening (or resuming) a
+song puts that lesson — its title, current step, notation and "Play it" — in front of the whole
+song library rather than below it: the library, Assignments and the "Play it on…" instrument row
+all collapse into one `<details>` the moment a song opens, so a lesson opened on a phone shows
+up in the first screen instead of several screens down, with focus moving to the song's own
+heading; the library stays one click (its `<summary>`) away, still showing the song just opened.
+A
 teacher can also hand a student a whole set of songs at once as a **challenge**: a plain `.json`
 file (`src/song/challenge.js`, schema `challenge/1`) holding a title, an optional note, and a list
 of songs. Picking one through the same file input adds every song to the library and shows it as
