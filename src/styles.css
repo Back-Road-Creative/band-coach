@@ -81,14 +81,30 @@
   a { color: var(--accent-ink); }
 
   /* P2a: the one always-visible way to reach the three destinations
-     (Practice/Songs/Progress) -- never wraps, even at a 390px phone width,
-     so it stays a single reachable row instead of stacking.
-     P2b-1: a fourth button (Instrument) joins the row -- its label carries
-     the current instrument's name, so it is the longest and most likely to
-     run out of room first; the ellipsis keeps all four on one line rather
-     than wrapping or squeezing the others. */
-  .main-nav { display: flex; flex-wrap: nowrap; gap: 8px; }
-  .main-nav button { flex: 1 1 0; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+     (Practice/Songs/Progress).
+     P2b-1/P2b-2: Instrument and Settings join them. The one-row, ellipsis
+     layout this replaced (P2a/P2b-1's original comment, kept in git history)
+     measured, at a real 390px phone width, every one of the five labels
+     truncated to a couple of characters -- two pairs (Practice/Progress,
+     Songs/Settings) came out indistinguishable from each other, so "reach
+     Songs" and "reach Settings" looked identical. A truncated label a
+     learner cannot read is not a reachable destination.
+     A 3-then-2 grid instead: Practice/Songs/Progress keep one full-width
+     row (each short enough to read at 320px with room to spare), Instrument
+     (the longest label -- it carries the chosen instrument's name) and
+     Settings share the row below, Instrument taking the wider 2-column
+     share since its text is the one most likely to need it. white-space:
+     normal (not nowrap) means a label word never gets cut off -- a name too
+     long for its box wraps to a second line instead, which only grows the
+     row's height (see nav-readable-widths.test.mjs's long-name case), never
+     truncates or overlaps a neighbour. Button padding/font are trimmed from
+     the base 9px/15px so the extra row costs the least height it can --
+     measured against journey-first-visit.test.mjs's #playBtn-in-first-
+     screen contract, which this must not break. */
+  .main-nav { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .main-nav button { flex: none; text-align: center; overflow: visible; text-overflow: clip; white-space: normal; overflow-wrap: break-word; padding: 6px 8px; font-size: 13px; line-height: 1.15; }
+  .main-nav button[data-route="instrument"] { grid-column: 1 / 3; }
+  .main-nav button[data-route="settings"] { grid-column: 3; }
   .main-nav button[aria-current="page"] { background: var(--text); color: var(--ground); border-color: var(--text); }
 
   .picker { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-start; }
