@@ -40,3 +40,25 @@ jobs:
           gh release create "$GITHUB_REF_NAME" dist/release/band-coach.html \
             --title "Band Coach $GITHUB_REF_NAME" \
             --generate-notes
+      - name: check for HEADLESSMODE_DISPATCH_TOKEN
+        id: headlessmode-token
+        run: |
+          if [ -n "${{ secrets.HEADLESSMODE_DISPATCH_TOKEN }}" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: warn if the Headless Mode site will not be notified
+        if: steps.headlessmode-token.outputs.present != 'true'
+        run: echo "::warning::HEADLESSMODE_DISPATCH_TOKEN not set — site not notified; its daily poll picks the release up within 24h"
+      - name: Notify the Headless Mode site
+        if: steps.headlessmode-token.outputs.present == 'true'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.HEADLESSMODE_DISPATCH_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          gh api repos/Back-Road-Creative/headlessmode/dispatches \
+            -f event_type=product-release \
+            -F 'client_payload[product]=band-coach' \
+            -F "client_payload[tag]=$TAG"
