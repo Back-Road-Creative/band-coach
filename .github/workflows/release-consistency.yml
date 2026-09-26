@@ -2,15 +2,22 @@ name: release-consistency
 
 # release.yml, pages.yml and store-package.yml each prove their own artifact
 # built; none of them prove the three still agree once the tag has finished
-# rolling out. This workflow runs after the same tag push and checks the two
-# things that fail silently otherwise: the one download URL every link in
-# this repo depends on, and the deployed Pages copy's own version.json. It
-# also opens a tracked issue for the manual Microsoft Store submission step,
-# which has no automated signal of its own.
+# rolling out. This workflow runs once release.yml has finished for a tag and
+# checks the two things that fail silently otherwise: the one download URL
+# every link in this repo depends on, and the deployed Pages copy's own
+# version.json. It also opens a tracked issue for the manual Microsoft Store
+# submission step, which has no automated signal of its own.
+#
+# It used to fire on the same tag push as release.yml and ride out the
+# release still publishing with a 10 x 30 s retry budget. v1.8.0 and v1.9.0
+# (2026-09-24) both failed that way: release.yml took ~4m55s, the last retry
+# fired at 4m30s, and the job reported "never published" seconds before the
+# asset was attached. A retry budget can only race a job whose duration
+# grows with the test suite; running after release.yml completes cannot.
 on:
-  push:
-    tags:
-      - 'v*'
+  workflow_run:
+    workflows: ['release']
+    types: [completed]
   workflow_dispatch: {}
 
 permissions:
@@ -19,15 +26,26 @@ permissions:
 
 jobs:
   check:
+    # A failed release run has nothing to check; waiting out the budget here
+    # would only bury the real failure under a "never published" message.
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
+      # Under workflow_run, GITHUB_REF_NAME is the default branch, not the
+      # tag; the tag is the triggering run's head_branch (GitHub sets it to
+      # the tag name for a tag-push run). A manual dispatch on a tag ref
+      # still resolves from GITHUB_REF_NAME; a dispatch on a branch falls
+      # back to whatever release is currently latest.
       - name: resolve the tag being checked
         id: tag
         env:
           GH_TOKEN: ${{ github.token }}
+          RUN_HEAD: ${{ github.event.workflow_run.head_branch }}
         run: |
-          if [ -n "$GITHUB_REF_NAME" ] && [[ "$GITHUB_REF_NAME" == v* ]]; then
+          if [ -n "$RUN_HEAD" ] && [[ "$RUN_HEAD" == v* ]]; then
+            tag="$RUN_HEAD"
+          elif [ -n "$GITHUB_REF_NAME" ] && [[ "$GITHUB_REF_NAME" == v* ]]; then
             tag="$GITHUB_REF_NAME"
           else
             tag="$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName -q .tagName)"
@@ -35,16 +53,13 @@ jobs:
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
 
-      # release.yml is triggered by the same tag push and runs concurrently
-      # with this workflow -- it is not done building and attaching the asset
-      # by the time this job starts. Checking "releases/latest/download/"
-      # right away would silently check the PREVIOUS release's asset instead
-      # (measured live on v1.4.0: this job finished, release.yml was still
-      # in_progress, and `gh release view` still reported v1.3.0), which
-      # would pass even if this tag's asset never gets attached at all. So
-      # this looks up the release FOR THIS TAG by name, not "latest", and
-      # rides out release.yml still running with the same retry idiom as the
-      # version.json check below.
+      # Checking "releases/latest/download/" alone would silently check the
+      # PREVIOUS release's asset (measured live on v1.4.0, when this still
+      # raced release.yml: `gh release view` reported v1.3.0), which would
+      # pass even if this tag's asset never gets attached at all. So this
+      # looks up the release FOR THIS TAG by name, not "latest". The retry
+      # now only covers API propagation after release.yml has finished, not
+      # the release build itself.
       - name: the release for this tag must publish the band-coach.html asset
         env:
           GH_TOKEN: ${{ github.token }}

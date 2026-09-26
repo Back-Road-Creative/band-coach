@@ -935,16 +935,19 @@ the gate if the file exceeds a 1.5 MB size budget.
 
 release.yml, pages.yml and store-package.yml each only prove their own artifact built -- none of
 them checks that the three still agree once the tag has finished rolling out.
-`.github/workflows/release-consistency.yml` runs after the same tag push and closes that gap. Since
-it and `release.yml` both fire on the same tag and run concurrently, it cannot just check that
-`releases/latest/download/band-coach.html` returns 200 -- a stale "latest" pointing at the
-*previous* release also returns 200, which is exactly the failure this exists to catch. Instead it
-looks up the release for the triggering tag by name (retrying while `release.yml` is still
-publishing it), confirms that release isn't a draft and has `band-coach.html` attached, and then
-confirms the `releases/latest/download/` URL above actually redirects to that same tag's asset. It
-also retries against the deployed Pages `version.json` (deployment lags the tag by a few minutes)
-until it reports the new version, and opens a `Store submission for vX.Y.Z` issue so the manual
-Partner Center submission step is tracked instead of relied on to be remembered.
+`.github/workflows/release-consistency.yml` runs once `release.yml` has finished for the tag
+(`workflow_run`, successful release runs only) and closes that gap. It used to fire on the tag push
+itself and wait out the release with a five-minute retry budget; v1.8.0 and v1.9.0 both failed it
+that way, seconds before the asset landed, so it no longer races the release at all. It cannot just
+check that `releases/latest/download/band-coach.html` returns 200 -- a stale "latest" pointing at
+the *previous* release also returns 200, which is exactly the failure this exists to catch. Instead
+it looks up the release for the tag by name (the tag is the release run's `head_branch`), confirms
+that release isn't a draft and has `band-coach.html` attached, and then confirms the
+`releases/latest/download/` URL above actually redirects to that same tag's asset. It also retries
+against the deployed Pages `version.json` (deployment lags the tag by a few minutes) until it
+reports the new version, and opens a `Store submission for vX.Y.Z` issue so the manual Partner
+Center submission step is tracked instead of relied on to be remembered. To re-run it by hand for a
+tag: **Actions → release-consistency → Run workflow**, choosing the tag as the ref.
 
 ## Before announcing a release: a five-minute human check
 

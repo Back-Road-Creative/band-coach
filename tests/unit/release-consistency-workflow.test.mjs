@@ -25,11 +25,39 @@ function workflow() {
   return readFileSync(WORKFLOW, 'utf8');
 }
 
-test('the release-consistency workflow exists and is v*-tag triggered', () => {
+// v1.8.0 (02:31Z) and v1.9.0 (13:37Z) on 2026-09-24 both failed this
+// workflow the same way: it fired on the tag push alongside release.yml,
+// waited its 10 x 30 s budget for the asset, and gave up seconds before
+// release.yml finished attaching it (v1.9.0: release done 13:42:03Z, this
+// job's last attempt 13:41:41Z). A retry budget can only race a job whose
+// duration grows with the test suite. Triggering on release.yml's completion
+// instead makes the race impossible: the check cannot start before the
+// asset exists or the release has already failed.
+test('the release-consistency workflow runs after release.yml completes, never racing the tag push', () => {
   const text = workflow();
   assert.match(text, /^name: release-consistency$/m, 'workflow should be named release-consistency');
-  assert.match(text, /tags:\s*\n\s*- 'v\*'/, "workflow should run on 'v*' tags");
+  assert.match(
+    text,
+    /workflow_run:\s*\n\s*workflows:\s*\n?\s*-?\s*\[?\s*'?release'?\s*\]?/,
+    'workflow should be triggered by the release workflow completing (workflow_run on `release`)',
+  );
+  assert.match(text, /types:\s*\n?\s*-?\s*\[?\s*completed/, 'workflow_run should fire on the completed event');
+  assert.doesNotMatch(text, /^\s*push:\s*\n\s*tags:/m, 'a tag-push trigger would race release.yml again');
   assert.match(text, /workflow_dispatch/, 'workflow should also support manual re-runs');
+});
+
+test('the check only runs when the release run it follows succeeded, and resolves the tag from that run', () => {
+  const text = workflow();
+  assert.match(
+    text,
+    /if:[^\n]*workflow_run\.conclusion == 'success'/,
+    'a failed release.yml must not be followed by a consistency check that would wait out its budget and fail again with a misleading message',
+  );
+  assert.match(
+    text,
+    /github\.event\.workflow_run\.head_branch/,
+    'the tag under check comes from the release run that triggered this (head_branch is the tag for a tag-push run), not from GITHUB_REF_NAME, which is the default branch under workflow_run',
+  );
 });
 
 test('it checks the latest-download URL every download link depends on', () => {
