@@ -595,6 +595,12 @@ their pass by editing that instrument's record in `src/instruments/*.js`, settin
 `{ reference: '<method book or standard name>', reviewedBy: '<name>', reviewedAt: 'YYYY-MM-DD' }`
 (all three filled in together, never just one or two).
 
+The table above answers "can I practise/assess this, and is its chart reviewed" per instrument, but
+not what any of that means for readiness to ship. `docs/capabilities.md`'s capability and maturity
+matrix (`src/instruments/capability.js`) answers that: it derives a `tier` for every record
+mechanically from `status`, `input` and provenance, and it exists precisely because `status:
+'ready'` above means the code path is wired up and runnable, never that a musician has validated it.
+
 ## Capo, alternate tunings and a left-handed view
 
 The "How to play it" panel's fretted-instrument diagrams (guitar, bass, ukulele, mandolin,
