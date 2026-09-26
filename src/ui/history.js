@@ -99,7 +99,10 @@ export function registerHistory(panels) {
     mount(el, api) {
       el.innerHTML = `
         <div class="panel-history">
-          <h2>My progress</h2>
+          <!-- F2 (src/app.js's focusDestination()): id + tabindex so a real
+               nav activation of Progress can focus this heading instead of
+               dropping focus to <body>. -->
+          <h2 id="historyHeading" tabindex="-1">My progress</h2>
           <p>What your practice has looked like, in plain numbers — no account, nothing sent anywhere.</p>
           <div class="history-summary" id="historySummary"></div>
           <div class="history-retention" id="historyRetention"></div>

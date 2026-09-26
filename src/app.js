@@ -2463,24 +2463,43 @@ import { register as registerPlayalong } from './ui/playalong.js';
   // whether the chooser sheet (#picker) is shown, so a learner can open it
   // from any screen -- e.g. from Songs -- without losing their place.
   const NAV_PANEL_FOR = { songs: 'songs', progress: 'history' };
+  // F2: routeTo() now reports whether it actually changed screen (true) or
+  // hit one of its own no-op guards (false) -- buildNav()'s click handler
+  // uses that to decide whether focus should move at all (see
+  // focusDestination() below). Instrument always reports true: unlike the
+  // other four destinations it has no "already there" guard, only open vs
+  // shut, and both are a real, focus-worthy state change.
   function routeTo(dest) {
-    if (dest === 'instrument') { setInstrumentSheetOpen($('picker').hidden); return; }
+    if (dest === 'instrument') { setInstrumentSheetOpen($('picker').hidden); return true; }
     // P3-11: navDestFor() now maps editor/playalong onto 'songs' too, so
     // currentDest() === 'songs' while either is open -- the no-op guard
     // below would otherwise swallow "press Songs from Edit notes/Play
     // along" as if Songs were already showing. Only the actual songs panel
     // counts as "already there"; every other case (including re-pressing
     // Songs while Songs is open) still hits the guard unchanged.
-    if (dest === 'songs' && panels.current() !== 'songs') { openPanel('songs'); return; }
-    if (dest === currentDest()) return;
-    if (dest === 'practice') { closePanel(); return; }
-    if (dest === 'settings') { openSettings(); return; }
-    const panelId = NAV_PANEL_FOR[dest]; if (!panelId) return;
-    openPanel(panelId);
+    if (dest === 'songs' && panels.current() !== 'songs') { openPanel('songs'); return true; }
+    if (dest === currentDest()) return false;
+    if (dest === 'practice') { closePanel(); return true; }
+    if (dest === 'settings') { openSettings(); return true; }
+    const panelId = NAV_PANEL_FOR[dest]; if (!panelId) return false;
+    openPanel(panelId); return true;
+  }
+  // F2: the heading each destination's own screen focuses once routeTo()
+  // actually moves there -- 'practice' has no heading of its own inside
+  // #mainArea (the stage is a live exercise display, not a titled screen),
+  // so a genuine "Songs -> Practice" navigation leaves focus on the nav
+  // button the browser already put it on for a real click/Enter/Space,
+  // same as the no-op case below; that is an honest landing (you can see
+  // and hear the exercise start), never a silent drop to <body>.
+  const DEST_HEADING_ID = { songs: 'songsHeading', progress: 'historyHeading', settings: 'settingsTitle' };
+  function focusDestination(dest, routed, navBtn) {
+    if (!routed) return; // no-op guard: leave focus exactly where the press left it (the nav button)
+    if (dest === 'instrument') { const h = $('pickerHeading'); if (!$('picker').hidden && h) h.focus(); else navBtn.focus(); return; }
+    const h = $(DEST_HEADING_ID[dest]); if (h) h.focus();
   }
   function buildNav() {
     $('mainNav').setAttribute('aria-label', t('nav.label'));
-    document.querySelectorAll('#mainNav button[data-route]').forEach(b => b.addEventListener('click', () => { b.blur(); routeTo(b.dataset.route); }));
+    document.querySelectorAll('#mainNav button[data-route]').forEach(b => b.addEventListener('click', () => { focusDestination(b.dataset.route, routeTo(b.dataset.route), b); }));
     updateNavState();
   }
   applyStaticLabels(document);
