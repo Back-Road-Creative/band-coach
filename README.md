@@ -961,6 +961,15 @@ reports the new version, and opens a `Store submission for vX.Y.Z` issue so the 
 Center submission step is tracked instead of relied on to be remembered. To re-run it by hand for a
 tag: **Actions → release-consistency → Run workflow**, choosing the tag as the ref.
 
+Once the GitHub release exists, `release.yml` also tells the Headless Mode marketing site
+(`Back-Road-Creative/headlessmode`) that a new `band-coach` version shipped, so its own site can
+update right away instead of only through its daily poll. That needs a fine-grained personal
+access token in this repo's `HEADLESSMODE_DISPATCH_TOKEN` secret, scoped to
+`Back-Road-Creative/headlessmode` only with `contents: write` (the `dispatches` API needs that
+scope) and no access to any other repo. If the secret isn't set, the step just logs a warning and
+skips itself — the release still succeeds, and the site's own daily poll picks the release up
+within 24 hours regardless.
+
 ## Before announcing a release: a five-minute human check
 
 Automated tests run headless and cannot plug in a real MIDI keyboard, play a real guitar into a
