@@ -5,10 +5,11 @@
 // running Practice screen and Progress once a session exists -- stay
 // WCAG-clean.
 //
-// F1 (plan §0.6): Progress renders only `summarize(db.sessions)` -- none of
-// the §5 "retained / applied" labels appear anywhere in src/ui/history.js.
-// This journey asserts only that a finished session shows up in Progress,
-// never that retained/applied text appears.
+// Progress also renders the plan's §5 "retained on a later check" / "applied
+// in a song" counts (src/ui/history.js's #historyRetention block, built from
+// summarizeEvents() in src/core/learning-events.js) -- covered by
+// tests/characterization/w-history-retained.test.mjs, not repeated here. This
+// journey only asserts that a finished session shows up in Progress at all.
 //
 // F3 (plan §0.6, src/app.js:1870 endSession(), re-grepped in this
 // worktree): a session is only pushed onto DB.sessions when

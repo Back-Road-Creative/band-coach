@@ -93,10 +93,10 @@ Proof: `node --test --test-concurrency=1 tests/characterization/a11y-axe.test.mj
 
 ## Known gaps
 
-- **F1 — Progress doesn't show "retained" or "applied" labels.** Progress renders only a plain
-  summary of finished sessions; the finer-grained retained/applied wording the design called for
-  does not exist in `src/ui/history.js`. The journey above only checks that a finished session
-  shows up, never that retained/applied text appears.
+- **F1 — closed.** Progress now also renders a "Passed with help / Passed on your own / Retained
+  on a later check / Applied in a song" line (`src/ui/history.js`'s `#historyRetention`, built from
+  `summarizeEvents()` in `src/core/learning-events.js`), with a plain "No checks recorded yet" line
+  when there is nothing to count. Proof: `node --test tests/characterization/w-history-retained.test.mjs`.
 - **F2 — activating a nav button drops focus to `<body>`, not to the new screen.** After Tab/Enter
   (or Space) on any nav button, the browser's focus lands on `<body>` instead of moving to the
   destination's own heading, so a screen-reader user gets no spoken cue that the screen changed.
