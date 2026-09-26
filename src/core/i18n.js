@@ -16,6 +16,17 @@ export const en = {
   'backup.readError': 'That file could not be read.',
   'backup.confirmRestore': 'Restore this backup? It will replace your current progress.',
   'reset.progressCleared': '{name} progress cleared. Back to level 1.',
+  // Keyboard mod's help panel text. States BOTH computer-key rows in plain
+  // words -- a w s e d f t g y h u j k play C4 up to C5, z x c v b n m play
+  // C3 up to B3 -- and says outright that this is screen and computer-key
+  // practice, never a claim of a real keyboard (see src/core/pckeys.js for
+  // the mapping this describes).
+  // hintFor()'s truthful fallback for any mod that draws a hand-built staff
+  // (MODS[mod].staff === true) and nothing else -- no lit-key diagram, no
+  // fretboard, no hole diagram. Read the staff, not a key: this must never
+  // say a key is "lit up" on a screen that never drew one.
+  'hint.staffNote': 'Read {label} on the staff and play it. Hold it steady.',
+  'kbd.help': 'Keyboard: plug in a MIDI keyboard and press Connect, or click the keys on screen, or use the computer keys as screen and computer-key practice (not a real keyboard) -- a w s e d f t g y h u j k play C4 up to C5, and z x c v b n m play C3 up to B3 (naturals only, no sharps on that row). New keys light up the first two times; after that you find them yourself. Hands together: a real MIDI keyboard, or two hands on the computer keys (one on each row), checks both notes and grades them exactly; a microphone only ever hears one note at a time, so that grading is approximate.',
   'update.checking': 'Checking…',
   'update.devBuild': 'This is a development build ({version}).',
   'update.upToDate': "You're running the latest version ({version}).",

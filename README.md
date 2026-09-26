@@ -605,7 +605,11 @@ The curriculum, fingering table and grading are pure logic in `src/core/hands-to
 `src/app.js`.
 
 A real MIDI keyboard delivers independent note-on events, so both notes are checked together and
-graded exactly (`gradeHandsTogetherExact`); two hands on the computer keys count the same way.
+graded exactly (`gradeHandsTogetherExact`); two hands on the computer keys count the same way —
+the right hand's five-finger position lives on the upper letter row (`a w s e d f t g y h u j k`,
+C4 up to C5) and the left hand's octave-down mirror lives on the bottom letter row (`z x c v b n
+m`, C3 up to B3, naturals only), so one hand on each row reaches every note the curriculum asks
+for (`src/core/pckeys.js`, `tests/unit/pckeys.test.mjs`).
 A single detected pitch — as a monophonic microphone pitch detector would report — can confirm at
 most one of the two notes and never both at once, so that grading is approximate
 (`gradeHandsTogetherApprox`) and the on-screen feedback says so in plain words rather than claiming
