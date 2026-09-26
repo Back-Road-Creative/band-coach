@@ -7,6 +7,7 @@ import { toAudioTime, judgeTap, medianLatency } from './core/timing.js';
 import { DEFAULT_STABILITY_DAYS, MIN_STABILITY_DAYS, MAX_STABILITY_DAYS, GRADE, retrievability, review, due, migrateItem } from './core/srs.js';
 import { handsTogetherById, fingeringLabel, gradeHandsTogetherExact, gradeHandsTogetherApprox } from './core/hands-together.js';
 import { createMidiParser } from './core/midi.js';
+import { PCKEYS } from './core/pckeys.js';
 // Merge slots: a unit in flight adds its imports by replacing ONLY its own
 // slot line, so parallel branches never edit adjacent lines.
 import { recordError, getErrors } from './core/error-log.js';
@@ -445,7 +446,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
     return L;
   }
   const MODS = {
-    kbd: { name: 'Keyboard', tag: 'MIDI or on-screen keys', color: '#2f93ee', input: 'midi', help: 'Keyboard: plug in a MIDI keyboard and press Connect, or click the keys on screen, or use the computer keys A W S E D F T G Y H U J K for C up to high C. New keys light up the first two times; after that you find them yourself. Hands together: a real MIDI keyboard (or two hands on the computer keys) checks both notes and grades them exactly; a microphone only ever hears one note at a time, so that grading is approximate.',
+    kbd: { name: 'Keyboard', tag: 'MIDI or on-screen keys', color: '#2f93ee', input: 'midi', help: t('kbd.help'),
       levels: [
         { name: 'C, D and E', add: N(60, 62, 64), limit: 8 }, { name: 'Add F and G', add: N(65, 67), limit: 8 }, { name: 'Add A, B and high C', add: N(69, 71, 72), limit: 8 },
         { name: 'Black keys: F sharp and B flat', add: N(66, 70), limit: 8 }, { name: 'Black keys: C sharp, E flat, A flat', add: N(61, 63, 68), limit: 8 },
@@ -1141,7 +1142,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
     else { const verb = mod === 'voice' ? 'Sing' : 'Play'; p = verb + ' ' + t.els.map((el, k) => (k === t.idx ? '<b>' : '') + promptFor(el.info, el.reveal) + (k === t.idx ? '</b>' : '')).join(' → '); if (t.kind === 'hold') p = (mod === 'voice' ? 'Hold ' : 'Hold ') + '<b>' + e.info.label + '</b> for two seconds'; h = hintFor(e); playRef(t); }
     $('prompt').innerHTML = p; $('hint').textContent = (t.warm ? 'Warm-up, does not count. ' : '') + h; updateDesc();
   }
-  function hintFor(e) { const i = e.info; if (i.string && MODS[mod].fretless) return (e.reveal ? i.label + '. The dot shows the position.' : 'Find this pitch on the string.') + ' There is no fret to feel for — match the pitch, and the gauge shows sharp or flat.'; if (i.string) return coreHintFor(i, e.reveal); if (i.anywhere) return 'Any string, any octave.'; if (i.kind === 'chord') return 'All the notes together: ' + i.pcs.map(x => NAMES[x]).join(', ') + '.'; if (i.kind === 'hands-together') return fingeringLabel(i.ex) + ' (' + nname(i.ex.rh.midi) + ' right hand, ' + nname(i.ex.lh.midi) + ' left hand). A MIDI keyboard or two hands on the computer keys grades both notes exactly; a microphone only hears one note at a time, so that grading is approximate.'; if (mod === 'voice') return task.ref === 'target' ? 'You heard the note. Sing it back in any octave and hold it.' : 'You heard Do. Find ' + i.short + ' from it.'; if (mod === 'wind') return 'Written ' + i.label + '. Hold it steady.'; return e.reveal ? 'New key: it is lit up this time.' : ''; }
+  function hintFor(e) { const i = e.info; if (i.string && MODS[mod].fretless) return (e.reveal ? i.label + '. The dot shows the position.' : 'Find this pitch on the string.') + ' There is no fret to feel for — match the pitch, and the gauge shows sharp or flat.'; if (i.string) return coreHintFor(i, e.reveal); if (i.anywhere) return 'Any string, any octave.'; if (i.kind === 'chord') return 'All the notes together: ' + i.pcs.map(x => NAMES[x]).join(', ') + '.'; if (i.kind === 'hands-together') return fingeringLabel(i.ex) + ' (' + nname(i.ex.rh.midi) + ' right hand, ' + nname(i.ex.lh.midi) + ' left hand). A MIDI keyboard or two hands on the computer keys grades both notes exactly; a microphone only hears one note at a time, so that grading is approximate.'; if (mod === 'voice') return task.ref === 'target' ? 'You heard the note. Sing it back in any octave and hold it.' : 'You heard Do. Find ' + i.short + ' from it.'; if (MODS[mod].staff) return t('hint.staffNote', { label: i.label }); return e.reveal ? 'New key: it is lit up this time.' : ''; }
   function refreshPrompt() { if (!task || task.kind === 'ear' || task.kind === 'bar' || task.kind === 'hold') return; const verb = mod === 'voice' ? 'Sing' : 'Play'; $('prompt').innerHTML = verb + ' ' + task.els.map((el, k) => (k === task.idx ? '<b>' : '') + promptFor(el.info, el.reveal) + (k === task.idx ? '</b>' : '')).join(' → '); const e = cur(); if (e) $('hint').textContent = (task.warm ? 'Warm-up, does not count. ' : '') + hintFor(e); updateDesc(); }
   // text mirror of the canvas for the visually-hidden #cvDesc element (unit 7.7 item 1):
   // revealed mirrors the current element's own reveal/failed flag, never invents one.
@@ -2116,9 +2117,8 @@ import { register as registerPlayalong } from './ui/playalong.js';
   });
   if (navigator.mediaDevices && navigator.mediaDevices.addEventListener) navigator.mediaDevices.addEventListener('devicechange', refreshMicDevices);
   if ($('calibrateBtn')) $('calibrateBtn').addEventListener('click', function () { this.blur(); calibrateNoiseFloor(); });
-  const PCKEYS = { a: 60, w: 61, s: 62, e: 63, d: 64, f: 65, t: 66, g: 67, y: 68, h: 69, u: 70, j: 71, k: 72 };
   document.addEventListener('keydown', ev => {
-    if (ev.repeat || ev.ctrlKey || ev.metaKey || ev.altKey) return; const tag = ev.target.tagName; if (tag === 'SELECT' || (tag === 'INPUT' && ev.target.type !== 'checkbox')) return;
+    if (ev.repeat || ev.ctrlKey || ev.metaKey || ev.altKey) return; const tag = ev.target.tagName; if (tag === 'SELECT' || tag === 'TEXTAREA' || (tag === 'INPUT' && ev.target.type !== 'checkbox') || ev.target.isContentEditable) return;
     if (mod === 'rhy' && (ev.key === ' ' || ev.key.length === 1)) { if (tag === 'BUTTON' && ev.key === ' ' && ev.target.id !== 'tapPad') return; ev.preventDefault(); ensureAudio(); onTap(ev); return; }
     if (MODS[mod] && MODS[mod].kit && KIT_KEYS[ev.key.toLowerCase()]) { ev.preventDefault(); ensureAudio(); onHit(KIT_KEYS[ev.key.toLowerCase()], tapAudioTime(ev), 'key'); return; }
     if (mod === 'ear' && task && task.choices && /^[1-9]$/.test(ev.key)) { const id = task.choices[+ev.key - 1]; if (id) answer(id); return; }
