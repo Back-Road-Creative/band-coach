@@ -16,20 +16,35 @@ const PHRASE_MIDI = [64, 62, 60];
 // count-in in src/ui/songs.js startRecording) before either playing the
 // given notes or, when delaysMs is null, playing nothing at all -- a clean
 // miss, deterministic every time (hitRate 0, no matches at all).
+//
+// Each note's gap is scheduled off an ABSOLUTE target on the app's own audio
+// clock (t0 + the cumulative delay), not a chained `setTimeout(delayMs)`
+// relative to the previous note. Chained relative timers compound: if one
+// timer fires late (a starved runner delays Chromium's own JS thread same as
+// anyone else's), every later note inherits that lateness AND adds its own,
+// so the last note in a phrase can land arbitrarily later than intended. An
+// absolute audioNow() target makes every note's lateness independent and
+// bounded by the polling interval alone (the `keyAt`/`grooveInject` pattern
+// in tests/unit/drum-kit-trainer.test.mjs and src/app.js's debug hook) --
+// same delaysMs input, same notes, only how the wait is expressed changes.
 async function playAttempt(page, delaysMs) {
   const script = `
     (async () => {
       const turnBtn = Array.from(document.querySelectorAll('.panel-songs-practice button')).find(b => b.textContent === 'Your turn');
       if (turnBtn) turnBtn.click();
       while (!(document.querySelector('.panel-songs-count') && document.querySelector('.panel-songs-count').textContent.startsWith('Notes heard so far'))) {
-        await new Promise(r => setTimeout(r, 15));
+        await new Promise(r => setTimeout(r, 4));
       }
       const delays = ${JSON.stringify(delaysMs)};
       if (delays) {
-        const seq = ${JSON.stringify(PHRASE_MIDI)}.map((midi, i) => ({ midi, delayMs: delays[i] }));
-        for (const { midi, delayMs } of seq) {
-          await new Promise(r => setTimeout(r, delayMs));
-          window.__coach.songsNote(midi, true);
+        const t0 = window.__coach.audioNow();
+        let cumMs = 0;
+        const seq = ${JSON.stringify(PHRASE_MIDI)}.map((midi, i) => { cumMs += delays[i]; return { midi, at: t0 + cumMs / 1000 }; });
+        for (const { midi, at } of seq) {
+          await new Promise(resolve => {
+            const fire = () => { if (window.__coach.audioNow() >= at) { window.__coach.songsNote(midi, true); resolve(); } else setTimeout(fire, 4); };
+            fire();
+          });
         }
       }
       await new Promise(r => setTimeout(r, 80));

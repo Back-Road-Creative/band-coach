@@ -11,6 +11,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { HTML_PATH } from '../helpers/html-path.mjs';
 import { launchPage } from '../helpers/browser.mjs';
+import { playSongNoteWhenListening } from '../helpers/songs-note.mjs';
 
 const htmlPath = HTML_PATH;
 
@@ -152,13 +153,11 @@ test('Practise again always starts at the first step', async (t) => {
       await page.evaluate("Array.from(document.querySelectorAll('.panel-songs-practice button')).find(b => b.textContent === 'Next').click()");
       continue;
     }
-    await page.evaluate(
-      "Array.from(document.querySelectorAll('.panel-songs-practice button')).find(b => b.textContent === 'Your turn').click()"
-    );
-    await page.waitFor(
-      "document.querySelector('.panel-songs-count') && document.querySelector('.panel-songs-count').textContent.startsWith('Notes heard so far')"
-    );
-    await page.evaluate("window.__coach.songsNote(64, true)");
+    // playSongNoteWhenListening() clicks "Your turn", polls in-page for real
+    // listening to begin, and fires the note in the same turn -- no Node-side
+    // round trip in between to add lateness relative to the phrase's t=0
+    // (tests/helpers/songs-note.mjs).
+    await playSongNoteWhenListening(page, 64);
     await page.waitFor("document.querySelector('.panel-songs-count') && document.querySelector('.panel-songs-count').textContent.includes('1')");
     await page.evaluate(
       "Array.from(document.querySelectorAll('.panel-songs-practice button')).find(b => b.textContent === 'Stop and check').click()"

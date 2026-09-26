@@ -1,0 +1,32 @@
+// Clicks "Your turn" and plays a note the instant real listening begins, all
+// inside ONE page.evaluate() -- so under a loaded runner there is no gap for
+// Node-side scheduling delay to open between "listening has started" and
+// "the note was delivered".
+//
+// Before this helper, callers did the click, a `page.waitFor(...)` for the
+// "Notes heard so far" paragraph, and a THIRD, separate `page.evaluate()` to
+// call `window.__coach.songsNote()` -- three CDP round trips, each one a
+// point where a starved Node event loop (busy running other test files, or
+// just contending with everything else on the box) could add real wall-clock
+// delay before the next step runs. Every millisecond added there is a
+// millisecond the note lands late relative to the phrase's own t=0, which a
+// timed check step (rhythm, tempo ladder) judges against -- late enough and
+// a genuinely correct answer is marked wrong (2026-09-26: reproduced as
+// "acc 1, got 0.78" and a check step stuck failing forever under load).
+//
+// Polling for the listening state IN THE PAGE (a tight 4ms loop, same
+// interval as the `keyAt`/`grooveInject` pattern) and calling `songsNote()`
+// in the same synchronous turn that observes the state change removes that
+// gap: the only latency left is however long the app itself took to flip the
+// state, which is exactly what a real learner's key press would also be
+// racing against.
+export async function playSongNoteWhenListening(page, midi, exact = true) {
+  await page.evaluate(`(async () => {
+    const turnBtn = Array.from(document.querySelectorAll('.panel-songs-practice button')).find(b => b.textContent === 'Your turn');
+    if (turnBtn) turnBtn.click();
+    while (!(document.querySelector('.panel-songs-count') && document.querySelector('.panel-songs-count').textContent.startsWith('Notes heard so far'))) {
+      await new Promise(r => setTimeout(r, 4));
+    }
+    window.__coach.songsNote(${JSON.stringify(midi)}, ${JSON.stringify(exact)});
+  })()`);
+}

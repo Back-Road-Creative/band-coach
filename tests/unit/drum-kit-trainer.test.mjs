@@ -93,9 +93,20 @@ test('MIDI: notes from an e-kit on the right drum pass; a note that is not on th
   await page.evaluate("document.getElementById('ioBtn').click()");
   await page.waitFor("document.getElementById('ioBtn').hidden === true");
 
+  // Each note fires as soon as a short poll finds audioNow() has reached its
+  // target, instead of betting on one `setTimeout(delayMs)` computed up
+  // front -- a single long timer fires late by however much the runner is
+  // starved, with nothing to correct it once scheduled. Polling every 4ms
+  // (the same grooveInject pattern src/app.js's debug hook uses for groove
+  // input) bounds the lateness to the poll interval on a slow box instead of
+  // to how badly the timer queue was backed up.
   const send = (list) => page.evaluate(`(function () {
     ${JSON.stringify(list)}.forEach(function (x) {
-      setTimeout(function () { window.__midiSend('kit', [0x99, x.note, 100]); }, Math.max(0, (x.at - window.__coach.audioNow()) * 1000));
+      const fire = function () {
+        if (window.__coach.audioNow() >= x.at) window.__midiSend('kit', [0x99, x.note, 100]);
+        else setTimeout(fire, 4);
+      };
+      fire();
     });
   })()`);
 

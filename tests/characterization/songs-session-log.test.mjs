@@ -14,6 +14,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { HTML_PATH } from '../helpers/html-path.mjs';
 import { launchPage } from '../helpers/browser.mjs';
+import { playSongNoteWhenListening } from '../helpers/songs-note.mjs';
 
 const htmlPath = HTML_PATH;
 
@@ -21,9 +22,11 @@ const htmlPath = HTML_PATH;
 // own clock -- src/song/lesson.js/practice.js's phraseSec()): every step of
 // the lesson this generates (rhythm, pitches, phrase-slow, the tempo
 // ladder, the whole piece) expects this note at t=0, so firing
-// window.__coach.songsNote() in the SAME browser tick as the "Your turn"
-// click keeps the timing error near zero regardless of the step's own bpm
-// or duration tolerance -- no need to predict or wait out any of them.
+// window.__coach.songsNote() the instant real listening begins (see
+// tests/helpers/songs-note.mjs's playSongNoteWhenListening -- one in-page
+// poll, no Node-side round trip to add lateness) keeps the timing error near
+// zero regardless of the step's own bpm or duration tolerance -- no need to
+// predict or wait out any of them.
 function challengeJson() {
   return JSON.stringify({
     schema: 'challenge/1',
@@ -77,15 +80,10 @@ test('finishing a song lesson logs a practice session with source: "song"', asyn
       await page.evaluate("Array.from(document.querySelectorAll('.panel-songs-practice button')).find(b => b.textContent === 'Next').click()");
       continue;
     }
-    await page.evaluate(
-      "Array.from(document.querySelectorAll('.panel-songs-practice button')).find(b => b.textContent === 'Your turn').click()"
-    );
-    await page.waitFor(
-      "document.querySelector('.panel-songs-count') && document.querySelector('.panel-songs-count').textContent.startsWith('Notes heard so far')"
-    ); // N2 (#191): a four-beat count-in runs before listening starts; a note during it is ignored
-    await page.evaluate(
-      "window.__coach.songsNote(64, true)"
-    );
+    // N2 (#191): a four-beat count-in runs before listening starts; a note
+    // during it is ignored. playSongNoteWhenListening() clicks, polls for
+    // listening to begin, and fires the note all in one page turn.
+    await playSongNoteWhenListening(page, 64);
     await page.waitFor("document.querySelector('.panel-songs-count') && document.querySelector('.panel-songs-count').textContent.includes('1')");
     await page.evaluate(
       "Array.from(document.querySelectorAll('.panel-songs-practice button')).find(b => b.textContent === 'Stop and check').click()"
