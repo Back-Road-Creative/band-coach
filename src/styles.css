@@ -3,6 +3,13 @@
   :root {
     --ground: #0a0d14; --panel: #121726; --panel-2: #1a2033; --line: #2a3350;
     --text: #e9edf6; --muted: #93a0bd; --accent: #2f93ee; --accent-ink: #2f93ee; --good: #5be08a; --warn: #f3c52f; --bad: #ff6b5e;
+    /* P7-5: ink for text/icons painted directly on --good/--warn/--bad/--muted
+       (the Songs feasibility/difficulty badges) -- black clears WCAG AA on
+       all four of these light dark-theme tints (see
+       tests/unit/badge-contrast.test.mjs), so one ink covers all four here;
+       the light theme below needs white instead, since its own four tones
+       are darker. */
+    --good-ink: #000; --warn-ink: #000; --bad-ink: #000; --muted-ink: #000;
     /* --press-muted: the ".picker button[aria-pressed]" swap below flips
        --text/--ground into background/foreground for the selected button, so
        its own muted small-print needs a muted tone of --ground (the colour
@@ -26,12 +33,16 @@
       --ground: #f5f7fb; --panel: #ffffff; --panel-2: #e7ebf3; --line: #c7cfde;
       --text: #101728; --muted: #4a5570; --accent: #1667c1; --accent-ink: #1667c1; --good: #1a7a44; --warn: #8a6100; --bad: #b3261e;
       --press-muted: #aeb8cc;
+      /* P7-5: white ink clears WCAG AA against all four of the light theme's
+         (darker) meaning tones -- see tests/unit/badge-contrast.test.mjs. */
+      --good-ink: #fff; --warn-ink: #fff; --bad-ink: #fff; --muted-ink: #fff;
     }
   }
   :root[data-theme="light"] {
     --ground: #f5f7fb; --panel: #ffffff; --panel-2: #e7ebf3; --line: #c7cfde;
     --text: #101728; --muted: #4a5570; --accent: #1667c1; --accent-ink: #1667c1; --good: #1a7a44; --warn: #8a6100; --bad: #b3261e;
     --press-muted: #aeb8cc;
+    --good-ink: #fff; --warn-ink: #fff; --bad-ink: #fff; --muted-ink: #fff;
   }
   * { box-sizing: border-box; }
   [hidden] { display: none !important; }
@@ -185,20 +196,20 @@
   .panel-songs-instrument-card-current .panel-songs-instrument-btn { border-color: var(--good); }
   .panel-songs-instrument-name { font-weight: 600; }
   .panel-songs-badge { font-size: 0.85em; border-radius: 999px; padding: 1px 8px; }
-  .panel-songs-badge[data-feasibility="as-written"] { background: var(--good); color: #000; }
-  .panel-songs-badge[data-feasibility="transposed"] { background: var(--warn); color: #000; }
-  .panel-songs-badge[data-feasibility="partial"] { background: var(--warn); color: #000; }
-  .panel-songs-badge[data-feasibility="unplayable"] { background: var(--bad); color: #fff; }
-  .panel-songs-badge[data-feasibility="empty"] { background: var(--muted); color: #000; }
+  .panel-songs-badge[data-feasibility="as-written"] { background: var(--good); color: var(--good-ink); }
+  .panel-songs-badge[data-feasibility="transposed"] { background: var(--warn); color: var(--warn-ink); }
+  .panel-songs-badge[data-feasibility="partial"] { background: var(--warn); color: var(--warn-ink); }
+  .panel-songs-badge[data-feasibility="unplayable"] { background: var(--bad); color: var(--bad-ink); }
+  .panel-songs-badge[data-feasibility="empty"] { background: var(--muted); color: var(--muted-ink); }
   .panel-songs-diff-badge { font-size: 0.85em; border-radius: 999px; padding: 1px 8px; margin-left: 6px; }
-  .panel-songs-diff-badge[data-difficulty="easy"] { background: var(--good); color: #000; }
-  .panel-songs-diff-badge[data-difficulty="medium"] { background: var(--warn); color: #000; }
-  .panel-songs-diff-badge[data-difficulty="hard"] { background: var(--bad); color: #fff; }
+  .panel-songs-diff-badge[data-difficulty="easy"] { background: var(--good); color: var(--good-ink); }
+  .panel-songs-diff-badge[data-difficulty="medium"] { background: var(--warn); color: var(--warn-ink); }
+  .panel-songs-diff-badge[data-difficulty="hard"] { background: var(--bad); color: var(--bad-ink); }
   .panel-songs-bar-strip { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
-  .panel-songs-bar { display: inline-flex; align-items: center; justify-content: center; min-width: 1.6em; height: 1.6em; border-radius: 4px; font-size: 0.85em; font-weight: 600; color: #000; }
+  .panel-songs-bar { display: inline-flex; align-items: center; justify-content: center; min-width: 1.6em; height: 1.6em; border-radius: 4px; font-size: 0.85em; font-weight: 600; color: var(--good-ink); }
   .panel-songs-bar[data-grade="good"] { background: var(--good); }
-  .panel-songs-bar[data-grade="shaky"] { background: var(--warn); }
-  .panel-songs-bar[data-grade="miss"] { background: var(--bad); color: #fff; }
+  .panel-songs-bar[data-grade="shaky"] { background: var(--warn); color: var(--warn-ink); }
+  .panel-songs-bar[data-grade="miss"] { background: var(--bad); color: var(--bad-ink); }
   .panel-songs-bar-worst { flex-basis: 100%; color: var(--muted); }
   .panel-songs-assessed { list-style: none; margin: 4px 0 0; padding: 0; font-size: 0.9em; }
   .panel-songs-assessed li[data-state="ok"] { color: var(--good); }
@@ -360,7 +371,7 @@
      colours regardless of the active theme, with no selector to enumerate;
      color-scheme: dark carries the same intent to native controls. Checked
      by tests/unit/stage-contrast.test.mjs. */
-  .stage { position: relative; background: linear-gradient(#0d111c, #05070c); border: 1px solid var(--line); border-radius: 8px; padding: 8px; display: flex; flex-direction: column; gap: 8px; color-scheme: dark; --ground: #0a0d14; --panel: #121726; --panel-2: #1a2033; --line: #2a3350; --text: #e9edf6; --muted: #93a0bd; --accent: #2f93ee; --accent-ink: #2f93ee; --good: #5be08a; --warn: #f3c52f; --bad: #ff6b5e; }
+  .stage { position: relative; background: linear-gradient(#0d111c, #05070c); border: 1px solid var(--line); border-radius: 8px; padding: 8px; display: flex; flex-direction: column; gap: 8px; color-scheme: dark; --ground: #0a0d14; --panel: #121726; --panel-2: #1a2033; --line: #2a3350; --text: #e9edf6; --muted: #93a0bd; --accent: #2f93ee; --accent-ink: #2f93ee; --good: #5be08a; --warn: #f3c52f; --bad: #ff6b5e; --good-ink: #000; --warn-ink: #000; --bad-ink: #000; --muted-ink: #000; }
   /* R10 P3: sentence case -- uppercase display type stays only on the h1
      wordmark and the Start button. */
   #prompt { font: 700 40px/1.05 var(--display); text-wrap: balance; min-height: 1.1em; }

@@ -110,13 +110,15 @@ test('axe-core finds no WCAG 2/2.1 A/AA violations across the app\'s main states
   // Re-opened from the nav here rather than reused from the panel loop
   // above, since the fingerings/theory scans in between switched the open
   // panel away from Songs.
-  // P7-5: both of these hit a REAL axe violation once a song is open --
-  // "Play it on..." instrument-card feasibility badges (.panel-songs-badge,
-  // .panel-songs-diff-badge) fail color-contrast (serious). This is a src
-  // finding for JP, not a test-file problem, so both stay `todo` with the
-  // violation named rather than weakened/excluded -- see the handback report
-  // for the verbatim axe output.
-  await t.test('songs: song open', { todo: 'color-contrast: "Play it on..." instrument-card feasibility badges fail contrast (serious)' }, async () => {
+  // P7-5: both of these used to hit a real axe violation once a song is
+  // open -- "Play it on..." instrument-card feasibility badges
+  // (.panel-songs-badge, .panel-songs-diff-badge) failed color-contrast
+  // (serious) because their ink was hard-coded #000/#fff instead of
+  // following the active theme. Fixed in src/styles.css by giving each
+  // meaning colour its own --*-ink token (see tests/unit/badge-contrast.
+  // test.mjs for the WCAG AA numbers); these two subtests are real
+  // assertions again, not `todo`.
+  await t.test('songs: song open', async () => {
     await page.evaluate('document.querySelector(\'#mainNav button[data-route="songs"]\').click()');
     await page.waitFor("window.__coach.panelOpen() === 'songs'");
     await page.evaluate(
@@ -126,7 +128,7 @@ test('axe-core finds no WCAG 2/2.1 A/AA violations across the app\'s main states
     await scan(page, 'songs: song open');
   });
 
-  await t.test('songs: add a song open', { todo: 'color-contrast: "Play it on..." instrument-card feasibility badges (still open behind Add a song) fail contrast (serious)' }, async () => {
+  await t.test('songs: add a song open', async () => {
     await page.evaluate(
       "Array.from(document.querySelectorAll('button')).find(b => b.textContent === 'Add a song').click()",
     );
