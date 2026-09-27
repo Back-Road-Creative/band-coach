@@ -78,6 +78,19 @@ silent keyboard on your own machine. Held notes are tracked per device, so two k
 disconnected one plugged back in) holding the same pitch never cancel each other, and switching
 away from the tab, letting the window lose focus, or unplugging mid-note releases whatever was held.
 
+Proof that a keyboard works is earned per device, not kept once earned: swap a proven keyboard for
+one that has never sent a note and the status line goes back to "found", not "is working", until
+that device actually says something. In three fallback states — this browser has no Web MIDI API,
+MIDI was blocked, or MIDI works but nothing is plugged in — the status line also says screen keys
+and computer keys still work as practice, not as proof a real keyboard works. A song practice
+attempt's learning
+record carries which route actually played it: "midi" only when every judged note was a real MIDI
+note-on, "computer-key" or "mic" when every judged note came from that one route instead, "mixed"
+when the judged notes disagree on route, and the field is left off entirely when any judged note's
+route is unknown (as with a screen-key click) — so a later look at your history can tell a song
+played on a real keyboard from one played on the computer keys as a stand-in, without ever
+guessing at a route the app never actually recorded.
+
 The pure scheduling and sending logic for "play it for me" — a song's notes sent out to a
 connected MIDI keyboard so it plays itself — lives in `src/core/midi.js` (`scheduleSong`,
 `playOnOutput`, `stopAll`, `describeOutputs`); there is no button wired to it yet.
@@ -216,6 +229,11 @@ startup.
 Every judged drill answer, warm-up answer and judged song step leaves one small record — which
 instrument and skill it was, whether it was independent or asked for help, which parts (pitch,
 timing, hold, tune) were actually checked, and how long it took — kept alongside the practice log
+described above. A song step's record also keeps which input actually played it (MIDI, computer
+keys, mic, or a mix), left off entirely when that route is unknown rather than guessed at. The raw
+sound of your playing or singing is never recorded; only the judged result is. The record keeps
+the most recent 500 attempts plus, for each skill, the first time it
+was played right (from a drill, and from anywhere), so it never grows without limit. The "My
 described above. The raw sound of your playing or singing is never recorded; only the judged
 result is. The record keeps the most recent 500 attempts plus, for each skill, the first time it
 was played right (from a drill, and from anywhere) and, for each song played on that skill, the
