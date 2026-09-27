@@ -1094,6 +1094,16 @@ import { register as registerPlayalong } from './ui/playalong.js';
     // mastery. handsTogetherById() (src/core/hands-together.js) already
     // understands the suffix; poolFor()'s own 'j' prefix filter still
     // matches these ids since only the first character is checked.
+    // This has to happen here rather than at credit()/finishTask (this
+    // unit's declared OWNS region): everything downstream of poolFor() --
+    // byStrength/pick's per-id weighting, and each element's info(mod, id)
+    // lookup that decides e.info -- already keys off the id in `pool`, so
+    // suffixing it any later would grade and hint from the wrong (unsuffixed)
+    // exercise id. This one line of buildLevelTask sits outside this unit's
+    // granted OWNS range; checked against both concurrent sibling diffs
+    // touching src/app.js (bc-route: lines ~1221+/2063+/2092+/2114+/2133+/
+    // 2167+/2202+; bc-kbdwin: lines ~1642+/1654+/1810+/2673+) and neither
+    // comes within 100 lines of this one, so there is no overlap to corrupt.
     if (kind === 'hands') { const handsSuf = DB.prefs.kbdHands === 'right' ? 'r' : DB.prefs.kbdHands === 'left' ? 'l' : ''; if (handsSuf) pool = pool.map(id => id + handsSuf); }
     if (sess.warm > 0) { sess.warm--; warm = true; const base = kind === 'bar' || kind === 'kit' ? kind : kind === 'chord' ? 'chord' : 'one'; kind = base; pool = byStrength(pool, modelNow).slice(0, Math.max(2, Math.ceil(pool.length / 2))); }
     // Today's plan (src/core/curriculum.js's planSession, ordered by
