@@ -103,6 +103,22 @@ const READY_INSTRUMENTS = INSTRUMENTS.filter((i) => i.status === 'ready');
 
 const noteListeners = [];
 
+// The live `practice` object for the currently mounted Songs panel, or null
+// -- mountSongsPanel keeps this in sync at its own two reassignment points
+// (starting/closing a practice session) so recordStartSec() below can read
+// it without mountSongsPanel exporting anything else about its internals.
+let currentPractice = null;
+
+// The audio-clock instant (api.now()'s units) the current practice attempt
+// is judged from -- 0 before a recording has ever started, and reset each
+// time one does (src/ui/songs.js's own startRecording(), one beat after the
+// count-in's last click). A characterization test used to approximate this
+// by polling the DOM for "recording has begun" and then sampling audioNow()
+// itself; that samples a moment close to, but never exactly, the value the
+// app already computed, and a busy runner widens the gap. Reading it here
+// is exact and needs no clock of its own.
+export function recordStartSec() { return currentPractice ? currentPractice.recordStartSec : null; }
+
 // Called from the single added line in src/app.js's onNote(). Fires for
 // every played note (MIDI keyboard, on-screen keys, computer keys) whether
 // or not the app's own built-in drill is running, so a song practice step
@@ -1141,6 +1157,7 @@ function mountSongsPanel(hostEl, api) {
     // crossing a tempoMap change plays, counts in and is judged against the
     // same tempo curve throughout.
     practice = { song: arrangedSong, partId, instrument, instrumentId, plan, arrangement, results: resumeEntry ? resumeEntry.tail.slice() : [], stepIndex: resumeEntry ? resumeEntry.stepIndex : 0, repair: null, recording: false, countingIn: false, countInTimer: null, playedEvents: [], recordStartSec: 0, stop: null, loopTransport: null, loopTransportStepIndex: null, clock: createSongClock(arrangedSong), assistance: 'none', lessonKey: lessonKeyValue, resumeRate: resumeEntry ? resumeEntry.rate : null };
+    currentPractice = practice;
     if (resumeEntry) say('Picking up where you left off.', 'ok');
     saveLesson();
     renderPractice();
@@ -1239,7 +1256,7 @@ function mountSongsPanel(hostEl, api) {
       practiceSection.appendChild(el('button', { type: 'button', text: 'Practise again', onclick: () => startPractice(practice.song, practice.partId, undefined, { fresh: true }) }));
       practiceSection.appendChild(el('button', {
         type: 'button', text: 'Back to songs',
-        onclick: () => { practice = null; practiceSection.hidden = true; libraryDetails.open = true; },
+        onclick: () => { practice = null; currentPractice = null; practiceSection.hidden = true; libraryDetails.open = true; },
       }));
       return;
     }

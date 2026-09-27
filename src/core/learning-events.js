@@ -8,14 +8,17 @@
 //
 // Raw audio is never part of this record -- only the judged outcome (which
 // dimension was ok/miss/unassessed) and enough context (instrument, skill,
-// source, song/part, tempo, input, assistance, active time) to explain it
-// in plain language later.
+// source, song/part, tempo, input, assistance, active time, and -- when the
+// caller knows them -- which hand(s) played it and which content revision it
+// was judged against) to explain it in plain language later.
 
 export const EVENT_VERSION = 1;
 
 const SOURCES = ['drill', 'warmup', 'song', 'ear', 'theory'];
 const ASSISTANCE = ['none', 'shown', 'approximate', 'guided'];
 const DIM_VALUES = ['ok', 'miss', 'unassessed'];
+const HANDS = ['left', 'right', 'both'];
+const CONTENT_REV_MAX_LEN = 64;
 
 function isFiniteNumber(x) {
   return typeof x === 'number' && isFinite(x);
@@ -61,6 +64,8 @@ export function validateEvent(ev) {
   if (ev.bpmTarget !== undefined) req(ev.bpmTarget === null || isFiniteNumber(ev.bpmTarget), 'bpmTarget must be a number or null');
   if (ev.bpmActual !== undefined) req(ev.bpmActual === null || isFiniteNumber(ev.bpmActual), 'bpmActual must be a number or null');
   if (ev.input !== undefined) req(typeof ev.input === 'string', 'input must be a string');
+  if (ev.hands !== undefined) req(HANDS.indexOf(ev.hands) >= 0, 'hands must be one of ' + HANDS.join(', '));
+  if (ev.contentRev !== undefined) req(typeof ev.contentRev === 'string' && ev.contentRev.length > 0 && ev.contentRev.length <= CONTENT_REV_MAX_LEN, 'contentRev must be a non-empty string of at most ' + CONTENT_REV_MAX_LEN + ' characters');
   return { ok: errors.length === 0, errors: errors };
 }
 
