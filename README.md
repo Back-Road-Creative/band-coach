@@ -78,6 +78,16 @@ silent keyboard on your own machine. Held notes are tracked per device, so two k
 disconnected one plugged back in) holding the same pitch never cancel each other, and switching
 away from the tab, letting the window lose focus, or unplugging mid-note releases whatever was held.
 
+Proof that a keyboard works is earned per device, not kept once earned: swap a proven keyboard for
+one that has never sent a note and the status line goes back to "found", not "is working", until
+that device actually says something. And whenever no real MIDI note has been heard yet — no Web
+MIDI API in this browser, MIDI blocked, or nothing plugged in — the status line says plainly that
+screen keys and computer keys still work as practice, not as proof a real keyboard works: they let
+you keep going, but they are never mistaken for the real thing. A song practice attempt records
+which of these actually played each judged note (MIDI, computer keys, or a mix) alongside its own
+progress row, so a later look at your history can tell a song played on a real keyboard from one
+played on the computer keys as a stand-in.
+
 The pure scheduling and sending logic for "play it for me" — a song's notes sent out to a
 connected MIDI keyboard so it plays itself — lives in `src/core/midi.js` (`scheduleSong`,
 `playOnOutput`, `stopAll`, `describeOutputs`); there is no button wired to it yet.

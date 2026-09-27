@@ -1221,13 +1221,17 @@ import { register as registerPlayalong } from './ui/playalong.js';
   };
   function dirWord(got, want) { let d = ((pc(want) - pc(got)) + 12) % 12; if (d > 6) d -= 12; return d > 0 ? 'higher' : 'lower'; }
   // a played note (MIDI key, screen key, or a plucked note the microphone
-  // recognised); `source` is 'midi' for a real MIDI note-on and left
-  // undefined for every other caller (screen keys, computer keys, the mic
-  // path, the debug hook) -- it only changes (a) the plain-text "heard"
-  // messages below and (b) hands-together grading using the real MIDI
-  // held-note set instead of the note-on timer window, never anything else.
+  // recognised); `source` is 'midi' for a real MIDI note-on, 'computer-key'
+  // for the physical-keyboard keydown branch, and left undefined for every
+  // other caller (screen keys, the mic path, the debug hook). Besides (a)
+  // the plain-text "heard" messages below and (b) hands-together grading
+  // using the real MIDI held-note set instead of the note-on timer window,
+  // it is now also handed straight through to forwardSongNote() so a song
+  // practice attempt can tell a real keyboard from a stand-in the same way
+  // (src/ui/songs.js's advance()) -- never anything about credit, mastery or
+  // pass/fail, which stay blind to it.
   function onNote(midi, exact, source) {
-    forwardSongNote(midi, exact);
+    forwardSongNote(midi, exact, undefined, source);
     if (MODS[mod] && MODS[mod].kit) { const p = pieceForMidi(midi); if (p === null) coach('MIDI note ' + midi + ' is not one of the drums on this kit' + (playing ? ', so it counts as an extra hit.' : '.')); else if (!playing) coach(kitName(p) + ' heard -- start an exercise to see it judged.'); onHit(p, tapAudioTime(), source); return; }
     lastInputAt = now(); pressed[midi] = performance.now();
     if (source === 'midi') { const notJudging = !playing || !task || task.done; const outOfView = !notJudging && mod === 'kbd' && (midi < kbdRange()[0] || midi > kbdRange()[1]); if (notJudging) coach(nname(midi) + ' heard' + (playing ? '.' : ' -- start an exercise to see it judged.')); else if (outOfView) coach(nname(midi) + ' heard, but that key is not drawn on screen right now.'); }
@@ -2063,17 +2067,23 @@ import { register as registerPlayalong } from './ui/playalong.js';
   // SAYS, never what it listens to -- see the ioBtn handler below. midiPorts
   // holds every state==='connected' port with what open() reported about it;
   // midiHeard holds the ports that have actually delivered a byte, which is
-  // better proof than open() and can promote a port open() gave up on.
-  // midiHeardAny flips true once any real byte has arrived; midiLog and
-  // realMidiHeld back the "MIDI details" readout and hands-together grading.
-  // noteState (src/core/note-state.js) is the ground truth for "which
-  // port+channel+pitch is down right now" -- realMidiHeld stays a flat Set
-  // of pitches (line 1198's hands-together grading reads it directly, and
-  // that call site is out of this unit's reach) but is only ever cleared of
-  // a pitch once noteState says NO port is holding it any more, so one
-  // port's note-off (or a blur/unplug releasing that port) can never cancel
-  // the SAME pitch held on another port.
-  let midiPorts = [], midiPortInputs = [], midiHeardAny = false, midiHeard = new Set(), midiLog = [], realMidiHeld = new Set(), midiParsers = new Map(), midiBlinkTimer = null, noteState = createNoteState();
+  // better proof than open() and can promote a port open() gave up on. Proof
+  // that a keyboard works is scoped to the CURRENT route, never sticky
+  // across a device change: "is working" below reads midiHeard against
+  // midiPortInputs (the ports wire() just reported), so a never-heard device
+  // connected after a proven one is unplugged reports only "found", not the
+  // previous device's proof (field report: device B showed "is working"
+  // with no note from B ever heard, because a session-wide flag never reset
+  // on a route change). midiLog and realMidiHeld back the "MIDI details"
+  // readout and hands-together grading. noteState (src/core/note-state.js)
+  // is the ground truth for "which port+channel+pitch is down right now" --
+  // realMidiHeld stays a flat Set of pitches (line 1198's hands-together
+  // grading reads it directly, and that call site is out of this unit's
+  // reach) but is only ever cleared of a pitch once noteState says NO port
+  // is holding it any more, so one port's note-off (or a blur/unplug
+  // releasing that port) can never cancel the SAME pitch held on another
+  // port.
+  let midiPorts = [], midiPortInputs = [], midiHeard = new Set(), midiLog = [], realMidiHeld = new Set(), midiParsers = new Map(), midiBlinkTimer = null, noteState = createNoteState();
   // midiPortInputs is kept parallel to midiPorts rather than held on the port
   // objects themselves: midiPorts is handed to the debug hook and crosses the
   // page boundary by value, and a live MIDIInput does not survive that trip.
@@ -2092,7 +2102,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
     else if (mod === 'ear') { b.hidden = true; detailsBtn.hidden = true; ioState('on', 'Nothing to connect. Turn your sound up.'); }
     else {
       b.hidden = midiOn; b.textContent = 'Connect MIDI'; detailsBtn.hidden = false;
-      if (midiOn) { const names = midiNames(), label = names.length > 1 ? names.join(' and ') : names[0]; ioState('on', label + (midiHeardAny ? (names.length > 1 ? ' are working.' : ' is working.') : (names.length > 1 ? ' found. Press any key on one.' : ' found. Press any key on it.'))); }
+      if (midiOn) { const names = midiNames(), label = names.length > 1 ? names.join(' and ') : names[0], heardOnThisRoute = midiPortInputs.some(i => midiHeard.has(i)); ioState('on', label + (heardOnThisRoute ? (names.length > 1 ? ' are working.' : ' is working.') : (names.length > 1 ? ' found. Press any key on one.' : ' found. Press any key on it.'))); }
       else ioState('', mod === 'rhy' ? 'Space bar or the pad works. MIDI is optional.' : 'Screen keys and computer keys work. MIDI is optional.');
     }
     if (!$('midiDetails').hidden) renderMidiDetails();
@@ -2114,7 +2124,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
   // feed note-on/off into onNote()/the real held-note set.
   function handleMidiMessage(input, ev) {
     const d = ev.data; if (!d || !d.length) return;
-    midiHeardAny = true; midiBlink();
+    midiBlink();
     // A byte arriving is the ground truth open() was only ever a proxy for.
     // Whatever open() reported, this port is demonstrably delivering, so stop
     // warning about a program that plainly is not in the way.
@@ -2133,7 +2143,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
       // e-kit is tried FIRST; see the empty-inputs branch below for the same
       // fallback when MIDI is readable but nothing is plugged in).
       if (MODS[mod] && MODS[mod].input === 'mic+midi' && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) { openMic().then(ioRefresh).catch(() => ioState('off', 'The microphone was blocked. Allow it in the browser, or open the standalone copy in Chrome.')); return; }
-      ioState('off', 'This browser cannot read MIDI. Use Chrome or Edge. Screen and computer keys still work.'); return;
+      ioState('off', 'This browser cannot read MIDI. Use Chrome or Edge. Screen and computer keys still work as practice, not proof a real keyboard works.'); return;
     }
     navigator.requestMIDIAccess().then(a => {
       const wire = () => {
@@ -2167,12 +2177,12 @@ import { register as registerPlayalong } from './ui/playalong.js';
           // A kit whose e-kit IS found never reaches here, so this can never
           // fight real MIDI note-ons for the same tap.
           if (!inputs.length && MODS[mod] && MODS[mod].input === 'mic+midi' && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) openMic().then(ioRefresh).catch(() => ioState('off', 'No MIDI device found, and the microphone was blocked. Allow it, or plug in a kit.'));
-          else if (!inputs.length) ioState('off', 'No MIDI device found. Plug it in and it will be picked up.');
+          else if (!inputs.length) ioState('off', 'No MIDI device found. Plug it in and it will be picked up. Screen and computer keys still work as practice, not proof a real keyboard works.');
           else if (!midiOn) ioState('off', 'Another program may be using this keyboard. Close it and press Connect again.');
         });
       };
       wire(); a.onstatechange = wire;
-    }).catch(() => ioState('off', 'MIDI was blocked here. Open the standalone copy in Chrome. Screen and computer keys still work.'));
+    }).catch(() => ioState('off', 'MIDI was blocked here. Open the standalone copy in Chrome. Screen and computer keys still work as practice, not proof a real keyboard works.'));
   });
   // "Set up input" reveals the whole io strip (Connect, the Input select,
   // Check my microphone, MIDI details, the level meter). #ioBtn and the rest
@@ -2202,7 +2212,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
     if (mod === 'rhy' && (ev.key === ' ' || ev.key.length === 1)) { if (tag === 'BUTTON' && ev.key === ' ' && ev.target.id !== 'tapPad') return; ev.preventDefault(); ensureAudio(); onTap(ev); return; }
     if (MODS[mod] && MODS[mod].kit && KIT_KEYS[ev.key.toLowerCase()]) { ev.preventDefault(); ensureAudio(); onHit(KIT_KEYS[ev.key.toLowerCase()], tapAudioTime(ev), 'key'); return; }
     if (mod === 'ear' && task && task.choices && /^[1-9]$/.test(ev.key)) { const id = task.choices[+ev.key - 1]; if (id) answer(id); return; }
-    if (mod === 'kbd' && PCKEYS[ev.key.toLowerCase()] !== undefined) { ev.preventDefault(); ensureAudio(); const m = PCKEYS[ev.key.toLowerCase()]; noteState.noteOn('computer-key', 0, m); tone(m, now() + 0.01, 0.5, 0.15); onNote(m, true); }
+    if (mod === 'kbd' && PCKEYS[ev.key.toLowerCase()] !== undefined) { ev.preventDefault(); ensureAudio(); const m = PCKEYS[ev.key.toLowerCase()]; noteState.noteOn('computer-key', 0, m); tone(m, now() + 0.01, 0.5, 0.15); onNote(m, true, 'computer-key'); }
   });
   // The keydown above has no matching note-off, so a computer key held down
   // while the browser drops the key event (alt-tab away mid-press is the
