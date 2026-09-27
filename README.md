@@ -251,7 +251,9 @@ transferred to a different song, so it is not counted as though it were.
 Starting a drill session (`src/core/curriculum.js`'s `planSession`/`describePlan`, `src/app.js`'s
 `startSession`) has the coach say, in plain words, what the sitting will cover: what's due for
 review, then the one active skill you're weakest on (named in plain words, e.g. "G4", never its
-internal id), then a short phrase that uses it, then a check with no hints. The drill chooser
+internal id), then a short phrase that uses it, then a check with no hints. A second sentence then
+says why that skill was picked, straight from `planSession`'s own record (`describeWhy`), never
+recomputed -- either it slipped before, or it is the one you've practiced least so far. The drill chooser
 follows that same order — review first, then the weak skill on its own, then applying it, then
 the blind check — before falling back to today's ordinary level-by-level practice once all four
 are done.
