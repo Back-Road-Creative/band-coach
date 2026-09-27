@@ -59,7 +59,10 @@ Switching away from the tab (or backgrounding the app on a phone) stops the micr
 suspends audio outright, rather than merely pausing the exercise on screen — the OS mic indicator
 goes off, exactly as if you had closed the tab. Coming back does not reopen the mic on its own:
 press Connect again (or resume through a drill that needs it) and the status line and mic indicator
-catch up.
+catch up. The app's own clock does come back on its own, though — the moment the tab is visible
+again (or, on a phone, the moment the OS restores it from its back/forward cache), suspended audio
+resumes so a lesson already in progress keeps ticking rather than freezing solid until some other
+click happens to wake it.
 
 Press "Connect MIDI" to use a keyboard. The status line only says a device is connected once the
 page has actually opened it, so "Keystation found. Press any key on it." means the keyboard is

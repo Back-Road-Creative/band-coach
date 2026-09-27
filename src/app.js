@@ -2216,7 +2216,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
   $('playBtn').addEventListener('click', function () { this.blur(); if (!sess) startSession(); else if (paused) resume(); else takeBreak('user'); });
   $('endBtn').addEventListener('click', function () { this.blur(); endSession(); }); $('endBtn2').addEventListener('click', endSession); $('backBtn').addEventListener('click', resume);
   $('snoozeBtn').addEventListener('click', () => { sess.snoozeUntil = Date.now() + 5 * 60000; sess.tiredFor = 0; S.ready = Math.min(S.ready, 0.6); pauseInfo = { at: Date.now(), secs: 0 }; resume(); coach('Five more minutes, then I will ask again. I have eased off the pace meanwhile.'); });
-  document.addEventListener('visibilitychange', () => { if (document.hidden && playing) takeBreak('hidden'); if (document.hidden) { flushSave(); releaseNotes(); runTeardown('hidden'); } else { refreshModelClock(); ioRefresh(); } wakeLock.handleVisibilityChange(document); });
+  document.addEventListener('visibilitychange', () => { if (document.hidden && playing) takeBreak('hidden'); if (document.hidden) { flushSave(); releaseNotes(); runTeardown('hidden'); } else { refreshModelClock(); ensureAudio(); ioRefresh(); } wakeLock.handleVisibilityChange(document); });
   // A hidden tab is a pause the learner might return to; pagehide (real tab
   // close, navigation, reload) never comes back, so it gets the same
   // teardown -- a hidden tab that goes straight to being closed must not
@@ -2226,6 +2226,15 @@ import { register as registerPlayalong } from './ui/playalong.js';
   // Kept next to this listener rather than in the flushSave/writeDB pagehide
   // wiring above, which an unrelated unit also edits.
   window.addEventListener('pagehide', () => runTeardown('pagehide'));
+  // now() is actx.currentTime, so a context the teardown stopper suspended
+  // above freezes the app clock solid -- nextTaskAt, scheduled against that
+  // frozen now(), can never become due again. The visible branch above
+  // covers a plain tab switch; a bfcache restore (Back/Forward Cache) instead
+  // fires pageshow with persisted:true and NO visibilitychange at all on some
+  // browsers, so ensureAudio() (a no-op unless actx exists and is suspended)
+  // needs its own call here too, or a learner returning from history
+  // navigation gets the same frozen clock this whole fix exists to prevent.
+  window.addEventListener('pageshow', ev => { if (ev.persisted) ensureAudio(); });
   // A held note has no way to send its own note-off once the window itself
   // loses focus (alt-tab, another app grabbing the keyboard) -- release
   // everything noteState is holding rather than leave a phantom note "held"
