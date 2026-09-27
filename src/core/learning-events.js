@@ -80,11 +80,15 @@ export const RETAIN_GAP_MS = 20 * 3600 * 1000;
 // per one of the plan's understandable states (6.4 lists five):
 //   - withHelp: assistance was not 'none' (a Show me / guided / approximate
 //     attempt -- practice happened, but it is not independent evidence).
-//   - independent: no assistance, and every dimension this event DID assess
-//     came back 'ok' (an unassessed dimension does not count against it --
-//     it was never judged, not judged wrong).
-//   - introduced: everything else (no assistance, but at least one assessed
-//     dimension came back 'miss') -- first contact or still-shaky attempts.
+//   - independent: no assistance, every dimension this event DID assess came
+//     back 'ok' (an unassessed dimension does not count against it -- it was
+//     never judged, not judged wrong), and, for a `kbd` row, `input` is
+//     either absent or 'midi' -- a keyboard attempt made over a non-MIDI
+//     route (computer-key, mixed) is practice, not proof.
+//   - introduced: everything else -- no assistance, but either at least one
+//     assessed dimension came back 'miss', or (for `kbd`) the attempt was
+//     made over a non-MIDI route regardless of how its dims came back --
+//     first contact, still-shaky attempts, and non-MIDI keyboard practice.
 //   - retained: an independent-ok attempt that lands at least retainGapMs
 //     (default RETAIN_GAP_MS) after an earlier independent-ok attempt on the
 //     same instrument+skill -- evidence the skill survived a break, not
@@ -110,8 +114,16 @@ export const RETAIN_GAP_MS = 20 * 3600 * 1000;
 // the same test summarizeEvents uses internally, pulled out because
 // boundEvents (below) needs it too, to find the rows worth keeping as
 // anchors past the plain size cut.
+// A `kbd` row whose `input` names a route other than 'midi' (e.g.
+// 'computer-key', or 'mixed', a take assembled from more than one route) is
+// never independent-ok either, however its dims came back: a keyboard
+// attempt made without a real MIDI keyboard is practice, not proof the
+// skill transferred to the instrument. A row with no `input` field at all
+// (legacy rows, drill rows recorded before input was tagged, and today's
+// on-screen song clicks) keeps its existing meaning.
 export function isIndependentOk(ev) {
   const withHelp = !!(ev.assistance && ev.assistance !== 'none');
+  if (ev.instrument === 'kbd' && typeof ev.input === 'string' && ev.input !== 'midi') return false;
   const dims = ev.dims || {};
   const assessed = Object.keys(dims).filter((k) => dims[k] !== 'unassessed');
   return !withHelp && assessed.length > 0 && assessed.every((k) => dims[k] === 'ok');
