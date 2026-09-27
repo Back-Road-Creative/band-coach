@@ -33,10 +33,10 @@ function partNotesOf(song, partId) {
   return part ? part.notes : [];
 }
 
-// (start, midi) is the diff key -- see the module comment above and the
-// header comment in lesson.js's own note-matching code for why duration
-// isn't part of it: a held note that got re-typed to a different length by
-// an importer is still "the same note", not a drop-and-add.
+// (start, midi) is the diff key -- see the module comment above and
+// note-f1.js's OFFSET-INSENSITIVE header for why duration isn't part of it:
+// a held note that got re-typed to a different length by an importer is
+// still "the same note", not a drop-and-add.
 function keyOf(n) {
   return n.start + ':' + n.midi;
 }
