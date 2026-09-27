@@ -3,14 +3,20 @@
 // renderOpts, which owns rendering); this file only owns which starter
 // song to suggest and whether that suggestion counts as reviewed.
 //
-// MODS.kbd's own level pitch pools (src/app.js:468-477, the N(...) calls in
-// each level's `add`) are mirrored here as plain MIDI-number arrays --
-// index i holds level (i+1)'s own new pitches, an empty array for a
-// task-only level (Moves/Chords/Hands, which teach no new pitch) that
-// still has to occupy its slot so later indices line up. This file cannot
-// import MODS itself: app.js's MODS lives inside its own IIFE closure and
-// is never exported.
-const KBD_LEVEL_PITCH_POOLS = [
+import { starterSongs } from '../song/starter/index.js';
+import { nameFor } from '../core/note-names.js';
+import { itemReview, contentRev } from './review-ledger.js';
+import { isReviewCurrent } from './review.js';
+
+// The keyboard trainer's own new pitches per level, as plain MIDI numbers:
+// index i holds level (i+1)'s pitches, an empty array for a task-only level
+// (Moves: two notes / three notes, which teach no new pitch) that still has
+// to occupy its slot so later indices line up. This is the only copy:
+// src/app.js's MODS.kbd levels build their `add` lists from it (N(...)), so
+// the trainer and the song hand-off below can never disagree about which
+// notes a level teaches. Levels past the last entry teach runs, chords and
+// hands together, never a new single pitch.
+export const KBD_LEVEL_PITCH_POOLS = [
   [60, 62, 64],                     // level 1: C, D and E
   [65, 67],                         // level 2: Add F and G
   [69, 71, 72],                     // level 3: Add A, B and high C
@@ -55,11 +61,6 @@ function pitchesOf(song) {
   song.parts.forEach((part) => part.notes.forEach((n) => set.add(n.midi)));
   return Array.from(set).sort((a, b) => a - b);
 }
-
-import { starterSongs } from '../song/starter/index.js';
-import { nameFor } from '../core/note-names.js';
-import { itemReview, contentRev } from './review-ledger.js';
-import { isReviewCurrent } from './review.js';
 
 // One entry per starter song whose every pitch is fully covered by a
 // keyboard level (minLevelFor above): a song reaching outside anything the

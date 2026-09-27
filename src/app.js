@@ -47,7 +47,7 @@ import { layoutFor as harpLayoutFor } from './instruments/how/harmonica.js';
 import { pieceForMidi, TRAINER_LEVELS as KIT_LEVELS } from './instruments/drum-kit.js';
 import { kitLayout, pieceAt } from './instruments/how/drum-kit.js';
 import { layoutPercussionMeasure } from './notation/percussion.js';
-import { songFor } from './instruments/kbd-songs.js';
+import { songFor, KBD_LEVEL_PITCH_POOLS as KBD_POOLS } from './instruments/kbd-songs.js';
 import { itemReview, contentRev } from './instruments/review-ledger.js';
 import { isReviewCurrent } from './instruments/review.js';
 // slot:import:notation-wire
@@ -469,11 +469,13 @@ import { register as registerPlayalong } from './ui/playalong.js';
   }
   const MODS = {
     kbd: { name: 'Keyboard', tag: 'MIDI or on-screen keys', color: '#2f93ee', input: 'midi', help: t('kbd.help'),
+      // Each level's new notes come from KBD_LEVEL_PITCH_POOLS (src/instruments/
+      // kbd-songs.js), the one copy the song hand-off also reads.
       levels: [
-        { name: 'C, D and E', add: N(60, 62, 64), limit: 8 }, { name: 'Add F and G', add: N(65, 67), limit: 8 }, { name: 'Add A, B and high C', add: N(69, 71, 72), limit: 8 },
-        { name: 'Black keys: F sharp and B flat', add: N(66, 70), limit: 8 }, { name: 'Black keys: C sharp, E flat, A flat', add: N(61, 63, 68), limit: 8 },
+        { name: 'C, D and E', add: N(...KBD_POOLS[0]), limit: 8 }, { name: 'Add F and G', add: N(...KBD_POOLS[1]), limit: 8 }, { name: 'Add A, B and high C', add: N(...KBD_POOLS[2]), limit: 8 },
+        { name: 'Black keys: F sharp and B flat', add: N(...KBD_POOLS[3]), limit: 8 }, { name: 'Black keys: C sharp, E flat, A flat', add: N(...KBD_POOLS[4]), limit: 8 },
         { name: 'Moves: two notes', task: 'seq', len: 2, limit: 6 }, { name: 'Moves: three notes', task: 'seq', len: 3, limit: 5 },
-        { name: 'The octave below', add: N(48, 50, 52, 53, 55, 57, 59), limit: 7 }, { name: 'Five-note runs', task: 'run', limit: 4 },
+        { name: 'The octave below', add: N(...KBD_POOLS[7]), limit: 7 }, { name: 'Five-note runs', task: 'run', limit: 4 },
         { name: 'Chords: C, F and G', add: ['cC', 'cF', 'cG'], task: 'chord', pool: 'c', limit: 12 }, { name: 'Chords: A minor, D minor, E minor', add: ['cAm', 'cDm', 'cEm'], task: 'chord', pool: 'c', limit: 10 },
         { name: 'Chord changes', task: 'seq', len: 2, pool: 'c', limit: 8 },
         { name: 'Hands together: five-finger position (MIDI exact, mic approximate)', add: ['j1', 'j2', 'j3', 'j4', 'j5'], task: 'hands', pool: 'j', limit: 10 }

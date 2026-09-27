@@ -1,15 +1,18 @@
 // src/instruments/kbd-songs.js: the keyboard trainer's "Play a song with
-// these notes" suggestions. Every check here recomputes the taught-pitch
-// pool independently from src/app.js:468-477's own N(...) calls (never
-// imports the module's internal pool), so a bug that silently drifted both
-// copies together would still be caught.
+// these notes" suggestions. KBD_LEVEL_PITCH_POOLS is the one copy of which
+// notes each keyboard level teaches (src/app.js's MODS.kbd levels read it),
+// so the trainer and the song hand-off cannot disagree. The checks below
+// recompute the taught-pitch pool from a hand-written expectation instead of
+// the module's own pool, so a changed curriculum fails here until this file
+// is updated on purpose.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { starterSongs } from '../../src/song/starter/index.js';
-import { ENTRIES, songFor, reviewItems } from '../../src/instruments/kbd-songs.js';
+import { ENTRIES, songFor, reviewItems, KBD_LEVEL_PITCH_POOLS } from '../../src/instruments/kbd-songs.js';
 
-// Mirrors src/app.js:470-477's MODS.kbd.levels add pools, in the same order.
+// The keyboard levels' own new notes, level 1 first; empty for a level that
+// teaches a task rather than new notes (Moves: two notes, Moves: three notes).
 const KBD_LEVEL_ADD = [
   [60, 62, 64],
   [65, 67],
@@ -33,6 +36,10 @@ function pitchesOf(song) {
   return Array.from(set);
 }
 
+test('the shared level pools match the keyboard curriculum', () => {
+  assert.deepEqual(KBD_LEVEL_PITCH_POOLS, KBD_LEVEL_ADD);
+});
+
 test('every entry names a real starter song', () => {
   assert.ok(ENTRIES.length > 0, 'expected at least one hand-off entry');
   for (const entry of ENTRIES) assert.ok(starterSongs.some((s) => s.id === entry.songId), entry.songId + ' should exist in starterSongs');
@@ -55,6 +62,16 @@ test("songFor(2) is Hot Cross Buns", () => {
   const entry = songFor(2);
   assert.ok(entry, 'expected a hand-off entry at level 2');
   assert.equal(entry.songId, 'hot-cross-buns');
+});
+
+test('songFor(level) is the most advanced song already reached, first-listed on a tie', () => {
+  for (let level = 1; level <= 14; level++) {
+    const reached = ENTRIES.filter((e) => e.minLevel <= level);
+    const got = songFor(level);
+    if (!reached.length) { assert.equal(got, null, 'level ' + level); continue; }
+    const top = Math.max(...reached.map((e) => e.minLevel));
+    assert.equal(got, reached.find((e) => e.minLevel === top), 'level ' + level);
+  }
 });
 
 test('every reviewItems() entry is unreviewed (the ledger ships empty)', () => {
