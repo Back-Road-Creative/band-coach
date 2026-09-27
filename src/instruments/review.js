@@ -14,3 +14,17 @@ export function isReviewed(provenance) {
   return typeof provenance.reviewedBy === 'string' && provenance.reviewedBy.length > 0
     && typeof provenance.reviewedAt === 'string' && provenance.reviewedAt.length > 0;
 }
+
+// Is a review still trustworthy, or has the content it approved moved on
+// since? schema.js's provenance carries an optional contentRev (the
+// curriculum's current revision) and reviewedRev (the revision a review
+// actually covered). A record with no contentRev declared has no way to go
+// stale, so a plain isReviewed() is enough; once contentRev is declared, the
+// review only counts as current when reviewedRev was recorded and matches
+// it exactly -- behind means the content changed after the review, and
+// schema.js already rejects ahead as invalid data.
+export function isReviewCurrent(provenance) {
+  if (!isReviewed(provenance)) return false;
+  if (provenance.contentRev === undefined) return true;
+  return provenance.reviewedRev === provenance.contentRev;
+}
