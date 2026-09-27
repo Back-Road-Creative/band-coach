@@ -91,6 +91,22 @@ export function describePlan(blocks, nameOf) {
   return 'Today: ' + parts.join(', then ') + '.';
 }
 
+// describeWhy(blocks, nameOf) -> a second, separate sentence naming the
+// reason planSession recorded for the weak skill it picked (see the `weak`
+// assignment above), e.g. "G4: slipped before, worth another pass." Returns
+// '' when there is no weak block, or its why is missing/not a string, so a
+// caller with nothing to say can simply skip appending it. Same argument
+// handling as describePlan: a non-array blocks becomes [], nameOf defaults
+// to the identity function. Plain English literals only -- never t(), which
+// would pull in i18n.js.
+export function describeWhy(blocks, nameOf) {
+  const list = Array.isArray(blocks) ? blocks : [];
+  const name = typeof nameOf === 'function' ? nameOf : (id => String(id));
+  const weak = list.find(b => b.kind === 'weak');
+  if (!weak || typeof weak.why !== 'string' || !weak.why) return '';
+  return name(weak.id) + ': ' + weak.why + '.';
+}
+
 // nextPlanStep(blocks, progress) -> { kind, ids, blind } | null
 // Pure cursor over the ordered blocks planSession produced: `progress` is
 // the caller's own tally of how many tasks each block kind has already
