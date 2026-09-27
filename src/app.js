@@ -1263,7 +1263,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
       const heldMidis = source === 'midi' ? Array.from(realMidiHeld) : (held.push({ m: midi, t: now() }), held = held.filter(x => now() - x.t < 0.6), held.map(x => x.m));
       const g = gradeHandsTogetherExact(ex, heldMidis, handsMode);
       if (g.wrong.length) { failEl(nname(midi) + ' is not part of ' + ex.short + ' (' + fingeringLabel(ex) + ').', e.id + '>x' + midi); if (source !== 'midi') held = []; return; }
-      if (g.ok) passEl(undefined, ex.short + ': ' + (handsMode === 'right' ? 'right hand, MIDI exact' : handsMode === 'left' ? 'left hand, MIDI exact' : 'both hands together') + '. ' + fingeringLabel(ex) + '.');
+      if (g.ok) passEl(undefined, ex.short + ': ' + (handsMode === 'right' ? 'right hand' : handsMode === 'left' ? 'left hand' : 'both hands together') + '. ' + fingeringLabel(ex) + '.');
       return;
     }
     if (i.kind !== 'note') return;

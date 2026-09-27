@@ -688,7 +688,8 @@ your preferences and survives a reload. Above level 13, the "Everything, faster"
 material back in with every other kind of drill; a plain `j1`-style id that turns up there is always
 the both-hands exercise, whatever the selector is currently set to — only an id with the `r`/`l`
 suffix is graded one-handed. The approximate (microphone) pass message says plainly which hand was
-checked in Right only/Left only mode, rather than the both-hands wording.
+checked in Right only/Left only mode, rather than the both-hands wording. One-handed passes never
+move you past level 13 on their own: the level holds until the both-hands exercises are ready.
 
 ## Harmonica: any of the 12 keys, plus bends
 

@@ -85,7 +85,7 @@ test('gradeHandsTogetherExact: empty input -> not ok, neither hand', () => {
   assert.equal(g.lh, false);
 });
 
-test('handsTogetherById(ex, held, "right") passes on the right-hand note alone and does not report the left-hand note as wrong when also held', () => {
+test('gradeHandsTogetherExact(ex, held, "right") passes on the right-hand note alone and does not report the left-hand note as wrong when also held', () => {
   const ex = handsTogetherById('j1'); // rh 60, lh 48
   const rightAlone = gradeHandsTogetherExact(ex, [60], 'right');
   assert.equal(rightAlone.ok, true);
