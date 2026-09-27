@@ -210,3 +210,38 @@ test('a real pointerdown on a lower-row key plays that key, not the wrong row', 
   await tapAt(page, target2.x + target2.w / 2, wrongOctave.y + wrongOctave.h / 2);
   await page.waitFor("document.getElementById('feedback').className === 'no'");
 });
+
+// Requirement (4): arrow-key focus walks the left row low to high, then the
+// right row. The rows are stacked, so a plain left-to-right sort by x would
+// interleave them (C3, C4, C#3, C#4 ...); walking the order must give
+// strictly rising pitches, left-hand keys first.
+test('arrow-key focus walks the left row low to high, then the right row', async (t) => {
+  const page = await launchPage(htmlPath);
+  t.after(() => page.close());
+  await toLevel(page, 8);
+
+  await page.evaluate("document.getElementById('cv').focus()");
+  const start = await page.evaluate('window.__coach.kbdFocus()');
+  assert.ok(start, 'a key should be focused once the canvas has focus');
+  for (let i = 0; i < start.total; i++) {
+    await page.evaluate(`
+      document.getElementById('cv').dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }))
+    `);
+  }
+  const first = await page.evaluate('window.__coach.kbdFocus()');
+  assert.equal(first.idx, 0, 'ArrowLeft should stop at the first key');
+  const byIdx = new Map([[first.idx, first.m]]);
+  for (let i = 1; i < first.total; i++) {
+    await page.evaluate(`
+      document.getElementById('cv').dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }))
+    `);
+    const f = await page.evaluate('window.__coach.kbdFocus()');
+    byIdx.set(f.idx, f.m);
+  }
+  assert.equal(byIdx.size, first.total, 'ArrowRight should visit every key once');
+  const walk = [...byIdx.keys()].sort((a, b) => a - b).map(i => byIdx.get(i));
+  for (let i = 1; i < walk.length; i++) {
+    assert.ok(walk[i] > walk[i - 1], `focus order should rise in pitch, got ${walk.join(',')}`);
+  }
+  assert.ok(walk[0] < 60 && walk[walk.length - 1] >= 60, `left row first, right row last, got ${walk.join(',')}`);
+});

@@ -702,8 +702,9 @@ octave below middle C, e.g. "Left hand · C3–B3") stacked above a labelled rig
 up, e.g. "Right hand · C4–C5"). Each row is capped at 8 white keys, which is what actually fixes
 the problem: 15 white keys across a phone-width canvas measured at ~21px per key, under the 24px
 WCAG 2.5.8 (2.2 AA) tap-target floor #283 already holds every other control in this app to; capping
-each row at 8 keeps every white key at or above that floor on any phone this app supports, by
-construction, rather than by a separate size check bolted on afterwards. The layout depends only on
+each row at 8 keeps every white key at or above that floor at the 340px phone canvas and on anything
+wider (the floor holds for any canvas at least ~204px wide), rather than by a separate size check
+bolted on afterwards. The layout depends only on
 which octaves are unlocked, never on the current task or its target note, so neither row ever moves
 mid-phrase.
 
