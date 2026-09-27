@@ -363,3 +363,70 @@ test('NEW: permission denied says so plainly', async (t) => {
   const text = await page.evaluate("document.getElementById('ioText').textContent");
   assert.match(text, /blocked/i);
 });
+
+// ---------- new behaviour: proof of a working keyboard is per DEVICE, not
+// per session, and every fallback status says computer/screen keys are
+// practice, never proof ----------
+
+test('NEW: proof a keyboard works does not carry over to a different device on the same route', async (t) => {
+  const page = await launchPage(htmlPath, { initScript: FAKE_MIDI_INIT });
+  t.after(() => page.close());
+
+  await page.evaluate("window.__coach.setMod('kbd')");
+  await midiAddPort(page, 'p1', 'Keys One');
+  await connectMidi(page);
+  await page.waitFor("document.getElementById('ioBtn').hidden === true");
+  await midiSend(page, 'p1', [0x90, 60, 100]);
+  await page.waitFor("document.getElementById('ioText').textContent.indexOf('is working') >= 0");
+
+  await midiRemovePort(page, 'p1');
+  await page.waitFor("document.getElementById('ioBtn').hidden === false");
+  // A different id: fake-midi.mjs always mints a new object on re-add, and
+  // a real browser may reuse one object for the same physical device, so a
+  // same-id add here would only prove the harness reuses an object, not
+  // that a never-heard device is judged on its own evidence.
+  await midiAddPort(page, 'p2', 'Keys Two');
+  await page.waitFor("document.getElementById('ioBtn').hidden === true");
+
+  const text = await page.evaluate("document.getElementById('ioText').textContent");
+  assert.doesNotMatch(text, /is working/i, 'Keys Two has sent nothing yet -- it has not earned "is working"');
+  assert.match(text, /found/i);
+});
+
+test('NEW: no Web MIDI API says screen/computer keys are practice, not proof', async (t) => {
+  const page = await launchPage(htmlPath, { initScript: FAKE_MIDI_INIT });
+  t.after(() => page.close());
+
+  await page.evaluate("window.__coach.setMod('kbd')");
+  await midiMakeUnavailable(page);
+  await connectMidi(page);
+  await page.waitFor("document.getElementById('ioText').textContent.length > 0");
+  const text = await page.evaluate("document.getElementById('ioText').textContent");
+  assert.match(text, /cannot read MIDI/i);
+  assert.match(text, /practice, not proof/i);
+});
+
+test('NEW: MIDI blocked/denied says screen/computer keys are practice, not proof', async (t) => {
+  const page = await launchPage(htmlPath, { initScript: FAKE_MIDI_INIT });
+  t.after(() => page.close());
+
+  await page.evaluate("window.__coach.setMod('kbd')");
+  await midiReject(page);
+  await connectMidi(page);
+  await page.waitFor("document.getElementById('ioText').textContent.length > 0");
+  const text = await page.evaluate("document.getElementById('ioText').textContent");
+  assert.match(text, /blocked/i);
+  assert.match(text, /practice, not proof/i);
+});
+
+test('NEW: MIDI available but nothing plugged in says screen/computer keys are practice, not proof', async (t) => {
+  const page = await launchPage(htmlPath, { initScript: FAKE_MIDI_INIT });
+  t.after(() => page.close());
+
+  await page.evaluate("window.__coach.setMod('kbd')");
+  await connectMidi(page);
+  await page.waitFor("document.getElementById('ioText').textContent.length > 0");
+  const text = await page.evaluate("document.getElementById('ioText').textContent");
+  assert.match(text, /No MIDI device found/i);
+  assert.match(text, /practice, not proof/i);
+});

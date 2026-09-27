@@ -78,6 +78,19 @@ silent keyboard on your own machine. Held notes are tracked per device, so two k
 disconnected one plugged back in) holding the same pitch never cancel each other, and switching
 away from the tab, letting the window lose focus, or unplugging mid-note releases whatever was held.
 
+Proof that a keyboard works is earned per device, not kept once earned: swap a proven keyboard for
+one that has never sent a note and the status line goes back to "found", not "is working", until
+that device actually says something. In three fallback states — this browser has no Web MIDI API,
+MIDI was blocked, or MIDI works but nothing is plugged in — the status line also says screen keys
+and computer keys still work as practice, not as proof a real keyboard works. A song practice
+attempt's learning
+record carries which route actually played it: "midi" only when every judged note was a real MIDI
+note-on, "computer-key" or "mic" when every judged note came from that one route instead, "mixed"
+when the judged notes disagree on route, and the field is left off entirely when any judged note's
+route is unknown (as with a screen-key click) — so a later look at your history can tell a song
+played on a real keyboard from one played on the computer keys as a stand-in, without ever
+guessing at a route the app never actually recorded.
+
 The pure scheduling and sending logic for "play it for me" — a song's notes sent out to a
 connected MIDI keyboard so it plays itself — lives in `src/core/midi.js` (`scheduleSong`,
 `playOnOutput`, `stopAll`, `describeOutputs`); there is no button wired to it yet.
@@ -216,13 +229,22 @@ startup.
 Every judged drill answer, warm-up answer and judged song step leaves one small record — which
 instrument and skill it was, whether it was independent or asked for help, which parts (pitch,
 timing, hold, tune) were actually checked, and how long it took — kept alongside the practice log
+described above. A song step's record also keeps which input actually played it (MIDI, computer
+keys, mic, or a mix), left off entirely when that route is unknown rather than guessed at. The raw
+sound of your playing or singing is never recorded; only the judged result is. The record keeps
+the most recent 500 attempts plus, for each skill, the first time it
+was played right (from a drill, and from anywhere), so it never grows without limit. The "My
 described above. The raw sound of your playing or singing is never recorded; only the judged
 result is. The record keeps the most recent 500 attempts plus, for each skill, the first time it
-was played right (from a drill, and from anywhere), so it never grows without limit. The "My
+was played right (from a drill, and from anywhere) and, for each song played on that skill, the
+play that first counted as applied (per-skill records are kept first when space runs short), so it
+never grows without limit. The "My
 progress" panel turns that record into one plain line — how many attempts were passed with help,
 passed independently, retained on a later check (not just repeated in the same sitting), and
 applied in a song rather than a drill — or, with nothing recorded yet, says so plainly instead of
-claiming anything is retained.
+claiming anything is retained. A given song only counts toward "applied" once per skill, no matter
+how many times it is replayed — practising the same tune over and over is not new evidence a skill
+transferred to a different song, so it is not counted as though it were.
 
 ## Today's plan
 
@@ -489,9 +511,13 @@ The "How to play it" panel (`src/ui/fingerings.js`) never leaves that gap
 implicit: `src/instruments/review.js`'s `isReviewed()` treats a record's
 provenance as reviewed only when `reviewedBy` and `reviewedAt` are both
 filled in, and the panel shows a plain-language "Not yet checked by a
-musician" badge whenever it isn't — including the reference name when one is
+player" badge whenever it isn't — including the reference name when one is
 on file. Since every record currently ships `provenance: null`, that badge is
-visible for all 28 instruments today, not a rare edge case. The panel's
+visible for all 28 instruments today, not a rare edge case. Per-item reviews
+(finer-grained than the whole-record provenance above, e.g. one curriculum
+entry) live in `src/instruments/review-ledger.js`, keyed by the item's id
+plus a hash of its own content, so editing an item makes its review go
+stale on its own; that ledger is empty today. The panel's
 routing is equally strict about what it draws: an instrument kind it has no
 diagram for renders a truthful "guidance isn't ready here yet" state rather
 than silently reusing another instrument family's renderer (`diagramKindFor`
@@ -676,6 +702,23 @@ both hands were heard. It is still graded for real by the spaced-repetition sche
 only one hand was actually confirmed it does not count toward level progress the way an exact pass
 does.
 
+A "Hands" selector on the keyboard options panel picks Both / Right only / Left only. Both is the
+long-standing drill above: both hands' notes are required, and any other held note is wrong.
+Right only and Left only ask for just the named hand's note — the other hand may play along (it is
+optional accompaniment, never required and never marked wrong), but only the named hand's note is
+what actually passes the exercise or is recorded as evidence the learner played it; the on-screen
+hint says which hand is being checked. Changing the selector clears the exercise in progress and
+starts a fresh one under the new mode rather than leaving a half-graded task behind. Right-only and
+left-only practice is tracked on its own id (`j1r`/`j1l` etc., alongside the both-hands `j1`), so
+passing the one-handed drill never counts toward, and never uses up, both-hands mastery — the two
+are scheduled by the spaced-repetition system independently. The choice is saved with the rest of
+your preferences and survives a reload. Above level 13, the "Everything, faster" levels mix hands
+material back in with every other kind of drill; a plain `j1`-style id that turns up there is always
+the both-hands exercise, whatever the selector is currently set to — only an id with the `r`/`l`
+suffix is graded one-handed. The approximate (microphone) pass message says plainly which hand was
+checked in Right only/Left only mode, rather than the both-hands wording. One-handed passes never
+move you past level 13 on their own: the level holds until the both-hands exercises are ready.
+
 ## Harmonica: any of the 12 keys, plus bends
 
 The harmonica mod is not locked to a C harmonica. A "My harmonica is in the key of" selector on
@@ -694,6 +737,31 @@ appended after the nine open-note levels, so an existing learner's saved level n
 shift. A bend is graded by its exact bent pitch, the same way an open note is graded by its own
 pitch. Bend availability (which holes bend, and how deep) does not change with key, since
 transposing the whole harmonica preserves the blow/draw gap inside every hole.
+
+## On-screen keyboard
+
+Once the keyboard mod unlocks the octave below middle C ("The octave below", level 8, and every
+level after — including "Hands together", level 13) or a captured melody dips below it, the
+on-screen piano stops drawing one 15-white-key strip and draws two: a labelled left-hand row (the
+octave below middle C, e.g. "Left hand · C3–B3") stacked above a labelled right-hand row (middle C
+up, e.g. "Right hand · C4–C5"). Each row is capped at 8 white keys, which is what actually fixes
+the problem: 15 white keys across a phone-width canvas measured at ~21px per key, under the 24px
+WCAG 2.5.8 (2.2 AA) tap-target floor #283 already holds every other control in this app to; capping
+each row at 8 keeps every white key at or above that floor at the 340px phone canvas and on anything
+wider (the floor holds for any canvas at least ~204px wide), rather than by a separate size check
+bolted on afterwards. The layout depends only on
+which octaves are unlocked, never on the current task or its target note, so neither row ever moves
+mid-phrase.
+
+During a "hands together" task, the right-hand and left-hand target notes are marked with a
+letter ("R"/"L") drawn on the key itself, not only the usual accent colour — colour alone cannot
+tell a learner which lit key belongs to which hand once both rows are on screen. The keyboard-only
+focus cursor (arrow keys move it, Enter/Space plays the focused key — see "Piano hands together"
+above for the fingering itself) traverses the left row low to high, then the right row low to high.
+
+`window.__coach.kbdKeys()` (dev build only) exposes the raw key rectangles the last frame drew,
+each carrying its MIDI note, pixel rectangle, which row it belongs to, and any hand mark — the same
+data a real pointerdown hit-tests against.
 
 ## Reference tones sound like the instrument
 
@@ -854,6 +922,14 @@ The songs panel (`src/ui/songs.js`) shows one "Play it on…" card per ready
 instrument, badge included, on a lesson's first (listen) step, before the
 learner has attempted anything; picking a card starts that same song on the
 chosen instrument without leaving the panel.
+
+`src/song/eval/fidelity.js`'s `fidelityReport(sourceNotes, song, partId, instrument)`
+is a pure, non-user-facing measurement of the same divergence, returning
+`{dropped, merged, octaveShift, shiftSemitones, outOfRange, chordReduced, hands}`:
+`dropped`/`merged` compare the part's notes against an optional pre-import note
+list; `octaveShift`, `shiftSemitones`, `outOfRange` and `chordReduced` all come
+from `fitToInstrument`'s own result, reused rather than re-derived; `hands`
+comes from `arrangeFor`'s placements (keyboard family only, `null` otherwise).
 
 `segment` (`src/song/lesson.js`) cuts phrases at real bar lines even when a
 song changes metre partway through (`song.metreChanges`), always agreeing

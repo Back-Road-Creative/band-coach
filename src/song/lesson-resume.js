@@ -14,7 +14,7 @@ export const TAIL_MAX = 8;
 
 // A fast, simple 32-bit fingerprint (FNV-1a) of a string, as 8 hex digits.
 // No crypto needed: this only has to notice that something changed.
-function fnv1a(str) {
+export function fnv1a(str) {
   let hash = 0x811c9dc5;
   for (let i = 0; i < str.length; i++) {
     hash ^= str.charCodeAt(i);
