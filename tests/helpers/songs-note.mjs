@@ -20,6 +20,13 @@
 // gap: the only latency left is however long the app itself took to flip the
 // state, which is exactly what a real learner's key press would also be
 // racing against.
+//
+// Even that last gap lost under heavy load (G-flaky-under-load-3, 2026-09-27:
+// songs-session-log still saw "acc 0.78"), because songsNote() stamps the
+// note with api.now() at call time. The note is now delivered through
+// songsNoteAt(midi, 0) instead: stamped at the attempt's own recordStartSec,
+// i.e. exactly on beat one, however late the call itself runs. This helper
+// promises "the note at t=0", so that is what it now delivers.
 export async function playSongNoteWhenListening(page, midi, exact = true) {
   await page.evaluate(`(async () => {
     const turnBtn = Array.from(document.querySelectorAll('.panel-songs-practice button')).find(b => b.textContent === 'Your turn');
@@ -27,6 +34,6 @@ export async function playSongNoteWhenListening(page, midi, exact = true) {
     while (!(document.querySelector('.panel-songs-count') && document.querySelector('.panel-songs-count').textContent.startsWith('Notes heard so far'))) {
       await new Promise(r => setTimeout(r, 4));
     }
-    window.__coach.songsNote(${JSON.stringify(midi)}, ${JSON.stringify(exact)});
+    window.__coach.songsNoteAt(${JSON.stringify(midi)}, 0, ${JSON.stringify(exact)});
   })()`);
 }

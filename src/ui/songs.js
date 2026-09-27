@@ -124,10 +124,22 @@ export function recordStartSec() { return currentPractice ? currentPractice.reco
 // every played note (MIDI keyboard, on-screen keys, computer keys) whether
 // or not the app's own built-in drill is running, so a song practice step
 // can hear key presses while no built-in task is active.
-export function forwardNote(midi, exact) {
+// `atAudioSec` (optional, api.now()'s units) stamps the note at that exact
+// audio-clock instant instead of "now"; only forwardNoteAt() below passes it.
+export function forwardNote(midi, exact, atAudioSec) {
   for (const fn of noteListeners.slice()) {
-    try { fn(midi, exact); } catch (e) { /* one bad listener must not break the others */ }
+    try { fn(midi, exact, atAudioSec); } catch (e) { /* one bad listener must not break the others */ }
   }
+}
+
+// Debug-hook only (window.__coach.songsNoteAt): a note stamped `offsetSec`
+// after the current attempt's own start (recordStartSec()), so a test can
+// play "the note on beat one" with zero lateness however busy the runner is
+// -- the call itself may land late, the note's timestamp does not.
+export function forwardNoteAt(midi, offsetSec, exact) {
+  const start = recordStartSec();
+  if (start === null) return;
+  forwardNote(midi, exact === undefined ? true : exact, start + offsetSec);
 }
 
 // Cents deviation of a detected frequency from the nearest equal-tempered
@@ -1554,8 +1566,8 @@ function mountSongsPanel(hostEl, api) {
       // judgeAttempt's pieceOkFor (practice.js) treats an unnamed or
       // MIC_UNNAMEABLE mic hit as not-assessed rather than a miss.
       if (practice.instrument.kit) {
-        const unsubscribe = onMidiNote((midi) => {
-          practice.playedEvents.push({ piece: pieceForMidi(midi), atSec: api.now() - practice.recordStartSec, source: 'midi' });
+        const unsubscribe = onMidiNote((midi, _exact, atAudioSec) => {
+          practice.playedEvents.push({ piece: pieceForMidi(midi), atSec: (atAudioSec != null ? atAudioSec : api.now()) - practice.recordStartSec, source: 'midi' });
           updateCount();
         });
         // Best effort: an e-kit alone (no room mic permission) still works
@@ -1598,8 +1610,8 @@ function mountSongsPanel(hostEl, api) {
         }, 50);
         practice.stop = () => { unsubscribe(); clearInterval(timer); };
       } else if (practice.instrument.input === 'midi') {
-        const unsubscribe = onMidiNote((midi) => {
-          pushMidiEvent(practice.playedEvents, midi, api.now() - practice.recordStartSec);
+        const unsubscribe = onMidiNote((midi, _exact, atAudioSec) => {
+          pushMidiEvent(practice.playedEvents, midi, (atAudioSec != null ? atAudioSec : api.now()) - practice.recordStartSec);
           updateCount();
         });
         practice.stop = unsubscribe;
