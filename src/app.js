@@ -2148,7 +2148,16 @@ import { register as registerPlayalong } from './ui/playalong.js';
   // toggles [hidden] on the wrapper, never removes or recreates the controls
   // -- so a test (or a learner already mid-flow) that reaches #ioBtn directly
   // still works with the sheet collapsed.
-  $('setupBtn').addEventListener('click', function () { this.blur(); const el = $('setupSheet'), open = el.hidden; el.hidden = !open; this.setAttribute('aria-expanded', String(open)); });
+  // a11y (item 2, setup-sheet-focus): every OTHER toggle button in this file
+  // blurs itself on click -- fine when the click only ever hides that one
+  // button. This one instead REVEALS a whole sheet of new controls right
+  // where the button was, so blurring dropped a keyboard user's focus to
+  // <body> on every single toggle, forcing a Tab-from-the-top just to reach
+  // what they themselves just opened (or, on close, anything at all). Focus
+  // now stays on the button both ways -- exactly where a keyboard user's
+  // next Tab/Shift-Tab expects it, whether they are about to move INTO the
+  // sheet or back OUT into the page.
+  $('setupBtn').addEventListener('click', function () { const el = $('setupSheet'), open = el.hidden; el.hidden = !open; this.setAttribute('aria-expanded', String(open)); });
   if ($('micDeviceSelect')) $('micDeviceSelect').addEventListener('change', function () {
     DB.prefs.inputDeviceId = this.value || null; save();
     if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; micReady = false; }
