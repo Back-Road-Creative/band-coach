@@ -173,7 +173,7 @@ function playMidi(midiOrSchedule) {
   var Ctx = window.AudioContext || window.webkitAudioContext;
   if (!Ctx) return;
   var ctx = new Ctx();
-  function tone(midi, when, dur) {
+  function tone(midi, when, dur, peak) {
     var freq = 440 * Math.pow(2, (midi - 69) / 12);
     var osc = ctx.createOscillator();
     var gain = ctx.createGain();
@@ -182,17 +182,21 @@ function playMidi(midiOrSchedule) {
     gain.connect(ctx.destination);
     var t0 = ctx.currentTime + when;
     gain.gain.setValueAtTime(0, t0);
-    gain.gain.linearRampToValueAtTime(0.3, t0 + 0.02);
+    gain.gain.linearRampToValueAtTime(peak || 0.3, t0 + 0.02);
     gain.gain.linearRampToValueAtTime(0, t0 + dur);
     osc.start(t0);
     osc.stop(t0 + dur + 0.02);
   }
+  // Notes are played one at a time, spaced by index, so the reviewer hears
+  // the sequence the row's text describes ("Play each note when it is
+  // shown") instead of a chord; dyads keep two notes together but at a
+  // lowered gain so they cannot clip.
   if (Array.isArray(midiOrSchedule) && midiOrSchedule.length && typeof midiOrSchedule[0] === 'object') {
     midiOrSchedule.forEach(function (n) { tone(n.midi, n.start, n.dur || 0.4); });
   } else if (Array.isArray(midiOrSchedule) && midiOrSchedule.length && Array.isArray(midiOrSchedule[0])) {
-    midiOrSchedule.forEach(function (pair) { pair.forEach(function (m) { tone(m, 0, 0.6); }); });
+    midiOrSchedule.forEach(function (pair, i) { pair.forEach(function (m) { tone(m, i * 0.8, 0.6, 0.15); }); });
   } else {
-    (midiOrSchedule || []).forEach(function (m) { tone(m, 0, 0.6); });
+    (midiOrSchedule || []).forEach(function (m, i) { tone(m, i * 0.7, 0.6); });
   }
 }
 Array.prototype.forEach.call(document.querySelectorAll('.playBtn'), function (btn) {

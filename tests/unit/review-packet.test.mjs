@@ -78,6 +78,12 @@ test('curriculum level 1 carries its taught pitches; every song row carries non-
   for (const e of ENTRIES) assert.ok(byId.get(e.id).midi && byId.get(e.id).midi.length > 0, e.id + ' should carry midi');
 });
 
+test('the inline player spaces plain-list and dyad notes out by index instead of stacking them as a chord', () => {
+  const html = buildReviewPacket('kbd');
+  assert.match(html, /\(midiOrSchedule \|\| \[\]\)\.forEach\(function \(m, i\) \{ tone\(m, i \* [0-9.]+, [0-9.]+\); \}\)/, 'plain-list notes must use a non-zero, index-based start time');
+  assert.match(html, /pair\.forEach\(function \(m\) \{ tone\(m, i \* [0-9.]+, [0-9.]+, [0-9.]+\); \}\)/, 'dyad notes must use a non-zero, index-based start time and a lowered gain');
+});
+
 test('reviewItems(kbd) returns the same 26 id/rev pairs the built page shows; an unsupported instrument throws', () => {
   const items = reviewItems('kbd');
   const html = buildReviewPacket('kbd');
