@@ -491,9 +491,13 @@ The "How to play it" panel (`src/ui/fingerings.js`) never leaves that gap
 implicit: `src/instruments/review.js`'s `isReviewed()` treats a record's
 provenance as reviewed only when `reviewedBy` and `reviewedAt` are both
 filled in, and the panel shows a plain-language "Not yet checked by a
-musician" badge whenever it isn't — including the reference name when one is
+player" badge whenever it isn't — including the reference name when one is
 on file. Since every record currently ships `provenance: null`, that badge is
-visible for all 28 instruments today, not a rare edge case. The panel's
+visible for all 28 instruments today, not a rare edge case. Per-item reviews
+(finer-grained than the whole-record provenance above, e.g. one curriculum
+entry) live in `src/instruments/review-ledger.js`, keyed by the item's id
+plus a hash of its own content, so editing an item makes its review go
+stale on its own; that ledger is empty today. The panel's
 routing is equally strict about what it draws: an instrument kind it has no
 diagram for renders a truthful "guidance isn't ready here yet" state rather
 than silently reusing another instrument family's renderer (`diagramKindFor`
