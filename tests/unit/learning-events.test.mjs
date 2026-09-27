@@ -78,6 +78,28 @@ test('validateEvent: bpmTarget/bpmActual accept number or null', () => {
   assert.equal(validateEvent(validDrillEvent({ bpmTarget: 'fast' })).ok, false);
 });
 
+test('validateEvent: optional hands accepts left/right/both, rejects anything else', () => {
+  assert.equal(validateEvent(validDrillEvent({ hands: 'left' })).ok, true);
+  assert.equal(validateEvent(validDrillEvent({ hands: 'right' })).ok, true);
+  assert.equal(validateEvent(validDrillEvent({ hands: 'both' })).ok, true);
+  assert.equal(validateEvent(validDrillEvent({ hands: 'lefty' })).ok, false);
+  assert.equal(validateEvent(validDrillEvent({ hands: 3 })).ok, false);
+});
+
+test('validateEvent: optional contentRev accepts a non-empty string up to 64 chars, rejects otherwise', () => {
+  assert.equal(validateEvent(validDrillEvent({ contentRev: 'rev-2026-09-27' })).ok, true);
+  assert.equal(validateEvent(validDrillEvent({ contentRev: '' })).ok, false);
+  assert.equal(validateEvent(validDrillEvent({ contentRev: 'x'.repeat(65) })).ok, false);
+  assert.equal(validateEvent(validDrillEvent({ contentRev: 5 })).ok, false);
+});
+
+test('validateEvent: an event with neither hands nor contentRev (the old shape) still validates', () => {
+  const ev = validDrillEvent();
+  assert.equal('hands' in ev, false);
+  assert.equal('contentRev' in ev, false);
+  assert.deepEqual(validateEvent(ev), { ok: true, errors: [] });
+});
+
 // ---------- summarizeEvents ----------
 
 test('summarizeEvents: assistance !== none counts as withHelp', () => {
@@ -238,6 +260,15 @@ test('old anchors are capped too, oldest dropped first', () => {
   const trimmed = boundEvents([...anchors, ...filler], { anchorMax: 3 });
   const keptAnchorIds = trimmed.filter((ev) => ev.id.startsWith('anchor')).map((ev) => ev.id);
   assert.deepEqual(keptAnchorIds.sort(), ['anchor3', 'anchor4', 'anchor5']);
+});
+
+test('summarizeEvents: a legacy event list (no hands, no contentRev) produces byte-identical counts', () => {
+  const events = [
+    validDrillEvent({ id: 'a', at: 0, instrument: 'kbd', skill: 'n60', source: 'drill' }),
+    validDrillEvent({ id: 'b', at: 24 * 3600 * 1000, instrument: 'kbd', skill: 'n60', source: 'song', songId: 'sg1' }),
+    validDrillEvent({ id: 'c', at: 48 * 3600 * 1000, instrument: 'kbd', skill: 'n60', assistance: 'shown' }),
+  ];
+  assert.deepEqual(summarizeEvents(events), { introduced: 0, withHelp: 1, independent: 2, retained: 1, applied: 1 });
 });
 
 test('boundEvents never changes the array it was given', () => {
