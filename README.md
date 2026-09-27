@@ -177,7 +177,8 @@ the small, formative human pilot this eval feeds into.
 Progress is saved in the browser, keyed to the exact file path Band Coach was opened from — moving
 or re-downloading the file can lose it, since browsers do not share that storage across paths. Every
 save is verified by reading it back; if a save cannot be written (storage full, or private browsing
-blocking it), Settings shows a plain-language status until a later save succeeds. Open
+blocking it), a plain-language status appears both on the main practice screen and in Settings, until
+a later save succeeds — you never have to open Settings to find out progress is not being kept. Open
 the Settings screen for "Save a backup", which downloads
 `band-coach-progress.json`, and "Restore a backup", which loads one back in. The backup file now
 carries your saved songs (from the Learn and Songs panels) alongside your practice progress, so

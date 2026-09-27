@@ -965,19 +965,21 @@ import { register as registerPlayalong } from './ui/playalong.js';
   // also accept the call and silently keep something else -- safeSet reads
   // its own write back before reporting ok:true (see src/core/storage.js).
   // A failure surfaces as a persistent, plain-language line in the existing
-  // #settingsSay role="status" region (reused rather than a new modal/DOM
-  // element) so the learner is never left believing an unsaved answer was
-  // kept; it is cleared the moment a later save actually lands. lastStored
-  // (flushSave's "did someone else change storage under us" guard) is only
-  // advanced on a VERIFIED write -- advancing it on a failed attempt would
-  // make flushSave believe a write it never made had already landed, and
-  // silently skip every retry after it.
+  // #settingsSay role="status" region AND in #mainSay, the twin region on
+  // the main practice screen (src/index.html) -- Settings is a panel a
+  // learner may never open, so #settingsSay alone left anyone practising on
+  // the main screen believing an unsaved answer was kept. Both are cleared
+  // the moment a later save actually lands. lastStored (flushSave's "did
+  // someone else change storage under us" guard) is only advanced on a
+  // VERIFIED write -- advancing it on a failed attempt would make flushSave
+  // believe a write it never made had already landed, and silently skip
+  // every retry after it.
   function writeDB() {
     if (MODS[mod]) DB.mods[mod] = S = sanitizeModel(mod, S, modelNow);
     const candidate = JSON.stringify(DB);
     const result = safeSet(localStorage, KEY, candidate);
-    if (result.ok) { lastStored = candidate; if (saveFailedShown) { saveFailedShown = false; $('settingsSay').textContent = ''; } }
-    else { saveFailedShown = true; $('settingsSay').textContent = t('storage.saveFailed'); }
+    if (result.ok) { lastStored = candidate; if (saveFailedShown) { saveFailedShown = false; $('settingsSay').textContent = ''; $('mainSay').textContent = ''; } }
+    else { saveFailedShown = true; $('settingsSay').textContent = t('storage.saveFailed'); $('mainSay').textContent = t('storage.saveFailed'); }
   }
   function save() { if (saveTimer) return; saveTimer = setTimeout(() => { saveTimer = null; writeDB(); }, 1200); }
   // Closing or reloading within the 1200ms debounce window used to lose
