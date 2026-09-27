@@ -92,7 +92,11 @@ export const RETAIN_GAP_MS = 20 * 3600 * 1000;
 //   - applied: an independent-ok attempt whose source is 'song' or whose
 //     songId is set, landing after an earlier independent-ok attempt on the
 //     same instrument+skill from a non-song source -- evidence the skill
-//     transferred out of drilling into real playing.
+//     transferred out of drilling into real playing. A given songId counts
+//     at most once per instrument+skill group -- replaying the same song
+//     over and over is not new evidence of transfer, only a song event with
+//     no songId (songId is optional on validateEvent) is counted every time,
+//     same as before, since there is no identity to dedupe it against.
 // retained and applied are refinements of independent, not separate buckets
 // -- every event counted as either is also counted in independent, so the
 // five numbers do not sum to the event count. History is built from ALL
@@ -117,11 +121,11 @@ export function summarizeEvents(events, { instrument, skill, retainGapMs } = {})
   const gapMs = isFiniteNumber(retainGapMs) ? retainGapMs : RETAIN_GAP_MS;
   const out = { introduced: 0, withHelp: 0, independent: 0, retained: 0, applied: 0 };
   const sorted = (events || []).filter((ev) => ev && typeof ev === 'object').slice().sort((a, b) => a.at - b.at);
-  const groups = new Map(); // instrument|skill -> { earliestOkAt, earliestNonSongOkAt }
+  const groups = new Map(); // instrument|skill -> { earliestOkAt, earliestNonSongOkAt, appliedSongIds }
   sorted.forEach((ev) => {
     const key = ev.instrument + '\u0001' + ev.skill;
     let g = groups.get(key);
-    if (!g) { g = { earliestOkAt: null, earliestNonSongOkAt: null }; groups.set(key, g); }
+    if (!g) { g = { earliestOkAt: null, earliestNonSongOkAt: null, appliedSongIds: new Set() }; groups.set(key, g); }
     const matches = (instrument === undefined || ev.instrument === instrument) && (skill === undefined || ev.skill === skill);
     const withHelp = !!(ev.assistance && ev.assistance !== 'none');
     const independentOk = isIndependentOk(ev);
@@ -131,7 +135,16 @@ export function summarizeEvents(events, { instrument, skill, retainGapMs } = {})
         out.independent++;
         if (g.earliestOkAt !== null && (ev.at - g.earliestOkAt) >= gapMs) out.retained++;
         const songSourced = ev.source === 'song' || !!ev.songId;
-        if (songSourced && g.earliestNonSongOkAt !== null && ev.at > g.earliestNonSongOkAt) out.applied++;
+        if (songSourced && g.earliestNonSongOkAt !== null && ev.at > g.earliestNonSongOkAt) {
+          // A songId already credited for this instrument+skill does not count
+          // again -- replaying the same song is not new transfer evidence. An
+          // event with no songId at all has no identity to dedupe against, so
+          // it is (as before) counted every time it qualifies.
+          if (!ev.songId || !g.appliedSongIds.has(ev.songId)) {
+            out.applied++;
+            if (ev.songId) g.appliedSongIds.add(ev.songId);
+          }
+        }
       } else out.introduced++;
     }
     if (independentOk) {
@@ -168,15 +181,19 @@ export const EVENT_ANCHOR_MAX = 200;
 //
 // So boundEvents keeps the newest `max` rows exactly as `slice(-max)` did,
 // then walks the OLDER, dropped rows and keeps, per instrument|skill group,
-// its earliest independent-ok row and its earliest non-song independent-ok
-// row -- but only when the window does not already hold an equal-or-earlier
-// row of that same kind for that group (no point keeping a stale anchor the
-// window already proves). When the same dropped row is the earliest for
-// both kinds, it is kept once. If more anchors than `anchorMax` survive,
-// only the ones with the latest `at` are kept, so a learner who has played
-// far more than 200 distinct skills loses the oldest evidence first, not at
-// random. The result never mutates its input: anchors first (in their
-// original order), then the window.
+// its earliest independent-ok row, its earliest non-song independent-ok row,
+// and -- since summarizeEvents also credits `applied` at most once per
+// distinct songId -- the earliest independent-ok row for each songId seen in
+// that group, so replaying a song enough times to push its first play out of
+// the window does not erase the credit for having applied it at all. Any of
+// these is kept only when the window does not already hold an equal-or-
+// earlier row of that same kind for that group (no point keeping a stale
+// anchor the window already proves). When the same dropped row is the
+// earliest for more than one kind, it is kept once. If more anchors than
+// `anchorMax` survive, only the ones with the latest `at` are kept, so a
+// learner who has played far more than 200 distinct skills (or songs) loses
+// the oldest evidence first, not at random. The result never mutates its
+// input: anchors first (in their original order), then the window.
 export function boundEvents(events, { max = EVENT_HISTORY_MAX, anchorMax = EVENT_ANCHOR_MAX } = {}) {
   const list = Array.isArray(events) ? events : [];
   const window = list.slice(-max);
@@ -186,17 +203,25 @@ export function boundEvents(events, { max = EVENT_HISTORY_MAX, anchorMax = EVENT
   const groupKey = (ev) => ev.instrument + '\u0001' + ev.skill;
   const isSongSourced = (ev) => ev.source === 'song' || !!ev.songId;
 
+  const songKey = (ev) => groupKey(ev) + '\u0001' + ev.songId;
+
   const windowOkAt = new Map(); // group -> earliest `at` of an independent-ok row already in the window
   const windowNonSongOkAt = new Map();
+  const windowSongOkAt = new Map(); // group|songId -> earliest `at` of an independent-ok row for that songId already in the window
   window.forEach((ev) => {
     if (!isIndependentOk(ev)) return;
     const key = groupKey(ev);
     if (!windowOkAt.has(key) || ev.at < windowOkAt.get(key)) windowOkAt.set(key, ev.at);
     if (!isSongSourced(ev) && (!windowNonSongOkAt.has(key) || ev.at < windowNonSongOkAt.get(key))) windowNonSongOkAt.set(key, ev.at);
+    if (ev.songId) {
+      const sKey = songKey(ev);
+      if (!windowSongOkAt.has(sKey) || ev.at < windowSongOkAt.get(sKey)) windowSongOkAt.set(sKey, ev.at);
+    }
   });
 
   const droppedEarliestOk = new Map(); // group -> the earliest independent-ok row among the dropped rows
   const droppedEarliestNonSongOk = new Map();
+  const droppedEarliestSongOk = new Map(); // group|songId -> the earliest independent-ok row for that songId among the dropped rows
   dropped.forEach((ev) => {
     if (!isIndependentOk(ev)) return;
     const key = groupKey(ev);
@@ -205,6 +230,11 @@ export function boundEvents(events, { max = EVENT_HISTORY_MAX, anchorMax = EVENT
     if (!isSongSourced(ev)) {
       const curNonSong = droppedEarliestNonSongOk.get(key);
       if (!curNonSong || ev.at < curNonSong.at) droppedEarliestNonSongOk.set(key, ev);
+    }
+    if (ev.songId) {
+      const sKey = songKey(ev);
+      const curSong = droppedEarliestSongOk.get(sKey);
+      if (!curSong || ev.at < curSong.at) droppedEarliestSongOk.set(sKey, ev);
     }
   });
 
@@ -217,6 +247,10 @@ export function boundEvents(events, { max = EVENT_HISTORY_MAX, anchorMax = EVENT
   });
   droppedEarliestNonSongOk.forEach((row, key) => {
     const coveredByWindow = windowNonSongOkAt.has(key) && windowNonSongOkAt.get(key) <= row.at;
+    if (!coveredByWindow) considerAnchor(row);
+  });
+  droppedEarliestSongOk.forEach((row, sKey) => {
+    const coveredByWindow = windowSongOkAt.has(sKey) && windowSongOkAt.get(sKey) <= row.at;
     if (!coveredByWindow) considerAnchor(row);
   });
 

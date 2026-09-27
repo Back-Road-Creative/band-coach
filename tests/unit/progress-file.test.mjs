@@ -99,6 +99,15 @@ test('migration ladder: a non-object db does not throw', () => {
   assert.equal(migrated.v, CURRENT_DB_VERSION);
 });
 
+test('migrate() leaves db.events unchanged, only db.v changes', () => {
+  const legacyEvent = { v: 1, id: 'a', at: 1, instrument: 'kbd', skill: 'n4', source: 'drill', assistance: 'none', dims: { pitch: 'ok' }, unassessed: [], activeMs: 400 };
+  const eventWithHandsAndRev = { ...legacyEvent, id: 'b', hands: 'left', contentRev: 'rev-1' };
+  const older = { mods: { kbd: { level: 1 } }, sessions: [], prefs: {}, events: [legacyEvent, eventWithHandsAndRev] }; // no `v` field
+  const migrated = migrate(older);
+  assert.equal(migrated.v, CURRENT_DB_VERSION);
+  assert.deepEqual(migrated.events, older.events);
+});
+
 test('export carries the song library alongside the db', () => {
   const env = exportProgress(sampleDB(), { appVersion: '1.2.3', now: () => 1, songs: [{ id: 'song-1', title: 'A' }] });
   assert.deepEqual(env.songs, [{ id: 'song-1', title: 'A' }]);

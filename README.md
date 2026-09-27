@@ -222,7 +222,9 @@ was played right (from a drill, and from anywhere), so it never grows without li
 progress" panel turns that record into one plain line — how many attempts were passed with help,
 passed independently, retained on a later check (not just repeated in the same sitting), and
 applied in a song rather than a drill — or, with nothing recorded yet, says so plainly instead of
-claiming anything is retained.
+claiming anything is retained. A given song only counts toward "applied" once per skill, no matter
+how many times it is replayed — practising the same tune over and over is not new evidence a skill
+transferred to a different song, so it is not counted as though it were.
 
 ## Today's plan
 

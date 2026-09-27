@@ -271,6 +271,57 @@ test('summarizeEvents: a legacy event list (no hands, no contentRev) produces by
   assert.deepEqual(summarizeEvents(events), { introduced: 0, withHelp: 1, independent: 2, retained: 1, applied: 1 });
 });
 
+test('summarizeEvents: replaying the same song counts applied once, not once per attempt', () => {
+  const events = [
+    validDrillEvent({ id: 'a', at: 0, instrument: 'kbd', skill: 'n60', source: 'drill' }),
+    validDrillEvent({ id: 'b', at: 1000, instrument: 'kbd', skill: 'n60', source: 'song', songId: 'sg1' }),
+    validDrillEvent({ id: 'c', at: 2000, instrument: 'kbd', skill: 'n60', source: 'song', songId: 'sg1' }),
+    validDrillEvent({ id: 'd', at: 3000, instrument: 'kbd', skill: 'n60', source: 'song', songId: 'sg1' }),
+  ];
+  assert.equal(summarizeEvents(events).applied, 1);
+});
+
+test('summarizeEvents: two DIFFERENT songs on the same skill each count once, for two applied', () => {
+  const events = [
+    validDrillEvent({ id: 'a', at: 0, instrument: 'kbd', skill: 'n60', source: 'drill' }),
+    validDrillEvent({ id: 'b', at: 1000, instrument: 'kbd', skill: 'n60', source: 'song', songId: 'sg1' }),
+    validDrillEvent({ id: 'c', at: 2000, instrument: 'kbd', skill: 'n60', source: 'song', songId: 'sg2' }),
+  ];
+  assert.equal(summarizeEvents(events).applied, 2);
+});
+
+test('a trimmed history reports the same applied count as the full one when the same song is replayed many times', () => {
+  const first = validDrillEvent({ id: 'first', at: 0, instrument: 'kbd', skill: 'n60', source: 'drill' });
+  const firstSong = validDrillEvent({ id: 'first-song', at: 1, instrument: 'kbd', skill: 'n60', source: 'song', songId: 'sg1' });
+  const filler = [];
+  for (let i = 0; i < 500; i++) filler.push(validDrillEvent({ id: 'f' + i, at: 10 + i, instrument: 'kbd', skill: 'n62', dims: { pitch: 'miss' } }));
+  const laterSameSong = validDrillEvent({ id: 'later-song', at: 3 * 24 * 3600 * 1000, instrument: 'kbd', skill: 'n60', source: 'song', songId: 'sg1' });
+  const full = [first, firstSong, ...filler, laterSameSong];
+  const trimmed = boundEvents(full, { max: 500 });
+  // The window+anchors do not guarantee every individual independent-ok row
+  // survives (only the two per-group anchor slots do), so `independent` can
+  // legitimately differ after trimming -- but `applied` must not, since the
+  // whole point of anchoring is that retained/applied stay correct.
+  assert.equal(
+    summarizeEvents(trimmed, { instrument: 'kbd', skill: 'n60' }).applied,
+    summarizeEvents(full, { instrument: 'kbd', skill: 'n60' }).applied
+  );
+});
+
+test('applied count survives trimming when two distinct songs are each played, then 600 later rows push both out of the window', () => {
+  const nonSongOk = validDrillEvent({ id: 'anchor-drill', at: 0, instrument: 'kbd', skill: 'n60', source: 'drill' });
+  const song1 = validDrillEvent({ id: 'song1', at: 1, instrument: 'kbd', skill: 'n60', source: 'song', songId: 'sg1' });
+  const song2 = validDrillEvent({ id: 'song2', at: 2, instrument: 'kbd', skill: 'n60', source: 'song', songId: 'sg2' });
+  const filler = [];
+  for (let i = 0; i < 600; i++) filler.push(validDrillEvent({ id: 'f' + i, at: 10 + i, instrument: 'kbd', skill: 'n62', dims: { pitch: 'miss' } }));
+  const full = [nonSongOk, song1, song2, ...filler];
+  const trimmed = boundEvents(full, { max: 500 });
+  assert.equal(
+    summarizeEvents(trimmed, { instrument: 'kbd', skill: 'n60' }).applied,
+    summarizeEvents(full, { instrument: 'kbd', skill: 'n60' }).applied
+  );
+});
+
 test('boundEvents never changes the array it was given', () => {
   const events = [];
   for (let i = 0; i < 10; i++) events.push(validDrillEvent({ id: 'e' + i, at: i, instrument: 'kbd', skill: 'n60', dims: { pitch: 'miss' } }));
