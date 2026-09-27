@@ -693,6 +693,30 @@ shift. A bend is graded by its exact bent pitch, the same way an open note is gr
 pitch. Bend availability (which holes bend, and how deep) does not change with key, since
 transposing the whole harmonica preserves the blow/draw gap inside every hole.
 
+## On-screen keyboard
+
+Once the keyboard mod unlocks the octave below middle C ("The octave below", level 8, and every
+level after — including "Hands together", level 13) or a captured melody dips below it, the
+on-screen piano stops drawing one 15-white-key strip and draws two: a labelled left-hand row (the
+octave below middle C, e.g. "Left hand · C3–B3") stacked above a labelled right-hand row (middle C
+up, e.g. "Right hand · C4–C5"). Each row is capped at 8 white keys, which is what actually fixes
+the problem: 15 white keys across a phone-width canvas measured at ~21px per key, under the 24px
+WCAG 2.5.8 (2.2 AA) tap-target floor #283 already holds every other control in this app to; capping
+each row at 8 keeps every white key at or above that floor on any phone this app supports, by
+construction, rather than by a separate size check bolted on afterwards. The layout depends only on
+which octaves are unlocked, never on the current task or its target note, so neither row ever moves
+mid-phrase.
+
+During a "hands together" task, the right-hand and left-hand target notes are marked with a
+letter ("R"/"L") drawn on the key itself, not only the usual accent colour — colour alone cannot
+tell a learner which lit key belongs to which hand once both rows are on screen. The keyboard-only
+focus cursor (arrow keys move it, Enter/Space plays the focused key — see "Piano hands together"
+above for the fingering itself) traverses the left row low to high, then the right row low to high.
+
+`window.__coach.kbdKeys()` (dev build only) exposes the raw key rectangles the last frame drew,
+each carrying its MIDI note, pixel rectangle, which row it belongs to, and any hand mark — the same
+data a real pointerdown hit-tests against.
+
 ## Reference tones sound like the instrument
 
 Every reference/example tone (the note a lesson plays for you to match or tune to) goes through
