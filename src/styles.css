@@ -148,7 +148,12 @@
      still name every variant. Opened, it may take the room it needs. */
   .picker-variant-group > .variant-toggle { margin: 0; width: 0; min-width: 100%; }
   .picker-variant-group > .variant-toggle[open] { width: auto; }
-  .picker-variant-group > .variant-toggle > summary { cursor: pointer; list-style: none; font: 500 11px var(--body); color: var(--muted); display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  /* WCAG 2.5.8 (2.2 AA) needs a 24x24 CSS px tap target -- the 11px text
+     alone rendered a box under 24px tall (axe's target-size rule flagged
+     every variant-toggle summary at first load). min-height plus a flex
+     row keeps the same 11px label, vertically centred, inside a taller box
+     instead of growing the text or the row's visual weight. */
+  .picker-variant-group > .variant-toggle > summary { cursor: pointer; list-style: none; font: 500 11px var(--body); color: var(--muted); display: flex; align-items: center; min-height: 24px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .picker-variant-group > .variant-toggle > summary::-webkit-details-marker { display: none; }
   .picker-variant-group > .variant-toggle > summary::before { content: '\25b8  '; }
   .picker-variant-group > .variant-toggle[open] > summary::before { content: '\25be  '; }
