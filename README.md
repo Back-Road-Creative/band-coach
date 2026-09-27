@@ -218,11 +218,15 @@ instrument and skill it was, whether it was independent or asked for help, which
 timing, hold, tune) were actually checked, and how long it took — kept alongside the practice log
 described above. The raw sound of your playing or singing is never recorded; only the judged
 result is. The record keeps the most recent 500 attempts plus, for each skill, the first time it
-was played right (from a drill, and from anywhere), so it never grows without limit. The "My
+was played right (from a drill, and from anywhere) and, for each song played on that skill, the
+play that first counted as applied (per-skill records are kept first when space runs short), so it
+never grows without limit. The "My
 progress" panel turns that record into one plain line — how many attempts were passed with help,
 passed independently, retained on a later check (not just repeated in the same sitting), and
 applied in a song rather than a drill — or, with nothing recorded yet, says so plainly instead of
-claiming anything is retained.
+claiming anything is retained. A given song only counts toward "applied" once per skill, no matter
+how many times it is replayed — practising the same tune over and over is not new evidence a skill
+transferred to a different song, so it is not counted as though it were.
 
 ## Today's plan
 
