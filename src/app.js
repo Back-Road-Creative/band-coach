@@ -1,6 +1,7 @@
 import { judgePitch, OCTAVE_POLICY } from './core/judge.js';
 import { createDeafWindow } from './audio/deaf-window.js';
 import { exportProgress as exportProgressFile, importProgress as importProgressFile, migrate as migrateDB } from './core/progress-file.js';
+import { safeSet, safeGet } from './core/storage.js';
 import { createLibrary, indexedDbStore, memoryStore } from './song/library.js';
 import { captureToSong } from './song/capture.js';
 import { toAudioTime, judgeTap, medianLatency } from './core/timing.js';
@@ -946,9 +947,38 @@ import { register as registerPlayalong } from './ui/playalong.js';
   // compares against it so a page going away never clobbers a newer write made
   // by someone else in the meantime (another tab, a restored backup).
   let lastStored = null;
-  function loadDB() { modelNow = Date.now(); let v = null; try { lastStored = localStorage.getItem(KEY); v = migrateDB(JSON.parse(lastStored || 'null')); } catch (e) {} hasSavedMod = !!(v && v.prefs && MODS[v.prefs.mod] && TOOL_MOD_IDS.indexOf(v.prefs.mod) < 0); DB = sanitizeDB(v, actx ? (actx.outputLatency || actx.baseLatency || 0) * 1000 : 0, modelNow); mod = DB.prefs.mod; S = DB.mods[mod]; gates = gatesFor(DB.prefs.noiseFloor); setNoteNaming(DB.prefs.noteNaming); }
+  // A missing/never-saved key is safeGet's ok:true, value:null -- migrateDB
+  // handles null the same as it always has. `corrupt` (JSON.parse failed on
+  // something that WAS there) also falls back to a fresh profile: the raw
+  // text safeGet already preserved under KEY+'.corrupt' is this app's only
+  // shot at ever recovering it, but that recovery is future work -- today
+  // this is no worse than the old behaviour (sanitizeDB always papered over
+  // a corrupt record with a fresh one), except the evidence now survives.
+  function loadDB() { modelNow = Date.now(); const got = safeGet(localStorage, KEY); lastStored = (got.ok && !got.corrupt && got.value !== null) ? JSON.stringify(got.value) : null; const v = (got.ok && !got.corrupt) ? migrateDB(got.value) : null; hasSavedMod = !!(v && v.prefs && MODS[v.prefs.mod] && TOOL_MOD_IDS.indexOf(v.prefs.mod) < 0); DB = sanitizeDB(v, actx ? (actx.outputLatency || actx.baseLatency || 0) * 1000 : 0, modelNow); mod = DB.prefs.mod; S = DB.mods[mod]; gates = gatesFor(DB.prefs.noiseFloor); setNoteNaming(DB.prefs.noteNaming); }
   let saveTimer = null;
-  function writeDB() { try { if (MODS[mod]) DB.mods[mod] = S = sanitizeModel(mod, S, modelNow); lastStored = JSON.stringify(DB); localStorage.setItem(KEY, lastStored); } catch (e) {} }
+  // Tracks only whether #settingsSay currently shows OUR failed-save
+  // message, so a successful save clears exactly that message and never an
+  // unrelated one coach() (src/app.js) put there moments earlier (e.g. a
+  // "Backup saved" line while Settings happens to be open).
+  let saveFailedShown = false;
+  // Verified: setItem not throwing is not proof of a save, since a store can
+  // also accept the call and silently keep something else -- safeSet reads
+  // its own write back before reporting ok:true (see src/core/storage.js).
+  // A failure surfaces as a persistent, plain-language line in the existing
+  // #settingsSay role="status" region (reused rather than a new modal/DOM
+  // element) so the learner is never left believing an unsaved answer was
+  // kept; it is cleared the moment a later save actually lands. lastStored
+  // (flushSave's "did someone else change storage under us" guard) is only
+  // advanced on a VERIFIED write -- advancing it on a failed attempt would
+  // make flushSave believe a write it never made had already landed, and
+  // silently skip every retry after it.
+  function writeDB() {
+    if (MODS[mod]) DB.mods[mod] = S = sanitizeModel(mod, S, modelNow);
+    const candidate = JSON.stringify(DB);
+    const result = safeSet(localStorage, KEY, candidate);
+    if (result.ok) { lastStored = candidate; if (saveFailedShown) { saveFailedShown = false; $('settingsSay').textContent = ''; } }
+    else { saveFailedShown = true; $('settingsSay').textContent = t('storage.saveFailed'); }
+  }
   function save() { if (saveTimer) return; saveTimer = setTimeout(() => { saveTimer = null; writeDB(); }, 1200); }
   // Closing or reloading within the 1200ms debounce window used to lose
   // whatever save() just queued -- nothing ever flushed it early. pagehide
