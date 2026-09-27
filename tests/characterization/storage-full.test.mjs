@@ -80,3 +80,55 @@ test('the failed-save status clears once a later save succeeds', async (t) => {
   const cleared = await page.evaluate(SAY);
   assert.doesNotMatch(cleared, /could not be saved/i, `expected the failure status to clear on a successful save, got: ${JSON.stringify(cleared)}`);
 });
+
+test('a save that cannot be written is visible on the main practice screen, not only in Settings', async (t) => {
+  const page = await launchPage(htmlPath, { initScript: QUOTA_EXCEEDED_INIT });
+  t.after(() => page.close());
+
+  await page.evaluate("window.__coach.setMod('kbd')");
+  await page.evaluate("document.getElementById('playBtn').click()");
+  await page.waitFor('window.__coach.task()');
+  const midi = await page.evaluate('window.__coach.cur().info.midi');
+  await page.evaluate(`window.__coach.note(${midi}, true)`);
+  await page.evaluate("window.dispatchEvent(new Event('pagehide'))");
+
+  // Settings is never opened in this test -- the learner is practising on
+  // the main screen the whole time, which is the only screen a real
+  // learner is ever looking at while playing.
+  const settingsHidden = await page.evaluate("document.getElementById('settingsView').hidden");
+  assert.equal(settingsHidden, true, 'sanity check: Settings is closed for this test');
+
+  const mainSay = await page.evaluate("document.getElementById('mainSay').textContent");
+  assert.match(
+    mainSay,
+    /could not be saved/i,
+    `expected a visible status region on the main screen to report the failed save, got: ${JSON.stringify(mainSay)}`
+  );
+  const shown = await page.evaluate("(() => { const el = document.getElementById('mainSay'); return !el.hidden && getComputedStyle(el).display !== 'none'; })()");
+  assert.equal(shown, true, 'the main-screen save warning must actually be visible, not just have text');
+});
+
+test('the main-screen save warning clears once a later save succeeds', async (t) => {
+  const page = await launchPage(htmlPath, { initScript: QUOTA_EXCEEDED_INIT });
+  t.after(() => page.close());
+  const MAIN_SAY = "document.getElementById('mainSay').textContent";
+
+  await page.evaluate("window.__coach.setMod('kbd')");
+  await page.evaluate("document.getElementById('playBtn').click()");
+  await page.waitFor('window.__coach.task()');
+  const midi = await page.evaluate('window.__coach.cur().info.midi');
+  await page.evaluate(`window.__coach.note(${midi}, true)`);
+  // Wait out save()'s debounce, not a synthetic pagehide: pagehide also
+  // tears the session down (E10), which would stop the practice this test
+  // needs for its second save.
+  await page.waitFor(`/could not be saved/i.test(${MAIN_SAY})`);
+
+  await page.evaluate('window.__forceQuotaExceeded = false;');
+  await page.waitFor('window.__coach.cur()');
+  const midi2 = await page.evaluate('window.__coach.cur().info.midi');
+  await page.evaluate(`window.__coach.note(${midi2}, true)`);
+  await page.waitFor(`!/could not be saved/i.test(${MAIN_SAY})`);
+
+  const cleared = await page.evaluate(MAIN_SAY);
+  assert.doesNotMatch(cleared, /could not be saved/i, `expected the main-screen warning to clear on a successful save, got: ${JSON.stringify(cleared)}`);
+});
