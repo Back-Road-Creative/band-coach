@@ -52,6 +52,17 @@ export function createPanels() {
         // no real focus to capture (opener stays null, same as before this
         // change) -- the unit tests above never touch it.
         const opener = doc ? doc.activeElement : null;
+        // Escape closes the panel from ANYWHERE focus lands inside it (WCAG
+        // 2.1.2/2.4.3 for a dismissible panel), with no tabbing to a close
+        // control required -- attached on the container itself (same as
+        // dialog-focus.js's own Escape handling) so it only ever fires for a
+        // keydown that bubbled up from inside THIS panel, never a sibling
+        // dialog's (the break card's role="dialog" lives outside panelHost
+        // and owns its own Escape via createFocusTrap). A plain-object el (no
+        // ownerDocument, as in the unit tests above) has no container to
+        // attach to, so this is a no-op there, same as the opener capture.
+        const onEscape = ev => { if (ev.key === 'Escape' && !ev.defaultPrevented) { ev.preventDefault(); this.close(); } };
+        if (container) container.addEventListener('keydown', onEscape);
         mounted.set(id, { inst: def.mount(container || el, api) || {}, container, opener });
       }
       open = id;
