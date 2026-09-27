@@ -1170,6 +1170,32 @@ function mountSongsPanel(hostEl, api) {
     // just pressed. F2's own nav-into-Songs focus (src/app.js, #songsHeading)
     // is unrelated -- this is the SONG's heading, reached only once a
     // specific song is opened.
+    // The browser's own focus()-triggered scroll (below) only moves the
+    // page when the focused element is NOT already inside the viewport,
+    // and even then it picks whichever edge is nearest -- not "top". At a
+    // tall/wide-enough viewport (tablet, desktop, 200%-zoomed phone text)
+    // the heading can already sit inside view while everything stacked
+    // below it (step title, staff, "Play it") still runs off the bottom.
+    // Forcing an explicit top alignment here, right after the practice view
+    // has rendered and BEFORE focus() runs, is what actually puts the whole
+    // lesson -- not just its heading -- inside the first screen at every
+    // size; guarded because scrollIntoView is absent from some
+    // minimal/test DOM shims.
+    if (practiceHeadingEl && typeof practiceHeadingEl.scrollIntoView === 'function') {
+      practiceHeadingEl.scrollIntoView({ block: 'start' });
+      // Fractional (sub-pixel) layout above the heading can leave the
+      // browser's own scrollTop rounded a hair PAST true "start" (e.g. the
+      // heading's real document top sits at 876.625px, but scrollTop can
+      // only land on 877), which then reads as the heading's top being a
+      // fraction of a pixel above the viewport. Nudging back by that exact
+      // fraction (never more) keeps the heading's top at or below the
+      // viewport's top edge without changing which pixel a person sees.
+      const overshoot = practiceHeadingEl.getBoundingClientRect().top;
+      // scrollY itself only ever lands on a whole pixel, so a sub-pixel
+      // nudge (e.g. -0.375) is silently rounded away to 0 -- floor() picks
+      // the nearest WHOLE pixel that still clears the overshoot instead.
+      if (overshoot < 0) window.scrollBy(0, Math.floor(overshoot));
+    }
     if (practiceHeadingEl) practiceHeadingEl.focus();
   }
 
