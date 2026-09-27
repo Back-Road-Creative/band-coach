@@ -745,13 +745,13 @@ level after — including "Hands together", level 13) or a captured melody dips 
 on-screen piano stops drawing one 15-white-key strip and draws two: a labelled left-hand row (the
 octave below middle C, e.g. "Left hand · C3–B3") stacked above a labelled right-hand row (middle C
 up, e.g. "Right hand · C4–C5"). Each row is capped at 8 white keys, which is what actually fixes
-the problem: 15 white keys across a phone-width canvas measured at ~21px per key, under the 40px
-tap-target target this unit holds the kbd piano rows to (above the 24px WCAG 2.5.8 (2.2 AA) floor
-#283 already holds every other on-screen keyboard key — including this app's mallet-percussion
-rows, which this unit leaves untouched — to); capping each row at 8, drawn across 96% of the
-canvas width, keeps every kbd white key at or above the 40px target at the 340px phone canvas and
-on anything at least ~334px wide (40*8/0.96); the separate 24px WCAG floor holds for any canvas at
-least ~200px wide (24*8/0.96). The layout depends only on
+the problem: 15 white keys across a phone-width canvas measured at ~21px per key, under the 24px
+WCAG 2.5.8 (2.2 AA) tap-target floor and well under the 40px the keyboard rows aim for. Capping
+each row at 8 white keys, drawn across 96% of the canvas width, keeps every keyboard white key at
+40px or more on the 340px phone canvas and on any canvas at least ~334px wide (40×8/0.96), and at
+24px or more on any canvas at least ~200px wide (24×8/0.96), by layout rather than by a separate
+size check bolted on afterwards. This applies to the keyboard (kbd) rows only; the mallet-percussion
+keyboard still draws its 15 white keys in one row. The layout depends only on
 which octaves are unlocked, never on the current task or its target note, so neither row ever moves
 mid-phrase.
 
