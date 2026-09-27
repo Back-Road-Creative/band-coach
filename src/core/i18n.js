@@ -11,6 +11,13 @@
 // is left in the string verbatim for the same reason: better a visible
 // placeholder than text that quietly loses information.
 export const en = {
+  // Shown when a save to this device's storage did not actually take (full
+  // quota, private browsing, or storage disabled outright) -- writeDB() in
+  // src/app.js verifies every write by reading it back rather than trusting
+  // that localStorage.setItem not throwing means it worked (see
+  // src/core/storage.js's safeSet). Cleared the moment a later save
+  // succeeds, so it never outlives the problem it describes.
+  'storage.saveFailed': "Your progress just now could not be saved on this device (storage may be full, or private browsing may be blocking it). Keep playing -- I'll keep trying to save.",
   'backup.saved': 'Backup saved to your downloads. Keep that file somewhere safe.',
   'backup.restored': 'Backup restored.',
   'backup.readError': 'That file could not be read.',
