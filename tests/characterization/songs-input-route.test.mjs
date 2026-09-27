@@ -287,4 +287,35 @@ test('a mic-detected pitched song attempt logs input: "mic"', async (t) => {
     },
   });
   assert.equal(result.input, 'mic');
+  assert.deepEqual(result.exceptions, []);
+});
+
+// A caller that never told onNote() a source at all -- the debug hook, or a
+// screen-key click -- leaves `played.source` undefined; advance()'s own
+// "left off rather than guessed" convention (src/ui/songs.js, the comment
+// above `judgedSources` in advance()) means the row's `input` key is absent
+// entirely, never a guessed value. `songsNoteAt` (the hook itself, see
+// src/app.js's `songsNoteAt: forwardSongNoteAt` assignment) is called here
+// with no trailing `source` argument, the same shape every caller used
+// before this unit added one.
+test('a hook-driven note with no source leaves the row\'s input key off entirely', async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'band-coach-song-input-none-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const challengePath = join(dir, 'challenge.json');
+  writeFileSync(challengePath, challengeJson());
+
+  const page = await launchPage(htmlPath);
+  t.after(() => page.close());
+
+  await importAndOpenSong(page, challengePath);
+
+  const before = await page.evaluate('window.__coach.db().events.length');
+  await judgeFirstStepWith(page, "window.__coach.songsNoteAt(64, 0, true);");
+  await page.waitFor('window.__coach.db().events.length > ' + before);
+
+  const events = await page.evaluate('window.__coach.db().events');
+  const row = events[events.length - 1];
+  assert.equal(row.source, 'song');
+  assert.equal('input' in row, false);
+  assert.deepEqual(page.exceptions, []);
 });

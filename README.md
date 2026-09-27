@@ -83,10 +83,13 @@ one that has never sent a note and the status line goes back to "found", not "is
 that device actually says something. And whenever no real MIDI note has been heard yet — no Web
 MIDI API in this browser, MIDI blocked, or nothing plugged in — the status line says plainly that
 screen keys and computer keys still work as practice, not as proof a real keyboard works: they let
-you keep going, but they are never mistaken for the real thing. A song practice attempt records
-which of these actually played each judged note (MIDI, computer keys, or a mix) alongside its own
-progress row, so a later look at your history can tell a song played on a real keyboard from one
-played on the computer keys as a stand-in.
+you keep going, but they are never mistaken for the real thing. A song practice attempt's learning
+record carries which route actually played it: "midi" only when every judged note was a real MIDI
+note-on, "computer-key" or "mic" when every judged note came from that one route instead, "mixed"
+when the judged notes disagree on route, and the field is left off entirely when any judged note's
+route is unknown (as with a screen-key click) — so a later look at your history can tell a song
+played on a real keyboard from one played on the computer keys as a stand-in, without ever
+guessing at a route the app never actually recorded.
 
 The pure scheduling and sending logic for "play it for me" — a song's notes sent out to a
 connected MIDI keyboard so it plays itself — lives in `src/core/midi.js` (`scheduleSong`,
@@ -226,8 +229,9 @@ startup.
 Every judged drill answer, warm-up answer and judged song step leaves one small record — which
 instrument and skill it was, whether it was independent or asked for help, which parts (pitch,
 timing, hold, tune) were actually checked, and how long it took — kept alongside the practice log
-described above. The raw sound of your playing or singing is never recorded; only the judged
-result is. The record keeps the most recent 500 attempts plus, for each skill, the first time it
+described above. A song step's record also keeps which input actually played it (MIDI, computer
+keys, mic, or a mix), left off entirely when that route is unknown rather than guessed at. The raw
+sound of your playing or singing is never recorded; only the judged result is. The record keeps the most recent 500 attempts plus, for each skill, the first time it
 was played right (from a drill, and from anywhere), so it never grows without limit. The "My
 progress" panel turns that record into one plain line — how many attempts were passed with help,
 passed independently, retained on a later check (not just repeated in the same sitting), and
