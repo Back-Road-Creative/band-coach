@@ -7,12 +7,14 @@
 // focus had already been dropped to <body>, and closing the panel left it
 // there, not on anything a keyboard user could pick up Tab from.
 //
-// There is no real Escape-to-close entry point for a panels.js-managed
-// panel to test here: the only Escape-closes-a-dialog behaviour in this app
-// is the break card (tests/characterization/a11y-dialog-focus.test.mjs),
-// which is createFocusTrap's own restore (src/ui/dialog-focus.js), not
-// panels.js's -- so both cases below use the same real trigger (choosing an
-// instrument from the sheet) against two different panels instead.
+// Escape now also closes a panels.js-managed panel (its own Escape-to-close
+// path, not createFocusTrap's -- see tests/characterization/a11y-panel-escape.test.mjs
+// and src/ui/panels.js). Both cases below still use a different real trigger
+// (choosing an instrument from the sheet) against two different panels,
+// since that path exercises panels.js's close() through a route Escape does
+// not: focus already moved somewhere OUTSIDE the panel (the just-clicked
+// picker button) before close() runs, rather than Escape's own case of
+// focus still being inside the panel when it closes.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { HTML_PATH } from '../helpers/html-path.mjs';

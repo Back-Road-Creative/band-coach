@@ -99,6 +99,17 @@ them, with no `.click()` on the learner path.
 2. **Space activates a nav button the same as Enter.**
    Proof: same file, test `Space activates a nav button the same as Enter`.
 
+## Escape closes an open panel
+
+A learner who Tabs into an open panel (Songs, Progress, Ear training, Theory, History, Fingerings,
+Play Along) can dismiss it with Escape from wherever focus landed inside it, without first tabbing
+to a close control — the same WCAG 2.1.2/2.4.3 expectation the break card's own Escape-to-resume
+already met (`src/ui/dialog-focus.js`). `src/ui/panels.js`'s `open()` attaches the Escape listener
+to the panel's own container, so it only ever fires for a keydown that bubbled up from inside that
+panel, and closing runs the panel's existing close path — focus returns to whatever control opened
+it, same as closing any other way.
+Proof: `node --test tests/characterization/a11y-panel-escape.test.mjs`.
+
 ## axe over the Songs internal screens and Ear training
 
 Extends the WCAG scan (`tests/characterization/a11y-axe.test.mjs`) to states the earlier scan never
