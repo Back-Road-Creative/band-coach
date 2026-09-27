@@ -4,6 +4,7 @@ import { staffPosition, ledgerLines } from '../../src/notation/staff.js';
 import { layoutMeasure } from '../../src/notation/layout.js';
 import { drawSVG } from '../../src/notation/draw-svg.js';
 import { drawPrimitives } from '../../src/notation/draw-canvas.js';
+import { CLEF_PATHS } from '../../src/notation/glyphs.js';
 import { PERCUSSION_SLOTS, PIECE_IDS, percussionNote, layoutPercussionMeasure } from '../../src/notation/percussion.js';
 
 function byType(primitives, type) {
@@ -158,7 +159,7 @@ test('layoutPercussionMeasure: stacked hits (kick+hi-hat, snare+hi-hat) share on
 test('drawSVG: a percussion measure renders the percussion clef and an x-notehead primitive', () => {
   const { primitives } = layoutPercussionMeasure({ hits: rockBeatHits(), time: [4, 4], width: 400 });
   const svg = drawSVG(primitives, { glyphFont: null }, { width: 400, height: 200 });
-  assert.match(svg, /\|\|/, 'plain-text percussion clef fallback');
+  assert.ok(svg.includes(`d="${CLEF_PATHS.percussion}"`), 'percussion clef draws as its vector path, not a text fallback');
   assert.match(svg, /<line x1="-?\d+(\.\d+)?" y1="-?\d+(\.\d+)?" x2="-?\d+(\.\d+)?" y2="-?\d+(\.\d+)?" stroke="black"\/><line/, 'an x notehead draws as two crossed strokes');
 });
 

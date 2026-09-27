@@ -1,6 +1,10 @@
 // Thin Canvas 2D renderer for the primitives layout.js / tab.js produce.
-// Uses only Canvas 2D calls; music glyphs come from a Unicode music font
-// (theme.glyphFont) with a plain-letter fallback when none is set.
+// Uses only Canvas 2D calls; clefs, accidentals and rests draw as hand-authored vector
+// paths (src/notation/glyphs.js) via Path2D. theme.glyphFont still opts back into drawing
+// them with a Unicode music font instead, and a plain letter is the last-resort fallback
+// for the rare environment with no Path2D (very old browsers, or a minimal test double).
+
+import { CLEF_PATHS, ACCIDENTAL_PATHS, REST_PATHS, FILLED_RESTS } from './glyphs.js';
 
 const CLEF_GLYPH = { treble: '\u{1D11E}', bass: '\u{1D122}', alto: '\u{1D121}', tenor: '\u{1D121}', percussion: '\u{1D125}' };
 const CLEF_FALLBACK = { treble: 'G', bass: 'F', alto: 'C', tenor: 'C', percussion: '||' };
@@ -8,13 +12,26 @@ const ACCIDENTAL_GLYPH = { '#': '♯', b: '♭', '': '♮' };
 const ACCIDENTAL_FALLBACK = { '#': '#', b: 'b', '': 'n' };
 // Keyed by the rest's undotted duration in whole notes (layout.js's durationInfo `base`).
 // Glyphs are the Unicode musical-symbol rests; fallbacks are one-letter mnemonics
-// (W)hole/(H)alf/(Q)uarter/(E)ighth/(S)ixteenth/(T)hirty-second so a no-glyph-font rest still reads
-// as "how long", not just "silence". An unrecognized/missing base falls back to quarter.
+// (W)hole/(H)alf/(Q)uarter/(E)ighth/(S)ixteenth/(T)hirty-second so a no-glyph-font,
+// no-Path2D rest still reads as "how long", not just "silence". An unrecognized/missing
+// base falls back to quarter.
 const REST_GLYPH = { 4: '\u{1D13B}', 2: '\u{1D13C}', 1: '\u{1D13D}', 0.5: '\u{1D13E}', 0.25: '\u{1D13F}', 0.125: '\u{1D140}' };
 const REST_LETTER_FALLBACK = { 4: 'W', 2: 'H', 1: 'Q', 0.5: 'E', 0.25: 'S', 0.125: 'T' };
 
-function glyphOrFallback(theme, glyph, fallback) {
-  return theme && theme.glyphFont ? glyph : fallback;
+// Draws a glyphs.js vector path translated to (x, y): filled for a solid shape (the
+// whole/half rest blocks), stroked otherwise. Falls back to a Unicode music-font glyph
+// when theme.glyphFont is set (the font path stays available for anyone who wants it), or
+// to a plain letter when Path2D itself isn't available -- feature-detected, never assumed,
+// so a missing API degrades to a still-readable letter rather than nothing at all.
+function drawGlyphPath(ctx, d, x, y, theme, glyph, fallback, filled) {
+  if (theme && theme.glyphFont) return drawText(ctx, glyph, x, y, theme.glyphFont);
+  if (typeof Path2D === 'undefined' || !d) return drawText(ctx, fallback, x, y);
+  ctx.save();
+  ctx.translate(x, y);
+  const path = new Path2D(d);
+  if (filled) ctx.fill(path);
+  else ctx.stroke(path);
+  ctx.restore();
 }
 
 function drawLine(ctx, x1, y1, x2, y2) {
@@ -74,18 +91,21 @@ const DRAWERS = {
     ctx.stroke();
   },
 
-  clef: (ctx, p, theme) => drawText(ctx, glyphOrFallback(theme, CLEF_GLYPH[p.clef], CLEF_FALLBACK[p.clef]), p.x, p.y, theme && theme.glyphFont),
+  clef: (ctx, p, theme) => drawGlyphPath(ctx, CLEF_PATHS[p.clef], p.x, p.y, theme, CLEF_GLYPH[p.clef], CLEF_FALLBACK[p.clef], false),
 
-  keyAccidental: (ctx, p, theme) => drawText(ctx, glyphOrFallback(theme, ACCIDENTAL_GLYPH[p.accidental], ACCIDENTAL_FALLBACK[p.accidental]), p.x, p.y, theme && theme.glyphFont),
+  keyAccidental: (ctx, p, theme) => drawGlyphPath(ctx, ACCIDENTAL_PATHS[p.accidental], p.x, p.y, theme, ACCIDENTAL_GLYPH[p.accidental], ACCIDENTAL_FALLBACK[p.accidental], false),
 
-  accidental: (ctx, p, theme) => drawText(ctx, glyphOrFallback(theme, ACCIDENTAL_GLYPH[p.accidental], ACCIDENTAL_FALLBACK[p.accidental]), p.x, p.y, theme && theme.glyphFont),
+  accidental: (ctx, p, theme) => drawGlyphPath(ctx, ACCIDENTAL_PATHS[p.accidental], p.x, p.y, theme, ACCIDENTAL_GLYPH[p.accidental], ACCIDENTAL_FALLBACK[p.accidental], false),
 
   timeSig: (ctx, p) => {
     ctx.fillText(String(p.top), p.x, p.y - 10);
     ctx.fillText(String(p.bottom), p.x, p.y + 2);
   },
 
-  rest: (ctx, p, theme) => drawText(ctx, glyphOrFallback(theme, REST_GLYPH[p.base] || REST_GLYPH[1], REST_LETTER_FALLBACK[p.base] || REST_LETTER_FALLBACK[1]), p.x, p.y, theme && theme.glyphFont),
+  rest: (ctx, p, theme) => {
+    const base = REST_PATHS[p.base] ? p.base : 1;
+    drawGlyphPath(ctx, REST_PATHS[base], p.x, p.y, theme, REST_GLYPH[base], REST_LETTER_FALLBACK[base], FILLED_RESTS.has(base));
+  },
 
   flag: (ctx, p) => {
     ctx.beginPath();
