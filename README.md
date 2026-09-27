@@ -921,6 +921,14 @@ instrument, badge included, on a lesson's first (listen) step, before the
 learner has attempted anything; picking a card starts that same song on the
 chosen instrument without leaving the panel.
 
+`src/song/eval/fidelity.js`'s `fidelityReport(sourceNotes, song, partId, instrument)`
+is a pure, non-user-facing measurement of the same divergence, returning
+`{dropped, merged, octaveShift, shiftSemitones, outOfRange, chordReduced, hands}`:
+`dropped`/`merged` compare the part's notes against an optional pre-import note
+list; `octaveShift`, `shiftSemitones`, `outOfRange` and `chordReduced` all come
+from `fitToInstrument`'s own result, reused rather than re-derived; `hands`
+comes from `arrangeFor`'s placements (keyboard family only, `null` otherwise).
+
 `segment` (`src/song/lesson.js`) cuts phrases at real bar lines even when a
 song changes metre partway through (`song.metreChanges`), always agreeing
 with `src/song/model.js`'s `barsOf` -- the one place bar boundaries are
