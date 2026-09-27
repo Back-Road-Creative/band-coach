@@ -104,3 +104,77 @@ test('hands together: an approximate pass is reviewed by the SRS but does not ra
   assert.ok(masteryAfter > masteryBefore, `an approximate pass must still be reviewed by the SRS (${masteryBefore} -> ${masteryAfter})`);
   assert.equal(readyAfter, readyBefore, 'an approximate pass must not move level progress');
 });
+
+// B1: Both/Right only/Left only. The selector is a real #modOpts control
+// (src/app.js renderOpts()), driven here by setting its value and dispatching
+// a real 'change' event -- the same event its own addEventListener('change')
+// handles -- not by poking DB.prefs through the debug hook.
+test('hands together: choosing "Right only" in the Hands selector persists across a reload', async (t) => {
+  const page = await launchPage(htmlPath);
+  t.after(() => page.close());
+  await toHandsTogether(page);
+
+  assert.equal(await page.evaluate("document.getElementById('optKbdHands').value"), 'both', 'both hands is the default');
+  await page.evaluate("const s = document.getElementById('optKbdHands'); s.value = 'right'; s.dispatchEvent(new Event('change', { bubbles: true }));");
+  assert.equal(await page.evaluate('window.__coach.db().prefs.kbdHands'), 'right');
+
+  await page.reload();
+  assert.equal(await page.evaluate('window.__coach.db().prefs.kbdHands'), 'right', 'the choice survives a reload');
+  assert.equal(await page.evaluate("document.getElementById('optKbdHands').value"), 'right', 'the selector itself reflects the saved choice after reload');
+});
+
+test('hands together: choosing "Right only" restarts the current task and credits a right-suffixed id, never the shared both-hands id', async (t) => {
+  const page = await launchPage(htmlPath);
+  t.after(() => page.close());
+  await toHandsTogether(page);
+
+  const bothId = await page.evaluate('window.__coach.cur().id');
+  assert.match(bothId, /^j\d+$/, 'the default both-hands element is credited on the plain j<n> id');
+
+  await page.evaluate("const s = document.getElementById('optKbdHands'); s.value = 'right'; s.dispatchEvent(new Event('change', { bubbles: true }));");
+  await page.waitFor('window.__coach.cur() && /^j\\d+r$/.test(window.__coach.cur().id)');
+
+  const id = await page.evaluate('window.__coach.cur().id');
+  const info = await page.evaluate('window.__coach.cur().info');
+  assert.equal(info.kind, 'hands-together');
+
+  // Only the right-hand note, exact MIDI input: passes, and the left hand's
+  // note was never required (finding B1(1) never leaves an unfinished,
+  // half-graded task behind after the mode switch).
+  await page.evaluate(`window.__coach.note(${info.ex.rh.midi}, true)`);
+  await page.waitFor("document.getElementById('feedback').className === 'ok'");
+  await page.waitFor('window.__coach.task() && window.__coach.task().done', 5000);
+
+  const events = await page.evaluate('window.__coach.db().events');
+  const last = events[events.length - 1];
+  assert.equal(last.hands, 'right', 'the logged event names which hand was checked');
+  assert.equal(last.skill, id);
+
+  const item = await page.evaluate(`window.__coach.state().item[${JSON.stringify(id)}]`);
+  assert.ok(item, 'the right-suffixed id has its own SRS item, separate from j<n>');
+  const bothItemUntouched = await page.evaluate(`window.__coach.state().item[${JSON.stringify(bothId)}]`);
+  assert.equal(bothItemUntouched.reps, 0, 'a right-only pass must never advance the shared both-hands item');
+});
+
+test('hands together: a j1r item (right-only practice) survives a save and reload, not silently dropped by validId', async (t) => {
+  const page = await launchPage(htmlPath);
+  t.after(() => page.close());
+  await toHandsTogether(page);
+
+  await page.evaluate("const s = document.getElementById('optKbdHands'); s.value = 'right'; s.dispatchEvent(new Event('change', { bubbles: true }));");
+  await page.waitFor('window.__coach.cur() && /^j\\d+r$/.test(window.__coach.cur().id)');
+
+  const id = await page.evaluate('window.__coach.cur().id');
+  const info = await page.evaluate('window.__coach.cur().info');
+  await page.evaluate(`window.__coach.note(${info.ex.rh.midi}, true)`);
+  await page.waitFor("document.getElementById('feedback').className === 'ok'");
+  await page.waitFor('window.__coach.task() && window.__coach.task().done', 5000);
+
+  const before = await page.evaluate(`window.__coach.state().item[${JSON.stringify(id)}]`);
+  assert.ok(before && before.reps > 0);
+
+  await page.reload();
+  const after = await page.evaluate(`window.__coach.state().item[${JSON.stringify(id)}]`);
+  assert.ok(after, 'the j1r item must not be erased on reload');
+  assert.equal(after.reps, before.reps, 'the survived item keeps its recorded reps, not reset to a fresh default');
+});
