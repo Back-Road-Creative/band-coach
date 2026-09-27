@@ -1571,9 +1571,15 @@ function mountSongsPanel(hostEl, api) {
       // kick/snare/hi-hat apart (src/audio/drum-classify.js), which is why
       // judgeAttempt's pieceOkFor (practice.js) treats an unnamed or
       // MIC_UNNAMEABLE mic hit as not-assessed rather than a miss.
+      // onMidiNote's own `source` is forwarded through unchanged -- it is
+      // 'midi' for a real MIDI note-on, but ALSO fires for computer-key and
+      // screen-click presses while a drum-kit instrument is selected (this
+      // listener hears every route onNote() does, whatever the current
+      // step's instrument is), so a computer-key hit on this same lesson
+      // must never be recorded as 'midi' either.
       if (practice.instrument.kit) {
-        const unsubscribe = onMidiNote((midi, _exact, atAudioSec) => {
-          practice.playedEvents.push({ piece: pieceForMidi(midi), atSec: (atAudioSec != null ? atAudioSec : api.now()) - practice.recordStartSec, source: 'midi' });
+        const unsubscribe = onMidiNote((midi, _exact, atAudioSec, source) => {
+          practice.playedEvents.push({ piece: pieceForMidi(midi), atSec: (atAudioSec != null ? atAudioSec : api.now()) - practice.recordStartSec, source });
           updateCount();
         });
         // Best effort: an e-kit alone (no room mic permission) still works
@@ -1667,11 +1673,12 @@ function mountSongsPanel(hostEl, api) {
             openEvent = null;
             // "Clap the rhythm": an attack with no clear pitch (a clap, a tap)
             // is still a beat, so a rhythm step keeps it as an unpitched event.
-            if (onsetsOnly) { practice.playedEvents.push({ midi: null, atSec: nowSec }); updateCount(); }
+            if (onsetsOnly) { practice.playedEvents.push({ midi: null, atSec: nowSec, source: 'mic' }); updateCount(); }
             return;
           }
           const midi = Math.round(69 + 12 * Math.log2(r.freq / 440));
           const event = playedEventFrom(r.freq, midi, nowSec);
+          event.source = 'mic';
           practice.playedEvents.push(event);
           openEvent = event;
           updateCount();
