@@ -16,9 +16,9 @@ and the exact assertions: `tests/characterization/journey-first-visit.test.mjs`.
    shut).
    Proof: same file, the `assertInFirstScreen` checks in the first test.
 
-3. **The app stays screen-reader-clean at every stop along the way.** axe-core finds no WCAG 2/2.1
-   A/AA violations on first paint, after choosing an instrument, or once the first exercise is
-   running.
+3. **The app stays screen-reader-clean at every stop along the way.** axe-core finds no WCAG
+   2/2.1/2.2 A/AA violations on first paint, after choosing an instrument, or once the first
+   exercise is running.
    Proof: same file, the `scan()` calls in the first test.
 
 4. **A returning learner gets there faster.** With a saved instrument, the picker sheet starts

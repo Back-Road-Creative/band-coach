@@ -27,7 +27,7 @@ const axeSource = readFileSync(
 // bar a public, general-audience app should clear. Level AAA rules are
 // aspirational and noisy (many are genuinely optional even for accessible
 // sites), so they are deliberately left out rather than scanned and ignored.
-const WCAG_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'];
+const WCAG_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'];
 
 function formatViolations(label, violations) {
   const lines = violations.map((v) => {
