@@ -674,6 +674,23 @@ both hands were heard. It is still graded for real by the spaced-repetition sche
 only one hand was actually confirmed it does not count toward level progress the way an exact pass
 does.
 
+A "Hands" selector on the keyboard options panel picks Both / Right only / Left only. Both is the
+long-standing drill above: both hands' notes are required, and any other held note is wrong.
+Right only and Left only ask for just the named hand's note — the other hand may play along (it is
+optional accompaniment, never required and never marked wrong), but only the named hand's note is
+what actually passes the exercise or is recorded as evidence the learner played it; the on-screen
+hint says which hand is being checked. Changing the selector clears the exercise in progress and
+starts a fresh one under the new mode rather than leaving a half-graded task behind. Right-only and
+left-only practice is tracked on its own id (`j1r`/`j1l` etc., alongside the both-hands `j1`), so
+passing the one-handed drill never counts toward, and never uses up, both-hands mastery — the two
+are scheduled by the spaced-repetition system independently. The choice is saved with the rest of
+your preferences and survives a reload. Above level 13, the "Everything, faster" levels mix hands
+material back in with every other kind of drill; a plain `j1`-style id that turns up there is always
+the both-hands exercise, whatever the selector is currently set to — only an id with the `r`/`l`
+suffix is graded one-handed. The approximate (microphone) pass message says plainly which hand was
+checked in Right only/Left only mode, rather than the both-hands wording. One-handed passes never
+move you past level 13 on their own: the level holds until the both-hands exercises are ready.
+
 ## Harmonica: any of the 12 keys, plus bends
 
 The harmonica mod is not locked to a C harmonica. A "My harmonica is in the key of" selector on
