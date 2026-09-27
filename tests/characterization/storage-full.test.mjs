@@ -55,25 +55,28 @@ test('a save that cannot be written to this device tells the learner in plain la
 test('the failed-save status clears once a later save succeeds', async (t) => {
   const page = await launchPage(htmlPath, { initScript: QUOTA_EXCEEDED_INIT });
   t.after(() => page.close());
+  const SAY = "document.getElementById('settingsSay').textContent";
 
   await page.evaluate("window.__coach.setMod('kbd')");
   await page.evaluate("document.getElementById('playBtn').click()");
   await page.waitFor('window.__coach.task()');
   const midi = await page.evaluate('window.__coach.cur().info.midi');
   await page.evaluate(`window.__coach.note(${midi}, true)`);
-  await page.evaluate("window.dispatchEvent(new Event('pagehide'))");
 
-  await page.evaluate('document.querySelector(\'[data-route="settings"]\').click()');
-  const failed = await page.evaluate("document.getElementById('settingsSay').textContent");
-  assert.match(failed, /could not be saved/i, 'sanity check: the failure message showed up first');
+  // Wait out save()'s own debounce rather than forcing a flush with a
+  // synthetic pagehide: pagehide also tears the session down (E10,
+  // src/core/session-teardown.js), which would stop the practice this test
+  // needs to keep going for its second save.
+  await page.waitFor(`/could not be saved/i.test(${SAY})`);
 
   // Let real writes go through again, then trigger another save.
   await page.evaluate('window.__forceQuotaExceeded = false;');
   await page.waitFor('window.__coach.cur()');
   const midi2 = await page.evaluate('window.__coach.cur().info.midi');
   await page.evaluate(`window.__coach.note(${midi2}, true)`);
-  await page.evaluate("window.dispatchEvent(new Event('pagehide'))");
+  await page.waitFor(`!/could not be saved/i.test(${SAY})`);
 
-  const cleared = await page.evaluate("document.getElementById('settingsSay').textContent");
+  await page.evaluate('document.querySelector(\'[data-route="settings"]\').click()');
+  const cleared = await page.evaluate(SAY);
   assert.doesNotMatch(cleared, /could not be saved/i, `expected the failure status to clear on a successful save, got: ${JSON.stringify(cleared)}`);
 });
