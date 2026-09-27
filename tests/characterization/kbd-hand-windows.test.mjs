@@ -129,21 +129,43 @@ test('in a hands-together task, the right-hand and left-hand target keys carry d
   assert.notEqual(rh.mark, lh.mark, `right-hand and left-hand marks must differ, got "${rh.mark}" and "${lh.mark}"`);
 });
 
-test('a real pointerdown on a lower-row key plays that key, not just the debug hook', async (t) => {
-  const page = await launchPage(htmlPath);
-  t.after(() => page.close());
-  await toLevel(page, 8);
+// Drives a level-8 task, correctly answering every element (which always
+// advances to the next one -- see passEl()'s idx += 1, src/app.js ~1207),
+// until the current target is a left-hand-octave note (midi < 60, the
+// range drawn in row 0 -- see kbdRange()/the kbd draw branch, ~1828-1847).
+// Level 8 (and above, since later levels fold earlier ones' items into their
+// own pool) mixes notes from both octaves at random, so this can take a few
+// elements. A finished task's next one is started by the app itself, on its
+// own clock (src/app.js:1497's `nextTaskAt`), the same as
+// journey-practice-progress.test.mjs's driveUntilJudged() relies on -- so
+// this only ever waits for a task/cur() to (re)appear, never clicks #playBtn
+// mid-drive.
+async function untilTarget(page, matches) {
+  for (let i = 0; i < 60; i++) {
+    await page.waitFor('window.__coach.task() && window.__coach.cur()', 5000);
+    const info = await page.evaluate('window.__coach.cur().info');
+    if (info.kind === 'note' && matches(info)) return info;
+    await page.evaluate(`window.__coach.note(${info.midi}, true)`);
+    await page.waitFor('window.__coach.task() && window.__coach.cur()', 5000);
+  }
+  throw new Error('did not encounter a matching target within the search budget');
+}
+const untilLowNoteTarget = (page) => untilTarget(page, (info) => info.midi < 60);
+// A row-0 C (midi 48): the one white key whose x lines up with its row-1
+// counterpart (both rows start their first white key at the same x -- see
+// the two draws in the kbd branch of draw(), src/app.js ~1844/1846). Picking
+// any low note here would still usually catch a hit-test that ignores y or
+// drops the row split, since the two rows differ in width and most notes'
+// x DOES move between them -- but "usually" is not a guarantee, and this
+// makes the check deterministic: the same x hits a real key in both rows,
+// so nothing but the y-band (row) can be doing the telling apart.
+const untilLowCTarget = (page) => untilTarget(page, (info) => info.midi < 60 && info.midi % 12 === 0);
 
-  const keys = await page.evaluate('window.__coach.kbdKeys()');
-  const lower = keys.find((k) => !k.black && (k.row || 0) === 1) || keys.find((k) => !k.black);
-  assert.ok(lower, 'expected at least one white key to tap');
-
-  await page.evaluate("document.getElementById('feedback').className = ''");
+async function tapAt(page, x, y) {
   const rect = await page.evaluate(`
     (function () {
       const cv = document.getElementById('cv'), r = cv.getBoundingClientRect();
-      const cx = ${lower.x} + ${lower.w} / 2, cy = ${lower.y} + ${lower.h} / 2;
-      return { clientX: r.left + cx * r.width / cv.width, clientY: r.top + cy * r.height / cv.height };
+      return { clientX: r.left + ${x} * r.width / cv.width, clientY: r.top + ${y} * r.height / cv.height };
     })()
   `);
   await page.evaluate(`
@@ -151,5 +173,40 @@ test('a real pointerdown on a lower-row key plays that key, not just the debug h
       clientX: ${rect.clientX}, clientY: ${rect.clientY}, bubbles: true,
     }))
   `);
-  await page.waitFor("document.getElementById('feedback').className === 'ok' || document.getElementById('feedback').className === 'no'");
+}
+
+test('a real pointerdown on a lower-row key plays that key, not the wrong row', async (t) => {
+  const page = await launchPage(htmlPath);
+  t.after(() => page.close());
+  await page.setViewport(VIEWPORTS.phone);
+  await toLevel(page, 8);
+
+  // Phase 1: tap the target's OWN rect, in row 0 (the left-hand octave) --
+  // this must play the target and pass. Once an element has been failed,
+  // passing it later reads back as neutral rather than 'ok' (passEl(),
+  // src/app.js:1205's `else` branch), so this is checked on a fresh,
+  // not-yet-failed element, before anything is tapped wrong.
+  const info1 = await untilLowNoteTarget(page);
+  const keys1 = await page.evaluate('window.__coach.kbdKeys()');
+  const target1 = keys1.find((k) => k.m === info1.midi && (k.row || 0) === 0);
+  assert.ok(target1, `expected the target (midi ${info1.midi}) to be drawn as a row-0 (left-hand) key`);
+  await page.evaluate("document.getElementById('feedback').className = ''");
+  await tapAt(page, target1.x + target1.w / 2, target1.y + target1.h / 2);
+  await page.waitFor("document.getElementById('feedback').className === 'ok'");
+
+  // Phase 2: a tap at the SAME x as a (fresh) low C target, but at the OTHER
+  // row's y -- the pitch class one octave up, row 1 (the right-hand
+  // octave). The keyboard is 'exact' octave policy (src/instruments/kbd.js),
+  // so that is a genuinely wrong key, not an equivalent one: a wrong-row
+  // hit-test (or no row split at all) would land on the target and pass;
+  // the real one must land on the wrong-octave key instead and fail.
+  const info2 = await untilLowCTarget(page);
+  const keys2 = await page.evaluate('window.__coach.kbdKeys()');
+  const target2 = keys2.find((k) => k.m === info2.midi && (k.row || 0) === 0);
+  const wrongOctave = keys2.find((k) => k.m === info2.midi + 12 && (k.row || 0) === 1);
+  assert.ok(target2, `expected the target (midi ${info2.midi}) to be drawn as a row-0 (left-hand) key`);
+  assert.ok(wrongOctave, `expected midi ${info2.midi + 12} to be drawn as a row-1 (right-hand) key`);
+  await page.evaluate("document.getElementById('feedback').className = ''");
+  await tapAt(page, target2.x + target2.w / 2, wrongOctave.y + wrongOctave.h / 2);
+  await page.waitFor("document.getElementById('feedback').className === 'no'");
 });
