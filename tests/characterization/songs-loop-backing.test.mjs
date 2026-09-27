@@ -18,6 +18,19 @@ const htmlPath = HTML_PATH;
 // wall-clock attempt lands well inside each step's own maxMeanErrorMs
 // tolerance (rhythm 120ms, phrase-slow 150ms) even under CI jitter.
 const PHRASE_MIDI = [64, 62, 60];
+// Each note's timing is anchored on the app's OWN audio clock
+// (window.__coach.songsRecordStart()/audioNow(), the same origin
+// practice.recordStartSec judges against -- see src/app.js's debug-hook
+// block and src/ui/songs.js's recordStartSec()), not on stacked
+// `setTimeout(delayMs)` calls. Three sequential setTimeouts compound
+// whatever the event loop's own scheduling jitter is on EACH one -- a
+// starved runner delaying the first note's timer pushes every later
+// note's fire time back too, and that drift accumulates across the whole
+// phrase -- where polling an absolute audio-clock target self-corrects on
+// every 4ms check regardless of how late the loop actually got to run it
+// (reproduced 2026-09-27: 5/9 concurrency=20 attempts of this file never
+// reached the tempo ladder step at all, stuck on a rhythm/phrase-slow step
+// that a late note pushed outside its own timing tolerance).
 async function playAttempt(page, delaysMs) {
   const script = `
     (async () => {
@@ -25,15 +38,19 @@ async function playAttempt(page, delaysMs) {
       if (turnBtn) turnBtn.click();
       // "Your turn" now opens with a four-beat count-in (N2) before it
       // starts listening -- wait for the count element to say real
-      // listening has begun so delaysMs below (measured against the
-      // step's own phrase clock) starts from the actual recordStartSec,
-      // not the button click.
+      // listening has begun before reading recordStartSec below.
       while (!(document.querySelector('.panel-songs-count') && document.querySelector('.panel-songs-count').textContent.startsWith('Notes heard so far'))) {
-        await new Promise(r => setTimeout(r, 15));
+        await new Promise(r => setTimeout(r, 4));
       }
+      const recordStart = window.__coach.songsRecordStart();
       const seq = ${JSON.stringify(PHRASE_MIDI.map((midi, i) => ({ midi, delayMs: delaysMs[i] })))};
+      let cumMs = 0;
       for (const { midi, delayMs } of seq) {
-        await new Promise(r => setTimeout(r, delayMs));
+        cumMs += delayMs;
+        const targetSec = recordStart + cumMs / 1000;
+        while (window.__coach.audioNow() < targetSec) {
+          await new Promise(r => setTimeout(r, 4));
+        }
         window.__coach.songsNote(midi, true);
       }
       await new Promise(r => setTimeout(r, 80));
