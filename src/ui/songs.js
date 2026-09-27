@@ -126,9 +126,15 @@ export function recordStartSec() { return currentPractice ? currentPractice.reco
 // can hear key presses while no built-in task is active.
 // `atAudioSec` (optional, api.now()'s units) stamps the note at that exact
 // audio-clock instant instead of "now"; only forwardNoteAt() below passes it.
-export function forwardNote(midi, exact, atAudioSec) {
+// `source` (optional) is whatever src/app.js's onNote() was told played the
+// note -- 'midi' for a real MIDI note-on, 'computer-key' for the physical
+// keyboard, undefined for a screen click, the mic path, or a caller (the
+// debug hook, an existing test) that never passes one. Every existing
+// caller of forwardNote/forwardNoteAt keeps working with no fourth
+// argument, same as before this parameter existed.
+export function forwardNote(midi, exact, atAudioSec, source) {
   for (const fn of noteListeners.slice()) {
-    try { fn(midi, exact, atAudioSec); } catch (e) { /* one bad listener must not break the others */ }
+    try { fn(midi, exact, atAudioSec, source); } catch (e) { /* one bad listener must not break the others */ }
   }
 }
 
@@ -136,10 +142,10 @@ export function forwardNote(midi, exact, atAudioSec) {
 // after the current attempt's own start (recordStartSec()), so a test can
 // play "the note on beat one" with zero lateness however busy the runner is
 // -- the call itself may land late, the note's timestamp does not.
-export function forwardNoteAt(midi, offsetSec, exact) {
+export function forwardNoteAt(midi, offsetSec, exact, source) {
   const start = recordStartSec();
   if (start === null) return;
-  forwardNote(midi, exact === undefined ? true : exact, start + offsetSec);
+  forwardNote(midi, exact === undefined ? true : exact, start + offsetSec, source);
 }
 
 // Cents deviation of a detected frequency from the nearest equal-tempered
@@ -1565,9 +1571,15 @@ function mountSongsPanel(hostEl, api) {
       // kick/snare/hi-hat apart (src/audio/drum-classify.js), which is why
       // judgeAttempt's pieceOkFor (practice.js) treats an unnamed or
       // MIC_UNNAMEABLE mic hit as not-assessed rather than a miss.
+      // onMidiNote's own `source` is forwarded through unchanged -- it is
+      // 'midi' for a real MIDI note-on, but ALSO fires for computer-key and
+      // screen-click presses while a drum-kit instrument is selected (this
+      // listener hears every route onNote() does, whatever the current
+      // step's instrument is), so a computer-key hit on this same lesson
+      // must never be recorded as 'midi' either.
       if (practice.instrument.kit) {
-        const unsubscribe = onMidiNote((midi, _exact, atAudioSec) => {
-          practice.playedEvents.push({ piece: pieceForMidi(midi), atSec: (atAudioSec != null ? atAudioSec : api.now()) - practice.recordStartSec, source: 'midi' });
+        const unsubscribe = onMidiNote((midi, _exact, atAudioSec, source) => {
+          practice.playedEvents.push({ piece: pieceForMidi(midi), atSec: (atAudioSec != null ? atAudioSec : api.now()) - practice.recordStartSec, source });
           updateCount();
         });
         // Best effort: an e-kit alone (no room mic permission) still works
@@ -1610,8 +1622,17 @@ function mountSongsPanel(hostEl, api) {
         }, 50);
         practice.stop = () => { unsubscribe(); clearInterval(timer); };
       } else if (practice.instrument.input === 'midi') {
-        const unsubscribe = onMidiNote((midi, _exact, atAudioSec) => {
+        // pushMidiEvent (above, not this unit's to change) always PUSHES a
+        // new entry for this exact press -- it may also close an earlier
+        // still-open same-pitch entry, but that closed entry is never the
+        // one just pushed -- so the last element right after the call is
+        // always this press's own event, safe to stamp with the route it
+        // actually came from ('midi' for real MIDI, 'computer-key' for the
+        // physical keyboard, undefined for a screen click -- see onNote()'s
+        // `source` comment in src/app.js).
+        const unsubscribe = onMidiNote((midi, _exact, atAudioSec, source) => {
           pushMidiEvent(practice.playedEvents, midi, (atAudioSec != null ? atAudioSec : api.now()) - practice.recordStartSec);
+          practice.playedEvents[practice.playedEvents.length - 1].source = source;
           updateCount();
         });
         practice.stop = unsubscribe;
@@ -1652,11 +1673,12 @@ function mountSongsPanel(hostEl, api) {
             openEvent = null;
             // "Clap the rhythm": an attack with no clear pitch (a clap, a tap)
             // is still a beat, so a rhythm step keeps it as an unpitched event.
-            if (onsetsOnly) { practice.playedEvents.push({ midi: null, atSec: nowSec }); updateCount(); }
+            if (onsetsOnly) { practice.playedEvents.push({ midi: null, atSec: nowSec, source: 'mic' }); updateCount(); }
             return;
           }
           const midi = Math.round(69 + 12 * Math.log2(r.freq / 440));
           const event = playedEventFrom(r.freq, midi, nowSec);
+          event.source = 'mic';
           practice.playedEvents.push(event);
           openEvent = event;
           updateCount();
@@ -1797,12 +1819,28 @@ function mountSongsPanel(hostEl, api) {
       // from the attempt anywhere in this file, so nothing better is
       // available to report.
       const { dims, unassessed } = dimsFromStep(step, result, { assess: capabilityFor(practice.instrument).assess });
+      // `input`: which route every JUDGED note in this try actually came
+      // from (a matched note only -- a miss carries no played event to ask,
+      // see practice.js's missedNote). 'midi' only when every one of them
+      // is a real MIDI note-on; the one concrete non-midi route when they
+      // all agree on something else (a computer-key song played end to
+      // end); 'mixed' when they do not agree; and left off the row entirely
+      // -- never guessed -- the moment any judged note's route is unknown
+      // (same "left off rather than guessed" convention finishTask's own
+      // `input` comment documents in src/app.js, for a caller, such as the
+      // debug hook or a screen click, that never told onNote() a source).
+      // Record only: this never changes credit, mastery or pass/fail above
+      // -- a later check reads this field on its own.
+      const judgedSources = result ? result.matches.filter((m) => m.ok && m.played).map((m) => m.played.source) : [];
+      const input = (judgedSources.length && judgedSources.every((s) => s !== undefined))
+        ? (judgedSources.every((s) => s === judgedSources[0]) ? judgedSources[0] : 'mixed')
+        : undefined;
       if (typeof api.logEvent === 'function') {
         api.logEvent(makeEvent({
           instrument: practice.instrumentId, skill: step.kind + ':' + step.phraseIndex, source: 'song',
           songId: practice.song.id, partId: practice.partId, assistance: practice.assistance,
           dims, unassessed, activeMs: Math.max(0, Math.round(elapsedMs || 0)),
-          bpmTarget: step.bpm || null, bpmActual: step.bpm || null,
+          bpmTarget: step.bpm || null, bpmActual: step.bpm || null, input,
         }, { now: api.now() }));
       }
       // A failed try gets told the FIRST concrete thing to fix -- the

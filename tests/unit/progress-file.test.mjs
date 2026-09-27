@@ -99,6 +99,23 @@ test('migration ladder: a non-object db does not throw', () => {
   assert.equal(migrated.v, CURRENT_DB_VERSION);
 });
 
+test('migrate() leaves db.events unchanged, only db.v changes', () => {
+  const legacyEvent = { v: 1, id: 'a', at: 1, instrument: 'kbd', skill: 'n4', source: 'drill', assistance: 'none', dims: { pitch: 'ok' }, unassessed: [], activeMs: 400 };
+  const eventWithHandsAndRev = { ...legacyEvent, id: 'b', hands: 'left', contentRev: 'rev-1' };
+  const older = { mods: { kbd: { level: 1 } }, sessions: [], prefs: {}, events: [legacyEvent, eventWithHandsAndRev] }; // no `v` field
+  // migrated.events and older.events can end up as the SAME array reference
+  // (a migration step that spreads `{...db, v: 1}` never copies `events`), so
+  // comparing them to each other after the call proves nothing -- an
+  // in-place mutation (stripping a field, truncating the array) would still
+  // pass. Snapshot before calling migrate() and compare against that.
+  const before = structuredClone(older.events);
+  const migrated = migrate(older);
+  assert.equal(migrated.v, CURRENT_DB_VERSION);
+  assert.deepEqual(migrated.events, before);
+  assert.equal(migrated.events[1].hands, 'left');
+  assert.equal(migrated.events[1].contentRev, 'rev-1');
+});
+
 test('export carries the song library alongside the db', () => {
   const env = exportProgress(sampleDB(), { appVersion: '1.2.3', now: () => 1, songs: [{ id: 'song-1', title: 'A' }] });
   assert.deepEqual(env.songs, [{ id: 'song-1', title: 'A' }]);

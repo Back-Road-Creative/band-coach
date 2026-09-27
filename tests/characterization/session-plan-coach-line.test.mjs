@@ -44,3 +44,26 @@ test('the coach line names the weak skill in plain words, never a raw id', async
   // weak pick and the one the coach line must name in plain words.
   assert.match(coachText, /then [A-G](#|b)?,/, `expected the plain name of the weak skill in the coach line, got: ${coachText}`);
 });
+
+// The coach line's second sentence names the reason planSession recorded for
+// the weak skill it picked (src/core/curriculum.js's describeWhy), not just
+// the skill itself -- and still never the raw internal id.
+test('the coach line says why the weak skill was picked', async (t) => {
+  const page = await launchPage(HTML_PATH);
+  t.after(() => page.close());
+
+  await page.evaluate(`(function () {
+    const db = window.__coach.db();
+    db.mods.kbd.item = { n60: { stability: 5, difficulty: 0.3, lastSeen: Date.now() - 100 * 86400000, reps: 4, lapses: 1, seen: 5 } };
+    window.localStorage.setItem('bandcoach.v1', JSON.stringify(db));
+  })()`);
+  await page.reload();
+  await page.evaluate("window.__coach.setMod('kbd')");
+  await page.waitFor('window.__coach && window.__coach.db().mods.kbd', 5000);
+  await page.evaluate("document.getElementById('playBtn').click()");
+  await page.waitFor('window.__coach.task()');
+
+  const coachText = await page.evaluate("document.getElementById('coach').textContent");
+  assert.match(coachText, /C: slipped before, worth another pass\./, `expected the coach line to say why, got: ${coachText}`);
+  assert.doesNotMatch(coachText, /\bn\d{2}\b/, `expected no raw id in the coach line, got: ${coachText}`);
+});
