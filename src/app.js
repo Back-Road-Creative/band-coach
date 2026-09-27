@@ -9,6 +9,7 @@ import { handsTogetherById, fingeringLabel, gradeHandsTogetherExact, gradeHandsT
 import { createMidiParser } from './core/midi.js';
 import { createNoteState } from './core/note-state.js';
 import { PCKEYS } from './core/pckeys.js';
+import { createTeardown } from './core/session-teardown.js';
 // Merge slots: a unit in flight adds its imports by replacing ONLY its own
 // slot line, so parallel branches never edit adjacent lines.
 import { recordError, getErrors } from './core/error-log.js';
@@ -339,6 +340,22 @@ import { register as registerPlayalong } from './ui/playalong.js';
     })();
     try { return await openMicPromise; } finally { openMicPromise = null; }
   }
+  // Session teardown (E10): the tab going hidden used to only pause the
+  // exercise (takeBreak/flushSave/releaseNotes, see the visibilitychange
+  // listener below) -- the mic stream and the AudioContext kept running,
+  // leaving the OS mic indicator lit and audio nodes ticking in a
+  // backgrounded/closed tab. `teardown` is a small ordered registry (pure,
+  // src/core/session-teardown.js) so both call sites that need this
+  // (visibilitychange->hidden and pagehide) run the exact same stoppers
+  // rather than duplicating stop logic. Each stopper only touches what it
+  // owns, and a stopper that finds nothing to do (mic already stopped from a
+  // device switch, actx never created) is a safe no-op -- runTeardown() is
+  // called from both sites and needs to be idempotent either way.
+  const teardown = createTeardown();
+  let teardownRunCount = 0;
+  teardown.add('mic', () => { if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; micReady = false; } });
+  teardown.add('audioContext', () => { if (actx && actx.state === 'running') actx.suspend(); });
+  function runTeardown(reason) { teardownRunCount++; teardown.run(reason); }
   async function refreshMicDevices() {
     if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return;
     let list = []; try { list = await navigator.mediaDevices.enumerateDevices(); } catch (e) { return; }
@@ -2160,7 +2177,16 @@ import { register as registerPlayalong } from './ui/playalong.js';
   $('playBtn').addEventListener('click', function () { this.blur(); if (!sess) startSession(); else if (paused) resume(); else takeBreak('user'); });
   $('endBtn').addEventListener('click', function () { this.blur(); endSession(); }); $('endBtn2').addEventListener('click', endSession); $('backBtn').addEventListener('click', resume);
   $('snoozeBtn').addEventListener('click', () => { sess.snoozeUntil = Date.now() + 5 * 60000; sess.tiredFor = 0; S.ready = Math.min(S.ready, 0.6); pauseInfo = { at: Date.now(), secs: 0 }; resume(); coach('Five more minutes, then I will ask again. I have eased off the pace meanwhile.'); });
-  document.addEventListener('visibilitychange', () => { if (document.hidden && playing) takeBreak('hidden'); if (document.hidden) { flushSave(); releaseNotes(); } else refreshModelClock(); wakeLock.handleVisibilityChange(document); });
+  document.addEventListener('visibilitychange', () => { if (document.hidden && playing) takeBreak('hidden'); if (document.hidden) { flushSave(); releaseNotes(); runTeardown('hidden'); } else { refreshModelClock(); ioRefresh(); } wakeLock.handleVisibilityChange(document); });
+  // A hidden tab is a pause the learner might return to; pagehide (real tab
+  // close, navigation, reload) never comes back, so it gets the same
+  // teardown -- a hidden tab that goes straight to being closed must not
+  // leave the mic/AudioContext running just because visibilitychange already
+  // ran once. runTeardown() is idempotent (each stopper is a no-op once
+  // already run), so a hidden tab that is THEN closed safely runs it twice.
+  // Kept next to this listener rather than in the flushSave/writeDB pagehide
+  // wiring above, which an unrelated unit also edits.
+  window.addEventListener('pagehide', () => runTeardown('pagehide'));
   // A held note has no way to send its own note-off once the window itself
   // loses focus (alt-tab, another app grabbing the keyboard) -- release
   // everything noteState is holding rather than leave a phantom note "held"
@@ -2552,6 +2578,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
     // behaviour (whether a quiet frame's pitch reaches the page), not on
     // fabricating a pass.
     setNoiseFloorForTest: floor => { DB.prefs.noiseFloor = floor; applyGates(gatesFor(floor)); save(); } });
+  if (__DEBUG_HOOK__) Object.assign(hook, { micOpen: () => micReady, audioSuspended: () => !!(actx && actx.state === 'suspended'), teardownRuns: () => teardownRunCount });
   //
   if (__DEBUG_HOOK__) Object.assign(hook, { judgeChord: judgeChord, chroma: chroma });
   if (__DEBUG_HOOK__) Object.assign(hook, { groove: () => groove, grooveLast: () => grooveLast, grooveBpm: () => S.grooveBpm, grooveOn: v => { grooveOn = !!v; task = null; groove = null; }, grooveInject: (midi, atAudioTime) => { const fire = () => { if (audioNow() >= atAudioTime) onNote(midi, true); else setTimeout(fire, 4); }; fire(); } });
