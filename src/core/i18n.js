@@ -105,6 +105,11 @@ export const en = {
   'rail.backupRestore': 'Restore a backup',
   'rail.checkUpdates': 'Check for updates',
   'rail.updateHelp': 'Asks the Band Coach website for the latest version number. Sends nothing about your playing.',
+  // Keyboard practice -> Songs hand-off (C11a): the button that opens a
+  // starter song's lesson once the notes it uses are all taught, and the
+  // way back once that lesson ends (src/ui/songs.js's renderPractice).
+  'kbd.songHandoff.button': 'Play a song with these notes',
+  'kbd.songHandoff.back': 'Back to practice',
 };
 
 const locales = { en };

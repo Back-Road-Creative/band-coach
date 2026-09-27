@@ -382,6 +382,10 @@
   .panel-fingerings .fing-keyed-keys { margin: 0; font-size: 15px; }
   .panel-fingerings .fing-unavailable { color: var(--muted); margin: 0; }
   .panel-fingerings .fing-review-badge { color: var(--warn); font-size: 13px; margin: 0 0 8px; }
+  /* B(C11a): the kbd hand-off's own unreviewed note, next to its button in
+     #modOpts -- same warn colour/size as fing-review-badge above, but that
+     class is scoped to .panel-fingerings only (see its own comment there). */
+  #modOpts [role="note"] { color: var(--warn); font-size: 13px; }
   .panel-playalong { display: flex; flex-direction: column; gap: 12px; }
   .panel-playalong .pa-intro { color: var(--muted); max-width: 64ch; margin: 0; }
   .panel-playalong .pa-note { color: var(--muted); font-size: 13px; margin: 0; }

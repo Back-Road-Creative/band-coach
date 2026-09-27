@@ -47,6 +47,9 @@ import { layoutFor as harpLayoutFor } from './instruments/how/harmonica.js';
 import { pieceForMidi, TRAINER_LEVELS as KIT_LEVELS } from './instruments/drum-kit.js';
 import { kitLayout, pieceAt } from './instruments/how/drum-kit.js';
 import { layoutPercussionMeasure } from './notation/percussion.js';
+import { songFor } from './instruments/kbd-songs.js';
+import { itemReview, contentRev } from './instruments/review-ledger.js';
+import { isReviewCurrent } from './instruments/review.js';
 // slot:import:notation-wire
 //
 // slot:import:a11y
@@ -1073,11 +1076,18 @@ import { register as registerPlayalong } from './ui/playalong.js';
         if (S.fast >= 3) { S.gain = Math.min(0.09, S.gain * 1.15); S.fast = 0; note = ' You keep clearing levels cleanly, so I am speeding up the pace.'; }
         S.promo = { at: S.judged, level: S.level + 1 }; S.level++; S.ready = 0.2; const d = D();
         coach('Level up. Next: ' + d.name + '.' + (d.add ? ' New: ' + d.add.map(id => inf(id).short).join(', ') + '.' : '') + note);
+        // B(C11a): a level move can put the kbd hand-off button in or out of
+        // view (songFor(S.level) reads the new level), and renderOpts is
+        // otherwise only called from setMod/tool buttons -- without this a
+        // player who levels up mid-session would not see it until their next
+        // instrument switch or reload.
+        if (mod === 'kbd') renderOpts();
       }
     } else if (S.ready <= 0 && S.level > 1) {
       const tooSoon = S.promo.level === S.level && S.judged - S.promo.at < 40 && sess.F < 0.5; S.level--; S.ready = 0.5; sess.downs++; S.fast = 0;
       if (tooSoon) { S.gain = Math.max(0.025, S.gain * 0.85); S.gate = Math.min(0.75, S.gate + 0.05); coach('I moved you up too soon, so that is on me. Back to level ' + S.level + ', and from now on I will ask for ' + Math.round(S.gate * 100) + '% on everything before moving up.'); }
       else coach('Stepping back to level ' + S.level + ' to rebuild. That is normal; it comes back faster the second time.');
+      if (mod === 'kbd') renderOpts();
     }
   }
 
@@ -2082,6 +2092,18 @@ import { register as registerPlayalong } from './ui/playalong.js';
     // fresh under the new mode (buildLevelTask's frame loop rebuilds
     // automatically once task is null and playing), never a half-graded one.
     if (mod === 'kbd') sel('optKbdHands', 'Hands', { both: ['Both'], right: ['Right only'], left: ['Left only'] }, DB.prefs.kbdHands, v => { DB.prefs.kbdHands = v; task = null; save(); });
+    // B(C11a) 'Play a song with these notes': songFor(S.level) names the
+    // most advanced starter song whose notes are all already taught (see
+    // src/instruments/kbd-songs.js -- null until level 2, since a song is
+    // only suggested once the level teaching its notes is behind the
+    // player, not the moment those notes unlock). The 'Make it a lesson'
+    // pattern above is the precedent this hand-off follows: requestOpenSong
+    // + openPanel('songs'), except this one also names a returnTo so Songs
+    // can offer a way back (src/ui/songs.js's renderPractice, 'Back to
+    // practice'). The map is teaching content no player has checked yet, so
+    // the review label sits right beside the button rather than only in a
+    // tooltip -- never claim it is reviewed when isReviewCurrent says no.
+    if (mod === 'kbd') { const song = songFor(S.level); if (song) { btn('kbdSongHandoff', t('kbd.songHandoff.button'), () => { requestOpenSong(panelApi, song.songId, undefined, 'kbd', 'kbd'); openPanel('songs'); }); if (!isReviewCurrent(itemReview(song.id, contentRev(song)))) { const note = document.createElement('span'); note.setAttribute('role', 'note'); note.className = 'small'; note.textContent = t('review.unreviewed'); box.appendChild(note); } } }
     if (mod === 'rhy') btn('calBtn', calRun ? 'Listening for 8 taps…' : 'Calibrate timing (' + Math.round(DB.latencyMs || 0) + ' ms)', startCalibrate, false);
     if (mod === 'capture') { btn('capGo', cap.on ? 'Stop' : 'Listen', () => { if (cap.on) capStop(); else { ensureAudio(); cap.on = true; cap.notes = []; cap.start = now(); cap.curM = -1; renderOpts(); } }, true); btn('capPlay', 'Play it back', () => { ensureAudio(); const t0 = now() + 0.1; cap.notes.forEach(n => tone(n.m, t0 + n.t - (cap.notes[0] ? cap.notes[0].t : 0), Math.max(0.2, n.d))); }); const lessons = {}; MOD_IDS.filter(m => hasMasteryScheme(m)).forEach(m => { lessons[m] = [MODS[m].name]; }); sel('capTo', cap.notes.length + ' notes. Practise on', lessons, 'kbd', () => {});
       // 'Make it a lesson': the captured tune becomes a draft Song (src/song/
@@ -2307,7 +2329,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
   // everything noteState is holding rather than leave a phantom note "held"
   // until some later, unrelated message happens to clear that same pitch.
   window.addEventListener('blur', () => releaseNotes());
-  function jump(dl) { const nl = Math.max(1, S.level + dl); if (nl === S.level) return; S.level = nl; S.ready = 0.3; task = null; coach((dl < 0 ? 'Moved down' : 'Skipped ahead') + ' to level ' + S.level + ': ' + D().name + '.'); save(); showAll(); }
+  function jump(dl) { const nl = Math.max(1, S.level + dl); if (nl === S.level) return; S.level = nl; S.ready = 0.3; task = null; coach((dl < 0 ? 'Moved down' : 'Skipped ahead') + ' to level ' + S.level + ': ' + D().name + '.'); save(); if (mod === 'kbd') renderOpts(); showAll(); }
   $('easierBtn').addEventListener('click', function () { this.blur(); jump(-1); }); $('harderBtn').addEventListener('click', function () { this.blur(); jump(1); });
   $('resetBtn').addEventListener('click', function () { this.blur(); if (sess) endSession(); DB.mods[mod] = S = freshModel(); recent = []; streak = 0; coach(t('reset.progressCleared', { name: MODS[mod].name })); save(); showAll(); });
   $('optNames').addEventListener('change', function () { DB.prefs.names = this.checked; save(); });

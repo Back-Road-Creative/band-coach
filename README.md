@@ -642,6 +642,14 @@ matrix (`src/instruments/capability.js`) answers that: it derives a `tier` for e
 mechanically from `status`, `input` and provenance, and it exists precisely because `status:
 'ready'` above means the code path is wired up and runnable, never that a musician has validated it.
 
+Once the keyboard trainer's own level has taught all the notes a starter song uses, a "Play a song
+with these notes" button appears next to the Hands selector and hands the learner straight into
+that song's lesson in the Songs panel, with a "Back to practice" button at the end to return; see
+`src/instruments/kbd-songs.js`. Which songs get suggested, and at which level, comes from the same
+`provenance`-less curriculum this whole section is about: the suggestion map is teaching content
+the app's authors assembled, not something a musician has checked against a method book, so its
+button always shows "Not yet checked by a player" right beside it rather than implying otherwise.
+
 ## Capo, alternate tunings and a left-handed view
 
 The "How to play it" panel's fretted-instrument diagrams (guitar, bass, ukulele, mandolin,
