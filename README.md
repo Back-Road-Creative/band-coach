@@ -120,6 +120,10 @@ same headless Chromium the tests use and writes `dist/screenshot-desktop.png` (1
 visually without a human pasting an ad hoc shell command, and `tests/build/shots.test.mjs` proves
 the capability itself still works.
 
+Run `npm run review-packet -- kbd` to build a standalone, offline review packet for a real player
+to check the keyboard trainer's teaching content against a named method book -- see
+[docs/review-workflow.md](docs/review-workflow.md) for what it contains and how to apply a result.
+
 ## Test
 
 ```
