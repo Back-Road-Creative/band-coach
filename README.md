@@ -55,6 +55,12 @@ instead of a one-size-fits-all level, including the level the pitch detector its
 small meter shows the live input level. An instrument plugged into only one channel of a
 2-channel interface is summed into the listening path rather than silenced.
 
+Switching away from the tab (or backgrounding the app on a phone) stops the microphone and
+suspends audio outright, rather than merely pausing the exercise on screen — the OS mic indicator
+goes off, exactly as if you had closed the tab. Coming back does not reopen the mic on its own:
+press Connect again (or resume through a drill that needs it) and the status line and mic indicator
+catch up.
+
 Press "Connect MIDI" to use a keyboard. The status line only says a device is connected once the
 page has actually opened it, so "Keystation found. Press any key on it." means the keyboard is
 wired up but the app has not heard a note yet, and "Keystation is working." means it has. If it
