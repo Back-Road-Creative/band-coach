@@ -56,7 +56,7 @@ import { estimateRange, classify, exerciseRangeFor, tonicFromRange } from './ins
 //
 //
 // slot:import:w-songs
-import { register as registerSongs, forwardNote as forwardSongNote, requestOpenSong } from './ui/songs.js';
+import { register as registerSongs, forwardNote as forwardSongNote, requestOpenSong, recordStartSec as songsRecordStartSec } from './ui/songs.js';
 import { itemIdForMidi } from './ui/songs/mastery.js';
 import { __setDebugFrames as __editorSetDebugFrames, __isRecording as __editorIsRecording } from './ui/songs/record-door.js';
 import { register as registerEditor, __getDebugSong } from './ui/editor.js';
@@ -2571,7 +2571,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
   //
   //
   // slot:hook:w-songs
-  if (__DEBUG_HOOK__) Object.assign(hook, { songsNote: forwardSongNote });
+  if (__DEBUG_HOOK__) Object.assign(hook, { songsNote: forwardSongNote, songsRecordStart: songsRecordStartSec });
   //
   // P3-12: the recording debug seams now live in the Songs record door
   // (src/ui/songs/record-door.js), not the editor panel; the hook's own
