@@ -15,7 +15,9 @@ checked — none today), or `none` (no diagram at all; keyboard, voice, the wind
 mallet percussion give a curriculum and pitch matching with no fingering panel). `contentReviewed` —
 straight from `src/instruments/review.js`'s `isReviewed()`: has a real musician checked this
 record's curriculum against a method book, from its `provenance` field. `tier` — the maturity label
-below.
+below. A review can go stale: when `provenance.contentRev` is set, `isReviewCurrent()` only counts
+the review as current while `reviewedRev` matches it, so an edited curriculum stops reading as
+reviewed until it's checked again.
 
 **A record's internal `status: 'ready'` means the code path is wired up and runnable — it is never
 an educational-validation badge.** Every instrument below is `status: 'ready'` (the app has no

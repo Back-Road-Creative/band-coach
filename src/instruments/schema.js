@@ -170,6 +170,20 @@ export function validateInstrument(rec) {
       if (p.reviewedAt !== null && !atPresent) fail('provenance.reviewedAt must be a non-empty string or null');
       if (byPresent !== atPresent) fail('provenance.reviewedBy and provenance.reviewedAt must both be set or both be null');
       if (atPresent && !/^\d{4}-\d{2}-\d{2}$/.test(p.reviewedAt)) fail('provenance.reviewedAt must be a YYYY-MM-DD date string');
+
+      // contentRev/reviewedRev: which curriculum revision a review actually
+      // covered, so a review doesn't silently keep counting as current once
+      // the content it approved has since changed underneath it (see
+      // review.js's isReviewCurrent). Both are optional positive integers;
+      // reviewedRev only makes sense once a review has actually happened.
+      const contentRevPresent = p.contentRev !== undefined;
+      const reviewedRevPresent = p.reviewedRev !== undefined;
+      if (contentRevPresent && (!isInt(p.contentRev) || p.contentRev <= 0)) fail('provenance.contentRev must be a positive integer when present');
+      if (reviewedRevPresent) {
+        if (!isInt(p.reviewedRev) || p.reviewedRev <= 0) fail('provenance.reviewedRev must be a positive integer when present');
+        if (!byPresent) fail('provenance.reviewedRev may only be set alongside a completed review (reviewedBy/reviewedAt)');
+        if (contentRevPresent && isInt(p.contentRev) && isInt(p.reviewedRev) && p.reviewedRev > p.contentRev) fail('provenance.reviewedRev cannot be ahead of provenance.contentRev');
+      }
     }
   }
 
