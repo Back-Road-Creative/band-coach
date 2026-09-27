@@ -143,3 +143,11 @@ Proof: `node --test --test-concurrency=1 tests/characterization/a11y-axe.test.mj
   meaning colour (`--good`/`--warn`/`--bad`/`--muted`) its own `--*-ink` token tuned per theme (see
   `tests/unit/badge-contrast.test.mjs` for the WCAG AA numbers), and the `songs: song open` and
   `songs: add a song open` subtests in `a11y-axe.test.mjs` are real assertions again, not `todo`.
+- **N1 — closed: a song attempt now records which route played it.** A judged song step's
+  learning-event row (`src/ui/songs.js`'s `advance()`) carries `input: 'midi'` only when every
+  judged note in the try was a real MIDI note-on, the one concrete non-midi route
+  (`'computer-key'`, `'mic'`) when they all agree on something else, `'mixed'` when they do not, and
+  the field is left off — never guessed — the moment any judged note's route is unknown. Proof:
+  `tests/characterization/songs-input-route.test.mjs`. Still open: a screen click on the on-screen
+  piano still plays an unrouted note (no `source` at all), so an attempt played that way still
+  leaves `input` off rather than naming a route — owned by the keyboard-window unit.

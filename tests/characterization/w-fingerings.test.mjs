@@ -117,7 +117,7 @@ test('fingerings panel: every keyed-woodwind instrument shows its own guidance, 
   assert.doesNotMatch(clarinetDesc, /Sing this pitch/);
 });
 
-test('fingerings panel: an unreviewed instrument shows the "not yet checked by a musician" badge', async (t) => {
+test('fingerings panel: an unreviewed instrument shows the "not yet checked by a player" badge', async (t) => {
   const page = await launchPage(HTML_PATH);
   t.after(() => page.close());
 
@@ -129,7 +129,7 @@ test('fingerings panel: an unreviewed instrument shows the "not yet checked by a
   // Every instrument record currently ships provenance: null, so the badge
   // is visible on ordinary startup, not a rare edge case.
   const badge = await page.evaluate("document.querySelector('.fing-review-badge')?.textContent");
-  assert.match(badge, /not yet checked by a musician/i);
+  assert.match(badge, /not yet checked by a player/i);
 });
 
 test('fingerings panel: capo, alternate tuning and left-handed controls', async (t) => {

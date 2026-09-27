@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   HANDS_TOGETHER_EXERCISES,
   handsTogetherById,
+  handsModeFromId,
   fingeringLabel,
   gradeHandsTogetherExact,
   gradeHandsTogetherApprox
@@ -82,6 +83,63 @@ test('gradeHandsTogetherExact: empty input -> not ok, neither hand', () => {
   assert.equal(g.ok, false);
   assert.equal(g.rh, false);
   assert.equal(g.lh, false);
+});
+
+test('gradeHandsTogetherExact(ex, held, "right") passes on the right-hand note alone and does not report the left-hand note as wrong when also held', () => {
+  const ex = handsTogetherById('j1'); // rh 60, lh 48
+  const rightAlone = gradeHandsTogetherExact(ex, [60], 'right');
+  assert.equal(rightAlone.ok, true);
+  assert.deepEqual(rightAlone.wrong, []);
+  const bothHeld = gradeHandsTogetherExact(ex, [60, 48], 'right');
+  assert.equal(bothHeld.ok, true, 'the left hand playing along must not fail a right-only pass');
+  assert.deepEqual(bothHeld.wrong, [], 'the left-hand note must never be reported as wrong in right mode');
+  const leftOnly = gradeHandsTogetherExact(ex, [48], 'right');
+  assert.equal(leftOnly.ok, false, 'the left hand alone is not the required hand');
+  const extraWrong = gradeHandsTogetherExact(ex, [60, 61], 'right');
+  assert.equal(extraWrong.ok, false);
+  assert.deepEqual(extraWrong.wrong, [61], 'a genuinely extraneous note is still wrong in right mode');
+});
+
+test('gradeHandsTogetherExact(ex, held, "left") mirrors the same rule for the left hand', () => {
+  const ex = handsTogetherById('j1');
+  assert.equal(gradeHandsTogetherExact(ex, [48], 'left').ok, true);
+  assert.equal(gradeHandsTogetherExact(ex, [48, 60], 'left').ok, true, 'the right hand playing along must not fail a left-only pass');
+  assert.equal(gradeHandsTogetherExact(ex, [60], 'left').ok, false);
+});
+
+test('gradeHandsTogetherExact: an omitted mode defaults to "both", exactly like before this parameter existed', () => {
+  const ex = handsTogetherById('j1');
+  assert.equal(gradeHandsTogetherExact(ex, [60]).ok, false);
+  assert.equal(gradeHandsTogetherExact(ex, [60, 48]).ok, true);
+});
+
+test('gradeHandsTogetherApprox: "right"/"left" mode requires only the named hand; the other hand heard alone is optional, not wrong', () => {
+  const ex = handsTogetherById('j1'); // rh 60, lh 48
+  const rh = gradeHandsTogetherApprox(ex, 60, 'right');
+  assert.equal(rh.ok, true);
+  assert.equal(rh.hand, 'rh');
+  const lhAlone = gradeHandsTogetherApprox(ex, 48, 'right');
+  assert.equal(lhAlone.ok, false);
+  assert.equal(lhAlone.wrong, false, 'the other hand\'s own correct note must never be flagged wrong');
+  const extraneous = gradeHandsTogetherApprox(ex, 61, 'right');
+  assert.equal(extraneous.ok, false);
+  assert.equal(extraneous.wrong, true, 'a genuinely extraneous pitch is still wrong');
+  const lh = gradeHandsTogetherApprox(ex, 48, 'left');
+  assert.equal(lh.ok, true);
+  assert.equal(lh.hand, 'lh');
+  const rhAlone = gradeHandsTogetherApprox(ex, 60, 'left');
+  assert.equal(rhAlone.ok, false);
+  assert.equal(rhAlone.wrong, false);
+});
+
+test('handsTogetherById accepts a mode-suffixed id and finds the same exercise; handsModeFromId reports which hand it names', () => {
+  const base = handsTogetherById('j1');
+  assert.equal(handsTogetherById('j1r').name, base.name);
+  assert.equal(handsTogetherById('j1l').name, base.name);
+  assert.equal(handsTogetherById('j1x'), null, 'an unrecognised suffix is not a valid id');
+  assert.equal(handsModeFromId('j1'), 'both');
+  assert.equal(handsModeFromId('j1r'), 'right');
+  assert.equal(handsModeFromId('j1l'), 'left');
 });
 
 test('gradeHandsTogetherApprox: a single detected pitch can confirm at most one hand, never both', () => {
