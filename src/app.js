@@ -7,6 +7,7 @@ import { toAudioTime, judgeTap, medianLatency } from './core/timing.js';
 import { DEFAULT_STABILITY_DAYS, MIN_STABILITY_DAYS, MAX_STABILITY_DAYS, GRADE, retrievability, review, due, migrateItem } from './core/srs.js';
 import { handsTogetherById, fingeringLabel, gradeHandsTogetherExact, gradeHandsTogetherApprox } from './core/hands-together.js';
 import { createMidiParser } from './core/midi.js';
+import { createNoteState } from './core/note-state.js';
 import { PCKEYS } from './core/pckeys.js';
 // Merge slots: a unit in flight adds its imports by replacing ONLY its own
 // slot line, so parallel branches never edit adjacent lines.
@@ -2016,11 +2017,25 @@ import { register as registerPlayalong } from './ui/playalong.js';
   // better proof than open() and can promote a port open() gave up on.
   // midiHeardAny flips true once any real byte has arrived; midiLog and
   // realMidiHeld back the "MIDI details" readout and hands-together grading.
-  let midiPorts = [], midiPortInputs = [], midiHeardAny = false, midiHeard = new Set(), midiLog = [], realMidiHeld = new Set(), midiParsers = new Map(), midiBlinkTimer = null;
+  // noteState (src/core/note-state.js) is the ground truth for "which
+  // port+channel+pitch is down right now" -- realMidiHeld stays a flat Set
+  // of pitches (line 1198's hands-together grading reads it directly, and
+  // that call site is out of this unit's reach) but is only ever cleared of
+  // a pitch once noteState says NO port is holding it any more, so one
+  // port's note-off (or a blur/unplug releasing that port) can never cancel
+  // the SAME pitch held on another port.
+  let midiPorts = [], midiPortInputs = [], midiHeardAny = false, midiHeard = new Set(), midiLog = [], realMidiHeld = new Set(), midiParsers = new Map(), midiBlinkTimer = null, noteState = createNoteState();
   // midiPortInputs is kept parallel to midiPorts rather than held on the port
   // objects themselves: midiPorts is handed to the debug hook and crosses the
   // page boundary by value, and a live MIDIInput does not survive that trip.
   function midiWorks(i) { return midiPorts[i].ok || midiHeard.has(midiPortInputs[i]); }
+  // Drops every note noteState says the given port is holding (with no
+  // argument, every port) -- a note-off that is never going to arrive
+  // because the port vanished (unplugged, or another program took it back)
+  // or the page itself stopped listening (window blur, tab hidden). Only
+  // drops a pitch from realMidiHeld once noteState confirms no OTHER port
+  // still holds it, same rule handleMidiMessage's own note-off follows.
+  function releaseNotes(port) { noteState.releaseAll(port).forEach(p => { if (!noteState.isHeld(p)) realMidiHeld.delete(p); }); }
   function midiNames() { return midiPorts.filter((p, i) => midiWorks(i)).map(p => p.name); }
   function ioRefresh() {
     const b = $('ioBtn'), detailsBtn = $('midiDetailsBtn');
@@ -2058,7 +2073,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
     midiLog.unshift(Array.from(d).map(b => b.toString(16).padStart(2, '0')).join(' ')); if (midiLog.length > 8) midiLog.length = 8;
     ioRefresh();
     let parser = midiParsers.get(input); if (!parser) { parser = createMidiParser(); midiParsers.set(input, parser); }
-    parser.feed(d).forEach(evt => { if (evt.type === 'on') { realMidiHeld.add(evt.note); onNote(evt.note, true, 'midi'); } else realMidiHeld.delete(evt.note); });
+    parser.feed(d).forEach(evt => { if (evt.type === 'on') { noteState.noteOn(input, evt.channel, evt.note); realMidiHeld.add(evt.note); onNote(evt.note, true, 'midi'); } else { noteState.noteOff(input, evt.channel, evt.note); if (!noteState.isHeld(evt.note)) realMidiHeld.delete(evt.note); } });
   }
   $('ioBtn').addEventListener('click', () => {
     ensureAudio();
@@ -2074,6 +2089,13 @@ import { register as registerPlayalong } from './ui/playalong.js';
     navigator.requestMIDIAccess().then(a => {
       const wire = () => {
         const inputs = []; a.inputs.forEach(i => inputs.push(i));
+        // A port this app had open that onstatechange no longer lists at all
+        // (unplugged, or Windows handed its note port back to a DAW): null
+        // its onmidimessage -- a stale MIDIInput otherwise keeps a listener
+        // wired to a port the status strip no longer names -- and release
+        // whatever notes noteState says it was holding, exactly as if it had
+        // sent every one of them a note-off on its way out.
+        midiPortInputs.forEach(i => { if (inputs.indexOf(i) === -1) { i.onmidimessage = null; releaseNotes(i); } });
         // Listen to EVERY input, whatever open() goes on to report. Web MIDI
         // opens a port implicitly when onmidimessage is assigned, so this is
         // how the app heard keyboards before open() was introduced, and a port
@@ -2122,8 +2144,13 @@ import { register as registerPlayalong } from './ui/playalong.js';
     if (mod === 'rhy' && (ev.key === ' ' || ev.key.length === 1)) { if (tag === 'BUTTON' && ev.key === ' ' && ev.target.id !== 'tapPad') return; ev.preventDefault(); ensureAudio(); onTap(ev); return; }
     if (MODS[mod] && MODS[mod].kit && KIT_KEYS[ev.key.toLowerCase()]) { ev.preventDefault(); ensureAudio(); onHit(KIT_KEYS[ev.key.toLowerCase()], tapAudioTime(ev), 'key'); return; }
     if (mod === 'ear' && task && task.choices && /^[1-9]$/.test(ev.key)) { const id = task.choices[+ev.key - 1]; if (id) answer(id); return; }
-    if (mod === 'kbd' && PCKEYS[ev.key.toLowerCase()] !== undefined) { ev.preventDefault(); ensureAudio(); const m = PCKEYS[ev.key.toLowerCase()]; tone(m, now() + 0.01, 0.5, 0.15); onNote(m, true); }
+    if (mod === 'kbd' && PCKEYS[ev.key.toLowerCase()] !== undefined) { ev.preventDefault(); ensureAudio(); const m = PCKEYS[ev.key.toLowerCase()]; noteState.noteOn('computer-key', 0, m); tone(m, now() + 0.01, 0.5, 0.15); onNote(m, true); }
   });
+  // The keydown above has no matching note-off, so a computer key held down
+  // while the browser drops the key event (alt-tab away mid-press is the
+  // common way) never released it -- noteState is the same held-note ledger
+  // MIDI note-off, window blur and tab-hidden already clear into.
+  document.addEventListener('keyup', ev => { if (mod === 'kbd' && PCKEYS[ev.key.toLowerCase()] !== undefined) noteState.noteOff('computer-key', 0, PCKEYS[ev.key.toLowerCase()]); });
   cv.addEventListener('pointerdown', ev => { const r = cv.getBoundingClientRect(), x = (ev.clientX - r.left) * cv.width / r.width, y = (ev.clientY - r.top) * cv.height / r.height; ensureAudio(); if (MODS[mod] && MODS[mod].kit && kitBox) { const p = pieceAt((x - kitBox.x) / kitBox.s, (y - kitBox.y) / kitBox.s); if (p) onHit(p, tapAudioTime(ev), 'click'); } if (mod === 'kbd') { const k = keyRects.find(q => x >= q.x && x <= q.x + q.w && y >= q.y && y <= q.y + q.h); if (k) { tone(k.m, now() + 0.01, 0.5, 0.15); onNote(k.m, true); } } if (mod === 'tuner') { const play = playRects.find(q => x >= q.x && x <= q.x + q.w && y >= q.y && y <= q.y + q.h); if (play) { tone(play.m, now() + 0.02, 1.6, 0.2); return; } const row = rowRects.find(q => x >= q.x && x <= q.x + q.w && y >= q.y && y <= q.y + q.h); if (row) tunerLock = tunerLock === row.idx ? null : row.idx; } });
   // item 3 (Wave W, w-fixes): keyboard path onto the same canvas piano -- arrow keys move the focus cursor, Enter/Space plays the focused key.
   cv.addEventListener('keydown', ev => { if (mod !== 'kbd') return; const order = kbdOrder(); if (!order.length) return; if (ev.key === 'ArrowRight' || ev.key === 'ArrowUp') { ev.preventDefault(); kbdFocusIdx = Math.min(order.length - 1, kbdFocusIdx + 1); } else if (ev.key === 'ArrowLeft' || ev.key === 'ArrowDown') { ev.preventDefault(); kbdFocusIdx = Math.max(0, kbdFocusIdx - 1); } else if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); const k = order[Math.min(kbdFocusIdx, order.length - 1)]; if (k) { ensureAudio(); tone(k.m, now() + 0.01, 0.5, 0.15); onNote(k.m, true); } } });
@@ -2133,7 +2160,12 @@ import { register as registerPlayalong } from './ui/playalong.js';
   $('playBtn').addEventListener('click', function () { this.blur(); if (!sess) startSession(); else if (paused) resume(); else takeBreak('user'); });
   $('endBtn').addEventListener('click', function () { this.blur(); endSession(); }); $('endBtn2').addEventListener('click', endSession); $('backBtn').addEventListener('click', resume);
   $('snoozeBtn').addEventListener('click', () => { sess.snoozeUntil = Date.now() + 5 * 60000; sess.tiredFor = 0; S.ready = Math.min(S.ready, 0.6); pauseInfo = { at: Date.now(), secs: 0 }; resume(); coach('Five more minutes, then I will ask again. I have eased off the pace meanwhile.'); });
-  document.addEventListener('visibilitychange', () => { if (document.hidden && playing) takeBreak('hidden'); if (document.hidden) flushSave(); else refreshModelClock(); wakeLock.handleVisibilityChange(document); });
+  document.addEventListener('visibilitychange', () => { if (document.hidden && playing) takeBreak('hidden'); if (document.hidden) { flushSave(); releaseNotes(); } else refreshModelClock(); wakeLock.handleVisibilityChange(document); });
+  // A held note has no way to send its own note-off once the window itself
+  // loses focus (alt-tab, another app grabbing the keyboard) -- release
+  // everything noteState is holding rather than leave a phantom note "held"
+  // until some later, unrelated message happens to clear that same pitch.
+  window.addEventListener('blur', () => releaseNotes());
   function jump(dl) { const nl = Math.max(1, S.level + dl); if (nl === S.level) return; S.level = nl; S.ready = 0.3; task = null; coach((dl < 0 ? 'Moved down' : 'Skipped ahead') + ' to level ' + S.level + ': ' + D().name + '.'); save(); showAll(); }
   $('easierBtn').addEventListener('click', function () { this.blur(); jump(-1); }); $('harderBtn').addEventListener('click', function () { this.blur(); jump(1); });
   $('resetBtn').addEventListener('click', function () { this.blur(); if (sess) endSession(); DB.mods[mod] = S = freshModel(); recent = []; streak = 0; coach(t('reset.progressCleared', { name: MODS[mod].name })); save(); showAll(); });
@@ -2526,7 +2558,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
   //
   if (__DEBUG_HOOK__) Object.assign(hook, { showMe: () => $('showMeBtn').click() });
   //
-  if (__DEBUG_HOOK__) Object.assign(hook, { midi: () => ({ on: midiOn, ports: midiPorts, log: midiLog.slice(), held: Array.from(realMidiHeld) }) });
+  if (__DEBUG_HOOK__) Object.assign(hook, { midi: () => ({ on: midiOn, ports: midiPorts, log: midiLog.slice(), held: Array.from(realMidiHeld) }), heldNotes: () => noteState.heldPitches() });
   //
   // slot:hook:rhythm-vocab
   //

@@ -243,6 +243,115 @@ test('NEW: no Web MIDI API at all keeps the existing truthful message', async (t
   assert.match(text, /cannot read MIDI/i);
 });
 
+// ---------- new behaviour: held notes are per-device, and released on
+// key-up / blur / hidden / unplug rather than only on a matching note-off ----------
+
+test('NEW: a note-off from a second port does not release a note still held on the first port', async (t) => {
+  const page = await launchPage(htmlPath, { initScript: FAKE_MIDI_INIT });
+  t.after(() => page.close());
+
+  await page.evaluate("window.__coach.setMod('kbd')");
+  await page.evaluate('window.__coach.state().level = 13');
+  await midiAddPort(page, 'p1', 'Keys One');
+  await midiAddPort(page, 'p2', 'Keys Two');
+  await connectMidi(page);
+  await page.waitFor("document.getElementById('ioBtn').hidden === true");
+  await page.evaluate("document.getElementById('playBtn').click()");
+  await page.waitFor('window.__coach.task()');
+
+  const info = await page.evaluate('window.__coach.cur().info');
+  // rh held on p1; the SAME pitch is never sent on p2 here -- p2's own
+  // note-off for a pitch it never turned on must not cancel p1's hold.
+  await midiNoteOn(page, 'p1', info.ex.rh.midi);
+  await midiNoteOff(page, 'p2', info.ex.rh.midi);
+  await midiNoteOn(page, 'p1', info.ex.lh.midi);
+  await page.waitFor("document.getElementById('feedback').className === 'ok'");
+});
+
+test('NEW: window blur releases every held MIDI note', async (t) => {
+  const page = await launchPage(htmlPath, { initScript: FAKE_MIDI_INIT });
+  t.after(() => page.close());
+
+  await page.evaluate("window.__coach.setMod('kbd')");
+  await page.evaluate('window.__coach.state().level = 13');
+  await midiAddPort(page, 'p1', 'Test Keys');
+  await connectMidi(page);
+  await page.waitFor("document.getElementById('ioBtn').hidden === true");
+  await page.evaluate("document.getElementById('playBtn').click()");
+  await page.waitFor('window.__coach.task()');
+
+  const info = await page.evaluate('window.__coach.cur().info');
+  await midiNoteOn(page, 'p1', info.ex.rh.midi);
+  await page.evaluate("window.dispatchEvent(new Event('blur'))");
+  await midiNoteOn(page, 'p1', info.ex.lh.midi);
+  await new Promise((r) => setTimeout(r, 50));
+  // rh was released by the blur, so the left hand landing alone is not both hands together.
+  assert.notEqual(await page.evaluate("document.getElementById('feedback').className"), 'ok');
+});
+
+// Going hidden also takes a break (existing behaviour: the exercise itself
+// pauses, task becomes null), which would make a hands-together check pass
+// trivially -- onNote() no-ops the moment there is no task, whether or not
+// the held note was ever released. So this one reads the held-note ledger
+// directly instead of routing through grading, same evidence as the
+// computer-key test below.
+test('NEW: the tab going hidden releases every held MIDI note', async (t) => {
+  const page = await launchPage(htmlPath, { initScript: FAKE_MIDI_INIT });
+  t.after(() => page.close());
+
+  await page.evaluate("window.__coach.setMod('kbd')");
+  await midiAddPort(page, 'p1', 'Test Keys');
+  await connectMidi(page);
+  await page.waitFor("document.getElementById('ioBtn').hidden === true");
+
+  await midiNoteOn(page, 'p1', 60);
+  assert.deepEqual(await page.evaluate('window.__coach.heldNotes()'), [60]);
+
+  await page.evaluate(
+    "Object.defineProperty(document, 'hidden', { configurable: true, get: () => true }); document.dispatchEvent(new Event('visibilitychange'))"
+  );
+  assert.deepEqual(await page.evaluate('window.__coach.heldNotes()'), []);
+});
+
+test('NEW: unplugging a MIDI port releases the notes it was holding', async (t) => {
+  const page = await launchPage(htmlPath, { initScript: FAKE_MIDI_INIT });
+  t.after(() => page.close());
+
+  await page.evaluate("window.__coach.setMod('kbd')");
+  await page.evaluate('window.__coach.state().level = 13');
+  await midiAddPort(page, 'p1', 'Test Keys');
+  await connectMidi(page);
+  await page.waitFor("document.getElementById('ioBtn').hidden === true");
+  await page.evaluate("document.getElementById('playBtn').click()");
+  await page.waitFor('window.__coach.task()');
+
+  const info = await page.evaluate('window.__coach.cur().info');
+  await midiNoteOn(page, 'p1', info.ex.rh.midi);
+  await midiRemovePort(page, 'p1');
+  await page.waitFor("document.getElementById('ioBtn').hidden === false"); // no device left -> back to asking to connect
+  await midiAddPort(page, 'p1', 'Test Keys');
+  await page.waitFor("document.getElementById('ioBtn').hidden === true");
+  await midiNoteOn(page, 'p1', info.ex.lh.midi);
+  await new Promise((r) => setTimeout(r, 50));
+  // rh was released when the port that held it was unplugged, so a fresh
+  // connection sending only the left hand is not both hands together.
+  assert.notEqual(await page.evaluate("document.getElementById('feedback').className"), 'ok');
+});
+
+test('NEW: releasing a computer key on key-up drops it from the held-note ledger', async (t) => {
+  const page = await launchPage(htmlPath, { initScript: FAKE_MIDI_INIT });
+  t.after(() => page.close());
+
+  await page.evaluate("window.__coach.setMod('kbd')");
+  await page.evaluate("document.dispatchEvent(new KeyboardEvent('keydown', { key: 'a' }))");
+  const heldAfterDown = await page.evaluate('window.__coach.heldNotes()');
+  assert.ok(heldAfterDown.length > 0, 'expected the computer key to be tracked as held after keydown');
+
+  await page.evaluate("document.dispatchEvent(new KeyboardEvent('keyup', { key: 'a' }))");
+  const heldAfterUp = await page.evaluate('window.__coach.heldNotes()');
+  assert.deepEqual(heldAfterUp, []);
+});
+
 test('NEW: permission denied says so plainly', async (t) => {
   const page = await launchPage(htmlPath, { initScript: FAKE_MIDI_INIT });
   t.after(() => page.close());
