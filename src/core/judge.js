@@ -14,6 +14,10 @@ import { INSTRUMENTS } from '../instruments/index.js';
 // distinct names because they answer different questions for the caller
 // ("this item ignores octave by design" vs "this instrument has no fixed
 // octave to check against").
+//
+// A missing heard pitch (heardMidi null or undefined -- nothing heard, or an
+// event with no midi field) is always { ok: false, reason: 'no-pitch' },
+// under every policy: it must never be read as "heard middle C".
 
 const pc = (m) => ((Math.round(m) % 12) + 12) % 12;
 
@@ -25,6 +29,7 @@ export const OCTAVE_POLICY = Object.fromEntries(
 );
 
 export function judgePitch({ heardMidi, targetMidi, policy }) {
+  if (heardMidi === null || heardMidi === undefined) return { ok: false, reason: 'no-pitch' };
   if (policy === 'exact') {
     const ok = Math.round(heardMidi) === Math.round(targetMidi);
     if (ok) return { ok: true, reason: 'exact-match' };
