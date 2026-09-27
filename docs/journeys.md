@@ -122,6 +122,41 @@ sheet open", since Settings is its own nav destination with its own axe scan
 Proof: `node --test --test-concurrency=1 tests/characterization/a11y-axe.test.mjs`, subtests
 `editor panel open`, `playalong panel open`, `ear panel open`, and `input set-up sheet open`.
 
+## Keyboard pathway (contract)
+
+Five steps a keyboard learner moves through, decided by `pathwayState()`
+(`src/core/pathway.js`) from saved events and sessions plus the caller's
+live MIDI proof and current level -- no DOM, no clock of its own, the
+caller supplies `now`:
+
+- **setup** -- connect a MIDI keyboard. Neither live proof this page load
+  nor a MIDI event ever logged for `kbd`.
+- **lesson** -- work the keyboard trainer. Proof exists but the level is
+  still 1.
+- **song** -- open a song and play it in. No song session or event on
+  record yet.
+- **check** -- play the whole piece to check it. A song has been tried but
+  no qualifying check row exists yet.
+- **return** -- a qualifying check row exists. `wait` until a day has
+  passed since it, then `recheck`.
+
+The check rule: MIDI input only, no assistance, the whole piece (not a
+single phrase step), every dimension the app assessed came back ok.
+Computer keys, screen keys, a microphone, and mixed input are all practice
+-- none of them ever pass the check. An older song session row logged
+before this pathway existed carries no input tag at all; it still counts
+toward Progress and toward "a song has been tried", but it never counts as
+a passing check.
+
+Each step's outcome text (`src/instruments/kbd-pathway.js`) is labelled
+**Not yet checked by a player** -- teaching content is never presented as
+reviewed until a real player's review lands in
+`src/instruments/review-ledger.js`'s ledger.
+
+This is a pure contract today, proven only by
+`node --test tests/unit/pathway.test.mjs` -- not yet a browser-proven
+journey. P2 wires it into a panel; R2 adds the browser journeys.
+
 ## Known gaps
 
 - **F1 — closed.** Progress now also renders a "Passed with help / Passed on your own / Retained
