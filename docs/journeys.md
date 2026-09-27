@@ -125,8 +125,9 @@ Proof: `node --test --test-concurrency=1 tests/characterization/a11y-axe.test.mj
 ## Keyboard pathway (contract)
 
 Five steps a keyboard learner moves through, decided by `pathwayState()`
-(`src/core/pathway.js`) from history alone -- no DOM, no clock of its own,
-the caller supplies `now`:
+(`src/core/pathway.js`) from saved events and sessions plus the caller's
+live MIDI proof and current level -- no DOM, no clock of its own, the
+caller supplies `now`:
 
 - **setup** -- connect a MIDI keyboard. Neither live proof this page load
   nor a MIDI event ever logged for `kbd`.
