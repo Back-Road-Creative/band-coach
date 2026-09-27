@@ -53,9 +53,10 @@ export function validateInputEvent(ev) {
 }
 
 // Which learning-event dims (src/ui/songs/assessed.js's dims: pitch, onset,
-// hold, tune, drum -- 'drum-identity' here, plus 'chord', for a dimension no
+// hold, tune, drum -- same names here, plus 'chord', for a dimension no
 // current record's `assess` can prove yet) each capability.js `assess`
-// value can actually prove. 'mic-single-note' is a monophonic pitch
+// value can actually prove. 'midi' never proves 'tune': a MIDI note number
+// is always in tune (assessed.js: "keyboards are always in tune"). 'mic-single-note' is a monophonic pitch
 // detector: it can hear one note's pitch/onset/hold/tune, but never which
 // simultaneous notes make a chord, and never tell one drum from another.
 // 'tap' has no pitch detection at all -- it proves rhythm only. 'none'
@@ -66,7 +67,7 @@ const DIM_CAPABILITY = {
   none: [],
   tap: ['onset'],
   'mic-single-note': ['pitch', 'onset', 'hold', 'tune'],
-  midi: ['pitch', 'chord', 'onset', 'hold', 'tune', 'drum-identity'],
+  midi: ['pitch', 'chord', 'onset', 'hold', 'drum'],
 };
 
 // evidenceFor(events, { assess, dims, nowSec, staleSec }) -> { eligible,

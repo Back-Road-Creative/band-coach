@@ -79,11 +79,11 @@ test('evidenceFor: assess "none" proves nothing at all, whatever the events say'
   assert.deepEqual(r.unassessed, ['pitch', 'onset']);
 });
 
-test('evidenceFor: mic-single-note cannot prove chord or drum-identity dims', () => {
+test('evidenceFor: mic-single-note cannot prove chord or drum dims', () => {
   const note = midiNote(5, { source: 'mic' });
-  const r = evidenceFor([note], { assess: 'mic-single-note', dims: ['pitch', 'chord', 'drum-identity'], nowSec: 10, staleSec: 2 });
+  const r = evidenceFor([note], { assess: 'mic-single-note', dims: ['pitch', 'chord', 'drum'], nowSec: 10, staleSec: 2 });
   assert.deepEqual(r.eligible, [note]);
-  assert.deepEqual(r.unassessed, ['chord', 'drum-identity']);
+  assert.deepEqual(r.unassessed, ['chord', 'drum']);
 });
 
 test('evidenceFor: tap proves only onset/rhythm, never pitch', () => {
@@ -105,9 +105,21 @@ test('evidenceFor: a held note still inside the stale window is eligible', () =>
   assert.deepEqual(r.eligible, [held]);
 });
 
-test('evidenceFor: a positive midi case proves pitch, chord, onset, hold, tune, and drum-identity', () => {
+test('evidenceFor: a positive midi case proves pitch, chord, onset, hold and drum', () => {
   const note = midiNote(5);
-  const r = evidenceFor([note], { assess: 'midi', dims: ['pitch', 'chord', 'onset', 'hold', 'tune', 'drum-identity'], nowSec: 10, staleSec: 2 });
+  const r = evidenceFor([note], { assess: 'midi', dims: ['pitch', 'chord', 'onset', 'hold', 'drum'], nowSec: 10, staleSec: 2 });
   assert.deepEqual(r.eligible, [note]);
   assert.deepEqual(r.unassessed, []);
+});
+
+test('evidenceFor: midi never proves tune, since a MIDI note number is always in tune', () => {
+  const note = midiNote(5);
+  const r = evidenceFor([note], { assess: 'midi', dims: ['pitch', 'tune'], nowSec: 10, staleSec: 2 });
+  assert.deepEqual(r.unassessed, ['tune']);
+});
+
+test('evidenceFor: dim names match the grading dims in src/ui/songs/assessed.js', () => {
+  const note = midiNote(5);
+  const r = evidenceFor([note], { assess: 'midi', dims: ['drum-identity'], nowSec: 10, staleSec: 2 });
+  assert.deepEqual(r.unassessed, ['drum-identity'], 'an unknown dim name is never provable');
 });
