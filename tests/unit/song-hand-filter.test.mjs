@@ -120,12 +120,18 @@ test('stepForHands: picks the requested hand\'s notes, keeping object identity w
   assert.ok(step, 'fixture should produce a phrase-slow step');
 
   const left = stepForHands(step, arrangement, 'left');
-  assert.ok(left.judged.every(n => n.hand === 'lh'));
-  assert.ok(left.played.every(n => n.hand === 'rh'));
+  assert.deepEqual(left.judged, step.notes.filter(n => n.hand === 'lh'));
+  assert.deepEqual(left.played, step.notes.filter(n => n.hand === 'rh'));
+  assert.ok(left.played.length > 0, 'played must actually hold the other hand\'s notes, not an empty list');
   assert.equal(left.assessed, true);
   for (const n of [...left.judged, ...left.played]) {
     assert.ok(step.notes.includes(n), 'must be the same object reference as an element of step.notes');
   }
+
+  const right = stepForHands(step, arrangement, 'right');
+  assert.deepEqual(right.judged, step.notes.filter(n => n.hand === 'rh'));
+  assert.deepEqual(right.played, step.notes.filter(n => n.hand === 'lh'));
+  assert.ok(right.played.length > 0, 'played must actually hold the other hand\'s notes, not an empty list');
 
   const both = stepForHands(step, arrangement, 'both');
   assert.deepEqual(both.judged, step.notes);
