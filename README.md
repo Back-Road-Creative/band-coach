@@ -165,7 +165,7 @@ not something to "fix" by editing the test.
 (an exact-pinned devDependency, the one runtime npm package the app itself never ships) over the
 built `dist/band-coach.html` in its main states — first load, an instrument selected and a lesson
 started, each side panel open (Songs' own internal screens and Ear training included), and the
-input set-up sheet (mic/MIDI device, calibration) — and fails on any WCAG 2/2.1 A/AA violation. The
+input set-up sheet (mic/MIDI device, calibration) — and fails on any WCAG 2/2.1/2.2 A/AA violation. The
 separate Settings nav destination (theme/mode toggles, `#settingsView`) has its own axe scan,
 `tests/characterization/settings-view.test.mjs`. It is a real scanner check, not a hand-picked list
 of rules, so it catches whatever the other a11y characterization tests above were not written to
