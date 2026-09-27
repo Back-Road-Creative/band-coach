@@ -16,9 +16,9 @@ and the exact assertions: `tests/characterization/journey-first-visit.test.mjs`.
    shut).
    Proof: same file, the `assertInFirstScreen` checks in the first test.
 
-3. **The app stays screen-reader-clean at every stop along the way.** axe-core finds no WCAG 2/2.1
-   A/AA violations on first paint, after choosing an instrument, or once the first exercise is
-   running.
+3. **The app stays screen-reader-clean at every stop along the way.** axe-core finds no WCAG
+   2/2.1/2.2 A/AA violations on first paint, after choosing an instrument, or once the first
+   exercise is running.
    Proof: same file, the `scan()` calls in the first test.
 
 4. **A returning learner gets there faster.** With a saved instrument, the picker sheet starts
@@ -98,6 +98,17 @@ them, with no `.click()` on the learner path.
    destination is reachable with Tab and Enter`.
 2. **Space activates a nav button the same as Enter.**
    Proof: same file, test `Space activates a nav button the same as Enter`.
+
+## Escape closes an open panel
+
+A learner who Tabs into an open panel (Songs, Progress, Ear training, Theory, History, Fingerings,
+Play Along) can dismiss it with Escape from wherever focus landed inside it, without first tabbing
+to a close control — the same WCAG 2.1.2/2.4.3 expectation the break card's own Escape-to-resume
+already met (`src/ui/dialog-focus.js`). `src/ui/panels.js`'s `open()` attaches the Escape listener
+to the panel's own container, so it only ever fires for a keydown that bubbled up from inside that
+panel, and closing runs the panel's existing close path — focus returns to whatever control opened
+it, same as closing any other way.
+Proof: `node --test tests/characterization/a11y-panel-escape.test.mjs`.
 
 ## axe over the Songs internal screens and Ear training
 

@@ -8,6 +8,19 @@
 //
 // Pure: no DOM, no AudioContext -- src/ui/songs.js owns the clock and the
 // render.
+//
+// Unit E3b: a step's passRule only ever grades what its OWN thresholds ask
+// for -- it has no idea whether the instrument actually playing it can
+// prove that dimension at all. dimsFromStep's optional third argument,
+// `{ assess }` (capabilityFor(instrument).assess, src/instruments/
+// capability.js), closes that gap: a dim the passRule graded but this
+// capability can never prove (src/core/input-event.js's provableDims, the
+// one shared table) is moved from `dims` into `unassessed` instead of
+// being reported as evidence the input never actually gave. Omitting the
+// third argument keeps every existing caller byte-identical -- this is
+// additive, never a change to the passRule-only behaviour above.
+
+import { provableDims } from '../../core/input-event.js';
 
 // dims/unassessed for a judged step's learning event (plan 6.4): each
 // dimension is read straight off judgeAttempt()'s own aggregate against
@@ -17,7 +30,7 @@
 // where a clap is deliberately pitch-free -- practice.js's judgeOnsets
 // comment) is left out of `dims` and listed in `unassessed` instead of
 // guessed at. Moved unchanged from src/ui/songs.js (P4-10).
-export function dimsFromStep(step, result) {
+export function dimsFromStep(step, result, opts) {
   const dims = {}, unassessed = [], rule = step.passRule || {};
   // A percussion step (src/song/lesson.js's percussionRules) is the only
   // kind of step that ever sets minPieceRate -- that is the one signal
@@ -37,6 +50,21 @@ export function dimsFromStep(step, result) {
     if (result.pieceRate != null) dims.drum = result.pieceRate >= rule.minPieceRate ? 'ok' : 'miss';
     else unassessed.push('drum');
   }
+  return gateByCapability(dims, unassessed, opts && opts.assess);
+}
+
+// A dim the passRule above just graded (it is a key in `dims`) but this
+// try's capability can never prove (not in provableDims(assess)) moves
+// into `unassessed` instead -- the passRule's own threshold math never
+// runs backwards to un-decide ok/miss, this only decides whether that
+// decision was ever evidence the instrument could actually give. No
+// `assess` (2-arg callers, e.g. every pre-E3b test) means no gate at all.
+function gateByCapability(dims, unassessed, assess) {
+  if (!assess) return { dims, unassessed };
+  const capable = provableDims(assess);
+  Object.keys(dims).forEach((dim) => {
+    if (capable.indexOf(dim) < 0) { delete dims[dim]; unassessed.push(dim); }
+  });
   return { dims, unassessed };
 }
 

@@ -148,7 +148,12 @@
      still name every variant. Opened, it may take the room it needs. */
   .picker-variant-group > .variant-toggle { margin: 0; width: 0; min-width: 100%; }
   .picker-variant-group > .variant-toggle[open] { width: auto; }
-  .picker-variant-group > .variant-toggle > summary { cursor: pointer; list-style: none; font: 500 11px var(--body); color: var(--muted); display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  /* WCAG 2.5.8 (2.2 AA) needs a 24x24 CSS px tap target -- the 11px text
+     alone rendered a box under 24px tall (axe's target-size rule flagged
+     every variant-toggle summary at first load). min-height plus a flex
+     row keeps the same 11px label, vertically centred, inside a taller box
+     instead of growing the text or the row's visual weight. */
+  .picker-variant-group > .variant-toggle > summary { cursor: pointer; list-style: none; font: 500 11px var(--body); color: var(--muted); display: flex; align-items: center; min-height: 24px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .picker-variant-group > .variant-toggle > summary::-webkit-details-marker { display: none; }
   .picker-variant-group > .variant-toggle > summary::before { content: '\25b8  '; }
   .picker-variant-group > .variant-toggle[open] > summary::before { content: '\25be  '; }
@@ -210,7 +215,17 @@
      scaled down by width: 100% so it never forces horizontal scroll on a
      390px-wide phone screen. */
   .panel-songs-view { max-width: 100%; overflow: hidden; }
-  .panel-songs-view canvas { display: block; width: 100%; height: auto; }
+  /* width: 100% alone only ever scaled DOWN to fit a narrow phone -- on a
+     wider screen (tablet 768px, desktop 1280px) the same rule scales the
+     canvas UP past its own 340px-wide, fixed-aspect-ratio artwork
+     (step-view.js's CANVAS_WIDTH), which grows its height right along with
+     it (measured against this build: 174px tall at 390px phone width, 368px
+     at 768px tablet width -- same canvas, same song). That extra height is
+     what pushed "Play it" below a tablet's first screen. Capping width at
+     the canvas's own native 340px keeps the "shrink to fit a phone" behaviour
+     the comment above describes while stopping it from ever drawing bigger
+     than the artwork actually is. */
+  .panel-songs-view canvas { display: block; width: 100%; max-width: 340px; height: auto; }
   /* P4-9: the plain-words fingering line shown instead of a tab for a bowed,
      keyboard or harmonica step. */
   .panel-songs-fingering { color: var(--muted); }

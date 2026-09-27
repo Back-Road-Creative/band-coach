@@ -23,10 +23,16 @@ const PHRASE_MIDI = [64, 62, 60];
 // timer fires late (a starved runner delays Chromium's own JS thread same as
 // anyone else's), every later note inherits that lateness AND adds its own,
 // so the last note in a phrase can land arbitrarily later than intended. An
-// absolute audioNow() target makes every note's lateness independent and
-// bounded by the polling interval alone (the `keyAt`/`grooveInject` pattern
-// in tests/unit/drum-kit-trainer.test.mjs and src/app.js's debug hook) --
-// same delaysMs input, same notes, only how the wait is expressed changes.
+// absolute target makes every note's lateness independent and bounded by the
+// polling interval alone (the `keyAt`/`grooveInject` pattern in
+// tests/unit/drum-kit-trainer.test.mjs and src/app.js's debug hook) -- same
+// delaysMs input, same notes, only how the wait is expressed changes.
+//
+// t0 itself is read from window.__coach.songsRecordStart(), the app's own
+// practice.recordStartSec (src/ui/songs.js), not sampled by polling the DOM
+// for "recording has begun" and then calling audioNow(): that samples a
+// moment close to, but never exactly, the instant the app already computed,
+// and a busy runner widens the gap between the two.
 async function playAttempt(page, delaysMs) {
   const script = `
     (async () => {
@@ -37,7 +43,7 @@ async function playAttempt(page, delaysMs) {
       }
       const delays = ${JSON.stringify(delaysMs)};
       if (delays) {
-        const t0 = window.__coach.audioNow();
+        const t0 = window.__coach.songsRecordStart();
         let cumMs = 0;
         const seq = ${JSON.stringify(PHRASE_MIDI)}.map((midi, i) => { cumMs += delays[i]; return { midi, at: t0 + cumMs / 1000 }; });
         for (const { midi, at } of seq) {

@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { drawSVG, escapeXML } from '../../../src/notation/draw-svg.js';
 import { layoutMeasure } from '../../../src/notation/layout.js';
+import { CLEF_PATHS, ACCIDENTAL_PATHS } from '../../../src/notation/glyphs.js';
 
 // Every primitive type draw-canvas.js's DRAWERS table handles (src/notation/draw-canvas.js).
 // Kept here as an explicit parity list -- DRAWERS itself isn't exported, so a new primitive
@@ -67,14 +68,27 @@ test('drawSVG: output is well-formed XML for every primitive type draw-canvas.js
   }
 });
 
-test('drawSVG: escapes text content (accidental/rest glyph fallback and clef letters)', () => {
+// Spec change: a clef/accidental with no glyph font now draws as a vector <path>, not the
+// plain-letter fallback -- the letter fallback only exists in draw-canvas.js, for the rare
+// environment with no Path2D; a string builder has no such fallback to reach for by default.
+test('drawSVG: draws clefs and accidentals as vector paths, not letters, when no glyph font is set', () => {
   const svg = drawSVG([
     { type: 'clef', x: 0, y: 0, clef: 'treble' },
     { type: 'accidental', x: 0, y: 0, accidental: '#' },
   ], { glyphFont: null }, { width: 50, height: 50 });
   assertWellFormedXML(svg);
-  assert.match(svg, />G</); // plain-letter fallback for treble clef, unescaped in output text
-  assert.match(svg, />#</); // '#' has no special XML meaning and needs no escaping
+  assert.ok(svg.includes(`<path d="${CLEF_PATHS.treble}"`), 'treble clef path missing');
+  assert.ok(svg.includes(`<path d="${ACCIDENTAL_PATHS['#']}"`), 'sharp accidental path missing');
+  assert.ok(!svg.includes('>G<'), 'should no longer fall back to the plain letter');
+  assert.ok(!svg.includes('>#<'), 'should no longer fall back to the plain letter');
+});
+
+test('drawSVG: an unrecognized clef/accidental value falls back to a plain letter instead of a broken path', () => {
+  const svg = drawSVG([
+    { type: 'clef', x: 0, y: 0, clef: 'nonsense' },
+    { type: 'accidental', x: 0, y: 0, accidental: 'nonsense' },
+  ], { glyphFont: null }, { width: 50, height: 50 });
+  assertWellFormedXML(svg);
 });
 
 test('escapeXML: escapes the five XML special characters', () => {

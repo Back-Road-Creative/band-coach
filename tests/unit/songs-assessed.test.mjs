@@ -76,6 +76,33 @@ test('nothing heard marks every dimension Not assessed, with one shared honest r
   });
 });
 
+test('E3b: a capability that cannot prove a dim moves it from graded to unassessed', () => {
+  // 'midi' (src/core/input-event.js DIM_CAPABILITY) can prove pitch/onset/
+  // hold/drum but never tune -- a keyboard's own passRule never sets
+  // maxMeanAbsCents (family 'keys' is not a sustain recipe), but this
+  // proves the gate itself: even a rule that DID grade tune gets overruled
+  // by what the capability can actually prove.
+  const { dims, unassessed } = dimsFromStep(step(), result(), { assess: 'midi' });
+  assert.equal(dims.pitch, 'ok');
+  assert.equal(dims.hold, 'ok');
+  assert.equal(dims.tune, undefined);
+  assert.ok(unassessed.includes('tune'));
+});
+
+test('E3b: a percussion step\'s drum dim is unassessed when the capability cannot prove it', () => {
+  const percStep = step({ passRule: { minPieceRate: 0.8, maxMeanErrorMs: 60 } });
+  const percResult = result({ pieceRate: 0.9, meanAbsCents: undefined, durationScore: undefined });
+  const { dims, unassessed } = dimsFromStep(percStep, percResult, { assess: 'mic-single-note' });
+  assert.equal(dims.drum, undefined);
+  assert.ok(unassessed.includes('drum'));
+});
+
+test('E3b: omitting the third argument keeps the 2-arg behaviour byte-identical', () => {
+  const withOpts = dimsFromStep(step(), result(), undefined);
+  const without = dimsFromStep(step(), result());
+  assert.deepEqual(withOpts, without);
+});
+
 test('each line is plain words, never a key name', () => {
   const { dims, unassessed } = dimsFromStep(step({ kind: 'rhythm' }), result());
   const lines = assessmentLines(dims, unassessed, { step: step({ kind: 'rhythm' }), instrument: kbd });

@@ -18,7 +18,7 @@ const axeSource = readFileSync(
   fileURLToPath(new URL('../../node_modules/axe-core/axe.min.js', import.meta.url)),
   'utf8',
 );
-const WCAG_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'];
+const WCAG_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'];
 
 test('boot: Settings is hidden, Practice is current, the rail has no #railMenu or .help, and the moved controls live inside #settingsView', async (t) => {
   const page = await launchPage(htmlPath);
@@ -80,7 +80,7 @@ test('changing the theme from Settings still applies -- the moved control keeps 
   assert.equal(await page.evaluate("document.documentElement.dataset.theme"), 'dark');
 });
 
-test('axe-core finds no WCAG 2/2.1 A/AA violations with Settings showing', async (t) => {
+test('axe-core finds no WCAG 2/2.1/2.2 A/AA violations with Settings showing', async (t) => {
   const page = await launchPage(htmlPath);
   t.after(() => page.close());
 

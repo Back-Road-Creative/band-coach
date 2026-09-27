@@ -11,7 +11,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { HTML_PATH } from '../helpers/html-path.mjs';
-import { launchPage } from '../helpers/browser.mjs';
+import { launchPage, withViewports } from '../helpers/browser.mjs';
 import { rectOf, assertInFirstScreen } from '../helpers/journey.mjs';
 
 const htmlPath = HTML_PATH;
@@ -118,6 +118,61 @@ test('the library, Assignments and the 28-card "Play it on…" row are collapsed
     return !!row && row.checkVisibility();
   })()`);
   assert.equal(rowVisible, true, 'Hot Cross Buns is still in the reopened library, visible');
+
+  assert.deepEqual(page.exceptions, []);
+});
+
+// Phone/tablet/desktop plus 200%-enlarged text (withViewports,
+// tests/helpers/browser.mjs). Each pass re-opens the song from Practice
+// rather than reusing one already-open instance across every size: the
+// browser does not re-anchor scrollY to a new layout's own top when the
+// viewport changes mid-session (measured directly against this build --
+// carrying the phone-sized scroll position into the tablet pass alone put
+// "Play it" 105px below the tablet's own first screen, with nothing in
+// src/styles.css to account for it), and no real learner inherits a scroll
+// position from a DIFFERENT device's screen size -- they land on each one
+// fresh, which is exactly what startPractice()'s own practiceHeadingEl.
+// focus() call (src/ui/songs.js) is there to put right for every size, not
+// only the one this file's first test already pins.
+//
+// All four sizes are hard assertions: startPractice() (src/ui/songs.js)
+// scrolls the practice heading to the TOP of the viewport itself
+// (scrollIntoView({ block: 'start' })) once the practice view renders,
+// rather than relying on the browser's default focus()-triggered scroll,
+// which only moves the page when the focused element is not already inside
+// the viewport and does not mean "scroll this to the top" -- so tablet,
+// desktop and phone-200%-text (where the heading already sits inside a
+// tall/wide-enough viewport on its own) now land there too, not only phone.
+test('the song lesson stays inside the first screen and "Play it" stays reachable at phone, tablet, desktop and 200% text', async (t) => {
+  const page = await launchPage(htmlPath);
+  t.after(() => page.close());
+  await page.setViewport(VIEWPORT);
+
+  await withViewports(page, async ({ name, height }) => {
+    await t.test(name, async () => {
+      await page.evaluate("document.querySelector('#mainNav button[data-route=\"practice\"]').click()");
+      await page.waitFor("window.__coach.panelOpen() === null");
+      await openHotCrossBunsThroughNav(page);
+      await page.waitFor("document.querySelector('.panel-songs-practice h4')");
+
+      const headingRect = await rectOf(page, '.panel-songs-practice h3');
+      assertInFirstScreen(headingRect, height, `${name}: song heading`);
+
+      const stepRect = await rectOf(page, '.panel-songs-practice h4');
+      assertInFirstScreen(stepRect, height, `${name}: current step title`);
+
+      const playRect = await rectOfButtonNamed(page, '.panel-songs-practice', 'Play it');
+      assert.ok(playRect, `${name}: "Play it" is inside .panel-songs-practice`);
+      assertInFirstScreen(playRect, height, `${name}: "Play it" transport button`);
+
+      const playVisible = await page.evaluate(`(() => {
+        const container = document.querySelector('.panel-songs-practice');
+        const btn = Array.from(container.querySelectorAll('button')).find((b) => b.textContent === 'Play it');
+        return btn.checkVisibility() && !btn.disabled;
+      })()`);
+      assert.equal(playVisible, true, `${name}: "Play it" is visible and enabled, not merely present in the DOM`);
+    });
+  });
 
   assert.deepEqual(page.exceptions, []);
 });

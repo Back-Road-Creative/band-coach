@@ -52,6 +52,35 @@ test('a save that cannot be written to this device tells the learner in plain la
   );
 });
 
+test('the failed-save status clears once a later save succeeds', async (t) => {
+  const page = await launchPage(htmlPath, { initScript: QUOTA_EXCEEDED_INIT });
+  t.after(() => page.close());
+  const SAY = "document.getElementById('settingsSay').textContent";
+
+  await page.evaluate("window.__coach.setMod('kbd')");
+  await page.evaluate("document.getElementById('playBtn').click()");
+  await page.waitFor('window.__coach.task()');
+  const midi = await page.evaluate('window.__coach.cur().info.midi');
+  await page.evaluate(`window.__coach.note(${midi}, true)`);
+
+  // Wait out save()'s own debounce rather than forcing a flush with a
+  // synthetic pagehide: pagehide also tears the session down (E10,
+  // src/core/session-teardown.js), which would stop the practice this test
+  // needs to keep going for its second save.
+  await page.waitFor(`/could not be saved/i.test(${SAY})`);
+
+  // Let real writes go through again, then trigger another save.
+  await page.evaluate('window.__forceQuotaExceeded = false;');
+  await page.waitFor('window.__coach.cur()');
+  const midi2 = await page.evaluate('window.__coach.cur().info.midi');
+  await page.evaluate(`window.__coach.note(${midi2}, true)`);
+  await page.waitFor(`!/could not be saved/i.test(${SAY})`);
+
+  await page.evaluate('document.querySelector(\'[data-route="settings"]\').click()');
+  const cleared = await page.evaluate(SAY);
+  assert.doesNotMatch(cleared, /could not be saved/i, `expected the failure status to clear on a successful save, got: ${JSON.stringify(cleared)}`);
+});
+
 test('a save that cannot be written is visible on the main practice screen, not only in Settings', async (t) => {
   const page = await launchPage(htmlPath, { initScript: QUOTA_EXCEEDED_INIT });
   t.after(() => page.close());
@@ -75,56 +104,31 @@ test('a save that cannot be written is visible on the main practice screen, not 
     /could not be saved/i,
     `expected a visible status region on the main screen to report the failed save, got: ${JSON.stringify(mainSay)}`
   );
-  const mainSayHidden = await page.evaluate("document.getElementById('mainSay').hidden");
-  assert.equal(mainSayHidden, false, 'the main-screen save warning must actually be visible, not just have text');
+  const shown = await page.evaluate("(() => { const el = document.getElementById('mainSay'); return !el.hidden && getComputedStyle(el).display !== 'none'; })()");
+  assert.equal(shown, true, 'the main-screen save warning must actually be visible, not just have text');
 });
 
 test('the main-screen save warning clears once a later save succeeds', async (t) => {
   const page = await launchPage(htmlPath, { initScript: QUOTA_EXCEEDED_INIT });
   t.after(() => page.close());
+  const MAIN_SAY = "document.getElementById('mainSay').textContent";
 
   await page.evaluate("window.__coach.setMod('kbd')");
   await page.evaluate("document.getElementById('playBtn').click()");
   await page.waitFor('window.__coach.task()');
   const midi = await page.evaluate('window.__coach.cur().info.midi');
   await page.evaluate(`window.__coach.note(${midi}, true)`);
-  await page.evaluate("window.dispatchEvent(new Event('pagehide'))");
-
-  const failed = await page.evaluate("document.getElementById('mainSay').textContent");
-  assert.match(failed, /could not be saved/i, 'sanity check: the failure message showed up first');
+  // Wait out save()'s debounce, not a synthetic pagehide: pagehide also
+  // tears the session down (E10), which would stop the practice this test
+  // needs for its second save.
+  await page.waitFor(`/could not be saved/i.test(${MAIN_SAY})`);
 
   await page.evaluate('window.__forceQuotaExceeded = false;');
   await page.waitFor('window.__coach.cur()');
   const midi2 = await page.evaluate('window.__coach.cur().info.midi');
   await page.evaluate(`window.__coach.note(${midi2}, true)`);
-  await page.evaluate("window.dispatchEvent(new Event('pagehide'))");
+  await page.waitFor(`!/could not be saved/i.test(${MAIN_SAY})`);
 
-  const cleared = await page.evaluate("document.getElementById('mainSay').textContent");
+  const cleared = await page.evaluate(MAIN_SAY);
   assert.doesNotMatch(cleared, /could not be saved/i, `expected the main-screen warning to clear on a successful save, got: ${JSON.stringify(cleared)}`);
-});
-
-test('the failed-save status clears once a later save succeeds', async (t) => {
-  const page = await launchPage(htmlPath, { initScript: QUOTA_EXCEEDED_INIT });
-  t.after(() => page.close());
-
-  await page.evaluate("window.__coach.setMod('kbd')");
-  await page.evaluate("document.getElementById('playBtn').click()");
-  await page.waitFor('window.__coach.task()');
-  const midi = await page.evaluate('window.__coach.cur().info.midi');
-  await page.evaluate(`window.__coach.note(${midi}, true)`);
-  await page.evaluate("window.dispatchEvent(new Event('pagehide'))");
-
-  await page.evaluate('document.querySelector(\'[data-route="settings"]\').click()');
-  const failed = await page.evaluate("document.getElementById('settingsSay').textContent");
-  assert.match(failed, /could not be saved/i, 'sanity check: the failure message showed up first');
-
-  // Let real writes go through again, then trigger another save.
-  await page.evaluate('window.__forceQuotaExceeded = false;');
-  await page.waitFor('window.__coach.cur()');
-  const midi2 = await page.evaluate('window.__coach.cur().info.midi');
-  await page.evaluate(`window.__coach.note(${midi2}, true)`);
-  await page.evaluate("window.dispatchEvent(new Event('pagehide'))");
-
-  const cleared = await page.evaluate("document.getElementById('settingsSay').textContent");
-  assert.doesNotMatch(cleared, /could not be saved/i, `expected the failure status to clear on a successful save, got: ${JSON.stringify(cleared)}`);
 });

@@ -48,6 +48,7 @@ import { validateSong } from '../song/model.js';
 import { buildLessonPlan, nextStep, creditFor } from '../song/lesson.js';
 import { feasibility } from '../song/feasibility.js';
 import { INSTRUMENTS } from '../instruments/index.js';
+import { capabilityFor } from '../instruments/capability.js';
 import { routeImportFile, importerFor } from './songs/import-route.js';
 import { judgeAttempt, passesRule, holdTuneFeedback, firstCorrection, phraseSec } from './songs/practice.js';
 import { createSongClock } from '../song/clock.js';
@@ -102,6 +103,22 @@ const READY_INSTRUMENTS = INSTRUMENTS.filter((i) => i.status === 'ready');
 // ---------------------------------------------------------------------------
 
 const noteListeners = [];
+
+// The live `practice` object for the currently mounted Songs panel, or null
+// -- mountSongsPanel keeps this in sync at its own two reassignment points
+// (starting/closing a practice session) so recordStartSec() below can read
+// it without mountSongsPanel exporting anything else about its internals.
+let currentPractice = null;
+
+// The audio-clock instant (api.now()'s units) the current practice attempt
+// is judged from -- 0 before a recording has ever started, and reset each
+// time one does (src/ui/songs.js's own startRecording(), one beat after the
+// count-in's last click). A characterization test used to approximate this
+// by polling the DOM for "recording has begun" and then sampling audioNow()
+// itself; that samples a moment close to, but never exactly, the value the
+// app already computed, and a busy runner widens the gap. Reading it here
+// is exact and needs no clock of its own.
+export function recordStartSec() { return currentPractice ? currentPractice.recordStartSec : null; }
 
 // Called from the single added line in src/app.js's onNote(). Fires for
 // every played note (MIDI keyboard, on-screen keys, computer keys) whether
@@ -1141,6 +1158,7 @@ function mountSongsPanel(hostEl, api) {
     // crossing a tempoMap change plays, counts in and is judged against the
     // same tempo curve throughout.
     practice = { song: arrangedSong, partId, instrument, instrumentId, plan, arrangement, results: resumeEntry ? resumeEntry.tail.slice() : [], stepIndex: resumeEntry ? resumeEntry.stepIndex : 0, repair: null, recording: false, countingIn: false, countInTimer: null, playedEvents: [], recordStartSec: 0, stop: null, loopTransport: null, loopTransportStepIndex: null, clock: createSongClock(arrangedSong), assistance: 'none', lessonKey: lessonKeyValue, resumeRate: resumeEntry ? resumeEntry.rate : null };
+    currentPractice = practice;
     if (resumeEntry) say('Picking up where you left off.', 'ok');
     saveLesson();
     renderPractice();
@@ -1152,6 +1170,32 @@ function mountSongsPanel(hostEl, api) {
     // just pressed. F2's own nav-into-Songs focus (src/app.js, #songsHeading)
     // is unrelated -- this is the SONG's heading, reached only once a
     // specific song is opened.
+    // The browser's own focus()-triggered scroll (below) only moves the
+    // page when the focused element is NOT already inside the viewport,
+    // and even then it picks whichever edge is nearest -- not "top". At a
+    // tall/wide-enough viewport (tablet, desktop, 200%-zoomed phone text)
+    // the heading can already sit inside view while everything stacked
+    // below it (step title, staff, "Play it") still runs off the bottom.
+    // Forcing an explicit top alignment here, right after the practice view
+    // has rendered and BEFORE focus() runs, is what actually puts the whole
+    // lesson -- not just its heading -- inside the first screen at every
+    // size; guarded because scrollIntoView is absent from some
+    // minimal/test DOM shims.
+    if (practiceHeadingEl && typeof practiceHeadingEl.scrollIntoView === 'function') {
+      practiceHeadingEl.scrollIntoView({ block: 'start' });
+      // Fractional (sub-pixel) layout above the heading can leave the
+      // browser's own scrollTop rounded a hair PAST true "start" (e.g. the
+      // heading's real document top sits at 876.625px, but scrollTop can
+      // only land on 877), which then reads as the heading's top being a
+      // fraction of a pixel above the viewport. Nudging back by that exact
+      // fraction (never more) keeps the heading's top at or below the
+      // viewport's top edge without changing which pixel a person sees.
+      const overshoot = practiceHeadingEl.getBoundingClientRect().top;
+      // scrollY itself only ever lands on a whole pixel, so a sub-pixel
+      // nudge (e.g. -0.375) is silently rounded away to 0 -- floor() picks
+      // the nearest WHOLE pixel that still clears the overshoot instead.
+      if (overshoot < 0) window.scrollBy(0, Math.floor(overshoot));
+    }
     if (practiceHeadingEl) practiceHeadingEl.focus();
   }
 
@@ -1239,7 +1283,7 @@ function mountSongsPanel(hostEl, api) {
       practiceSection.appendChild(el('button', { type: 'button', text: 'Practise again', onclick: () => startPractice(practice.song, practice.partId, undefined, { fresh: true }) }));
       practiceSection.appendChild(el('button', {
         type: 'button', text: 'Back to songs',
-        onclick: () => { practice = null; practiceSection.hidden = true; libraryDetails.open = true; },
+        onclick: () => { practice = null; currentPractice = null; practiceSection.hidden = true; libraryDetails.open = true; },
       }));
       return;
     }
@@ -1713,7 +1757,7 @@ function mountSongsPanel(hostEl, api) {
       if (result) {
         practice.lastHeat = barHeat(practice.song, result.matches);
         practice.lastHeatBars = repairStep.bars;
-        const { dims, unassessed } = dimsFromStep(repairStep, result);
+        const { dims, unassessed } = dimsFromStep(repairStep, result, { assess: capabilityFor(practice.instrument).assess });
         practice.lastAssessed = assessmentLines(dims, unassessed, { step: repairStep, instrument: practice.instrument });
       }
       if (passed) practice.repair = null;
@@ -1740,7 +1784,7 @@ function mountSongsPanel(hostEl, api) {
       // the same as bpmTarget (step.bpm): no tempo estimate is measured
       // from the attempt anywhere in this file, so nothing better is
       // available to report.
-      const { dims, unassessed } = dimsFromStep(step, result);
+      const { dims, unassessed } = dimsFromStep(step, result, { assess: capabilityFor(practice.instrument).assess });
       if (typeof api.logEvent === 'function') {
         api.logEvent(makeEvent({
           instrument: practice.instrumentId, skill: step.kind + ':' + step.phraseIndex, source: 'song',

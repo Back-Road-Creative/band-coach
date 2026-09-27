@@ -55,6 +55,15 @@ instead of a one-size-fits-all level, including the level the pitch detector its
 small meter shows the live input level. An instrument plugged into only one channel of a
 2-channel interface is summed into the listening path rather than silenced.
 
+Switching away from the tab (or backgrounding the app on a phone) stops the microphone and
+suspends audio outright, rather than merely pausing the exercise on screen — the OS mic indicator
+goes off, exactly as if you had closed the tab. Coming back does not reopen the mic on its own:
+press Connect again (or resume through a drill that needs it) and the status line and mic indicator
+catch up. The app's own clock does come back on its own, though — the moment the tab is visible
+again (or, on a phone, the moment the OS restores it from its back/forward cache), suspended audio
+resumes so a lesson already in progress keeps ticking rather than freezing solid until some other
+click happens to wake it.
+
 Press "Connect MIDI" to use a keyboard. The status line only says a device is connected once the
 page has actually opened it, so "Keystation found. Press any key on it." means the keyboard is
 wired up but the app has not heard a note yet, and "Keystation is working." means it has. If it
@@ -65,7 +74,9 @@ as better proof than opening the port was. A small dot next to Connect blinks on
 page receives, even with no exercise running — useful for telling "the app cannot see my keyboard"
 apart from "the app sees it but has nothing to judge right now". "MIDI details" opens a readout of
 every input's name, connection state and the last few raw messages heard, for tracking down a
-silent keyboard on your own machine.
+silent keyboard on your own machine. Held notes are tracked per device, so two keyboards (or a
+disconnected one plugged back in) holding the same pitch never cancel each other, and switching
+away from the tab, letting the window lose focus, or unplugging mid-note releases whatever was held.
 
 The pure scheduling and sending logic for "play it for me" — a song's notes sent out to a
 connected MIDI keyboard so it plays itself — lives in `src/core/midi.js` (`scheduleSong`,
@@ -157,7 +168,7 @@ not something to "fix" by editing the test.
 (an exact-pinned devDependency, the one runtime npm package the app itself never ships) over the
 built `dist/band-coach.html` in its main states — first load, an instrument selected and a lesson
 started, each side panel open (Songs' own internal screens and Ear training included), and the
-input set-up sheet (mic/MIDI device, calibration) — and fails on any WCAG 2/2.1 A/AA violation. The
+input set-up sheet (mic/MIDI device, calibration) — and fails on any WCAG 2/2.1/2.2 A/AA violation. The
 separate Settings nav destination (theme/mode toggles, `#settingsView`) has its own axe scan,
 `tests/characterization/settings-view.test.mjs`. It is a real scanner check, not a hand-picked list
 of rules, so it catches whatever the other a11y characterization tests above were not written to
@@ -179,6 +190,7 @@ or re-downloading the file can lose it, since browsers do not share that storage
 save is verified by reading it back; if a save cannot be written (storage full, or private browsing
 blocking it), a plain-language status appears both on the main practice screen and in Settings, until
 a later save succeeds — you never have to open Settings to find out progress is not being kept. Open
+blocking it), Settings shows a plain-language status until a later save succeeds. Open
 the Settings screen for "Save a backup", which downloads
 `band-coach-progress.json`, and "Restore a backup", which loads one back in. The backup file now
 carries your saved songs (from the Learn and Songs panels) alongside your practice progress, so
