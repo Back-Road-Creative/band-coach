@@ -12,7 +12,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { HTML_PATH } from '../helpers/html-path.mjs';
-import { launchPage } from '../helpers/browser.mjs';
+import { launchPage, withViewports } from '../helpers/browser.mjs';
 import { rectOf, assertInFirstScreen } from '../helpers/journey.mjs';
 
 const htmlPath = HTML_PATH;
@@ -117,4 +117,34 @@ test('the fresh first paint at 320x844 still keeps #playBtn in the first screen 
   t.after(() => page.close());
   await page.setViewport({ width: 320, height: 844, mobile: true });
   assertInFirstScreen(await rectOf(page, '#playBtn'), 844, 'fresh first paint, 320px, new nav layout');
+});
+
+// Phone/tablet/desktop plus 200%-enlarged text (withViewports,
+// tests/helpers/browser.mjs): the same "no ellipsis, no clipping, no
+// overlap" bar the 320/390 tests above hold the nav to, now also checked at
+// the two wider real device classes and with text genuinely enlarged --
+// none of those is a phone-only concern (a tablet's own nav can just as
+// easily overlap, and enlarged text is the harder constraint of the two
+// widths a phone already passes).
+test('the nav stays fully readable with no ellipsis and no overlap at phone, tablet, desktop and 200% text', async (t) => {
+  const page = await launchPage(htmlPath);
+  t.after(() => page.close());
+
+  await withViewports(page, async ({ name }) => {
+    const rects = await navButtonRects(page);
+    assert.equal(rects.length, 5, `${name}: five nav buttons`);
+
+    for (const route of ['practice', 'songs', 'progress']) {
+      const r = rects.find((x) => x.route === route);
+      assert.ok(r, `${name}: ${route} button exists`);
+      assert.notEqual(r.textOverflow, 'ellipsis', `${name} ${route}: text-overflow must not be ellipsis (label was ${JSON.stringify(r.text)})`);
+      assert.ok(r.scrollWidth <= r.clientWidth, `${name} ${route}: scrollWidth ${r.scrollWidth} exceeds clientWidth ${r.clientWidth} -- label ${JSON.stringify(r.text)} is clipped`);
+    }
+
+    for (let i = 0; i < rects.length; i++) {
+      for (let j = i + 1; j < rects.length; j++) {
+        assert.ok(!overlaps(rects[i], rects[j]), `${name}: ${rects[i].route} and ${rects[j].route} bounding boxes overlap`);
+      }
+    }
+  });
 });

@@ -694,3 +694,53 @@ export async function retryFlaky({ attempts = 3, attempt, accept, describe, what
   err.attempts = seen;
   throw err;
 }
+
+// Real device widths a learner reads this app at, plus one "text enlarged"
+// pass -- for a nav-readable-widths/songs-lesson-first style test that wants
+// to run the SAME assertions across all of them instead of hand-rolling a
+// setViewport() loop per file. `mobile: true` on tablet too: measured
+// directly against real devices, a 768-wide iPad in portrait still reports
+// touch-pointer media features the same way a phone does, unlike a
+// mouse-driven 768-wide desktop window.
+export const VIEWPORTS = {
+  phone: { width: 390, height: 844, mobile: true },
+  tablet: { width: 768, height: 1024, mobile: true },
+  desktop: { width: 1280, height: 800, mobile: false },
+};
+
+// Runs `run({ name, width, height })` once per real viewport above, then
+// once more at phone width with text genuinely enlarged. src/styles.css
+// (checked directly: no `rem` or `em` anywhere, every size a bare px value)
+// has nothing for the standard "set html { font-size: 200% }" WCAG 1.4.4
+// technique to scale -- it would change what 1rem equals and move nothing,
+// since nothing here is sized in rem. The non-standard CSS `zoom` property
+// Chromium supports is what actually enlarges rendered text/controls
+// regardless of what unit they were authored in (measured directly against
+// this build: #playBtn's own rendered box doubled, 129.7x51 -> 259.5x103,
+// under `zoom: 200%`) -- so that, not a root font-size, is the mechanism
+// used here. `innerWidth`/`innerHeight` are read back AFTER zooming rather
+// than assumed, because Chromium's own reported layout viewport at 200% zoom
+// does not simply halve (measured: 390x844 -> 529x1145, not 195x422) -- a
+// caller comparing element rects against a guessed viewport would be
+// comparing against the wrong number. The zoomed pass still leaves the
+// button consuming a bigger share of that viewport than before (129.7/390 =
+// 33% unzoomed vs 259.5/529 = 49% zoomed), so it is a genuinely harder
+// layout constraint, not a no-op.
+// Each pass leaves viewport switching to the caller's own `run` -- a caller
+// with state already on screen (a song already open, already scrolled to
+// wherever its own focus() call put it) decides whether that state should
+// carry over into the next size or be rebuilt fresh; this helper does not
+// scroll or otherwise touch the page itself between passes, only the
+// viewport metrics.
+export async function withViewports(page, run) {
+  for (const [name, vp] of Object.entries(VIEWPORTS)) {
+    await page.setViewport(vp);
+    await run({ name, width: vp.width, height: vp.height, zoomed: false });
+  }
+  await page.setViewport(VIEWPORTS.phone);
+  await page.evaluate("document.documentElement.style.zoom = '200%'");
+  const width = await page.evaluate('innerWidth');
+  const height = await page.evaluate('innerHeight');
+  await run({ name: 'phone-200%-text', width, height, zoomed: true });
+  await page.evaluate("document.documentElement.style.zoom = ''");
+}
