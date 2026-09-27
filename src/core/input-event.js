@@ -70,6 +70,16 @@ const DIM_CAPABILITY = {
   midi: ['pitch', 'chord', 'onset', 'hold', 'drum'],
 };
 
+// provableDims(assess) -> the DIM_CAPABILITY row for that capability.js
+// `assess` value, or [] for an unrecognized one -- the one place outside
+// this module that needs "what can this capability ever prove" without
+// running actual events through evidenceFor (src/ui/songs/assessed.js's
+// dimsFromStep: a step's passRule can only grade what the capability can
+// prove, before any single try's events come into it).
+export function provableDims(assess) {
+  return (DIM_CAPABILITY[assess] || []).slice();
+}
+
 // evidenceFor(events, { assess, dims, nowSec, staleSec }) -> { eligible,
 // unassessed }: which of `events` count as evidence at all (eligible), and
 // which of the requested `dims` this capability can never prove regardless

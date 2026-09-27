@@ -48,6 +48,7 @@ import { validateSong } from '../song/model.js';
 import { buildLessonPlan, nextStep, creditFor } from '../song/lesson.js';
 import { feasibility } from '../song/feasibility.js';
 import { INSTRUMENTS } from '../instruments/index.js';
+import { capabilityFor } from '../instruments/capability.js';
 import { routeImportFile, importerFor } from './songs/import-route.js';
 import { judgeAttempt, passesRule, holdTuneFeedback, firstCorrection, phraseSec } from './songs/practice.js';
 import { createSongClock } from '../song/clock.js';
@@ -1730,7 +1731,7 @@ function mountSongsPanel(hostEl, api) {
       if (result) {
         practice.lastHeat = barHeat(practice.song, result.matches);
         practice.lastHeatBars = repairStep.bars;
-        const { dims, unassessed } = dimsFromStep(repairStep, result);
+        const { dims, unassessed } = dimsFromStep(repairStep, result, { assess: capabilityFor(practice.instrument).assess });
         practice.lastAssessed = assessmentLines(dims, unassessed, { step: repairStep, instrument: practice.instrument });
       }
       if (passed) practice.repair = null;
@@ -1757,7 +1758,7 @@ function mountSongsPanel(hostEl, api) {
       // the same as bpmTarget (step.bpm): no tempo estimate is measured
       // from the attempt anywhere in this file, so nothing better is
       // available to report.
-      const { dims, unassessed } = dimsFromStep(step, result);
+      const { dims, unassessed } = dimsFromStep(step, result, { assess: capabilityFor(practice.instrument).assess });
       if (typeof api.logEvent === 'function') {
         api.logEvent(makeEvent({
           instrument: practice.instrumentId, skill: step.kind + ':' + step.phraseIndex, source: 'song',
