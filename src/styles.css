@@ -210,7 +210,17 @@
      scaled down by width: 100% so it never forces horizontal scroll on a
      390px-wide phone screen. */
   .panel-songs-view { max-width: 100%; overflow: hidden; }
-  .panel-songs-view canvas { display: block; width: 100%; height: auto; }
+  /* width: 100% alone only ever scaled DOWN to fit a narrow phone -- on a
+     wider screen (tablet 768px, desktop 1280px) the same rule scales the
+     canvas UP past its own 340px-wide, fixed-aspect-ratio artwork
+     (step-view.js's CANVAS_WIDTH), which grows its height right along with
+     it (measured against this build: 174px tall at 390px phone width, 368px
+     at 768px tablet width -- same canvas, same song). That extra height is
+     what pushed "Play it" below a tablet's first screen. Capping width at
+     the canvas's own native 340px keeps the "shrink to fit a phone" behaviour
+     the comment above describes while stopping it from ever drawing bigger
+     than the artwork actually is. */
+  .panel-songs-view canvas { display: block; width: 100%; max-width: 340px; height: auto; }
   /* P4-9: the plain-words fingering line shown instead of a tab for a bowed,
      keyboard or harmonica step. */
   .panel-songs-fingering { color: var(--muted); }
