@@ -162,10 +162,10 @@ export function summarizeEvents(events, { instrument, skill, retainGapMs } = {})
 export const EVENT_HISTORY_MAX = 500;
 
 // EVENT_ANCHOR_MAX: the most "anchor" rows (see boundEvents below) kept on
-// top of the window. 200 covers far more distinct instrument|skill pairs
-// than a beginner curriculum activates; only a learner who has played over
-// 200 distinct skills, none of them in the last 500 rows, would ever lose
-// the oldest anchor. Worst case size: 500 window rows + 200 anchor rows =
+// top of the window, shared between per-instrument|skill anchors and the
+// per-(instrument|skill, songId) anchors described below -- so it now covers
+// far more (skill, song) pairs than a beginner curriculum activates, not
+// only distinct skills. Worst case size: 500 window rows + 200 anchor rows =
 // 700 rows, about 210 KB at ~300 bytes/row -- still far below what
 // localStorage allows.
 export const EVENT_ANCHOR_MAX = 200;
@@ -181,19 +181,33 @@ export const EVENT_ANCHOR_MAX = 200;
 //
 // So boundEvents keeps the newest `max` rows exactly as `slice(-max)` did,
 // then walks the OLDER, dropped rows and keeps, per instrument|skill group,
-// its earliest independent-ok row, its earliest non-song independent-ok row,
-// and -- since summarizeEvents also credits `applied` at most once per
-// distinct songId -- the earliest independent-ok row for each songId seen in
-// that group, so replaying a song enough times to push its first play out of
-// the window does not erase the credit for having applied it at all. Any of
-// these is kept only when the window does not already hold an equal-or-
-// earlier row of that same kind for that group (no point keeping a stale
-// anchor the window already proves). When the same dropped row is the
-// earliest for more than one kind, it is kept once. If more anchors than
-// `anchorMax` survive, only the ones with the latest `at` are kept, so a
-// learner who has played far more than 200 distinct skills (or songs) loses
-// the oldest evidence first, not at random. The result never mutates its
-// input: anchors first (in their original order), then the window.
+// its earliest independent-ok row (the "group anchors": earliest-ok and
+// earliest-non-song-ok) and -- since summarizeEvents also credits `applied`
+// at most once per distinct songId -- the earliest QUALIFYING independent-ok
+// row for each songId seen in that group (a "song anchor"): qualifying means
+// it lands after that group's earliest non-song-ok row (in the window OR
+// among the dropped rows, whichever is earlier), the same test summarizeEvents
+// itself applies, since the row that actually counted toward `applied` is not
+// always a song's very first play -- a song played once before any drilling
+// and replayed after only earns credit on the replay. Any of these is kept
+// only when the window does not already hold an equal-or-earlier qualifying
+// row of that same kind for that group (no point keeping a stale anchor the
+// window already proves).
+//
+// Group anchors and song anchors share the `anchorMax` budget, but group
+// anchors are kept FIRST: a song anchor only ever matters if its group's
+// earliest non-song-ok row is also present in the result (in the window or
+// kept as a group anchor) -- without it the song row can never be counted as
+// applied anyway, so spending budget on it would waste a slot a group anchor
+// could have used instead. If more group anchors survive than fit in
+// `anchorMax`, only the ones with the latest `at` are kept (oldest evidence
+// lost first); any remaining budget is then filled by song anchors, again
+// latest `at` first, and a song anchor whose group's non-song-ok row did not
+// survive (neither in the window nor kept as a group anchor) is dropped
+// outright rather than spend budget on a row that can no longer count for
+// anything. The result never mutates its input: anchors first (group
+// anchors, then song anchors, both in their original order), then the
+// window.
 export function boundEvents(events, { max = EVENT_HISTORY_MAX, anchorMax = EVENT_ANCHOR_MAX } = {}) {
   const list = Array.isArray(events) ? events : [];
   const window = list.slice(-max);
@@ -207,21 +221,15 @@ export function boundEvents(events, { max = EVENT_HISTORY_MAX, anchorMax = EVENT
 
   const windowOkAt = new Map(); // group -> earliest `at` of an independent-ok row already in the window
   const windowNonSongOkAt = new Map();
-  const windowSongOkAt = new Map(); // group|songId -> earliest `at` of an independent-ok row for that songId already in the window
   window.forEach((ev) => {
     if (!isIndependentOk(ev)) return;
     const key = groupKey(ev);
     if (!windowOkAt.has(key) || ev.at < windowOkAt.get(key)) windowOkAt.set(key, ev.at);
     if (!isSongSourced(ev) && (!windowNonSongOkAt.has(key) || ev.at < windowNonSongOkAt.get(key))) windowNonSongOkAt.set(key, ev.at);
-    if (ev.songId) {
-      const sKey = songKey(ev);
-      if (!windowSongOkAt.has(sKey) || ev.at < windowSongOkAt.get(sKey)) windowSongOkAt.set(sKey, ev.at);
-    }
   });
 
   const droppedEarliestOk = new Map(); // group -> the earliest independent-ok row among the dropped rows
   const droppedEarliestNonSongOk = new Map();
-  const droppedEarliestSongOk = new Map(); // group|songId -> the earliest independent-ok row for that songId among the dropped rows
   dropped.forEach((ev) => {
     if (!isIndependentOk(ev)) return;
     const key = groupKey(ev);
@@ -231,39 +239,92 @@ export function boundEvents(events, { max = EVENT_HISTORY_MAX, anchorMax = EVENT
       const curNonSong = droppedEarliestNonSongOk.get(key);
       if (!curNonSong || ev.at < curNonSong.at) droppedEarliestNonSongOk.set(key, ev);
     }
-    if (ev.songId) {
-      const sKey = songKey(ev);
-      const curSong = droppedEarliestSongOk.get(sKey);
-      if (!curSong || ev.at < curSong.at) droppedEarliestSongOk.set(sKey, ev);
-    }
   });
 
-  const anchorSeen = new Set();
-  const anchors = [];
-  const considerAnchor = (row) => { if (row && !anchorSeen.has(row)) { anchorSeen.add(row); anchors.push(row); } };
+  // groupNonSongOkAt: the earliest non-song-ok `at` for a group ACROSS THE
+  // WHOLE LIST (window or dropped, whichever is earlier) -- this is what
+  // summarizeEvents actually compares a song row's `at` against to decide
+  // whether it counts as applied, so it is also what decides which song row
+  // is worth anchoring: the one that comes after it, not simply the
+  // earliest-ever play of that song (which may predate any drilling and so
+  // never counted toward applied at all).
+  const groupNonSongOkAt = new Map();
+  const setGroupNonSongOkAt = (key, at) => { if (!groupNonSongOkAt.has(key) || at < groupNonSongOkAt.get(key)) groupNonSongOkAt.set(key, at); };
+  windowNonSongOkAt.forEach((at, key) => setGroupNonSongOkAt(key, at));
+  droppedEarliestNonSongOk.forEach((row, key) => setGroupNonSongOkAt(key, row.at));
+
+  const qualifies = (ev) => {
+    const at = groupNonSongOkAt.get(groupKey(ev));
+    return at !== undefined && ev.at > at;
+  };
+
+  const windowSongOkAt = new Map(); // group|songId -> earliest `at` of a QUALIFYING independent-ok row for that songId already in the window
+  window.forEach((ev) => {
+    if (!isIndependentOk(ev) || !ev.songId || !qualifies(ev)) return;
+    const sKey = songKey(ev);
+    if (!windowSongOkAt.has(sKey) || ev.at < windowSongOkAt.get(sKey)) windowSongOkAt.set(sKey, ev.at);
+  });
+
+  const droppedEarliestSongOk = new Map(); // group|songId -> the earliest QUALIFYING independent-ok row for that songId among the dropped rows
+  dropped.forEach((ev) => {
+    if (!isIndependentOk(ev) || !ev.songId || !qualifies(ev)) return;
+    const sKey = songKey(ev);
+    const curSong = droppedEarliestSongOk.get(sKey);
+    if (!curSong || ev.at < curSong.at) droppedEarliestSongOk.set(sKey, ev);
+  });
+
+  // Per-group anchors (earliest-ok, earliest-non-song-ok) are what give a
+  // per-song anchor its meaning at all: a song row only counts as applied
+  // when a group's earliest non-song-ok row is ALSO present in the trimmed
+  // result. So they are kept first, ahead of per-song anchors, out of the
+  // shared anchorMax budget -- see EVENT_ANCHOR_MAX above.
+  const groupAnchorSeen = new Set();
+  const groupAnchors = [];
+  const considerGroupAnchor = (row) => { if (row && !groupAnchorSeen.has(row)) { groupAnchorSeen.add(row); groupAnchors.push(row); } };
   droppedEarliestOk.forEach((row, key) => {
     const coveredByWindow = windowOkAt.has(key) && windowOkAt.get(key) <= row.at;
-    if (!coveredByWindow) considerAnchor(row);
+    if (!coveredByWindow) considerGroupAnchor(row);
   });
+  const nonSongAnchorKey = new Set(); // group keys whose non-song anchor row was kept (dropped, not covered by window)
   droppedEarliestNonSongOk.forEach((row, key) => {
     const coveredByWindow = windowNonSongOkAt.has(key) && windowNonSongOkAt.get(key) <= row.at;
-    if (!coveredByWindow) considerAnchor(row);
-  });
-  droppedEarliestSongOk.forEach((row, sKey) => {
-    const coveredByWindow = windowSongOkAt.has(sKey) && windowSongOkAt.get(sKey) <= row.at;
-    if (!coveredByWindow) considerAnchor(row);
+    if (!coveredByWindow) { considerGroupAnchor(row); nonSongAnchorKey.add(key); }
   });
 
   const originalIndex = new Map();
   dropped.forEach((ev, i) => originalIndex.set(ev, i));
-  anchors.sort((a, b) => originalIndex.get(a) - originalIndex.get(b));
+  groupAnchors.sort((a, b) => originalIndex.get(a) - originalIndex.get(b));
 
-  let kept = anchors;
-  if (kept.length > anchorMax) {
-    const latestFirst = kept.slice().sort((a, b) => b.at - a.at).slice(0, anchorMax);
+  let keptGroupAnchors = groupAnchors;
+  if (keptGroupAnchors.length > anchorMax) {
+    const latestFirst = keptGroupAnchors.slice().sort((a, b) => b.at - a.at).slice(0, anchorMax);
     const keepSet = new Set(latestFirst);
-    kept = kept.filter((row) => keepSet.has(row));
+    keptGroupAnchors = keptGroupAnchors.filter((row) => keepSet.has(row));
   }
+  const keptGroupAnchorSet = new Set(keptGroupAnchors);
+
+  const songAnchorCandidates = [];
+  droppedEarliestSongOk.forEach((row, sKey) => {
+    const coveredByWindow = windowSongOkAt.has(sKey) && windowSongOkAt.get(sKey) <= row.at;
+    if (coveredByWindow) return;
+    const key = groupKey(row);
+    // Without its group's non-song evidence surviving too, this song anchor
+    // cannot ever count toward `applied` -- keeping it would spend shared
+    // budget for nothing, at the expense of an anchor that could.
+    if (!windowNonSongOkAt.has(key) && !(nonSongAnchorKey.has(key) && keptGroupAnchorSet.has(droppedEarliestNonSongOk.get(key)))) return;
+    songAnchorCandidates.push(row);
+  });
+  songAnchorCandidates.sort((a, b) => originalIndex.get(a) - originalIndex.get(b));
+
+  const remainingBudget = Math.max(0, anchorMax - keptGroupAnchors.length);
+  let keptSongAnchors = songAnchorCandidates;
+  if (keptSongAnchors.length > remainingBudget) {
+    const latestFirst = keptSongAnchors.slice().sort((a, b) => b.at - a.at).slice(0, remainingBudget);
+    const keepSet = new Set(latestFirst);
+    keptSongAnchors = keptSongAnchors.filter((row) => keepSet.has(row));
+  }
+
+  const kept = keptGroupAnchors.concat(keptSongAnchors).sort((a, b) => originalIndex.get(a) - originalIndex.get(b));
 
   return kept.concat(window);
 }

@@ -322,6 +322,80 @@ test('applied count survives trimming when two distinct songs are each played, t
   );
 });
 
+test('applied count survives trimming when a song is played BEFORE the group had any non-song evidence and replayed after', () => {
+  // A song anchor that keeps the song's earliest independent-ok row is not
+  // enough: that earliest play (sg1 @0) comes before the group's first
+  // non-song-ok row (drill @1), so it never counted toward `applied` in the
+  // first place. The row that DOES count is the later replay (sg1 @2). The
+  // anchor must keep THAT row, not the (non-qualifying) earliest one.
+  const songBeforeDrill = validDrillEvent({ id: 'song-early', at: 0, instrument: 'kbd', skill: 'n60', source: 'song', songId: 'sg1' });
+  const nonSongOk = validDrillEvent({ id: 'anchor-drill', at: 1, instrument: 'kbd', skill: 'n60', source: 'drill' });
+  const songAfterDrill = validDrillEvent({ id: 'song-late', at: 2, instrument: 'kbd', skill: 'n60', source: 'song', songId: 'sg1' });
+  const filler = [];
+  for (let i = 0; i < 600; i++) filler.push(validDrillEvent({ id: 'f' + i, at: 10 + i, instrument: 'kbd', skill: 'n62', dims: { pitch: 'miss' } }));
+  const full = [songBeforeDrill, nonSongOk, songAfterDrill, ...filler];
+  const trimmed = boundEvents(full, { max: 500 });
+  assert.equal(summarizeEvents(full, { instrument: 'kbd', skill: 'n60' }).applied, 1);
+  assert.equal(
+    summarizeEvents(trimmed, { instrument: 'kbd', skill: 'n60' }).applied,
+    summarizeEvents(full, { instrument: 'kbd', skill: 'n60' }).applied
+  );
+});
+
+test('per-song anchors do not evict the per-group anchors that give them meaning, when many distinct songs share the anchor budget', () => {
+  // 40 skills each drilled independently-ok once, then 5 different songs
+  // each touch all 40 skills later -- 200 song anchors competing with the 40
+  // per-group (earliest-ok / earliest-non-song-ok) anchors for the shared
+  // EVENT_ANCHOR_MAX budget. The per-group anchors are the OLDEST rows, so a
+  // naive "keep the latest anchors" eviction drops them first, which zeroes
+  // both `retained` and `applied` for every one of those 40 skills even
+  // though the full history says they were both retained and applied.
+  const drills = [];
+  for (let k = 0; k < 40; k++) drills.push(validDrillEvent({ id: 'drill' + k, at: k, instrument: 'kbd', skill: 's' + k, source: 'drill' }));
+  const songs = [];
+  const sixtyHoursMs = 60 * 3600 * 1000;
+  for (let s = 0; s < 5; s++) {
+    for (let k = 0; k < 40; k++) songs.push(validDrillEvent({ id: 'song' + s + '-' + k, at: sixtyHoursMs + s * 1000 + k, instrument: 'kbd', skill: 's' + k, source: 'song', songId: 'song' + s }));
+  }
+  const filler = [];
+  for (let i = 0; i < 500; i++) filler.push(validDrillEvent({ id: 'f' + i, at: 100 + i, instrument: 'kbd', skill: 'nfiller', dims: { pitch: 'miss' } }));
+  const full = [...drills, ...filler, ...songs];
+  const trimmed = boundEvents(full, { max: 500 });
+  const fullSummary = summarizeEvents(full, { instrument: 'kbd' });
+  const trimmedSummary = summarizeEvents(trimmed, { instrument: 'kbd' });
+  assert.equal(trimmedSummary.retained, fullSummary.retained);
+  assert.equal(trimmedSummary.applied, fullSummary.applied);
+});
+
+test('per-group anchors survive even when per-song anchors alone would overflow the shared budget', () => {
+  // Same shape as the previous test, but with enough filler AFTER the songs
+  // to push the songs themselves out of the window too, so their anchors
+  // compete for the same EVENT_ANCHOR_MAX budget as the 40 per-group anchors
+  // (200 possible song anchors + 40 group anchors > 200). A naive "keep
+  // whichever anchors have the latest `at`, full stop" eviction drops the 40
+  // per-group anchors first (they are the oldest rows), which zeroes
+  // `retained` and `applied` outright even though the full history has both.
+  const drills = [];
+  for (let k = 0; k < 40; k++) drills.push(validDrillEvent({ id: 'drill' + k, at: k, instrument: 'kbd', skill: 's' + k, source: 'drill' }));
+  const sixtyHoursMs = 60 * 3600 * 1000;
+  const songs = [];
+  for (let s = 0; s < 5; s++) {
+    for (let k = 0; k < 40; k++) songs.push(validDrillEvent({ id: 'song' + s + '-' + k, at: sixtyHoursMs + s * 1000 + k, instrument: 'kbd', skill: 's' + k, source: 'song', songId: 'song' + s }));
+  }
+  const filler = [];
+  for (let i = 0; i < 600; i++) filler.push(validDrillEvent({ id: 'f' + i, at: sixtyHoursMs + 10000 + i, instrument: 'kbd', skill: 'nfiller', dims: { pitch: 'miss' } }));
+  const full = [...drills, ...songs, ...filler];
+  const trimmed = boundEvents(full, { max: 500 });
+  const fullSummary = summarizeEvents(full, { instrument: 'kbd' });
+  const trimmedSummary = summarizeEvents(trimmed, { instrument: 'kbd' });
+  assert.ok(fullSummary.retained > 0 && fullSummary.applied > 0, 'sanity: the full history has evidence to lose');
+  // The naive eviction this locks against zeroes both counts outright; the
+  // fix must keep them well above zero even though the budget cannot fit
+  // every possible song anchor.
+  assert.ok(trimmedSummary.retained > 0, 'retained must not be zeroed by anchor-budget eviction');
+  assert.ok(trimmedSummary.applied > 0, 'applied must not be zeroed by anchor-budget eviction');
+});
+
 test('boundEvents never changes the array it was given', () => {
   const events = [];
   for (let i = 0; i < 10; i++) events.push(validDrillEvent({ id: 'e' + i, at: i, instrument: 'kbd', skill: 'n60', dims: { pitch: 'miss' } }));
