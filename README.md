@@ -82,10 +82,10 @@ The pure scheduling and sending logic for "play it for me" — a song's notes se
 connected MIDI keyboard so it plays itself — lives in `src/core/midi.js` (`scheduleSong`,
 `playOnOutput`, `stopAll`, `describeOutputs`); there is no button wired to it yet.
 
-"My progress" (below) only ever counts a keyboard attempt as passed on your own when it came
-through a connected MIDI keyboard: an attempt played on the computer keys, or one pieced together
-from more than one route, is practice worth having but is not treated as proof the skill
-transferred to a real keyboard.
+When a keyboard song attempt is recorded as played on the computer keys, or pieced together from
+more than one route, "My progress" (below) does not count it as passed on your own: it is practice
+worth having but not proof the skill transferred to a real keyboard. Drill attempts and on-screen
+clicks are not labelled with their route yet, so for now they are still counted as before.
 
 ## Build it from source
 
@@ -231,10 +231,10 @@ passed independently, retained on a later check (not just repeated in the same s
 applied in a song rather than a drill — or, with nothing recorded yet, says so plainly instead of
 claiming anything is retained. A given song only counts toward "applied" once per skill, no matter
 how many times it is replayed — practising the same tune over and over is not new evidence a skill
-transferred to a different song, so it is not counted as though it were. A keyboard attempt
+transferred to a different song, so it is not counted as though it were. A keyboard song attempt
 recorded as played on the computer keys, or from a mixed route, never counts toward passed on your
-own (or, in turn, retained or applied), whatever the judged result — only a note that actually
-arrived over MIDI counts as proof.
+own (or, in turn, retained or applied), whatever the judged result — attempts whose route is not
+recorded (drills, on-screen clicks, older records) are still counted as before.
 
 ## Today's plan
 
