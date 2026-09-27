@@ -45,7 +45,14 @@ export function createPanels() {
         const doc = el && el.ownerDocument;
         const container = doc ? doc.createElement('div') : null;
         if (container) el.appendChild(container);
-        mounted.set(id, { inst: def.mount(container || el, api) || {}, container });
+        // opener: whatever had focus the instant before this panel's own
+        // mount() runs (mount() itself moves focus in -- theory.js, songs.js,
+        // editor.js, playalong.js all do), captured here so close() can give
+        // it back later. A plain-object el has no ownerDocument, so there is
+        // no real focus to capture (opener stays null, same as before this
+        // change) -- the unit tests above never touch it.
+        const opener = doc ? doc.activeElement : null;
+        mounted.set(id, { inst: def.mount(container || el, api) || {}, container, opener });
       }
       open = id;
       const entry = mounted.get(id);
@@ -57,9 +64,30 @@ export function createPanels() {
       const id = open;
       open = null;
       if (entry) {
+        // Captured BEFORE hide()/destroy()/remove() run below, any of which
+        // can itself move focus: this is what was actually focused the
+        // instant close() was asked for. If it is still something outside
+        // this panel's own container -- e.g. a different nav button a real
+        // click just focused on the way to closing this one -- that focus
+        // is exactly where the learner meant it to land, so restoring the
+        // opener would only steal it back; the restore below is only for
+        // when the container we are about to remove would otherwise take
+        // the focus that was inside it down with it.
+        const doc = entry.container && entry.container.ownerDocument;
+        const activeAtClose = doc && doc.activeElement;
+        const focusIsBeingOrphaned = !activeAtClose || activeAtClose === doc.body || (entry.container && entry.container.contains(activeAtClose));
         if (entry.inst.hide) entry.inst.hide();
         if (entry.inst.destroy) entry.inst.destroy();
         if (entry.container) entry.container.remove();
+        // Give focus back to whoever opened this panel -- removing the
+        // container above drops focus to <body> whenever it had landed on
+        // something inside (a list row, a "Back to songs" button); without
+        // this a keyboard user's next Tab would start over from the top of
+        // the page instead of picking up where they left off. Only restores
+        // when the opener is still connected -- a saved song row that no
+        // longer exists, or a plain-object el with nothing to capture, both
+        // leave focus exactly where closing the panel left it.
+        if (focusIsBeingOrphaned && entry.opener && entry.opener.isConnected && typeof entry.opener.focus === 'function') entry.opener.focus();
         mounted.delete(id);
       }
     },
