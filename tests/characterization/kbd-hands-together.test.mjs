@@ -152,8 +152,13 @@ test('hands together: choosing "Right only" restarts the current task and credit
 
   const item = await page.evaluate(`window.__coach.state().item[${JSON.stringify(id)}]`);
   assert.ok(item, 'the right-suffixed id has its own SRS item, separate from j<n>');
-  const bothItemUntouched = await page.evaluate(`window.__coach.state().item[${JSON.stringify(bothId)}]`);
-  assert.equal(bothItemUntouched.reps, 0, 'a right-only pass must never advance the shared both-hands item');
+  // Not just bothId (the first task's element): none of the five shared
+  // both-hands ids may have gained reps from a right-only pass, whichever
+  // one happened to be first.
+  for (let n = 1; n <= 5; n++) {
+    const bothItem = await page.evaluate(`window.__coach.state().item[${JSON.stringify('j' + n)}]`);
+    assert.equal((bothItem && bothItem.reps) || 0, 0, 'a right-only pass must never advance any shared both-hands item (j' + n + ')');
+  }
 });
 
 test('hands together: a j1r item (right-only practice) survives a save and reload, not silently dropped by validId', async (t) => {
@@ -177,4 +182,92 @@ test('hands together: a j1r item (right-only practice) survives a save and reloa
   const after = await page.evaluate(`window.__coach.state().item[${JSON.stringify(id)}]`);
   assert.ok(after, 'the j1r item must not be erased on reload');
   assert.equal(after.reps, before.reps, 'the survived item keeps its recorded reps, not reset to a fresh default');
+});
+
+test('hands together: an approximate Right-only pass names the hand, never the both-hands MIDI line', async (t) => {
+  const page = await launchPage(htmlPath);
+  t.after(() => page.close());
+  await toHandsTogether(page);
+
+  await page.evaluate("const s = document.getElementById('optKbdHands'); s.value = 'right'; s.dispatchEvent(new Event('change', { bubbles: true }));");
+  await page.waitFor('window.__coach.cur() && /^j\\d+r$/.test(window.__coach.cur().id)');
+
+  const info = await page.evaluate('window.__coach.cur().info');
+  await page.evaluate(`window.__coach.note(${info.ex.rh.midi}, false)`);
+  await page.waitFor("document.getElementById('feedback').className === 'ok'");
+  const msg = await page.evaluate("document.getElementById('feedback').textContent");
+  assert.match(msg, /right hand/i);
+  assert.doesNotMatch(msg, /connect a midi keyboard to grade both hands together/i, 'a one-hand mode must not tell the learner to grade "both hands together"');
+});
+
+// Above level 13 (the last dedicated "hands" level), levelDef falls into
+// task 'mix' (levelDef's synthesised "Everything, faster (k)"), which cycles
+// through every task kind seen across the mod's own levels -- including
+// 'seq' and 'one', whose pool is every active id except chords and note
+// names by letter, so it can still hand out a PLAIN (unsuffixed) 'j<n>' id
+// even while the Hands selector is set to Right/Left only. Grading, hintFor
+// and finishTask must key off THAT element's own id (handsModeFromId), not
+// the current global preference, or a plain j<n> gets graded one-handed
+// while still crediting the shared both-hands mastery item.
+// Takes the already-fetched element (rather than re-reading window.__coach.cur()
+// a second time) so a task boundary landing between two evaluate() calls can
+// never hand this a null cur() to read .info off of.
+async function completeElement(page, e) {
+  const info = e.info;
+  if (info.kind === 'chord') { for (const p of info.pcs) await page.evaluate(`window.__coach.note(${60 + p}, true)`); }
+  else if (info.kind === 'hands-together') { await page.evaluate(`window.__coach.note(${info.ex.rh.midi}, true)`); await page.evaluate(`window.__coach.note(${info.ex.lh.midi}, true)`); }
+  else if (info.kind === 'note') { await page.evaluate(`window.__coach.note(${info.midi}, true)`); }
+  else { return false; }
+  return true;
+}
+
+test('hands together: a plain both-hands id inside a mixed (level 14+) task is still graded and credited as both-hands, even in Right-only mode', async (t) => {
+  const page = await launchPage(htmlPath);
+  t.after(() => page.close());
+  await page.evaluate("window.__coach.setMod('kbd')");
+  await page.evaluate('window.__coach.state().level = 14');
+  await page.evaluate("document.getElementById('playBtn').click()");
+  await page.waitFor('window.__coach.task()');
+
+  await page.evaluate("const s = document.getElementById('optKbdHands'); s.value = 'right'; s.dispatchEvent(new Event('change', { bubbles: true }));");
+  assert.equal(await page.evaluate('window.__coach.db().prefs.kbdHands'), 'right');
+
+  let target = null;
+  for (let i = 0; i < 80 && !target; i++) {
+    await page.waitFor('window.__coach.cur()', 3000);
+    const e = await page.evaluate('window.__coach.cur()');
+    if (!e) continue;
+    if (e.info.kind === 'hands-together' && /^j\d+$/.test(e.id)) { target = e; break; }
+    const advanced = await completeElement(page, e);
+    if (!advanced) { await page.waitFor('!window.__coach.task() || window.__coach.task().done', 3000); }
+  }
+  assert.ok(target, 'a plain j<n> element must show up in a mixed-level task within a reasonable number of tasks');
+
+  const id = target.id, info = target.info;
+  const before = await page.evaluate(`window.__coach.state().item[${JSON.stringify(id)}]`);
+  const repsBefore = (before && before.reps) || 0;
+
+  // Clear any leftover feedback text/class from whichever element finished
+  // just before this one was reached (the feedback area is only ever
+  // updated by the next pass/fail, never reset between tasks) so the check
+  // below reflects THIS note, not a stale prior pass.
+  await page.evaluate("document.getElementById('feedback').className = ''; document.getElementById('feedback').textContent = '';");
+
+  // Only the right-hand note: in Right-only mode this is the whole
+  // exercise, but a plain j<n> id names the BOTH-hands exercise, so it must
+  // not pass on one hand alone.
+  await page.evaluate(`window.__coach.note(${info.ex.rh.midi}, true)`);
+  await new Promise((r) => setTimeout(r, 100));
+  assert.equal(await page.evaluate("document.getElementById('feedback').className"), '', 'the right-hand note alone must not pass a both-hands (j<n>) element');
+
+  await page.evaluate(`window.__coach.note(${info.ex.lh.midi}, true)`);
+  await page.waitFor("document.getElementById('feedback').className === 'ok'");
+  await page.waitFor('window.__coach.task() && window.__coach.task().done', 5000);
+
+  const events = await page.evaluate('window.__coach.db().events');
+  const last = events[events.length - 1];
+  assert.equal(last.hands, 'both', 'a plain j<n> element is always logged as both hands, regardless of the current global preference');
+
+  const after = await page.evaluate(`window.__coach.state().item[${JSON.stringify(id)}]`);
+  assert.ok(after.reps > repsBefore, 'the both-hands pass must still credit the shared both-hands item');
 });
