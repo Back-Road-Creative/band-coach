@@ -34,7 +34,7 @@ import { stepTuner } from './core/tuner.js';
 import { shouldReveal, promptFor, hintFor as coreHintFor } from './core/reveal.js';
 import { gradeOutcome } from './core/grade-outcome.js';
 import { makeEvent, validateEvent, boundEvents } from './core/learning-events.js';
-import { planSession, describePlan, nextPlanStep } from './core/curriculum.js';
+import { planSession, describePlan, describeWhy, nextPlanStep } from './core/curriculum.js';
 //
 import * as RHY from './core/rhythm.js';
 //
@@ -1959,6 +1959,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
     sessionPlan = planSession({ instrumentId: mod, level: S.level, activeIds: activeItems(mod, S.level), items: S.item, events: DB.events, now: modelNow, due: due });
     planProgress = { review: 0, weak: 0, apply: 0, check: 0 };
     msg += ' ' + describePlan(sessionPlan, id => inf(id).short);
+    const why = describeWhy(sessionPlan, id => inf(id).short); if (why) msg += ' ' + why;
     playing = true; paused = false; $('playBtn').textContent = 'Pause'; $('endBtn').hidden = false; coach(msg); showAll(); wakeLock.acquire();
   }
   // logSession(): a panel (e.g. a song lesson) logs its own practice as a

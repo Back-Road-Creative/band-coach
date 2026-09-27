@@ -251,7 +251,9 @@ transferred to a different song, so it is not counted as though it were.
 Starting a drill session (`src/core/curriculum.js`'s `planSession`/`describePlan`, `src/app.js`'s
 `startSession`) has the coach say, in plain words, what the sitting will cover: what's due for
 review, then the one active skill you're weakest on (named in plain words, e.g. "G4", never its
-internal id), then a short phrase that uses it, then a check with no hints. The drill chooser
+internal id), then a short phrase that uses it, then a check with no hints. A second sentence then
+says why that skill was picked, straight from `planSession`'s own record (`describeWhy`), never
+recomputed -- either it slipped before, or it is the one you've practiced least so far. The drill chooser
 follows that same order — review first, then the weak skill on its own, then applying it, then
 the blind check — before falling back to today's ordinary level-by-level practice once all four
 are done.
@@ -928,6 +930,14 @@ The songs panel (`src/ui/songs.js`) shows one "Play it on…" card per ready
 instrument, badge included, on a lesson's first (listen) step, before the
 learner has attempted anything; picking a card starts that same song on the
 chosen instrument without leaving the panel.
+
+`src/song/eval/fidelity.js`'s `fidelityReport(sourceNotes, song, partId, instrument)`
+is a pure, non-user-facing measurement of the same divergence, returning
+`{dropped, merged, octaveShift, shiftSemitones, outOfRange, chordReduced, hands}`:
+`dropped`/`merged` compare the part's notes against an optional pre-import note
+list; `octaveShift`, `shiftSemitones`, `outOfRange` and `chordReduced` all come
+from `fitToInstrument`'s own result, reused rather than re-derived; `hands`
+comes from `arrangeFor`'s placements (keyboard family only, `null` otherwise).
 
 `segment` (`src/song/lesson.js`) cuts phrases at real bar lines even when a
 song changes metre partway through (`song.metreChanges`), always agreeing
