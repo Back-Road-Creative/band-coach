@@ -12,6 +12,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { HTML_PATH } from '../helpers/html-path.mjs';
 import { launchPage } from '../helpers/browser.mjs';
+import { playSongNoteWhenListening } from '../helpers/songs-note.mjs';
 
 const htmlPath = HTML_PATH;
 
@@ -63,15 +64,13 @@ test('a song session row keeps its source and songId after the page reloads', as
       await page.evaluate("Array.from(document.querySelectorAll('.panel-songs-practice button')).find(b => b.textContent === 'Next').click()");
       continue;
     }
-    await page.evaluate(
-      "Array.from(document.querySelectorAll('.panel-songs-practice button')).find(b => b.textContent === 'Your turn').click()"
-    );
-    await page.waitFor(
-      "document.querySelector('.panel-songs-count') && document.querySelector('.panel-songs-count').textContent.startsWith('Notes heard so far')"
-    ); // N2 (#191): a four-beat count-in runs before listening starts; a note during it is ignored
-    await page.evaluate(
-      "window.__coach.songsNote(64, true)"
-    );
+    // N2 (#191): a four-beat count-in runs before listening starts; a note
+    // during it is ignored. playSongNoteWhenListening() clicks, polls for
+    // listening to begin, and fires the note all in one page turn, so a
+    // starved runner cannot open a Node-side gap between "listening
+    // started" and "the note was delivered" the way a separate click +
+    // waitFor + evaluate("songsNote(...)") would.
+    await playSongNoteWhenListening(page, 64);
     await page.waitFor("document.querySelector('.panel-songs-count') && document.querySelector('.panel-songs-count').textContent.includes('1')");
     await page.evaluate(
       "Array.from(document.querySelectorAll('.panel-songs-practice button')).find(b => b.textContent === 'Stop and check').click()"

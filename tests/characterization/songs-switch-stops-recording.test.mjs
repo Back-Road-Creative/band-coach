@@ -9,6 +9,7 @@ import { join } from 'node:path';
 import { HTML_PATH } from '../helpers/html-path.mjs';
 import { launchPage } from '../helpers/browser.mjs';
 import { writeBandPack } from '../../src/song/band-pack.js';
+import { playSongNoteWhenListening } from '../helpers/songs-note.mjs';
 
 const htmlPath = HTML_PATH;
 
@@ -154,17 +155,14 @@ test('a listen step\'s "Next" does not carry a stale bar-by-bar result onto the 
   for (let i = 0; i < 10; i++) {
     const title = await page.evaluate("document.querySelector('.panel-songs-practice h4').textContent");
     if (title.includes('bars 2-2')) break; // reached phrase 1's own listen step
-    await page.evaluate(
-      "Array.from(document.querySelectorAll('.panel-songs-practice button')).find(b => b.textContent === 'Your turn').click()"
-    );
     // Wait out the four-beat count-in (N2) -- pressing the note the instant
     // "Your turn" is clicked would now land during the clicks and never be
-    // heard, so this waits for the count element to say real listening has
-    // begun before pressing the phrase's one note.
-    await page.waitFor(
-      "document.querySelector('.panel-songs-count') && document.querySelector('.panel-songs-count').textContent.startsWith('Notes heard so far')"
-    );
-    await page.evaluate('window.__coach.songsNote(60, true)');
+    // heard. playSongNoteWhenListening() clicks "Your turn", polls in the
+    // page for real listening to begin, and fires the note in the same
+    // turn -- a separate click + waitFor + evaluate("songsNote(...)") adds
+    // a Node-side round trip a starved runner can turn into real lateness
+    // against this song's tempo-ladder tolerance.
+    await playSongNoteWhenListening(page, 60);
     await page.waitFor(
       "Array.from(document.querySelectorAll('.panel-songs-practice button')).some(b => b.textContent === 'Stop and check')"
     );
