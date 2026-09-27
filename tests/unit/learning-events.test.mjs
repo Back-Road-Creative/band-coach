@@ -366,10 +366,11 @@ test('per-group anchors survive even when per-song anchors alone would overflow 
   // The full history has all 40 skills both retained and applied (one
   // retain/apply per skill across the 5 replays).
   assert.deepEqual(fullSummary, { introduced: 600, withHelp: 0, independent: 240, retained: 200, applied: 200 });
-  // The naive eviction this locks against zeroes both counts outright; the
-  // fix keeps as many group anchors as the shared anchorMax budget allows
-  // (200), which is not enough for all 40 groups' song anchors too -- these
-  // are the exact numbers the fix produces, not just "> 0".
+  // The naive eviction this locks against zeroes both counts outright. The
+  // fix keeps per-group anchors ahead of song anchors, so the shared 200-row
+  // anchorMax budget runs out before every (skill, song) pair's anchor fits
+  // and retained/applied still drop after trimming -- these are the exact
+  // numbers the fix produces, not just "> 0".
   assert.deepEqual(trimmedSummary, { introduced: 500, withHelp: 0, independent: 200, retained: 160, applied: 160 });
 });
 
