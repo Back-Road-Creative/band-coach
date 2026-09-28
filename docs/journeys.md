@@ -153,9 +153,16 @@ Each step's outcome text (`src/instruments/kbd-pathway.js`) is labelled
 reviewed until a real player's review lands in
 `src/instruments/review-ledger.js`'s ledger.
 
-This is a pure contract today, proven only by
-`node --test tests/unit/pathway.test.mjs` -- not yet a browser-proven
-journey. P2 wires it into a panel; R2 adds the browser journeys.
+P2 wires the contract into a panel (`src/ui/pathway.js`), opened from a
+"Your keyboard path" button in the keyboard trainer's own options (kbd
+level only). The panel lists all five steps, marks the current one, and
+offers ONE action for it: the trainer for setup/lesson, opening the
+suggested starter song for song, and opening that same song straight into
+Check mode for check/return -- the hand-off going through
+`requestOpenSong`'s new, optional `mode` parameter (`src/ui/songs.js`), so a
+learner following the panel lands in Check mode rather than Learn. Proven
+by `node --test --test-concurrency=1
+tests/characterization/kbd-pathway-panel.test.mjs`.
 `src/app.js`'s `startSession` is the first caller of `pathwayState`, and shows the step's outcome
 text once per visit for a returning keyboard learner (`tests/characterization/plan-song-block.test.mjs`).
 
