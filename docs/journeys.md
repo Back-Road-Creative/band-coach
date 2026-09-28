@@ -203,11 +203,16 @@ the five-item `reviewItems()` list so the panel's step count stays five.
 Proof: `node --test tests/unit/pathway-transfer-retention.test.mjs`.
 
 This assumes every event's `at` is a real epoch-millisecond timestamp.
-`src/ui/songs.js` currently logs song-check `at` from the audio clock
-(seconds, not epoch ms, per its `{ now: api.now() }` call) -- a separate
-unit (`fix/song-event-epoch-clock`) fixes that at the source; `pathway.js`
-adds no workaround for a mixed clock, since detecting or correcting that is
-that unit's job, not this pure function's.
+It is: `makeEvent()` (`src/core/learning-events.js`) defaults `at` to
+`Date.now()`, and since #324 (`fix/song-event-epoch-clock`) the song-check
+call site in `src/ui/songs.js` passes no `now` override, so song rows use
+the same clock as drill rows (its inline comment says why `api.now()`, the
+audio clock in seconds, must never stamp `at`). `pathway.js` adds no
+workaround for a mixed clock. Rows saved on a learner's device before #324
+may still carry an audio-clock `at`; nothing migrates them. Live proof that
+a fresh check row carries a real epoch-ms `at`: journey 3 in "Keyboard
+pathway close-out" below, whose day-boundary math only works against a
+real clock.
 
 ## Keyboard pathway close-out
 
@@ -256,16 +261,6 @@ dynamically-computed count (`events.filter(isIndependentOk).length`), not a fixe
 never drift out of step with what the app actually does; no code changed to "fix" this, since
 whether N should mean "this song's steps" or "this pathway's one qualifying row" is a product
 decision this unit's scope does not cover.
-
-**Correction to the mixed-clock caveat above.** The "Keyboard pathway (contract)" section's closing
-paragraph flags `src/ui/songs.js`'s song-check `at` as still coming from the audio clock (seconds),
-not real epoch milliseconds. That is no longer true on this branch: `makeEvent()`
-(`src/core/learning-events.js`) defaults `at` to `Date.now()`, and the song-check call site passes
-no `now` override (its own comment says so directly) -- journey 3's real two-day run is live proof
-a fresh check row's `at` is a genuine epoch-ms timestamp, since the day-boundary math in
-`pathwayState()` (`dueAt`, `retainedAt`) only works at all against a real clock. Whether every OLDER
-saved row already on a learner's device also carries a genuine `at`, or some pre-date this fix, is
-outside what this journey checked.
 
 ## Known gaps
 
