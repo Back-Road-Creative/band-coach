@@ -34,8 +34,11 @@
 //   arrangeKeys(notes, instrument) -> { rh, lh, unplayable }
 //     Range-checks every note against `instrument.range` first (anything
 //     outside it is reported in `unplayable` with a plain reason, never
-//     dropped and never invented), then runs the rest through splitHands
-//     and fingerHand per hand.
+//     dropped and never invented), then splits the rest between the hands:
+//     a note carrying an explicit `hand` ('rh'/'lh', see src/song/model.js)
+//     always goes to that hand; every other (untagged) note still goes
+//     through splitHands' middle-C guess. Either way every playable note
+//     is run through fingerHand per hand.
 
 const DEFAULT_SPLIT_MIDI = 60; // middle C
 const DEFAULT_HYSTERESIS = 2; // a whole tone either side of the split point
@@ -176,7 +179,16 @@ export function arrangeKeys(notes, instrument) {
     }
   });
 
-  const { rh, lh } = splitHands(playable);
+  // An explicit note.hand wins over the pitch split; only untagged notes go
+  // through splitHands. splitHands returns the same note references it was
+  // given, so re-merge by identity (Set) rather than rebuilding the arrays,
+  // which keeps every note -- tagged and untagged -- in its original time
+  // order for fingerHand's Viterbi.
+  const untagged = playable.filter(n => n.hand !== 'rh' && n.hand !== 'lh');
+  const { rh: untaggedRh } = splitHands(untagged);
+  const untaggedRhSet = new Set(untaggedRh);
+  const rh = playable.filter(n => n.hand === 'rh' || (n.hand !== 'lh' && untaggedRhSet.has(n)));
+  const lh = playable.filter(n => n.hand === 'lh' || (n.hand !== 'rh' && !untaggedRhSet.has(n)));
   return {
     rh: fingerHand(rh, 'rh'),
     lh: fingerHand(lh, 'lh'),
