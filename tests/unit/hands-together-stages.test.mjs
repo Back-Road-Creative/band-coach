@@ -148,3 +148,29 @@ test('SPLIT_MID_TOL_RATIO is 0.2, and the right-hand tolerance is max(PAIR_RELEA
   assert.equal(justOutside.rh.state, 'fail');
   assert.ok(SPLIT_MID_TOL_RATIO * (lhOff - lhOn) > PAIR_RELEASE_TOL_MS);
 });
+
+test('the right-hand tolerance floors at PAIR_RELEASE_TOL_MS on a short held note', () => {
+  const lhOn = 1000, lhOff = 1500; // 500ms held -> ratio tol = 100 < PAIR_RELEASE_TOL_MS (150), so the floor applies
+  const mid = (lhOn + lhOff) / 2;
+  assert.ok(SPLIT_MID_TOL_RATIO * (lhOff - lhOn) < PAIR_RELEASE_TOL_MS);
+  const justInside = gradeSplitRhythm(ex, { lhOn: lhOn, lhOff: lhOff, rhOns: [1010, mid + 140], rhOffs: [1300, 1510] });
+  assert.notEqual(justInside.rh.state, 'fail');
+  const justOutside = gradeSplitRhythm(ex, { lhOn: lhOn, lhOff: lhOff, rhOns: [1010, mid + 160], rhOffs: [1300, 1510] });
+  assert.equal(justOutside.rh.state, 'fail');
+});
+
+test('gradeSplitRhythm: a third right-hand onset fails, naming the right hand', () => {
+  const r = gradeSplitRhythm(ex, { lhOn: 0, lhOff: 1000, rhOns: [0, 500, 950], rhOffs: [400, 900, 990] });
+  assert.equal(r.rh.state, 'fail');
+  assert.match(r.rh.reason, /right hand/i);
+  assert.equal(r.state, 'fail');
+});
+
+test('a re-pressed left hand clears its stale release before a fresh split-rhythm attempt', () => {
+  // The app resets rhOns/rhOffs to [] on a fail but only e.pair.on/off for the
+  // held-note timestamps -- this asserts the PURE grader treats a fresh lhOn
+  // with no matching lhOff as still-held (undefined off), not the old value.
+  const stale = gradeSplitRhythm(ex, { lhOn: 1000, lhOff: undefined, rhOns: [1000, 1500], rhOffs: [1400] });
+  assert.notEqual(stale.lh.state, 'fail');
+  assert.notEqual(stale.rh.state, 'fail');
+});

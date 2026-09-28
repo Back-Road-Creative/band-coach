@@ -323,7 +323,8 @@ export const SPLIT_MID_TOL_RATIO = 0.2;
 // player can read as "the exercise", by design (decision 4): the left hand
 // is judged against the right hand's two onsets/second release, and the
 // right hand's second onset is judged against the left hand's own held
-// note -- see rh/lh below. Returns { state, reason, rh: { state, reason },
+// note; a third right-hand onset fails outright, since the right hand must
+// play EXACTLY two notes -- see rh/lh below. Returns { state, reason, rh: { state, reason },
 // lh: { state, reason } }, where the outer `state`/`reason` is 'fail' if
 // either hand fails (naming that hand's reason), 'pass' once both hands
 // have independently passed, else 'waiting'.
@@ -356,7 +357,10 @@ export function gradeSplitRhythm(exercise, rec) {
     }
   }
 
-  if (rhOns.length >= 2 && lhOn !== undefined && lhOn !== null && lhOff !== undefined && lhOff !== null) {
+  if (rhOns.length > 2) {
+    rh.state = 'fail';
+    rh.reason = 'The right hand played more than two notes. Play exactly two even notes over the held bass.';
+  } else if (rhOns.length >= 2 && lhOn !== undefined && lhOn !== null && lhOff !== undefined && lhOff !== null) {
     const mid = (lhOn + lhOff) / 2, tol = Math.max(PAIR_RELEASE_TOL_MS, SPLIT_MID_TOL_RATIO * (lhOff - lhOn));
     const delta = rhOns[1] - mid;
     if (Math.abs(delta) > tol) {

@@ -1386,7 +1386,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
         }
         if (stage === 'split') {
           if (midi !== ex.rh.midi && midi !== ex.lh.midi) { failEl(wrongMsg, e.id + '>x' + midi); return; }
-          if (midi === ex.lh.midi) { e.pair.on[midi] = performance.now(); }
+          if (midi === ex.lh.midi) { e.pair.on[midi] = performance.now(); delete e.pair.off[midi]; }
           else if (e.pair.rhOns.length === e.pair.rhOffs.length) { e.pair.rhOns.push(performance.now()); }
           const g = gradeSplitRhythm(ex, { lhOn: e.pair.on[ex.lh.midi], lhOff: e.pair.off[ex.lh.midi], rhOns: e.pair.rhOns, rhOffs: e.pair.rhOffs });
           e.pair.last = { rh: g.rh.state, lh: g.lh.state };
