@@ -16,9 +16,9 @@ export function defaultExerciseState() {
 
 // state: { level, streak, correct, total }. `streak` is signed: positive is
 // a run of correct answers, negative a run of wrong ones.
-export function recordAnswer(state, correct, maxLevel, opts = {}) {
-  const upRun = opts.upRun ?? LEVEL_UP_RUN;
-  const downRun = opts.downRun ?? LEVEL_DOWN_RUN;
+export function recordAnswer(state, correct, maxLevel) {
+  const upRun = LEVEL_UP_RUN;
+  const downRun = LEVEL_DOWN_RUN;
   const total = (state.total || 0) + 1;
   const correctCount = (state.correct || 0) + (correct ? 1 : 0);
   const prevStreak = state.streak || 0;

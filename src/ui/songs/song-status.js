@@ -78,15 +78,6 @@ export function statusLabel(entry) {
   return label;
 }
 
-// Removes a song's status entry (called when a song is deleted from the
-// library elsewhere, so the ledger never drifts to point at a song that no
-// longer exists -- plan §4 risk 5).
-export function forgetSong(ledger, songId) {
-  const out = { ...(ledger || {}) };
-  delete out[songId];
-  return out;
-}
-
 // A copy of learn.js's practiceGate rule (learn.js:90-94): a song with any
 // open flagged notes cannot be practised until they are resolved. Kept as
 // its own copy here, not an import, so src/ui/learn.js stays untouched by

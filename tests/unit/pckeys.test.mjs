@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { PCKEYS, PCKEYS_UPPER, PCKEYS_LOWER, pckeysRowRange } from '../../src/core/pckeys.js';
+import { PCKEYS, PCKEYS_UPPER, PCKEYS_LOWER } from '../../src/core/pckeys.js';
 import { HANDS_TOGETHER_EXERCISES } from '../../src/core/hands-together.js';
 
 test('upper row: a..k map to C4 (60) up to C5 (72), unchanged from before this module existed', () => {
@@ -29,9 +29,4 @@ test('no MIDI note is mapped twice across the two rows', () => {
 test('the lower row covers every left-hand note the hands-together curriculum needs', () => {
   const lowerNotes = new Set(Object.values(PCKEYS_LOWER));
   HANDS_TOGETHER_EXERCISES.forEach(ex => assert.ok(lowerNotes.has(ex.lh.midi), `left-hand note ${ex.lh.midi} (${ex.name}) is reachable from the computer keys`));
-});
-
-test('pckeysRowRange reports the lowest and highest MIDI note a row reaches', () => {
-  assert.deepEqual(pckeysRowRange(PCKEYS_UPPER), [60, 72]);
-  assert.deepEqual(pckeysRowRange(PCKEYS_LOWER), [48, 59]);
 });

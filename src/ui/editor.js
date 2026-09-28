@@ -56,8 +56,8 @@ export function requestOpenInEditor(api, songId, needsCheck, { starterId } = {})
 
 // P3-10: the unsaved-work stash -- this panel's own saved-data slot (see
 // working-copy.js's own header comment for why this is the only place it
-// survives a panel switch). Written by hide() whenever a song is open and
-// not yet abandoned, cleared by show() the moment it is read back.
+// survives a panel switch). hide() stashes it here whenever a song is open;
+// show() restores it and clears the slot the moment it is read back.
 const EDITOR_WORKING_STORE_ID = 'editor-working';
 
 // Shared across every unit that writes to the saved-song library — see the
