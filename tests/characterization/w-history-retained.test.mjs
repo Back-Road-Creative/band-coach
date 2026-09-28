@@ -58,3 +58,22 @@ test('Progress never claims a retained count with no checks recorded', async (t)
   assert.match(text, /No checks recorded yet/);
   assert.doesNotMatch(text, /Retained on a later check:\s*[1-9]/);
 });
+
+// E5c: a keyboard drill on n64 followed by a correct hot-cross-buns song step
+// credits "Applied in a song" through KBD_SONG_SKILL_MAP (src/instruments/kbd-songs.js),
+// even though the drill and song rows share no instrument|skill group of their
+// own -- history.js:178 now passes { skillMap: KBD_SONG_SKILL_MAP, skillMapInstrument: 'kbd' }.
+test('a drilled note credits a keyboard song play as applied via KBD_SONG_SKILL_MAP', async (t) => {
+  const page = await launchPage(HTML_PATH);
+  t.after(() => page.close());
+  const base = { v: 1, assistance: 'none', dims: { pitch: 'ok' }, unassessed: [], activeMs: 1000 };
+  await seedEvents(page, [
+    Object.assign({}, base, { id: 'evA', at: T0, instrument: 'kbd', skill: 'n64', source: 'drill' }),
+    Object.assign({}, base, { id: 'evB', at: T0 + 1000, instrument: 'kbd', skill: 'phrase-slow:0', source: 'song', songId: 'hot-cross-buns' }),
+  ]);
+  await page.evaluate('window.__coach.openPanel("history")');
+  assert.equal(await page.evaluate('window.__coach.panelOpen()'), 'history');
+
+  const text = await page.evaluate("document.getElementById('historyRetention').textContent");
+  assert.match(text, /Applied in a song:\s*1/);
+});

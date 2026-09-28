@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { dimsFromStep, assessmentLines } from '../../src/ui/songs/assessed.js';
+import { isIndependentOk, summarizeEvents } from '../../src/core/learning-events.js';
 
 function rule(overrides = {}) {
   return { maxMeanErrorMs: 60, minDurationScore: 0.6, maxMeanAbsCents: 40, ...overrides };
@@ -101,6 +102,61 @@ test('E3b: omitting the third argument keeps the 2-arg behaviour byte-identical'
   const withOpts = dimsFromStep(step(), result(), undefined);
   const without = dimsFromStep(step(), result());
   assert.deepEqual(withOpts, without);
+});
+
+// Unit XTR: a try that clears every threshold EXCEPT extras (a wrong note
+// struck alongside the right ones, passesRule/failedDimension's own
+// maxExtras gate, src/ui/songs/practice.js) must not read as "passed on your
+// own" -- extras aren't one of the four dims judgeAttempt grades, so without
+// this fold-in every dim above would log 'ok' and isIndependentOk/
+// summarizeEvents/pathway.js's qualifies() would all wrongly agree it passed
+// independently.
+function makeDrillEvent(dims, unassessed = []) {
+  return { v: 1, id: 'a', at: 1, instrument: 'kbd', skill: 'n4', source: 'song', assistance: 'none', dims, unassessed, activeMs: 400 };
+}
+
+test('XTR: an extras-only failure marks pitch a miss, not a silent ok', () => {
+  const { dims, unassessed } = dimsFromStep(step({ passRule: rule({ maxExtras: 0 }) }), result({ extras: { count: 1 } }));
+  assert.equal(dims.pitch, 'miss');
+  assert.equal(dims.onset, 'ok');
+  assert.equal(dims.hold, 'ok');
+  assert.equal(dims.tune, 'ok');
+  assert.ok(!unassessed.includes('pitch'));
+  assert.equal(isIndependentOk(makeDrillEvent(dims, unassessed)), false);
+  const s = summarizeEvents([makeDrillEvent(dims, unassessed)]);
+  assert.equal(s.independent, 0);
+});
+
+test('XTR control: the same try with extras.count 0 is still independent-ok', () => {
+  const { dims, unassessed } = dimsFromStep(step({ passRule: rule({ maxExtras: 0 }) }), result({ extras: { count: 0 } }));
+  assert.equal(dims.pitch, 'ok');
+  assert.equal(isIndependentOk(makeDrillEvent(dims, unassessed)), true);
+  const s = summarizeEvents([makeDrillEvent(dims, unassessed)]);
+  assert.equal(s.independent, 1);
+});
+
+test('XTR: a rhythm step\'s extras-only failure marks onset a miss (pitch has no dim to fold into)', () => {
+  const { dims, unassessed } = dimsFromStep(step({ kind: 'rhythm', passRule: rule({ maxExtras: 0 }) }), result({ extras: { count: 1 } }));
+  assert.equal(dims.onset, 'miss');
+  assert.equal(dims.pitch, undefined);
+  assert.deepEqual(unassessed, ['pitch']);
+  assert.equal(isIndependentOk(makeDrillEvent(dims, unassessed)), false);
+});
+
+test('XTR: a capability that can only prove onset (tap) folds the extras miss onto onset, surviving gateByCapability', () => {
+  const { dims, unassessed } = dimsFromStep(step({ passRule: rule({ maxExtras: 0 }) }), result({ extras: { count: 1 } }), { assess: 'tap' });
+  assert.equal(dims.onset, 'miss');
+  assert.equal(dims.pitch, undefined);
+  assert.ok(unassessed.includes('pitch'));
+  assert.ok(!unassessed.includes('onset'));
+  assert.equal(isIndependentOk(makeDrillEvent(dims, unassessed)), false);
+});
+
+test('XTR: a capability that can prove nothing (none) invents no dim for extras, and the row still does not count', () => {
+  const { dims, unassessed } = dimsFromStep(step({ passRule: rule({ maxExtras: 0 }) }), result({ extras: { count: 1 } }), { assess: 'none' });
+  assert.deepEqual(dims, {});
+  assert.ok(unassessed.includes('pitch'));
+  assert.equal(isIndependentOk(makeDrillEvent(dims, unassessed)), false);
 });
 
 test('each line is plain words, never a key name', () => {

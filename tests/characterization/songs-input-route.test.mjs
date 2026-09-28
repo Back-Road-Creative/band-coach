@@ -7,6 +7,17 @@
 // for the MIDI attempt, and a real `keydown` KeyboardEvent (the same
 // technique tests/characterization/midi-entry.test.mjs's computer-key test
 // uses) for the computer-key attempt -- neither goes through the debug hook.
+// A canvas tap/Enter-Space ('screen', src/app.js's cv listeners) is NOT
+// exercised here: #cv lives inside #mainArea, which src/app.js's openPanel()
+// unconditionally hides ([hidden] { display: none !important } in
+// src/styles.css) the instant the Songs panel opens, so a real canvas tap or
+// canvas Enter/Space can never reach onNote() while a song step is being
+// recorded -- measured directly (getBoundingClientRect() on #cv reads
+// { w: 0, h: 0 } the moment openPanel('songs') runs). openPanel() also
+// clears the drill task, so the main-app mic path returns before onNote().
+// src/app.js's onNote() forwards only 'midi'/'computer-key' to a song step;
+// today's shipped app has no reachable path that logs a song row's `input`
+// as 'screen' or routes a main-app mic note into one.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
@@ -121,6 +132,45 @@ async function judgeFirstStepWith(page, sendNoteJs) {
     ${sendNoteJs}
   })()`);
   await page.waitFor("document.querySelector('.panel-songs-count') && document.querySelector('.panel-songs-count').textContent.includes('1')");
+  await page.evaluate(
+    "Array.from(document.querySelectorAll('.panel-songs-practice button')).find(b => b.textContent === 'Stop and check').click()"
+  );
+  await page.waitFor("document.querySelector('.panel-songs-practice h4') || document.querySelector('.panel-songs-practice p')");
+}
+
+// Same as judgeFirstStepWith, but for a step spanning MORE than one note (a
+// phrase-rhythm step with two notes, the "mixed" test below). Two things a
+// single sendNoteJs cannot do: (1) sending every note in one in-page turn
+// then waiting for the count to reach '1' never resolves once two notes
+// already landed before the wait ran; (2) the "rhythm" step's onset matching
+// (src/ui/songs/practice.js judgeOnsets) assigns each played event to
+// whichever expected onset it lands NEAREST in real time -- two notes fired
+// only milliseconds apart both land nearest the FIRST onset regardless of
+// send order, so `sendNoteJsList[i]`'s own delay (the caller's job, not this
+// helper's) has to actually separate them by about as long as the phrase
+// itself does. Each entry is fired and awaited (count includes its own
+// tally, "1" then "2") one at a time.
+async function judgeFirstStepWithSequence(page, sendNoteJsList) {
+  for (let i = 0; i < 8; i++) {
+    const hasNext = await page.evaluate(
+      "Array.from(document.querySelectorAll('.panel-songs-practice button')).some(b => b.textContent === 'Next')"
+    );
+    if (!hasNext) break;
+    await page.evaluate("Array.from(document.querySelectorAll('.panel-songs-practice button')).find(b => b.textContent === 'Next').click()");
+  }
+  await page.evaluate(`(async () => {
+    const turnBtn = Array.from(document.querySelectorAll('.panel-songs-practice button')).find(b => b.textContent === 'Your turn');
+    if (turnBtn) turnBtn.click();
+    while (!(document.querySelector('.panel-songs-count') && document.querySelector('.panel-songs-count').textContent.startsWith('Notes heard so far'))) {
+      await new Promise(r => setTimeout(r, 4));
+    }
+    ${sendNoteJsList[0]}
+  })()`);
+  await page.waitFor("document.querySelector('.panel-songs-count') && document.querySelector('.panel-songs-count').textContent.includes('1')");
+  for (let i = 1; i < sendNoteJsList.length; i++) {
+    await page.evaluate(`(async () => { ${sendNoteJsList[i]} })()`);
+    await page.waitFor(`document.querySelector('.panel-songs-count') && document.querySelector('.panel-songs-count').textContent.includes('${i + 1}')`);
+  }
   await page.evaluate(
     "Array.from(document.querySelectorAll('.panel-songs-practice button')).find(b => b.textContent === 'Stop and check').click()"
   );
@@ -290,11 +340,57 @@ test('a mic-detected pitched song attempt logs input: "mic"', async (t) => {
   assert.deepEqual(result.exceptions, []);
 });
 
+// A single judged try can span more than one note (a phrase's rhythm step,
+// the first non-listen step reached below) -- one played by computer key,
+// the next by real fake-MIDI, still one attempt, one logged row. advance()'s
+// `input` is 'mixed' the moment the judged notes in a try do not all agree
+// on the same concrete route, never guessed toward either one.
+test('a keyboard song attempt played through both computer key and real MIDI logs input: "mixed"', async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'band-coach-song-input-mixed-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const challengePath = join(dir, 'challenge.json');
+  writeFileSync(challengePath, JSON.stringify({
+    schema: 'challenge/1', title: 'Two Notes', from: null, note: null,
+    songs: [{
+      schema: 'song/1', id: 'two-note-song', title: 'Two Note Song', composer: null, licence: null, source: null,
+      key: { tonic: 0, mode: 'major' }, metre: { num: 4, den: 4 }, bpm: 100, ticksPerQuarter: 480,
+      parts: [{ id: 'melody', name: 'Melody', notes: [{ start: 0, dur: 480, midi: 64 }, { start: 480, dur: 480, midi: 67 }] }],
+      chords: []
+    }]
+  }));
+
+  const page = await launchPage(htmlPath, { initScript: FAKE_MIDI_INIT });
+  t.after(() => page.close());
+
+  await importAndOpenSong(page, challengePath, 'Two Note Song');
+  await midiAddPort(page, 'p1', 'Test Keys');
+  await page.evaluate("document.getElementById('ioBtn').click()");
+  await page.waitFor("document.getElementById('ioBtn').hidden === true");
+
+  const before = await page.evaluate('window.__coach.db().events.length');
+  // The second note's expected onset sits one quarter note after the first
+  // (start: 480 ticks at 100bpm, 480 ticks/quarter -- 0.6s later); the
+  // explicit wait here is what makes it land nearest THAT onset rather than
+  // the first one (see judgeFirstStepWithSequence's comment above).
+  await judgeFirstStepWithSequence(page, [
+    "document.dispatchEvent(new KeyboardEvent('keydown', { key: 'd' }));",
+    "await new Promise((r) => setTimeout(r, 600)); window.__midiSend('p1', [0x90, 67, 100]);",
+  ]);
+  await page.waitFor('window.__coach.db().events.length > ' + before);
+
+  const events = await page.evaluate('window.__coach.db().events');
+  const row = events[events.length - 1];
+  assert.equal(row.source, 'song');
+  assert.equal(row.input, 'mixed');
+  assert.deepEqual(page.exceptions, []);
+});
+
 // A caller that never told onNote() a source at all -- the debug hook, or a
-// screen-key click -- leaves `played.source` undefined; advance()'s own
-// "left off rather than guessed" convention (src/ui/songs.js, the comment
-// above `judgedSources` in advance()) means the row's `input` key is absent
-// entirely, never a guessed value. `songsNoteAt` (the hook itself, see
+// canvas tap/Enter-Space (unreachable during song practice, see the comment
+// at the top of this file) -- leaves `played.source` undefined; advance()'s
+// own "left off rather than guessed" convention (src/ui/songs.js, the
+// comment above `judgedSources` in advance()) means the row's `input` key is
+// absent entirely, never a guessed value. `songsNoteAt` (the hook itself, see
 // src/app.js's `songsNoteAt: forwardSongNoteAt` assignment) is called here
 // with no trailing `source` argument, the same shape every caller used
 // before this unit added one.

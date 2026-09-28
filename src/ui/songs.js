@@ -77,6 +77,7 @@ import { arrangeFor, songForArrangement } from '../song/arrange/index.js';
 import { staffView, renderStepView, tabView, fingeringLine, kitView } from './songs/step-view.js';
 import { createDrumCapture } from './songs/drum-capture.js';
 import { pieceForMidi } from '../instruments/drum-kit.js';
+import { fidelityReport } from '../song/eval/fidelity.js';
 import { lessonKey, sanitizeLessonList, sanitizeLessonEntry, rememberLesson, findLesson, resultsTail } from '../song/lesson-resume.js';
 import { handsAvailable, stepForHands } from '../song/hand-filter.js';
 import { name as noteName } from '../core/note-names.js';
@@ -130,8 +131,10 @@ export function recordStartSec() { return currentPractice ? currentPractice.reco
 // audio-clock instant instead of "now"; only forwardNoteAt() below passes it.
 // `source` (optional) is whatever src/app.js's onNote() was told played the
 // note -- 'midi' for a real MIDI note-on, 'computer-key' for the physical
-// keyboard, undefined for a screen click, the mic path, or a caller (the
-// debug hook, an existing test) that never passes one. Every existing
+// keyboard, undefined for a caller (the debug hook, an existing test) that
+// never passes one. A canvas tap or a main-app mic note never gets here:
+// src/app.js's openPanel() hides the canvas and clears the drill task the
+// moment this panel opens. Every existing
 // caller of forwardNote/forwardNoteAt keeps working with no fourth
 // argument, same as before this parameter existed.
 export function forwardNote(midi, exact, atAudioSec, source) {
@@ -275,6 +278,51 @@ export function difficultyLabel(score) {
   if (score < 0.34) return 'Easy';
   if (score < 0.67) return 'Medium';
   return 'Hard';
+}
+
+// E6c: the plain-words notice for what a single-song notation import
+// changes to fit the keyboard, built on E6a's fidelityReport (src/song/
+// eval/fidelity.js). Only out-of-range/octaveShift are reachable for kbd
+// today (sourceNotes is always null from this call site, and keys is not
+// single-line, so dropped/merged/chordReduced are always empty -- see
+// fidelity.js's own doc comment) -- the dropped/merged wording below is
+// kept for whenever a caller that DOES have sourceNotes reuses this. Pure:
+// no DOM, no instrument lookup, just the report's own numbers -> words.
+// English strings live here rather than the i18n table -- songs.js is a
+// CONVERTED_FILE for its existing strings, but this notice is scoped
+// narrowly enough (E6c) that adding a whole shared-table block is out of
+// this unit's OWNS; a later i18n pass can migrate it if it earns a home.
+export function fidelityNoticeText(report) {
+  if (!report) return '';
+  const parts = [];
+  const outOfRangeCount = (report.outOfRange || []).filter((u) => u.reason === 'out-of-range').length;
+  if (outOfRangeCount > 0) parts.push(outOfRangeCount === 1 ? '1 note is too low or too high for the keyboard and will be skipped' : outOfRangeCount + ' notes are too low or too high for the keyboard and will be skipped');
+  if (report.octaveShift) {
+    const octaves = Math.abs(report.octaveShift) / 12;
+    const dir = report.octaveShift > 0 ? 'up' : 'down';
+    parts.push(octaves === 1 ? 'Moved ' + dir + ' 1 octave to fit the keyboard' : 'Moved ' + dir + ' ' + octaves + ' octaves to fit the keyboard');
+  }
+  const droppedCount = (report.dropped || []).length;
+  if (droppedCount > 0) parts.push(droppedCount === 1 ? '1 note was dropped' : droppedCount + ' notes were dropped');
+  const mergedCount = (report.merged || []).length;
+  if (mergedCount > 0) parts.push(mergedCount === 1 ? '1 chord was merged into a single note' : mergedCount + ' chords were merged into single notes');
+  if (parts.length === 0) return '';
+  const text = parts.join('; ');
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+// The decider: shows the notice only when the CURRENT instrument is the
+// keyboard (api.mod()/api.instrument(), same pattern as review.js's own
+// per-instrument checks) -- every other instrument, or none set, stays
+// silent, since fitToInstrument's numbers are meaningless for an
+// instrument the learner isn't even playing.
+function fidelityNoticeFor(song, api) {
+  const instrument = api.instrument ? api.instrument(api.mod()) : null;
+  if (!instrument || instrument.id !== 'kbd') return '';
+  const part = song.parts && song.parts[0];
+  if (!part) return '';
+  const report = fidelityReport(null, song, part.id, instrument);
+  return fidelityNoticeText(report);
 }
 
 function stepHint(step) {
@@ -541,6 +589,13 @@ function mountSongsPanel(hostEl, api) {
   const polyphonicLabel = el('label', { for: 'songsPolyphonic', text: 'More than one note at a time' });
   const polyphonicCheckbox = el('input', { type: 'checkbox', id: 'songsPolyphonic' });
   const importMsg = el('div', { class: 'panel-songs-msg', role: 'status' });
+  // E6c: a single-song notation import's own plain-words notice for what
+  // changed to fit the KEYBOARD specifically (fidelityNoticeFor above) --
+  // hidden and empty whenever there is nothing to say, or the current
+  // instrument isn't the keyboard. Never reused by resultEl's own
+  // review/reasses re-render (renderAddReview/renderReview), so a later
+  // Learn/Rehearse/Check screen swap never clears or overwrites it.
+  const fidelityMsg = el('p', { class: 'panel-songs-fidelity', role: 'status', hidden: 'hidden' });
   // Read-only part assignments from the last imported band pack -- one line
   // per song that carries an assignment (a song with no assignment gets no
   // line at all). Cleared at the top of every handleFile() so it never shows
@@ -582,7 +637,7 @@ function mountSongsPanel(hostEl, api) {
 
   const addSongSection = el('section', { class: 'add-song-section', hidden: 'hidden', 'aria-label': 'Add a song' }, [
     addSongHeading, door.el, importLabel, importInput, polyphonicLabel, polyphonicCheckbox,
-    addSongCancelBtn, importMsg, bandPackPartsEl, resultEl,
+    addSongCancelBtn, importMsg, fidelityMsg, bandPackPartsEl, resultEl,
   ]);
   hostEl.appendChild(addSongSection);
 
@@ -1834,8 +1889,8 @@ function mountSongsPanel(hostEl, api) {
         // one just pushed -- so the last element right after the call is
         // always this press's own event, safe to stamp with the route it
         // actually came from ('midi' for real MIDI, 'computer-key' for the
-        // physical keyboard, undefined for a screen click -- see onNote()'s
-        // `source` comment in src/app.js).
+        // physical keyboard, undefined for a hook-driven note -- see
+        // onNote()'s `source` comment in src/app.js).
         const unsubscribe = onMidiNote((midi, _exact, atAudioSec, source) => {
           pushMidiEvent(practice.playedEvents, midi, (atAudioSec != null ? atAudioSec : api.now()) - practice.recordStartSec);
           practice.playedEvents[practice.playedEvents.length - 1].source = source;
@@ -2062,7 +2117,7 @@ function mountSongsPanel(hostEl, api) {
       // -- never guessed -- the moment any judged note's route is unknown
       // (same "left off rather than guessed" convention finishTask's own
       // `input` comment documents in src/app.js, for a caller, such as the
-      // debug hook or a screen click, that never told onNote() a source).
+      // debug hook, that never told onNote() a source).
       // Record only: this never changes credit, mastery or pass/fail above
       // -- a later check reads this field on its own.
       const judgedSources = result ? result.matches.filter((m) => m.ok && m.played).map((m) => m.played.source) : [];
@@ -2070,9 +2125,8 @@ function mountSongsPanel(hostEl, api) {
         ? (judgedSources.every((s) => s === judgedSources[0]) ? judgedSources[0] : 'mixed')
         : undefined;
       // Check names its own route for every event, never leaving it off:
-      // the real route above, or 'unknown' when the route was left off (a
-      // screen click, the debug hook, or a caller that never told onNote()
-      // a source) -- so a Check row is always readable on its own, without
+      // the real route above, or 'unknown' when the route was left off (the
+      // debug hook, or a caller that never told onNote() a source) -- so a Check row is always readable on its own, without
       // having to infer "no input field" as anything.
       const loggedInput = practice.mode === 'check' ? (input !== undefined ? input : 'unknown') : input;
       if (typeof api.logEvent === 'function') {
@@ -2206,6 +2260,8 @@ function mountSongsPanel(hostEl, api) {
     bandPackPartsEl.innerHTML = '';
     resultEl.hidden = true;
     resultEl.innerHTML = '';
+    fidelityMsg.hidden = true;
+    fidelityMsg.textContent = '';
     // classifyAddFile (src/ui/songs/add-source.js) tells a recording from a
     // score/challenge/band-pack from an unknown file, so this one input
     // never has to ask -- routeImportFile still decides how a notation kind
@@ -2364,6 +2420,13 @@ function mountSongsPanel(hostEl, api) {
     const idNote = storedId !== song.id ? ' (saved as "' + storedId + '" -- a song with that id was already saved)' : '';
     if (warnings && warnings.length) say('Added "' + song.title + '". ' + warnings.join(' ') + idNote, 'ok');
     else say('Added "' + song.title + '" to your songs.' + idNote, 'ok');
+    // E6c: what changed to fit the KEYBOARD specifically -- a single-song
+    // notation import only (never the audio/band-pack/challenge branches
+    // above), and only shown for kbd; silent for every other instrument
+    // and whenever fidelityReport finds nothing worth saying.
+    const noticeText = fidelityNoticeFor({ ...song, id: storedId }, api);
+    fidelityMsg.textContent = noticeText;
+    fidelityMsg.hidden = !noticeText;
     // A notation import carries no warnings most of the time (an unresolved
     // check item is the exception, e.g. a tempo-less ABC file) -- Checked
     // the moment it lands when there is nothing to check, a Draft when
