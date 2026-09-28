@@ -20,7 +20,7 @@
 // pitch-tracker target the way the other seven families are, and the
 // starter songs are all plain melodies with no percussion part.
 
-import { starterSongs } from '../starter/index.js';
+import { starterMelodies } from '../starter/index.js';
 import { ticksToSeconds } from '../model.js';
 import { transcribe } from '../transcribe.js';
 import { scoreNotes } from './note-f1.js';
@@ -95,7 +95,7 @@ export function evaluateSong(song, familyName, seed = 1) {
 // per-song regression isn't masked by a noisy family) and per-family (mean
 // F1 across every song, for that family's rendering profile).
 export function evaluateAll(opts = {}) {
-  const songs = opts.songs ?? starterSongs;
+  const songs = opts.songs ?? starterMelodies;
   const families = opts.families ?? Object.keys(FAMILY_PROFILES);
 
   const perSong = songs.map((song) => {

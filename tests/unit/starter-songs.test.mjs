@@ -19,6 +19,8 @@ const EXPECTED_OPENING_INTERVALS = {
   'ode-to-joy': [0, 0, 1, 3, 3, 1, 0, -2, -4, -4, -2, 0, 0, -2, -2],
   'amazing-grace': [0, 5, 9, 5, 9, 7, 5, 2, 0],
   'minuet-in-g': [0, -7, -5, -3, -2, 0, -7, -7, 2],
+  'ode-to-joy-two-hands': [0, 0, 1, 3, 3, 1, 0, -2, -4, -4, -2, 0, 0, -2, -2],
+  'twinkle-twinkle-two-hands': [0, 0, 7, 7],
 };
 
 // The floor is 8, not 12: six tunes typed from memory could not be vouched for
@@ -102,7 +104,12 @@ test('opening notes match independently hand-checked semitone intervals', () => 
   for (const song of starterSongs) {
     const expected = EXPECTED_OPENING_INTERVALS[song.id];
     assert.ok(expected, `${song.id}: no expected interval sequence in the test fixture`);
-    const midis = song.parts[0].notes.slice(0, expected.length).map((n) => n.midi);
+    // A two-hand starter's part interleaves both hands (see build() in
+    // src/song/starter/index.js); the hand-checked intervals above were
+    // worked out from the right-hand melody alone, so the left hand's
+    // notes (untagged elsewhere) are excluded here.
+    const rhNotes = song.parts[0].notes.filter((n) => n.hand !== 'lh');
+    const midis = rhNotes.slice(0, expected.length).map((n) => n.midi);
     const first = midis[0];
     const actual = midis.map((m) => m - first);
     assert.deepEqual(actual, expected, `${song.id}: opening interval sequence mismatch`);

@@ -3,7 +3,7 @@
 // renderOpts, which owns rendering); this file only owns which starter
 // song to suggest and whether that suggestion counts as reviewed.
 //
-import { starterSongs } from '../song/starter/index.js';
+import { starterSongs, isTwoHand } from '../song/starter/index.js';
 import { nameFor } from '../core/note-names.js';
 import { itemReview, contentRev } from './review-ledger.js';
 import { isReviewCurrent } from './review.js';
@@ -70,10 +70,18 @@ function pitchesOf(song) {
 // e.g. on two instruments, without them sharing one review); `skills` is
 // the plain-language list of notes this song hands off, for display or a
 // future review note.
+// The level the keyboard trainer's own hands-together curriculum starts at
+// (app.js MODS.kbd level 13, "Hands together", mirrored at kbd.js:28): a
+// two-hand starter's minLevel is never allowed below this, even when every
+// individual pitch it uses was taught earlier -- playing both hands at once
+// is its own skill, not implied by knowing the notes.
+export const KBD_HANDS_TOGETHER_LEVEL = 13;
+
 export const ENTRIES = starterSongs
   .map((song) => {
     const pitches = pitchesOf(song);
-    const minLevel = minLevelFor(pitches);
+    const rawMinLevel = minLevelFor(pitches);
+    const minLevel = rawMinLevel === null ? null : Math.max(rawMinLevel, isTwoHand(song) ? KBD_HANDS_TOGETHER_LEVEL : rawMinLevel);
     return { id: 'kbd.songHandoff.' + song.id, songId: song.id, minLevel, skills: pitches.map((p) => nameFor(p, { octave: true })) };
   })
   .filter((entry) => entry.minLevel !== null);
