@@ -402,6 +402,16 @@ Rehearse are kept as practice with help; only a Check try can count as done on y
 passed Check try, and again once the whole piece is done, a line says whether that try actually
 counted as a check or was practice only; on keyboard, only a real MIDI keyboard counts.
 
+On keyboard, a song whose notes name both hands (the two "both hands" starters, or an imported
+score with hand marks) also shows a Hands control under the lesson modes — **Both hands**,
+**Right hand** or **Left hand** — plus a line naming each hand's starting note. With Right hand or
+Left hand chosen, only that hand's notes are judged; in Learn and Rehearse the app plays the other
+hand along with your try, and those notes are never counted as yours. A step where your chosen
+hand rests is not judged at all — press Next to move on. The practice log records which hand was
+checked on each row. A one-hand lesson carries on from its own saved place, and switching hands
+replaces that saved place rather than starting a second one. A melody-only song shows no Hands
+control.
+
 Opening the editor screen (via a song's own **Edit notes**) shows its own row: **Edit
 notes**, **Play along**, **Export**, **Share**, **Save a copy** — Edit notes opens *any* song,
 starter tunes included, straight in "Record a tune": saving a starter's edits makes "My copy of
