@@ -189,3 +189,19 @@ test('CLI: a stale result exits 1 and names the stale id, writing to --ledger on
   assert.match(res.stdout + res.stderr, /kbd\.curriculum\.1/);
   assert.equal(readFileSync(ledgerCopy, 'utf8'), LEDGER_SOURCE);
 });
+
+// `npm run review-apply` runs the script from the package root, so a relative
+// path the player typed from a subfolder must resolve against the folder they
+// typed it in (npm's INIT_CWD), not the package root.
+test('CLI: relative result and --ledger paths resolve against the folder npm was run from', () => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'apply-review-initcwd-'));
+  writeFileSync(path.join(dir, 'review-ledger.js'), LEDGER_SOURCE, 'utf8');
+  writeFileSync(path.join(dir, 'result.json'), JSON.stringify(baseResult({ items: [{ id: CURR1.id, rev: 'deadbeef', verdict: 'pass', note: '' }] })), 'utf8');
+  const scriptPath = path.join(__dirname, '..', '..', 'build', 'apply-review.mjs');
+  const res = spawnSync('node', [scriptPath, 'result.json', '--ledger', 'review-ledger.js'], {
+    encoding: 'utf8', cwd: path.join(__dirname, '..', '..'), env: { ...process.env, INIT_CWD: dir }
+  });
+  assert.doesNotMatch(res.stdout + res.stderr, /ENOENT/);
+  assert.match(res.stdout + res.stderr, /kbd\.curriculum\.1/, 'it read the result file and refused the stale rev');
+  assert.equal(res.status, 1);
+});

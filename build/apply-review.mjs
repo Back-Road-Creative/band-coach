@@ -12,7 +12,7 @@
 // human to act on by editing the source the row points at.
 import { readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 
 import { reviewItems } from './review-packet.mjs';
 
@@ -199,8 +199,12 @@ const isMain = process.argv[1] && fileURLToPath(import.meta.url) === process.arg
 if (isMain) {
   const args = process.argv.slice(2);
   const ledgerFlagIndex = args.indexOf('--ledger');
-  const ledgerPath = ledgerFlagIndex >= 0 ? args[ledgerFlagIndex + 1] : DEFAULT_LEDGER_PATH;
-  const resultPath = args.find((a, i) => a !== '--ledger' && args[i - 1] !== '--ledger');
+  // npm runs this from the package root; a relative path means the folder
+  // the player typed it in, which npm passes as INIT_CWD.
+  const from = process.env.INIT_CWD || process.cwd();
+  const ledgerPath = ledgerFlagIndex >= 0 ? resolve(from, args[ledgerFlagIndex + 1]) : DEFAULT_LEDGER_PATH;
+  const resultArg = args.find((a, i) => a !== '--ledger' && args[i - 1] !== '--ledger');
+  const resultPath = resultArg && resolve(from, resultArg);
   try {
     if (!resultPath) throw new Error('usage: node build/apply-review.mjs <result.json> [--ledger <path>]');
     const result = JSON.parse(readFileSync(resultPath, 'utf8'));

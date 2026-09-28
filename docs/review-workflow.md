@@ -23,7 +23,8 @@ npm run review-packet -- kbd --out ~/Desktop/kbd-review.html
 `--out` matters because `npm run build` and `npm test` both wipe `dist/` on every run (see
 `build/build.mjs`'s dev build, which deletes and recreates `dist/` from scratch) -- a packet left
 under the default path will not survive the next build. Copy it out, or build straight to a path
-outside `dist/`, before running either command again.
+outside `dist/`, before running either command again. A relative `--out` path is taken from the
+folder you ran the command in, not the project folder.
 
 Today only `kbd` (the keyboard trainer) is supported; an unknown instrument name exits with an
 error instead of a wrong or empty page.
@@ -89,7 +90,8 @@ instrument doesn't have (`unknown id <id>`), or an item's rev no longer matches 
 content (`stale <id>: ...`) -- meaning the content changed since the packet was built, and the review
 needs to happen again against the fresh copy. Only `pass` rows become ledger entries; any
 `correction` row is never written and never deletes anything, and is printed to the console instead
-so a human can act on the note. A file with no `pass` rows writes nothing.
+so a human can act on the note. A file with no `pass` rows writes nothing. A relative
+`<result.json>` path is taken from the folder you ran the command in, not the project folder.
 
 The command never commits or pushes anything -- review the diff it makes to
 `src/instruments/review-ledger.js` the normal way and open a PR with it, the same as any other
