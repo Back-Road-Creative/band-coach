@@ -1392,6 +1392,10 @@ import { register as registerPathway } from './ui/pathway.js';
     // rather than guessed (src/ui/songs.js's advance()).
     forwardSongNote(midi, exact, undefined, (source === 'midi' || source === 'computer-key') ? source : undefined);
     if (MODS[mod] && MODS[mod].kit) { const p = pieceForMidi(midi); if (p === null) coach('MIDI note ' + midi + ' is not one of the drums on this kit' + (playing ? ', so it counts as an extra hit.' : '.')); else if (!playing) coach(kitName(p) + ' heard -- start an exercise to see it judged.'); onHit(p, tapAudioTime(), source); return; }
+    // "Calibrate timing" listens for taps, and a MIDI keyboard or drum set
+    // is a tap source like the space bar: route the hit to onTap() before
+    // the not-judging message below can call it a stray note.
+    if (calRun) { onTap(); return; }
     lastInputAt = now(); pressed[midi] = performance.now();
     if (source === 'midi') { const notJudging = !playing || !task || task.done; const outOfView = !notJudging && mod === 'kbd' && (midi < kbdRange()[0] || midi > kbdRange()[1]); if (notJudging) coach(nname(midi) + ' heard' + (playing ? '.' : ' -- start an exercise to see it judged.')); else if (outOfView) coach(nname(midi) + ' heard, but that key is not drawn on screen right now.'); }
     if (!playing || !task || task.done) return; const e = cur(); if (!e) return; const i = e.info;
@@ -1647,7 +1651,7 @@ import { register as registerPathway } from './ui/pathway.js';
   }
   function onTap(ev) {
     lastInputAt = now(); $('tapPad').classList.add('down'); setTimeout(() => $('tapPad').classList.remove('down'), 90);
-    if (calRun) { const raw = tapAudioTime(ev), v = judgeTap({ tapTime: raw, beatTimes: calRun.beats, latencyMs: 0, windowMs: 1e9 }); if (v.errorMs !== null) calRun.taps.push(v.errorMs); return; }
+    if (calRun) { const raw = tapAudioTime(ev), v = judgeTap({ tapTime: raw, beatTimes: calRun.beats, latencyMs: 0, windowMs: 1e9 }); if (v.errorMs !== null) { calRun.taps.push(v.errorMs); say('Caught ' + calRun.taps.length + ' of 8 taps.', ''); } return; }
     if (!playing || !task || (task.kind !== 'bar' && task.kind !== 'bar2') || !bar || bar.judged) return;
     const latencyMs = DB.latencyMs != null ? DB.latencyMs : (actx ? (actx.outputLatency || actx.baseLatency || 0) * 1000 : 0);
     const win = S.level > MODS.rhy.levels.length ? 0.11 : 0.15;

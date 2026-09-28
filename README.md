@@ -1229,6 +1229,11 @@ integer-tick durations, so triplets and swing are exact fractions rather than ro
 Rhythm reading (`rhy`) gains eight further levels built on it, after the original ten-cell levels:
 rests, ties, dotted-eighth figures, triplets, 3/4, 6/8, swing, and two-bar phrases.
 
+Rhythm reading's "Calibrate timing" button plays eight clicks and takes a tap on each: the tap pad,
+the space bar or any letter key, or a note on a connected MIDI keyboard or drum set -- the same
+inputs the exercises judge. Each caught tap is counted on screen; four or more store the median
+offset as the latency allowance every later tap is judged against.
+
 ## Ear training
 
 The Ear training screen (`src/core/ear/*`, wired in `src/ui/ear.js`) has ten listen-and-answer
