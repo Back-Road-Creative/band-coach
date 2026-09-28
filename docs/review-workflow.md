@@ -34,8 +34,9 @@ error instead of a wrong or empty page.
 - **Expected** -- what the reviewer should actually try to do or check, in plain language, derived
   from the same data the app uses (not new teaching copy invented for the packet).
 - **Source** -- the repo file the item comes from, so a correction points straight at what to edit.
-- **Id / Rev** -- the item's stable content id and a content fingerprint (see below). Hidden data
-  the review-apply step needs; not something a reviewer has to read.
+- **Id / Rev** -- the item's stable content id and a content fingerprint (see below). Shown for
+  reference, so a correction can be traced back to the exact content it was marked against; a
+  reviewer does not need to read either column to do the review.
 - **Play** -- when the item has known notes, a button that plays them through the browser's own
   audio, so the reviewer can hear what the app expects without a real instrument connected.
 - **Verdict / Note** -- Pass, or Correction with a note describing what's wrong.

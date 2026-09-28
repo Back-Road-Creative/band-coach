@@ -9,11 +9,29 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { buildReviewPacket, reviewItems } from '../../build/review-packet.mjs';
+import { buildReviewPacket, reviewItems, parseCliArgs } from '../../build/review-packet.mjs';
 import kbd from '../../src/instruments/kbd.js';
 import { ENTRIES } from '../../src/instruments/kbd-songs.js';
 import { reviewItems as pathwayReviewItems } from '../../src/instruments/kbd-pathway.js';
 import { contentRev } from '../../src/instruments/review-ledger.js';
+
+// Stricter than a blunt /url\(/i scan over the whole page (which a
+// deliberately spaced-out call like "URL.createObjectURL (blob)" can dodge
+// without actually being a stylesheet reaching outside the file): this
+// checks specifically for the things that would make the page load
+// something from outside itself -- a CSS url() inside a <style> block or a
+// style="" attribute, an http(s):// or protocol-relative src=/href=, an
+// @import, or a <link rel=stylesheet>.
+function externalResourceIssues(html) {
+  const issues = [];
+  const styleBlocks = [...html.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/gi)].map((m) => m[1]);
+  const styleAttrs = [...html.matchAll(/\bstyle="([^"]*)"/gi)].map((m) => m[1]);
+  for (const block of [...styleBlocks, ...styleAttrs]) if (/url\(/i.test(block)) issues.push('CSS url() found');
+  if (/@import/i.test(html)) issues.push('@import found');
+  if (/<link\b[^>]*\brel\s*=\s*["']?stylesheet/i.test(html)) issues.push('<link rel=stylesheet> found');
+  if (/\b(?:src|href)\s*=\s*["'](?:https?:)?\/\//i.test(html)) issues.push('src=/href= pointing off-page found');
+  return issues;
+}
 
 function rowsOf(html) {
   const rows = [];
@@ -34,8 +52,34 @@ test('the packet never reaches outside itself for anything', () => {
   assert.doesNotMatch(html, /https?:\/\//i);
   assert.doesNotMatch(html, /<script[^>]*\bsrc=/i);
   assert.doesNotMatch(html, /<link\b/i);
-  assert.doesNotMatch(html, /url\(/i);
   assert.doesNotMatch(html, /@import/i);
+  assert.deepEqual(externalResourceIssues(html), []);
+});
+
+test('the external-resource scan catches a url() injected into a style block (and the normal createObjectURL spelling does not trip it)', () => {
+  const html = buildReviewPacket('kbd');
+  const injected = html.replace('</style>', 'a{background:url(https://evil.example/x.png)}</style>');
+  assert.deepEqual(externalResourceIssues(injected), ['CSS url() found']);
+  assert.match(html, /URL\.createObjectURL\(blob\)/, 'the download call keeps its normal, un-spaced spelling');
+  assert.match(html, /URL\.revokeObjectURL\(objectUrl\)/, 'the revoke call keeps its normal, un-spaced spelling');
+});
+
+test('the object URL is revoked after the click, not in the same tick (a deferred revoke so the download can start first)', () => {
+  const html = buildReviewPacket('kbd');
+  assert.match(html, /a\.click\(\);[\s\S]*?setTimeout\(function \(\) \{ URL\.revokeObjectURL\(objectUrl\); \}, 0\);/);
+});
+
+test('Play reuses one AudioContext across clicks instead of making a new one every time', () => {
+  const html = buildReviewPacket('kbd');
+  const creationSites = html.match(/new Ctx\(\)/g) || [];
+  assert.equal(creationSites.length, 1, 'exactly one place in the page creates an AudioContext');
+  assert.match(html, /sharedAudioCtx/);
+});
+
+test('parseCliArgs accepts --out before or after the instrument', () => {
+  assert.deepEqual(parseCliArgs(['kbd']), { instrument: 'kbd', outPath: undefined });
+  assert.deepEqual(parseCliArgs(['kbd', '--out', '/tmp/x.html']), { instrument: 'kbd', outPath: '/tmp/x.html' });
+  assert.deepEqual(parseCliArgs(['--out', '/tmp/x.html', 'kbd']), { instrument: 'kbd', outPath: '/tmp/x.html' });
 });
 
 test('every curriculum entry, song hand-off entry and pathway outcome appears exactly once, with no duplicate ids', () => {
