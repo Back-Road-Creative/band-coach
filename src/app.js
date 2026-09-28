@@ -941,6 +941,30 @@ import { register as registerPathway } from './ui/pathway.js';
     Object.keys(v.acc || {}).forEach(k => { s.acc[k] = num(v.acc[k], 0, 0, 3); }); Object.keys(v.cr || {}).forEach(k => { if (validId(m, k)) s.cr[k] = num(v.cr[k], 0, -80, 80); });
     return s;
   }
+  // repairEventClocks (bc-clk): before this fix, src/ui/songs.js stamped a song row's
+  // `at` with the audio clock (seconds since page load, resets to 0 every reload)
+  // instead of epoch ms like every other row -- so a saved row with a finite `at`
+  // under EVENT_CLOCK_EPOCH_FLOOR (1e12 ms is the year 2001; the audio clock could
+  // never reach that many SECONDS of page-open time) came from that bug and its
+  // stamped `at` is not the real time. Repaired with the `at` of the next row in
+  // array order (DB.events is append-only -- logEvent only pushes, boundEvents only
+  // drops rows, never reorders, so array order IS push order) that has a real epoch
+  // `at`; a bad row with no later epoch row (nothing trustworthy comes after it) falls
+  // back to `modelNow`, the load time -- never earlier than the truth, so a
+  // return/retention wait (src/core/pathway.js) is never granted early. `id` is left
+  // untouched.
+  const EVENT_CLOCK_EPOCH_FLOOR = 1e12;
+  function repairEventClocks(events, modelNow) {
+    const out = events.slice();
+    for (let i = 0; i < out.length; i++) {
+      if (Number.isFinite(out[i].at) && out[i].at < EVENT_CLOCK_EPOCH_FLOOR) {
+        let fixedAt = modelNow;
+        for (let j = i + 1; j < out.length; j++) { if (Number.isFinite(out[j].at) && out[j].at >= EVENT_CLOCK_EPOCH_FLOOR) { fixedAt = out[j].at; break; } }
+        out[i] = Object.assign({}, out[i], { at: fixedAt });
+      }
+    }
+    return out;
+  }
   function sanitizeDB(v, defaultLatencyMs, modelNow) {
     const notate = {}; NOTATE_MOD_IDS.forEach(m => { notate[m] = 'names'; });
     const d = { v: 1, mods: {}, sessions: [], events: [], prefs: { mod: 'kbd', wind: 'bb', voice: 'low', kbdHands: 'both', sessionMinutes: null, names: true, noiseFloor: null, inputDeviceId: null, notate: notate, theme: 'system', noteNaming: { system: 'letters', accidentals: 'mixed' } } }; v = (v && typeof v === 'object') ? v : {};
@@ -960,7 +984,7 @@ import { register as registerPathway } from './ui/pathway.js';
     // the SAME validateEvent() a writer runs before push -- a corrupt or
     // hand-edited row is dropped here, never thrown, exactly like an
     // invalid DB.sessions row above is filtered rather than crashing load.
-    if (Array.isArray(v.events)) d.events = boundEvents(v.events.filter(x => validateEvent(x).ok), { skillMap: KBD_SONG_SKILL_MAP, skillMapInstrument: 'kbd' });
+    if (Array.isArray(v.events)) d.events = boundEvents(repairEventClocks(v.events.filter(x => validateEvent(x).ok), modelNow), { skillMap: KBD_SONG_SKILL_MAP, skillMapInstrument: 'kbd' });
     const p = v.prefs || {}; if (MODS[p.mod]) d.prefs.mod = p.mod; if (WIND_KINDS[p.wind]) d.prefs.wind = p.wind; d.prefs.voiceRange = (p.voiceRange && typeof p.voiceRange === 'object' && Number.isFinite(p.voiceRange.low) && Number.isFinite(p.voiceRange.high) && p.voiceRange.low < p.voiceRange.high) ? { low: clamp(Math.round(p.voiceRange.low), 24, 96), high: clamp(Math.round(p.voiceRange.high), 24, 96) } : null; const VKp = Object.assign({}, VOICE_KINDS, d.prefs.voiceRange ? { mine: ['My range (found by test)', tonicFromRange(exerciseRangeFor(d.prefs.voiceRange)).tonic] } : {}); if (VKp[p.voice]) d.prefs.voice = p.voice; d.prefs.names = p.names !== false;
     d.prefs.noiseFloor = (typeof p.noiseFloor === 'number' && isFinite(p.noiseFloor) && p.noiseFloor >= 0) ? clamp(p.noiseFloor, 0, 1) : null;
     d.prefs.inputDeviceId = typeof p.inputDeviceId === 'string' && p.inputDeviceId ? p.inputDeviceId : null;

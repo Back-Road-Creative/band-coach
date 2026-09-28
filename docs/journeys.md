@@ -124,10 +124,10 @@ Proof: `node --test --test-concurrency=1 tests/characterization/a11y-axe.test.mj
 
 ## Keyboard pathway (contract)
 
-Five steps a keyboard learner moves through, decided by `pathwayState()`
-(`src/core/pathway.js`) from saved events and sessions plus the caller's
-live MIDI proof and current level -- no DOM, no clock of its own, the
-caller supplies `now`:
+Five listed steps a keyboard learner moves through, decided by
+`pathwayState()` (`src/core/pathway.js`) from saved events and sessions plus
+the caller's live MIDI proof and current level -- no DOM, no clock of its
+own, the caller supplies `now`:
 
 - **setup** -- connect a MIDI keyboard. Neither live proof this page load
   nor a MIDI event ever logged for `kbd`.
@@ -166,6 +166,49 @@ tests/characterization/kbd-pathway-panel.test.mjs`.
 `src/app.js`'s `startSession` is the first caller of `pathwayState`, and shows the step's outcome
 text once per visit for a returning keyboard learner (`tests/characterization/plan-song-block.test.mjs`).
 
+**P3 -- a 'complete' step past 'return', needing two pieces of played
+evidence, not just elapsed time.** The FIRST qualifying check row (the
+earliest one ever logged, not the latest -- see `earliestCheckRow()`)
+becomes the anchor: its songId is "the song already checked", and its `at`
+fixes `dueAt` (`anchor.at + DAY_MS`) for good -- a later qualifying row,
+same song or different, never moves that date. From the anchor,
+`pathwayState()` looks for:
+
+- **retained** (`earliestRetainedRow()`) -- the earliest qualifying row, ANY
+  songId, at or after `dueAt`. Real evidence the check still held up a day
+  later, not the day simply having passed with nothing played.
+- **transfer** (`latestTransferRow()`) -- a qualifying row on a DIFFERENT
+  songId than the anchor's, any time after it. One row can satisfy both at
+  once (e.g. the very first check on a different song lands a day later);
+  a same-song recheck, however late, only ever counts toward retained.
+
+`pathwayState()` returns `step: 'complete'` once BOTH exist. With only one
+(or neither), 'return' continues with a different action: `wait` before
+`dueAt`; `recheck` once `dueAt` has passed with no retained row yet;
+`transfer` once retained exists but transfer doesn't (the same-song recheck
+is never re-offered at that point -- that evidence is already in).
+
+The panel (`src/ui/pathway.js`) offers the transfer song only once action
+`transfer` is reached, chosen by `transferSongFor(level, anchorSongId,
+seenSongIds)` (`src/instruments/kbd-pathway.js`; `seenSongIds` is every
+songId any kbd song-source event carries, so the offer is a song "the
+learner has not seen" and not just one they haven't been checked on --
+falling back to excluding only the anchor song once nothing else unlocked
+is left unseen). It shows the retained result as soon as `pathwayState`
+reports a `retainedAt` (mid-'return' or at 'complete'), and the transfer
+result only at 'complete'. All of this copy --
+`RETAINED_TEXT`/`TRANSFER_TEXT`/`TRANSFER_DONE_TEXT`/`COMPLETE_TEXT` --
+carries kbd-pathway.js's "Not yet checked by a player" label, kept out of
+the five-item `reviewItems()` list so the panel's step count stays five.
+Proof: `node --test tests/unit/pathway-transfer-retention.test.mjs`.
+
+This assumes every event's `at` is a real epoch-millisecond timestamp.
+`src/ui/songs.js` currently logs song-check `at` from the audio clock
+(seconds, not epoch ms, per its `{ now: api.now() }` call) -- a separate
+unit (`fix/song-event-epoch-clock`) fixes that at the source; `pathway.js`
+adds no workaround for a mixed clock, since detecting or correcting that is
+that unit's job, not this pure function's.
+
 ## Known gaps
 
 - **F1 — closed.** Progress now also renders a "Passed with help / Passed on your own / Retained
@@ -195,3 +238,15 @@ text once per visit for a returning keyboard learner (`tests/characterization/pl
   `tests/characterization/songs-input-route.test.mjs`. Still open: a screen click on the on-screen
   piano still plays an unrouted note (no `source` at all), so an attempt played that way still
   leaves `input` off rather than naming a route — owned by the keyboard-window unit.
+- **N2 — closed: song rows stamp the same clock as drill rows.** A judged song step used to stamp
+  its learning-event row's `at` (`src/ui/songs.js`'s `advance()`) with the audio clock
+  (`api.now()`, seconds since the page opened, restarting at 0 on every reload) instead of epoch ms
+  like every other row — mixing two time scales in one event stream that `summarizeEvents()` sorts
+  by `at` and `pathwayState()` (`src/core/pathway.js`) spaces checks against with `DAY_MS`. Song
+  rows now call `makeEvent()` with no `now` option, so they get the same `Date.now()` every drill
+  row already used. A row already saved with the old audio-clock stamp (a finite `at` under `1e12`,
+  the year 2001 — no page stays open that many seconds) is repaired on load
+  (`src/app.js`'s `repairEventClocks`, called from `sanitizeDB`): it takes the `at` of the next row
+  in save order that has a real epoch stamp, or the load time if none follows, so a repaired row is
+  never dated earlier than the truth and a return/retention wait is never granted early. Proof:
+  `tests/characterization/song-event-epoch-clock.test.mjs`.
