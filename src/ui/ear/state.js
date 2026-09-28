@@ -7,8 +7,8 @@
 // A run of LEVEL_UP_RUN correct answers in a row moves the exercise up one
 // level; a run of LEVEL_DOWN_RUN wrong answers in a row moves it down one.
 // Either transition resets the streak so the next run starts clean.
-export const LEVEL_UP_RUN = 3;
-export const LEVEL_DOWN_RUN = 2;
+const LEVEL_UP_RUN = 3;
+const LEVEL_DOWN_RUN = 2;
 
 export function defaultExerciseState() {
   return { level: 1, streak: 0, correct: 0, total: 0 };
@@ -16,9 +16,9 @@ export function defaultExerciseState() {
 
 // state: { level, streak, correct, total }. `streak` is signed: positive is
 // a run of correct answers, negative a run of wrong ones.
-export function recordAnswer(state, correct, maxLevel, opts = {}) {
-  const upRun = opts.upRun ?? LEVEL_UP_RUN;
-  const downRun = opts.downRun ?? LEVEL_DOWN_RUN;
+export function recordAnswer(state, correct, maxLevel) {
+  const upRun = LEVEL_UP_RUN;
+  const downRun = LEVEL_DOWN_RUN;
   const total = (state.total || 0) + 1;
   const correctCount = (state.correct || 0) + (correct ? 1 : 0);
   const prevStreak = state.streak || 0;

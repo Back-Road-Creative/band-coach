@@ -7,14 +7,8 @@
 // the caller. This module never imports srs.js itself, so a unit test can
 // hand-build items and a stub `due` without pulling in the real forgetting
 // model (though the real tests use the real one).
-//
-// `events` (src/core/learning-events.js records) is accepted but unused here:
-// the "retained on review" / "applied in a new phrase" reporting this module
-// used to reserve a slot for is now src/ui/history.js's #historyRetention
-// block, built directly from summarizeEvents() (see that module's own
-// comment) rather than from planSession's own ordering.
 
-// planSession({ instrumentId, level, activeIds, items, events, now, due,
+// planSession({ instrumentId, level, activeIds, items, now, due,
 // sessions, songFor, today }) -> ordered array of up to five blocks:
 //   { kind: 'review', ids }            -- SRS-due ids among ones already seen
 //   { kind: 'weak', id, why }          -- the active id needing the most work
@@ -30,7 +24,7 @@
 // `songId` matching and `mod === instrumentId`. The song block is appended
 // even when there is nothing else to plan (no weak/apply/check), so a
 // fresh learner with no item records yet still sees it.
-export function planSession({ instrumentId, level, activeIds, items, events = [], now, due, sessions, songFor, today } = {}) {
+export function planSession({ instrumentId, level, activeIds, items, now, due, sessions, songFor, today } = {}) {
   const ids = Array.isArray(activeIds) ? activeIds : [];
   const itemsMap = items || {};
   const blocks = [];

@@ -11,7 +11,6 @@
 // item here always reads the same as it does in the trainer, in whichever
 // naming system/accidentals the learner picked.
 import { name as noteNameFor } from '../../core/note-names.js';
-const pc = (m) => ((Math.round(m) % 12) + 12) % 12;
 const nname = (m) => noteNameFor(m, true);
 
 /**

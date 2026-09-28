@@ -6,10 +6,6 @@
 
 import { name as noteNameFor } from '../../core/note-names.js';
 
-export function pitchClass(midi) {
-  return ((Math.round(midi) % 12) + 12) % 12;
-}
-
 // e.g. noteName(60) -> 'C4', noteName(61) -> 'C♯4'
 export function noteName(midi) {
   return noteNameFor(midi, true);

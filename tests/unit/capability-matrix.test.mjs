@@ -5,13 +5,17 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
 import { INSTRUMENTS, byId } from '../../src/instruments/index.js';
-import { capabilityFor, capabilityMatrix, TIERS } from '../../src/instruments/capability.js';
+import { capabilityFor } from '../../src/instruments/capability.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DOC_PATH = path.join(__dirname, '..', '..', 'docs', 'capabilities.md');
 
-test('capabilityMatrix() covers every instrument record with a valid tier', () => {
-  const matrix = capabilityMatrix();
+// Mirrors src/instruments/capability.js's own tierFor()'s possible outputs --
+// kept here only so this test can check every record's tier is one of them.
+const TIERS = ['first-release-candidate', 'accessible-unvalidated', 'supported-untested', 'planned'];
+
+test('capabilityFor() covers every instrument record with a valid tier', () => {
+  const matrix = INSTRUMENTS.map(capabilityFor);
   assert.equal(matrix.length, INSTRUMENTS.length);
   const ids = new Set(INSTRUMENTS.map(r => r.id));
   for (const cap of matrix) {

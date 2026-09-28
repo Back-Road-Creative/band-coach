@@ -1,11 +1,9 @@
 // The mic "Record door": Record -> a four-beat count-in -> capture -> Stop,
 // plus the audio-file transcription pipeline it shares -- moved out of
-// src/ui/learn.js (P3-3, a behaviour-preserving move) so Songs can reuse the
-// same door later (P3-4+) instead of duplicating it. No DOM or behaviour
-// change here: every id, every panel-learn-* class and every button label
-// stays exactly as it was in learn.js when idPrefix is 'learn' (the default
-// learn.js itself passes), and `library.add` stays in the caller (learn.js
-// keeps its own save-before-review order for now -- see onTake below).
+// src/ui/learn.js (P3-3, a behaviour-preserving move; learn.js itself is
+// gone, retired in P3-6) and now Songs' own "Add a song" door, under the
+// panel-songs-* classes below. `library.add` stays in the caller (Songs'
+// own save-then-Draft order -- see onTake below).
 import { createRecorder } from '../editor/record.js';
 import { countInTimes, clampBpm, DEFAULT_BPM } from '../learn/count-in.js';
 import { rmsLevel } from '../learn/level.js';
@@ -94,42 +92,40 @@ export function __isRecording() {
   return !!(debugRecorder && debugRecorder.listening && debugIsRecording());
 }
 
-// createRecordDoor(api, { onTake, say, idPrefix }): builds the mic section
+// createRecordDoor(api, { onTake, say, onStart }): builds the mic section
 // (tempo field, level meter, count-in beat display, Record/Stop button) and
 // wires Record -> Counting in… (four clicks, "1 2 3 4") -> recording starts
 // on the downbeat -> Stop -> transcribe. On a successful take it calls
 // onTake(song, warnings) and leaves saving (library.add) and rendering the
-// result to the caller, so the caller's own save-before-review order is
+// result to the caller, so the caller's own save-then-Draft order is
 // unchanged. `say` is the caller's own status line (shared with the file
 // door), so both doors report through the one place a learner is already
-// watching. idPrefix defaults to 'learn' so learn.js's own ids/classes
-// (learnBpm, panel-learn-beat, panel-learn-record-btn, panel-learn-meter,
-// ...) come out byte-identical; a later caller (Songs) can pass a different
-// prefix so its own copy of this door never clashes ids with learn.js's.
-export function createRecordDoor(api, { onTake, say, onStart, idPrefix = 'learn' } = {}) {
+// watching. Songs is this door's only caller, so its ids/classes are the
+// literal panel-songs-* names below, not built from a prefix.
+export function createRecordDoor(api, { onTake, say, onStart } = {}) {
   // Reuses src/ui/editor/record.js's createRecorder unchanged (the same
   // frame recorder "Record a tune" drives) against this door's own panelApi,
   // so the capture itself is not reimplemented here.
   const recorder = createRecorder(api);
   debugRecorder = recorder;
   debugIsRecording = () => recording;
-  const micSection = el('div', { class: `panel-${idPrefix}-mic` });
+  const micSection = el('div', { class: 'panel-songs-mic' });
   micSection.appendChild(el('h4', { text: 'Or sing, hum or play into the mic' }));
-  const bpmId = `${idPrefix}Bpm`;
+  const bpmId = 'songsBpm';
   const bpmInput = el('input', {
     type: 'number', id: bpmId, min: '40', max: '200', value: String(DEFAULT_BPM),
-    class: `panel-${idPrefix}-bpm`, 'aria-label': 'Tempo (beats per minute)',
+    class: 'panel-songs-bpm', 'aria-label': 'Tempo (beats per minute)',
   });
-  const bpmRow = el('div', { class: `panel-${idPrefix}-bpm-row` }, [
+  const bpmRow = el('div', { class: 'panel-songs-bpm-row' }, [
     el('label', { for: bpmId, text: 'Tempo (beats per minute)' }), bpmInput,
   ]);
-  const meterFill = el('div', { class: `panel-${idPrefix}-meter-fill` });
+  const meterFill = el('div', { class: 'panel-songs-meter-fill' });
   const meterBox = el('div', {
-    class: `panel-${idPrefix}-meter`, role: 'progressbar', 'aria-label': 'Microphone level',
+    class: 'panel-songs-meter', role: 'progressbar', 'aria-label': 'Microphone level',
     'aria-valuemin': '0', 'aria-valuemax': '100', 'aria-valuenow': '0',
   }, [meterFill]);
-  const beatEl = el('p', { class: `panel-${idPrefix}-beat`, 'aria-live': 'polite' });
-  const recordBtn = el('button', { type: 'button', class: `panel-${idPrefix}-record-btn`, text: 'Record' });
+  const beatEl = el('p', { class: 'panel-songs-beat', 'aria-live': 'polite' });
+  const recordBtn = el('button', { type: 'button', class: 'panel-songs-record-btn', text: 'Record' });
   micSection.append(bpmRow, meterBox, beatEl, recordBtn);
 
   // ---- mic level meter: a plain requestAnimationFrame loop reading RMS off

@@ -20,11 +20,3 @@ export const PCKEYS_LOWER = { z: 48, x: 50, c: 52, v: 53, b: 55, n: 57, m: 59 };
 // named rows above so a caller that only cares about one row can still get
 // it on its own.
 export const PCKEYS = Object.assign({}, PCKEYS_UPPER, PCKEYS_LOWER);
-
-// The lowest and highest MIDI note either row reaches, for hint/help text --
-// this module stays free of any note-naming convention (that lives in
-// app.js's own NAMES/nname()), so it only ever hands back numbers.
-export function pckeysRowRange(row) {
-  const vals = Object.values(row);
-  return [Math.min(...vals), Math.max(...vals)];
-}

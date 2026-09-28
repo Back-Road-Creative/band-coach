@@ -237,34 +237,6 @@ test('Check never reads or writes the saved place; Rehearse shares Learn\'s', as
   assert.deepEqual(page.exceptions, []);
 });
 
-test('a legacy \'none\'-keyed saved place is migrated to \'shown\' on the next open', async (t) => {
-  const page = await launchPage(htmlPath);
-  t.after(() => page.close());
-
-  await openHotCrossBuns(page);
-  await clickButtonNamed(page, 'Next');
-  await page.waitFor(
-    "(() => { try { return JSON.parse(localStorage.getItem('bandcoach.v1')).panels.songs.lessons[0].stepIndex === 1; } catch (e) { return false; } })()"
-  );
-  await page.evaluate("window.__coach.db().panels.songs.lessons[0].key.assist = 'none'");
-
-  await page.evaluate(
-    "Array.from(document.querySelectorAll('.panel-songs-row button')).find(b => b.textContent === 'Hot Cross Buns').click()"
-  );
-  await page.waitFor("document.querySelector('.panel-songs-practice h4')");
-  const heading = await page.evaluate("document.querySelector('.panel-songs-practice h4').textContent");
-  assert.ok(heading.startsWith('Clap the rhythm'), 'expected the legacy entry to still resume: ' + heading);
-  const said = await page.evaluate("document.getElementById('panelSay').textContent");
-  assert.equal(said, 'Picking up where you left off.');
-
-  const lessons = await page.evaluate("window.__coach.db().panels.songs.lessons");
-  const hcbEntries = lessons.filter((e) => e.key.songId === 'hot-cross-buns');
-  assert.equal(hcbEntries.length, 1, 'expected exactly one hot-cross-buns saved entry: ' + JSON.stringify(lessons));
-  assert.equal(hcbEntries[0].key.assist, 'shown', 'expected the legacy entry migrated to the shown key');
-
-  assert.deepEqual(page.exceptions, []);
-});
-
 test('Practise again keeps returnTo', async (t) => {
   const dir = mkdtempSync(join(tmpdir(), 'band-coach-song-modes-'));
   t.after(() => rmSync(dir, { recursive: true, force: true }));

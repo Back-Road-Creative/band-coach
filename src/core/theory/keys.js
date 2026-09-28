@@ -110,31 +110,3 @@ function keys(mode) {
   return mode === 'major' ? MAJOR_KEYS : MINOR_KEYS;
 }
 
-export function relativeKey(key) {
-  const resolved = resolveKey(key);
-  const otherMode = resolved.mode === 'major' ? 'minor' : 'major';
-  return keyFromSignature(resolved.signature, otherMode);
-}
-
-export function parallelKey(key) {
-  const resolved = resolveKey(key);
-  const otherMode = resolved.mode === 'major' ? 'minor' : 'major';
-  return keyByTonicMode(resolved.tonic, otherMode);
-}
-
-// One step around the circle of fifths in either direction, same mode.
-export function neighbours(key) {
-  const resolved = resolveKey(key);
-  const { count, type } = resolved.signature;
-  const step = (dir) => {
-    // dir=+1 is a fifth up (one more sharp / one fewer flat), dir=-1 the reverse.
-    let sharps = type === 'sharp' ? count : type === 'none' ? 0 : -count;
-    sharps += dir;
-    if (sharps > 7 || sharps < -7) return null; // past the 15-key range (double accidentals)
-    const signature = sharps === 0 ? { count: 0, type: 'none' } : sharps > 0
-      ? { count: sharps, type: 'sharp' }
-      : { count: -sharps, type: 'flat' };
-    return keyFromSignature(signature, resolved.mode);
-  };
-  return { up: step(1), down: step(-1) };
-}

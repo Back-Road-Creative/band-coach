@@ -114,12 +114,6 @@ function noteXml(seg, keyName) {
   return xml;
 }
 
-// Ticks in one bar of `metre` ({ num, den }). Mirrors model.js's private
-// barTicksOf, which only ever sees the song's single initial metre.
-function barTicksFor(metre) {
-  return metre.num * (4 / metre.den) * TICKS_PER_QUARTER;
-}
-
 // The active `metre` for the bar starting at `boundaries[i]`.
 function metreAt(song, boundaries, i) {
   const mStart = boundaries[i];

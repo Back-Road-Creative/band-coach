@@ -5,10 +5,6 @@
 
 const STREAK_TO_LEVEL_UP = 3;
 
-export function initLessonState() {
-  return { level: 1, seed: 0, streak: 0 };
-}
-
 // Coerces whatever came back from api.store('theory').get() (which may be
 // null, stale, or hand-edited) into a valid state -- never trusts saved data.
 export function sanitizeLessonState(raw, levelCount) {

@@ -5,9 +5,6 @@ export const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A',
 
 export const MAJOR_STEPS = [0, 2, 4, 5, 7, 9, 11];
 
-export function pcName(pc) {
-  return NOTE_NAMES[((pc % 12) + 12) % 12];
-}
 
 // Shared "ordered-list" grading: reports the ok/wrong shape every sequence
 // exercise here uses (degrees, progressions, melodic/rhythm dictation,

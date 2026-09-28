@@ -63,20 +63,9 @@ export function createMidiParser() {
   return { feed: feed };
 }
 
-// A plain-language summary of a live MIDIAccess.inputs map (or any array of
-// {id, name, state, connection} port-like objects), for status text and the
-// "MIDI details" readout -- see src/app.js ioRefresh()/renderMidiDetails().
-export function describeInputs(inputs) {
-  const list = [];
-  if (inputs && typeof inputs.forEach === 'function') inputs.forEach(p => list.push(p));
-  else if (Array.isArray(inputs)) list.push.apply(list, inputs);
-  const connected = list.filter(p => p.state === 'connected');
-  return { total: list.length, connected: connected, names: connected.map(p => p.name || 'MIDI device') };
-}
-
-// Same summary as describeInputs but for a live MIDIAccess.outputs map (or
-// any array of port-like objects) -- the "play it for me" feature picks a
-// keyboard to send notes to from this list.
+// A plain-language summary of a live MIDIAccess.outputs map (or any array of
+// {id, name, state, connection} port-like objects) -- the "play it for me"
+// feature picks a keyboard to send notes to from this list.
 export function describeOutputs(outputs) {
   const list = [];
   if (outputs && typeof outputs.forEach === 'function') outputs.forEach(p => list.push(p));

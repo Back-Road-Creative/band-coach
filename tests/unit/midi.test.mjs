@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createMidiParser, describeInputs } from '../../src/core/midi.js';
+import { createMidiParser } from '../../src/core/midi.js';
 
 test('note-on with velocity > 0 is an "on" event', () => {
   const p = createMidiParser();
@@ -55,29 +55,6 @@ test('a buffer can carry more than one message, running status included', () => 
     { type: 'on', note: 62, velocity: 100, channel: 0 },
     { type: 'off', note: 60, velocity: 0, channel: 0 },
   ]);
-});
-
-test('describeInputs: counts only connected ports and names them', () => {
-  const inputs = [
-    { id: 'a', name: 'Keystation', state: 'connected' },
-    { id: 'b', name: 'Old Keyboard', state: 'disconnected' },
-  ];
-  const d = describeInputs(inputs);
-  assert.equal(d.total, 2);
-  assert.equal(d.connected.length, 1);
-  assert.deepEqual(d.names, ['Keystation']);
-});
-
-test('describeInputs: accepts a Map-like forEach (the real MIDIAccess.inputs shape)', () => {
-  const map = new Map([['a', { id: 'a', name: 'Keystation', state: 'connected' }]]);
-  const d = describeInputs(map);
-  assert.equal(d.total, 1);
-  assert.deepEqual(d.names, ['Keystation']);
-});
-
-test('describeInputs: an unnamed port falls back to a generic label', () => {
-  const d = describeInputs([{ id: 'a', state: 'connected' }]);
-  assert.deepEqual(d.names, ['MIDI device']);
 });
 
 // System Common messages carry data bytes of their own (MTC quarter frame 1,

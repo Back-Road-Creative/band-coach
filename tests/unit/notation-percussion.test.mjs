@@ -5,10 +5,18 @@ import { layoutMeasure } from '../../src/notation/layout.js';
 import { drawSVG } from '../../src/notation/draw-svg.js';
 import { drawPrimitives } from '../../src/notation/draw-canvas.js';
 import { CLEF_PATHS } from '../../src/notation/glyphs.js';
-import { PERCUSSION_SLOTS, PIECE_IDS, percussionNote, layoutPercussionMeasure } from '../../src/notation/percussion.js';
+import { PERCUSSION_SLOTS, layoutPercussionMeasure } from '../../src/notation/percussion.js';
 
 function byType(primitives, type) {
   return primitives.filter((p) => p.type === type);
+}
+
+// A single-hit layoutMeasure-shaped note, matching what percussion.js's own
+// percussionNote() used to build -- for a single hit, perc.stem is just that
+// slot's own `stem` (stemForHits only diverges once several hits are stacked).
+function note(pieceId, dur) {
+  const slot = PERCUSSION_SLOTS[pieceId];
+  return { midi: null, dur, perc: { hits: [{ piece: pieceId, ...slot }], stem: slot.stem } };
 }
 
 // A recording fake ctx matching tests/unit/notation/draw-canvas.test.mjs's pattern.
@@ -23,13 +31,6 @@ function makeFakeCtx() {
 test('staffPosition: works for a percussion slot without throwing', () => {
   assert.equal(staffPosition(PERCUSSION_SLOTS.snare, 'percussion'), 5);
   assert.equal(staffPosition({ position: -3 }, 'percussion'), -3);
-});
-
-test('every drum-kit piece id in the contract has a slot', () => {
-  for (const id of PIECE_IDS) {
-    assert.ok(PERCUSSION_SLOTS[id], `missing slot for ${id}`);
-  }
-  assert.equal(PIECE_IDS.length, 10);
 });
 
 test('slots are unique except closed/open hi-hat sharing one', () => {
@@ -57,23 +58,10 @@ test('noteheads: hi-hat/ride/crash are x-shaped, kick/snare/toms are ovals', () 
   for (const id of ovalShaped) assert.equal(PERCUSSION_SLOTS[id].notehead, 'oval', id);
 });
 
-test('percussionNote: produces a layoutMeasure-shaped note with a single hit', () => {
-  const note = percussionNote('snare', 1);
-  assert.equal(note.midi, null);
-  assert.equal(note.dur, 1);
-  assert.equal(note.perc.hits.length, 1);
-  assert.equal(note.perc.hits[0].piece, 'snare');
-  assert.equal(note.perc.stem, 'up');
-});
-
-test('percussionNote: throws on an unknown piece id', () => {
-  assert.throws(() => percussionNote('cowbell', 1));
-});
-
 test('layoutMeasure: clef "percussion" draws a percussion clef and no key signature', () => {
   const { primitives } = layoutMeasure({
     clef: 'percussion', key: 'D', time: [4, 4], width: 400,
-    notes: [percussionNote('snare', 4)],
+    notes: [note('snare', 4)],
   });
   const clefs = byType(primitives, 'clef');
   assert.equal(clefs.length, 1);
@@ -84,7 +72,7 @@ test('layoutMeasure: clef "percussion" draws a percussion clef and no key signat
 test('layoutMeasure: a percussion hit gets a notehead with the right shape and no accidental machinery', () => {
   const { primitives } = layoutMeasure({
     clef: 'percussion', key: 'C', time: [4, 4], width: 400,
-    notes: [percussionNote('ride', 4)],
+    notes: [note('ride', 4)],
   });
   const heads = byType(primitives, 'notehead');
   assert.equal(heads.length, 1);
@@ -95,7 +83,7 @@ test('layoutMeasure: a percussion hit gets a notehead with the right shape and n
 test('layoutMeasure: hihat-open gets an extra small circle mark above its x notehead', () => {
   const { primitives } = layoutMeasure({
     clef: 'percussion', key: 'C', time: [4, 4], width: 400,
-    notes: [percussionNote('hihat-open', 4)],
+    notes: [note('hihat-open', 4)],
   });
   const heads = byType(primitives, 'notehead');
   assert.equal(heads.length, 2);
@@ -105,7 +93,7 @@ test('layoutMeasure: hihat-open gets an extra small circle mark above its x note
 test('layoutMeasure: crash sits on its documented ledger line above the staff', () => {
   const { primitives } = layoutMeasure({
     clef: 'percussion', key: 'C', time: [4, 4], width: 400,
-    notes: [percussionNote('crash', 4)],
+    notes: [note('crash', 4)],
   });
   assert.equal(byType(primitives, 'ledger').length, 1);
 });
@@ -113,7 +101,7 @@ test('layoutMeasure: crash sits on its documented ledger line above the staff', 
 test('layoutMeasure: kick stem points down, snare stem points up', () => {
   const { primitives } = layoutMeasure({
     clef: 'percussion', key: 'C', time: [4, 4], width: 400,
-    notes: [percussionNote('kick', 2), percussionNote('snare', 2)],
+    notes: [note('kick', 2), note('snare', 2)],
   });
   const stems = byType(primitives, 'stem');
   assert.equal(stems.length, 2);

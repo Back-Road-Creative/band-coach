@@ -58,14 +58,14 @@ export const OPEN_D = [38, 45, 50, 54, 57, 62];
 export const HALF_STEP_DOWN = STANDARD_GUITAR.map(p => p - 1);
 
 // Low-G ukulele: same pitches as src/instruments/ukulele-low-g.js.
-export const UKULELE_LOW_G = [55, 60, 64, 69];
+const UKULELE_LOW_G = [55, 60, 64, 69];
 
 // High-G (re-entrant, standard) ukulele: same pitches as src/instruments/
 // uke.js, kept in its played string order (G above C, not sorted low-high).
-export const UKULELE_HIGH_G = [67, 60, 64, 69];
+const UKULELE_HIGH_G = [67, 60, 64, 69];
 
 // 5-string bass: same pitches as src/instruments/bass-5-string.js.
-export const BASS_5_STRING = [23, 28, 33, 38, 43];
+const BASS_5_STRING = [23, 28, 33, 38, 43];
 
 export const TUNINGS = {
   standard: STANDARD_GUITAR,

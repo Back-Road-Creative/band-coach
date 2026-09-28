@@ -377,9 +377,8 @@ repeat-until-clean chunking a built-in curriculum level uses.
 ## Songs
 
 The Songs panel's own "Add a song" button, right at the top, opens one section with both ways to
-add a song: a "Record" door (the same count-in, level meter and capture "Learn this" uses,
-`src/ui/songs/record-door.js`, built with its own `songs`-prefixed ids so they never clash with
-Learn this's) and an "Open file" input for a score, a recording, a teacher's challenge or a band
+add a song: a "Record" door (the count-in, level meter and capture in
+`src/ui/songs/record-door.js`) and an "Open file" input for a score, a recording, a teacher's challenge or a band
 pack — one input, one help line naming every accepted extension (`ADD_ACCEPT`/`ADD_HELP_LINE`,
 `src/ui/songs/add-source.js`). A recording or a score lands on the same review screen "Learn this"
 shows (`src/ui/songs/review.js`) without leaving Songs: "Practise this" opens the lesson (a
@@ -1229,6 +1228,11 @@ integer-tick durations, so triplets and swing are exact fractions rather than ro
 `buildPhrase`/`onsetsOf`/`validateBar` are unit-tested in isolation under `tests/unit/rhythm.test.mjs`.
 Rhythm reading (`rhy`) gains eight further levels built on it, after the original ten-cell levels:
 rests, ties, dotted-eighth figures, triplets, 3/4, 6/8, swing, and two-bar phrases.
+
+Rhythm reading's "Calibrate timing" button plays eight clicks and takes a tap on each: the tap pad,
+the space bar or any letter key, or a note on a connected MIDI keyboard or drum set -- the same
+inputs the exercises judge. Each caught tap is counted on screen; four or more store the median
+offset as the latency allowance every later tap is judged against.
 
 ## Ear training
 

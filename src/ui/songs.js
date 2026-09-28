@@ -49,8 +49,8 @@ import { buildLessonPlan, nextStep, creditFor } from '../song/lesson.js';
 import { feasibility } from '../song/feasibility.js';
 import { INSTRUMENTS } from '../instruments/index.js';
 import { capabilityFor } from '../instruments/capability.js';
-import { routeImportFile, importerFor } from './songs/import-route.js';
-import { judgeAttempt, passesRule, holdTuneFeedback, firstCorrection, phraseSec } from './songs/practice.js';
+import { importerFor } from './songs/import-route.js';
+import { judgeAttempt, passesRule, firstCorrection, phraseSec } from './songs/practice.js';
 import { createSongClock } from '../song/clock.js';
 import { phaseOf, repairFor } from '../core/teaching.js';
 import { barHeat, worstBars } from '../song/bar-heat.js';
@@ -168,7 +168,7 @@ export function centsFromFreq(freq, midi) {
 // tick (50 ms), so a note heard once and gone is judged as clipped short
 // rather than skipped as "unmeasured"; the capture loop stretches it while
 // the same pitch keeps sounding.
-export const MIC_TICK_SEC = 0.05;
+const MIC_TICK_SEC = 0.05;
 export function playedEventFrom(freq, midi, atSec) {
   return { midi, atSec, durSec: MIC_TICK_SEC, cents: centsFromFreq(freq, midi) };
 }
@@ -609,13 +609,11 @@ function mountSongsPanel(hostEl, api) {
   const resultEl = el('div', { class: 'panel-learn-result' });
   resultEl.hidden = true;
 
-  // The mic door (src/ui/songs/record-door.js), reused with idPrefix
-  // 'songs' so its ids/classes (songsBpm, panel-songs-beat, panel-songs-
-  // record-btn, panel-songs-meter, ...) never collide with Learn this's own
-  // copy (idPrefix 'learn') if both happen to be mounted at once.
+  // The mic door (src/ui/songs/record-door.js), Songs' only caller: its own
+  // ids/classes are the literal panel-songs-* names (songsBpm, panel-songs-
+  // beat, panel-songs-record-btn, panel-songs-meter, ...).
   const door = createRecordDoor(api, {
     say,
-    idPrefix: 'songs',
     onStart() { resultEl.hidden = true; resultEl.innerHTML = ''; },
     onTake: onMicTake,
   });
@@ -1242,16 +1240,12 @@ function mountSongsPanel(hostEl, api) {
     // tuning/harp-key/instrument change, a tempo change) means no match, so
     // the lesson starts at step 1 with no message, same as always. Check
     // never reads (or, in saveLesson() below, writes) the saved-place list
-    // at all, so it always starts at step 1 -- a one-time legacy fallback
-    // (a place saved under the OLD, always-'none' key) is tried only
-    // outside Check, so an old entry is picked up once and then, since
-    // saveLesson() writes the 'shown' key into the same slot, migrated.
+    // at all, so it always starts at step 1.
     const lessonKeyValue = lessonKey({ song: arrangedSong, partId, instrumentId, setup, arrangement, assistance, hands });
     const foundEntry = mode === 'check' || opts.fresh
       ? null
       : sanitizeLessonEntry(
-        findLesson(sanitizeLessonList((store.get() || {}).lessons), lessonKeyValue)
-          || findLesson(sanitizeLessonList((store.get() || {}).lessons), { ...lessonKeyValue, assist: 'none' }),
+        findLesson(sanitizeLessonList((store.get() || {}).lessons), lessonKeyValue),
         plan.steps.length
       );
     // A saved entry still sitting at step 0 with an empty trailing tail

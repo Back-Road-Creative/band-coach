@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  transposeByInterval, writtenToConcert, concertToWritten, transposeBetweenInstruments,
+  transposeByInterval, writtenToConcert, concertToWritten,
   chooseEnharmonicKey, transposeKey, transposePhraseForInstrument,
 } from '../../src/core/theory/transpose.js';
 import { byId } from '../../src/instruments/index.js';
@@ -24,12 +24,6 @@ test('B flat trumpet: written is a major second above concert (transposition -2)
 test('E flat alto sax: written is a major sixth above concert (transposition -9)', () => {
   const written = concertToWritten([n(60)], byId['sax-alto-eb']);
   assert.equal(written[0].midi, 69);
-});
-
-test('transposeBetweenInstruments round-trips through concert pitch', () => {
-  const bbWritten = [n(62)]; // concert C, written for Bb trumpet
-  const forSax = transposeBetweenInstruments(bbWritten, byId['trumpet-bb'], byId['sax-alto-eb']);
-  assert.equal(forSax[0].midi, 69); // same concert pitch (C), written for Eb alto sax
 });
 
 test('chooseEnharmonicKey prefers fewer accidentals, ties toward sharps', () => {

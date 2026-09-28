@@ -9,7 +9,6 @@
 // educational-validation badge. That distinction is why this module exists:
 // `tier` below is the only field that speaks to maturity, and it is computed,
 // not asserted.
-import { INSTRUMENTS } from './index.js';
 import { isReviewed } from './review.js';
 import { howKindFor } from '../ui/fingerings/how.js';
 
@@ -24,8 +23,6 @@ const COMPUTED_CHART_KINDS = new Set(['fretboard', 'fingerboard', 'brass-valves'
 // per-chart review field, so provenance is the only review evidence this
 // module has to work with.
 const TYPED_CHART_KINDS = new Set(['drum-kit', 'keyed-woodwind', 'recorder', 'whistle']);
-
-export const TIERS = ['first-release-candidate', 'accessible-unvalidated', 'supported-untested', 'planned'];
 
 function chartFor(rec) {
   const kind = howKindFor(rec);
@@ -70,8 +67,4 @@ export function capabilityFor(rec) {
     contentReviewed: isReviewed(rec.provenance),
     tier: tierFor(rec)
   };
-}
-
-export function capabilityMatrix() {
-  return INSTRUMENTS.map(capabilityFor);
 }
