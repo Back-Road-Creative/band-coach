@@ -242,10 +242,10 @@ None of these is claimed reviewed by a player: every outcome text the pathway or
 shows still carries "Not yet checked by a player" (`Reviewed by: none yet`), same as everywhere
 else this teaching content appears. This close-out proves the pathway's own plumbing works end to
 end through the UI a learner actually uses; it says nothing about whether a musician has checked
-the curriculum itself, or about any feature not in this build (a "How to play this" peek, a
-one-correction review, or any higher level than this branch's own trainer reaches -- if any of
-those are in flight elsewhere, they are a separate unit's work, not this one's, and are not named
-or implied anywhere in these four journeys).
+the curriculum itself. The four journeys also do not exercise the "How to play this" peek (#336) or
+the one-correction review (#337), both in main but landed after this branch was cut, nor the
+keyboard trainer's level 17 position change (#338), which was not in main when this was written --
+none of them is named or implied anywhere in these four journeys.
 
 **Finding: "Passed on your own" and the pathway's own check disagree about what counts.** Journey 1
 measured this directly rather than assuming the task brief's "exactly one independent pass": Check
