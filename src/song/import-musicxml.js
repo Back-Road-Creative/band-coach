@@ -15,6 +15,11 @@
 // browser API dependency). `<score-timewise>` (measure-major layout) is
 // transposed to the part-major `<score-partwise>` shape below before the
 // rest of this file's parsing runs unchanged.
+//
+// A part that declares `<staves>2</staves>` in `<attributes>` gets each note
+// tagged `hand: 'rh'` (its own `<staff>1</staff>`) or `'lh'` (`<staff>2</staff>`,
+// missing `<staff>` defaults to 1); a part with 1 or 3+ staves gets no hand
+// tags at all (see the note loop below for why).
 
 import { songIdentity } from './ident.js';
 import { parseXml, elements, element, childText, attr, text } from './xml-lite.js';
@@ -142,6 +147,7 @@ export function importMusicXml(rawText, options = {}) {
     const partId = attr(partNode, 'id', `part-${parts.length + 1}`);
     const notes = [];
     let divisions = 1;
+    let staves = 1; // <staves> in <attributes>; 2 means piano-style rh/lh, else no hand tags
     let transposeSemitones = 0; // chromatic + 12*octave-change, written->sounding
     const voiceCursor = new Map(); // voice id -> tick cursor
     let lastNoteStart = 0; // start tick for the current <chord/> group
@@ -164,6 +170,8 @@ export function importMusicXml(rawText, options = {}) {
         if (child.name === 'attributes') {
           const divText = childText(child, 'divisions');
           if (divText !== undefined) divisions = num(divText, divisions);
+          const stavesText = childText(child, 'staves');
+          if (stavesText !== undefined) staves = num(stavesText, staves);
           const keyNode = element(child, 'key');
           if (keyNode) {
             const newKey = keyFromFifthsAndMode(num(childText(keyNode, 'fifths'), 0), childText(keyNode, 'mode'), warnings);
@@ -218,6 +226,10 @@ export function importMusicXml(rawText, options = {}) {
             } else {
               midi += transposeSemitones;
               const noteObj = { start, dur: ticks, midi };
+              if (staves === 2) {
+                const staffNum = num(childText(child, 'staff'), 1);
+                noteObj.hand = staffNum === 2 ? 'lh' : 'rh';
+              }
               const tieTypes = new Set(elements(child, 'tie').map((t) => attr(t, 'type')));
               if (tieTypes.has('stop')) {
                 if (openTies.has(midi)) { noteObj.tieFromPrev = true; openTies.delete(midi); }
@@ -234,6 +246,7 @@ export function importMusicXml(rawText, options = {}) {
     }
 
     if (voiceCursor.size > 1) warnings.push(`part "${partNames[partId] || partId}" has ${voiceCursor.size} voices; flattened into one`);
+    if (staves >= 3) warnings.push(`part "${partNames[partId] || partId}" has ${staves} staves; hands not assigned`);
     notes.sort((a, b) => a.start - b.start);
     parts.push({ id: partId, name: partNames[partId] || partId, notes });
   }
