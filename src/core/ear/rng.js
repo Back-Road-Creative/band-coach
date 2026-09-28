@@ -3,7 +3,7 @@
 // question forever. mulberry32 (public-domain), seeded by folding level and
 // seed into one 32-bit integer.
 
-export function seedFrom(level, seed) {
+function seedFrom(level, seed) {
   let h = (Number(level) >>> 0) * 0x9e3779b1;
   h = (h ^ (Number(seed) >>> 0)) >>> 0;
   h = Math.imul(h ^ (h >>> 16), 0x45d9f3b) >>> 0;

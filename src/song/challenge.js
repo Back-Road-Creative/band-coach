@@ -20,7 +20,7 @@ export const CHALLENGE_SCHEMA = 'challenge/1';
 // under 50, and it keeps a hostile or corrupted file from asking the
 // library to store thousands of "songs" in one go.
 export const MAX_CHALLENGE_SONGS = 50;
-export const MAX_CHALLENGE_BYTES = 5 * 1024 * 1024;
+const MAX_CHALLENGE_BYTES = 5 * 1024 * 1024;
 
 function isPlainObject(x) { return x !== null && typeof x === 'object' && !Array.isArray(x); }
 function isNonEmptyString(x) { return typeof x === 'string' && x.length > 0; }

@@ -2,11 +2,11 @@
 // this module is imported by build/build.mjs's bundle target eventually, and by
 // plain `node --test` unit tests, so it must run standalone in either place.
 
-export const FAMILIES = ['keys', 'fretted', 'bowed', 'wind', 'brass', 'voice', 'percussion', 'free-reed'];
-export const INPUTS = ['mic', 'midi', 'mic+midi', 'tap'];
-export const CLEFS = ['treble', 'bass', 'alto', 'tenor', 'grand', 'tab', 'percussion'];
-export const OCTAVE_POLICIES = ['exact', 'nearest-octave'];
-export const STATUSES = ['ready', 'planned'];
+const FAMILIES = ['keys', 'fretted', 'bowed', 'wind', 'brass', 'voice', 'percussion', 'free-reed'];
+const INPUTS = ['mic', 'midi', 'mic+midi', 'tap'];
+const CLEFS = ['treble', 'bass', 'alto', 'tenor', 'grand', 'tab', 'percussion'];
+const OCTAVE_POLICIES = ['exact', 'nearest-octave'];
+const STATUSES = ['ready', 'planned'];
 
 const ID_RE = /^[a-z][a-z0-9]*(-[a-z0-9]+)*$/;
 

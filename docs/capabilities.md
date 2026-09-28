@@ -91,7 +91,7 @@ only promises this doc can point at a real line for.
 
 | Promise | Source | Status |
 | --- | --- | --- |
-| "Free, no account, and your sound never leaves your computer" | README.md:6 | implemented-and-verified — `tests/build/pages-offline.test.mjs`, `tests/build/gate.test.mjs` drive the release build offline and assert zero network calls |
+| "Free, no account, and your sound never leaves your computer" | README.md:6 | implemented-and-verified — `tests/build/pages-offline.test.mjs`, `tests/release/gate.test.mjs` drive the release build offline and assert zero network calls |
 | A learner can turn a recording of themselves (or an audio file) into a playable song | README.md:229 ("Import audio... its file input lets a learner pick a recording") | implemented-and-verified — `tests/unit/capture-v2-transcribe.test.mjs`, `tests/unit/eval-roundtrip.test.mjs` |
 | Installable "phone copy" / Add to Home Screen (README.md's "Phone copy" section) | README.md:893-901 | implemented-and-verified for install/offline-render only — `tests/build/pages.test.mjs`, `tests/build/pages-offline.test.mjs` prove the service worker installs and the shell renders offline in headless Chromium |
 | The phone copy works on a real phone, microphone included | README.md:910-915 ("**iPhone microphone behaviour is unmeasured** ... don't tell a learner it works on their phone") | deliberately-deferred — README.md states this outright: unmeasured on a real device, a later test phase is planned |

@@ -34,7 +34,7 @@ function magAt(magSpectrum, bin) {
 // energy at its *even* (or every-third, ...) harmonics, each already
 // discounted by a larger h. Returns a plain Float32Array indexed from 0 ==
 // minMidi; caller keeps track of minMidi itself (see detectPitches).
-export function salienceFrame(magSpectrum, sampleRate, fftSize, opts = {}) {
+function salienceFrame(magSpectrum, sampleRate, fftSize, opts = {}) {
   const { minMidi = 36, maxMidi = 96, harmonics = 5 } = opts;
   const nyquistBin = magSpectrum.length - 1;
   const out = new Float32Array(maxMidi - minMidi + 1);

@@ -146,7 +146,7 @@ function notePlayable(shiftedMidi, instrument, availableSet) {
 // and feasibility.js already imports fitToInstrument from this module;
 // defining it there and importing it back would make the two files a
 // circular pair of ES module imports for no reason.
-export const POLYPHONIC_FAMILIES = new Set(['keys', 'fretted', 'percussion']);
+const POLYPHONIC_FAMILIES = new Set(['keys', 'fretted', 'percussion']);
 export function isSingleLine(instrument) {
   return !POLYPHONIC_FAMILIES.has(instrument.family);
 }
@@ -287,16 +287,12 @@ export function fitToInstrument(song, partId, instrument) {
 // segment
 // ---------------------------------------------------------------------------
 
-// beatTicks/barTicks: the OPENING metre only (song.metre), used wherever a
+// beatTicks: the OPENING metre only (song.metre), used wherever a
 // caller needs one flat tick-per-beat number for the whole song (buildLessonPlan's
 // phraseDifficulty call below). segment() itself must NOT use these once a
 // song carries metreChanges -- see barBoundariesThrough/beatTicksAt.
 function beatTicks(song) {
   return song.ticksPerQuarter * (4 / song.metre.den);
-}
-
-function barTicks(song) {
-  return song.metre.num * beatTicks(song);
 }
 
 // The beat length (ticks) of whichever metre is in force at `tick` --
@@ -424,7 +420,7 @@ function sustainRules(instrument, passRule) {
 // keys) for a non-percussion part. src/ui/songs/practice.js's passesRule
 // ignores minPieceRate whenever a try's pieceRate comes back null (nothing
 // the mic could name), so this never blocks a pass on timing alone.
-export const MIN_PIECE_RATE = 0.8;
+const MIN_PIECE_RATE = 0.8;
 function percussionRules(isPercussion, passRule) {
   if (!passRule || !isPercussion) return passRule;
   return { ...passRule, minPieceRate: MIN_PIECE_RATE };
