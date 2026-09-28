@@ -136,6 +136,23 @@ export const en = {
   // fingering line, hidden in Check same as those views (only shows for an
   // instrument the Fingerings panel can draw, howKindFor() non-null).
   'howInline.button': 'How to play this',
+  // "Your keyboard path" panel (P2), src/ui/pathway.js: the button that
+  // opens it, the panel's own title/tag/current-step marker, the five
+  // step names src/core/pathway.js's pathwayState steps through, and the
+  // one action label per step (the wait label names the recheck date).
+  'pathway.open': 'Your keyboard path',
+  'pathway.title': 'Your keyboard path',
+  'pathway.tag': 'Pathway',
+  'pathway.current': 'You are here',
+  'pathway.step.setup': 'Setup',
+  'pathway.step.lesson': 'Lesson',
+  'pathway.step.song': 'Song',
+  'pathway.step.check': 'Check',
+  'pathway.step.return': 'Return',
+  'pathway.action.trainer': 'Go to the keyboard trainer',
+  'pathway.action.song': 'Open {title} in Songs',
+  'pathway.action.check': 'Check {title} in Songs',
+  'pathway.action.wait': 'Come back on {date} to check it again',
 };
 
 const locales = { en };

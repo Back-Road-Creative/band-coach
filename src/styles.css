@@ -424,6 +424,15 @@
   .panel-playalong .pa-loop-region { position: absolute; top: 0; bottom: 0; background: color-mix(in srgb, var(--accent) 25%, transparent); border-inline: 2px solid var(--accent); }
   .panel-playalong .pa-playhead-row { align-items: center; gap: 8px; }
   .panel-playalong .pa-playhead-row input[type="range"] { flex: 1 1 160px; }
+  /* "Your keyboard path" panel (P2): the step list, the current step's
+     accent border, and its unreviewed note -- same warn colour/size as
+     #modOpts [role="note"] above (line 394), theme tokens only. */
+  .panel-pathway .pathway-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+  .panel-pathway .pathway-steps li { border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; }
+  .panel-pathway .pathway-steps li.pathway-current { border-color: var(--good); border-width: 2px; }
+  .panel-pathway .pathway-here { color: var(--good); font-size: 13px; }
+  .panel-pathway .pathway-wait { color: var(--warn); font-size: 13px; }
+  .panel-pathway .pathway-unreviewed { color: var(--warn); font-size: 13px; }
   /* */
   /* slot:css:w-fixes */
   /* */
