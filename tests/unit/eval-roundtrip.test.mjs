@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { starterSongs } from '../../src/song/starter/index.js';
+import { starterMelodies as starterSongs } from '../../src/song/starter/index.js';
 import { FAMILY_PROFILES, evaluateAll } from '../../src/song/eval/roundtrip.js';
 
 // Floors below are the MEASURED per-family mean F1 (see roundtrip.js
