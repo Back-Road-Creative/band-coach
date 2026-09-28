@@ -198,7 +198,7 @@ test('a step with no left-hand notes is not assessed', async (t) => {
           .catch(() => false);
         const events = await page.evaluate('window.__coach.db().events');
         const row = newRowLogged ? events[events.length - 1] : null;
-        return { restSeenAndClean, newRowLogged, rowCount: events.length, row, exceptions: page.exceptions.slice() };
+        return { restSeenAndClean, newRowLogged, before, rowCount: events.length, row, exceptions: page.exceptions.slice() };
       } finally {
         await page.close();
       }
@@ -206,7 +206,8 @@ test('a step with no left-hand notes is not assessed', async (t) => {
   });
 
   assert.ok(result.restSeenAndClean, 'the rest line showed and no row was logged while skipping it');
-  assert.ok(result.newRowLogged, 'exactly one new row was logged on the first real judged step');
+  assert.ok(result.newRowLogged, 'a new row was logged on the first real judged step');
+  assert.equal(result.rowCount, result.before + 1, 'exactly one new row was logged on the first real judged step');
   assert.equal(result.row.hands, 'left');
   assert.equal(result.row.skill, 'rhythm:1');
   assert.deepEqual(result.exceptions, []);
