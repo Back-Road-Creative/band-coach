@@ -209,6 +209,64 @@ unit (`fix/song-event-epoch-clock`) fixes that at the source; `pathway.js`
 adds no workaround for a mixed clock, since detecting or correcting that is
 that unit's job, not this pure function's.
 
+## Keyboard pathway close-out
+
+Four end-to-end keyboard-learner journeys, each driven start to finish through real entry points
+only -- clicks, a real MIDI message over a fake port, a real `KeyboardEvent`, a real `change`
+event -- never `window.__coach` to drive a step (only to read state no real entry point can be
+asked for: the audio clock, the recording's own start time, a mastery item's numbers). Proof:
+`node --test --test-concurrency=1 tests/characterization/kbd-journey-scenarios.test.mjs`.
+
+1. **First visit with a MIDI keyboard.** setup -> lesson -> song -> check -> return, all through
+   real clicks and real MIDI notes, ending in a clean Check-mode play of the whole piece.
+2. **Computer keys only.** The same walkthrough, every note a real computer-key press: practice
+   genuinely progresses, Check mode is genuinely reached and played, but the pathway never reaches
+   return and Progress never counts an independent pass -- a computer-key attempt is practice, not
+   proof, on this instrument.
+3. **Returning the next day.** Day 1 ends at return, offering to wait. `Date.now()` (not the event
+   data) is moved forward a real day and the page reloaded, so day 2 is the same profile, one real
+   day later. The pathway now offers a recheck; playing it cleanly is read back as retained, both
+   through the pathway panel's own `.pathway-retained` note and through Progress's "Retained on a
+   later check" count.
+4. **Hand-alone to Both at level 13.** Twelve real "Skip ahead" clicks reach level 13, where Both
+   hands together starts locked; playing the right hand alone, then the left hand alone (a real
+   `change` event switches the Hands selector between them), on real MIDI, unlocks Both -- also
+   reached with a real `change` event.
+
+None of these is claimed reviewed by a player: every outcome text the pathway or the song hand-off
+shows still carries "Not yet checked by a player" (`Reviewed by: none yet`), same as everywhere
+else this teaching content appears. This close-out proves the pathway's own plumbing works end to
+end through the UI a learner actually uses; it says nothing about whether a musician has checked
+the curriculum itself, or about any feature not in this build (a "How to play this" peek, a
+one-correction review, or any higher level than this branch's own trainer reaches -- if any of
+those are in flight elsewhere, they are a separate unit's work, not this one's, and are not named
+or implied anywhere in these four journeys).
+
+**Finding: "Passed on your own" and the pathway's own check disagree about what counts.** Journey 1
+measured this directly rather than assuming the task brief's "exactly one independent pass": Check
+mode always restarts a lesson at step 1 (see "Keyboard pathway (contract)" above), so reaching the
+final whole-piece Check row means every earlier judged step (rhythm, pitches, phrase-slow, each
+tempo-ladder rung) was also just played cleanly, with no assistance, on real MIDI -- and
+`isIndependentOk()` says yes to every one of them. `src/core/pathway.js`'s own `qualifies()` only
+looks at the final whole-piece row (`skill === 'whole:null'`), but `src/ui/history.js`'s
+`#historyRetention` line has no such filter -- it counts every independent-ok row app-wide. A real
+learner's first successful Check-mode walkthrough of a song will see "Passed on your own: N" for N
+= every judged step of that walkthrough, not 1. Journey 1's assertion is tied to the real,
+dynamically-computed count (`events.filter(isIndependentOk).length`), not a fixed number, so it can
+never drift out of step with what the app actually does; no code changed to "fix" this, since
+whether N should mean "this song's steps" or "this pathway's one qualifying row" is a product
+decision this unit's scope does not cover.
+
+**Correction to the mixed-clock caveat above.** The "Keyboard pathway (contract)" section's closing
+paragraph flags `src/ui/songs.js`'s song-check `at` as still coming from the audio clock (seconds),
+not real epoch milliseconds. That is no longer true on this branch: `makeEvent()`
+(`src/core/learning-events.js`) defaults `at` to `Date.now()`, and the song-check call site passes
+no `now` override (its own comment says so directly) -- journey 3's real two-day run is live proof
+a fresh check row's `at` is a genuine epoch-ms timestamp, since the day-boundary math in
+`pathwayState()` (`dueAt`, `retainedAt`) only works at all against a real clock. Whether every OLDER
+saved row already on a learner's device also carries a genuine `at`, or some pre-date this fix, is
+outside what this journey checked.
+
 ## Known gaps
 
 - **F1 — closed.** Progress now also renders a "Passed with help / Passed on your own / Retained
