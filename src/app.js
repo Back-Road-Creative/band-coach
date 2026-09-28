@@ -6,7 +6,7 @@ import { createLibrary, indexedDbStore, memoryStore } from './song/library.js';
 import { captureToSong } from './song/capture.js';
 import { toAudioTime, judgeTap, medianLatency } from './core/timing.js';
 import { DEFAULT_STABILITY_DAYS, MIN_STABILITY_DAYS, MAX_STABILITY_DAYS, GRADE, retrievability, review, due, migrateItem } from './core/srs.js';
-import { handsTogetherById, handsModeFromId, fingeringLabel, gradeHandsTogetherExact, gradeHandsTogetherApprox } from './core/hands-together.js';
+import { handsTogetherById, handsModeFromId, fingeringLabel, gradeHandsTogetherExact, gradeHandsTogetherApprox, bothUnlocked, effectiveHands, prepLine, HANDS_TOGETHER_EXERCISES } from './core/hands-together.js';
 import { createMidiParser } from './core/midi.js';
 import { createNoteState } from './core/note-state.js';
 import { PCKEYS } from './core/pckeys.js';
@@ -1045,6 +1045,11 @@ import { register as registerPlayalong } from './ui/playalong.js';
     const drop = acc30 === null ? 0 : c01((sess.best30 - acc30) / 0.25), slow = (rt === null || !sess.bestRt) ? 0 : c01((rt / Math.max(0.4, sess.bestRt) - 1.15) / 0.6);
     sess.F = 0.45 * drop + 0.25 * slow + 0.2 * c01((sess.sinceBreak / 60 - 12) / 18) + 0.1 * c01(sess.downs / 3); return sess.F;
   }
+  // K2: patches the Hands selector's Both option (and its lock note) open in
+  // place, the instant bothUnlocked() actually flips inside credit() below
+  // -- never a full renderOpts() rebuild, so a mid-change select never
+  // steals its own focus.
+  function flipBothUnlockIfNeeded() { const o = document.querySelector('#optKbdHands option[value="both"]'); if (o) o.disabled = false; const lk = $('kbdBothLock'); if (lk) lk.remove(); if (DB.prefs.kbdHands === 'both') $('optKbdHands').value = 'both'; }
   function credit(id, q, from, warm, rt, outcome) {
     // A warm-up task is told "does not count" (see the hint text set at task
     // render: `t.warm ? 'Warm-up, does not count. ' : ''`, and the startSession()
@@ -1055,11 +1060,18 @@ import { register as registerPlayalong } from './ui/playalong.js';
     const out = outcome || gradeOutcome({ helped: false, assistance: null, q: q });
     // A helped element (Show me) is not a test: no review, no streak, no
     // level move, no judged count -- only the session's help counter moves.
-    // See src/core/grade-outcome.js.
+    // See src/core/grade-outcome.js. Neither does it advance bothUnlocked():
+    // a Show me pass is not evidence the hand was actually played.
     if (!out.review) { sess.helped = (sess.helped || 0) + 1; return; }
+    // K2: capture whether Both is still locked BEFORE this element's review
+    // is written below -- bothUnlocked() now reads reps, which review() is
+    // what actually sets, so this is the earliest point a level-13 hands
+    // element's grading can flip it from locked to unlocked.
+    const wasHandsLocked = mod === 'kbd' && D().task === 'hands' && !bothUnlocked(S);
     recent.push(q > 0 ? 1 : 0); if (recent.length > 20) recent.shift(); streak = q > 0 ? streak + 1 : 0;
     const grade = GRADE_FOR_Q(q), before = it(id, modelNow);
     S.item[id] = Object.assign({ seen: before.seen }, review(before, { grade, now: modelNow }));
+    if (wasHandsLocked && bothUnlocked(S)) flipBothUnlockIfNeeded();
     if (from && from !== id) S.trans[from + '>' + id] = review(tr(from, id, modelNow), { grade, now: modelNow });
     S.judged++; if (out.level) S.ready = clamp(S.ready + (q > 0 ? S.gain * q : -0.08), 0, 1);
     sess.judged++; if (q > 0) sess.ok++; if (sess.first.length < 30) sess.first.push(q > 0 ? 1 : 0); sess.last.push(q > 0 ? 1 : 0); if (sess.last.length > 30) sess.last.shift();
@@ -1107,8 +1119,16 @@ import { register as registerPlayalong } from './ui/playalong.js';
     // mode ('j1r'/'j1l') so a right/left-only pass credits its own id, never
     // the shared 'j1' both-hands id. (Level 14+'s mixed 'seq'/'one' pools can
     // still hand out a plain 'j<n>' id here -- that element is always graded
-    // as both-hands, by id, wherever it is graded; see handsModeFromId.)
-    if (kind === 'hands') { const handsSuf = DB.prefs.kbdHands === 'right' ? 'r' : DB.prefs.kbdHands === 'left' ? 'l' : ''; if (handsSuf) pool = pool.map(id => id + handsSuf); }
+    // as both-hands, by id, wherever it is graded; see handsModeFromId.) K2:
+    // a dedicated 'hands' task also runs through effectiveHands(), which
+    // gates a saved 'both' preference down to 'right' until bothUnlocked()
+    // -- each hand alone actually PLAYED (a graded attempt) at least once --
+    // says the level 13 drill may run both hands together; the raw
+    // preference itself is never rewritten. The live flip itself now lives
+    // in credit() (see flipBothUnlockIfNeeded), fired exactly when that
+    // grading happens, not here at task-build time.
+    const handsPref = d.task === 'hands' ? effectiveHands(DB.prefs.kbdHands, bothUnlocked(S)) : DB.prefs.kbdHands;
+    if (kind === 'hands') { const handsSuf = handsPref === 'right' ? 'r' : handsPref === 'left' ? 'l' : ''; if (handsSuf) pool = pool.map(id => id + handsSuf); }
     if (sess.warm > 0) { sess.warm--; warm = true; const base = kind === 'bar' || kind === 'kit' ? kind : kind === 'chord' ? 'chord' : 'one'; kind = base; pool = byStrength(pool, modelNow).slice(0, Math.max(2, Math.ceil(pool.length / 2))); }
     // Today's plan (src/core/curriculum.js's planSession, ordered by
     // nextPlanStep) steers an ordinary (non-warm-up) level task through its
@@ -2138,7 +2158,26 @@ import { register as registerPlayalong } from './ui/playalong.js';
     // 13). Changing it clears the in-progress task so the next one is built
     // fresh under the new mode (buildLevelTask's frame loop rebuilds
     // automatically once task is null and playing), never a half-graded one.
-    if (mod === 'kbd') sel('optKbdHands', 'Hands', { both: ['Both'], right: ['Right only'], left: ['Left only'] }, DB.prefs.kbdHands, v => { DB.prefs.kbdHands = v; task = null; save(); });
+    // K2: at level 13, Both stays disabled and the shown value reads
+    // effectiveHands() (never the raw, unrewritten preference) until
+    // bothUnlocked() -- each hand alone actually PLAYED (a graded attempt,
+    // not merely offered) at least once, or an earlier both-hands record
+    // grandfathering it open. A lock note and a "before you start" prep line
+    // for each hand ride along beside it.
+    if (mod === 'kbd') sel('optKbdHands', 'Hands', { both: ['Both'], right: ['Right only'], left: ['Left only'] }, mod === 'kbd' && D().task === 'hands' ? effectiveHands(DB.prefs.kbdHands, bothUnlocked(S)) : DB.prefs.kbdHands, v => { DB.prefs.kbdHands = v; task = null; save(); });
+    if (mod === 'kbd' && D().task === 'hands') {
+      if (!bothUnlocked(S)) {
+        const o = document.querySelector('#optKbdHands option[value="both"]'); if (o) o.disabled = true;
+        const lock = document.createElement('span'); lock.id = 'kbdBothLock'; lock.className = 'small'; lock.setAttribute('role', 'note');
+        lock.textContent = 'Both unlocks after you have played the right hand alone and the left hand alone.'; box.appendChild(lock);
+      }
+      const prep = document.createElement('span'); prep.id = 'kbdHandsPrep'; prep.className = 'small';
+      prep.textContent = prepLine(HANDS_TOGETHER_EXERCISES[0], m => nname(m, true)); box.appendChild(prep);
+      if (!isReviewCurrent(itemReview('kbd.handsTogether.prep', contentRev(prepLine(HANDS_TOGETHER_EXERCISES[0]))))) {
+        const note = document.createElement('span'); note.id = 'kbdHandsPrepReview'; note.setAttribute('role', 'note'); note.className = 'small';
+        note.textContent = t('review.unreviewed'); box.appendChild(note);
+      }
+    }
     // B(C11a) 'Play a song with these notes': songFor(S.level) names the
     // most advanced starter song whose notes are all already taught (see
     // src/instruments/kbd-songs.js -- null until level 2, since a song is
