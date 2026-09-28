@@ -75,29 +75,41 @@ the pure `isIndependentOk`/`pathwayState` contract in
 Since the feature under test predates this unit, the four tests are green
 at base by construction; "red first" is demonstrated here instead by three
 named mutations, applied one at a time, never committed, each reverted
-(`git checkout --`) before the next was applied and before this suite was
-run green again.
+(`git checkout -- src/`) before the next was applied and before this suite
+was rebuilt and run green again. Every row below is a fresh measurement
+against the current HEAD (which added `walkToStep`'s own per-step
+`'unknown'`/`isIndependentOk` assertions) — not carried over from an
+earlier revision of this file.
+
+`walkToStep` now asserts, on every step it walks past, that the row logs
+`input === 'unknown'` and `isIndependentOk(row) === false` (see the walk
+helper's own comment). Because Song A/B/C all have a rhythm step before
+the step under test, **M2 and M3 both trip that walk assertion on the very
+first walked-past rhythm step**, inside `walkToStep` itself, for every test
+that walks past one (T2, T4, T5) — before the target step (pitches/whole)
+is ever reached. This hides the later, more specific verdicts (T4's mixed
+verdict text, T5's Progress/pathway state) that the original prediction
+below was written against: those assertions are still correct, but under
+these two mutations the suite never gets far enough to exercise them.
 
 | Mutation | What it removed | Cases that went red |
 | --- | --- | --- |
-| **M1** — drop the input source stamp. Deleted `practice.playedEvents[...].source = source;` (`src/ui/songs.js:1752`) and dropped the trailing `source` argument from `forwardSongNote(midi, exact, undefined, source)` (`src/app.js:1256`). | Every played note is recorded with no route at all, so Check always logs `'unknown'`. | **T1, T2, T4, T5 — all four.** Every assertion keyed on `row.input === 'midi'`/`'computer-key'`/`'mixed'` fails; T5 additionally fails 3/3 retries on `row1.input` (see log excerpt below). |
-| **M2** — drop the kbd non-MIDI gate. Deleted `if (ev.instrument === 'kbd' && typeof ev.input === 'string' && ev.input !== 'midi') return false;` from `isIndependentOk` (`src/core/learning-events.js:126`). | A keyboard row played by any route (computer key, mixed, unknown) can now read as independent-ok purely off its `dims`. | **T4, T5.** T4's mixed-input verdict text flips from "did not count" to "counted"; T5 fails because the computer-key whole-piece pass is reported by `summarizeEvents` as already counting ("Progress already counts an unproven pass"). **T1 and T2 stayed green** — neither asserts through `isIndependentOk`/`summarizeEvents` on a non-MIDI row; T2 does assert `isIndependentOk(row) === false` but only on real-MIDI wrong-note/wrong-octave/velocity-0 rows, which fail on `dims`, not on the input gate, so M2 does not touch them. `pathwayState` also stayed green under M2 as predicted — `src/core/pathway.js`'s own `qualifies()` checks `input === 'midi'` independently of `isIndependentOk`. |
-| **M3** — drop the check-mode `'unknown'` coercion. Replaced `const loggedInput = practice.mode === 'check' ? (input !== undefined ? input : 'unknown') : input;` with `const loggedInput = input;` (`src/ui/songs.js:1960`). | An unsourced note in Check mode is now logged with `input: undefined` instead of the string `'unknown'`. | **T4, and — against the original plan, also T5.** T4 fails exactly as predicted (`row.input` reads `undefined`, not `'unknown'`). T5 was expected to stay green, but also went red: `isIndependentOk`'s kbd gate (`src/core/learning-events.js:126`) only fires when `typeof ev.input === 'string'`; once unsourced rows are logged as `undefined` instead of the string `'unknown'`, that `typeof` check no longer catches them, so a clean walked-through step recorded with no source can now read as independent-ok on `dims` alone. T5's own walk helper produces exactly such rows on every step before "whole" — under M3 they silently inflate `summarizeEvents(...).independent` before the whole-step assertion is even reached, and the test fails with "Progress already counts an unproven pass" on 2 of 3 retried attempts (the third attempt failed for an unrelated timing reason, log excerpt below; run again standalone, M3 fails T5 consistently). This is recorded as measured, not adjusted to match the original narrower prediction. |
+| **M1** — drop the input source stamp. Deleted `practice.playedEvents[...].source = source;` (`src/ui/songs.js:1752`) and dropped the trailing `source` argument from `forwardSongNote(midi, exact, undefined, source)` (`src/app.js:1256`). | Every played note is recorded with no route at all, so Check always logs `'unknown'`. | **T1, T2, T4, T5 — all four**, measured. Every assertion keyed on `row.input === 'midi'`/`'computer-key'`/`'mixed'` fails on its own `not ok` line; T5 fails on all 3/3 retries with `row1.input: 'unknown'` (see excerpt below). |
+| **M2** — drop the kbd non-MIDI gate. Deleted `if (ev.instrument === 'kbd' && typeof ev.input === 'string' && ev.input !== 'midi') return false;` from `isIndependentOk` (`src/core/learning-events.js:126`). | A keyboard row played by any route (computer key, mixed, unknown) can now read as independent-ok purely off its `dims`. | **T2, T4, T5 red; T1 green — measured.** T2/T4/T5 all target a step that sits after a judged `'rhythm'` step in the plan (Songs A and B both have one before `pitches`/`whole`); all three fail identically and immediately, inside `walkToStep`, on `assert.equal(isIndependentOk(walkedRow), false, ...)` for that walked-past rhythm row (its `dims` are clean, so without the gate it now reads independent-ok) — the pitches/whole-step assertions under test are never reached. T1 targets `'rhythm'` itself on Song C, so `walkToStep` only clicks past the unjudged `listen` step (`passRule: null`, no walked-row assertion) on the way there, and stays green. |
+| **M3** — drop the check-mode `'unknown'` coercion. Replaced `const loggedInput = practice.mode === 'check' ? (input !== undefined ? input : 'unknown') : input;` with `const loggedInput = input;` (`src/ui/songs.js:1960`). | An unsourced note in Check mode is now logged with `input: undefined` instead of the string `'unknown'`. | **T2, T4, T5 red; T1 green — measured, same shape as M2.** All three reds fail inside `walkToStep`, this time on `assert.equal(walkedRow.input, 'unknown', ...)` for the same walked-past rhythm row (`input` reads `undefined`, not the string `'unknown'`) — again before the target step is reached. T1 stays green for the same reason as under M2. |
 
-M1 sample failure (representative row): `{"input":"unknown", ...}` where
-`row.input === 'midi'` was asserted.
+M1 sample failure (T1, representative of all four): `expected: 'midi',
+actual: 'unknown'` (`row.input` at
+`kbd-midi-negative-controls.test.mjs:248`); T5's three retried attempts all
+report `row1.input: "unknown"` in their failure detail.
 
-M2 sample failure (T4 verdict text):
-```
-+ 'This try counted as a check.'
-- 'Practice only: this try did not count as a check. On keyboard, only a MIDI keyboard counts.'
-```
+M2 sample failure (T2, representative of T2/T4/T5): `walked-past rhythm row
+must never count` — `AssertionError [ERR_ASSERTION]: expected: false,
+actual: true` at `walkToStep` (`kbd-midi-negative-controls.test.mjs:178`).
 
-M3 sample failure (T4):
-```
-+ undefined
-- 'unknown'
-```
+M3 sample failure (T2, representative of T2/T4/T5): `walked-past rhythm row
+must log 'unknown'` — `+ actual undefined, - expected 'unknown'` at
+`walkToStep` (`kbd-midi-negative-controls.test.mjs:177`).
 
 ## What was not measured
 
@@ -117,7 +129,12 @@ M3 sample failure (T4):
   therefore relabel a pitches-step row to `skill: 'whole:null'` before
   calling `pathwayState` — a deliberate counterfactual to exercise the
   MIDI-vs-not branch of `qualifies()` in isolation, not a claim that a
-  pitches-step attempt is ever fed to the real pathway unmodified.
+  pitches-step attempt is ever fed to the real pathway unmodified. T5 is
+  the direct check on real whole-piece rows, unrelabeled: it drives an
+  actual `'whole'` step end to end on both routes and reads `pathwayState`
+  off the real `skill: 'whole:null'` row it logs, so T2's counterfactual
+  and T5's real row corroborate each other rather than standing in for one
+  another.
 
 ## Findings (no fixes in this unit — follow-ups only)
 

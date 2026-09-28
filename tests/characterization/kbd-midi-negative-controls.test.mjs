@@ -1,14 +1,17 @@
 // E4a: live MIDI pipeline negative controls and a timing budget, for the
 // keyboard song-practice path (src/ui/songs.js advance()). Drives real
-// entry points throughout -- a fake Web MIDI port's note-on
-// (tests/helpers/fake-midi.mjs), a real `keydown` KeyboardEvent, and real
-// canvas focus/Enter -- never the debug hook for the input side under test.
-// A note played with NO source (the debug hook's own songsNoteAt with no
-// trailing argument) is used only to WALK PAST steps that are not the one
-// under test; those rows log input 'unknown' in Check and never count
-// (src/core/learning-events.js isIndependentOk), so they cannot
-// contaminate the counted assertions below -- see the walk helper's own
-// comment.
+// entry points for the input side under test wherever one reaches the
+// target pitch -- a fake Web MIDI port's note-on (tests/helpers/fake-midi.mjs),
+// a real `keydown` KeyboardEvent, and the on-screen canvas cursor's
+// ArrowRight/Enter. T4(b) is the one case where the canvas path was tried
+// and never landed a focusable key on the target pitch (measured, not
+// assumed -- see docs/assessment-kbd-midi.md); every run fell back to the
+// debug hook's own unsourced seam for that one note. A note played with NO
+// source (the debug hook's own songsNoteAt with no trailing argument) is
+// used to WALK PAST steps that are not the one under test; those rows log
+// input 'unknown' in Check and never count (src/core/learning-events.js
+// isIndependentOk), so they cannot contaminate the counted assertions below
+// -- see the walk helper's own comment.
 //
 // See docs/assessment-kbd-midi.md for what this suite measured, the
 // mutation table that shows it is red-first, and what it explicitly did
@@ -292,10 +295,18 @@ test('T2: a wrong note, a wrong octave and a velocity-0 note-on all miss the pit
 
   async function launchAtPitches() {
     const page = await launchPage(htmlPath, { initScript: FAKE_MIDI_INIT });
-    await importAndOpenSong(page, challengePath, 'Song A');
-    await connectFakeMidi(page);
-    await clickMode(page, 'check');
-    await walkToStep(page, PLAN_A, 'pitches');
+    try {
+      await importAndOpenSong(page, challengePath, 'Song A');
+      await connectFakeMidi(page);
+      await clickMode(page, 'check');
+      await walkToStep(page, PLAN_A, 'pitches');
+    } catch (err) {
+      // A failed walk/setup step must not leave the Chromium page (and the
+      // process it keeps alive) open -- the caller's own try/finally never
+      // runs because `page` is never assigned when this throws.
+      await page.close();
+      throw err;
+    }
     return page;
   }
 
