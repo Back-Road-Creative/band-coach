@@ -500,9 +500,10 @@ library actually assigned each song (never assumed from the file), so a title th
 one already saved is still the song a challenge's progress or a band pack's part assignment
 points at, not a stale id nobody kept. A step that fails on the SAME thing twice in a row (the
 same missed note, late note, or hold/tune reason `firstCorrection()`'s own check already names)
-becomes a short repair on just those notes plus a neighbour either side (`repairFor()` in
-`src/core/teaching.js`), instead of a third run at the whole phrase; passing the repair returns to
-the original step where it left off.
+becomes a short repair on just the single worst note (`repairFor()` in `src/core/teaching.js`),
+instead of a third run at the whole phrase; passing that one note returns to the original step
+where it left off. A repair try is logged as guided assistance, not independent evidence — it is
+a redo of a note the step already failed on, not a fresh, unaided attempt.
 
 ## Play along with a recording
 
