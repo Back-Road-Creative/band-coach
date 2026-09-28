@@ -655,6 +655,13 @@ their pass by editing that instrument's record in `src/instruments/*.js`, settin
 `{ reference: '<method book or standard name>', reviewedBy: '<name>', reviewedAt: 'YYYY-MM-DD' }`
 (all three filled in together, never just one or two).
 
+Per-item reviews (one curriculum level, one song hand-off, one pathway step -- see
+`docs/review-workflow.md`) land a different way: a result file downloaded from a review packet is
+applied with `npm run review-apply`, which writes an entry keyed by the item's id and content hash
+into `src/instruments/review-ledger.js`, lands through a normal PR like any other source change, and
+never touches a record's `provenance`. That means applying one of these never moves the "Content
+reviewed" column below -- it stays provisional until someone edits `provenance` by hand, as above.
+
 The table above answers "can I practise/assess this, and is its chart reviewed" per instrument, but
 not what any of that means for readiness to ship. `docs/capabilities.md`'s capability and maturity
 matrix (`src/instruments/capability.js`) answers that: it derives a `tier` for every record
@@ -667,7 +674,8 @@ that song's lesson in the Songs panel, with a "Back to practice" button at the e
 `src/instruments/kbd-songs.js`. Which songs get suggested, and at which level, comes from the same
 `provenance`-less curriculum this whole section is about: the suggestion map is teaching content
 the app's authors assembled, not something a musician has checked against a method book, so its
-button always shows "Not yet checked by a player" right beside it rather than implying otherwise.
+button shows "Not yet checked by a player" right beside it until a player's review of that exact
+entry lands in the ledger, rather than implying otherwise.
 
 ## Capo, alternate tunings and a left-handed view
 

@@ -2,8 +2,8 @@
 // opens on their own machine (no build tooling, no dev server, no network)
 // to check an instrument's teaching content -- curriculum wording, song
 // hand-off suggestions, pathway outcome copy -- item by item against a
-// named method book or standard, then downloads a result file this repo's
-// (not-yet-built) review-apply step will read.
+// named method book or standard, then downloads a result file
+// build/apply-review.mjs (npm run review-apply) will read.
 //
 // Every row's id/rev follows the same contract src/instruments/*.js already
 // uses for its own review ledger lookups (src/instruments/review-ledger.js

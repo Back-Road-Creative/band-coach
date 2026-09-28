@@ -73,4 +73,23 @@ reviewer actually marked:
 
 Downloading a result file does not change anything in the app by itself -- nothing here writes to
 `src/instruments/review-ledger.js`'s `LEDGER`. Applying a result (turning `pass` rows into real
-ledger entries) is a separate step, `npm run review-apply`, not yet available in this repo.
+ledger entries) is a separate step:
+
+```
+npm run review-apply -- <result.json>
+```
+
+This reads the result file, checks it against the instrument's current items, and rewrites only the
+`LEDGER` literal in `src/instruments/review-ledger.js` -- the one file it ever writes, and never a
+record's `provenance` (see `src/instruments/*.js`). It refuses the whole file, listing every problem
+it finds, when: the schema or instrument doesn't match, `reference` or `reviewedBy` is missing or
+empty, `reviewedAt` isn't a real calendar date in `YYYY-MM-DD` form, an item names an id the current
+instrument doesn't have (`unknown id <id>`), or an item's rev no longer matches that item's current
+content (`stale <id>: ...`) -- meaning the content changed since the packet was built, and the review
+needs to happen again against the fresh copy. Only `pass` rows become ledger entries; any
+`correction` row is never written and never deletes anything, and is printed to the console instead
+so a human can act on the note. A file with no `pass` rows writes nothing.
+
+The command never commits or pushes anything -- review the diff it makes to
+`src/instruments/review-ledger.js` the normal way and open a PR with it, the same as any other
+source change.
