@@ -223,17 +223,40 @@ test('hands together: an approximate Right-only pass names the hand, never the b
 async function completeElement(page, e) {
   const info = e.info;
   if (info.kind === 'chord') { for (const p of info.pcs) await page.evaluate(`window.__coach.note(${60 + p}, true)`); }
+  else if (info.kind === 'hands-together' && info.ex.oldRh) {
+    // Level 17's position change ('j<n>p', in every mixed level from 18 up)
+    // needs the left hand HELD across the shift, so it is driven the way a
+    // player would drive it -- computer keys (real holds, tracked keyup
+    // included), the same route kbd-level17-position.test.mjs uses -- not
+    // the hook's screen-tap route, whose 0.6 s "recent note-ons" window can
+    // still carry the previous element's notes and fail this one as wrong.
+    // Old position first (oldRh + lh), wait for the coach to register the
+    // shift, let go of the old right-hand key, play the new one, then
+    // release everything so the next element starts from no held keys.
+    const UPPER = { 60: 'a', 61: 'w', 62: 's', 63: 'e', 64: 'd', 65: 'f', 66: 't', 67: 'g', 68: 'y', 69: 'h', 70: 'u', 71: 'j', 72: 'k' };
+    const LOWER = { 48: 'z', 50: 'x', 52: 'c', 53: 'v', 55: 'b' };
+    const oldKey = UPPER[info.ex.oldRh.midi], rhKey = UPPER[info.ex.rh.midi], lhKey = LOWER[info.ex.lh.midi];
+    if (!oldKey || !rhKey || !lhKey) throw new Error('no computer-key mapping for ' + JSON.stringify(info.ex));
+    const key = (type, k) => page.evaluate(`document.dispatchEvent(new KeyboardEvent('${type}', { key: '${k}' }))`);
+    await key('keydown', oldKey); await key('keydown', lhKey);
+    await page.waitFor('window.__coach.cur() && window.__coach.cur().pair && window.__coach.cur().pair.moved === true', 3000);
+    await key('keyup', oldKey);
+    await page.evaluate("document.getElementById('feedback').className = ''; document.getElementById('feedback').textContent = '';");
+    await key('keydown', rhKey);
+    await page.waitFor("document.getElementById('feedback').className === 'ok'", 3000);
+    await key('keyup', rhKey); await key('keyup', lhKey);
+  }
   else if (info.kind === 'hands-together') { await page.evaluate(`window.__coach.note(${info.ex.rh.midi}, true)`); await page.evaluate(`window.__coach.note(${info.ex.lh.midi}, true)`); }
   else if (info.kind === 'note') { await page.evaluate(`window.__coach.note(${info.midi}, true)`); }
   else { return false; }
   return true;
 }
 
-test('hands together: a plain both-hands id inside a mixed (level 17+) task is still graded and credited as both-hands, even in Right-only mode', async (t) => {
+test('hands together: a plain both-hands id inside a mixed (level 18+, the first "Everything, faster" level once level 17 is the position change) task is still graded and credited as both-hands, even in Right-only mode', async (t) => {
   const page = await launchPage(htmlPath);
   t.after(() => page.close());
   await page.evaluate("window.__coach.setMod('kbd')");
-  await page.evaluate('window.__coach.state().level = 17');
+  await page.evaluate('window.__coach.state().level = 18');
   await page.evaluate("document.getElementById('playBtn').click()");
   await page.waitFor('window.__coach.task()');
 
