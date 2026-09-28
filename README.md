@@ -397,6 +397,10 @@ song library rather than below it: the library, Assignments and the "Play it on�
 all collapse into one `<details>` the moment a song opens, so a lesson opened on a phone shows
 up in the first screen instead of several screens down, with focus moving to the song's own
 heading; the library stays one click (its `<summary>`) away, still showing the song just opened.
+A MusicXML (`.xml`, `.musicxml`, `.mxl`) piano part written on two staves imports with each note
+marked for a hand (staff 1 right, staff 2 left; see "Piano hands together"), so it counts as a
+two-handed part; MIDI, ABC and Guitar Pro imports carry no hand data and stay one-handed
+(`node --test tests/unit/import-musicxml-hands.test.mjs`).
 A
 teacher can also hand a student a whole set of songs at once as a **challenge**: a plain `.json`
 file (`src/song/challenge.js`, schema `challenge/1`) holding a title, an optional note, and a list
@@ -779,10 +783,12 @@ on-screen piano stops drawing one 15-white-key strip and draws two: a labelled l
 octave below middle C, e.g. "Left hand · C3–B3") stacked above a labelled right-hand row (middle C
 up, e.g. "Right hand · C4–C5"). Each row is capped at 8 white keys, which is what actually fixes
 the problem: 15 white keys across a phone-width canvas measured at ~21px per key, under the 24px
-WCAG 2.5.8 (2.2 AA) tap-target floor #283 already holds every other control in this app to; capping
-each row at 8 keeps every white key at or above that floor at the 340px phone canvas and on anything
-wider (the floor holds for any canvas at least ~204px wide), rather than by a separate size check
-bolted on afterwards. The layout depends only on
+WCAG 2.5.8 (2.2 AA) tap-target floor and well under the 40px the keyboard rows aim for. Capping
+each row at 8 white keys, drawn across 96% of the canvas width, keeps every keyboard white key at
+40px or more on the 340px phone canvas and on any canvas at least ~334px wide (40×8/0.96), and at
+24px or more on any canvas at least ~200px wide (24×8/0.96), by layout rather than by a separate
+size check bolted on afterwards. This applies to the keyboard (kbd) rows only; the mallet-percussion
+keyboard still draws its 15 white keys in one row. The layout depends only on
 which octaves are unlocked, never on the current task or its target note, so neither row ever moves
 mid-phrase.
 
@@ -792,9 +798,17 @@ tell a learner which lit key belongs to which hand once both rows are on screen.
 focus cursor (arrow keys move it, Enter/Space plays the focused key — see "Piano hands together"
 above for the fingering itself) traverses the left row low to high, then the right row low to high.
 
+A thin strip drawn under the rows shows the full 88-key keyboard (A0–C8) at a glance, dimmed except
+for a brighter, outlined span marking exactly the octave(s) the rows above are currently drawing —
+so a learner can see where "the octave below" or "middle C up" sits inside the whole instrument,
+not just read its name. The strip is not tappable (it adds no hit rects of its own) and depends
+only on which octaves are unlocked, the same as the rows themselves.
+
 `window.__coach.kbdKeys()` (dev build only) exposes the raw key rectangles the last frame drew,
 each carrying its MIDI note, pixel rectangle, which row it belongs to, and any hand mark — the same
-data a real pointerdown hit-tests against.
+data a real pointerdown hit-tests against. `window.__coach.kbdOverview()` (dev build only) exposes
+the overview strip's own rectangle plus the `win` rectangle marking the currently-drawn range, both
+in the same canvas pixel space as `kbdKeys()`.
 
 ## Reference tones sound like the instrument
 
