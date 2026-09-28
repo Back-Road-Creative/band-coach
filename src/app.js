@@ -79,7 +79,8 @@ import { register as registerTheory, currentLessonQuestion as theoryCurrentQuest
 import { registerHistory } from './ui/history.js';
 //
 //
-import { registerFingerings } from './ui/fingerings.js';
+import { registerFingerings, renderHowInline } from './ui/fingerings.js';
+import { instrumentSetup } from './ui/fingerings/setup.js';
 //
 //
 import { register as registerPlayalong } from './ui/playalong.js';
@@ -1265,13 +1266,41 @@ import { register as registerPlayalong } from './ui/playalong.js';
     else if (t.kind === 'kit') { p = 'Read it, then <b>play it</b>'; h = (t.kit.bar.tip ? t.kit.bar.tip + ' ' : '') + 'Listen for the count-in, then play the bar on the drums it shows.'; startKitBar(); }
     else if (t.kind === 'groove') { p = 'Get ready — <b>play it in time</b>'; h = 'Four clicks to count in, then play each note on the beat.'; startGroove(); }
     else { const verb = mod === 'voice' ? 'Sing' : 'Play'; p = verb + ' ' + t.els.map((el, k) => (k === t.idx ? '<b>' : '') + promptFor(el.info, el.reveal) + (k === t.idx ? '</b>' : '')).join(' → '); if (t.kind === 'hold') p = (mod === 'voice' ? 'Hold ' : 'Hold ') + '<b>' + e.info.label + '</b> for two seconds'; h = hintFor(e); playRef(t); }
-    $('prompt').innerHTML = p; $('hint').textContent = (t.warm ? 'Warm-up, does not count. ' : '') + h; updateDesc();
+    $('prompt').innerHTML = p; $('hint').textContent = (t.warm ? 'Warm-up, does not count. ' : '') + h; updateDesc(); updateHowPeek();
   }
   function hintFor(e) { const i = e.info; if (i.string && MODS[mod].fretless) return (e.reveal ? i.label + '. The dot shows the position.' : 'Find this pitch on the string.') + ' There is no fret to feel for — match the pitch, and the gauge shows sharp or flat.'; if (i.string) return coreHintFor(i, e.reveal); if (i.anywhere) return 'Any string, any octave.'; if (i.kind === 'chord') return 'All the notes together: ' + i.pcs.map(x => NAMES[x]).join(', ') + '.'; if (i.kind === 'hands-together') { const stage = handsStageFromId(e.id); if (stage === 'held') { const mel = heldBassMelody(i.ex); return 'Left hand: finger ' + i.ex.lh.finger + ', ' + nname(i.ex.lh.midi) + ' -- hold it down. Right hand plays ' + mel.map(n => nname(n.midi) + ' (finger ' + n.finger + ')').join(', ') + ' over it, while the left hand keeps holding. Screen taps: practice only -- held notes need a MIDI keyboard or computer keys.'; } if (stage === 'split') { return 'Right hand: two even notes, ' + nname(i.ex.rh.midi) + ' then ' + nname(i.ex.rh.midi) + ' again. Left hand: one long note, ' + nname(i.ex.lh.midi) + ', held under both. Screen taps: practice only -- held notes need a MIDI keyboard or computer keys.'; } if (isTimedPairId(e.id)) return 'Right hand: finger ' + i.ex.rh.finger + ', ' + nname(i.ex.rh.midi) + '. Left hand: finger ' + i.ex.lh.finger + ', ' + nname(i.ex.lh.midi) + '. First play them together at your own pace; then press both at the same moment and let go together. Screen taps: practice only -- held notes need a MIDI keyboard or computer keys.'; const hMode = handsModeFromId(e.id); if (hMode === 'right') return 'Right hand: finger ' + i.ex.rh.finger + ', ' + nname(i.ex.rh.midi) + '. The left hand (' + nname(i.ex.lh.midi) + ') may play along but is not checked. A MIDI keyboard or two hands on the computer keys grades the right-hand note exactly; a microphone grades it approximately.'; if (hMode === 'left') return 'Left hand: finger ' + i.ex.lh.finger + ', ' + nname(i.ex.lh.midi) + '. The right hand (' + nname(i.ex.rh.midi) + ') may play along but is not checked. A MIDI keyboard or two hands on the computer keys grades the left-hand note exactly; a microphone grades it approximately.'; return fingeringLabel(i.ex) + ' (' + nname(i.ex.rh.midi) + ' right hand, ' + nname(i.ex.lh.midi) + ' left hand). A MIDI keyboard or two hands on the computer keys grades both notes exactly; a microphone only hears one note at a time, so that grading is approximate.'; } if (mod === 'voice') return task.ref === 'target' ? 'You heard the note. Sing it back in any octave and hold it.' : 'You heard Do. Find ' + i.short + ' from it.'; if (MODS[mod].staff) return t('hint.staffNote', { label: i.label }); return e.reveal ? 'New key: it is lit up this time.' : ''; }
-  function refreshPrompt() { if (!task || task.kind === 'ear' || task.kind === 'bar' || task.kind === 'hold') return; const verb = mod === 'voice' ? 'Sing' : 'Play'; $('prompt').innerHTML = verb + ' ' + task.els.map((el, k) => (k === task.idx ? '<b>' : '') + promptFor(el.info, el.reveal) + (k === task.idx ? '</b>' : '')).join(' → '); const e = cur(); if (e) $('hint').textContent = (task.warm ? 'Warm-up, does not count. ' : '') + hintFor(e); updateDesc(); }
+  function refreshPrompt() { if (!task || task.kind === 'ear' || task.kind === 'bar' || task.kind === 'hold') return; const verb = mod === 'voice' ? 'Sing' : 'Play'; $('prompt').innerHTML = verb + ' ' + task.els.map((el, k) => (k === task.idx ? '<b>' : '') + promptFor(el.info, el.reveal) + (k === task.idx ? '</b>' : '')).join(' → '); const e = cur(); if (e) $('hint').textContent = (task.warm ? 'Warm-up, does not count. ' : '') + hintFor(e); updateDesc(); updateHowPeek(); }
   // text mirror of the canvas for the visually-hidden #cvDesc element (unit 7.7 item 1):
   // revealed mirrors the current element's own reveal/failed flag, never invents one.
   function updateDesc() { const el = $('cvDesc'); if (!el) return; const e = cur(); const revealed = task && task.kind === 'ear' ? !!task.revealed : !!(e && (e.reveal || e.failed)); el.textContent = task && task.kind === 'kit' ? 'Drum kit, ' + task.kit.name + ': ' + task.kit.bar.hits.map(h => (h.flam ? 'a flam on ' : '') + h.pieces.map(kitName).join(' with ')).join(', then ') + '. Play it after the count-in.' : describeTask(task, { revealed: revealed }); }
+  // "How to play this" peek (C1a): the SAME Fingerings-panel diagram Songs'
+  // own inline expander shows for a lesson step (renderHowInline, src/ui/
+  // fingerings.js), dropped beside the active note here instead. Never
+  // calls openPanel('fingerings') -- its first line unconditionally ends
+  // the running session (see openPanel below) -- so peeking costs nothing:
+  // the session and the task both survive. Hidden under the exact same
+  // conditions as showMeBtn (ear/bar/bar2/kit have no single active note to
+  // draw a fingering for), plus whenever the current element has no plain
+  // sounding pitch (a chord or hands-together item) or the mod's instrument
+  // has no how diagram at all (renderHowInline returns null for keyboard,
+  // today's only such instrument).
+  function updateHowPeek() {
+    const host = $('howPeekHost'); if (!host) return; host.textContent = '';
+    const e = cur(), instrument = instrumentById[mod];
+    if (!task || task.done || !e || $('showMeBtn').hidden || !instrument || e.info.midi === undefined) { host.hidden = true; return; }
+    const setup = instrumentSetup(instrument, { fingeringsStore: (DB.panels && DB.panels.fingerings) || null, prefs: DB.prefs });
+    const rendered = renderHowInline(host, instrument, e.info.midi, setup);
+    if (!rendered) { host.hidden = true; return; }
+    host.hidden = false;
+    // Using the peek marks the SAME element helped as Show me (B3) -- help,
+    // not a test: no SRS review, no streak break, no level setback, and (via
+    // credit()'s existing assistance: e.helped ? 'shown' : ... line) the
+    // same "shown" DB.events row Show me leaves. Deliberately does not
+    // re-render this host (no refreshPrompt() call here) -- the host is
+    // rebuilt fresh only when the active note itself changes, so the peek
+    // the learner just opened does not collapse itself under their cursor.
+    rendered.toggle.addEventListener('click', () => { if (rendered.toggle.getAttribute('aria-expanded') === 'true' && !e.failed && !e.helped) { e.helped = true; e.reveal = true; updateDesc(); } });
+  }
 
   // ---------- judging ----------
   const timeQ = (rt, limit) => rt <= 0.4 * limit ? 1 : clamp(1 - 0.4 * (rt - 0.4 * limit) / (0.6 * limit), 0.6, 1);
@@ -2249,7 +2278,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
     document.documentElement.style.setProperty('--accent', accentRaw); document.documentElement.style.setProperty('--accent-ink', accentInkFor(accentRaw)); document.documentElement.style.setProperty('--accent-display', accentDisplayFor(accentRaw));
     $('helpText').innerHTML = ''; const st = document.createElement('strong'); st.textContent = 'How this one works: '; $('helpText').appendChild(st); $('helpText').appendChild(document.createTextNode((MODS[mod] || TOOLS[mod]).help));
     document.querySelectorAll('.side .card, .side .stats, #playBtn, #resetBtn').forEach(el => { el.style.display = tool ? 'none' : ''; }); $('tapPad').hidden = mod !== 'rhy'; $('timeFill').parentElement.style.visibility = tool || mod === 'rhy' || (MODS[mod] && MODS[mod].kit) ? 'hidden' : 'visible';
-    if (tool) { $('prompt').textContent = ''; $('hint').textContent = mod === 'tuner' ? 'One open string at a time.' : 'One note at a time.'; $('choices').hidden = true; $('replayBtn').hidden = true; $('showMeBtn').hidden = true; return; }
+    if (tool) { $('prompt').textContent = ''; $('hint').textContent = mod === 'tuner' ? 'One open string at a time.' : 'One note at a time.'; $('choices').hidden = true; $('replayBtn').hidden = true; $('showMeBtn').hidden = true; $('howPeekHost').hidden = true; return; }
     const d = D(); $('levelNum').textContent = 'Level ' + S.level; $('levelName').textContent = customOn ? 'Your captured melody' : d.name; $('limitOut').textContent = d.task === 'bar' || mod === 'rhy' || MODS[mod].kit ? (d.bpm || 72) + ' bpm' : (d.limit || 8) + ' s per answer';
     const pct = Math.round(S.ready * 100); $('readyFill').style.width = pct + '%'; $('readyFill').style.background = S.ready < 0.25 ? 'var(--bad)' : S.ready < 0.6 ? 'var(--warn)' : 'var(--good)'; $('readyBar').setAttribute('aria-valuenow', pct);
     const e = sess ? 1 - sess.F : 1, ep = Math.round(e * 100); $('energyFill').style.width = ep + '%'; $('energyFill').style.background = e < 0.4 ? 'var(--bad)' : e < 0.65 ? 'var(--warn)' : 'var(--good)'; $('energyBar').setAttribute('aria-valuenow', ep);
