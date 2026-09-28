@@ -65,6 +65,13 @@ function validateNote(note, index, prev, path, errors) {
       errors.push(path + '.piece must be a string or null (got ' + JSON.stringify(note.piece) + ')');
     }
   }
+  // `hand` -- which hand plays this note on a two-handed instrument (keyboard
+  // family 'keys', see src/song/arrange/keys.js). Explicit and optional: a
+  // note with no `hand` still gets a hand from the middle-C pitch split at
+  // arrange time, but an explicit tag always wins over that guess.
+  if ('hand' in note && note.hand !== undefined && note.hand !== 'rh' && note.hand !== 'lh') {
+    errors.push(path + ".hand must be omitted, 'rh' or 'lh' (got " + JSON.stringify(note.hand) + ')');
+  }
   if (index > 0 && isNonNegInt(note.start) && prev && isNonNegInt(prev.start)) {
     if (note.start < prev.start) {
       errors.push(path + ': notes must be sorted by start (got ' + note.start + ' after ' + prev.start + ')');
@@ -292,6 +299,12 @@ function normalizeNote(raw, path) {
       throw new Error(path + '.piece must be a string or null');
     }
     note.piece = raw.piece;
+  }
+  if (raw.hand !== undefined) {
+    if (raw.hand !== 'rh' && raw.hand !== 'lh') {
+      throw new Error(path + ".hand must be 'rh' or 'lh'");
+    }
+    note.hand = raw.hand;
   }
   return note;
 }

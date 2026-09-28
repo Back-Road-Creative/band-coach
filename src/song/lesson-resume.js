@@ -57,17 +57,26 @@ export function tempoKey(song) {
 // scope. `setup` deliberately leaves out leftHanded (display only) and
 // voiceRange (already folded into arrangement via shiftSemitones); for a
 // free-reed instrument it also folds in the harmonica key, because two
-// different harp keys can otherwise produce the same arrangementKey.
-export function lessonKey({ song, partId, instrumentId, setup, arrangement, assistance }) {
+// different harp keys can otherwise produce the same arrangementKey. It
+// also records a one-hand selection ('left' or 'right') as a trailing
+// `|hands=<hand>`, appended only then -- 'both' or no selection (the only
+// two values every existing caller ever passed) adds nothing, so every key
+// saved before this field existed still matches byte-for-byte. A one-hand
+// lesson shares its song+part+instrument save slot with the both-hands one
+// (rememberLesson keys the slot on setup.split('|')[0]), so switching hands
+// replaces the saved place instead of adding a second one -- intended for
+// now.
+export function lessonKey({ song, partId, instrumentId, setup, arrangement, assistance, hands }) {
   const capo = setup && Number.isFinite(setup.capo) ? setup.capo : 0;
   const tuning = (setup && setup.tuning) || '';
   const harpKey = arrangement && arrangement.family === 'free-reed' && setup && Number.isInteger(setup.harpKey) ? setup.harpKey : '';
+  const handsMark = hands === 'left' || hands === 'right' ? '|hands=' + hands : '';
   return {
     songId: song.id,
     rev: songRevision(song, partId),
     partId,
     arrangement: arrangementKey(arrangement),
-    setup: [instrumentId, capo, tuning, harpKey].join('|'),
+    setup: [instrumentId, capo, tuning, harpKey].join('|') + handsMark,
     tempo: tempoKey(song),
     assist: assistance
   };
