@@ -46,7 +46,7 @@ test('a keyboard import with a note out of the keyboard range shows a plain-word
 
   await page.evaluate("window.__coach.setMod('kbd')");
   await page.evaluate("window.__coach.openPanel('songs')");
-  await page.waitFor("document.querySelectorAll('.panel-songs-row button').length >= 0");
+  await page.waitFor("document.querySelectorAll('.panel-songs-row button').length > 0");
   await page.setFileInput('#songsFileInput', midiPath);
   await page.waitFor(
     "document.querySelector('.panel-songs-msg') && document.querySelector('.panel-songs-msg').textContent.includes('Low C Test')"
@@ -71,7 +71,7 @@ test('a clean keyboard import shows no notice, and the song still lands Checked'
 
   await page.evaluate("window.__coach.setMod('kbd')");
   await page.evaluate("window.__coach.openPanel('songs')");
-  await page.waitFor("document.querySelectorAll('.panel-songs-row button').length >= 0");
+  await page.waitFor("document.querySelectorAll('.panel-songs-row button').length > 0");
   await page.setFileInput('#songsFileInput', midiPath);
   await page.waitFor(
     "document.querySelector('.panel-songs-msg') && document.querySelector('.panel-songs-msg').textContent.includes('Low C Test')"
@@ -97,7 +97,7 @@ test('the notice is kbd-only: a non-keyboard instrument gets nothing even with a
 
   await page.evaluate("window.__coach.setMod('flute')");
   await page.evaluate("window.__coach.openPanel('songs')");
-  await page.waitFor("document.querySelectorAll('.panel-songs-row button').length >= 0");
+  await page.waitFor("document.querySelectorAll('.panel-songs-row button').length > 0");
   await page.setFileInput('#songsFileInput', midiPath);
   await page.waitFor(
     "document.querySelector('.panel-songs-msg') && document.querySelector('.panel-songs-msg').textContent.includes('Low C Test')"
