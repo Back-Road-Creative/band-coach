@@ -389,6 +389,15 @@ checked on each row. A one-hand lesson carries on from its own saved place, and 
 replaces that saved place rather than starting a second one. A melody-only song shows no Hands
 control.
 
+In Learn and Rehearse, a **"How to play this"** button under the current step expands the same
+"How to play it" diagram and description shown elsewhere in the app, for the lesson's instrument
+and the step's first note, using the saved capo, tuning, left-handed setting and harmonica key.
+It shows the "Not yet checked by a player" line for an instrument no musician has reviewed yet.
+Escape, or pressing the button again, collapses it and returns focus to the button. It is hidden
+in Check, the no-help attempt, same as the notation and fingering line it sits beside, and it
+only appears for an instrument the "How to play it" panel can draw — so it does not appear for
+keyboard.
+
 Opening the editor screen (via a song's own **Edit notes**) shows its own row: **Edit
 notes**, **Play along**, **Export**, **Share**, **Save a copy** — Edit notes opens *any* song,
 starter tunes included, straight in "Record a tune": saving a starter's edits makes "My copy of

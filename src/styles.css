@@ -264,6 +264,15 @@
   .panel-songs-mode, .panel-songs-hands { display: flex; flex-wrap: wrap; gap: 4px; }
   .panel-songs-mode button[aria-pressed="true"], .panel-songs-hands button[aria-pressed="true"] { border-color: var(--good); }
   .panel-songs-check-result { color: var(--muted); }
+  /* how inline (C1b): the "How to play this" toggle/body under the step's
+     own notation, tab or fingering line -- a scrollable body (the diagram
+     itself can be wider than a phone) so it never forces page-level
+     horizontal scroll at 390px, same discipline as .panel-songs-view
+     above. */
+  .how-inline { display: flex; flex-direction: column; gap: 6px; }
+  .how-inline-body { overflow-x: auto; max-width: 100%; }
+  .how-inline-badge { color: var(--warn); font-size: 13px; margin: 0; }
+  .how-inline-desc { margin: 0; }
   @media (max-width: 400px) { .panel-songs-list { flex-direction: column; } .panel-songs-play-on-list { flex-direction: column; } }
   /* */
   .panel-editor { display: flex; flex-direction: column; gap: 12px; max-width: 100%; }
@@ -361,32 +370,32 @@
   .panel-fingerings .fing-notes { display: flex; gap: 4px; overflow-x: auto; padding-bottom: 4px; max-width: 100%; }
   .panel-fingerings .fing-note-btn { flex: none; padding: 6px 8px; font-size: 13px; }
   .panel-fingerings .fing-note-btn[aria-pressed="true"] { background: #f3c52f; border-color: #f3c52f; color: #06101d; }
-  .panel-fingerings .fing-diagram-host { overflow-x: auto; }
-  .panel-fingerings .fing-fretboard { display: flex; flex-direction: column; gap: 2px; min-width: max-content; }
-  .panel-fingerings .fing-string { display: flex; align-items: center; gap: 2px; }
-  .panel-fingerings .fing-string-label { width: 3.2em; flex: none; font-size: 12px; color: var(--muted); }
-  .panel-fingerings .fing-fret { display: inline-flex; align-items: center; justify-content: center; width: 1.6em; height: 1.6em; border: 1px solid var(--line); font-size: 14px; color: var(--accent-ink); }
-  .panel-fingerings .fing-fret.fing-hit { background: #f3c52f; color: #06101d; border-color: #f3c52f; }
-  .panel-fingerings .fing-fingerboard { display: flex; flex-direction: column; gap: 6px; min-width: max-content; }
-  .panel-fingerings .fing-fboard-string { display: flex; align-items: center; gap: 6px; }
-  .panel-fingerings .fing-fboard-track { position: relative; width: 12em; height: 6px; background: var(--panel-2); border-radius: 4px; border: 1px solid var(--line); }
-  .panel-fingerings .fing-fboard-marker { position: absolute; top: -4px; width: 12px; height: 14px; border-radius: 50%; background: #f3c52f; transform: translateX(-6px); }
-  .panel-fingerings .fing-brass { display: flex; align-items: center; gap: 8px; }
-  .panel-fingerings .fing-valve { display: inline-flex; align-items: center; justify-content: center; width: 2.4em; height: 2.4em; border-radius: 50%; border: 2px solid var(--line); font: 700 16px var(--display); }
-  .panel-fingerings .fing-valve.fing-hit { background: #f3c52f; border-color: #f3c52f; color: #06101d; }
-  .panel-fingerings .fing-slide-pos { font: 700 18px var(--display); }
-  .panel-fingerings .fing-warn { color: var(--warn); font-size: 13px; margin: 4px 0 0; }
-  .panel-fingerings .fing-harmonica { display: flex; gap: 4px; flex-wrap: wrap; }
-  .panel-fingerings .fing-hole { display: flex; flex-direction: column; align-items: center; justify-content: center; width: 2.6em; height: 2.6em; border-radius: 50%; border: 2px solid var(--line); font-size: 13px; }
-  .panel-fingerings .fing-hole.fing-hit { background: #f3c52f; border-color: #f3c52f; color: #06101d; }
-  .panel-fingerings .fing-hole small { font-size: 10px; }
-  .panel-fingerings .fing-recorder { display: flex; flex-direction: column; align-items: center; gap: 4px; }
-  .panel-fingerings .fing-recorder-hole { display: inline-flex; align-items: center; justify-content: center; width: 1.8em; height: 1.8em; border-radius: 50%; border: 2px solid var(--line); font-size: 12px; }
-  .panel-fingerings .fing-recorder-hole.fing-hit { background: var(--muted); }
-  .panel-fingerings .fing-recorder-hole.fing-half { background: linear-gradient(90deg, var(--muted) 50%, transparent 50%); }
-  .panel-fingerings .fing-keyed-woodwind { display: flex; flex-direction: column; gap: 6px; max-width: 60ch; }
-  .panel-fingerings .fing-keyed-keys { margin: 0; font-size: 15px; }
-  .panel-fingerings .fing-unavailable { color: var(--muted); margin: 0; }
+  .panel-fingerings .fing-diagram-host, .how-inline .fing-diagram-host { overflow-x: auto; }
+  .panel-fingerings .fing-fretboard, .how-inline .fing-fretboard { display: flex; flex-direction: column; gap: 2px; min-width: max-content; }
+  .panel-fingerings .fing-string, .how-inline .fing-string { display: flex; align-items: center; gap: 2px; }
+  .panel-fingerings .fing-string-label, .how-inline .fing-string-label { width: 3.2em; flex: none; font-size: 12px; color: var(--muted); }
+  .panel-fingerings .fing-fret, .how-inline .fing-fret { display: inline-flex; align-items: center; justify-content: center; width: 1.6em; height: 1.6em; border: 1px solid var(--line); font-size: 14px; color: var(--accent-ink); }
+  .panel-fingerings .fing-fret.fing-hit, .how-inline .fing-fret.fing-hit { background: #f3c52f; color: #06101d; border-color: #f3c52f; }
+  .panel-fingerings .fing-fingerboard, .how-inline .fing-fingerboard { display: flex; flex-direction: column; gap: 6px; min-width: max-content; }
+  .panel-fingerings .fing-fboard-string, .how-inline .fing-fboard-string { display: flex; align-items: center; gap: 6px; }
+  .panel-fingerings .fing-fboard-track, .how-inline .fing-fboard-track { position: relative; width: 12em; height: 6px; background: var(--panel-2); border-radius: 4px; border: 1px solid var(--line); }
+  .panel-fingerings .fing-fboard-marker, .how-inline .fing-fboard-marker { position: absolute; top: -4px; width: 12px; height: 14px; border-radius: 50%; background: #f3c52f; transform: translateX(-6px); }
+  .panel-fingerings .fing-brass, .how-inline .fing-brass { display: flex; align-items: center; gap: 8px; }
+  .panel-fingerings .fing-valve, .how-inline .fing-valve { display: inline-flex; align-items: center; justify-content: center; width: 2.4em; height: 2.4em; border-radius: 50%; border: 2px solid var(--line); font: 700 16px var(--display); }
+  .panel-fingerings .fing-valve.fing-hit, .how-inline .fing-valve.fing-hit { background: #f3c52f; border-color: #f3c52f; color: #06101d; }
+  .panel-fingerings .fing-slide-pos, .how-inline .fing-slide-pos { font: 700 18px var(--display); }
+  .panel-fingerings .fing-warn, .how-inline .fing-warn { color: var(--warn); font-size: 13px; margin: 4px 0 0; }
+  .panel-fingerings .fing-harmonica, .how-inline .fing-harmonica { display: flex; gap: 4px; flex-wrap: wrap; }
+  .panel-fingerings .fing-hole, .how-inline .fing-hole { display: flex; flex-direction: column; align-items: center; justify-content: center; width: 2.6em; height: 2.6em; border-radius: 50%; border: 2px solid var(--line); font-size: 13px; }
+  .panel-fingerings .fing-hole.fing-hit, .how-inline .fing-hole.fing-hit { background: #f3c52f; border-color: #f3c52f; color: #06101d; }
+  .panel-fingerings .fing-hole small, .how-inline .fing-hole small { font-size: 10px; }
+  .panel-fingerings .fing-recorder, .how-inline .fing-recorder { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .panel-fingerings .fing-recorder-hole, .how-inline .fing-recorder-hole { display: inline-flex; align-items: center; justify-content: center; width: 1.8em; height: 1.8em; border-radius: 50%; border: 2px solid var(--line); font-size: 12px; }
+  .panel-fingerings .fing-recorder-hole.fing-hit, .how-inline .fing-recorder-hole.fing-hit { background: var(--muted); }
+  .panel-fingerings .fing-recorder-hole.fing-half, .how-inline .fing-recorder-hole.fing-half { background: linear-gradient(90deg, var(--muted) 50%, transparent 50%); }
+  .panel-fingerings .fing-keyed-woodwind, .how-inline .fing-keyed-woodwind { display: flex; flex-direction: column; gap: 6px; max-width: 60ch; }
+  .panel-fingerings .fing-keyed-keys, .how-inline .fing-keyed-keys { margin: 0; font-size: 15px; }
+  .panel-fingerings .fing-unavailable, .how-inline .fing-unavailable { color: var(--muted); margin: 0; }
   .panel-fingerings .fing-review-badge { color: var(--warn); font-size: 13px; margin: 0 0 8px; }
   /* B(C11a): the kbd hand-off's own unreviewed note, next to its button in
      #modOpts -- same warn colour/size as fing-review-badge above, but that

@@ -73,6 +73,7 @@ import { sanitizeStatusLedger, markDraft, markChecked, statusFor, statusLabel } 
 import { layoutSong } from './editor/layout-song.js';
 import { drawPrimitives } from '../notation/draw-canvas.js';
 import { instrumentSetup } from './fingerings/setup.js';
+import { renderHowInline } from './fingerings.js';
 import { arrangeFor, songForArrangement } from '../song/arrange/index.js';
 import { staffView, renderStepView, tabView, fingeringLine, kitView } from './songs/step-view.js';
 import { createDrumCapture } from './songs/drum-capture.js';
@@ -1468,6 +1469,17 @@ function mountSongsPanel(hostEl, api) {
       } else if (step.notes.length) {
         const fingering = fingeringLine(step, practice.arrangement, practice.instrument, practice.plan.fit.notes);
         if (fingering) practiceSection.appendChild(el('p', { class: 'panel-songs-fingering', text: fingering.text }));
+      }
+      // "How to play this" (C1b): the SAME Fingerings-panel diagram/
+      // description for THIS instrument and the step's earliest-starting
+      // note, collapsed by default, right under the step view above --
+      // absent for an instrument with no how diagram at all (kbd), same
+      // guard renderHowInline itself applies. Setup is re-read here rather
+      // than kept on `practice` (only two call sites, startPractice's own
+      // `setup` local above is not in scope here).
+      if (step.notes.length) {
+        const active = step.notes.reduce((a, b) => (b.start < a.start ? b : a));
+        renderHowInline(practiceSection, practice.instrument, active.midi, instrumentSetup(practice.instrument, { fingeringsStore: api.store('fingerings').get(), prefs: api.db().prefs }));
       }
       practiceSection.appendChild(el('p', { text: stepHint(step) }));
     }
