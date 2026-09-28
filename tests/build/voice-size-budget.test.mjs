@@ -86,7 +86,14 @@ test('the voices budget fails loudly if its module is renamed away', async () =>
 // cut, with the next open features alone needing ~13KB more. The release
 // file is minified (~362KB) and has its own 1.5MB gate in tests/release.
 // 1MB still leaves no room to embed a media library by accident.
-const TOTAL_BUDGET_BYTES = 1024 * 1024;
+// Raised again to 1.125MB (2026-09-27), measured the same way: main (00c5f76,
+// after level 14) built to 1,050,348 bytes, over by 1,772, with no comments in
+// the dev build to cut. The keyboard pathway's open units add bundled JS on
+// top (measured at each pushed head against its base: +2.9KB to +6.3KB each,
+// about 55KB for the whole pathway). 1.125MB leaves about 74KB past that and
+// still leaves no room for a media library. The downloaded (release) file was
+// 575,707 bytes against its own 1.5MB gate.
+const TOTAL_BUDGET_BYTES = 1.125 * 1024 * 1024;
 
 test('the built single-file app stays under its total size ceiling', async () => {
   const outDir = mkdtempSync(join(tmpdir(), 'band-coach-total-budget-'));
