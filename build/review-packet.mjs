@@ -169,10 +169,17 @@ ${rows}
 <p id="refusal"></p>
 <button type="button" id="downloadResult">Download result</button>
 <script>
+// One AudioContext for the whole page's lifetime, made lazily on the first
+// Play click and resumed (never re-created) on later ones -- some older
+// Chromium builds cap the number of live contexts a page can hold (around
+// six), and this page's Play button can be clicked far more than six times.
+var sharedAudioCtx = null;
 function playMidi(midiOrSchedule) {
   var Ctx = window.AudioContext || window.webkitAudioContext;
   if (!Ctx) return;
-  var ctx = new Ctx();
+  if (!sharedAudioCtx) sharedAudioCtx = new Ctx();
+  else if (sharedAudioCtx.state === 'suspended') sharedAudioCtx.resume();
+  var ctx = sharedAudioCtx;
   function tone(midi, when, dur, peak) {
     var freq = 440 * Math.pow(2, (midi - 69) / 12);
     var osc = ctx.createOscillator();
@@ -234,31 +241,42 @@ document.getElementById('downloadResult').addEventListener('click', function () 
     items: items
   };
   var blob = new Blob([JSON.stringify(result, null, 2)], { type: 'application/json' });
-  // A space before the call parenthesis here is deliberate (valid JS): this
-  // page's own no-external-resource self-check scans for the four letters
-  // immediately followed by an opening parenthesis (meant to catch a
-  // stylesheet or script reaching outside the file), which this Blob
-  // download API method name merely happens to also end in.
-  var objectUrl = URL.createObjectURL (blob);
+  var objectUrl = URL.createObjectURL(blob);
   var a = document.createElement('a');
   a.href = objectUrl;
   a.download = 'review-result-${escapeHtml(instrument)}.json';
   document.body.appendChild(a);
   a.click();
   a.remove();
-  URL.revokeObjectURL (objectUrl);
+  // Revoking the object URL in the same tick as the click can cancel the
+  // download in some browsers before they finish reading the blob; deferring
+  // it to the next tick lets the download start first.
+  setTimeout(function () { URL.revokeObjectURL(objectUrl); }, 0);
 });
 </script>
 </body>
 </html>`;
 }
 
+// Pure so the CLI's own contract (instrument name, --out flag, in either
+// order) can be unit-tested without spawning a process. `--out <path>` is
+// pulled out of the argument list wherever it appears -- the instrument
+// name is simply whatever positional argument is left.
+export function parseCliArgs(args) {
+  const rest = args.slice();
+  const outIndex = rest.indexOf('--out');
+  let outPath;
+  if (outIndex >= 0) {
+    outPath = rest[outIndex + 1];
+    rest.splice(outIndex, 2);
+  }
+  return { instrument: rest[0], outPath };
+}
+
 const isMain = process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1];
 if (isMain) {
-  const args = process.argv.slice(2);
-  const instrument = args[0];
-  const outIndex = args.indexOf('--out');
-  const outPath = outIndex >= 0 ? args[outIndex + 1] : join(root, 'dist', 'review-packet-' + instrument + '.html');
+  const { instrument, outPath: parsedOutPath } = parseCliArgs(process.argv.slice(2));
+  const outPath = parsedOutPath || join(root, 'dist', 'review-packet-' + instrument + '.html');
   try {
     const html = buildReviewPacket(instrument);
     mkdirSync(dirname(outPath), { recursive: true });
