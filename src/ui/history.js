@@ -6,6 +6,7 @@
 // in src/core/history.js and src/core/srs.js — this module is the DOM glue.
 import { summarize, sparkline, toTeacherSummary, ledger, weeklyReport } from '../core/history.js';
 import { summarizeEvents } from '../core/learning-events.js';
+import { KBD_SONG_SKILL_MAP } from '../instruments/kbd-songs.js';
 import { due } from '../core/srs.js';
 import { itemLabel } from './history/item-label.js';
 import { sanitizeHistoryStore } from './history/store.js';
@@ -174,8 +175,10 @@ export function registerHistory(panels) {
         // independent + introduced is every counted event (retained/applied are
         // refinements of independent, not extra buckets -- see that module's own
         // comment), so it doubles as "were there any checks at all" without a
-        // second read of db.events.length.
-        const ev = summarizeEvents(db.events || []);
+        // second read of db.events.length. On the keyboard, a starter song
+        // played on your own also counts as applied for any of its notes
+        // already drilled, via KBD_SONG_SKILL_MAP (src/instruments/kbd-songs.js).
+        const ev = summarizeEvents(db.events || [], { skillMap: KBD_SONG_SKILL_MAP, skillMapInstrument: 'kbd' });
         const checkedCount = ev.withHelp + ev.independent + ev.introduced;
         el.querySelector('#historyRetention').innerHTML = checkedCount
           ? `<p>Passed with help: ${ev.withHelp} · Passed on your own: ${ev.independent} · Retained on a later check: ${ev.retained} · Applied in a song: ${ev.applied}</p>`
