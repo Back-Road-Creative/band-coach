@@ -24,11 +24,6 @@ export function concertToWritten(notes, instrument) {
   return transposeByInterval(notes, -instrument.transposition);
 }
 
-// Written-pitch notes on `fromInstrument`, re-written for `toInstrument`.
-export function transposeBetweenInstruments(notes, fromInstrument, toInstrument) {
-  return concertToWritten(writtenToConcert(notes, fromInstrument), toInstrument);
-}
-
 // Of the key(s) at this tonic/mode, the one with the fewest signature
 // accidentals (a tie, e.g. F#/Gb major at 6 each, is broken toward sharps).
 export function chooseEnharmonicKey(tonicPc, mode) {

@@ -12,7 +12,6 @@ import {
   markChecked,
   statusFor,
   statusLabel,
-  forgetSong,
   reviewGate,
 } from '../../src/ui/songs/song-status.js';
 import { PANEL_DATA_MAX } from '../../src/ui/panels.js';
@@ -70,14 +69,6 @@ test('the review gate blocks a song with open checks', () => {
   const clear = reviewGate([]);
   assert.equal(clear.allowed, true);
   assert.equal(clear.reason, null);
-});
-
-test('forgetSong removes a song and leaves the rest untouched', () => {
-  let ledger = markDraft({}, 'song-1', { needsCheck: 1, source: 'file', originalAudioKept: true });
-  ledger = markDraft(ledger, 'song-2', { needsCheck: 0, source: 'mic', originalAudioKept: false });
-  const after = forgetSong(ledger, 'song-1');
-  assert.equal(statusFor(after, 'song-1'), null);
-  assert.ok(statusFor(after, 'song-2'));
 });
 
 test('a ledger stays under the 256 KB panel limit', () => {

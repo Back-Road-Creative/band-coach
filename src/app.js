@@ -2286,7 +2286,7 @@ import { register as registerPathway } from './ui/pathway.js';
     // Plan this sitting (review what's due, the weakest active skill, apply it, check it,
     // and, on keyboard, a suggested starter song) -- pure, so it only needs today's active
     // ids/items/events/sessions, not anything DOM/task-shaped.
-    sessionPlan = planSession({ instrumentId: mod, level: S.level, activeIds: activeItems(mod, S.level), items: S.item, events: DB.events, now: modelNow, due: due, sessions: DB.sessions, today: today(), songFor: mod === 'kbd' ? (lvl => { const e = songFor(lvl); if (!e) return null; const s = starterSongs.find(x => x.id === e.songId); return { songId: e.songId, title: s ? s.title : e.songId }; }) : undefined });
+    sessionPlan = planSession({ instrumentId: mod, level: S.level, activeIds: activeItems(mod, S.level), items: S.item, now: modelNow, due: due, sessions: DB.sessions, today: today(), songFor: mod === 'kbd' ? (lvl => { const e = songFor(lvl); if (!e) return null; const s = starterSongs.find(x => x.id === e.songId); return { songId: e.songId, title: s ? s.title : e.songId }; }) : undefined });
     planProgress = { review: 0, weak: 0, apply: 0, check: 0 };
     msg += ' ' + describePlan(sessionPlan, id => inf(id).short);
     const why = describeWhy(sessionPlan, id => inf(id).short); if (why) msg += ' ' + why;

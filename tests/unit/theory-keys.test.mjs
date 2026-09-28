@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   ALL_KEYS, MAJOR_KEYS, MINOR_KEYS,
-  findKey, signatureFor, keyFromSignature, relativeKey, parallelKey, neighbours,
+  findKey, signatureFor, keyFromSignature,
 } from '../../src/core/theory/keys.js';
 
 test('there are exactly 15 major and 15 minor keys', () => {
@@ -46,29 +46,6 @@ test('keyFromSignature inverts signatureFor for every key', () => {
     const sig = signatureFor(key);
     assert.equal(keyFromSignature(sig, key.mode).name, key.name);
   }
-});
-
-test('relativeKey swaps mode, keeps the signature', () => {
-  assert.equal(relativeKey('C').name, 'Am');
-  assert.equal(relativeKey('Am').name, 'C');
-  assert.equal(relativeKey('F#').name, 'D#m');
-  assert.equal(relativeKey('Cb').name, 'Abm');
-});
-
-test('parallelKey keeps the tonic, swaps mode', () => {
-  assert.equal(parallelKey('C').name, 'Cm');
-  // G# major would need 8 sharps -- outside the 15-key system, so the parallel
-  // major of G# minor is its enharmonic equivalent, Ab (4 flats).
-  assert.equal(parallelKey('G#m').name, 'Ab');
-});
-
-test('neighbours moves one step around the circle of fifths', () => {
-  const n = neighbours('C');
-  assert.equal(n.up.name, 'G');
-  assert.equal(n.down.name, 'F');
-  const atEdge = neighbours('C#');
-  assert.equal(atEdge.up, null); // would need an 8th sharp
-  assert.equal(atEdge.down.name, 'F#');
 });
 
 test('findKey rejects anything outside the 15+15', () => {

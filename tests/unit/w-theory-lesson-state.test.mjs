@@ -1,9 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { initLessonState, sanitizeLessonState, recordAnswer } from '../../src/ui/theory/lesson-state.js';
+import { sanitizeLessonState, recordAnswer } from '../../src/ui/theory/lesson-state.js';
 
-test('initLessonState starts at level 1, seed 0, streak 0', () => {
-  assert.deepEqual(initLessonState(), { level: 1, seed: 0, streak: 0 });
+test('sanitizeLessonState(null) starts at level 1, seed 0, streak 0', () => {
+  assert.deepEqual(sanitizeLessonState(null, 5), { level: 1, seed: 0, streak: 0 });
 });
 
 test('sanitizeLessonState falls back to defaults for missing/bad fields', () => {

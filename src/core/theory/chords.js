@@ -59,32 +59,6 @@ export function diatonicChords(key) {
   });
 }
 
-// Rotate a chord's notes so `inversion` (0 = root position, 1 = first...)
-// puts that tone at the bottom; pitch classes are untouched, only order.
-export function invert(built, inversion) {
-  const n = built.notes.length;
-  const shift = ((inversion % n) + n) % n;
-  const notes = built.notes.slice(shift).concat(built.notes.slice(0, shift));
-  return { ...built, inversion: shift, notes };
-}
-
-// Reverse lookup: which known quality do these pitch classes spell, trying
-// each as root -- a dim7 chord has 4 equally valid roots, so [] or many can return.
-export function nameChord(pitchClasses) {
-  const set = new Set(pitchClasses.map(mod12));
-  const pcs = [...set];
-  const results = [];
-  for (const rootPc of pcs) {
-    for (const [quality, q] of Object.entries(QUALITIES)) {
-      const wanted = new Set(q.intervals.map(i => mod12(rootPc + i)));
-      if (wanted.size === set.size && [...wanted].every(pc => set.has(pc))) {
-        results.push({ rootPc, quality });
-      }
-    }
-  }
-  return results;
-}
-
 // Playable shapes of `built` on `tuning` (open-string MIDI, low string first):
 // each sounding string lands on a chord tone, >=3 strings sound, ranked by
 // lowest position/span/string-count so open-position shapes surface early.

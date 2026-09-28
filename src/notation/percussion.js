@@ -26,13 +26,6 @@ export const PERCUSSION_SLOTS = {
   crash: { position: 10, notehead: 'x', stem: 'up' }, // first ledger line above the staff (A5)
 };
 
-// The contract's canonical piece-id order (do not rename these ids -- a
-// sibling drum-kit trainer unit codes directly against them).
-export const PIECE_IDS = [
-  'kick', 'snare', 'hihat-closed', 'hihat-pedal', 'hihat-open',
-  'tom-floor', 'tom-mid', 'tom-high', 'crash', 'ride',
-];
-
 function slotOrThrow(pieceId) {
   const slot = PERCUSSION_SLOTS[pieceId];
   if (!slot) throw new Error(`unknown percussion piece: ${pieceId}`);
@@ -47,15 +40,6 @@ function slotOrThrow(pieceId) {
 // piece present pulls the stem up.
 function stemForHits(hits) {
   return hits.every((h) => h.stem === 'down') ? 'down' : 'up';
-}
-
-// One percussion hit as a layoutMeasure() note: { midi: null, dur, perc }.
-// `perc.hits` is always an array (length 1 here) so layout.js has one shape
-// to handle whether a note is a single hit or a stacked chord.
-export function percussionNote(pieceId, dur) {
-  const slot = slotOrThrow(pieceId);
-  const hit = { piece: pieceId, ...slot };
-  return { midi: null, dur, perc: { hits: [hit], stem: stemForHits([hit]) } };
 }
 
 // hits: [{ piece, start (beats from bar start), duration }]. Several hits

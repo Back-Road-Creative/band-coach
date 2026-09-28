@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { nameFor, LETTERS_MIXED, setNoteNaming, getNoteNaming, name } from '../../src/core/note-names.js';
+import { nameFor, LETTERS_MIXED, setNoteNaming, name } from '../../src/core/note-names.js';
 
 test('default (letters, mixed) reproduces today\'s NAMES table exactly', () => {
   const expected = ['C', 'C♯', 'D', 'E♭', 'E', 'F', 'F♯', 'G', 'A♭', 'A', 'B♭', 'B'];
@@ -29,9 +29,8 @@ test('unknown system/accidentals fall back to letters/mixed', () => {
   assert.equal(nameFor(1, { system: 'bogus', accidentals: 'nope' }), 'C♯');
 });
 
-test('setNoteNaming/getNoteNaming/name(): module-level pref drives name()', () => {
+test('setNoteNaming/name(): module-level pref drives name()', () => {
   setNoteNaming({ system: 'german', accidentals: 'mixed' });
-  assert.deepEqual(getNoteNaming(), { system: 'german', accidentals: 'mixed' });
   assert.equal(name(11), 'H');
   assert.equal(name(60, true), 'C4');
   setNoteNaming({ system: 'letters', accidentals: 'mixed' });

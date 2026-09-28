@@ -177,6 +177,35 @@ test('Practise again always starts at the first step', async (t) => {
   assert.deepEqual(page.exceptions, []);
 });
 
+test('a place saved under the old, always-"none" key is not resumed', async (t) => {
+  const page = await launchPage(htmlPath);
+  t.after(() => page.close());
+
+  await openHotCrossBunsAndAdvanceOneStep(page);
+
+  // Rewrite the saved entry's key to the shape a lesson would have been
+  // saved under before Learn/Rehearse (assist 'shown') and Check (assist
+  // 'none') were split -- same seven fields, only `assist` differs.
+  await page.evaluate(
+    "(() => { const db = JSON.parse(localStorage.getItem('bandcoach.v1')); db.panels.songs.lessons[0].key.assist = 'none'; localStorage.setItem('bandcoach.v1', JSON.stringify(db)); })()"
+  );
+
+  await page.reload();
+  await page.evaluate("window.__coach.openPanel('songs')");
+  await page.waitFor("document.querySelectorAll('.panel-songs-row button').length > 0");
+  await page.evaluate(
+    "Array.from(document.querySelectorAll('.panel-songs-row button')).find(b => b.textContent === 'Hot Cross Buns').click()"
+  );
+  await page.waitFor("document.querySelector('.panel-songs-practice h4')");
+
+  const stepTitle = await page.evaluate("document.querySelector('.panel-songs-practice h4').textContent");
+  assert.ok(stepTitle.startsWith('Listen'), 'a place saved under the old key shape does not resume: ' + stepTitle);
+  const said = await page.evaluate("document.getElementById('panelSay').textContent");
+  assert.equal(said, '', 'no pick-up line for a place saved under the old key shape');
+
+  assert.deepEqual(page.exceptions, []);
+});
+
 test('the Carry on button reopens the unfinished lesson', async (t) => {
   const page = await launchPage(htmlPath);
   t.after(() => page.close());

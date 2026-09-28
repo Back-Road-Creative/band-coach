@@ -67,8 +67,6 @@ export function setNoteNaming(pref) {
   current = { system: system, accidentals: accidentals };
 }
 
-export function getNoteNaming() { return current; }
-
 // Convenience wrapper reading the current pref -- what nname()/noteName()/
 // itemLabel() actually call.
 export function name(midiOrPc, octave) {

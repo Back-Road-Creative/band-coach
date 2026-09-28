@@ -1242,16 +1242,12 @@ function mountSongsPanel(hostEl, api) {
     // tuning/harp-key/instrument change, a tempo change) means no match, so
     // the lesson starts at step 1 with no message, same as always. Check
     // never reads (or, in saveLesson() below, writes) the saved-place list
-    // at all, so it always starts at step 1 -- a one-time legacy fallback
-    // (a place saved under the OLD, always-'none' key) is tried only
-    // outside Check, so an old entry is picked up once and then, since
-    // saveLesson() writes the 'shown' key into the same slot, migrated.
+    // at all, so it always starts at step 1.
     const lessonKeyValue = lessonKey({ song: arrangedSong, partId, instrumentId, setup, arrangement, assistance, hands });
     const foundEntry = mode === 'check' || opts.fresh
       ? null
       : sanitizeLessonEntry(
-        findLesson(sanitizeLessonList((store.get() || {}).lessons), lessonKeyValue)
-          || findLesson(sanitizeLessonList((store.get() || {}).lessons), { ...lessonKeyValue, assist: 'none' }),
+        findLesson(sanitizeLessonList((store.get() || {}).lessons), lessonKeyValue),
         plan.steps.length
       );
     // A saved entry still sitting at step 0 with an empty trailing tail

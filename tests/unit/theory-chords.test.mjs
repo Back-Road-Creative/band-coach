@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { chord, diatonicChords, invert, nameChord, voicingsOnFretboard } from '../../src/core/theory/chords.js';
+import { chord, diatonicChords, voicingsOnFretboard } from '../../src/core/theory/chords.js';
 import { findKey } from '../../src/core/theory/keys.js';
 import { byId } from '../../src/instruments/index.js';
 
@@ -37,21 +37,6 @@ test('diatonic chords of C major: qualities and roman numerals', () => {
   assert.deepEqual(chords.map(c => c.numeral), ['I', 'ii', 'iii', 'IV', 'V', 'vi', 'vii°']);
   assert.deepEqual(chords.map(c => c.quality), ['maj', 'min', 'min', 'maj', 'maj', 'min', 'dim']);
   assert.equal(spelled(chords[4]), 'G B D'); // V
-});
-
-test('invert rotates the lowest tone', () => {
-  const c = chord('C', 'maj');
-  const first = invert(c, 1);
-  assert.equal(spelled(first), 'E G C');
-  const second = invert(c, 2);
-  assert.equal(spelled(second), 'G C E');
-});
-
-test('nameChord finds the quality (and, for symmetric chords, more than one root)', () => {
-  assert.deepEqual(nameChord([0, 4, 7]), [{ rootPc: 0, quality: 'maj' }]);
-  const dim7Names = nameChord([0, 3, 6, 9]);
-  assert.equal(dim7Names.length, 4); // C dim7 == Eb dim7 == Gb dim7 == A dim7
-  assert.ok(dim7Names.every(n => n.quality === 'dim7'));
 });
 
 test('voicingsOnFretboard: standard open-position shapes appear near the top for C, G, D, Em, Am', () => {
