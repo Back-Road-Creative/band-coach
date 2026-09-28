@@ -26,6 +26,8 @@ export default {
     { level: 11, items: ['Chords: A minor, D minor, E minor'] },
     { level: 12, items: ['Chord changes'] },
     { level: 13, items: ['Hands together: five-finger position (MIDI exact, mic approximate)'] },
-    { level: 14, items: ['Hands together: matching rhythms (MIDI or computer keys)'] }
+    { level: 14, items: ['Hands together: matching rhythms (MIDI or computer keys)'] },
+    { level: 15, items: ['Hands together: held bass under the melody (MIDI or computer keys)'] },
+    { level: 16, items: ['Hands together: different rhythms in each hand (MIDI or computer keys)'] }
   ]
 };

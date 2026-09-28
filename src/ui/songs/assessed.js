@@ -50,7 +50,31 @@ export function dimsFromStep(step, result, opts) {
     if (result.pieceRate != null) dims.drum = result.pieceRate >= rule.minPieceRate ? 'ok' : 'miss';
     else unassessed.push('drum');
   }
-  return gateByCapability(dims, unassessed, opts && opts.assess);
+  const gated = gateByCapability(dims, unassessed, opts && opts.assess);
+  return applyExtrasMiss(gated.dims, gated.unassessed, rule, result);
+}
+
+// An extras-only failure (practice.js's passesRule/failedDimension, the SAME
+// maxExtras number) never shows up above -- extras aren't one of the
+// four/five dims judgeAttempt grades -- so a try that failed ONLY because of
+// a wrong extra note struck alongside the right ones would otherwise log
+// every dim 'ok'/'unassessed' and read as passed on its own
+// (isIndependentOk, src/core/learning-events.js; pathway.js's qualifies()).
+// Folded into whichever real dim best names "a wrong note got struck":
+// pitch when this step/capability actually assesses pitch, onset when it
+// doesn't (a rhythm step, a percussion step whose capability can only prove
+// onset -- see gateByCapability above), else whichever other dim this try
+// did assess (drum, hold, tune). When nothing was assessed at all the row
+// can never count as passed on its own anyway (isIndependentOk needs one
+// assessed dim), so no dim is invented that the capability can't prove. Runs
+// AFTER gateByCapability so the capability gate never gets a chance to
+// move this particular miss back into unassessed.
+function applyExtrasMiss(dims, unassessed, rule, result) {
+  if (rule.maxExtras == null || !result || !result.extras || result.extras.count <= rule.maxExtras) return { dims, unassessed };
+  const markMiss = (dim) => { dims[dim] = 'miss'; const i = unassessed.indexOf(dim); if (i >= 0) unassessed.splice(i, 1); };
+  const target = ['pitch', 'onset', 'drum', 'hold', 'tune'].find((dim) => dims[dim] !== undefined);
+  if (target) markMiss(target);
+  return { dims, unassessed };
 }
 
 // A dim the passRule above just graded (it is a key in `dims`) but this
