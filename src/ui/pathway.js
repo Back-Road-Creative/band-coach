@@ -72,9 +72,7 @@ export function register(panels) {
         actionHtml = '<button type="button" id="pathwayAction">' + t('pathway.action.trainer') + '</button>';
       } else if (kind === 'open-song' && song) {
         actionHtml = '<button type="button" id="pathwayAction">' + t('pathway.action.song', { title: title }) + '</button>';
-      } else if (kind === 'check-song' && song) {
-        actionHtml = '<button type="button" id="pathwayAction">' + t('pathway.action.check', { title: title }) + '</button>';
-      } else if (kind === 'recheck' && song) {
+      } else if ((kind === 'check-song' || kind === 'recheck') && song) {
         actionHtml = '<button type="button" id="pathwayAction">' + t('pathway.action.check', { title: title }) + '</button>';
       } else if (kind === 'wait') {
         actionHtml = '<p class="pathway-wait">' + t('pathway.action.wait', { date: new Date(ps.action.dueAt).toLocaleDateString() }) + '</p>';
