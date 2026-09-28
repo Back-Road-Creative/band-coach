@@ -661,7 +661,7 @@ Per-item reviews (one curriculum level, one song hand-off, one pathway step -- s
 applied with `npm run review-apply`, which writes an entry keyed by the item's id and content hash
 into `src/instruments/review-ledger.js`, lands through a normal PR like any other source change, and
 never touches a record's `provenance`. That means applying one of these never moves the "Content
-reviewed" column below -- it stays provisional until someone edits `provenance` by hand, as above.
+reviewed" column in the table above -- it stays provisional until someone edits `provenance` by hand.
 
 The table above answers "can I practise/assess this, and is its chart reviewed" per instrument, but
 not what any of that means for readiness to ship. `docs/capabilities.md`'s capability and maturity
