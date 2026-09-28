@@ -440,8 +440,12 @@ const OPEN_REQUEST_STORE_ID = 'songs-open-request';
 // omitted by every caller before this one (capture's 'Make it a lesson',
 // the editor, songs/review.js), which is exactly why it is the 5th,
 // optional parameter rather than a change to any of their call sites.
-export function requestOpenSong(api, songId, partId, instrumentId, returnTo) {
-  api.store(OPEN_REQUEST_STORE_ID).set({ songId, partId: partId || null, instrumentId: instrumentId || null, returnTo: returnTo || null });
+// mode (P2): an optional lesson mode ('rehearse'/'check') the keyboard
+// pathway panel's Check-step action hands off, so a learner following the
+// panel lands straight in Check mode rather than Learn -- omitted by every
+// earlier caller, which is why it is the 6th, optional parameter.
+export function requestOpenSong(api, songId, partId, instrumentId, returnTo, mode) {
+  api.store(OPEN_REQUEST_STORE_ID).set({ songId, partId: partId || null, instrumentId: instrumentId || null, returnTo: returnTo || null, mode: mode || null });
 }
 
 // P3-5: written by hide() below when Add a song was busy (the mic door
@@ -2399,7 +2403,7 @@ function mountSongsPanel(hostEl, api) {
     // openSong() below does: passing the starter id would route the action
     // row's 'Edit notes' at openEditorPanel with a starter id it cannot open.
     songHeader(song, starter ? null : req.songId);
-    startPractice(song, partId, instrument, { returnTo: req.returnTo || null });
+    startPractice(song, partId, instrument, { returnTo: req.returnTo || null, mode: req.mode });
   }
 
   // "Carry on: <title>": the newest saved lesson place still short of the

@@ -274,7 +274,10 @@ logged today, which survives opening Songs and reloading the page. The suggestio
 yet checked by a player" label, the same one beside the "Play a song with these notes" button.
 A learner returning to keyboard practice on a later day also gets one "Welcome back" line naming
 their next keyboard-path step (`src/core/pathway.js`'s `pathwayState`), shown once on the first
-session of that visit.
+session of that visit. A "Your keyboard path" button in keyboard practice's own options opens a
+panel listing all five keyboard-path steps, marks the current one, and offers one action that goes
+there -- every step's outcome labelled "Not yet checked by a player" until a real player's review
+lands.
 
 A "Session length" selector (No limit / 5 / 10 / 15 minutes) sits in every instrument's options
 (not the Tuner or Capture tools), saved to `prefs.sessionMinutes`; an invalid saved value (anything but 5, 10, 15 or no choice at all)
