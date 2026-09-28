@@ -25,7 +25,7 @@ async function connectMidi(page) {
 // keeps these MIDI-focused setups on Both, which every assertion below
 // (each expecting a real note-off/blur/unplug to matter for BOTH hands)
 // already assumes; unseeded, the right-hand note alone would pass on its own.
-const HANDS_ALONE_SEED = "window.__coach.db().mods.kbd.item.j1r = { stability: 1, difficulty: 0.3, lastSeen: Date.now(), reps: 0, lapses: 0, seen: 1 }; window.__coach.db().mods.kbd.item.j1l = { stability: 1, difficulty: 0.3, lastSeen: Date.now(), reps: 0, lapses: 0, seen: 1 };";
+const HANDS_ALONE_SEED = "window.__coach.db().mods.kbd.item.j1r = { stability: 1, difficulty: 0.3, lastSeen: Date.now(), reps: 1, lapses: 0, seen: 1 }; window.__coach.db().mods.kbd.item.j1l = { stability: 1, difficulty: 0.3, lastSeen: Date.now(), reps: 1, lapses: 0, seen: 1 };";
 
 // ---------- characterization: the real ioBtn path already does this ----------
 

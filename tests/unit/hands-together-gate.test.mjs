@@ -11,8 +11,12 @@ test('bothUnlocked: only the right hand alone shown is still locked', () => {
   assert.equal(bothUnlocked({ item: { j1r: { seen: 3 } } }), false);
 });
 
-test('bothUnlocked: both the right hand alone and the left hand alone shown unlocks', () => {
-  assert.equal(bothUnlocked({ item: { j1r: { seen: 3 }, j1l: { seen: 5 } } }), true);
+test('bothUnlocked: both hands merely shown (seen>0, reps 0) is still locked -- shown is not played', () => {
+  assert.equal(bothUnlocked({ item: { j1r: { seen: 3, reps: 0 }, j1l: { seen: 5, reps: 0 } } }), false);
+});
+
+test('bothUnlocked: both hands actually played (reps>0) unlocks', () => {
+  assert.equal(bothUnlocked({ item: { j1r: { seen: 3, reps: 1 }, j1l: { seen: 5, reps: 2 } } }), true);
 });
 
 test('bothUnlocked: an it() placeholder (seen 0, reps 0) does not count as shown', () => {

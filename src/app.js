@@ -1042,6 +1042,11 @@ import { register as registerPlayalong } from './ui/playalong.js';
     const drop = acc30 === null ? 0 : c01((sess.best30 - acc30) / 0.25), slow = (rt === null || !sess.bestRt) ? 0 : c01((rt / Math.max(0.4, sess.bestRt) - 1.15) / 0.6);
     sess.F = 0.45 * drop + 0.25 * slow + 0.2 * c01((sess.sinceBreak / 60 - 12) / 18) + 0.1 * c01(sess.downs / 3); return sess.F;
   }
+  // K2: patches the Hands selector's Both option (and its lock note) open in
+  // place, the instant bothUnlocked() actually flips inside credit() below
+  // -- never a full renderOpts() rebuild, so a mid-change select never
+  // steals its own focus.
+  function flipBothUnlockIfNeeded() { const o = document.querySelector('#optKbdHands option[value="both"]'); if (o) o.disabled = false; const lk = $('kbdBothLock'); if (lk) lk.remove(); if (DB.prefs.kbdHands === 'both') $('optKbdHands').value = 'both'; }
   function credit(id, q, from, warm, rt, outcome) {
     // A warm-up task is told "does not count" (see the hint text set at task
     // render: `t.warm ? 'Warm-up, does not count. ' : ''`, and the startSession()
@@ -1052,11 +1057,18 @@ import { register as registerPlayalong } from './ui/playalong.js';
     const out = outcome || gradeOutcome({ helped: false, assistance: null, q: q });
     // A helped element (Show me) is not a test: no review, no streak, no
     // level move, no judged count -- only the session's help counter moves.
-    // See src/core/grade-outcome.js.
+    // See src/core/grade-outcome.js. Neither does it advance bothUnlocked():
+    // a Show me pass is not evidence the hand was actually played.
     if (!out.review) { sess.helped = (sess.helped || 0) + 1; return; }
+    // K2: capture whether Both is still locked BEFORE this element's review
+    // is written below -- bothUnlocked() now reads reps, which review() is
+    // what actually sets, so this is the earliest point a level-13 hands
+    // element's grading can flip it from locked to unlocked.
+    const wasHandsLocked = mod === 'kbd' && D().task === 'hands' && !bothUnlocked(S);
     recent.push(q > 0 ? 1 : 0); if (recent.length > 20) recent.shift(); streak = q > 0 ? streak + 1 : 0;
     const grade = GRADE_FOR_Q(q), before = it(id, modelNow);
     S.item[id] = Object.assign({ seen: before.seen }, review(before, { grade, now: modelNow }));
+    if (wasHandsLocked && bothUnlocked(S)) flipBothUnlockIfNeeded();
     if (from && from !== id) S.trans[from + '>' + id] = review(tr(from, id, modelNow), { grade, now: modelNow });
     S.judged++; if (out.level) S.ready = clamp(S.ready + (q > 0 ? S.gain * q : -0.08), 0, 1);
     sess.judged++; if (q > 0) sess.ok++; if (sess.first.length < 30) sess.first.push(q > 0 ? 1 : 0); sess.last.push(q > 0 ? 1 : 0); if (sess.last.length > 30) sess.last.shift();
@@ -1107,9 +1119,11 @@ import { register as registerPlayalong } from './ui/playalong.js';
     // as both-hands, by id, wherever it is graded; see handsModeFromId.) K2:
     // a dedicated 'hands' task also runs through effectiveHands(), which
     // gates a saved 'both' preference down to 'right' until bothUnlocked()
-    // -- each hand alone shown at least once -- says the level 13 drill may
-    // run both hands together; the raw preference itself is never rewritten.
-    const handsLockedBefore = d.task === 'hands' && !bothUnlocked(S);
+    // -- each hand alone actually PLAYED (a graded attempt) at least once --
+    // says the level 13 drill may run both hands together; the raw
+    // preference itself is never rewritten. The live flip itself now lives
+    // in credit() (see flipBothUnlockIfNeeded), fired exactly when that
+    // grading happens, not here at task-build time.
     const handsPref = d.task === 'hands' ? effectiveHands(DB.prefs.kbdHands, bothUnlocked(S)) : DB.prefs.kbdHands;
     if (kind === 'hands') { const handsSuf = handsPref === 'right' ? 'r' : handsPref === 'left' ? 'l' : ''; if (handsSuf) pool = pool.map(id => id + handsSuf); }
     if (sess.warm > 0) { sess.warm--; warm = true; const base = kind === 'bar' || kind === 'kit' ? kind : kind === 'chord' ? 'chord' : 'one'; kind = base; pool = byStrength(pool, modelNow).slice(0, Math.max(2, Math.ceil(pool.length / 2))); }
@@ -1178,12 +1192,6 @@ import { register as registerPlayalong } from './ui/playalong.js';
     else if (kind === 'bar') { let left = 4, from = lastItem, guard = 0; while (left > 0 && guard++ < 12) { const fit = pool.filter(id => CELLS[id.slice(1)].b <= left); const id = pick(from, fit.length ? fit : ['rq'], modelNow); t.els.push(mk(id)); left -= CELLS[id.slice(1)].b; from = id; } if (!t.els.some(e => e.info.on.length)) { t.els[0] = mk('rq'); } }
     else if (kind === 'kit') { const L = d.bars ? d : M.levels[S.tick % M.levels.length], b = L.bars[S.tick % L.bars.length]; S.tick++; t.kit = { metre: L.metre, bpm: d.bars ? L.bpm : L.bpm + 6 * (S.level - M.levels.length), swing: L.swing || 0, bar: b, name: L.name }; t.els = [{ id: 'kit', info: { label: L.name }, failed: false, t0: 0, rt: 0, reveal: false }]; }
     else if (kind === 'bar2') { const variants = d.bars || [[['qr']]], cells = variants[S.tick % variants.length]; S.tick++; t.rCells = cells; t.els = [{ id: 'bar2', info: { label: d.name }, failed: false, t0: 0, rt: 0, reveal: false }]; }
-    // K2: mk() above is what can first tip bothUnlocked() true (it sets
-    // seen), so the unlock is checked live right here rather than waiting
-    // for a future renderOpts() -- flipping the DOM in place, never
-    // rebuilding the whole options box, so a mid-change select never steals
-    // its own focus.
-    if (handsLockedBefore && bothUnlocked(S)) { const o = document.querySelector('#optKbdHands option[value="both"]'); if (o) o.disabled = false; const lk = $('kbdBothLock'); if (lk) lk.remove(); if (DB.prefs.kbdHands === 'both') $('optKbdHands').value = 'both'; }
     if (M.input === 'answer') { t.kind = 'ear'; if (!t.els.length) t.els.push(mk(pick(lastItem, pool, modelNow))); const e = t.els[0], fam = pool.filter(id => id[0] === e.id[0] && (e.id[0] !== 'i' || id.slice(-1) === e.id.slice(-1))); t.choices = fam.slice().sort((a, b) => (inf(a).semi || 0) - (inf(b).semi || 0) || (a < b ? -1 : 1)); t.root = 55 + ((S.tick * 5) % 12); }
     if (planKind) planProgress[planKind] = (planProgress[planKind] || 0) + 1;
     return t;
@@ -2127,9 +2135,10 @@ import { register as registerPlayalong } from './ui/playalong.js';
     // automatically once task is null and playing), never a half-graded one.
     // K2: at level 13, Both stays disabled and the shown value reads
     // effectiveHands() (never the raw, unrewritten preference) until
-    // bothUnlocked() -- each hand alone actually shown at least once, or an
-    // earlier both-hands record grandfathering it open. A lock note and a
-    // "before you start" prep line for each hand ride along beside it.
+    // bothUnlocked() -- each hand alone actually PLAYED (a graded attempt,
+    // not merely offered) at least once, or an earlier both-hands record
+    // grandfathering it open. A lock note and a "before you start" prep line
+    // for each hand ride along beside it.
     if (mod === 'kbd') sel('optKbdHands', 'Hands', { both: ['Both'], right: ['Right only'], left: ['Left only'] }, mod === 'kbd' && D().task === 'hands' ? effectiveHands(DB.prefs.kbdHands, bothUnlocked(S)) : DB.prefs.kbdHands, v => { DB.prefs.kbdHands = v; task = null; save(); });
     if (mod === 'kbd' && D().task === 'hands') {
       if (!bothUnlocked(S)) {
