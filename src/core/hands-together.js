@@ -1,3 +1,10 @@
+// Level 13's Both/Right only/Left only gate: Both stays disabled (the level
+// is built right-hand-only) until the right hand alone (j<n>r) and the left
+// hand alone (j<n>l) have each actually been shown at least once -- see
+// bothUnlocked() below. A player who already holds a genuinely used plain
+// j1-j5 item (an earlier both-hands record, from before the gate existed or
+// from any other route) is grandfathered straight to Both open.
+//
 // Piano "hands together" exercises: the right hand and the left hand each
 // play one note at the same time, each with its own standard finger number
 // (1 = thumb ... 5 = little finger). Pure logic, no DOM, no audio, no
@@ -13,6 +20,8 @@
 // finger exercises are introduced. MIDI values are absolute (kbd's
 // octavePolicy is 'exact', see src/instruments/kbd.js), matching the
 // keyboard mod's own middle-C-is-60 convention (app.js N(60, 62, 64, ...)).
+import { nameFor } from './note-names.js';
+
 const STEPS = [
   { name: 'C', rh: 60, rf: 1, lh: 48, lf: 5 },
   { name: 'D', rh: 62, rf: 2, lh: 50, lf: 4 },
@@ -58,6 +67,51 @@ export function handsModeFromId(id) {
 
 export function fingeringLabel(exercise) {
   return 'right hand finger ' + exercise.rh.finger + ', left hand finger ' + exercise.lh.finger;
+}
+
+// Has this SRS model actually PLAYED (a graded attempt, reps>0) both hands
+// alone, or already holds a genuinely used both-hands (plain j<n>) item? For
+// j1r/j1l, `seen` alone is NOT enough: mk() (src/app.js) sets seen the
+// instant an element is BUILT, before the learner has played a single note,
+// so a seen>0/reps:0 item is only evidence the drill was offered, not that
+// it was played -- reps is only ever written by review() (src/app.js's
+// credit()), once an element has actually been judged. The plain j<n>
+// grandfather clause is unchanged from before this distinction existed:
+// seen>0 or reps>0 still counts there (an older both-hands record's `seen`
+// is still real historical evidence, since level 13's own gate never
+// existed to create a seen-without-reps plain j<n> item in the first
+// place), and it()/evaluate() still create seen:0, reps:0 placeholder items
+// for ids they only glance at (weight() over every pool id, evaluate() over
+// the plain j ids once ready>=1) which never count as evidence either way.
+export function bothUnlocked(model) {
+  if (!model || typeof model !== 'object') return false;
+  const items = model.item || {};
+  const played = it => !!it && (it.reps | 0) > 0;
+  const used = it => !!it && ((it.seen | 0) > 0 || (it.reps | 0) > 0);
+  return (played(items.j1r) && played(items.j1l)) || HANDS_TOGETHER_EXERCISES.some(e => used(items[e.id]));
+}
+
+// The Hands mode the level-13 task actually builds: 'both' stays gated to
+// 'right' until bothUnlocked() says otherwise. The saved preference itself
+// (DB.prefs.kbdHands) is never rewritten by this -- once unlocked, whatever
+// the player has it set to (still 'both', typically) just takes effect.
+export function effectiveHands(pref, unlocked) {
+  const mode = pref === 'right' || pref === 'left' ? pref : 'both';
+  return mode === 'both' && !unlocked ? 'right' : mode;
+}
+
+const FINGER_WORD = { 1: 'thumb', 2: 'index finger', 3: 'middle finger', 4: 'ring finger', 5: 'little finger' };
+
+// A one-line "before you start" caption naming each hand's starting finger
+// and key -- read aloud in everyday words, not a fingering diagram, since a
+// beginner has not necessarily learned to read one yet. `nameOf` defaults to
+// this module's own note-naming convention (letters, with octave, matching
+// the keyboard mod's on-screen labels) but a caller may inject any namer.
+export function prepLine(exercise, nameOf) {
+  const namer = nameOf || (m => nameFor(m, { octave: true }));
+  const rh = exercise.rh, lh = exercise.lh;
+  return 'Before you start: right hand ' + FINGER_WORD[rh.finger] + ' (finger ' + rh.finger + ') on ' + namer(rh.midi) +
+    '; left hand ' + FINGER_WORD[lh.finger] + ' (finger ' + lh.finger + ') on ' + namer(lh.midi) + '.';
 }
 
 // EXACT grading: independent note-on events, as a real MIDI keyboard (or two
