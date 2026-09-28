@@ -207,10 +207,14 @@ export const starterSongDefs = [
 // starter -- only note.hand distinguishes the two hands. A stable sort by
 // start keeps simultaneous rh/lh onsets in rh-then-lh order, and never
 // reorders two notes that already share a start (Array.prototype.sort is
-// stable in Node/V8).
-function build(def) {
+// stable in Node/V8). Exported for its unit test.
+export function build(def) {
   const song = parse(def.notation, def);
   if (!def.lh) return song;
+  // Each bar is already checked against the metre by parse(), so equal bar
+  // counts mean both hands last exactly as long as each other.
+  const rhBars = def.notation.split('|').length, lhBars = def.lh.split('|').length;
+  if (rhBars !== lhBars) throw new Error(`${def.id}: the right hand has ${rhBars} bars but the left hand has ${lhBars}`);
   const lhSong = parse(def.lh, { ...def, notation: def.lh });
   song.parts[0].notes.forEach((n) => { n.hand = 'rh'; });
   lhSong.parts[0].notes.forEach((n) => { n.hand = 'lh'; });

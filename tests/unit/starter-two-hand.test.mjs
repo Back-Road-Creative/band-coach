@@ -8,7 +8,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { INSTRUMENTS } from '../../src/instruments/index.js';
-import { starterSongs, starterMelodies, isTwoHand } from '../../src/song/starter/index.js';
+import { starterSongs, starterSongDefs, starterMelodies, isTwoHand, build } from '../../src/song/starter/index.js';
 import { buildLessonPlan } from '../../src/song/lesson.js';
 import { arrangeFor } from '../../src/song/arrange/index.js';
 import { handsAvailable } from '../../src/song/hand-filter.js';
@@ -100,4 +100,10 @@ test('ear song dictation and song rhythm never draw a two-hand starter into thei
       }
     }
   }
+});
+
+test('build refuses a two-hand def whose left hand has a different number of bars', () => {
+  const def = { ...starterSongDefs.find((d) => d.id === 'ode-to-joy-two-hands') };
+  def.lh = def.lh.split('|').slice(0, -1).join('|');
+  assert.throws(() => build(def), /ode-to-joy-two-hands: the right hand has 8 bars but the left hand has 7/);
 });
