@@ -13,6 +13,7 @@
     "pages": "node build/build.mjs --pages",
     "shots": "node build/shots.mjs",
     "review-packet": "node build/review-packet.mjs",
+    "review-apply": "node build/apply-review.mjs",
     "pretest": "npm run build",
     "test": "node --test --test-concurrency=$(node tests/helpers/browser.mjs) \"tests/*.test.mjs\" \"tests/build/*.test.mjs\" \"tests/characterization/*.test.mjs\" \"tests/unit/*.test.mjs\" \"tests/unit/notation/*.test.mjs\"",
     "posttest": "npm run gate",

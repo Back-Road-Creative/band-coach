@@ -2,8 +2,8 @@
 // opens on their own machine (no build tooling, no dev server, no network)
 // to check an instrument's teaching content -- curriculum wording, song
 // hand-off suggestions, pathway outcome copy -- item by item against a
-// named method book or standard, then downloads a result file this repo's
-// (not-yet-built) review-apply step will read.
+// named method book or standard, then downloads a result file
+// build/apply-review.mjs (npm run review-apply) will read.
 //
 // Every row's id/rev follows the same contract src/instruments/*.js already
 // uses for its own review ledger lookups (src/instruments/review-ledger.js
@@ -15,7 +15,7 @@
 // inline <script>, this module never runs in a browser.
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 
 import kbd from '../src/instruments/kbd.js';
 import { ENTRIES as SONG_HANDOFF_ENTRIES, KBD_LEVEL_PITCH_POOLS } from '../src/instruments/kbd-songs.js';
@@ -276,7 +276,9 @@ export function parseCliArgs(args) {
 const isMain = process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1];
 if (isMain) {
   const { instrument, outPath: parsedOutPath } = parseCliArgs(process.argv.slice(2));
-  const outPath = parsedOutPath || join(root, 'dist', 'review-packet-' + instrument + '.html');
+  // npm runs this from the package root; a relative --out means the folder
+  // the player typed it in, which npm passes as INIT_CWD.
+  const outPath = parsedOutPath ? resolve(process.env.INIT_CWD || process.cwd(), parsedOutPath) : join(root, 'dist', 'review-packet-' + instrument + '.html');
   try {
     const html = buildReviewPacket(instrument);
     mkdirSync(dirname(outPath), { recursive: true });

@@ -9,6 +9,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
+import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 import { buildReviewPacket, reviewItems, parseCliArgs } from '../../build/review-packet.mjs';
 import kbd from '../../src/instruments/kbd.js';
 import { ENTRIES } from '../../src/instruments/kbd-songs.js';
@@ -80,6 +86,23 @@ test('parseCliArgs accepts --out before or after the instrument', () => {
   assert.deepEqual(parseCliArgs(['kbd']), { instrument: 'kbd', outPath: undefined });
   assert.deepEqual(parseCliArgs(['kbd', '--out', '/tmp/x.html']), { instrument: 'kbd', outPath: '/tmp/x.html' });
   assert.deepEqual(parseCliArgs(['--out', '/tmp/x.html', 'kbd']), { instrument: 'kbd', outPath: '/tmp/x.html' });
+});
+
+// `npm run review-packet` runs from the package root; a relative --out typed
+// from another folder must land in that folder (npm's INIT_CWD).
+test('CLI: a relative --out lands in the folder npm was run from', () => {
+  const pkgRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
+  const dir = mkdtempSync(path.join(tmpdir(), 'review-packet-initcwd-'));
+  const name = 'review-packet-initcwd-probe.html';
+  try {
+    const res = spawnSync('node', [path.join(pkgRoot, 'build', 'review-packet.mjs'), 'kbd', '--out', name], {
+      encoding: 'utf8', cwd: pkgRoot, env: { ...process.env, INIT_CWD: dir }
+    });
+    assert.equal(res.status, 0, res.stderr);
+    assert.ok(existsSync(path.join(dir, name)), 'the packet is written where the player typed the path');
+  } finally {
+    rmSync(path.join(pkgRoot, name), { force: true });
+  }
 });
 
 test('every curriculum entry, song hand-off entry and pathway outcome appears exactly once, with no duplicate ids', () => {
