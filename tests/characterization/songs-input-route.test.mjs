@@ -13,13 +13,11 @@
 // src/styles.css) the instant the Songs panel opens, so a real canvas tap or
 // canvas Enter/Space can never reach onNote() while a song step is being
 // recorded -- measured directly (getBoundingClientRect() on #cv reads
-// { w: 0, h: 0 } the moment openPanel('songs') runs). src/app.js's onNote()
-// still forwards whatever `source` it is given straight through rather than
-// gating it to only 'midi'/'computer-key' (this unit's fix, see the comment
-// there), which is still the more truthful, simpler rule and matters the
-// moment ANY future UI change makes #cv reachable during song practice, but
+// { w: 0, h: 0 } the moment openPanel('songs') runs). openPanel() also
+// clears the drill task, so the main-app mic path returns before onNote().
+// src/app.js's onNote() forwards only 'midi'/'computer-key' to a song step;
 // today's shipped app has no reachable path that logs a song row's `input`
-// as 'screen'.
+// as 'screen' or routes a main-app mic note into one.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';

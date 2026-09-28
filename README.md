@@ -99,8 +99,8 @@ When a keyboard song attempt is recorded as played on the computer keys, or piec
 more than one route, "My progress" (below) does not count it as passed on your own: it is practice
 worth having but not proof the skill transferred to a real keyboard. A keyboard drill or warm-up
 answer now records its route too, and one played on the computer keys or on-screen keys is the
-same story: practice, not counted as passed on your own. An on-screen click during a song is still
-not labelled with its route.
+same story: practice, not counted as passed on your own. A keyboard song is played on a MIDI keyboard or the
+computer keys; the on-screen keys are hidden while a song is open.
 
 ## Build it from source
 

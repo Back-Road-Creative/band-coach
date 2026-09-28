@@ -1295,32 +1295,25 @@ import { register as registerPlayalong } from './ui/playalong.js';
   // canvas Enter/Space, and 'mic' for the microphone path -- left undefined
   // when a caller passes none (the debug hook, grooveInject).
   // A built-in drill/warm-up row now records this route as `input` (passed
-  // through passEl to finishTask's logEvent); a song step gets the SAME
-  // `source` forwarded whole, whatever it is (see the comment at the
-  // forwardSongNote call below) -- undefined stays undefined (the debug hook,
-  // grooveInject), never guessed into something concrete. Besides (a) the
-  // plain-text "heard" messages below and (b) hands-together grading using
-  // the real MIDI held-note set instead of the note-on timer window, it is
-  // now also handed straight through to forwardSongNote() so a song practice
+  // through passEl to finishTask's logEvent); a song step still only ever
+  // gets 'midi' or 'computer-key' forwarded to it (see the comment at the
+  // forwardSongNote call below). A canvas tap or a mic note never reaches a
+  // song step at all: openPanel() hides #mainArea (so #cv) and clears `task`
+  // (so onPitch returns before calling onNote) the moment Songs opens. Besides (a) the plain-text "heard"
+  // messages below and (b) hands-together grading using the real MIDI
+  // held-note set instead of the note-on timer window, it is now also
+  // handed straight through to forwardSongNote() so a song practice
   // attempt can tell a real keyboard from a stand-in the same way
   // (src/ui/songs.js's advance()) -- never anything about credit, mastery or
   // pass/fail, which stay blind to it.
   function onNote(midi, exact, source) {
-    // Whatever this call's own `source` truthfully is, forwarded unchanged --
-    // this used to be gated here to only 'midi'/'computer-key', so a route
-    // this function was actually told (e.g. 'screen') reached
-    // src/ui/songs.js's advance() as no route at all, same shape as a caller
-    // that never named one. #cv (the canvas a screen tap or canvas
-    // Enter/Space fires on) sits inside #mainArea, which openPanel() hides
-    // the instant a song's practice screen opens, so today's shipped app has
-    // no reachable path from a screen tap into a song row -- this fix is
-    // still the more honest rule regardless (never special-case which routes
-    // count as real), and stops mattering only by luck rather than by
-    // design. src/ui/songs.js's own mic-detected pitched path
-    // (beginListening's plain `else` branch) never reads this parameter at
-    // all, so a 'mic' source passing through here cannot double-tag or
-    // overwrite anything it stamps on its own.
-    forwardSongNote(midi, exact, undefined, source);
+    // Songs only ever learn a route they already understand (a real
+    // keyboard or a stand-in for one). 'screen' and 'mic' cannot arrive here
+    // while a song is open (see openPanel()), so this gate only matters if a
+    // later UI change makes #cv reachable during songs: such a tap would
+    // then reach advance() with no route, and its row keeps `input` off
+    // rather than guessed (src/ui/songs.js's advance()).
+    forwardSongNote(midi, exact, undefined, (source === 'midi' || source === 'computer-key') ? source : undefined);
     if (MODS[mod] && MODS[mod].kit) { const p = pieceForMidi(midi); if (p === null) coach('MIDI note ' + midi + ' is not one of the drums on this kit' + (playing ? ', so it counts as an extra hit.' : '.')); else if (!playing) coach(kitName(p) + ' heard -- start an exercise to see it judged.'); onHit(p, tapAudioTime(), source); return; }
     lastInputAt = now(); pressed[midi] = performance.now();
     if (source === 'midi') { const notJudging = !playing || !task || task.done; const outOfView = !notJudging && mod === 'kbd' && (midi < kbdRange()[0] || midi > kbdRange()[1]); if (notJudging) coach(nname(midi) + ' heard' + (playing ? '.' : ' -- start an exercise to see it judged.')); else if (outOfView) coach(nname(midi) + ' heard, but that key is not drawn on screen right now.'); }
