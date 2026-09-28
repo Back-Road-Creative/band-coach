@@ -9,11 +9,16 @@
 //   graded for real (the SRS review still happens, same as today) but it
 //   does not count toward level progress since only one hand was actually
 //   heard.
+// - assistance === 'guided': a practice-only pass with no note-off to time
+//   against (a screen tap or the on-screen Enter/Space key) -- reviewed the
+//   same as 'approximate', for the same reason: real evidence of the notes,
+//   but not evidence of the timing a level-14 rhythm check actually asks
+//   for.
 // - otherwise: a normal graded answer — review happens and counts toward
 //   level progress.
 
 export function gradeOutcome({ helped = false, failed = false, assistance = null, q = 0 } = {}) {
   if (helped) return { review: false, level: false, q: 0 };
-  if (assistance === 'approximate') return { review: true, level: false, q: q };
+  if (assistance === 'approximate' || assistance === 'guided') return { review: true, level: false, q: q };
   return { review: true, level: true, q: q };
 }

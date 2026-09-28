@@ -1,5 +1,5 @@
 // Extracted from src/app.js MODS.kbd. Range 48-72 is the lowest and highest
-// MIDI note reached across all thirteen levels. Keyboard reads exact MIDI
+// MIDI note reached across every dedicated level. Keyboard reads exact MIDI
 // pitches, no octave folding, so octavePolicy is exact.
 export default {
   id: 'kbd',
@@ -25,6 +25,7 @@ export default {
     { level: 10, items: ['Chords: C, F and G'] },
     { level: 11, items: ['Chords: A minor, D minor, E minor'] },
     { level: 12, items: ['Chord changes'] },
-    { level: 13, items: ['Hands together: five-finger position (MIDI exact, mic approximate)'] }
+    { level: 13, items: ['Hands together: five-finger position (MIDI exact, mic approximate)'] },
+    { level: 14, items: ['Hands together: matching rhythms (MIDI or computer keys)'] }
   ]
 };
