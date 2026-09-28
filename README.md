@@ -769,8 +769,8 @@ many milliseconds, drawn from `gradeTimedPair()` in `src/core/hands-together.js`
 (`PAIR_ONSET_TOL_MS`, `PAIR_RELEASE_TOL_MS`). This grading needs real, independent note-on/note-off
 events, so it only runs on a real MIDI keyboard or the computer keys; a screen tap (or the on-screen
 focus cursor's Enter/Space) still lets you practice the notes, but the pass it gives is marked
-practice-only, is never counted as independent evidence, and never advances the level — use "Make it
-harder" to move on without one. A microphone pass stays approximate, the same as at level 13. The
+practice-only, is never counted as independent evidence, and never advances the level — use "Skip
+ahead" to move on without one. A microphone pass stays approximate, the same as at level 13. The
 level is labelled "Not yet checked by a player" since this wording has not been reviewed by an
 actual piano teacher yet. See `tests/unit/hands-together-timed.test.mjs` and
 `tests/characterization/kbd-level14-rhythm.test.mjs` for the exact rules and the real-MIDI/computer-

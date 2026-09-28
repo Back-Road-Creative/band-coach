@@ -242,22 +242,23 @@ test('a real keydown/keyup CHECK pass works with no MIDI port at all', async (t)
   const rhKey = RH_KEY_FOR_MIDI[info.ex.rh.midi], lhKey = LH_KEY_FOR_MIDI[info.ex.lh.midi];
   assert.ok(rhKey && lhKey, 'both hand pitches must have a computer key');
 
-  async function key(page, k, type) {
-    await page.evaluate(`document.dispatchEvent(new KeyboardEvent(${JSON.stringify(type)}, { key: ${JSON.stringify(k)} }))`);
+  // Both keys of a pair go through in one page.evaluate round trip (as the
+  // MIDI tests above do with window.__midiSend), so the onset/release gap
+  // is near 0 ms whatever the runner's scheduling load -- a keydown/keyup
+  // pair sent as two separate round trips could land more than
+  // PAIR_ONSET_TOL_MS/PAIR_RELEASE_TOL_MS apart on a busy shared runner and
+  // fail with no bug in the app.
+  async function keys(page, ks, type) {
+    await page.evaluate(`(() => { ${ks.map((k) => `document.dispatchEvent(new KeyboardEvent(${JSON.stringify(type)}, { key: ${JSON.stringify(k)} }));`).join(' ')} })()`);
   }
 
-  await key(page, rhKey, 'keydown');
-  await key(page, lhKey, 'keydown');
+  await keys(page, [rhKey, lhKey], 'keydown');
   await page.waitFor("window.__coach.cur() && window.__coach.cur().pair && window.__coach.cur().pair.phase === 'check'");
-  await key(page, rhKey, 'keyup');
-  await key(page, lhKey, 'keyup');
+  await keys(page, [rhKey, lhKey], 'keyup');
   await page.evaluate("document.getElementById('feedback').className = ''; document.getElementById('feedback').textContent = '';");
 
-  await key(page, rhKey, 'keydown');
-  await key(page, lhKey, 'keydown');
-  await new Promise((r) => setTimeout(r, 50));
-  await key(page, rhKey, 'keyup');
-  await key(page, lhKey, 'keyup');
+  await keys(page, [rhKey, lhKey], 'keydown');
+  await keys(page, [rhKey, lhKey], 'keyup');
 
   await page.waitFor("document.getElementById('feedback').className === 'ok'");
   assert.deepEqual(page.exceptions, []);
