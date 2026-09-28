@@ -358,12 +358,24 @@ plain paper, black on white, with nothing else on the page. A teacher challenge'
 under their own **Assignments** heading below the song list, separate from a single open song's
 own actions.
 
-Reopening a song carries on from the step you left off on, at the same practice speed, with a
-plain "Picking up where you left off." line — a **"Carry on: &lt;title&gt;"** button above the
-list offers the most recent one whenever no lesson is on screen. Editing the song's notes,
-choosing another part or instrument, changing capo, tuning or harmonica key, or a tempo change
-starts the lesson fresh at the first step instead, with no message, since any of those makes it a
-different lesson to learn. "Practise again" always starts at the beginning, whatever was saved.
+Reopening a song, in Learn or Rehearse, carries on from the step you left off on, at the same
+practice speed, with a plain "Picking up where you left off." line — a **"Carry on:
+&lt;title&gt;"** button above the list offers the most recent one whenever no lesson is on screen.
+A place saved before lesson modes existed still carries on, in Learn, the same way. Check always
+starts at step 1 and never changes what was saved. Editing the song's notes, choosing another part
+or instrument, changing capo, tuning or harmonica key, or a tempo change starts the lesson fresh at
+the first step instead, with no message, since any of those makes it a different lesson to learn.
+"Practise again" starts at the beginning, in the same mode, whatever was saved — for a lesson
+opened from keyboard practice, it still ends with "Back to practice".
+
+A song lesson has three modes on one control, chosen per lesson (not saved — every new open starts
+in Learn). **Learn** shows everything: the notation, the fingering line, the step's own hint, and a
+"Play it" button that plays the phrase first. **Rehearse** shows the same views and hint but hides
+"Play it" — Learn and Rehearse share one saved place, so switching between them mid-lesson keeps
+your spot. **Check** hides the notation, the fingering line, the hint and "Play it" outright — the
+no-help attempt — and always starts at step 1 without touching the saved place. After a passed
+Check try, and again once the whole piece is done, a line says whether that try actually counted as
+a check or was practice only; on keyboard, only a real MIDI keyboard counts.
 
 Opening the editor screen (via a song's own **Edit notes**) shows its own row: **Edit
 notes**, **Play along**, **Export**, **Share**, **Save a copy** — Edit notes opens *any* song,
