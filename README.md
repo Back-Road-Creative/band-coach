@@ -466,7 +466,10 @@ alongside or before the right one — a chord step's window, and a one-note step
 played ahead of the right one, both count the same way (`maxExtras` on every judged step's
 passRule, `src/song/lesson.js`): hitting every expected note is not enough to pass if the learner
 also struck a note that was not asked for. A same-pitch repeat of the expected note (a key bounce
-or re-strike) is still absorbed, not counted as an extra.
+or re-strike) is still absorbed, not counted as an extra. A one-note step's wrong note is only
+counted this way from an exact input (MIDI) — a mic-heard blip ahead of the right note is exempt,
+since mic pitch is already treated as approximate everywhere else and a pitch tracker often reads
+a short wrong pitch or an octave jump right at a note's attack.
 A failed try always names the first concrete thing to fix — the missed note, the late note, the
 hold/tune reason above, or the extra note — instead of a generic retry prompt
 (`firstCorrection()` in `src/ui/songs/practice.js`).
