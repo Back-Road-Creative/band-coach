@@ -156,6 +156,22 @@ test('validateResult reports every problem for a badly-shaped file at once', () 
   assert.ok(errors.length > 0);
 });
 
+test('an unsupported instrument is caught and reported alongside other problems', () => {
+  const result = baseResult({ instrument: 'gtr', reference: '', reviewedBy: '', reviewedAt: 'bad' });
+  assert.throws(
+    () => applyReviewResult(result, { ledgerSource: LEDGER_SOURCE }),
+    (err) => /instrument/.test(err.message) && /reference/.test(err.message)
+  );
+});
+
+test('an item missing its rev names the id, not a generic message', () => {
+  const result = baseResult({ items: [{ id: CURR1.id, verdict: 'pass', note: '' }] });
+  assert.throws(
+    () => applyReviewResult(result, { ledgerSource: LEDGER_SOURCE }),
+    (err) => /kbd\.curriculum\.1/.test(err.message) && /rev/.test(err.message)
+  );
+});
+
 test('the real ledger file on disk is untouched by this suite', () => {
   const bytesNow = readFileSync(LEDGER_PATH, 'utf8');
   assert.equal(bytesNow, LEDGER_SOURCE);

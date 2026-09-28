@@ -53,8 +53,12 @@ export function validateResult(result, items) {
   const currentById = new Map(items.map((i) => [i.id, i]));
   const seen = new Set();
   for (const item of result.items) {
-    if (!item || typeof item !== 'object' || !item.id || !item.rev) {
-      errors.push('an item is missing id or rev');
+    if (!item || typeof item !== 'object' || !item.id) {
+      errors.push('an item (index ' + result.items.indexOf(item) + ') is missing id');
+      continue;
+    }
+    if (!item.rev) {
+      errors.push(item.id + ': missing rev');
       continue;
     }
     if (item.verdict !== 'pass' && item.verdict !== 'correction') {
@@ -153,9 +157,23 @@ function rewriteLedgerSource(ledgerSource, ledger) {
 // first's output keeps the first's entries with no extra plumbing; pass
 // currentLedger explicitly only to override that.
 export function applyReviewResult(result, { ledgerSource, currentLedger, items } = {}) {
-  const resolvedItems = items || reviewItems(result && result.instrument);
-  const { ok, errors } = validateResult(result, resolvedItems);
-  if (!ok) throw new Error('apply-review: refusing this result file:\n' + errors.map((e) => '  - ' + e).join('\n'));
+  // reviewItems() throws for an unsupported instrument; caught here so that
+  // problem is reported alongside every other field error instead of
+  // escaping before validateResult gets to run at all.
+  let resolvedItems = items;
+  const itemsErrors = [];
+  if (!resolvedItems && result && typeof result === 'object') {
+    try {
+      resolvedItems = reviewItems(result.instrument);
+    } catch (err) {
+      itemsErrors.push(err.message);
+      resolvedItems = [];
+    }
+  }
+  resolvedItems = resolvedItems || [];
+  const { ok, errors: validationErrors } = validateResult(result, resolvedItems);
+  const errors = itemsErrors.concat(validationErrors);
+  if (!ok || itemsErrors.length) throw new Error('apply-review: refusing this result file:\n' + errors.map((e) => '  - ' + e).join('\n'));
   const ledger = { ...(currentLedger !== undefined ? currentLedger : readLedgerFromSource(ledgerSource)) };
   const applied = [];
   const corrections = [];
