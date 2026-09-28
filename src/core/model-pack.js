@@ -8,20 +8,8 @@
 // on load, never on a timer, never speculatively. This module is the pure
 // seam for that: fetch, storage and the checksum digest are all injected, so
 // a cache hit, a corrupt download, a version bump and a failed upgrade are
-// all provable without a browser or a real network. The IndexedDB adapter
-// lives here too (browsers only, exercised by a characterization test) so a
-// caller need not reach into a second file to get a real cache.
+// all provable without a browser or a real network.
 //
-// A model pack lives at `<pages root>/model-packs/<name>/manifest.json`,
-// mirroring VERSION_CHECK_URL's placement at the Pages root (see
-// update-check.js) -- but unlike the version check, which has exactly one
-// fixed target, a caller can offer more than one pack, so `loadPack` takes
-// `manifestUrl` directly rather than assuming a single constant. This
-// constant is the shared PREFIX a later UI unit builds pack URLs from, kept
-// here so the URL scheme has one home instead of being invented again at
-// the call site.
-export const MODEL_PACK_BASE_URL = 'https://back-road-creative.github.io/band-coach/model-packs/';
-
 // A manifest fetched from `manifestUrl` is expected to look like:
 //   { "name": "...", "version": "1.0.0", "bytes": 12345,
 //     "sha256": "<hex>", "url": "https://.../pack.bin" }
@@ -99,53 +87,6 @@ export function createMemoryStore() {
     },
     async set(key, value) {
       map.set(key, value);
-    },
-  };
-}
-
-// Real persistence for a browser: one object store, keyed by pack name, each
-// value the same shape `loadPack` writes ({ name, version, sha256, bytes }).
-// Returns null when there is no indexedDB at all (a caller feature-detects
-// by checking the return value, never by browser-sniffing) rather than
-// throwing, since a missing IndexedDB is a capability gap this module must
-// report truthfully, not a fatal error.
-export function createIndexedDBStore({
-  dbName = 'band-coach-model-packs',
-  storeName = 'packs',
-  indexedDB: idbOverride,
-} = {}) {
-  const idb = idbOverride || (typeof indexedDB !== 'undefined' ? indexedDB : undefined);
-  if (!idb) return null;
-
-  function openDB() {
-    return new Promise((resolve, reject) => {
-      const req = idb.open(dbName, 1);
-      req.onupgradeneeded = () => {
-        if (!req.result.objectStoreNames.contains(storeName)) req.result.createObjectStore(storeName);
-      };
-      req.onsuccess = () => resolve(req.result);
-      req.onerror = () => reject(req.error);
-    });
-  }
-
-  return {
-    async get(key) {
-      const db = await openDB();
-      return new Promise((resolve, reject) => {
-        const tx = db.transaction(storeName, 'readonly');
-        const req = tx.objectStore(storeName).get(key);
-        req.onsuccess = () => resolve(req.result === undefined ? null : req.result);
-        req.onerror = () => reject(req.error);
-      });
-    },
-    async set(key, value) {
-      const db = await openDB();
-      return new Promise((resolve, reject) => {
-        const tx = db.transaction(storeName, 'readwrite');
-        tx.objectStore(storeName).put(value, key);
-        tx.oncomplete = () => resolve();
-        tx.onerror = () => reject(tx.error);
-      });
     },
   };
 }

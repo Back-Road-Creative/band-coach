@@ -7,8 +7,8 @@
 // A run of LEVEL_UP_RUN correct answers in a row moves the exercise up one
 // level; a run of LEVEL_DOWN_RUN wrong answers in a row moves it down one.
 // Either transition resets the streak so the next run starts clean.
-export const LEVEL_UP_RUN = 3;
-export const LEVEL_DOWN_RUN = 2;
+const LEVEL_UP_RUN = 3;
+const LEVEL_DOWN_RUN = 2;
 
 export function defaultExerciseState() {
   return { level: 1, streak: 0, correct: 0, total: 0 };

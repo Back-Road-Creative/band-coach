@@ -48,17 +48,6 @@ function option(value, label) {
   return el('option', { value }, [document.createTextNode(label)]);
 }
 
-// A key's spelling as a chromatic tonic ('F#', 'Bb', ...), used when the
-// learner is not choosing a full key but a bare pitch class for a scale/chord.
-function chromaticOption(name) {
-  return { value: name, pc: parseSpelling(name).pc };
-}
-
-function clefFor(rec) {
-  if (!rec) return 'treble';
-  return rec.clefs.indexOf('grand') >= 0 ? 'grand' : rec.clefs[0];
-}
-
 function drawStaff(canvas, midis, keyName) {
   if (!canvas) return;
   const width = canvas.width;

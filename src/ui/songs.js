@@ -49,8 +49,8 @@ import { buildLessonPlan, nextStep, creditFor } from '../song/lesson.js';
 import { feasibility } from '../song/feasibility.js';
 import { INSTRUMENTS } from '../instruments/index.js';
 import { capabilityFor } from '../instruments/capability.js';
-import { routeImportFile, importerFor } from './songs/import-route.js';
-import { judgeAttempt, passesRule, holdTuneFeedback, firstCorrection, phraseSec } from './songs/practice.js';
+import { importerFor } from './songs/import-route.js';
+import { judgeAttempt, passesRule, firstCorrection, phraseSec } from './songs/practice.js';
 import { createSongClock } from '../song/clock.js';
 import { phaseOf, repairFor } from '../core/teaching.js';
 import { barHeat, worstBars } from '../song/bar-heat.js';
@@ -168,7 +168,7 @@ export function centsFromFreq(freq, midi) {
 // tick (50 ms), so a note heard once and gone is judged as clipped short
 // rather than skipped as "unmeasured"; the capture loop stretches it while
 // the same pitch keeps sounding.
-export const MIC_TICK_SEC = 0.05;
+const MIC_TICK_SEC = 0.05;
 export function playedEventFrom(freq, midi, atSec) {
   return { midi, atSec, durSec: MIC_TICK_SEC, cents: centsFromFreq(freq, midi) };
 }

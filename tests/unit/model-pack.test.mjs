@@ -10,9 +10,7 @@
 // This is the pure seam: no DOM, no global fetch, no real IndexedDB. Every
 // dependency (fetch, storage, the digest function) is injected, so cache
 // hit/miss, a corrupt download and a version bump are all provable without a
-// browser. The IndexedDB-backed store lives in this same module but is
-// exercised by the characterization test instead, since node:test has no
-// IndexedDB of its own.
+// browser.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {

@@ -28,7 +28,7 @@ export const FALLBACK_RANGE = Object.freeze({ fmin: 36, fmax: 1600 });
 // range, without reopening a full octave either side -- the interval YIN's
 // autocorrelation most often mistakes a fundamental for, which is exactly
 // the failure mode narrowing the range is meant to remove.
-export const MARGIN_SEMITONES = 3;
+const MARGIN_SEMITONES = 3;
 
 // A4 = MIDI 69 = 440 Hz, the standard reference this app tunes to everywhere
 // else (see app.js's own `mfreq`/`fmidi`).
@@ -74,7 +74,7 @@ export const MIN_FRAME_SIZE = 2048;
 // Headroom above the raw period-in-samples so a genuine note at an
 // instrument's lowest string isn't sitting right at the search window's
 // edge, the way 2048 left the 4-string bass's open E.
-export const FRAME_SIZE_MARGIN = 1.25;
+const FRAME_SIZE_MARGIN = 1.25;
 
 // rec: an instrument record (or any falsy/malformed value, same contract as
 // rangeForInstrument). sampleRate: the real AudioContext sample rate the

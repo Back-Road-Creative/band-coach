@@ -7,8 +7,8 @@
 // Table shape mirrors src/app.js's own NAMES exactly for 'letters'+'mixed',
 // so the app's default output is byte-identical to before this module
 // existed: C C♯ D E♭ E F F♯ G A♭ A B♭ B.
-export const LETTERS_SHARPS = ['C', 'C♯', 'D', 'D♯', 'E', 'F', 'F♯', 'G', 'G♯', 'A', 'A♯', 'B'];
-export const LETTERS_FLATS = ['C', 'D♭', 'D', 'E♭', 'E', 'F', 'G♭', 'G', 'A♭', 'A', 'B♭', 'B'];
+const LETTERS_SHARPS = ['C', 'C♯', 'D', 'D♯', 'E', 'F', 'F♯', 'G', 'G♯', 'A', 'A♯', 'B'];
+const LETTERS_FLATS = ['C', 'D♭', 'D', 'E♭', 'E', 'F', 'G♭', 'G', 'A♭', 'A', 'B♭', 'B'];
 export const LETTERS_MIXED = ['C', 'C♯', 'D', 'E♭', 'E', 'F', 'F♯', 'G', 'A♭', 'A', 'B♭', 'B'];
 
 // Fixed-do solfege: Do Re Mi Fa Sol La Si (not the movable-do "Ti" used
@@ -51,7 +51,7 @@ export function nameFor(midiOrPc, opts) {
   return table[pc] + (o.octave ? (Math.floor(midiOrPc / 12) - 1) : '');
 }
 
-export const DEFAULT_NOTE_NAMING = { system: 'letters', accidentals: 'mixed' };
+const DEFAULT_NOTE_NAMING = { system: 'letters', accidentals: 'mixed' };
 
 // Module-level "current pref" -- a shared singleton across every importer
 // (src/app.js, src/ui/fingerings/notes.js, src/ui/history/item-label.js all

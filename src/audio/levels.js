@@ -60,7 +60,7 @@ export function gatesFor(floorRms) {
 // 0.006 / DEFAULT_GATES.pitch (0.008) === 0.75, so releaseFloor() derives
 // the same ratio off whatever gates are active: at the uncalibrated
 // defaults this returns EXACTLY 0.006, keeping today's behaviour untouched.
-export const RELEASE_GATE_RATIO = 0.75;
+const RELEASE_GATE_RATIO = 0.75;
 
 export function releaseFloor(gatesArg) {
   const pitchGate = gatesArg && Number.isFinite(gatesArg.pitch) ? gatesArg.pitch : DEFAULT_GATES.pitch;

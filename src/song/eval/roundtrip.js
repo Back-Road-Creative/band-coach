@@ -54,7 +54,7 @@ export const FAMILY_PROFILES = {
 // Renders one Song's melody part (src/song/model.js shape: notes are
 // { start, dur, midi } in ticks) into dense per-frame pitch-tracker output
 // at the song's own bpm, using `rng` for jitter/wobble.
-export function renderSongToFrames(song, profile, rng) {
+function renderSongToFrames(song, profile, rng) {
   const frames = [];
   const notes = song.parts[0].notes;
   for (const note of notes) {
@@ -76,7 +76,7 @@ export function renderSongToFrames(song, profile, rng) {
 
 // Runs one song through render -> transcribe -> score for one family
 // profile. Returns note-f1.js's {precision, recall, f1, matched, ref, est}.
-export function evaluateSong(song, familyName, seed = 1) {
+function evaluateSong(song, familyName, seed = 1) {
   const profile = FAMILY_PROFILES[familyName];
   if (!profile) throw new Error(`roundtrip: unknown family "${familyName}"`);
   const rng = makeLcg(seed);
