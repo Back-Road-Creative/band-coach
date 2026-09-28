@@ -1,0 +1,501 @@
+// Levels 15-16 ("held bass under the melody" / "different rhythms in each
+// hand"): two more LEARN-then-CHECK stages built on the same five
+// hands-together pairs as level 14 (tests/characterization/
+// kbd-level14-rhythm.test.mjs, whose harness this borrows). Real entry
+// points throughout: a fake MIDI port through the real ioBtn click handler,
+// real DOM keydown/keyup, and a real canvas pointerdown -- window.__coach is
+// only ever used here to read state (cur(), db(), state(), kbdKeys()).
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { HTML_PATH } from '../helpers/html-path.mjs';
+import { launchPage, retryFlaky } from '../helpers/browser.mjs';
+import { FAKE_MIDI_INIT, midiAddPort } from '../helpers/fake-midi.mjs';
+import { isIndependentOk } from '../../src/core/learning-events.js';
+import { heldBassMelody } from '../../src/core/hands-together.js';
+
+const htmlPath = HTML_PATH;
+
+async function connectMidi(page) {
+  await page.evaluate("document.getElementById('ioBtn').click()");
+}
+
+async function toLevel(page, n) {
+  await page.evaluate("window.__coach.setMod('kbd')");
+  await page.evaluate(`window.__coach.state().level = ${n}`);
+  await page.evaluate("window.__coach.setMod('kbd')");
+}
+
+function onBytes(note, on) {
+  return [(on ? 0x90 : 0x80), note, on ? 100 : 0];
+}
+
+async function clearFeedback(page) {
+  await page.evaluate("document.getElementById('feedback').className = ''; document.getElementById('feedback').textContent = '';");
+}
+
+async function sendOne(page, port, note, on) {
+  await page.evaluate(`window.__midiSend('${port}', [${onBytes(note, on).join(',')}])`);
+}
+
+async function learnPass(page, port, rh, lh) {
+  await page.evaluate(`(function () {
+    window.__midiSend('${port}', [${onBytes(rh, true).join(',')}]);
+    window.__midiSend('${port}', [${onBytes(lh, true).join(',')}]);
+  })()`);
+  await page.waitFor("window.__coach.cur() && window.__coach.cur().pair && window.__coach.cur().pair.phase === 'check'");
+  await page.evaluate(`(function () {
+    window.__midiSend('${port}', [${onBytes(rh, false).join(',')}]);
+    window.__midiSend('${port}', [${onBytes(lh, false).join(',')}]);
+  })()`);
+  await clearFeedback(page);
+}
+
+async function startTask(page, level) {
+  await toLevel(page, level);
+  await midiAddPort(page, 'p1', 'Test Keys');
+  await connectMidi(page);
+  await page.waitFor("document.getElementById('ioBtn').hidden === true");
+  await page.evaluate("document.getElementById('playBtn').click()");
+  await page.waitFor('window.__coach.task()');
+}
+
+test('level 15: label, review note, and level-14/13 UI are absent', async (t) => {
+  const page = await launchPage(htmlPath, { initScript: FAKE_MIDI_INIT });
+  t.after(() => page.close());
+  await toLevel(page, 15);
+
+  const reviewText = await page.evaluate("document.getElementById('kbdHeldReview').textContent");
+  assert.match(reviewText, /Not yet checked by a player/);
+  assert.equal(await page.evaluate("document.getElementById('kbdBothLock')"), null);
+  assert.equal(await page.evaluate("document.getElementById('kbdRhythmNote')"), null);
+
+  assert.deepEqual(page.exceptions, []);
+});
+
+async function readLevelDef(page, mod, level) {
+  await page.evaluate(`window.__coach.setMod('${mod}')`);
+  await page.evaluate(`window.__coach.state().level = ${level}`);
+  await page.evaluate(`window.__coach.setMod('${mod}')`);
+  return page.evaluate('window.__coach.levelDef()');
+}
+
+// K4 bug: appending staged levels 15-16 after level 14 silently re-anchored
+// "Everything, faster (k)"'s limit/bpm onto level 16 instead of level 14.
+test('levelDef: K4 (levels 15-16) does not move the "Everything, faster" mix level off its pre-K4 anchor', async (t) => {
+  const page = await launchPage(htmlPath, { initScript: FAKE_MIDI_INIT });
+  t.after(() => page.close());
+
+  const kbdDef = await readLevelDef(page, 'kbd', 17);
+  assert.equal(kbdDef.limit, 9.25, 'must anchor on level 14 (matching rhythms, limit 10), not level 16 (limit 14)');
+  assert.equal(kbdDef.bpm, 78, 'bpm must anchor the same pre-K4 level');
+
+  const voiceDef = await readLevelDef(page, 'voice', 9);
+  assert.equal(voiceDef.limit, 11.25, 'an instrument untouched by K4 must see no change to its own mix level');
+  assert.equal(voiceDef.bpm, 78);
+
+  assert.deepEqual(page.exceptions, []);
+});
+
+test('level 15: releasing the bass before the melody finishes fails with a hold reason, and the element is not passed', async (t) => {
+  const page = await launchPage(htmlPath, { initScript: FAKE_MIDI_INIT });
+  t.after(() => page.close());
+  await startTask(page, 15);
+
+  const id = await page.evaluate('window.__coach.cur().id');
+  assert.match(id, /^j\dh$/);
+  const info = await page.evaluate('window.__coach.cur().info');
+  const rh = info.ex.rh.midi, lh = info.ex.lh.midi;
+
+  await learnPass(page, 'p1', rh, lh);
+  const idBefore = await page.evaluate('window.__coach.cur().id');
+
+  // CHECK: bass on, first melody note on then off, then bass off (too soon).
+  await page.evaluate(`(function () {
+    window.__midiSend('p1', [${onBytes(lh, true).join(',')}]);
+    window.__midiSend('p1', [${onBytes(rh, true).join(',')}]);
+    window.__midiSend('p1', [${onBytes(rh, false).join(',')}]);
+    window.__midiSend('p1', [${onBytes(lh, false).join(',')}]);
+  })()`);
+
+  await page.waitFor("document.getElementById('feedback').className === 'no'");
+  const msg = await page.evaluate("document.getElementById('feedback').textContent");
+  assert.match(msg, /left hand/i);
+  assert.match(msg, /hold/i);
+
+  const idAfter = await page.evaluate('window.__coach.cur().id');
+  assert.equal(idAfter, idBefore, 'a failed element is not passed on to the next one');
+
+  assert.deepEqual(page.exceptions, []);
+});
+
+test('level 15: a full held-bass pass', async (t) => {
+  const page = await launchPage(htmlPath, { initScript: FAKE_MIDI_INIT });
+  t.after(() => page.close());
+  await startTask(page, 15);
+
+  const info = await page.evaluate('window.__coach.cur().info');
+  const rh = info.ex.rh.midi, lh = info.ex.lh.midi;
+  const melody = heldBassMelody(info.ex);
+
+  await learnPass(page, 'p1', rh, lh);
+
+  await sendOne(page, 'p1', lh, true);
+  for (const n of melody) {
+    await sendOne(page, 'p1', n.midi, true);
+    await sendOne(page, 'p1', n.midi, false);
+  }
+  await sendOne(page, 'p1', lh, false);
+
+  await page.waitFor("document.getElementById('feedback').className === 'ok'");
+  await page.waitFor('window.__coach.task() && window.__coach.task().done', 5000);
+
+  const events = await page.evaluate('window.__coach.db().events');
+  const last = events[events.length - 1];
+  assert.match(last.skill, /^j\dh$/);
+  assert.equal(last.assistance, 'none');
+  assert.equal(last.hands, 'both');
+  assert.equal(last.input, 'midi');
+
+  assert.deepEqual(page.exceptions, []);
+});
+
+// The three level-16 tests below depend on in-page setTimeout gaps of
+// 20/300/500/1000ms measured against real note-on/note-off timestamps -- on a
+// starved runner those gaps can drift enough to flip a pass/fail edge, so
+// each runs under retryFlaky (tests/helpers/browser.mjs), one fresh page per
+// attempt, following tests/characterization/songs-tempo-change.test.mjs.
+test('level 15: after a wrong-melody fail, keeping the bass held lets the retry pass without re-pressing it', async (t) => {
+  const page = await launchPage(htmlPath, { initScript: FAKE_MIDI_INIT });
+  t.after(() => page.close());
+  await startTask(page, 15);
+
+  const info = await page.evaluate('window.__coach.cur().info');
+  const rh = info.ex.rh.midi, lh = info.ex.lh.midi;
+  const melody = heldBassMelody(info.ex);
+  const wrongMidi = melody[0].midi + 1; // anything other than the expected first melody note
+
+  await learnPass(page, 'p1', rh, lh);
+
+  // Press the bass, play a WRONG melody note (fails), but keep the bass held.
+  await sendOne(page, 'p1', lh, true);
+  await sendOne(page, 'p1', wrongMidi, true);
+  await sendOne(page, 'p1', wrongMidi, false);
+
+  await page.waitFor("document.getElementById('feedback').className === 'no'");
+  await clearFeedback(page);
+
+  // Still holding the bass: play the correct melody, then release the bass.
+  // A learner who never let go must be able to complete the element from
+  // here -- if the bass's onset were wrongly cleared on the fail above, the
+  // bass note-off below would be ignored (not in e.pair.on) and this would
+  // hang forever instead of reaching task.done.
+  for (const n of melody) {
+    await sendOne(page, 'p1', n.midi, true);
+    await sendOne(page, 'p1', n.midi, false);
+  }
+  await sendOne(page, 'p1', lh, false);
+
+  await page.waitFor('window.__coach.task() && window.__coach.task().done', 5000);
+
+  const events = await page.evaluate('window.__coach.db().events');
+  const last = events[events.length - 1];
+  assert.match(last.skill, /^j\dh$/, 'the retry must be graded and credited to the held-bass item, not stuck failing forever');
+
+  assert.deepEqual(page.exceptions, []);
+});
+
+test('level 16: right hand wrong (second note not near the midpoint) fails naming the right hand', async (t) => {
+  await retryFlaky({
+    attempts: 3,
+    what: 'level 16: right hand wrong fails naming the right hand',
+    describe: (r) => r.error || 'ok',
+    accept: (r) => r.ok,
+    attempt: async () => {
+      const page = await launchPage(htmlPath, { initScript: FAKE_MIDI_INIT });
+      try {
+        await startTask(page, 16);
+
+        const id = await page.evaluate('window.__coach.cur().id');
+        if (!/^j\dd$/.test(id)) return { ok: false, error: 'unexpected id ' + id };
+        const info = await page.evaluate('window.__coach.cur().info');
+        const rh = info.ex.rh.midi, lh = info.ex.lh.midi;
+
+        await learnPass(page, 'p1', rh, lh);
+
+        await page.evaluate(`(async function () {
+          window.__midiSend('p1', [${onBytes(lh, true).join(',')}]);
+          window.__midiSend('p1', [${onBytes(rh, true).join(',')}]);
+          await new Promise(function (r) { setTimeout(r, 20); });
+          window.__midiSend('p1', [${onBytes(rh, false).join(',')}]);
+          window.__midiSend('p1', [${onBytes(rh, true).join(',')}]);
+          await new Promise(function (r) { setTimeout(r, 1000); });
+          window.__midiSend('p1', [${onBytes(rh, false).join(',')}]);
+          window.__midiSend('p1', [${onBytes(lh, false).join(',')}]);
+        })()`);
+
+        await page.waitFor("document.getElementById('feedback').className === 'no'", 5000);
+        const msg = await page.evaluate("document.getElementById('feedback').textContent");
+        const last = await page.evaluate('window.__coach.cur().pair.last');
+        if (page.exceptions.length) return { ok: false, error: 'page exceptions: ' + JSON.stringify(page.exceptions) };
+        if (!/right hand/i.test(msg)) return { ok: false, error: 'message did not name the right hand: ' + msg };
+        if (last.rh !== 'fail' || last.lh !== 'pass') return { ok: false, error: 'unexpected pair.last: ' + JSON.stringify(last) };
+        return { ok: true };
+      } finally {
+        await page.close();
+      }
+    }
+  });
+});
+
+test('level 16: left hand late fails naming the left hand, without failing the right hand', async (t) => {
+  await retryFlaky({
+    attempts: 3,
+    what: 'level 16: left hand late fails naming the left hand',
+    describe: (r) => r.error || 'ok',
+    accept: (r) => r.ok,
+    attempt: async () => {
+      const page = await launchPage(htmlPath, { initScript: FAKE_MIDI_INIT });
+      try {
+        await startTask(page, 16);
+
+        const info = await page.evaluate('window.__coach.cur().info');
+        const rh = info.ex.rh.midi, lh = info.ex.lh.midi;
+
+        await learnPass(page, 'p1', rh, lh);
+
+        await page.evaluate(`(async function () {
+          window.__midiSend('p1', [${onBytes(rh, true).join(',')}]);
+          await new Promise(function (r) { setTimeout(r, 300); });
+          window.__midiSend('p1', [${onBytes(lh, true).join(',')}]);
+        })()`);
+
+        await page.waitFor("document.getElementById('feedback').className === 'no'", 5000);
+        const msg = await page.evaluate("document.getElementById('feedback').textContent");
+        const last = await page.evaluate('window.__coach.cur().pair.last');
+        if (page.exceptions.length) return { ok: false, error: 'page exceptions: ' + JSON.stringify(page.exceptions) };
+        if (!/left hand/i.test(msg)) return { ok: false, error: 'message did not name the left hand: ' + msg };
+        if (last.lh !== 'fail' || last.rh === 'fail') return { ok: false, error: 'unexpected pair.last: ' + JSON.stringify(last) };
+        return { ok: true };
+      } finally {
+        await page.close();
+      }
+    }
+  });
+});
+
+test('level 16: a full split-rhythm pass', async (t) => {
+  await retryFlaky({
+    attempts: 3,
+    what: 'level 16: a full split-rhythm pass',
+    describe: (r) => r.error || 'ok',
+    accept: (r) => r.ok,
+    attempt: async () => {
+      const page = await launchPage(htmlPath, { initScript: FAKE_MIDI_INIT });
+      try {
+        await startTask(page, 16);
+
+        const info = await page.evaluate('window.__coach.cur().info');
+        const rh = info.ex.rh.midi, lh = info.ex.lh.midi;
+
+        await learnPass(page, 'p1', rh, lh);
+
+        await page.evaluate(`(async function () {
+          window.__midiSend('p1', [${onBytes(lh, true).join(',')}]);
+          window.__midiSend('p1', [${onBytes(rh, true).join(',')}]);
+          await new Promise(function (r) { setTimeout(r, 500); });
+          window.__midiSend('p1', [${onBytes(rh, false).join(',')}]);
+          window.__midiSend('p1', [${onBytes(rh, true).join(',')}]);
+          await new Promise(function (r) { setTimeout(r, 500); });
+          window.__midiSend('p1', [${onBytes(rh, false).join(',')}]);
+          window.__midiSend('p1', [${onBytes(lh, false).join(',')}]);
+        })()`);
+
+        await page.waitFor("document.getElementById('feedback').className === 'ok'", 5000);
+        await page.waitFor('window.__coach.task() && window.__coach.task().done', 5000);
+
+        const events = await page.evaluate('window.__coach.db().events');
+        const last = events[events.length - 1];
+        if (page.exceptions.length) return { ok: false, error: 'page exceptions: ' + JSON.stringify(page.exceptions) };
+        if (!/^j\dd$/.test(last.skill) || last.assistance !== 'none') return { ok: false, error: 'unexpected last event: ' + JSON.stringify(last) };
+        return { ok: true };
+      } finally {
+        await page.close();
+      }
+    }
+  });
+});
+
+test('level 16: a right-hand tap-and-release before the bass is pressed does not sour the real attempt', async (t) => {
+  // A stray right-hand press (and release) that lands BEFORE the bass goes
+  // down -- e.g. a learner tapping the melody key first -- must not become
+  // rhOns[0]/rhOffs[0] for the real attempt that follows.
+  await retryFlaky({
+    attempts: 3,
+    what: 'level 16: an early right-hand tap is ignored',
+    describe: (r) => r.error || 'ok',
+    accept: (r) => r.ok,
+    attempt: async () => {
+      const page = await launchPage(htmlPath, { initScript: FAKE_MIDI_INIT });
+      try {
+        await startTask(page, 16);
+
+        const info = await page.evaluate('window.__coach.cur().info');
+        const rh = info.ex.rh.midi, lh = info.ex.lh.midi;
+
+        await learnPass(page, 'p1', rh, lh);
+
+        // Tap and release the right hand once, before the bass is down.
+        await sendOne(page, 'p1', rh, true);
+        await sendOne(page, 'p1', rh, false);
+
+        await page.evaluate(`(async function () {
+          window.__midiSend('p1', [${onBytes(lh, true).join(',')}]);
+          window.__midiSend('p1', [${onBytes(rh, true).join(',')}]);
+          await new Promise(function (r) { setTimeout(r, 500); });
+          window.__midiSend('p1', [${onBytes(rh, false).join(',')}]);
+          window.__midiSend('p1', [${onBytes(rh, true).join(',')}]);
+          await new Promise(function (r) { setTimeout(r, 500); });
+          window.__midiSend('p1', [${onBytes(rh, false).join(',')}]);
+          window.__midiSend('p1', [${onBytes(lh, false).join(',')}]);
+        })()`);
+
+        await page.waitFor("document.getElementById('feedback').className === 'ok'", 5000);
+        await page.waitFor('window.__coach.task() && window.__coach.task().done', 5000);
+        if (page.exceptions.length) return { ok: false, error: 'page exceptions: ' + JSON.stringify(page.exceptions) };
+        return { ok: true };
+      } finally {
+        await page.close();
+      }
+    }
+  });
+});
+
+test('level 16: a left-hand tap-and-release before the real attempt does not sour it', async (t) => {
+  // A player who taps the bass and lets go once, then starts the real
+  // attempt properly, must still pass -- the stale release from the first
+  // press must not be read as "let go too soon" against the second attempt.
+  await retryFlaky({
+    attempts: 3,
+    what: 'level 16: a re-pressed left hand clears its stale release',
+    describe: (r) => r.error || 'ok',
+    accept: (r) => r.ok,
+    attempt: async () => {
+      const page = await launchPage(htmlPath, { initScript: FAKE_MIDI_INIT });
+      try {
+        await startTask(page, 16);
+
+        const info = await page.evaluate('window.__coach.cur().info');
+        const rh = info.ex.rh.midi, lh = info.ex.lh.midi;
+
+        await learnPass(page, 'p1', rh, lh);
+
+        // Tap and release the bass once (no right hand yet), then the real,
+        // correct attempt.
+        await sendOne(page, 'p1', lh, true);
+        await sendOne(page, 'p1', lh, false);
+
+        await page.evaluate(`(async function () {
+          window.__midiSend('p1', [${onBytes(lh, true).join(',')}]);
+          window.__midiSend('p1', [${onBytes(rh, true).join(',')}]);
+          await new Promise(function (r) { setTimeout(r, 500); });
+          window.__midiSend('p1', [${onBytes(rh, false).join(',')}]);
+          window.__midiSend('p1', [${onBytes(rh, true).join(',')}]);
+          await new Promise(function (r) { setTimeout(r, 500); });
+          window.__midiSend('p1', [${onBytes(rh, false).join(',')}]);
+          window.__midiSend('p1', [${onBytes(lh, false).join(',')}]);
+        })()`);
+
+        await page.waitFor("document.getElementById('feedback').className === 'ok'", 5000);
+        await page.waitFor('window.__coach.task() && window.__coach.task().done', 5000);
+        if (page.exceptions.length) return { ok: false, error: 'page exceptions: ' + JSON.stringify(page.exceptions) };
+        return { ok: true };
+      } finally {
+        await page.close();
+      }
+    }
+  });
+});
+
+async function tapPoints(page, points) {
+  const rects = await page.evaluate(`
+    (function () {
+      const cv = document.getElementById('cv'), r = cv.getBoundingClientRect();
+      return ${JSON.stringify(points)}.map(function (p) {
+        return { clientX: r.left + p.x * r.width / cv.width, clientY: r.top + p.y * r.height / cv.height };
+      });
+    })()
+  `);
+  await page.evaluate(`
+    (${JSON.stringify(rects)}).forEach(function (pt) {
+      document.getElementById('cv').dispatchEvent(new PointerEvent('pointerdown', { clientX: pt.clientX, clientY: pt.clientY, bubbles: true }));
+    });
+  `);
+}
+
+test('level 15: screen taps write no independent row', async (t) => {
+  const page = await launchPage(htmlPath);
+  t.after(() => page.close());
+  await toLevel(page, 15);
+  await page.evaluate("document.getElementById('playBtn').click()");
+  await page.waitFor('window.__coach.task()');
+
+  const readyBefore = await page.evaluate('window.__coach.state().ready');
+
+  const info = await page.evaluate('window.__coach.cur().info');
+  const rh = info.ex.rh.midi, lh = info.ex.lh.midi;
+  const keys = await page.evaluate('window.__coach.kbdKeys()');
+  const rKey = keys.find((k) => k.m === rh), lKey = keys.find((k) => k.m === lh);
+  assert.ok(rKey && lKey, 'both hand rects must be drawn');
+
+  await tapPoints(page, [
+    { x: rKey.x + rKey.w / 2, y: rKey.y + rKey.h / 2 },
+    { x: lKey.x + lKey.w / 2, y: lKey.y + lKey.h / 2 }
+  ]);
+
+  await page.waitFor("document.getElementById('feedback').textContent.match(/practice only: held notes need a midi keyboard or computer keys/i)", 3000);
+  await page.waitFor('window.__coach.task() && window.__coach.task().done', 5000);
+
+  const events = await page.evaluate('window.__coach.db().events');
+  const rows = events.filter((e) => /^j\dh$/.test(e.skill));
+  assert.ok(rows.length > 0, 'expected at least one j<n>h event row');
+  rows.forEach((e) => { assert.equal(e.assistance, 'guided'); assert.equal(e.input, 'screen'); assert.equal(isIndependentOk(e), false); });
+
+  const readyAfter = await page.evaluate('window.__coach.state().ready');
+  assert.ok(readyAfter <= readyBefore, 'a practice-only (guided) pass must not raise S.ready');
+
+  assert.deepEqual(page.exceptions, []);
+});
+
+test('level 16: screen taps write no independent row', async (t) => {
+  const page = await launchPage(htmlPath);
+  t.after(() => page.close());
+  await toLevel(page, 16);
+  await page.evaluate("document.getElementById('playBtn').click()");
+  await page.waitFor('window.__coach.task()');
+
+  const readyBefore = await page.evaluate('window.__coach.state().ready');
+
+  const info = await page.evaluate('window.__coach.cur().info');
+  const rh = info.ex.rh.midi, lh = info.ex.lh.midi;
+  const keys = await page.evaluate('window.__coach.kbdKeys()');
+  const rKey = keys.find((k) => k.m === rh), lKey = keys.find((k) => k.m === lh);
+  assert.ok(rKey && lKey, 'both hand rects must be drawn');
+
+  await tapPoints(page, [
+    { x: rKey.x + rKey.w / 2, y: rKey.y + rKey.h / 2 },
+    { x: lKey.x + lKey.w / 2, y: lKey.y + lKey.h / 2 }
+  ]);
+
+  await page.waitFor("document.getElementById('feedback').textContent.match(/practice only: held notes need a midi keyboard or computer keys/i)", 3000);
+  await page.waitFor('window.__coach.task() && window.__coach.task().done', 5000);
+
+  const events = await page.evaluate('window.__coach.db().events');
+  const rows = events.filter((e) => /^j\dd$/.test(e.skill));
+  assert.ok(rows.length > 0, 'expected at least one j<n>d event row');
+  rows.forEach((e) => { assert.equal(e.assistance, 'guided'); assert.equal(e.input, 'screen'); assert.equal(isIndependentOk(e), false); });
+
+  const readyAfter = await page.evaluate('window.__coach.state().ready');
+  assert.ok(readyAfter <= readyBefore, 'a practice-only (guided) pass must not raise S.ready');
+
+  assert.deepEqual(page.exceptions, []);
+});

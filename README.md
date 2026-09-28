@@ -97,8 +97,12 @@ connected MIDI keyboard so it plays itself — lives in `src/core/midi.js` (`sch
 
 When a keyboard song attempt is recorded as played on the computer keys, or pieced together from
 more than one route, "My progress" (below) does not count it as passed on your own: it is practice
-worth having but not proof the skill transferred to a real keyboard. Drill attempts and on-screen
-clicks are not labelled with their route yet, so for now they are still counted as before.
+worth having but not proof the skill transferred to a real keyboard. A keyboard drill or warm-up
+answer now records its route too, and one played on the computer keys or on-screen keys is the
+same story: practice, not counted as passed on your own. An on-screen click during a song is still
+not labelled with its route.
+same story: practice, not counted as passed on your own. A keyboard song is played on a MIDI keyboard or the
+computer keys; the on-screen keys are hidden while a song is open.
 
 ## Build it from source
 
@@ -198,8 +202,9 @@ of rules, so it catches whatever the other a11y characterization tests above wer
 look for.
 
 `src/song/eval/roundtrip.js` scores transcription against *synthetic* pitch frames rendered from
-the starter songs — useful for catching a pipeline regression, but it never runs real audio
-through the detector. `src/song/eval/pcm.js` does: it runs a labelled real-audio clip through the
+the one-hand starter melodies (`starterMelodies`, `src/song/starter/index.js`) — useful for
+catching a pipeline regression, but it never runs real audio through the detector; the harness is
+monophonic, so the two-hand starters are left out rather than scored as if they were one line. `src/song/eval/pcm.js` does: it runs a labelled real-audio clip through the
 same `framesFromPCM` → `transcribe` path Learn this uses, and scores the result (precision,
 recall, F1, onset/release timing error, octave errors) against hand-made ground truth.
 `tests/fixtures/audio/README.md` documents the corpus manifest format the eval reads and ships
@@ -239,26 +244,41 @@ startup.
 Every judged drill answer, warm-up answer and judged song step leaves one small record — which
 instrument and skill it was, whether it was independent or asked for help, which parts (pitch,
 timing, hold, tune) were actually checked, and how long it took — kept alongside the practice log
-described above. A song step's record also keeps which input actually played it (MIDI, computer
-keys, mic, or a mix), left off entirely when that route is unknown rather than guessed at. The raw
-sound of your playing or singing is never recorded; only the judged result is. The record keeps
-the most recent 500 attempts plus, for each skill, the first time it
-was played right (from a drill, and from anywhere), so it never grows without limit. The "My
-described above. The raw sound of your playing or singing is never recorded; only the judged
-result is. The record keeps the most recent 500 attempts plus, for each skill, the first time it
-was played right (from a drill, and from anywhere) and, for each song played on that skill, the
-play that first counted as applied (per-skill records are kept first when space runs short), so it
-never grows without limit. The "My
-progress" panel turns that record into one plain line — how many attempts were passed with help,
-passed independently, retained on a later check (not just repeated in the same sitting), and
-applied in a song rather than a drill — or, with nothing recorded yet, says so plainly instead of
-claiming anything is retained. A given song only counts toward "applied" once per skill, no matter
-how many times it is replayed — practising the same tune over and over is not new evidence a skill
-transferred to a different song, so it is not counted as though it were. A keyboard song attempt
-recorded as played on the computer keys, or from a mixed route, never counts toward passed on your
-own (or, in turn, retained or applied), whatever the judged result — attempts whose route is not
-recorded (drills, on-screen clicks, older records) are still counted as before.
-transferred to a different song, so it is not counted as though it were.
+described above. A drill answer's, a warm-up answer's, and a song step's record also keeps which
+described above. A song try that fails only because of an extra note struck alongside the right
+ones (a song step's own limit on wrong notes) is folded into the pitch check as a miss — or the
+timing check, on a rhythm or percussion step where pitch is never judged at all — so a try like
+that is never counted as passed on your own, even though every other part checked out fine. A drill answer's, a warm-up answer's, and a song step's record also keeps which
+input actually played it (MIDI, computer keys, on-screen keys, or mic), left off entirely when that
+route is unknown rather than guessed at. The raw sound of your playing or singing is never
+recorded; only the judged result is. The record keeps the most recent 500 attempts plus, for each
+skill, the first time it was played right (from a drill, and from anywhere) and, for each song
+played on that skill, the play that first counted as applied (per-skill records are kept first when
+space runs short), so it never grows without limit. The "My progress" panel turns that record into
+one plain line — how many attempts were passed with help, passed independently, retained on a
+later check (not just repeated in the same sitting), and applied in a song rather than a drill — or,
+with nothing recorded yet, says so plainly instead of claiming anything is retained. A given song
+only counts toward "applied" once per skill, no matter how many times it is replayed — practising
+the same tune over and over is not new evidence a skill transferred to a different song, so it is
+not counted as though it were. A keyboard song attempt recorded as played on the computer keys, or
+from a mixed route, never counts toward passed on your own (or, in turn, retained or applied),
+whatever the judged result — the same is true of a keyboard drill or warm-up answer played on the
+computer keys or on-screen keys: it counts as practice, not proof the skill transferred to a real
+keyboard. Attempts whose route is not recorded (on-screen clicks in a song, older records) are
+still counted as before.
+
+On the keyboard, a starter song played on your own also counts as applied for the notes it uses:
+if you had already played one of those notes right in a drill, a correct song attempt counts once
+toward "Applied in a song". The same song only counts once, however often you replay it, and only
+attempts where the notes themselves were checked count.
+
+On the keyboard, a starter song played on your own also counts as applied for the notes it uses:
+if you had already played one of those notes right in a drill, a correct song attempt counts once
+toward "Applied in a song". The same song only counts once, however often you replay it, and only
+attempts where the notes themselves were checked count. When older attempts are trimmed off the
+record, the song attempt that earned that credit is kept alongside the drill attempt it depends
+on, so "Applied in a song" never quietly drops just because history grew past the 500-attempt
+window.
 
 ## Today's plan
 
@@ -271,6 +291,37 @@ recomputed -- either it slipped before, or it is the one you've practiced least 
 follows that same order — review first, then the weak skill on its own, then applying it, then
 the blind check — before falling back to today's ordinary level-by-level practice once all four
 are done.
+
+On a keyboard level with a suggested starter song (`songFor` from `src/instruments/kbd-songs.js`),
+the plan ends with "then play &lt;title&gt;" -- shown as done once a song session for that song is
+logged today, which survives opening Songs and reloading the page. The suggestion carries the "Not
+yet checked by a player" label, the same one beside the "Play a song with these notes" button.
+A learner returning to keyboard practice on a later day also gets one "Welcome back" line naming
+their next keyboard-path step (`src/core/pathway.js`'s `pathwayState`), shown once on the first
+session of that visit. A "Your keyboard path" button in keyboard practice's own options opens a
+panel listing all five keyboard-path steps, marks the current one, and offers one action that goes
+there -- every step's outcome labelled "Not yet checked by a player" until a real player's review
+lands.
+
+A "Session length" selector (No limit / 5 / 10 / 15 minutes) sits in every instrument's options
+(not the Tuner or Capture tools), saved to `prefs.sessionMinutes`; an invalid saved value (anything but 5, 10, 15 or no choice at all)
+falls back to No limit rather than a target the coach can't explain. The choice sets the new
+session's target when `src/app.js`'s `startSession` runs — a change made mid-session waits for
+the next Start, so it can neither fire a surprise break nor cancel one already showing. At the
+target, the coach pauses with "That is today's N minutes", naming the real minute count instead
+of a fixed number. The tired-pattern cap (three sessions in a row that each ended weaker than
+they started) still applies, but only when its 15 minutes is lower than the learner's own
+choice — see `tests/characterization/session-length-choice.test.mjs`.
+
+A "Session length" selector (No limit / 5 / 10 / 15 minutes) sits in every instrument's options
+(not the Tuner or Capture tools), saved to `prefs.sessionMinutes`; an invalid saved value (anything but 5, 10, 15 or no choice at all)
+falls back to No limit rather than a target the coach can't explain. The choice sets the new
+session's target when `src/app.js`'s `startSession` runs — a change made mid-session waits for
+the next Start, so it can neither fire a surprise break nor cancel one already showing. At the
+target, the coach pauses with "That is today's N minutes", naming the real minute count instead
+of a fixed number. The tired-pattern cap (three sessions in a row that each ended weaker than
+they started) still applies, but only when its 15 minutes is lower than the learner's own
+choice — see `tests/characterization/session-length-choice.test.mjs`.
 
 ## Turning an audio file into notes
 
@@ -363,12 +414,35 @@ plain paper, black on white, with nothing else on the page. A teacher challenge'
 under their own **Assignments** heading below the song list, separate from a single open song's
 own actions.
 
-Reopening a song carries on from the step you left off on, at the same practice speed, with a
-plain "Picking up where you left off." line — a **"Carry on: &lt;title&gt;"** button above the
-list offers the most recent one whenever no lesson is on screen. Editing the song's notes,
-choosing another part or instrument, changing capo, tuning or harmonica key, or a tempo change
-starts the lesson fresh at the first step instead, with no message, since any of those makes it a
-different lesson to learn. "Practise again" always starts at the beginning, whatever was saved.
+Reopening a song, in Learn or Rehearse, carries on from the step you left off on, at the same
+practice speed, with a plain "Picking up where you left off." line — a **"Carry on:
+&lt;title&gt;"** button above the list offers the most recent one whenever no lesson is on screen.
+A place saved before lesson modes existed still carries on, in Learn, the same way. Check always
+starts at step 1 and never changes what was saved. Editing the song's notes, choosing another part
+or instrument, changing capo, tuning or harmonica key, or a tempo change starts the lesson fresh at
+the first step instead, with no message, since any of those makes it a different lesson to learn.
+"Practise again" starts at the beginning, in the same mode, whatever was saved — for a lesson
+opened from keyboard practice, it still ends with "Back to practice".
+
+A song lesson has three modes on one control, chosen per lesson (not saved — every new open starts
+in Learn). **Learn** shows everything: the notation, the fingering line, the step's own hint, and a
+"Play it" button that plays the phrase first. **Rehearse** shows the same views and hint but hides
+"Play it" — Learn and Rehearse share one saved place, so switching between them mid-lesson keeps
+your spot. **Check** hides the notation, the fingering line, the hint and "Play it" outright — the
+no-help attempt — and always starts at step 1 without touching the saved place. Tries in Learn and
+Rehearse are kept as practice with help; only a Check try can count as done on your own. After a
+passed Check try, and again once the whole piece is done, a line says whether that try actually
+counted as a check or was practice only; on keyboard, only a real MIDI keyboard counts.
+
+On keyboard, a song whose notes name both hands (the two "both hands" starters, or an imported
+score with hand marks) also shows a Hands control under the lesson modes — **Both hands**,
+**Right hand** or **Left hand** — plus a line naming each hand's starting note. With Right hand or
+Left hand chosen, only that hand's notes are judged; in Learn and Rehearse the app plays the other
+hand along with your try, and those notes are never counted as yours. A step where your chosen
+hand rests is not judged at all — press Next to move on. The practice log records which hand was
+checked on each row. A one-hand lesson carries on from its own saved place, and switching hands
+replaces that saved place rather than starting a second one. A melody-only song shows no Hands
+control.
 
 Opening the editor screen (via a song's own **Edit notes**) shows its own row: **Edit
 notes**, **Play along**, **Export**, **Share**, **Save a copy** — Edit notes opens *any* song,
@@ -398,6 +472,10 @@ A MusicXML (`.xml`, `.musicxml`, `.mxl`) piano part written on two staves import
 marked for a hand (staff 1 right, staff 2 left; see "Piano hands together"), so it counts as a
 two-handed part; MIDI, ABC and Guitar Pro imports carry no hand data and stay one-handed
 (`node --test tests/unit/import-musicxml-hands.test.mjs`).
+With the keyboard picked, importing a single song file also says, in one line, what changes to fit
+the keyboard — how many notes are too low or too high and will be skipped, or that the part moved
+by an octave — using `fidelityReport` (`src/song/eval/fidelity.js`); a file that fits as written
+shows no such line (`node --test tests/characterization/songs-import-fidelity.test.mjs`).
 A
 teacher can also hand a student a whole set of songs at once as a **challenge**: a plain `.json`
 file (`src/song/challenge.js`, schema `challenge/1`) holding a title, an optional note, and a list
@@ -677,6 +755,13 @@ that song's lesson in the Songs panel, with a "Back to practice" button at the e
 the app's authors assembled, not something a musician has checked against a method book, so its
 button shows "Not yet checked by a player" right beside it until a player's review of that exact
 entry lands in the ledger, rather than implying otherwise.
+button always shows "Not yet checked by a player" right beside it rather than implying otherwise.
+Two starters, "Ode to Joy (theme), both hands" and "Twinkle, Twinkle, Little Star, both hands",
+carry an explicit left-hand part (`src/song/starter/index.js`) and are never suggested before the
+keyboard trainer's hands-together level (13, `KBD_HANDS_TOGETHER_LEVEL`) even though every
+individual pitch they use is taught earlier -- playing both hands together is its own skill. Their
+left-hand arrangement is teaching content made for Band Coach, same as any other hand-off
+suggestion, and shows "Not yet checked by a player" beside it too.
 
 ## Capo, alternate tunings and a left-handed view
 
@@ -736,8 +821,11 @@ both hands were heard. It is still graded for real by the spaced-repetition sche
 only one hand was actually confirmed it does not count toward level progress the way an exact pass
 does.
 
-A "Hands" selector on the keyboard options panel picks Both / Right only / Left only. Both is the
-long-standing drill above: both hands' notes are required, and any other held note is wrong.
+A "Hands" selector on the keyboard options panel picks Both / Right only / Left only. At level 13,
+Both stays locked until you have played the right hand alone and the left hand alone at least once
+each — a lock note beside the selector says so, and until then the drill runs Right only regardless
+of what the selector shows. Both is the long-standing drill once unlocked: both hands' notes are
+required, and any other held note is wrong.
 Right only and Left only ask for just the named hand's note — the other hand may play along (it is
 optional accompaniment, never required and never marked wrong), but only the named hand's note is
 what actually passes the exercise or is recorded as evidence the learner played it; the on-screen
@@ -746,12 +834,93 @@ starts a fresh one under the new mode rather than leaving a half-graded task beh
 left-only practice is tracked on its own id (`j1r`/`j1l` etc., alongside the both-hands `j1`), so
 passing the one-handed drill never counts toward, and never uses up, both-hands mastery — the two
 are scheduled by the spaced-repetition system independently. The choice is saved with the rest of
-your preferences and survives a reload. Above level 13, the "Everything, faster" levels mix hands
+your preferences and survives a reload. Above level 16, the "Everything, faster" levels mix hands
 material back in with every other kind of drill; a plain `j1`-style id that turns up there is always
 the both-hands exercise, whatever the selector is currently set to — only an id with the `r`/`l`
-suffix is graded one-handed. The approximate (microphone) pass message says plainly which hand was
+suffix is graded one-handed, and a `j1t`/`j1h`/`j1d`-style id (level 14's timed pair, level 15's
+held bass or level 16's split rhythm, all below) is still graded on a real MIDI keyboard or the
+computer keys, but practice-only on screen taps, exactly as it is on its own dedicated level. The approximate (microphone) pass message says plainly which hand was
 checked in Right only/Left only mode, rather than the both-hands wording. One-handed passes never
 move you past level 13 on their own: the level holds until the both-hands exercises are ready.
+
+"Played" here means a judged attempt (`reps` above zero), never merely having been offered the
+drill — the right-hand-alone and left-hand-alone ids each get a fresh placeholder the instant the
+level 13 drill first builds an element for them, before a single note is played, so Both stays
+locked through that moment; a Show me (helped) attempt does not count either, since it is not a
+real test. If you already have a genuinely used both-hands record from before this lock existed
+(or from any other route into a plain `j1`-`j5` id), Both is grandfathered open from the start —
+`bothUnlocked()` in `src/core/hands-together.js` treats that older record as "drilled" a little
+more loosely (seen or reps above zero, since it predates the one-handed ids), never just an id that
+happens to exist in your saved model, so an untouched placeholder entry never falsely unlocks it.
+A "before you start" line names each hand's starting finger and key (the
+C five-finger position — `prepLine()`), labelled "Not yet checked by a player" since this wording
+has not been reviewed by an actual piano teacher yet. Your saved Hands preference is never rewritten
+by the lock: if it still reads Both while locked the drill quietly runs Right only underneath, and
+returns to Both with no extra step the moment it unlocks. See `tests/unit/hands-together-gate.test.mjs`
+and `tests/characterization/kbd-hand-alone-gate.test.mjs` for the exact rules and the real-MIDI
+walk-through.
+
+Level 14, "Hands together: matching rhythms", reuses the same five both-hands pairs (its own
+`j1t`-`j5t` ids — a distinct spaced-repetition mastery from the plain `j1`-`j5` both-hands item, so
+a timed pass never credits or consumes it) but adds real timing on top of the exact both-hands
+grading: LEARN first (press both notes together at your own pace, no timing required, exactly like
+the untimed both-hands drill) and once that is held, CHECK (let go, then press both keys within 100
+ms of each other and let go of both within 150 ms of each other). A note already held before the
+element starts is never re-credited towards either phase — only a fresh note-on counts. Missing
+either tolerance fails with a plain-language reason naming which hand was early or late and by how
+many milliseconds, drawn from `gradeTimedPair()` in `src/core/hands-together.js`
+(`PAIR_ONSET_TOL_MS`, `PAIR_RELEASE_TOL_MS`). This grading needs real, independent note-on/note-off
+events, so it only runs on a real MIDI keyboard or the computer keys; a screen tap (or the on-screen
+focus cursor's Enter/Space) still lets you practice the notes, but the pass it gives is marked
+practice-only, is never counted as independent evidence, and never moves you up a level on its own
+(it still updates that pair's review schedule) — use "Skip ahead" to move on without one. A microphone pass stays approximate, the same as at level 13. The
+level is labelled "Not yet checked by a player" since this wording has not been reviewed by an
+actual piano teacher yet. See `tests/unit/hands-together-timed.test.mjs` and
+`tests/characterization/kbd-level14-rhythm.test.mjs` for the exact rules and the real-MIDI/computer-
+key walk-throughs.
+
+Level 15, "Hands together: held bass under the melody", reuses the same five pairs' own `j1h`-`j5h`
+ids (again a distinct mastery, never credited or consumed by any other hands-together id). The left
+hand holds its bass note (LEARN is the same untimed both-notes-held pass as level 14) and, once
+held, CHECK asks for a fresh bass note-on followed by a short three-note melody in the right hand
+(`heldBassMelody()` in `src/core/hands-together.js` — the right hand's own note, its neighbouring
+pair's note, then the right hand's own note again, e.g. C-D-C; the top pair, G, has no pair above
+it to borrow from, so it plays G-F-G instead) while the bass keeps sounding. A melody note played while the bass has already
+been let go, or the bass being released before the last melody note-on, fails with a plain-language
+reason naming the left hand and the hold; a melody note that is not the next one expected fails
+naming the expected note instead. The exercise passes on the bass note-off, once it comes after the
+last melody note-on (`gradeHeldBass()`). This grading needs real note-on/note-off events, so — the
+same as level 14 — it only runs on a real MIDI keyboard or the computer keys; a screen tap (or the
+on-screen focus cursor's Enter/Space) still lets you practice the notes, but only ever reaches the
+LEARN pass, marked practice-only, never counted as independent evidence and never moving you up a
+level on its own — use "Skip ahead" to move on without one. A microphone pass stays approximate, the
+same as at levels 13-14. The level is labelled "Not yet checked by a player" since this wording has
+not been reviewed by an actual piano teacher yet. See `tests/unit/hands-together-stages.test.mjs`
+and `tests/characterization/kbd-levels-15-16.test.mjs` for the exact rules and the real-MIDI/
+computer-key walk-throughs.
+
+Level 16, "Hands together: different rhythms in each hand", reuses the same five pairs' own
+`j1d`-`j5d` ids (its own mastery too). LEARN is the same untimed both-notes-held pass again; CHECK
+asks the right hand to play its note twice, evenly spaced, while the left hand holds its own note as
+one long note underneath the two. Unlike every earlier hands-together level, each hand gets its OWN
+pass/fail verdict rather than one shared one (`gradeSplitRhythm()`): the left hand must come in
+within `PAIR_ONSET_TOL_MS` of the right hand's first note, must not let go before the right hand's
+second note, and must let go within `PAIR_RELEASE_TOL_MS` of the right hand's second release; the
+right hand's second note must land within `PAIR_RELEASE_TOL_MS` (or, for a longer-held left-hand
+note, `SPLIT_MID_TOL_RATIO` — 0.2 — times how long the left-hand note is held, whichever is larger)
+of the exact midpoint of the held left-hand note. The latest verdict for each hand is kept even
+across a failed attempt, so the app (and a test, through the debug hook) can always read which hand
+most recently passed and which failed. As with levels 14-15, this needs real note-on/note-off
+events, so it only runs on a real MIDI keyboard or the computer keys; a screen tap only ever reaches
+the practice-only LEARN pass, never independent evidence and never moving the level on its own — use
+"Skip ahead" instead. A microphone pass stays approximate. The level is labelled "Not yet checked by
+a player" for the same reason as levels 14-15. See `tests/unit/hands-together-stages.test.mjs` and
+`tests/characterization/kbd-levels-15-16.test.mjs` for the exact rules and the real-MIDI/computer-
+key walk-throughs.
+
+Levels 15-16 were inserted before "Everything, faster", so a saved keyboard level of 15 or above now
+opens these levels, and "Everything, faster (k)" is level 16+k (it was 14+k); saved levels are not
+renumbered.
 
 A song note itself can also say which hand plays it: an optional `hand: 'rh'` / `hand: 'lh'` field
 (`src/song/model.js`). A keyboard arrangement honours that tag instead of guessing from the
@@ -976,7 +1145,8 @@ learner has attempted anything; picking a card starts that same song on the
 chosen instrument without leaving the panel.
 
 `src/song/eval/fidelity.js`'s `fidelityReport(sourceNotes, song, partId, instrument)`
-is a pure, non-user-facing measurement of the same divergence, returning
+is a pure, non-user-facing measurement of the same divergence (worded for the learner only by
+Songs' import notice -- see Songs), returning
 `{dropped, merged, octaveShift, shiftSemitones, outOfRange, chordReduced, hands}`:
 `dropped`/`merged` compare the part's notes against an optional pre-import note
 list; `octaveShift`, `shiftSemitones`, `outOfRange` and `chordReduced` all come
@@ -1011,7 +1181,10 @@ it was is only revealed after grading, never before), rhythm dictation, rhythms 
 two at higher levels, of a starter song's own note durations and rests, pitch dropped -- the song
 title is shown up front, since this is a sight-reading drill rather than a by-ear one, and it
 grades with rhythm dictation's own checker unchanged), chord progressions, scales and modes,
-chord inversions, in-tune-or-not intonation discrimination, and sing-it-back.
+chord inversions, in-tune-or-not intonation discrimination, and sing-it-back. Song dictation and
+song rhythm both draw only from the one-hand starter melodies (`starterMelodies`,
+`src/song/starter/index.js`) -- a two-hand starter is never pulled apart into a monophonic phrase
+or tapped-back rhythm.
 
 ## Find your own singing range
 

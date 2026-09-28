@@ -258,6 +258,12 @@
   .panel-songs-band-pack-parts-list { margin-top: 4px; }
   .panel-songs-band-pack-parts { margin: 2px 0; color: var(--muted); }
   .panel-songs-share-msg { min-height: 1.2em; color: var(--good); }
+  /* Songs lesson modes (C11b): the one Learn/Rehearse/Check control,
+     placed after the transport -- buttons stay at least 24px (the a11y
+     scan, #283), same min-height every other panel button already gets. */
+  .panel-songs-mode, .panel-songs-hands { display: flex; flex-wrap: wrap; gap: 4px; }
+  .panel-songs-mode button[aria-pressed="true"], .panel-songs-hands button[aria-pressed="true"] { border-color: var(--good); }
+  .panel-songs-check-result { color: var(--muted); }
   @media (max-width: 400px) { .panel-songs-list { flex-direction: column; } .panel-songs-play-on-list { flex-direction: column; } }
   /* */
   .panel-editor { display: flex; flex-direction: column; gap: 12px; max-width: 100%; }
@@ -404,6 +410,15 @@
   .panel-playalong .pa-loop-region { position: absolute; top: 0; bottom: 0; background: color-mix(in srgb, var(--accent) 25%, transparent); border-inline: 2px solid var(--accent); }
   .panel-playalong .pa-playhead-row { align-items: center; gap: 8px; }
   .panel-playalong .pa-playhead-row input[type="range"] { flex: 1 1 160px; }
+  /* "Your keyboard path" panel (P2): the step list, the current step's
+     accent border, and its unreviewed note -- same warn colour/size as
+     #modOpts [role="note"] above (line 394), theme tokens only. */
+  .panel-pathway .pathway-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+  .panel-pathway .pathway-steps li { border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; }
+  .panel-pathway .pathway-steps li.pathway-current { border-color: var(--good); border-width: 2px; }
+  .panel-pathway .pathway-here { color: var(--good); font-size: 13px; }
+  .panel-pathway .pathway-wait { color: var(--warn); font-size: 13px; }
+  .panel-pathway .pathway-unreviewed { color: var(--warn); font-size: 13px; }
   /* */
   /* slot:css:w-fixes */
   /* */

@@ -13,9 +13,17 @@ import { retrievability } from '../../src/core/srs.js';
 const htmlPath = HTML_PATH;
 const masteryOf = (item, now) => (item ? retrievability(item, now) : 0.4);
 
+// K2: level 13's Both option (used by every test in this file) is now gated
+// behind each hand alone having been shown -- see tests/unit/hands-together-
+// gate.test.mjs and tests/characterization/kbd-hand-alone-gate.test.mjs.
+// Seeding both hands' alone-items as already shown keeps this file's setup
+// on Both, which is what every existing assertion here already assumes.
+const HANDS_ALONE_SEED = "window.__coach.db().mods.kbd.item.j1r = { stability: 1, difficulty: 0.3, lastSeen: Date.now(), reps: 1, lapses: 0, seen: 1 }; window.__coach.db().mods.kbd.item.j1l = { stability: 1, difficulty: 0.3, lastSeen: Date.now(), reps: 1, lapses: 0, seen: 1 };";
+
 async function toHandsTogether(page) {
   await page.evaluate("window.__coach.setMod('kbd')");
   await page.evaluate('window.__coach.state().level = 13');
+  await page.evaluate(HANDS_ALONE_SEED);
   await page.evaluate("document.getElementById('playBtn').click()");
   await page.waitFor('window.__coach.task()');
 }
@@ -200,7 +208,7 @@ test('hands together: an approximate Right-only pass names the hand, never the b
   assert.doesNotMatch(msg, /connect a midi keyboard to grade both hands together/i, 'a one-hand mode must not tell the learner to grade "both hands together"');
 });
 
-// Above level 13 (the last dedicated "hands" level), levelDef falls into
+// Above level 16 (the last dedicated "hands" level), levelDef falls into
 // task 'mix' (levelDef's synthesised "Everything, faster (k)"), which cycles
 // through every task kind seen across the mod's own levels -- including
 // 'seq' and 'one', whose pool is every active id except chords and note
@@ -221,11 +229,11 @@ async function completeElement(page, e) {
   return true;
 }
 
-test('hands together: a plain both-hands id inside a mixed (level 14+) task is still graded and credited as both-hands, even in Right-only mode', async (t) => {
+test('hands together: a plain both-hands id inside a mixed (level 17+) task is still graded and credited as both-hands, even in Right-only mode', async (t) => {
   const page = await launchPage(htmlPath);
   t.after(() => page.close());
   await page.evaluate("window.__coach.setMod('kbd')");
-  await page.evaluate('window.__coach.state().level = 14');
+  await page.evaluate('window.__coach.state().level = 17');
   await page.evaluate("document.getElementById('playBtn').click()");
   await page.waitFor('window.__coach.task()');
 

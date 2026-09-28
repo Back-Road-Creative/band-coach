@@ -110,6 +110,44 @@ export const en = {
   // way back once that lesson ends (src/ui/songs.js's renderPractice).
   'kbd.songHandoff.button': 'Play a song with these notes',
   'kbd.songHandoff.back': 'Back to practice',
+  // Songs lesson modes (C11b): the one control's own label and its three
+  // buttons, plus the counted/practice-only line a Check try's own verdict
+  // shows (src/ui/songs.js's mode control and advance()).
+  'songs.mode.label': 'Lesson mode',
+  'songs.mode.learn': 'Learn',
+  'songs.mode.rehearse': 'Rehearse',
+  'songs.mode.check': 'Check',
+  'songs.mode.counted': 'This try counted as a check.',
+  'songs.mode.practiceOnly': 'Practice only: this try did not count as a check. On keyboard, only a MIDI keyboard counts.',
+  // Songs hand selector (H3), src/ui/songs.js's renderPractice: the Both/
+  // Right/Left control (keyboard two-hand songs only), the prep line naming
+  // each hand's starting note, and the "this hand rests" line a step with
+  // nothing for the chosen hand shows instead of "Your turn".
+  'songs.hands.label': 'Hands',
+  'songs.hands.both': 'Both hands',
+  'songs.hands.right': 'Right hand',
+  'songs.hands.left': 'Left hand',
+  'songs.hands.startRight': 'Right hand starts on {note}.',
+  'songs.hands.startLeft': 'Left hand starts on {note}.',
+  'songs.hands.restRight': 'The right hand rests here. Listen, then press Next.',
+  'songs.hands.restLeft': 'The left hand rests here. Listen, then press Next.',
+  // "Your keyboard path" panel (P2), src/ui/pathway.js: the button that
+  // opens it, the panel's own title/tag/current-step marker, the five
+  // step names src/core/pathway.js's pathwayState steps through, and the
+  // one action label per step (the wait label names the recheck date).
+  'pathway.open': 'Your keyboard path',
+  'pathway.title': 'Your keyboard path',
+  'pathway.tag': 'Pathway',
+  'pathway.current': 'You are here',
+  'pathway.step.setup': 'Setup',
+  'pathway.step.lesson': 'Lesson',
+  'pathway.step.song': 'Song',
+  'pathway.step.check': 'Check',
+  'pathway.step.return': 'Return',
+  'pathway.action.trainer': 'Go to the keyboard trainer',
+  'pathway.action.song': 'Open {title} in Songs',
+  'pathway.action.check': 'Check {title} in Songs',
+  'pathway.action.wait': 'Come back on {date} to check it again',
 };
 
 const locales = { en };

@@ -4,7 +4,7 @@ import { make, check, LEVEL_COUNT, LEVEL_NAMES } from '../../src/core/ear/song-r
 import { check as rhythmCheck } from '../../src/core/ear/rhythm-dictation.js';
 import { validateBar } from '../../src/core/rhythm.js';
 import { barsOf, notesInBar } from '../../src/song/model.js';
-import { starterSongs } from '../../src/song/starter/index.js';
+import { starterMelodies as starterSongs } from '../../src/song/starter/index.js';
 
 // Rebuilds the same gap-filled { dur, rest } events song-rhythm.js builds
 // internally, from the song's own notesInBar, so a test can independently

@@ -3,7 +3,19 @@
 // UI do about it? Pure -- no DOM, no Date.now(): caller supplies `now`,
 // exactly like src/core/groove.js supplies its own clock. P1 covers the
 // 'kbd' instrument/mod only; P2 wires this into a panel, P3 adds a
-// 'complete' step past 'return'.
+// 'complete' step past 'return', needing TWO pieces of evidence: a
+// qualifying row played at least a day after the original check (retained
+// -- any song), and a qualifying row on a DIFFERENT song than the original
+// (transfer -- any time after the original). Either one landing alone
+// keeps 'return' going, just with a different action (see pathwayState's
+// comment below); only both together close it out.
+//
+// This assumes event `at` values are real epoch milliseconds throughout --
+// a day-boundary comparison against a mixed clock (some rows in audio-clock
+// seconds, e.g. an older src/ui/songs.js `at` before its own epoch-clock
+// fix lands) would silently misjudge "a day later". No workaround for that
+// lives here; it is a separate unit's job to guarantee the input, not this
+// pure function's to detect a mismatched clock.
 
 import { isIndependentOk } from './learning-events.js';
 
@@ -45,27 +57,74 @@ function qualifies(ev) {
     && ev.assistance === 'none' && ev.skill === 'whole:null' && isIndependentOk(ev);
 }
 
-// latestCheckRow: the most recent qualifying row, by `at`. Returns null when
-// none exists.
-function latestCheckRow(events) {
+// earliestCheckRow: the FIRST qualifying row ever logged, by `at` -- "the
+// first independent song check", and the fixed anchor every rule below
+// reads from. Its `at` is what dueAt is computed from, and stays fixed: a
+// later qualifying row (on this same song or a different one) never moves
+// it, only supplies further evidence. Returns null when none exists.
+function earliestCheckRow(events) {
   let best = null;
-  events.forEach((ev) => { if (qualifies(ev) && (!best || ev.at > best.at)) best = ev; });
+  events.forEach((ev) => { if (qualifies(ev) && (!best || ev.at < best.at)) best = ev; });
+  return best;
+}
+
+// earliestRetainedRow: the EARLIEST qualifying row (any songId, including
+// the anchor's own) at or after `dueAt` -- real evidence the check still
+// held up a day later, not just elapsed time with nothing played. A
+// transfer-song row that happens to land at or after dueAt satisfies this
+// too (one play can prove both retention and transfer at once); a same-song
+// recheck before dueAt does not count yet.
+function earliestRetainedRow(events, dueAt) {
+  let best = null;
+  events.forEach((ev) => { if (qualifies(ev) && ev.at >= dueAt && (!best || ev.at < best.at)) best = ev; });
+  return best;
+}
+
+// latestTransferRow: the most recent qualifying row (same MIDI/no-assistance
+// whole-piece rule as qualifies()) whose songId differs from the anchor
+// check's -- proof the learner carried the same skill to a piece they were
+// never drilled to pass, not just repeated the one they were checked on.
+// Any qualifying row other than the anchor is necessarily at or after the
+// anchor's `at` (the anchor is the earliest qualifying row overall), so no
+// separate time check is needed here. A row with no songId at all (an
+// older row logged before songId rode along on song sessions/events) never
+// counts as a transfer -- there is nothing to compare it against.
+function latestTransferRow(events, excludeSongId) {
+  let best = null;
+  events.forEach((ev) => { if (qualifies(ev) && typeof ev.songId === 'string' && ev.songId !== excludeSongId && (!best || ev.at > best.at)) best = ev; });
   return best;
 }
 
 // pathwayState({ events, sessions, midiProof, level, now }) -> { step,
-// action, checkAt? }. events/sessions tolerate undefined, empty, or
-// non-object rows without throwing -- a caller loading a saved DB never
-// gets to assume every row is well-formed.
+// action, checkAt?, checkSongId?, retainedAt?, transferAt?, transferSongId?
+// }. events/sessions tolerate undefined, empty, or non-object rows without
+// throwing -- a caller loading a saved DB never gets to assume every row is
+// well-formed.
 export function pathwayState({ events, sessions, midiProof, level, now }) {
   const evs = asArray(events).filter(isObj);
   const rows = asArray(sessions);
-  const checkRow = latestCheckRow(evs);
-  if (checkRow) {
-    const dueAt = checkRow.at + DAY_MS;
-    return now < dueAt
-      ? { step: 'return', action: { kind: 'wait', dueAt: dueAt }, checkAt: checkRow.at }
-      : { step: 'return', action: { kind: 'recheck' }, checkAt: checkRow.at };
+  const anchor = earliestCheckRow(evs);
+  if (anchor) {
+    const dueAt = anchor.at + DAY_MS;
+    const retainedRow = earliestRetainedRow(evs, dueAt);
+    const transferRow = latestTransferRow(evs, anchor.songId);
+    // 'complete' needs BOTH: a row proving retention (any song, at/after
+    // dueAt) AND a row proving transfer (a different song, any time after
+    // the anchor) -- one row can satisfy both at once, but elapsed time
+    // alone, with nothing played, satisfies neither.
+    if (retainedRow && transferRow) {
+      return { step: 'complete', action: { kind: 'complete' }, checkAt: anchor.at, retainedAt: retainedRow.at, transferAt: transferRow.at, transferSongId: transferRow.songId };
+    }
+    if (now < dueAt) {
+      return { step: 'return', action: { kind: 'wait', dueAt: dueAt }, checkAt: anchor.at, checkSongId: anchor.songId };
+    }
+    if (!retainedRow) {
+      return { step: 'return', action: { kind: 'recheck' }, checkAt: anchor.at, checkSongId: anchor.songId };
+    }
+    // retainedRow exists but no transfer row yet -- do not offer the
+    // same-song recheck again (that evidence is already in), offer the
+    // transfer song instead.
+    return { step: 'return', action: { kind: 'transfer' }, checkAt: anchor.at, checkSongId: anchor.songId, retainedAt: retainedRow.at };
   }
   if (!hasProof(evs, midiProof)) return { step: 'setup', action: { kind: 'connect-midi' } };
   if (level <= 1) return { step: 'lesson', action: { kind: 'trainer' } };

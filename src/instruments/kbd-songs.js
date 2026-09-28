@@ -3,7 +3,7 @@
 // renderOpts, which owns rendering); this file only owns which starter
 // song to suggest and whether that suggestion counts as reviewed.
 //
-import { starterSongs } from '../song/starter/index.js';
+import { starterSongs, isTwoHand } from '../song/starter/index.js';
 import { nameFor } from '../core/note-names.js';
 import { itemReview, contentRev } from './review-ledger.js';
 import { isReviewCurrent } from './review.js';
@@ -70,10 +70,18 @@ function pitchesOf(song) {
 // e.g. on two instruments, without them sharing one review); `skills` is
 // the plain-language list of notes this song hands off, for display or a
 // future review note.
+// The level the keyboard trainer's own hands-together curriculum starts at
+// (app.js MODS.kbd level 13, "Hands together", mirrored at kbd.js:28): a
+// two-hand starter's minLevel is never allowed below this, even when every
+// individual pitch it uses was taught earlier -- playing both hands at once
+// is its own skill, not implied by knowing the notes.
+export const KBD_HANDS_TOGETHER_LEVEL = 13;
+
 export const ENTRIES = starterSongs
   .map((song) => {
     const pitches = pitchesOf(song);
-    const minLevel = minLevelFor(pitches);
+    const rawMinLevel = minLevelFor(pitches);
+    const minLevel = rawMinLevel === null ? null : Math.max(rawMinLevel, isTwoHand(song) ? KBD_HANDS_TOGETHER_LEVEL : rawMinLevel);
     return { id: 'kbd.songHandoff.' + song.id, songId: song.id, minLevel, skills: pitches.map((p) => nameFor(p, { octave: true })) };
   })
   .filter((entry) => entry.minLevel !== null);
@@ -88,6 +96,21 @@ export function songFor(level) {
   for (const entry of ENTRIES) if (entry.minLevel <= level && (!best || entry.minLevel > best.minLevel)) best = entry;
   return best;
 }
+
+// songId -> the drill skill ids (src/app.js's N(), 'n' + midi, built from
+// KBD_LEVEL_PITCH_POOLS above) a fully-taught starter song uses -- so a song
+// play can be credited as "applied" for a note the player has already
+// drilled on its own, even though a drill event's skill ('n64') and a song
+// event's skill ('phrase-slow:0'/'pitches:0'/etc, see src/ui/songs.js) never
+// share an instrument|skill group in src/core/learning-events.js's own
+// applied rule. Only songs ENTRIES already fully teaches (minLevel !== null)
+// are mapped -- a song reaching outside the keyboard trainer's own levels has
+// no drill ids to point at. Built from ENTRIES' own ids/pitches, never from a
+// second pass over starterSongs, so it can never disagree with ENTRIES about
+// which songs qualify.
+export const KBD_SONG_SKILL_MAP = Object.freeze(Object.fromEntries(
+  ENTRIES.map((entry) => [entry.songId, Object.freeze(pitchesOf(starterSongs.find((s) => s.id === entry.songId)).map((p) => 'n' + p))])
+));
 
 // Every hand-off entry alongside whether a real player has reviewed it
 // through the shared per-item ledger (src/instruments/review-ledger.js) --
