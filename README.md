@@ -198,8 +198,9 @@ of rules, so it catches whatever the other a11y characterization tests above wer
 look for.
 
 `src/song/eval/roundtrip.js` scores transcription against *synthetic* pitch frames rendered from
-the starter songs — useful for catching a pipeline regression, but it never runs real audio
-through the detector. `src/song/eval/pcm.js` does: it runs a labelled real-audio clip through the
+the one-hand starter melodies (`starterMelodies`, `src/song/starter/index.js`) — useful for
+catching a pipeline regression, but it never runs real audio through the detector; the harness is
+monophonic, so the two-hand starters are left out rather than scored as if they were one line. `src/song/eval/pcm.js` does: it runs a labelled real-audio clip through the
 same `framesFromPCM` → `transcribe` path Learn this uses, and scores the result (precision,
 recall, F1, onset/release timing error, octave errors) against hand-made ground truth.
 `tests/fixtures/audio/README.md` documents the corpus manifest format the eval reads and ships
@@ -669,6 +670,12 @@ that song's lesson in the Songs panel, with a "Back to practice" button at the e
 `provenance`-less curriculum this whole section is about: the suggestion map is teaching content
 the app's authors assembled, not something a musician has checked against a method book, so its
 button always shows "Not yet checked by a player" right beside it rather than implying otherwise.
+Two starters, "Ode to Joy (theme), both hands" and "Twinkle, Twinkle, Little Star, both hands",
+carry an explicit left-hand part (`src/song/starter/index.js`) and are never suggested before the
+keyboard trainer's hands-together level (13, `KBD_HANDS_TOGETHER_LEVEL`) even though every
+individual pitch they use is taught earlier -- playing both hands together is its own skill. Their
+left-hand arrangement is teaching content made for Band Coach, same as any other hand-off
+suggestion, and shows "Not yet checked by a player" beside it too.
 
 ## Capo, alternate tunings and a left-handed view
 
@@ -728,8 +735,11 @@ both hands were heard. It is still graded for real by the spaced-repetition sche
 only one hand was actually confirmed it does not count toward level progress the way an exact pass
 does.
 
-A "Hands" selector on the keyboard options panel picks Both / Right only / Left only. Both is the
-long-standing drill above: both hands' notes are required, and any other held note is wrong.
+A "Hands" selector on the keyboard options panel picks Both / Right only / Left only. At level 13,
+Both stays locked until you have played the right hand alone and the left hand alone at least once
+each — a lock note beside the selector says so, and until then the drill runs Right only regardless
+of what the selector shows. Both is the long-standing drill once unlocked: both hands' notes are
+required, and any other held note is wrong.
 Right only and Left only ask for just the named hand's note — the other hand may play along (it is
 optional accompaniment, never required and never marked wrong), but only the named hand's note is
 what actually passes the exercise or is recorded as evidence the learner played it; the on-screen
@@ -738,12 +748,50 @@ starts a fresh one under the new mode rather than leaving a half-graded task beh
 left-only practice is tracked on its own id (`j1r`/`j1l` etc., alongside the both-hands `j1`), so
 passing the one-handed drill never counts toward, and never uses up, both-hands mastery — the two
 are scheduled by the spaced-repetition system independently. The choice is saved with the rest of
-your preferences and survives a reload. Above level 13, the "Everything, faster" levels mix hands
+your preferences and survives a reload. Above level 14, the "Everything, faster" levels mix hands
 material back in with every other kind of drill; a plain `j1`-style id that turns up there is always
 the both-hands exercise, whatever the selector is currently set to — only an id with the `r`/`l`
-suffix is graded one-handed. The approximate (microphone) pass message says plainly which hand was
+suffix is graded one-handed, and a `j1t`-style id (level 14's timed pair, below) is still graded in
+time on a real MIDI keyboard or the computer keys, but practice-only on screen taps, exactly as it
+is at level 14 itself. The approximate (microphone) pass message says plainly which hand was
 checked in Right only/Left only mode, rather than the both-hands wording. One-handed passes never
 move you past level 13 on their own: the level holds until the both-hands exercises are ready.
+
+"Played" here means a judged attempt (`reps` above zero), never merely having been offered the
+drill — the right-hand-alone and left-hand-alone ids each get a fresh placeholder the instant the
+level 13 drill first builds an element for them, before a single note is played, so Both stays
+locked through that moment; a Show me (helped) attempt does not count either, since it is not a
+real test. If you already have a genuinely used both-hands record from before this lock existed
+(or from any other route into a plain `j1`-`j5` id), Both is grandfathered open from the start —
+`bothUnlocked()` in `src/core/hands-together.js` treats that older record as "drilled" a little
+more loosely (seen or reps above zero, since it predates the one-handed ids), never just an id that
+happens to exist in your saved model, so an untouched placeholder entry never falsely unlocks it.
+A "before you start" line names each hand's starting finger and key (the
+C five-finger position — `prepLine()`), labelled "Not yet checked by a player" since this wording
+has not been reviewed by an actual piano teacher yet. Your saved Hands preference is never rewritten
+by the lock: if it still reads Both while locked the drill quietly runs Right only underneath, and
+returns to Both with no extra step the moment it unlocks. See `tests/unit/hands-together-gate.test.mjs`
+and `tests/characterization/kbd-hand-alone-gate.test.mjs` for the exact rules and the real-MIDI
+walk-through.
+
+Level 14, "Hands together: matching rhythms", reuses the same five both-hands pairs (its own
+`j1t`-`j5t` ids — a distinct spaced-repetition mastery from the plain `j1`-`j5` both-hands item, so
+a timed pass never credits or consumes it) but adds real timing on top of the exact both-hands
+grading: LEARN first (press both notes together at your own pace, no timing required, exactly like
+the untimed both-hands drill) and once that is held, CHECK (let go, then press both keys within 100
+ms of each other and let go of both within 150 ms of each other). A note already held before the
+element starts is never re-credited towards either phase — only a fresh note-on counts. Missing
+either tolerance fails with a plain-language reason naming which hand was early or late and by how
+many milliseconds, drawn from `gradeTimedPair()` in `src/core/hands-together.js`
+(`PAIR_ONSET_TOL_MS`, `PAIR_RELEASE_TOL_MS`). This grading needs real, independent note-on/note-off
+events, so it only runs on a real MIDI keyboard or the computer keys; a screen tap (or the on-screen
+focus cursor's Enter/Space) still lets you practice the notes, but the pass it gives is marked
+practice-only, is never counted as independent evidence, and never moves you up a level on its own
+(it still updates that pair's review schedule) — use "Skip ahead" to move on without one. A microphone pass stays approximate, the same as at level 13. The
+level is labelled "Not yet checked by a player" since this wording has not been reviewed by an
+actual piano teacher yet. See `tests/unit/hands-together-timed.test.mjs` and
+`tests/characterization/kbd-level14-rhythm.test.mjs` for the exact rules and the real-MIDI/computer-
+key walk-throughs.
 
 A song note itself can also say which hand plays it: an optional `hand: 'rh'` / `hand: 'lh'` field
 (`src/song/model.js`). A keyboard arrangement honours that tag instead of guessing from the
@@ -1003,7 +1051,10 @@ it was is only revealed after grading, never before), rhythm dictation, rhythms 
 two at higher levels, of a starter song's own note durations and rests, pitch dropped -- the song
 title is shown up front, since this is a sight-reading drill rather than a by-ear one, and it
 grades with rhythm dictation's own checker unchanged), chord progressions, scales and modes,
-chord inversions, in-tune-or-not intonation discrimination, and sing-it-back.
+chord inversions, in-tune-or-not intonation discrimination, and sing-it-back. Song dictation and
+song rhythm both draw only from the one-hand starter melodies (`starterMelodies`,
+`src/song/starter/index.js`) -- a two-hand starter is never pulled apart into a monophonic phrase
+or tapped-back rhythm.
 
 ## Find your own singing range
 
