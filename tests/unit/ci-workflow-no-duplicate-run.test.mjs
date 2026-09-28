@@ -65,3 +65,22 @@ test('pull_request still triggers ci, so a PR head is still proven', () => {
     "the PR-head proof is the pull_request run; its head_sha is the PR's head commit",
   );
 });
+
+// The suite itself has since grown past the old budget: on 2026-09-28 the
+// `npm test` step took 8m21s-9m36s on ubuntu-latest for four PASSING runs
+// (35636761647's era was 2m21s), and three PR runs launched in the same minute
+// (#324, #329, #331) were all cancelled at 10m06s by `timeout-minutes: 10` with
+// no test failing. A cancelled step reports the same `cancel` bucket the robot
+// treats as stuck-red, so every timeout cost an empty-commit re-run that could
+// time out again. The job budget must leave headroom over the measured
+// duration, not sit on top of it.
+test('the job timeout leaves headroom over the measured suite duration', () => {
+  const text = workflow();
+  const m = /timeout-minutes:\s*(\d+)/.exec(text);
+  assert.ok(m, 'the test job must keep an explicit timeout-minutes');
+  assert.ok(
+    Number(m[1]) >= 20,
+    `timeout-minutes is ${m[1]}; passing runs take up to 9m36s on ubuntu-latest (2026-09-28), `
+      + 'so anything under 20 turns a slow runner into a cancelled run with no failing test',
+  );
+});

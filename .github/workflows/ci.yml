@@ -5,7 +5,12 @@ name: ci
 # Triggering push on every branch as well ran the whole suite TWICE per push,
 # and because a push and a pull_request carry different `github.ref` the
 # concurrency group below could not collapse them -- the two runs simply raced
-# for the same shared box and lost to `timeout-minutes: 10`.
+# for the same shared box and lost to the then 10-minute job timeout.
+#
+# The job timeout is a budget over the MEASURED suite, not a target: `npm test`
+# took 8m21s-9m36s on ubuntu-latest for passing runs on 2026-09-28, and three
+# PR runs launched together were cancelled at 10m06s with nothing failing.
+# tests/unit/ci-workflow-no-duplicate-run.test.mjs pins the headroom.
 on:
   push:
     branches: [main]
@@ -21,7 +26,7 @@ concurrency:
 jobs:
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
