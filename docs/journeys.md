@@ -238,3 +238,15 @@ that unit's job, not this pure function's.
   `tests/characterization/songs-input-route.test.mjs`. Still open: a screen click on the on-screen
   piano still plays an unrouted note (no `source` at all), so an attempt played that way still
   leaves `input` off rather than naming a route — owned by the keyboard-window unit.
+- **N2 — closed: song rows stamp the same clock as drill rows.** A judged song step used to stamp
+  its learning-event row's `at` (`src/ui/songs.js`'s `advance()`) with the audio clock
+  (`api.now()`, seconds since the page opened, restarting at 0 on every reload) instead of epoch ms
+  like every other row — mixing two time scales in one event stream that `summarizeEvents()` sorts
+  by `at` and `pathwayState()` (`src/core/pathway.js`) spaces checks against with `DAY_MS`. Song
+  rows now call `makeEvent()` with no `now` option, so they get the same `Date.now()` every drill
+  row already used. A row already saved with the old audio-clock stamp (a finite `at` under `1e12`,
+  the year 2001 — no page stays open that many seconds) is repaired on load
+  (`src/app.js`'s `repairEventClocks`, called from `sanitizeDB`): it takes the `at` of the next row
+  in save order that has a real epoch stamp, or the load time if none follows, so a repaired row is
+  never dated earlier than the truth and a return/retention wait is never granted early. Proof:
+  `tests/characterization/song-event-epoch-clock.test.mjs`.

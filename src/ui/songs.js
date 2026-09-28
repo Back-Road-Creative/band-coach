@@ -2136,7 +2136,7 @@ function mountSongsPanel(hostEl, api) {
           dims, unassessed, activeMs: Math.max(0, Math.round(elapsedMs || 0)),
           bpmTarget: step.bpm || null, bpmActual: step.bpm || null, input: loggedInput,
           hands: practice.hands || undefined,
-        }, { now: api.now() });
+        }); // no `now` option: makeEvent defaults to Date.now(), the same epoch-ms clock every other event row uses -- api.now() is the audio clock (seconds since page load) and must never stamp `at`.
         api.logEvent(row);
         // The Check verdict (renderPractice above): the same isIndependentOk
         // predicate Progress and the pathway use, so the label can never
