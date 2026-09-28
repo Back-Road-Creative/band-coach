@@ -275,6 +275,16 @@ A learner returning to keyboard practice on a later day also gets one "Welcome b
 their next keyboard-path step (`src/core/pathway.js`'s `pathwayState`), shown once on the first
 session of that visit.
 
+A "Session length" selector (No limit / 5 / 10 / 15 minutes) sits in every mod's options, saved
+to `prefs.sessionMinutes`; an invalid saved value (anything but 5, 10, 15 or no choice at all)
+falls back to No limit rather than a target the coach can't explain. The choice sets the new
+session's target when `src/app.js`'s `startSession` runs — a change made mid-session waits for
+the next Start, so it can neither fire a surprise break nor cancel one already showing. At the
+target, the coach pauses with "That is today's N minutes", naming the real minute count instead
+of a fixed number. The tired-pattern cap (three sessions in a row that each ended weaker than
+they started) still applies, but only when its 15 minutes is lower than the learner's own
+choice — see `tests/characterization/session-length-choice.test.mjs`.
+
 ## Turning an audio file into notes
 
 `src/audio/file-frames.js` is a pure function, `framesFromPCM`, that walks a decoded mono audio
