@@ -131,8 +131,10 @@ export function recordStartSec() { return currentPractice ? currentPractice.reco
 // audio-clock instant instead of "now"; only forwardNoteAt() below passes it.
 // `source` (optional) is whatever src/app.js's onNote() was told played the
 // note -- 'midi' for a real MIDI note-on, 'computer-key' for the physical
-// keyboard, undefined for a screen click, the mic path, or a caller (the
-// debug hook, an existing test) that never passes one. Every existing
+// keyboard, undefined for a caller (the debug hook, an existing test) that
+// never passes one. A canvas tap or a main-app mic note never gets here:
+// src/app.js's openPanel() hides the canvas and clears the drill task the
+// moment this panel opens. Every existing
 // caller of forwardNote/forwardNoteAt keeps working with no fourth
 // argument, same as before this parameter existed.
 export function forwardNote(midi, exact, atAudioSec, source) {
@@ -1887,8 +1889,8 @@ function mountSongsPanel(hostEl, api) {
         // one just pushed -- so the last element right after the call is
         // always this press's own event, safe to stamp with the route it
         // actually came from ('midi' for real MIDI, 'computer-key' for the
-        // physical keyboard, undefined for a screen click -- see onNote()'s
-        // `source` comment in src/app.js).
+        // physical keyboard, undefined for a hook-driven note -- see
+        // onNote()'s `source` comment in src/app.js).
         const unsubscribe = onMidiNote((midi, _exact, atAudioSec, source) => {
           pushMidiEvent(practice.playedEvents, midi, (atAudioSec != null ? atAudioSec : api.now()) - practice.recordStartSec);
           practice.playedEvents[practice.playedEvents.length - 1].source = source;
@@ -2115,7 +2117,7 @@ function mountSongsPanel(hostEl, api) {
       // -- never guessed -- the moment any judged note's route is unknown
       // (same "left off rather than guessed" convention finishTask's own
       // `input` comment documents in src/app.js, for a caller, such as the
-      // debug hook or a screen click, that never told onNote() a source).
+      // debug hook, that never told onNote() a source).
       // Record only: this never changes credit, mastery or pass/fail above
       // -- a later check reads this field on its own.
       const judgedSources = result ? result.matches.filter((m) => m.ok && m.played).map((m) => m.played.source) : [];
@@ -2123,9 +2125,8 @@ function mountSongsPanel(hostEl, api) {
         ? (judgedSources.every((s) => s === judgedSources[0]) ? judgedSources[0] : 'mixed')
         : undefined;
       // Check names its own route for every event, never leaving it off:
-      // the real route above, or 'unknown' when the route was left off (a
-      // screen click, the debug hook, or a caller that never told onNote()
-      // a source) -- so a Check row is always readable on its own, without
+      // the real route above, or 'unknown' when the route was left off (the
+      // debug hook, or a caller that never told onNote() a source) -- so a Check row is always readable on its own, without
       // having to infer "no input field" as anything.
       const loggedInput = practice.mode === 'check' ? (input !== undefined ? input : 'unknown') : input;
       if (typeof api.logEvent === 'function') {
