@@ -222,8 +222,21 @@ export function judgeAttempt(expectedNotes, playedEvents, opts = {}) {
   if (onsetMatched) judgeOnsets(groupIntoChords(notes), played, onsetAt, matches, extraList, bpm, ticksPerQuarter, policy, clock, percussion);
   for (const chord of onsetMatched ? [] : groupIntoChords(notes)) {
     if (chord.length === 1) {
-      // Single expected note at this tick: the original forward-only
-      // search, unchanged — no chord window, no extras.
+      // Single expected note at this tick: the original forward-only search
+      // (no chord window) -- but anything skipped over on the way to the
+      // match is, by construction, a non-match under this note's pitch (the
+      // loop breaks on the FIRST match), so once the right note is found,
+      // every played event between cursor and it is a wrong note struck
+      // before the right one -- an extra, same as the chord path's unclaimed
+      // window events. A totally missed note (foundAt === -1) leaves cursor
+      // where it was, so nothing here is "unclaimed" yet -- a later step
+      // may still match these same events. A mic-heard event (src/ui/songs.js
+      // tags these `source: 'mic'`) is exempt -- a pitch tracker often emits
+      // a short wrong-pitch blip or an octave jump right at a note's attack,
+      // and mic pitch is already treated as approximate everywhere else, so a
+      // guitar or voice learner's correctly played note should not fail a
+      // maxExtras: 0 step on detection noise. Any exact input (MIDI, or an
+      // event with no source at all) still counts.
       const note = chord[0];
       const expectedAt = timed ? onsetAt(note.start) : null;
       let foundAt = -1;
@@ -237,6 +250,7 @@ export function judgeAttempt(expectedNotes, playedEvents, opts = {}) {
         matches.push(missedNote(note));
         continue;
       }
+      for (let i = cursor; i < foundAt; i++) { if (played[i].source !== 'mic') extraList.push(played[i]); }
       matches.push(matchOneNote(note, played[foundAt], timed, expectedAt, bpm, ticksPerQuarter, onsetAt, clock));
       cursor = foundAt + 1;
       continue;

@@ -47,7 +47,7 @@ import { layoutFor as harpLayoutFor } from './instruments/how/harmonica.js';
 import { pieceForMidi, TRAINER_LEVELS as KIT_LEVELS } from './instruments/drum-kit.js';
 import { kitLayout, pieceAt } from './instruments/how/drum-kit.js';
 import { layoutPercussionMeasure } from './notation/percussion.js';
-import { songFor, KBD_LEVEL_PITCH_POOLS as KBD_POOLS } from './instruments/kbd-songs.js';
+import { songFor, KBD_LEVEL_PITCH_POOLS as KBD_POOLS, KBD_SONG_SKILL_MAP } from './instruments/kbd-songs.js';
 import { itemReview, contentRev } from './instruments/review-ledger.js';
 import { isReviewCurrent } from './instruments/review.js';
 import { starterSongs } from './song/starter/index.js';
@@ -84,6 +84,7 @@ import { instrumentSetup } from './ui/fingerings/setup.js';
 //
 //
 import { register as registerPlayalong } from './ui/playalong.js';
+import { register as registerPathway } from './ui/pathway.js';
 //
 //
 // slot:import:w-fixes
@@ -941,9 +942,33 @@ import { register as registerPlayalong } from './ui/playalong.js';
     Object.keys(v.acc || {}).forEach(k => { s.acc[k] = num(v.acc[k], 0, 0, 3); }); Object.keys(v.cr || {}).forEach(k => { if (validId(m, k)) s.cr[k] = num(v.cr[k], 0, -80, 80); });
     return s;
   }
+  // repairEventClocks (bc-clk): before this fix, src/ui/songs.js stamped a song row's
+  // `at` with the audio clock (seconds since page load, resets to 0 every reload)
+  // instead of epoch ms like every other row -- so a saved row with a finite `at`
+  // under EVENT_CLOCK_EPOCH_FLOOR (1e12 ms is the year 2001; the audio clock could
+  // never reach that many SECONDS of page-open time) came from that bug and its
+  // stamped `at` is not the real time. Repaired with the `at` of the next row in
+  // array order (DB.events is append-only -- logEvent only pushes, boundEvents only
+  // drops rows, never reorders, so array order IS push order) that has a real epoch
+  // `at`; a bad row with no later epoch row (nothing trustworthy comes after it) falls
+  // back to `modelNow`, the load time -- never earlier than the truth, so a
+  // return/retention wait (src/core/pathway.js) is never granted early. `id` is left
+  // untouched.
+  const EVENT_CLOCK_EPOCH_FLOOR = 1e12;
+  function repairEventClocks(events, modelNow) {
+    const out = events.slice();
+    for (let i = 0; i < out.length; i++) {
+      if (Number.isFinite(out[i].at) && out[i].at < EVENT_CLOCK_EPOCH_FLOOR) {
+        let fixedAt = modelNow;
+        for (let j = i + 1; j < out.length; j++) { if (Number.isFinite(out[j].at) && out[j].at >= EVENT_CLOCK_EPOCH_FLOOR) { fixedAt = out[j].at; break; } }
+        out[i] = Object.assign({}, out[i], { at: fixedAt });
+      }
+    }
+    return out;
+  }
   function sanitizeDB(v, defaultLatencyMs, modelNow) {
     const notate = {}; NOTATE_MOD_IDS.forEach(m => { notate[m] = 'names'; });
-    const d = { v: 1, mods: {}, sessions: [], events: [], prefs: { mod: 'kbd', wind: 'bb', voice: 'low', kbdHands: 'both', names: true, noiseFloor: null, inputDeviceId: null, notate: notate, theme: 'system', noteNaming: { system: 'letters', accidentals: 'mixed' } } }; v = (v && typeof v === 'object') ? v : {};
+    const d = { v: 1, mods: {}, sessions: [], events: [], prefs: { mod: 'kbd', wind: 'bb', voice: 'low', kbdHands: 'both', sessionMinutes: null, names: true, noiseFloor: null, inputDeviceId: null, notate: notate, theme: 'system', noteNaming: { system: 'letters', accidentals: 'mixed' } } }; v = (v && typeof v === 'object') ? v : {};
     MOD_IDS.forEach(m => { d.mods[m] = sanitizeModel(m, v.mods && v.mods[m], modelNow); });
     if (Array.isArray(v.sessions)) d.sessions = v.sessions.filter(x => x && typeof x.d === 'string' && MODS[x.mod]).slice(-60).map(x => {
       // source/songId (a panel-logged row, e.g. a finished or abandoned song
@@ -960,7 +985,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
     // the SAME validateEvent() a writer runs before push -- a corrupt or
     // hand-edited row is dropped here, never thrown, exactly like an
     // invalid DB.sessions row above is filtered rather than crashing load.
-    if (Array.isArray(v.events)) d.events = boundEvents(v.events.filter(x => validateEvent(x).ok));
+    if (Array.isArray(v.events)) d.events = boundEvents(repairEventClocks(v.events.filter(x => validateEvent(x).ok), modelNow), { skillMap: KBD_SONG_SKILL_MAP, skillMapInstrument: 'kbd' });
     const p = v.prefs || {}; if (MODS[p.mod]) d.prefs.mod = p.mod; if (WIND_KINDS[p.wind]) d.prefs.wind = p.wind; d.prefs.voiceRange = (p.voiceRange && typeof p.voiceRange === 'object' && Number.isFinite(p.voiceRange.low) && Number.isFinite(p.voiceRange.high) && p.voiceRange.low < p.voiceRange.high) ? { low: clamp(Math.round(p.voiceRange.low), 24, 96), high: clamp(Math.round(p.voiceRange.high), 24, 96) } : null; const VKp = Object.assign({}, VOICE_KINDS, d.prefs.voiceRange ? { mine: ['My range (found by test)', tonicFromRange(exerciseRangeFor(d.prefs.voiceRange)).tonic] } : {}); if (VKp[p.voice]) d.prefs.voice = p.voice; d.prefs.names = p.names !== false;
     d.prefs.noiseFloor = (typeof p.noiseFloor === 'number' && isFinite(p.noiseFloor) && p.noiseFloor >= 0) ? clamp(p.noiseFloor, 0, 1) : null;
     d.prefs.inputDeviceId = typeof p.inputDeviceId === 'string' && p.inputDeviceId ? p.inputDeviceId : null;
@@ -977,6 +1002,12 @@ import { register as registerPlayalong } from './ui/playalong.js';
     // sanitising pattern as prefs.wind/prefs.voice above -- an unrecognised
     // or missing saved value sanitises to 'both', today's only behaviour.
     d.prefs.kbdHands = ['both', 'right', 'left'].indexOf(p.kbdHands) >= 0 ? p.kbdHands : 'both';
+    // Session length E7c: 5/10/15 minutes or no limit at all (null, today's
+    // only behaviour) -- same allow-list sanitising pattern as
+    // prefs.kbdHands above, so any other saved value (a string '5', 0, 20,
+    // garbage) sanitises to no limit rather than a target the coach can't
+    // explain.
+    d.prefs.sessionMinutes = [5, 10, 15].indexOf(p.sessionMinutes) >= 0 ? p.sessionMinutes : null;
     // "Show: staff / names / both" is per-instrument and defaults to 'names',
     // i.e. today's display, untouched, for any instrument not set.
     const pn = (p.notate && typeof p.notate === 'object') ? p.notate : {};
@@ -1335,8 +1366,9 @@ import { register as registerPlayalong } from './ui/playalong.js';
   // A built-in drill/warm-up row now records this route as `input` (passed
   // through passEl to finishTask's logEvent); a song step still only ever
   // gets 'midi' or 'computer-key' forwarded to it (see the comment at the
-  // forwardSongNote call below) -- a canvas tap or a mic note inside a song
-  // stays untagged, exactly as before. Besides (a) the plain-text "heard"
+  // forwardSongNote call below). A canvas tap or a mic note never reaches a
+  // song step at all: openPanel() hides #mainArea (so #cv) and clears `task`
+  // (so onPitch returns before calling onNote) the moment Songs opens. Besides (a) the plain-text "heard"
   // messages below and (b) hands-together grading using the real MIDI
   // held-note set instead of the note-on timer window, it is now also
   // handed straight through to forwardSongNote() so a song practice
@@ -1345,12 +1377,11 @@ import { register as registerPlayalong } from './ui/playalong.js';
   // pass/fail, which stay blind to it.
   function onNote(midi, exact, source) {
     // Songs only ever learn a route they already understand (a real
-    // keyboard or a stand-in for one) -- forwarding 'screen' or 'mic' here
-    // would silently start logging song step input for a canvas tap during
-    // a kbd song, and could put 'mic' on a song row too, which would make
-    // src/ui/songs.js's own comments about that field (advance()'s region,
-    // and its "left off rather than guessed" convention) wrong. Tagging
-    // song screen clicks is a separate follow-up, not this change.
+    // keyboard or a stand-in for one). 'screen' and 'mic' cannot arrive here
+    // while a song is open (see openPanel()), so this gate only matters if a
+    // later UI change makes #cv reachable during songs: such a tap would
+    // then reach advance() with no route, and its row keeps `input` off
+    // rather than guessed (src/ui/songs.js's advance()).
     forwardSongNote(midi, exact, undefined, (source === 'midi' || source === 'computer-key') ? source : undefined);
     if (MODS[mod] && MODS[mod].kit) { const p = pieceForMidi(midi); if (p === null) coach('MIDI note ' + midi + ' is not one of the drums on this kit' + (playing ? ', so it counts as an extra hit.' : '.')); else if (!playing) coach(kitName(p) + ' heard -- start an exercise to see it judged.'); onHit(p, tapAudioTime(), source); return; }
     lastInputAt = now(); pressed[midi] = performance.now();
@@ -1415,12 +1446,36 @@ import { register as registerPlayalong } from './ui/playalong.js';
           if (midi === ex.lh.midi) { e.pair.on[midi] = performance.now(); e.pair.off = {}; e.pair.notes = []; return; }
           e.pair.notes.push({ midi: midi, ms: performance.now(), bassHeld: (ex.lh.midi in e.pair.on) && noteState.isHeld(ex.lh.midi) });
           const g = gradeHeldBass(ex, { bassOn: e.pair.on[ex.lh.midi], bassOff: e.pair.off[ex.lh.midi], notes: e.pair.notes });
-          if (g.state === 'fail') { failEl(g.reason, e.id + '>h'); e.pair.on = {}; e.pair.off = {}; e.pair.notes = []; }
+          // A fail while the bass is STILL physically down is only the
+          // melody's fault -- clearing e.pair.on here would make the very
+          // next melody note read bassHeld:false (nothing in e.pair.on to
+          // check against) and the bass's own note-off get ignored (not in
+          // e.pair.on), telling a learner who never let go that their left
+          // hand let go. Keep the bass's onset and only reset the melody, so
+          // the retry grades from the bass still being held; a fail with the
+          // bass already up resets as before (there is no held bass left to
+          // preserve).
+          if (g.state === 'fail') { failEl(g.reason, e.id + '>h'); if (noteState.isHeld(ex.lh.midi)) { e.pair.notes = []; } else { e.pair.on = {}; e.pair.off = {}; e.pair.notes = []; } }
           return;
         }
         if (stage === 'split') {
           if (midi !== ex.rh.midi && midi !== ex.lh.midi) { failEl(wrongMsg, e.id + '>x' + midi); return; }
-          if (midi === ex.lh.midi) { e.pair.on[midi] = performance.now(); delete e.pair.off[midi]; }
+          if (midi === ex.lh.midi) {
+            // A stray right-hand tap-and-release BEFORE the bass ever goes
+            // down (a learner tapping the melody key first, or tapping it
+            // again right after a fail reset) must not squat rhOns[0]/
+            // rhOffs[0] -- gradeSplitRhythm reads rhOns[0] as the onset
+            // paired against the bass's own onset, so a stale completed tap
+            // there pushes the real first note into rhOns[1] and throws off
+            // every comparison after it. Pressing the bass starts the RH
+            // lists fresh for this attempt -- but ONLY when rhOns/rhOffs are
+            // already balanced (no right-hand note currently held): a right
+            // hand that came in EARLY and is still down when the bass
+            // finally arrives (the left-hand-late case) is real evidence for
+            // this attempt, not a stray tap, and must be kept.
+            if (e.pair.rhOns.length === e.pair.rhOffs.length) { e.pair.rhOns = []; e.pair.rhOffs = []; }
+            e.pair.on[midi] = performance.now(); delete e.pair.off[midi];
+          }
           else if (e.pair.rhOns.length === e.pair.rhOffs.length) { e.pair.rhOns.push(performance.now()); }
           const g = gradeSplitRhythm(ex, { lhOn: e.pair.on[ex.lh.midi], lhOff: e.pair.off[ex.lh.midi], rhOns: e.pair.rhOns, rhOffs: e.pair.rhOffs });
           e.pair.last = { rh: g.rh.state, lh: g.lh.state };
@@ -1739,7 +1794,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
       if (now() - lastInputAt > 30 && el > lim + 8) { if (e.failed && !task.warm) { /* this one does not count: nobody was there */ e.failed = false; } task.done = true; task = null; takeBreak('away'); return; }
     }
     if (sess.sinceBreak > 25 * 60 && Date.now() > sess.snoozeUntil) { takeBreak('long'); return; }
-    if (sess.target && sess.active > sess.target * 60) { sess.target = 0; takeBreak('target'); return; }
+    if (sess.target && sess.active > sess.target * 60) { const mins = sess.target; sess.target = 0; takeBreak('target', mins); return; }
     if (!sess.capWarned && todayMinutes() >= 45) { sess.capWarned = true; coach('That is 45 minutes of practice today across your instruments. Skill settles in while you rest, so more today buys little. Finish this level bar and call it.'); }
   }
   let lastFrame = 0, lastPitchAt = 0, listenOnsetDetector = null;
@@ -2178,7 +2233,11 @@ import { register as registerPlayalong } from './ui/playalong.js';
   let pathwayLineShown = false;
   function startSession() {
     refreshModelClock(); ensureAudio(); sess = newSession(); recent = []; streak = 0; errCount = 0; task = null; lastItem = null; lastInputAt = now(); chunk = 0; say('');
-    let msg = 'Level ' + S.level + ': ' + D().name + '.'; if (tiredPattern()) { sess.target = 15; msg = 'Your last three sessions each ended weaker than they started, which is what tired practice looks like. Today is capped at 15 minutes. ' + msg; } else if (todayMinutes() >= 45) msg = 'You already have ' + Math.round(todayMinutes()) + ' minutes in today. Keep this one short. ' + msg;
+    // Session length E7c: the learner's own choice (DB.prefs.sessionMinutes,
+    // 0 meaning no limit) sets today's target before the tired check below,
+    // so tiredPattern()'s 15-minute cap only tightens it, never loosens it.
+    sess.target = DB.prefs.sessionMinutes || 0;
+    let msg = 'Level ' + S.level + ': ' + D().name + '.'; if (tiredPattern()) { sess.target = sess.target ? Math.min(sess.target, 15) : 15; msg = 'Your last three sessions each ended weaker than they started, which is what tired practice looks like. Today is capped at ' + sess.target + ' minutes. ' + msg; } else if (todayMinutes() >= 45) msg = 'You already have ' + Math.round(todayMinutes()) + ' minutes in today. Keep this one short. ' + msg;
     if (S.judged > 5 && !customOn) { sess.warm = 4; msg += ' First a short warm-up through what you know; it does not count.'; }
     // A returning keyboard learner (a prior kbd session logged on an earlier
     // day) is told, once per page load, which keyboard-path step comes next
@@ -2226,7 +2285,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
   // DB.sessions row -- a caller bug must never crash a practice session.
   function logEvent(ev) {
     const check = validateEvent(ev); if (!check.ok) { recordError('logEvent', new Error('dropped invalid event -- ' + check.errors.join('; '))); return; }
-    DB.events.push(ev); DB.events = boundEvents(DB.events); save();
+    DB.events.push(ev); DB.events = boundEvents(DB.events, { skillMap: KBD_SONG_SKILL_MAP, skillMapInstrument: 'kbd' }); save();
   }
   function endSession() {
     if (!sess) return; const min = sess.active / 60; let line = 'Session ended. Too short to log.';
@@ -2238,14 +2297,18 @@ import { register as registerPlayalong } from './ui/playalong.js';
   }
   const BREAKS = {
     user: ['Paused', 'Take your time. A pause of 90 seconds or more counts as a break and resets your energy.', 0], away: ['You stepped away', 'Nothing came in for a while, so I paused. The exercise you left does not count against you.', 0], hidden: ['Paused', 'The page was hidden, so I stopped the clock. Nothing was counted while you were gone.', 0],
-    error: ['Paused to recover', 'Something went wrong inside the trainer. It repaired its state and your progress is safe.', 0], tired: ['Break time: 2 minutes', '', 120], long: ['Break time: 5 minutes', '25 minutes without a break. Stand up, shake out your hands, get water. Practice past this point mostly rehearses mistakes.', 300], target: ['That is today\'s 15 minutes', 'Short and fresh beats long and tired. End here, or take a break and do one more block.', 300]
+    error: ['Paused to recover', 'Something went wrong inside the trainer. It repaired its state and your progress is safe.', 0], tired: ['Break time: 2 minutes', '', 120], long: ['Break time: 5 minutes', '25 minutes without a break. Stand up, shake out your hands, get water. Practice past this point mostly rehearses mistakes.', 300], target: ['That is today\'s practice', 'Short and fresh beats long and tired. End here, or take a break and do one more block.', 300]
   };
   const breakTrap = createFocusTrap({ container: $('breakCard'), onEscape: () => resume() });
-  function takeBreak(kind) {
+  function takeBreak(kind, mins) {
     if (!sess || paused) return; const b = BREAKS[kind]; playing = false; paused = true; pauseInfo = { at: Date.now(), secs: b[2] }; let why = b[1];
     if (kind === 'tired') why = 'Your accuracy slid from ' + Math.round(100 * sess.best30) + '% at your best today to ' + Math.round(100 * mean(sess.w30)) + '%' + (sess.bestRt && sess.rts.length >= 10 && median(sess.rts) > sess.bestRt * 1.3 ? ', and you are getting slower to answer' : '') + '. That pattern is fatigue, not lack of skill. Two minutes away fixes more than two more minutes of pushing.';
     if (kind === 'error') { const last = getErrors().slice(-1)[0]; if (last) why += ' Last error: ' + last.message; }
-    $('breakTitle').textContent = b[0]; $('breakWhy').textContent = why; $('breakClock').hidden = !b[2]; $('snoozeBtn').hidden = !(kind === 'tired' || kind === 'long'); $('breakCard').hidden = false; $('playBtn').textContent = 'Resume'; task = null; bar = null; save(); showAll(); breakTrap.activate($('playBtn'));
+    // Session length E7c: the title names the real minute count the learner
+    // chose (sess.target, captured by the caller above before it is zeroed)
+    // instead of BREAKS.target's generic fallback string.
+    let title = b[0]; if (kind === 'target' && mins) title = 'That is today\'s ' + mins + ' minutes';
+    $('breakTitle').textContent = title; $('breakWhy').textContent = why; $('breakClock').hidden = !b[2]; $('snoozeBtn').hidden = !(kind === 'tired' || kind === 'long'); $('breakCard').hidden = false; $('playBtn').textContent = 'Resume'; task = null; bar = null; save(); showAll(); breakTrap.activate($('playBtn'));
   }
   function tickBreak() { if (!pauseInfo || !pauseInfo.secs) return; const left = Math.max(0, pauseInfo.secs - (Date.now() - pauseInfo.at) / 1000); $('breakClock').textContent = left > 0 ? Math.floor(left / 60) + ':' + ('0' + Math.floor(left % 60)).slice(-2) : 'Ready when you are'; }
   function resume() {
@@ -2325,6 +2388,10 @@ import { register as registerPlayalong } from './ui/playalong.js';
     const box = $('modOpts'); box.innerHTML = ''; const sel = (id, label, opts, val, on) => { const l = document.createElement('label'); l.htmlFor = id; l.textContent = label + ' '; const s = document.createElement('select'); s.id = id; Object.keys(opts).forEach(k => { const o = document.createElement('option'); o.value = k; o.textContent = opts[k][0]; s.appendChild(o); }); s.value = val; s.addEventListener('change', () => on(s.value)); l.appendChild(s); box.appendChild(l); };
     const btn = (id, text, on, primary) => { const b = document.createElement('button'); b.type = 'button'; b.id = id; b.className = 'small' + (primary ? ' primary' : ''); b.textContent = text; b.addEventListener('click', () => { b.blur(); on(); }); box.appendChild(b); return b; };
     const chk = (id, text, val, on) => { const l = document.createElement('label'); l.htmlFor = id; const c = document.createElement('input'); c.type = 'checkbox'; c.id = id; c.checked = val; c.addEventListener('change', () => on(c.checked)); l.appendChild(c); l.appendChild(document.createTextNode(' ' + text)); box.appendChild(l); };
+    // Session length E7c: 5/10/15 minutes or no limit, per DB.prefs.sessionMinutes
+    // -- a change takes effect at the next Start, never a running session's
+    // sess.target, so it cannot fire a surprise break or cancel one mid-session.
+    if (!TOOLS[mod]) sel('optSessionMinutes', 'Session length', { none: ['No limit'], '5': ['5 minutes'], '10': ['10 minutes'], '15': ['15 minutes'] }, DB.prefs.sessionMinutes ? String(DB.prefs.sessionMinutes) : 'none', v => { DB.prefs.sessionMinutes = v === 'none' ? null : +v; save(); });
     if (NOTATE_MOD_IDS.indexOf(mod) >= 0) sel('optNotate', 'Show', { names: ['Note names (today)'], staff: ['Staff'], both: ['Staff and names'] }, DB.prefs.notate[mod], v => { DB.prefs.notate[mod] = v; save(); });
     if (mod === 'wind') { sel('optWind', 'My instrument', WIND_KINDS, DB.prefs.wind, v => { DB.prefs.wind = v; task = null; save(); }); chk('optRef', 'Play me the note first', false, () => {}); }
     if (mod === 'voice') sel('optVoice', 'My range', Object.assign({}, VOICE_KINDS, DB.prefs.voiceRange ? { mine: ['My range (found by test)', tonicFromRange(exerciseRangeFor(DB.prefs.voiceRange)).tonic] } : {}), DB.prefs.voice, v => { DB.prefs.voice = v; task = null; save(); });
@@ -2406,6 +2473,12 @@ import { register as registerPlayalong } from './ui/playalong.js';
     // the review label sits right beside the button rather than only in a
     // tooltip -- never claim it is reviewed when isReviewCurrent says no.
     if (mod === 'kbd') { const song = songFor(S.level); if (song) { btn('kbdSongHandoff', t('kbd.songHandoff.button'), () => { requestOpenSong(panelApi, song.songId, undefined, 'kbd', 'kbd'); openPanel('songs'); }); if (!isReviewCurrent(itemReview(song.id, contentRev(song)))) { const note = document.createElement('span'); note.setAttribute('role', 'note'); note.className = 'small'; note.textContent = t('review.unreviewed'); box.appendChild(note); } } }
+    // P2: "Your keyboard path" opens a panel naming all five
+    // src/core/pathway.js steps and the one action for whichever is current
+    // -- shown at every kbd level (unlike the song hand-off above, which
+    // needs a suggested song), since 'setup'/'lesson' come before any song
+    // is suggested at all.
+    if (mod === 'kbd') btn('kbdPathwayBtn', t('pathway.open'), () => openPanel('pathway'));
     if (mod === 'rhy') btn('calBtn', calRun ? 'Listening for 8 taps…' : 'Calibrate timing (' + Math.round(DB.latencyMs || 0) + ' ms)', startCalibrate, false);
     if (mod === 'capture') { btn('capGo', cap.on ? 'Stop' : 'Listen', () => { if (cap.on) capStop(); else { ensureAudio(); cap.on = true; cap.notes = []; cap.start = now(); cap.curM = -1; renderOpts(); } }, true); btn('capPlay', 'Play it back', () => { ensureAudio(); const t0 = now() + 0.1; cap.notes.forEach(n => tone(n.m, t0 + n.t - (cap.notes[0] ? cap.notes[0].t : 0), Math.max(0.2, n.d))); }); const lessons = {}; MOD_IDS.filter(m => hasMasteryScheme(m)).forEach(m => { lessons[m] = [MODS[m].name]; }); sel('capTo', cap.notes.length + ' notes. Practise on', lessons, 'kbd', () => {});
       // 'Make it a lesson': the captured tune becomes a draft Song (src/song/
@@ -2881,6 +2954,11 @@ import { register as registerPlayalong } from './ui/playalong.js';
     // logEvent(): see the logEvent() helper near logSession() above -- lets
     // a panel (a judged song step) leave its own row in DB.events.
     logEvent: ev => logEvent(ev),
+    // midiProof(): live proof this page load has actually heard a MIDI byte
+    // -- same test src/core/pathway.js's caller at startSession (2020) uses,
+    // exposed here so a mounted panel (the keyboard pathway panel) can ask
+    // the same question pathwayState needs without reaching past the API.
+    midiProof: () => midiPortInputs.some(i => midiHeard.has(i)),
   };
   //
   //
@@ -2903,6 +2981,9 @@ import { register as registerPlayalong } from './ui/playalong.js';
   //
   //
   registerPlayalong(panels);
+  //
+  //
+  registerPathway(panels);
   //
   //
   // slot:panel:w-fixes

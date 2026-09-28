@@ -101,6 +101,8 @@ worth having but not proof the skill transferred to a real keyboard. A keyboard 
 answer now records its route too, and one played on the computer keys or on-screen keys is the
 same story: practice, not counted as passed on your own. An on-screen click during a song is still
 not labelled with its route.
+same story: practice, not counted as passed on your own. A keyboard song is played on a MIDI keyboard or the
+computer keys; the on-screen keys are hidden while a song is open.
 
 ## Build it from source
 
@@ -121,6 +123,11 @@ same headless Chromium the tests use and writes `dist/screenshot-desktop.png` (1
 `dist/screenshot-phone.png` (390x844, phone viewport emulation on) — so a UI change can be checked
 visually without a human pasting an ad hoc shell command, and `tests/build/shots.test.mjs` proves
 the capability itself still works.
+
+Run `npm run review-packet -- kbd` to build a standalone, offline review packet for a real player
+to check the keyboard trainer's teaching content against a named method book -- see
+[docs/review-workflow.md](docs/review-workflow.md) for what it contains and what its downloaded
+result is for.
 
 ## Test
 
@@ -238,6 +245,10 @@ Every judged drill answer, warm-up answer and judged song step leaves one small 
 instrument and skill it was, whether it was independent or asked for help, which parts (pitch,
 timing, hold, tune) were actually checked, and how long it took — kept alongside the practice log
 described above. A drill answer's, a warm-up answer's, and a song step's record also keeps which
+described above. A song try that fails only because of an extra note struck alongside the right
+ones (a song step's own limit on wrong notes) is folded into the pitch check as a miss — or the
+timing check, on a rhythm or percussion step where pitch is never judged at all — so a try like
+that is never counted as passed on your own, even though every other part checked out fine. A drill answer's, a warm-up answer's, and a song step's record also keeps which
 input actually played it (MIDI, computer keys, on-screen keys, or mic), left off entirely when that
 route is unknown rather than guessed at. The raw sound of your playing or singing is never
 recorded; only the judged result is. The record keeps the most recent 500 attempts plus, for each
@@ -255,6 +266,19 @@ whatever the judged result — the same is true of a keyboard drill or warm-up a
 computer keys or on-screen keys: it counts as practice, not proof the skill transferred to a real
 keyboard. Attempts whose route is not recorded (on-screen clicks in a song, older records) are
 still counted as before.
+
+On the keyboard, a starter song played on your own also counts as applied for the notes it uses:
+if you had already played one of those notes right in a drill, a correct song attempt counts once
+toward "Applied in a song". The same song only counts once, however often you replay it, and only
+attempts where the notes themselves were checked count.
+
+On the keyboard, a starter song played on your own also counts as applied for the notes it uses:
+if you had already played one of those notes right in a drill, a correct song attempt counts once
+toward "Applied in a song". The same song only counts once, however often you replay it, and only
+attempts where the notes themselves were checked count. When older attempts are trimmed off the
+record, the song attempt that earned that credit is kept alongside the drill attempt it depends
+on, so "Applied in a song" never quietly drops just because history grew past the 500-attempt
+window.
 
 ## Today's plan
 
@@ -274,7 +298,30 @@ logged today, which survives opening Songs and reloading the page. The suggestio
 yet checked by a player" label, the same one beside the "Play a song with these notes" button.
 A learner returning to keyboard practice on a later day also gets one "Welcome back" line naming
 their next keyboard-path step (`src/core/pathway.js`'s `pathwayState`), shown once on the first
-session of that visit.
+session of that visit. A "Your keyboard path" button in keyboard practice's own options opens a
+panel listing all five keyboard-path steps, marks the current one, and offers one action that goes
+there -- every step's outcome labelled "Not yet checked by a player" until a real player's review
+lands.
+
+A "Session length" selector (No limit / 5 / 10 / 15 minutes) sits in every instrument's options
+(not the Tuner or Capture tools), saved to `prefs.sessionMinutes`; an invalid saved value (anything but 5, 10, 15 or no choice at all)
+falls back to No limit rather than a target the coach can't explain. The choice sets the new
+session's target when `src/app.js`'s `startSession` runs — a change made mid-session waits for
+the next Start, so it can neither fire a surprise break nor cancel one already showing. At the
+target, the coach pauses with "That is today's N minutes", naming the real minute count instead
+of a fixed number. The tired-pattern cap (three sessions in a row that each ended weaker than
+they started) still applies, but only when its 15 minutes is lower than the learner's own
+choice — see `tests/characterization/session-length-choice.test.mjs`.
+
+A "Session length" selector (No limit / 5 / 10 / 15 minutes) sits in every instrument's options
+(not the Tuner or Capture tools), saved to `prefs.sessionMinutes`; an invalid saved value (anything but 5, 10, 15 or no choice at all)
+falls back to No limit rather than a target the coach can't explain. The choice sets the new
+session's target when `src/app.js`'s `startSession` runs — a change made mid-session waits for
+the next Start, so it can neither fire a surprise break nor cancel one already showing. At the
+target, the coach pauses with "That is today's N minutes", naming the real minute count instead
+of a fixed number. The tired-pattern cap (three sessions in a row that each ended weaker than
+they started) still applies, but only when its 15 minutes is lower than the learner's own
+choice — see `tests/characterization/session-length-choice.test.mjs`.
 
 ## Turning an audio file into notes
 
@@ -434,6 +481,10 @@ A MusicXML (`.xml`, `.musicxml`, `.mxl`) piano part written on two staves import
 marked for a hand (staff 1 right, staff 2 left; see "Piano hands together"), so it counts as a
 two-handed part; MIDI, ABC and Guitar Pro imports carry no hand data and stay one-handed
 (`node --test tests/unit/import-musicxml-hands.test.mjs`).
+With the keyboard picked, importing a single song file also says, in one line, what changes to fit
+the keyboard — how many notes are too low or too high and will be skipped, or that the part moved
+by an octave — using `fidelityReport` (`src/song/eval/fidelity.js`); a file that fits as written
+shows no such line (`node --test tests/characterization/songs-import-fidelity.test.mjs`).
 A
 teacher can also hand a student a whole set of songs at once as a **challenge**: a plain `.json`
 file (`src/song/challenge.js`, schema `challenge/1`) holding a title, an optional note, and a list
@@ -476,9 +527,15 @@ words, and it names the actual direction — held too short says "Hold each note
 held too long (running into the next note) says "Let each note go a little sooner — it's running
 into the next one.", a mix of both says "Match each note's length — some ran short, some ran
 long."; being out of tune says "A little sharp — aim for the middle of the note." (or "flat") —
-instead of the generic retry prompt. A chord step also refuses a wrong extra note struck alongside
-the right ones (`maxExtras` on every judged step's passRule, `src/song/lesson.js`): hitting every
-expected note is not enough to pass if the learner also struck a note that was not asked for.
+instead of the generic retry prompt. Every judged step also refuses a wrong extra note struck
+alongside or before the right one — a chord step's window, and a one-note step's wrong note
+played ahead of the right one, both count the same way (`maxExtras` on every judged step's
+passRule, `src/song/lesson.js`): hitting every expected note is not enough to pass if the learner
+also struck a note that was not asked for. A same-pitch repeat of the expected note (a key bounce
+or re-strike) is still absorbed, not counted as an extra. A one-note step's wrong note is only
+counted this way from an exact input (MIDI) — a mic-heard blip ahead of the right note is exempt,
+since mic pitch is already treated as approximate everywhere else and a pitch tracker often reads
+a short wrong pitch or an octave jump right at a note's attack.
 A failed try always names the first concrete thing to fix — the missed note, the late note, the
 hold/tune reason above, or the extra note — instead of a generic retry prompt
 (`firstCorrection()` in `src/ui/songs/practice.js`).
@@ -692,6 +749,13 @@ their pass by editing that instrument's record in `src/instruments/*.js`, settin
 `{ reference: '<method book or standard name>', reviewedBy: '<name>', reviewedAt: 'YYYY-MM-DD' }`
 (all three filled in together, never just one or two).
 
+Per-item reviews (one curriculum level, one song hand-off, one pathway step -- see
+`docs/review-workflow.md`) land a different way: a result file downloaded from a review packet is
+applied with `npm run review-apply`, which writes an entry keyed by the item's id and content hash
+into `src/instruments/review-ledger.js`, lands through a normal PR like any other source change, and
+never touches a record's `provenance`. That means applying one of these never moves the "Content
+reviewed" column in the table above -- it stays provisional until someone edits `provenance` by hand.
+
 The table above answers "can I practise/assess this, and is its chart reviewed" per instrument, but
 not what any of that means for readiness to ship. `docs/capabilities.md`'s capability and maturity
 matrix (`src/instruments/capability.js`) answers that: it derives a `tier` for every record
@@ -704,6 +768,8 @@ that song's lesson in the Songs panel, with a "Back to practice" button at the e
 `src/instruments/kbd-songs.js`. Which songs get suggested, and at which level, comes from the same
 `provenance`-less curriculum this whole section is about: the suggestion map is teaching content
 the app's authors assembled, not something a musician has checked against a method book, so its
+button shows "Not yet checked by a player" right beside it until a player's review of that exact
+entry lands in the ledger, rather than implying otherwise.
 button always shows "Not yet checked by a player" right beside it rather than implying otherwise.
 Two starters, "Ode to Joy (theme), both hands" and "Twinkle, Twinkle, Little Star, both hands",
 carry an explicit left-hand part (`src/song/starter/index.js`) and are never suggested before the
@@ -1103,7 +1169,8 @@ learner has attempted anything; picking a card starts that same song on the
 chosen instrument without leaving the panel.
 
 `src/song/eval/fidelity.js`'s `fidelityReport(sourceNotes, song, partId, instrument)`
-is a pure, non-user-facing measurement of the same divergence, returning
+is a pure, non-user-facing measurement of the same divergence (worded for the learner only by
+Songs' import notice -- see Songs), returning
 `{dropped, merged, octaveShift, shiftSemitones, outOfRange, chordReduced, hands}`:
 `dropped`/`merged` compare the part's notes against an optional pre-import note
 list; `octaveShift`, `shiftSemitones`, `outOfRange` and `chordReduced` all come
