@@ -363,7 +363,7 @@ function tempoChangeText(step, changes, song) {
 // turned into the same kind of everyday phrase firstCorrection already uses
 // for the failure message itself, just short enough to sit in a title.
 const REPAIR_DIM_WORDS = {
-  pitch: 'the missed note(s)',
+  pitch: 'the missed note',
   onset: 'the late note',
   tune: 'the pitch centre',
   hold: 'holding the note',
@@ -2086,6 +2086,28 @@ function mountSongsPanel(hostEl, api) {
         practice.lastHeatBars = repairStep.bars;
         const { dims, unassessed } = dimsFromStep(repairStep, result, { assess: capabilityFor(practice.instrument).assess });
         practice.lastAssessed = assessmentLines(dims, unassessed, { step: repairStep, instrument: practice.instrument });
+        // A repair try is never independent evidence -- it is the isolated
+        // redo of the one worst note AFTER the step already failed twice --
+        // so it always logs assistance 'guided' (src/core/learning-events.js
+        // ASSISTANCE/isIndependentOk), regardless of practice.assistance
+        // (which describes the ORIGINAL step's mode, not this retry). Same
+        // one-row-per-judged-try convention as the main branch below, minus
+        // a Check verdict (a repair try is never 'check' mode on its own)
+        // and minus mastery credit (the comment above already covers why:
+        // the per-note credit already ran in finishRecording).
+        if (typeof api.logEvent === 'function') {
+          const judgedSources = result.matches.filter((m) => m.ok && m.played).map((m) => m.played.source);
+          const input = (judgedSources.length && judgedSources.every((s) => s !== undefined))
+            ? (judgedSources.every((s) => s === judgedSources[0]) ? judgedSources[0] : 'mixed')
+            : undefined;
+          api.logEvent(makeEvent({
+            instrument: practice.instrumentId, skill: repairStep.kind + ':' + repairStep.phraseIndex, source: 'song',
+            songId: practice.song.id, partId: practice.partId, assistance: 'guided',
+            dims, unassessed, activeMs: Math.max(0, Math.round(elapsedMs || 0)),
+            bpmTarget: repairStep.bpm || null, bpmActual: repairStep.bpm || null, input,
+            hands: practice.hands || undefined,
+          }, { now: api.now() }));
+        }
       }
       if (passed) practice.repair = null;
       practice.playedEvents = [];
