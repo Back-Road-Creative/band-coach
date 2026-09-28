@@ -17,7 +17,7 @@
 //
 // This test resumes straight to the untimed "pitches" step through the
 // app's own saved-lesson-place mechanism, rather than playing through the
-// timed "rhythm" step first (test/songs-hold-tune-song-clock, unit T3).
+// timed "rhythm" step first.
 // The rhythm step's rule ({ maxMeanErrorMs: 120 }, src/song/lesson.js) is
 // judged against onsets that are stamped with api.now() at the moment a
 // setInterval(50) tick runs (src/ui/songs.js beginListening()'s mic
@@ -44,7 +44,7 @@ import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { HTML_PATH } from '../helpers/html-path.mjs';
-import { launchPage, retryFlaky } from '../helpers/browser.mjs';
+import { launchPage, retryFlaky, WAIT_FLOOR_MS } from '../helpers/browser.mjs';
 import { buildLessonPlan } from '../../src/song/lesson.js';
 import { byId as instrumentById } from '../../src/instruments/index.js';
 
@@ -217,7 +217,7 @@ test('a sustaining instrument that plays the right note but holds it too short i
         // version of this test used, and the same wait absorbs whatever
         // getUserMedia latency the rhythm loop used to absorb.
         const captured = await page.evaluate(`(async () => {
-          const deadline = Date.now() + 20000;
+          const deadline = Date.now() + ${WAIT_FLOOR_MS};
           while (Date.now() < deadline) {
             const countEl = document.querySelector('.panel-songs-count');
             if (countEl && /^Notes heard so far: [1-9]/.test(countEl.textContent)) {
