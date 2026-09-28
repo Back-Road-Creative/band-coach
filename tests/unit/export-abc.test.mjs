@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { exportAbc } from '../../src/song/export-abc.js';
 import { importAbc } from '../../src/song/import-abc.js';
-import { starterSongs } from '../../src/song/starter/index.js';
+import { starterMelodies as starterSongs } from '../../src/song/starter/index.js';
 
 function melodyOf(song) {
   return song.parts.find((p) => p.id === 'melody') ?? song.parts[0];

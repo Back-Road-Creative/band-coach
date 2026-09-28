@@ -12,7 +12,7 @@ import { makeRng, pickFrom, intRange } from './rng.js';
 import { check as rhythmCheck } from './rhythm-dictation.js';
 import { METRES, validateBar } from '../rhythm.js';
 import { barsOf, notesInBar } from '../../song/model.js';
-import { starterSongs } from '../../song/starter/index.js';
+import { starterMelodies } from '../../song/starter/index.js';
 
 export const LEVEL_COUNT = 5;
 export const LEVEL_NAMES = ['1 bar', '1 bar', '2 bars', '2 bars', '2 bars'];
@@ -67,7 +67,7 @@ function eventsForSpan(song, boundaries, startBar, barCount, metreKey) {
   return { events, allBarsValid };
 }
 
-export function make(level, seed, { songs = starterSongs } = {}) {
+export function make(level, seed, { songs = starterMelodies } = {}) {
   const rng = makeRng(level, seed);
   const idx = Math.min(Math.max(level - 1, 0), BARS_FOR_LEVEL.length - 1);
   const wantBars = BARS_FOR_LEVEL[idx];
