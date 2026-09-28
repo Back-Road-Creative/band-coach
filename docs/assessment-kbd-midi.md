@@ -172,3 +172,190 @@ must log 'unknown'` — `+ actual undefined, - expected 'unknown'` at
    tolerance window, not a device-aware one. Follow-up: measure typical
    MIDI-to-`onmidimessage` latency on real hardware and decide whether a
    fixed compensation offset belongs in `matchOneNote`, in its own unit.
+
+# v2 — pathway check, transfer/retention rows and hand controls
+
+Scope: `tests/characterization/kbd-midi-check-path.test.mjs`, run alongside
+v1's file. Same one-file caveat as v1: not a claim of independent review,
+and not the full characterization suite.
+
+## What was measured
+
+Whether the SAME real, browser-driven attempts v1 exercises also produce
+rows that P1's check predicate (`isIndependentOk`,
+`src/core/learning-events.js`) and P3's pathway state machine
+(`pathwayState`, `src/core/pathway.js`) correctly refuse to advance on, and
+whether H3's hand filter (`stepForHands`/`handsAvailable`,
+`src/song/hand-filter.js`) actually restricts what gets judged when a
+two-hand keyboard song is in play. P3's own retention/transfer pure
+functions are already unit-tested directly
+(`tests/unit/pathway-transfer-retention.test.mjs`); this file does not
+repeat that — it proves the rows the app really logs at the browser level
+are the ones those functions are ever asked to evaluate.
+
+- **C1** — a clean MIDI pass in Learn (`assistance: 'shown'` always, in
+  Learn and Rehearse alike) never reads independent-ok and never advances
+  `pathwayState`.
+- **C2** — clicking "Play it" (Learn's own demo/reveal button — see "The
+  `howInline` substitution" below) before a clean MIDI pass changes nothing:
+  still `assistance: 'shown'`, still refused.
+- **C3** — a real computer-key press (`KeyboardEvent('keydown')`, key `'d'`
+  = MIDI 64, `src/core/pckeys.js`), mid-phrase, in Check (`assistance:
+  'none'`, so this isolates the input-route check from the assistance
+  check): `input: 'computer-key'`, refused.
+- **C4** — an unsourced ("unknown") note, driven as the JUDGED note itself
+  in Check (everywhere else in this file and in v1, the same unsourced hook
+  call is only ever used to walk PAST a step): `input: 'unknown'`, refused.
+- **C5** — the wrong hand. A two-hand chord song, 'right' selected: playing
+  the left hand's own (correct-for-left) pitch misses the pitches step
+  entirely (`dims.pitch: 'miss'`); the right hand's own pitch, same step,
+  passes. See "Rhythm judges WHEN, not WHAT" below for why this control
+  targets the pitches step, not rhythm.
+- **C6** — a step with no notes for the chosen hand. A two-hand song whose
+  first phrase is right-hand-only; with 'left' selected, H3 reports
+  `assessed: false` for that phrase's steps, the UI shows only "Next" (no
+  "Your turn" at all), and no learning-event row is logged for it.
+- **C7** (positive control) — a clean, on-time MIDI pass in Check does read
+  independent-ok and does advance `pathwayState` to `'return'`. Included so
+  the six negative controls above are readable as "this specific thing is
+  refused", not "nothing here can ever pass".
+
+## On what
+
+- Same harness as v1: headless Chromium over raw CDP
+  (`tests/helpers/browser.mjs`), the same fake `navigator.requestMIDIAccess`
+  (`tests/helpers/fake-midi.mjs`), real entry points (a real MIDI byte
+  delivery, a real `keydown`, real button clicks) for every control except
+  C4, which deliberately drives the unsourced hook seam as the note under
+  test.
+- Two new song fixtures, built the same `challenge/1`/`song/1` shape as v1's
+  Song A/B/C, both hand-tagged and both grounded against the app's own
+  `buildLessonPlan` output before being written into the test (a throwaway
+  node script, not shipped) rather than assumed from reading
+  `src/song/hand-filter.js` alone:
+  - `Song Hands Chord` — one phrase, one simultaneous rh+lh "chord" (two
+    notes sharing `start: 0`), so both hands are present from the very
+    first judged step, no multi-step walk needed to reach the hand control.
+  - `Song Hands Rest` — a right-hand-only first phrase, then a left-hand
+    note a bar later. `handsAvailable` is still `['rh','lh']` (a hand
+    counts as available the moment it appears anywhere in the part), but
+    the first phrase's own steps have nothing for a learner who chose
+    'left' — H3's `assessed: false` branch.
+- `pathwayState` needs a row's `skill` to read exactly `'whole:null'` before
+  it is even looked at (`qualifies()`, `src/core/pathway.js`, unexported).
+  Reaching a real `'whole'` step for six different controls was judged too
+  expensive (tens of judged steps per control); every control here instead
+  targets the cheapest reachable judged step (`'rhythm'` for C1–C4, C7;
+  `'pitches'` for C5) and relabels the logged row's `skill` to
+  `'whole:null'` before calling `pathwayState` — the same counterfactual
+  v1's T2 uses. This proves the MIDI/assistance/hand branch of `qualifies()`
+  in isolation; it does not prove a non-whole-step attempt is ever fed to
+  the real pathway unmodified. C7 (the positive control) is the one case
+  where the row's real dims (a genuine `onset: 'ok'`) also happen to be
+  everything `qualifies()` needs, so its `pathwayState(...).step ===
+  'return'` assertion is read the same way, but the row is still a
+  relabeled rhythm-step row, not a real whole-piece one — v1's T5 remains
+  the only test in this pair that drives a real, unrelabeled whole-piece
+  row through `pathwayState`.
+- **Rhythm judges WHEN, not WHAT — measured, not assumed.** `src/ui/songs.js`
+  documents this in its own comment near the rhythm-step scoring code: a
+  rhythm-step attempt is judged purely on note onset timing, any pitch or a
+  clap counts. An earlier draft of C5 targeted the rhythm step and measured
+  that a wrong-hand pitch played exactly on time still passed it
+  (`isIndependentOk === true`) — confirming the app comment directly rather
+  than trusting it — so C5 was moved to the `'pitches'` step, which does
+  check pitch identity, before this file was finalized.
+- **A missed judged note carries no attributable input route at all —
+  measured, not assumed.** `advance()`'s `input` derivation
+  (`src/ui/songs.js`) reads the route ONLY off matched (`ok`) notes — "a
+  miss carries no played event to ask", its own comment. C5's miss leg was
+  first written asserting `row.input === 'midi'` and measured `'unknown'`
+  instead; the assertion was corrected to match the measured behavior
+  (`dims.pitch === 'miss'`, no `input` claim) rather than adjusted to force
+  the original prediction. The positive leg (a matched note) does carry
+  `input: 'midi'`, confirming the asymmetry is about matching, not about
+  MIDI delivery.
+- **The app does not silence the resting hand's own notes while walking a
+  two-hand step — a real finding, not a test-harness workaround.**
+  `finishRecording` (`src/ui/songs.js`) passes the WHOLE, unfiltered
+  `practice.playedEvents` into `judgeAttempt`, scored only against the
+  selected hand's judged notes (H3) but with every OTHER note still counted
+  as an unmatched extra (`passRule.maxExtras: 0`). Walking past a two-hand
+  step while trying to send both hands' authored notes therefore fails that
+  step on `maxExtras`, not because either hand's own pitch was wrong. C5's
+  own walk (see `walkToStep`'s `hands` parameter) sends only the selected
+  hand's notes while walking past the rhythm step for exactly this reason —
+  the alternative (silently swallowing this as a harness bug) would have
+  hidden the finding rather than recording it. No fix is in this unit; see
+  Findings below.
+- The `howInline` substitution: C1b's "How to play this" inline expander is
+  not on this branch (grepped: no `howInline` anywhere under `src/`, and no
+  `#showMeBtn`/`#earRevealBtn` equivalent lives in Songs — those are drill
+  mode and ear-training only). The chosen substitute is Learn's own "Play
+  it" demo button (`src/ui/songs.js`), the one on-screen control in Songs
+  that plainly means "show me" and is Learn-only (Rehearse has none). C2
+  distinguishes itself from C1 (a plain revealed view, no explicit reveal
+  click) by pressing that button before the pass.
+
+## Mutation table (red-first evidence)
+
+Same discipline as v1: one mutation at a time, applied by hand, rebuilt,
+this file's tests run in isolation, failing case names recorded, then
+`git checkout HEAD -- <file>` and rebuilt green before the next mutation.
+No mutation was ever committed. Every row is a fresh measurement against
+this file's own 7 cases (C1–C7), not predicted in advance.
+
+| Mutation | What it removed | Cases that went red |
+| --- | --- | --- |
+| **M1** — drop P1's kbd input-route gate. Deleted `if (ev.instrument === 'kbd' && typeof ev.input === 'string' && ev.input !== 'midi') return false;` from `isIndependentOk` (`src/core/learning-events.js`). | A keyboard row played by any non-MIDI route can now read independent-ok purely off `dims`. | **C3, C4, C5 red; C1, C2, C6, C7 green — measured.** C3 (`computer-key`) and C4 (`unknown`) fail directly on their own `isIndependentOk(row) === false` assertion. C5 fails one level up: its own `walkToStep`-walked rhythm row (an unsourced `'unknown'` note, otherwise a clean onset) now reads independent-ok, tripping `walkToStep`'s own per-row guard before C5's targeted pitches-step assertions are even reached — collateral evidence the same gate protects the walk helper's own invariant, not just this file's named controls. C1/C2 stay red-immune because Learn's `assistance: 'shown'` still fails the (unmodified) `withHelp` check on its own; C6 logs no row at all, so there is nothing for this gate to have covered; C7's route is genuinely `'midi'`, unaffected either way. |
+| **M2** — drop P1's assistance gate. Removed `!withHelp &&` from `isIndependentOk`'s final `return` (`src/core/learning-events.js`). | A row with `assistance: 'shown'` can now read independent-ok purely off `dims`. | **C1, C2 red; C3–C7 green — measured.** C1 and C2 (both Learn, `assistance: 'shown'`) fail directly on `isIndependentOk(row) === false`; every other case's row already has `assistance: 'none'` (Check) so this gate was never the thing protecting them. |
+| **M3** — break H3's hand filter. Swapped `HAND_BY_MODE = { right: 'rh', left: 'lh' }` to `{ right: 'lh', left: 'rh' }` (`src/song/hand-filter.js`). | `stepForHands` now judges the OPPOSITE hand's notes from the one the learner selected. | **C5, C6 red; C1–C4, C7 green — measured.** C5: with 'right' selected, the mutated filter now judges the LEFT hand's notes, so the left hand's own pitch (previously the deliberate miss) now matches and reads independent-ok — the exact inversion the control is designed to catch. C6: `Song Hands Rest`'s first phrase is right-hand-only; with 'left' selected, the mutated filter now resolves 'left' to `'rh'`, so that phrase DOES have notes for the (mutated) selected hand — `assessed` flips from false to true, the "rest" line the app shows for an unassessed step stops appearing, and C6's own `restVisible === true` assertion fails outright (`expected: true, actual: false`). Every other control never touches a hand-tagged song (Song Single) or never reaches a hand-filtered judged step (C1–C4's rhythm-step target), so H3 is simply not in their path. |
+
+Raw failure excerpts (one representative line per mutation, from the actual
+runs this table is built from):
+
+- M1, C5: `walked-past rhythm row must never count` — `AssertionError:
+  expected: false, actual: true`.
+- M2, C1: `AssertionError [ERR_ASSERTION]: expected: false, actual: true`
+  on `assert.equal(isIndependentOk(row), false)`.
+- M3, C6: `the rest line shows for a hand with nothing to play here` —
+  `AssertionError: expected: true, actual: false`.
+
+## What was not measured
+
+- Everything v1's own "What was not measured" already lists (real hardware,
+  microphone pathways, non-`kbd` instruments) — unchanged, not repeated
+  test-by-test here.
+- Real-hardware MIDI latency for the pathway/check-path controls in this
+  file specifically — same v1 Finding 4 follow-up (R2's hardware
+  walkthrough), not re-measured here.
+- Retention (a second, later-day attempt) and transfer (a different song)
+  themselves: those pure functions are already unit-tested directly
+  (`tests/unit/pathway-transfer-retention.test.mjs`); this file proves the
+  rows feeding them are trustworthy, not the retention/transfer math itself.
+- Progress's own on-screen text for any of these controls (v1's T5 already
+  covers Progress agreement for a real whole-piece row; this file reads
+  `pathwayState` directly instead of re-deriving the same UI-level check for
+  every control).
+- `qualifies()`'s two redundant direct checks (`ev.input === 'midi'` and
+  `ev.assistance === 'none'`, in addition to calling `isIndependentOk(ev)`)
+  were noted as a discovered design property during grounding, but a
+  planned fourth mutation to prove that redundancy directly (removing only
+  `qualifies()`'s own duplicate checks, leaving `isIndependentOk` alone) was
+  not run — this file's spec named three mutations and this doc reports
+  exactly those three, measured. The redundancy itself is real (readable
+  directly in `src/core/pathway.js`) but is not evidenced here by a fourth
+  mutation.
+
+## Findings (no fixes in this unit — follow-ups only)
+
+1. **Extras are not silenced for the resting hand during a two-hand step.**
+   `finishRecording` (`src/ui/songs.js`) scores the WHOLE, unfiltered
+   `practice.playedEvents` against only the selected hand's judged notes
+   (H3), so a note played on the OTHER (unselected) hand during a two-hand
+   step counts as an unmatched extra (`passRule.maxExtras: 0`) and can fail
+   an otherwise-correct attempt. Demonstrated directly while designing C5
+   (see "On what" above); not exercised as its own named case here.
+   Follow-up: either drop the unselected hand's own notes from
+   `practice.playedEvents` before scoring, or exclude them from the
+   `maxExtras` count, in its own unit.
