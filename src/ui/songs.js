@@ -284,20 +284,24 @@ export function difficultyLabel(score) {
 // fidelity.js's own doc comment) -- the dropped/merged wording below is
 // kept for whenever a caller that DOES have sourceNotes reuses this. Pure:
 // no DOM, no instrument lookup, just the report's own numbers -> words.
+// English strings live here rather than the i18n table -- songs.js is a
+// CONVERTED_FILE for its existing strings, but this notice is scoped
+// narrowly enough (E6c) that adding a whole shared-table block is out of
+// this unit's OWNS; a later i18n pass can migrate it if it earns a home.
 export function fidelityNoticeText(report) {
   if (!report) return '';
   const parts = [];
   const outOfRangeCount = (report.outOfRange || []).filter((u) => u.reason === 'out-of-range').length;
-  if (outOfRangeCount > 0) parts.push(t(outOfRangeCount === 1 ? 'songs.fidelity.outOfRange.one' : 'songs.fidelity.outOfRange.many', { count: outOfRangeCount }));
+  if (outOfRangeCount > 0) parts.push(outOfRangeCount === 1 ? '1 note is too low or too high for the keyboard and will be skipped' : outOfRangeCount + ' notes are too low or too high for the keyboard and will be skipped');
   if (report.octaveShift) {
     const octaves = Math.abs(report.octaveShift) / 12;
     const dir = report.octaveShift > 0 ? 'up' : 'down';
-    parts.push(t(octaves === 1 ? `songs.fidelity.octaveShift.${dir}.one` : `songs.fidelity.octaveShift.${dir}.many`, { count: octaves }));
+    parts.push(octaves === 1 ? 'Moved ' + dir + ' 1 octave to fit the keyboard' : 'Moved ' + dir + ' ' + octaves + ' octaves to fit the keyboard');
   }
   const droppedCount = (report.dropped || []).length;
-  if (droppedCount > 0) parts.push(t(droppedCount === 1 ? 'songs.fidelity.dropped.one' : 'songs.fidelity.dropped.many', { count: droppedCount }));
+  if (droppedCount > 0) parts.push(droppedCount === 1 ? '1 note was dropped' : droppedCount + ' notes were dropped');
   const mergedCount = (report.merged || []).length;
-  if (mergedCount > 0) parts.push(t(mergedCount === 1 ? 'songs.fidelity.merged.one' : 'songs.fidelity.merged.many', { count: mergedCount }));
+  if (mergedCount > 0) parts.push(mergedCount === 1 ? '1 chord was merged into a single note' : mergedCount + ' chords were merged into single notes');
   if (parts.length === 0) return '';
   const text = parts.join('; ');
   return text.charAt(0).toUpperCase() + text.slice(1);
