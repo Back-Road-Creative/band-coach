@@ -131,6 +131,11 @@ export const en = {
   'songs.hands.startLeft': 'Left hand starts on {note}.',
   'songs.hands.restRight': 'The right hand rests here. Listen, then press Next.',
   'songs.hands.restLeft': 'The left hand rests here. Listen, then press Next.',
+  // Songs "How to play this" inline expander (C1b), src/ui/songs.js's
+  // renderPractice: the toggle button next to the step's notation, tab or
+  // fingering line, hidden in Check same as those views (only shows for an
+  // instrument the Fingerings panel can draw, howKindFor() non-null).
+  'howInline.button': 'How to play this',
   // "Your keyboard path" panel (P2), src/ui/pathway.js: the button that
   // opens it, the panel's own title/tag/current-step marker, the five
   // step names src/core/pathway.js's pathwayState steps through, and the
