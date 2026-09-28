@@ -373,9 +373,10 @@ in Learn). **Learn** shows everything: the notation, the fingering line, the ste
 "Play it" button that plays the phrase first. **Rehearse** shows the same views and hint but hides
 "Play it" — Learn and Rehearse share one saved place, so switching between them mid-lesson keeps
 your spot. **Check** hides the notation, the fingering line, the hint and "Play it" outright — the
-no-help attempt — and always starts at step 1 without touching the saved place. After a passed
-Check try, and again once the whole piece is done, a line says whether that try actually counted as
-a check or was practice only; on keyboard, only a real MIDI keyboard counts.
+no-help attempt — and always starts at step 1 without touching the saved place. Tries in Learn and
+Rehearse are kept as practice with help; only a Check try can count as done on your own. After a
+passed Check try, and again once the whole piece is done, a line says whether that try actually
+counted as a check or was practice only; on keyboard, only a real MIDI keyboard counts.
 
 Opening the editor screen (via a song's own **Edit notes**) shows its own row: **Edit
 notes**, **Play along**, **Export**, **Share**, **Save a copy** — Edit notes opens *any* song,
