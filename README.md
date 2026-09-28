@@ -256,6 +256,11 @@ own (or, in turn, retained or applied), whatever the judged result — attempts 
 recorded (drills, on-screen clicks, older records) are still counted as before.
 transferred to a different song, so it is not counted as though it were.
 
+On the keyboard, a starter song played on your own also counts as applied for the notes it uses:
+if you had already played one of those notes right in a drill, a correct song attempt counts once
+toward "Applied in a song". The same song only counts once, however often you replay it, and only
+attempts where the notes themselves were checked count.
+
 ## Today's plan
 
 Starting a drill session (`src/core/curriculum.js`'s `planSession`/`describePlan`, `src/app.js`'s
