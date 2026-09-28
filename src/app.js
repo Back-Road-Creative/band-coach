@@ -6,7 +6,7 @@ import { createLibrary, indexedDbStore, memoryStore } from './song/library.js';
 import { captureToSong } from './song/capture.js';
 import { toAudioTime, judgeTap, medianLatency } from './core/timing.js';
 import { DEFAULT_STABILITY_DAYS, MIN_STABILITY_DAYS, MAX_STABILITY_DAYS, GRADE, retrievability, review, due, migrateItem } from './core/srs.js';
-import { handsTogetherById, handsModeFromId, fingeringLabel, gradeHandsTogetherExact, gradeHandsTogetherApprox } from './core/hands-together.js';
+import { handsTogetherById, handsModeFromId, fingeringLabel, gradeHandsTogetherExact, gradeHandsTogetherApprox, bothUnlocked, effectiveHands, prepLine, HANDS_TOGETHER_EXERCISES } from './core/hands-together.js';
 import { createMidiParser } from './core/midi.js';
 import { createNoteState } from './core/note-state.js';
 import { PCKEYS } from './core/pckeys.js';
@@ -1104,8 +1104,14 @@ import { register as registerPlayalong } from './ui/playalong.js';
     // mode ('j1r'/'j1l') so a right/left-only pass credits its own id, never
     // the shared 'j1' both-hands id. (Level 14+'s mixed 'seq'/'one' pools can
     // still hand out a plain 'j<n>' id here -- that element is always graded
-    // as both-hands, by id, wherever it is graded; see handsModeFromId.)
-    if (kind === 'hands') { const handsSuf = DB.prefs.kbdHands === 'right' ? 'r' : DB.prefs.kbdHands === 'left' ? 'l' : ''; if (handsSuf) pool = pool.map(id => id + handsSuf); }
+    // as both-hands, by id, wherever it is graded; see handsModeFromId.) K2:
+    // a dedicated 'hands' task also runs through effectiveHands(), which
+    // gates a saved 'both' preference down to 'right' until bothUnlocked()
+    // -- each hand alone shown at least once -- says the level 13 drill may
+    // run both hands together; the raw preference itself is never rewritten.
+    const handsLockedBefore = d.task === 'hands' && !bothUnlocked(S);
+    const handsPref = d.task === 'hands' ? effectiveHands(DB.prefs.kbdHands, bothUnlocked(S)) : DB.prefs.kbdHands;
+    if (kind === 'hands') { const handsSuf = handsPref === 'right' ? 'r' : handsPref === 'left' ? 'l' : ''; if (handsSuf) pool = pool.map(id => id + handsSuf); }
     if (sess.warm > 0) { sess.warm--; warm = true; const base = kind === 'bar' || kind === 'kit' ? kind : kind === 'chord' ? 'chord' : 'one'; kind = base; pool = byStrength(pool, modelNow).slice(0, Math.max(2, Math.ceil(pool.length / 2))); }
     // Today's plan (src/core/curriculum.js's planSession, ordered by
     // nextPlanStep) steers an ordinary (non-warm-up) level task through its
@@ -1172,6 +1178,12 @@ import { register as registerPlayalong } from './ui/playalong.js';
     else if (kind === 'bar') { let left = 4, from = lastItem, guard = 0; while (left > 0 && guard++ < 12) { const fit = pool.filter(id => CELLS[id.slice(1)].b <= left); const id = pick(from, fit.length ? fit : ['rq'], modelNow); t.els.push(mk(id)); left -= CELLS[id.slice(1)].b; from = id; } if (!t.els.some(e => e.info.on.length)) { t.els[0] = mk('rq'); } }
     else if (kind === 'kit') { const L = d.bars ? d : M.levels[S.tick % M.levels.length], b = L.bars[S.tick % L.bars.length]; S.tick++; t.kit = { metre: L.metre, bpm: d.bars ? L.bpm : L.bpm + 6 * (S.level - M.levels.length), swing: L.swing || 0, bar: b, name: L.name }; t.els = [{ id: 'kit', info: { label: L.name }, failed: false, t0: 0, rt: 0, reveal: false }]; }
     else if (kind === 'bar2') { const variants = d.bars || [[['qr']]], cells = variants[S.tick % variants.length]; S.tick++; t.rCells = cells; t.els = [{ id: 'bar2', info: { label: d.name }, failed: false, t0: 0, rt: 0, reveal: false }]; }
+    // K2: mk() above is what can first tip bothUnlocked() true (it sets
+    // seen), so the unlock is checked live right here rather than waiting
+    // for a future renderOpts() -- flipping the DOM in place, never
+    // rebuilding the whole options box, so a mid-change select never steals
+    // its own focus.
+    if (handsLockedBefore && bothUnlocked(S)) { const o = document.querySelector('#optKbdHands option[value="both"]'); if (o) o.disabled = false; const lk = $('kbdBothLock'); if (lk) lk.remove(); if (DB.prefs.kbdHands === 'both') $('optKbdHands').value = 'both'; }
     if (M.input === 'answer') { t.kind = 'ear'; if (!t.els.length) t.els.push(mk(pick(lastItem, pool, modelNow))); const e = t.els[0], fam = pool.filter(id => id[0] === e.id[0] && (e.id[0] !== 'i' || id.slice(-1) === e.id.slice(-1))); t.choices = fam.slice().sort((a, b) => (inf(a).semi || 0) - (inf(b).semi || 0) || (a < b ? -1 : 1)); t.root = 55 + ((S.tick * 5) % 12); }
     if (planKind) planProgress[planKind] = (planProgress[planKind] || 0) + 1;
     return t;
@@ -2094,7 +2106,25 @@ import { register as registerPlayalong } from './ui/playalong.js';
     // 13). Changing it clears the in-progress task so the next one is built
     // fresh under the new mode (buildLevelTask's frame loop rebuilds
     // automatically once task is null and playing), never a half-graded one.
-    if (mod === 'kbd') sel('optKbdHands', 'Hands', { both: ['Both'], right: ['Right only'], left: ['Left only'] }, DB.prefs.kbdHands, v => { DB.prefs.kbdHands = v; task = null; save(); });
+    // K2: at level 13, Both stays disabled and the shown value reads
+    // effectiveHands() (never the raw, unrewritten preference) until
+    // bothUnlocked() -- each hand alone actually shown at least once, or an
+    // earlier both-hands record grandfathering it open. A lock note and a
+    // "before you start" prep line for each hand ride along beside it.
+    if (mod === 'kbd') sel('optKbdHands', 'Hands', { both: ['Both'], right: ['Right only'], left: ['Left only'] }, mod === 'kbd' && D().task === 'hands' ? effectiveHands(DB.prefs.kbdHands, bothUnlocked(S)) : DB.prefs.kbdHands, v => { DB.prefs.kbdHands = v; task = null; save(); });
+    if (mod === 'kbd' && D().task === 'hands') {
+      if (!bothUnlocked(S)) {
+        const o = document.querySelector('#optKbdHands option[value="both"]'); if (o) o.disabled = true;
+        const lock = document.createElement('span'); lock.id = 'kbdBothLock'; lock.className = 'small'; lock.setAttribute('role', 'note');
+        lock.textContent = 'Both unlocks after you have played the right hand alone and the left hand alone.'; box.appendChild(lock);
+      }
+      const prep = document.createElement('span'); prep.id = 'kbdHandsPrep'; prep.className = 'small';
+      prep.textContent = prepLine(HANDS_TOGETHER_EXERCISES[0], m => nname(m, true)); box.appendChild(prep);
+      if (!isReviewCurrent(itemReview('kbd.handsTogether.prep', contentRev(prepLine(HANDS_TOGETHER_EXERCISES[0]))))) {
+        const note = document.createElement('span'); note.id = 'kbdHandsPrepReview'; note.setAttribute('role', 'note'); note.className = 'small';
+        note.textContent = t('review.unreviewed'); box.appendChild(note);
+      }
+    }
     // B(C11a) 'Play a song with these notes': songFor(S.level) names the
     // most advanced starter song whose notes are all already taught (see
     // src/instruments/kbd-songs.js -- null until level 2, since a song is

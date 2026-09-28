@@ -13,9 +13,17 @@ import { retrievability } from '../../src/core/srs.js';
 const htmlPath = HTML_PATH;
 const masteryOf = (item, now) => (item ? retrievability(item, now) : 0.4);
 
+// K2: level 13's Both option (used by every test in this file) is now gated
+// behind each hand alone having been shown -- see tests/unit/hands-together-
+// gate.test.mjs and tests/characterization/kbd-hand-alone-gate.test.mjs.
+// Seeding both hands' alone-items as already shown keeps this file's setup
+// on Both, which is what every existing assertion here already assumes.
+const HANDS_ALONE_SEED = "window.__coach.db().mods.kbd.item.j1r = { stability: 1, difficulty: 0.3, lastSeen: Date.now(), reps: 0, lapses: 0, seen: 1 }; window.__coach.db().mods.kbd.item.j1l = { stability: 1, difficulty: 0.3, lastSeen: Date.now(), reps: 0, lapses: 0, seen: 1 };";
+
 async function toHandsTogether(page) {
   await page.evaluate("window.__coach.setMod('kbd')");
   await page.evaluate('window.__coach.state().level = 13');
+  await page.evaluate(HANDS_ALONE_SEED);
   await page.evaluate("document.getElementById('playBtn').click()");
   await page.waitFor('window.__coach.task()');
 }
