@@ -1273,8 +1273,9 @@ import { register as registerPlayalong } from './ui/playalong.js';
     // ever judges here (q > 0 is the whole pass/fail signal); `input` is
     // the route of the passing note (passEl's 4th argument, threaded down
     // from onNote()'s `source`) and is left off rather than guessed when
-    // the caller never told onNote a source -- the debug hook called with
-    // no third argument.
+    // no route was passed: the debug hook or grooveInject calling onNote
+    // with no third argument, and onPitch's own pluck-chord and sustain
+    // passEl calls (microphone rows, never a kbd note).
     task.els.forEach(e => { credit(e.id, e.q || 0, from, task.warm, e.rt, gradeOutcome({ helped: !!e.helped, failed: !!e.failed, assistance: e.assistance || null, q: e.q || 0 })); logEvent(makeEvent({ instrument: mod, skill: e.id, source: task.warm ? 'warmup' : 'drill', assistance: e.helped ? 'shown' : (e.assistance || 'none'), dims: { pitch: e.q > 0 ? 'ok' : 'miss' }, unassessed: [], activeMs: Math.round((e.rt || 0) * 1000), bpmTarget: null, bpmActual: null, hands: e.info.kind === 'hands-together' ? handsModeFromId(e.id) : undefined, input: e.input }, { now: modelNow })); from = e.id; if (!(e.q > 0)) anyFail = true; });
     lastItem = from; nextTaskAt = now() + (anyFail ? 1.5 : 0.7); if (task.kind === 'ear') nextTaskAt = now() + (anyFail ? 2.6 : 1.1); save(); showAll();
   };
@@ -1283,11 +1284,11 @@ import { register as registerPlayalong } from './ui/playalong.js';
   // recognised); `source` is 'midi' for a real MIDI note-on, 'computer-key'
   // for the physical-keyboard keydown branch, 'screen' for a canvas tap or
   // canvas Enter/Space, and 'mic' for the microphone path -- left undefined
-  // only for the debug hook when a test calls it with no third argument.
+  // when a caller passes none (the debug hook, grooveInject).
   // A built-in drill/warm-up row now records this route as `input` (passed
   // through passEl to finishTask's logEvent); a song step still only ever
-  // gets 'midi' or 'computer-key' forwarded to it (see change 5's comment
-  // at forwardSongNote below) -- a canvas tap or a mic note inside a song
+  // gets 'midi' or 'computer-key' forwarded to it (see the comment at the
+  // forwardSongNote call below) -- a canvas tap or a mic note inside a song
   // stays untagged, exactly as before. Besides (a) the plain-text "heard"
   // messages below and (b) hands-together grading using the real MIDI
   // held-note set instead of the note-on timer window, it is now also
