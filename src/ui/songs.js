@@ -127,11 +127,12 @@ export function recordStartSec() { return currentPractice ? currentPractice.reco
 // `atAudioSec` (optional, api.now()'s units) stamps the note at that exact
 // audio-clock instant instead of "now"; only forwardNoteAt() below passes it.
 // `source` (optional) is whatever src/app.js's onNote() was told played the
-// note -- 'midi' for a real MIDI note-on, 'computer-key' for the physical
-// keyboard, undefined for a screen click, the mic path, or a caller (the
-// debug hook, an existing test) that never passes one. Every existing
-// caller of forwardNote/forwardNoteAt keeps working with no fourth
-// argument, same as before this parameter existed.
+// note, forwarded through unchanged -- 'midi' for a real MIDI note-on,
+// 'computer-key' for the physical keyboard, 'screen' for a canvas tap or
+// canvas Enter/Space, and undefined for a caller (the debug hook, an
+// existing test) that never passes one. Every existing caller of
+// forwardNote/forwardNoteAt keeps working with no fourth argument, same as
+// before this parameter existed.
 export function forwardNote(midi, exact, atAudioSec, source) {
   for (const fn of noteListeners.slice()) {
     try { fn(midi, exact, atAudioSec, source); } catch (e) { /* one bad listener must not break the others */ }
@@ -1838,12 +1839,12 @@ function mountSongsPanel(hostEl, api) {
       // from (a matched note only -- a miss carries no played event to ask,
       // see practice.js's missedNote). 'midi' only when every one of them
       // is a real MIDI note-on; the one concrete non-midi route when they
-      // all agree on something else (a computer-key song played end to
-      // end); 'mixed' when they do not agree; and left off the row entirely
-      // -- never guessed -- the moment any judged note's route is unknown
-      // (same "left off rather than guessed" convention finishTask's own
-      // `input` comment documents in src/app.js, for a caller, such as the
-      // debug hook or a screen click, that never told onNote() a source).
+      // all agree on something else (a computer-key or on-screen-tap song
+      // played end to end); 'mixed' when they do not agree; and left off the
+      // row entirely -- never guessed -- the moment any judged note's route
+      // is unknown (same "left off rather than guessed" convention
+      // finishTask's own `input` comment documents in src/app.js, for a
+      // caller, such as the debug hook, that never told onNote() a source).
       // Record only: this never changes credit, mastery or pass/fail above
       // -- a later check reads this field on its own.
       const judgedSources = result ? result.matches.filter((m) => m.ok && m.played).map((m) => m.played.source) : [];
