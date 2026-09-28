@@ -785,9 +785,9 @@ Level 15, "Hands together: held bass under the melody", reuses the same five pai
 ids (again a distinct mastery, never credited or consumed by any other hands-together id). The left
 hand holds its bass note (LEARN is the same untimed both-notes-held pass as level 14) and, once
 held, CHECK asks for a fresh bass note-on followed by a short three-note melody in the right hand
-(`heldBassMelody()` in `src/core/hands-together.js` — the bass note, its neighbouring pair's note,
-then the bass note again, e.g. C-D-C; the top pair, G, has no pair above it to borrow from, so it
-plays G-F-G instead) while the bass keeps sounding. A melody note played while the bass has already
+(`heldBassMelody()` in `src/core/hands-together.js` — the right hand's own note, its neighbouring
+pair's note, then the right hand's own note again, e.g. C-D-C; the top pair, G, has no pair above
+it to borrow from, so it plays G-F-G instead) while the bass keeps sounding. A melody note played while the bass has already
 been let go, or the bass being released before the last melody note-on, fails with a plain-language
 reason naming the left hand and the hold; a melody note that is not the next one expected fails
 naming the expected note instead. The exercise passes on the bass note-off, once it comes after the

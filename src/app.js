@@ -737,7 +737,9 @@ import { register as registerPlayalong } from './ui/playalong.js';
   const WIND_KINDS = { c: ['Concert pitch: flute, oboe, violin', 0, 'treble'], bb: ['B flat: trumpet, clarinet, soprano sax', -2, 'treble'], bbt: ['B flat, octave lower: tenor sax', -14, 'treble'], eb: ['E flat: alto sax', -9, 'treble'], ebb: ['E flat, octave lower: baritone sax', -21, 'treble'], f: ['F: French horn', -7, 'treble'], bc: ['Bass clef: trombone, euphonium, tuba', -19, 'bass'] };
   const VOICE_KINDS = { low: ['Lower voice (Do = C3)', 48], mid: ['Middle voice (Do = G3)', 55], high: ['Higher voice (Do = C4)', 60] };
 
-  function levelDef(mod, L) { const T = MODS[mod].levels; if (L <= T.length) return T[L - 1]; const k = L - T.length, last = T[T.length - 1]; return { name: 'Everything, faster (' + k + ')', task: 'mix', limit: Math.max(2.5, (last.limit || 8) - 0.75 * k), bpm: Math.min(120, (last.bpm || 72) + 6 * k), fast: true }; }
+  // K4: "Everything, faster (k)" anchors on the last level WITHOUT a `stage`
+  // (level 15/16 carry one) so appending a staged level never re-anchors it.
+  function levelDef(mod, L) { const T = MODS[mod].levels; if (L <= T.length) return T[L - 1]; const k = L - T.length, unstaged = T.filter(x => !x.stage), last = unstaged.length ? unstaged[unstaged.length - 1] : T[T.length - 1]; return { name: 'Everything, faster (' + k + ')', task: 'mix', limit: Math.max(2.5, (last.limit || 8) - 0.75 * k), bpm: Math.min(120, (last.bpm || 72) + 6 * k), fast: true }; }
   function activeItems(mod, L) { const T = MODS[mod].levels, out = []; for (let i = 0; i < Math.min(L, T.length); i++) (T[i].add || []).forEach(id => out.push(id)); return out; }
   // what an item id means
   let info = function (mod, id, prefs) {
@@ -2945,7 +2947,9 @@ import { register as registerPlayalong } from './ui/playalong.js';
   }
   applyStaticLabels(document);
   loadDB(); if (!Array.isArray(DB.custom)) DB.custom = []; $('optNames').checked = DB.prefs.names; $('optTheme').value = DB.prefs.theme; applyTheme(DB.prefs.theme); $('optNoteSystem').value = DB.prefs.noteNaming.system; $('optAccidentals').value = DB.prefs.noteNaming.accidentals; buildPicker(); pickerAsSheet = hasSavedMod; setInstrumentSheetOpen(!hasSavedMod); buildNav(); setMod(mod); requestAnimationFrame(frame);
-  const hook = !__DEBUG_HOOK__ ? null : { state: () => S, db: () => DB, sess: () => sess, task: () => task, cur: cur, note: onNote, answer: answer, tap: onTap, bar: () => bar, playing: () => playing, setMod: setMod, testSource: testSource, heard: () => heard, yin: yin, cap: () => cap, tuner: () => tunerState, tunerLock: () => tunerLock, deaf: () => deafWindow.isDeaf(), deafUntil: () => deafWindow.until(), exportProgress: doExportProgress, importProgress: doImportProgress, audioNow: audioNow, modelNow: () => modelNow, plan: () => sessionPlan, planProgress: () => planProgress };
+  const hook = !__DEBUG_HOOK__ ? null : { state: () => S, db: () => DB, sess: () => sess, task: () => task, cur: cur, note: onNote, answer: answer, tap: onTap, bar: () => bar, playing: () => playing, setMod: setMod, testSource: testSource, heard: () => heard, yin: yin, cap: () => cap, tuner: () => tunerState, tunerLock: () => tunerLock, deaf: () => deafWindow.isDeaf(), deafUntil: () => deafWindow.until(), exportProgress: doExportProgress, importProgress: doImportProgress, audioNow: audioNow, modelNow: () => modelNow, plan: () => sessionPlan, planProgress: () => planProgress,
+    // levelDef(): D() -- a test's seam onto a mix level's limit/bpm.
+    levelDef: () => D() };
   // Debug-hook slots: replace ONLY your own line with
   //   if (__DEBUG_HOOK__) Object.assign(hook, { … });
   if (__DEBUG_HOOK__) Object.assign(hook, { errors: getErrors });

@@ -166,7 +166,7 @@ test('gradeSplitRhythm: a third right-hand onset fails, naming the right hand', 
   assert.equal(r.state, 'fail');
 });
 
-test('a re-pressed left hand clears its stale release before a fresh split-rhythm attempt', () => {
+test('gradeSplitRhythm: a left hand still held (no lhOff) is never failed on the release rules', () => {
   // The app resets rhOns/rhOffs to [] on a fail but only e.pair.on/off for the
   // held-note timestamps -- this asserts the PURE grader treats a fresh lhOn
   // with no matching lhOff as still-held (undefined off), not the old value.

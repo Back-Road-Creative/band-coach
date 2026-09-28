@@ -72,6 +72,30 @@ test('level 15: label, review note, and level-14/13 UI are absent', async (t) =>
   assert.deepEqual(page.exceptions, []);
 });
 
+async function readLevelDef(page, mod, level) {
+  await page.evaluate(`window.__coach.setMod('${mod}')`);
+  await page.evaluate(`window.__coach.state().level = ${level}`);
+  await page.evaluate(`window.__coach.setMod('${mod}')`);
+  return page.evaluate('window.__coach.levelDef()');
+}
+
+// K4 bug: appending staged levels 15-16 after level 14 silently re-anchored
+// "Everything, faster (k)"'s limit/bpm onto level 16 instead of level 14.
+test('levelDef: K4 (levels 15-16) does not move the "Everything, faster" mix level off its pre-K4 anchor', async (t) => {
+  const page = await launchPage(htmlPath, { initScript: FAKE_MIDI_INIT });
+  t.after(() => page.close());
+
+  const kbdDef = await readLevelDef(page, 'kbd', 17);
+  assert.equal(kbdDef.limit, 9.25, 'must anchor on level 14 (matching rhythms, limit 10), not level 16 (limit 14)');
+  assert.equal(kbdDef.bpm, 78, 'bpm must anchor the same pre-K4 level');
+
+  const voiceDef = await readLevelDef(page, 'voice', 9);
+  assert.equal(voiceDef.limit, 11.25, 'an instrument untouched by K4 must see no change to its own mix level');
+  assert.equal(voiceDef.bpm, 78);
+
+  assert.deepEqual(page.exceptions, []);
+});
+
 test('level 15: releasing the bass before the melody finishes fails with a hold reason, and the element is not passed', async (t) => {
   const page = await launchPage(htmlPath, { initScript: FAKE_MIDI_INIT });
   t.after(() => page.close());
