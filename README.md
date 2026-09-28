@@ -813,6 +813,15 @@ it never counts for or against you: the spaced-repetition record and your level 
 as they were, and only the session's help counter moves (`src/app.js` `credit()` /
 `src/core/grade-outcome.js`).
 
+Beside the active note, a **"How to play this"** toggle offers the same "How to play it" diagram
+and description Learn/Rehearse shows under a song step, drawn for the drill's own instrument and
+current note. Opening it counts the same as Show me — help, not a test, no credit and no penalty,
+and (like Show me) it logs the attempt with assistance "shown" once you play the note. Unlike the
+main "How to play it" panel, opening this toggle never ends the running session or the current
+task: it expands the diagram right where you are, instead of switching screens. It is hidden under
+the same conditions Show me is (ear training, rhythm reading, drum kit), and for a note the panel
+has no diagram for at all (keyboard, today's only such instrument).
+
 ## Piano hands together
 
 The keyboard mod's level 13 is "hands together": the right hand and left hand each play one note
