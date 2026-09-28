@@ -267,6 +267,14 @@ follows that same order — review first, then the weak skill on its own, then a
 the blind check — before falling back to today's ordinary level-by-level practice once all four
 are done.
 
+On a keyboard level with a suggested starter song (`songFor` from `src/instruments/kbd-songs.js`),
+the plan ends with "then play &lt;title&gt;" -- shown as done once a song session for that song is
+logged today, which survives opening Songs and reloading the page. The suggestion carries the "Not
+yet checked by a player" label, the same one beside the "Play a song with these notes" button.
+A learner returning to keyboard practice on a later day also gets one "Welcome back" line naming
+their next keyboard-path step (`src/core/pathway.js`'s `pathwayState`), shown once on the first
+session of that visit.
+
 ## Turning an audio file into notes
 
 `src/audio/file-frames.js` is a pure function, `framesFromPCM`, that walks a decoded mono audio

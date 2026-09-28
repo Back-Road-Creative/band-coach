@@ -156,6 +156,8 @@ reviewed until a real player's review lands in
 This is a pure contract today, proven only by
 `node --test tests/unit/pathway.test.mjs` -- not yet a browser-proven
 journey. P2 wires it into a panel; R2 adds the browser journeys.
+`src/app.js`'s `startSession` is the first caller of `pathwayState`, and shows the step's outcome
+text once per visit for a returning keyboard learner (`tests/characterization/plan-song-block.test.mjs`).
 
 ## Known gaps
 
