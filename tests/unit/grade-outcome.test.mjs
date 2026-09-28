@@ -23,3 +23,7 @@ test('gradeOutcome: helped takes priority over approximate assistance', () => {
 test('gradeOutcome: no args defaults to a normal, unhelped, ungraded answer', () => {
   assert.deepEqual(gradeOutcome(), { review: true, level: true, q: 0 });
 });
+
+test('gradeOutcome: guided assistance reviews but does not raise level (practice-only pass)', () => {
+  assert.deepEqual(gradeOutcome({ assistance: 'guided', q: 1 }), { review: true, level: false, q: 1 });
+});
