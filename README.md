@@ -389,6 +389,10 @@ song library rather than below it: the library, Assignments and the "Play it onâ
 all collapse into one `<details>` the moment a song opens, so a lesson opened on a phone shows
 up in the first screen instead of several screens down, with focus moving to the song's own
 heading; the library stays one click (its `<summary>`) away, still showing the song just opened.
+A MusicXML (`.xml`, `.musicxml`, `.mxl`) piano part written on two staves imports with each note
+marked for a hand (staff 1 right, staff 2 left; see "Piano hands together"), so it counts as a
+two-handed part; MIDI, ABC and Guitar Pro imports carry no hand data and stay one-handed
+(`node --test tests/unit/import-musicxml-hands.test.mjs`).
 A
 teacher can also hand a student a whole set of songs at once as a **challenge**: a plain `.json`
 file (`src/song/challenge.js`, schema `challenge/1`) holding a title, an optional note, and a list

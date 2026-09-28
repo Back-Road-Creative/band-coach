@@ -43,12 +43,14 @@ test('tutorial-chopin-prelude.musicxml (real Finale v28.0 export): key, metre, t
   // Eb4 (<alter>-1</alter>), G4, all <duration>4</duration> with
   // <divisions>4</divisions> -> 480 ticks, all starting at tick 0.
   // midi = (octave+1)*12 + stepPC + alter: G3=55, C4=60, Eb4=63, G4=67.
+  // <staves>2</staves> and the opening chord's four notes are all
+  // <staff>1</staff> (fixture lines 108, 137, 152, ...), so each gets hand: 'rh'.
   const opening = song.parts[0].notes.slice(0, 4);
   assert.deepEqual(opening, [
-    { start: 0, dur: TPQ, midi: 55 },
-    { start: 0, dur: TPQ, midi: 60 },
-    { start: 0, dur: TPQ, midi: 63 },
-    { start: 0, dur: TPQ, midi: 67 },
+    { start: 0, dur: TPQ, midi: 55, hand: 'rh' },
+    { start: 0, dur: TPQ, midi: 60, hand: 'rh' },
+    { start: 0, dur: TPQ, midi: 63, hand: 'rh' },
+    { start: 0, dur: TPQ, midi: 67, hand: 'rh' },
   ]);
 
   // The file's <note> elements are all pitched (no <rest>/<grace>): a
@@ -64,6 +66,12 @@ test('tutorial-chopin-prelude.musicxml (real Finale v28.0 export): key, metre, t
   // Three simultaneous <voice> ids (1, 2, 3) are used across the part -> the
   // "N voices flattened" warning must fire, naming the part.
   assert.ok(warnings.some((w) => /3 voices/.test(w) && /Piano/.test(w)), `expected a 3-voices warning, got: ${JSON.stringify(warnings)}`);
+
+  // Both staves are actually in play (not just staff 1): every note carries
+  // a hand, and both 'rh' and 'lh' show up.
+  assert.ok(song.parts[0].notes.every((n) => n.hand === 'rh' || n.hand === 'lh'), 'every note should carry a hand');
+  assert.ok(song.parts[0].notes.some((n) => n.hand === 'rh'), 'expected some rh notes');
+  assert.ok(song.parts[0].notes.some((n) => n.hand === 'lh'), 'expected some lh notes');
 });
 
 test('harmonic-element.musicxml (W3C conformance example): a chord with <technical><harmonic> markup, no key/time/sound at all', () => {
