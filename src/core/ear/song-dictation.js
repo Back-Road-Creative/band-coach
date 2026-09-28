@@ -8,7 +8,7 @@
 import { makeRng, intRange } from './rng.js';
 import { checkSequence } from './theory.js';
 import { barsOf, notesInBar, ticksToSeconds } from '../../song/model.js';
-import { starterSongs } from '../../song/starter/index.js';
+import { starterMelodies } from '../../song/starter/index.js';
 
 export const LEVEL_COUNT = 5;
 export const LEVEL_NAMES = ['1 bar', '1 bar', '2 bars', '2 bars', '3 bars'];
@@ -26,7 +26,7 @@ function phraseNotes(song, startBar, barCount) {
   return notes.sort((a, b) => a.start - b.start);
 }
 
-export function make(level, seed, { songs = starterSongs } = {}) {
+export function make(level, seed, { songs = starterMelodies } = {}) {
   const rng = makeRng(level, seed);
   const idx = Math.min(Math.max(level - 1, 0), BARS_FOR_LEVEL.length - 1);
   const wantBars = BARS_FOR_LEVEL[idx];
