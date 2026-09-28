@@ -14,14 +14,21 @@ test('answers persist to localStorage under the known key', async (t) => {
   t.after(() => page.close());
 
   await page.evaluate("window.__coach.setMod('kbd')");
+  // Choosing the instrument queues its own debounced save. Under load that
+  // write lands before Start is pressed and before any item is recorded, so
+  // let it land first on purpose: the test then pins that the answer's own
+  // later save reaches storage, not just that something was written.
+  await page.waitFor("localStorage.getItem('bandcoach.v1') !== null", 10000);
   await page.evaluate("document.getElementById('playBtn').click()");
   await page.waitFor('window.__coach.task()');
   const midi = await page.evaluate('window.__coach.cur().info.midi');
   await page.evaluate(`window.__coach.note(${midi}, true)`);
 
-  // save() debounces at 1.2s (src/app.js:217). Poll rather than a short fixed
-  // wait: under CPU load the debounced write can land well past 1.2s.
-  await page.waitFor("localStorage.getItem('bandcoach.v1') !== null", 10000);
+  // save() debounces at 1.2s (src/app.js save()). Poll rather than a short
+  // fixed wait: under CPU load the debounced write can land well past 1.2s.
+  // Poll for the recorded item itself, not just for a stored value: an
+  // earlier save (above) already put a DB with no items there.
+  await page.waitFor("(() => { const d = JSON.parse(localStorage.getItem('bandcoach.v1') || 'null'); return !!(d && d.mods && d.mods.kbd && d.mods.kbd.item && Object.keys(d.mods.kbd.item).length > 0); })()", 10000);
   const raw = await page.evaluate("localStorage.getItem('bandcoach.v1')");
   const parsed = JSON.parse(raw);
   assert.ok(parsed.mods && parsed.mods.kbd && parsed.mods.kbd.item, 'parsed DB has mods.kbd.item');
