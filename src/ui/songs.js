@@ -78,6 +78,8 @@ import { staffView, renderStepView, tabView, fingeringLine, kitView } from './so
 import { createDrumCapture } from './songs/drum-capture.js';
 import { pieceForMidi } from '../instruments/drum-kit.js';
 import { lessonKey, sanitizeLessonList, sanitizeLessonEntry, rememberLesson, findLesson, resultsTail } from '../song/lesson-resume.js';
+import { handsAvailable, stepForHands } from '../song/hand-filter.js';
+import { name as noteName } from '../core/note-names.js';
 
 // P3-9 Print: the same pitch-class-to-key-name tables editor.js keeps (not exported there) --
 // see songHeader()'s Print button below for the one place this file needs a key name.
@@ -1150,6 +1152,26 @@ function mountSongsPanel(hostEl, api) {
     // unchanged either way, only which song they were built from differs.
     const arrangedSong = songForArrangement(song, partId, arrangement);
     if (arrangedSong !== song) plan = buildLessonPlan(arrangedSong, partId, instrument, { level });
+    // Hands (H3): only a keyboard part whose notes actually name both hands
+    // (handsAvailable, src/song/hand-filter.js) offers a choice at all --
+    // every other instrument/song keeps `hands` null, which handSplit()
+    // below (and lessonKey/stepForHands) treats exactly like today.
+    // Reopening with no explicit opts.hands (a library click, Carry on)
+    // defaults to whichever hand this exact song+part+instrument slot was
+    // last left on -- rememberLesson()/saveLesson() already share ONE slot
+    // between a one-hand and both-hands lesson (setup.split('|')[0]), so
+    // this is the same lookup, just read for its hands mark instead of its
+    // step/tail. 'both' (or nothing saved yet) falls back to 'both'.
+    const twoHand = handsAvailable(arrangedSong, partId, arrangement).length === 2;
+    let hands;
+    if (opts.hands === 'left' || opts.hands === 'right' || opts.hands === 'both') hands = opts.hands;
+    else {
+      const savedSlot = sanitizeLessonList((store.get() || {}).lessons)
+        .find((e) => e.key.songId === song.id && e.key.partId === partId && e.key.setup.split('|')[0] === instrumentId);
+      const handsMatch = savedSlot && /\|hands=(left|right)$/.exec(savedSlot.key.setup);
+      hands = handsMatch ? handsMatch[1] : 'both';
+    }
+    if (!twoHand) hands = null;
     // lessonKey (src/song/lesson-resume.js): the seven fields that together
     // say "this is the same lesson" -- song identity+revision, part,
     // arrangement, the setup that changes what is played, the song's own
@@ -1164,7 +1186,7 @@ function mountSongsPanel(hostEl, api) {
     // (a place saved under the OLD, always-'none' key) is tried only
     // outside Check, so an old entry is picked up once and then, since
     // saveLesson() writes the 'shown' key into the same slot, migrated.
-    const lessonKeyValue = lessonKey({ song: arrangedSong, partId, instrumentId, setup, arrangement, assistance });
+    const lessonKeyValue = lessonKey({ song: arrangedSong, partId, instrumentId, setup, arrangement, assistance, hands });
     const foundEntry = mode === 'check' || opts.fresh
       ? null
       : sanitizeLessonEntry(
@@ -1199,7 +1221,7 @@ function mountSongsPanel(hostEl, api) {
     // on -- built once per practice session, not per step, so a phrase
     // crossing a tempoMap change plays, counts in and is judged against the
     // same tempo curve throughout.
-    practice = { song: arrangedSong, baseSong: song, partId, instrument, instrumentId, plan, arrangement, results: resumeEntry ? resumeEntry.tail.slice() : [], stepIndex: resumeEntry ? resumeEntry.stepIndex : 0, repair: null, recording: false, countingIn: false, countInTimer: null, playedEvents: [], recordStartSec: 0, stop: null, loopTransport: null, loopTransportStepIndex: null, clock: createSongClock(arrangedSong), mode, assistance, lastCheckVerdict: null, lessonKey: lessonKeyValue, resumeRate: resumeEntry ? resumeEntry.rate : null, returnTo: opts.returnTo || null };
+    practice = { song: arrangedSong, baseSong: song, partId, instrument, instrumentId, plan, arrangement, results: resumeEntry ? resumeEntry.tail.slice() : [], stepIndex: resumeEntry ? resumeEntry.stepIndex : 0, repair: null, recording: false, countingIn: false, countInTimer: null, playedEvents: [], recordStartSec: 0, stop: null, loopTransport: null, loopTransportStepIndex: null, clock: createSongClock(arrangedSong), mode, assistance, hands, lastCheckVerdict: null, lessonKey: lessonKeyValue, resumeRate: resumeEntry ? resumeEntry.rate : null, returnTo: opts.returnTo || null };
     currentPractice = practice;
     if (resumeEntry) say('Picking up where you left off.', 'ok');
     saveLesson();
@@ -1281,7 +1303,7 @@ function mountSongsPanel(hostEl, api) {
   // an instrument. Computed lazily here, only for the song actually open --
   // never for the whole library up front.
   function renderPlayItOn(song, partId, currentInstrumentId) {
-    return renderPlayItOnCards(song, partId, currentInstrumentId, (instrument) => startPractice(song, partId, instrument, { mode: practice.mode }));
+    return renderPlayItOnCards(song, partId, currentInstrumentId, (instrument) => startPractice(song, partId, instrument, { mode: practice.mode, hands: practice.hands }));
   }
 
   // Shared restart used by the mode control (a click on a DIFFERENT mode
@@ -1291,12 +1313,12 @@ function mountSongsPanel(hostEl, api) {
   // restarting never silently drops a Learn/Rehearse session's practice
   // log row. practice.instrument (never api.mod()) is passed through so a
   // "Play it on…" instrument choice survives a mode switch or restart.
-  function restart(mode, fresh) {
+  function restart(mode, fresh, hands = practice.hands) {
     if (practice.judgedCount && !practice.sessionLogged && typeof api.logSession === 'function') {
       const summary = summarizePracticeSession(practice, api.now());
       if (summary) { practice.sessionLogged = true; api.logSession(summary); }
     }
-    startPractice(practice.baseSong || practice.song, practice.partId, practice.instrument, { mode, fresh, returnTo: practice.returnTo });
+    startPractice(practice.baseSong || practice.song, practice.partId, practice.instrument, { mode, fresh, returnTo: practice.returnTo, hands });
   }
 
   // The count element's own text for the current practice state: "Counting
@@ -1476,7 +1498,19 @@ function mountSongsPanel(hostEl, api) {
       practiceSection.appendChild(playBtn);
     }
 
-    if (step.passRule) {
+    const split = handSplit(step);
+    if (step.passRule && !split.assessed) {
+      // The chosen hand rests through this whole step -- nothing to judge,
+      // so there is no "Your turn": just listen (if Learn/Rehearse played
+      // it above) and move on. See advance()'s `opts.unassessed` branch,
+      // which skips credit/mastery/the learning-event row/nextStep's own
+      // pass-count entirely for this step.
+      practiceSection.appendChild(el('p', {
+        class: 'panel-songs-hands-rest',
+        text: practice.hands === 'left' ? t('songs.hands.restLeft') : t('songs.hands.restRight'),
+      }));
+      practiceSection.appendChild(el('button', { type: 'button', text: 'Next', onclick: () => advance(true, null, 0, { unassessed: true }) }));
+    } else if (step.passRule) {
       const recordBtn = el('button', {
         type: 'button',
         text: practice.recording ? 'Stop and check' : 'Your turn',
@@ -1511,6 +1545,41 @@ function mountSongsPanel(hostEl, api) {
       }));
     }
     practiceSection.appendChild(modeGroup);
+
+    // Hands (H3): only a two-hand keyboard song ever sets practice.hands to
+    // anything but null (startPractice above) -- a melody-only song, or any
+    // non-keyboard instrument, shows none of this. Placed below the mode
+    // control for the same reason as songs-lesson-first (see the mode
+    // control's own comment above): keeps a phone's first screen unchanged.
+    if (practice.hands !== null) {
+      const handsGroup = el('div', { class: 'panel-songs-hands', role: 'group', 'aria-label': t('songs.hands.label') });
+      // Literal ids (never built with string concatenation) so the static
+      // scan (tests/unit/i18n-app-keys.test.mjs) can see every t() call this
+      // file makes.
+      const HAND_LABELS = { both: t('songs.hands.both'), right: t('songs.hands.right'), left: t('songs.hands.left') };
+      for (const h of ['both', 'right', 'left']) {
+        handsGroup.appendChild(el('button', {
+          type: 'button',
+          'data-hands': h,
+          'aria-pressed': String(h === practice.hands),
+          text: HAND_LABELS[h],
+          onclick: () => { if (h !== practice.hands) restart(practice.mode, false, h); },
+        }));
+      }
+      practiceSection.appendChild(handsGroup);
+      // The prep line: names each hand's own earliest-start note in this
+      // step, in the learner's own note-naming preference (src/core/
+      // note-names.js) -- omitted for a hand with nothing to play here (the
+      // rest line above already says so on a judged step; a listen step with
+      // a resting hand just gets no line at all).
+      const earliestOf = (hand) => step.notes.filter((n) => (hand === 'lh' ? n.hand === 'lh' : n.hand !== 'lh')).reduce((a, b) => (a == null || b.start < a.start ? b : a), null);
+      const rhNote = earliestOf('rh');
+      const lhNote = earliestOf('lh');
+      const sentences = [];
+      if (practice.hands !== 'left' && rhNote) sentences.push(t('songs.hands.startRight', { note: noteName(rhNote.midi, true) }));
+      if (practice.hands !== 'right' && lhNote) sentences.push(t('songs.hands.startLeft', { note: noteName(lhNote.midi, true) }));
+      if (sentences.length) practiceSection.appendChild(el('p', { class: 'panel-songs-hands-prep', text: sentences.join(' ') }));
+    }
 
     // Check verdict (advance() below sets/clears it): whether the last
     // passed judged try actually counted, or was practice only -- shown
@@ -1615,6 +1684,22 @@ function mountSongsPanel(hostEl, api) {
   function effectiveBpm(step) {
     if (step.kind === 'tempo-ladder' && practice.loopTransport) return backingBpm(step.bpm, practice.loopTransport.getRate());
     return step.bpm;
+  }
+
+  // Hands (H3): splits a step's notes by hand when a one-hand choice is in
+  // force (src/song/hand-filter.js stepForHands) -- `step` (judged notes
+  // only) is what credit/mastery/the learning-event row/repair all read;
+  // `played` is the OTHER hand's notes, played back as accompaniment
+  // (startRecording below) but never counted as the learner's own; `assessed`
+  // is false when the chosen hand has nothing in this step at all. 'both' (or
+  // no hand choice for this song) judges every note, same as before this
+  // unit, and `played` is always empty.
+  function handSplit(step) {
+    if (practice.hands === 'left' || practice.hands === 'right') {
+      const s = stepForHands(step, practice.arrangement, practice.hands);
+      return { step: { ...step, notes: s.judged }, played: s.played, assessed: s.assessed };
+    }
+    return { step, played: [], assessed: true };
   }
 
   function playPhrase(step) {
@@ -1811,6 +1896,26 @@ function mountSongsPanel(hostEl, api) {
     // The phrase origin (atSec 0 for judging) is one beat AFTER the last
     // click -- the downbeat the count-in was leading up to.
     practice.recordStartSec = at0 + times[times.length - 1] + spb;
+    // Hands (H3): the OTHER hand's notes are played back as accompaniment
+    // during a chosen-hand try -- same per-note schedule as playPhrase()
+    // above (phraseSec off this step's own originTick/clock), just anchored
+    // to THIS try's recordStartSec instead of playPhrase()'s one-off demo
+    // time. api.tone() never reaches onMidiNote, so this can never be picked
+    // up as the learner's own input (finishRecording() below only ever judges
+    // handSplit(step).step.notes, the CHOSEN hand). Check gets none of this:
+    // the no-help contract (the mode control's own comment above) covers not
+    // having the other hand played for you either.
+    if ((practice.hands === 'left' || practice.hands === 'right') && practice.mode !== 'check' && step.bpm > 0) {
+      const accompaniment = handSplit(step).played;
+      const ticksPerQuarter = practice.song.ticksPerQuarter;
+      const accBpm = effectiveBpm(step);
+      accompaniment.forEach((n) => {
+        const secOffset = phraseSec(n.start, step.originTick, accBpm, ticksPerQuarter, practice.clock);
+        const secEnd = phraseSec(n.start + n.dur, step.originTick, accBpm, ticksPerQuarter, practice.clock);
+        const dur = Math.max(0.12, secEnd - secOffset);
+        api.tone(n.midi, practice.recordStartSec + secOffset, dur, 0.18);
+      });
+    }
     const delayMs = Math.max(0, (practice.recordStartSec - api.now()) * 1000);
     practice.countInTimer = setTimeout(() => {
       practice.countInTimer = null;
@@ -1837,7 +1942,7 @@ function mountSongsPanel(hostEl, api) {
     closeOpenMidiEvents(practice.playedEvents, Math.max(0, (api.now() - practice.recordStartSec)));
     stopRecording();
     const timed = step.kind !== 'pitches';
-    const result = judgeAttempt(step.notes, practice.playedEvents, {
+    const result = judgeAttempt(handSplit(step).step.notes, practice.playedEvents, {
       bpm: effectiveBpm(step) || practice.song.bpm,
       ticksPerQuarter: practice.song.ticksPerQuarter,
       policy: practice.instrument.octavePolicy,
@@ -1893,7 +1998,7 @@ function mountSongsPanel(hostEl, api) {
     return count;
   }
 
-  function advance(passed, result, elapsedMs) {
+  function advance(passed, result, elapsedMs, opts = {}) {
     // A repair try (src/core/teaching.js repairFor) is a handful of isolated
     // notes, not one of the plan's own steps: it never joins practice.results
     // (nextStep and the tempo-ladder streak logic stay blind to it) and
@@ -1917,8 +2022,16 @@ function mountSongsPanel(hostEl, api) {
       return;
     }
     const step = practice.plan.steps[practice.stepIndex];
+    // Hands (H3): every read below that touches step.notes reads the CHOSEN
+    // hand's notes only (handSplit's judged half) -- credit, mastery-key
+    // dims, the assessment lines, and a repair's own note isolation
+    // (repairFor indexes step.notes by result.matches, so it must line up
+    // with what judgeAttempt() in finishRecording() above actually judged).
+    // step.kind/phraseIndex/bars/passRule/bpm still read the full step --
+    // those describe the STEP, not which hand is being judged.
+    const judgedStep = handSplit(step).step;
     practice.results.push({ stepIndex: practice.stepIndex, passed });
-    if (step.passRule) {
+    if (step.passRule && !opts.unassessed) {
       // Lazily started on the FIRST judged step, not in startPractice(): a
       // learner who only ever watches the listen step and leaves never
       // logs an empty session (summarizePracticeSession above returns null
@@ -1926,7 +2039,7 @@ function mountSongsPanel(hostEl, api) {
       if (practice.startedAt == null) practice.startedAt = api.now();
       practice.judgedCount = (practice.judgedCount || 0) + 1;
       if (passed) practice.judgedOk = (practice.judgedOk || 0) + 1;
-      const credit = creditFor({ step, passed, elapsedMs: elapsedMs || 0, judgedCount: result ? result.judgedCount : undefined, matches: result ? result.matches : undefined });
+      const credit = creditFor({ step: judgedStep, passed, elapsedMs: elapsedMs || 0, judgedCount: result ? result.judgedCount : undefined, matches: result ? result.matches : undefined });
       const mapped = mapMasteryKeys(credit.masteryKeys, practice.instrumentId, (api.db().prefs || {}));
       // A rhythm step is judged on onsets only: a try with any clap or
       // wrong-pitch hit is no evidence about the notes' pitch mastery.
@@ -1935,7 +2048,7 @@ function mountSongsPanel(hostEl, api) {
       // the same as bpmTarget (step.bpm): no tempo estimate is measured
       // from the attempt anywhere in this file, so nothing better is
       // available to report.
-      const { dims, unassessed } = dimsFromStep(step, result, { assess: capabilityFor(practice.instrument).assess });
+      const { dims, unassessed } = dimsFromStep(judgedStep, result, { assess: capabilityFor(practice.instrument).assess });
       // `input`: which route every JUDGED note in this try actually came
       // from (a matched note only -- a miss carries no played event to ask,
       // see practice.js's missedNote). 'midi' only when every one of them
@@ -1964,6 +2077,7 @@ function mountSongsPanel(hostEl, api) {
           songId: practice.song.id, partId: practice.partId, assistance: practice.assistance,
           dims, unassessed, activeMs: Math.max(0, Math.round(elapsedMs || 0)),
           bpmTarget: step.bpm || null, bpmActual: step.bpm || null, input: loggedInput,
+          hands: practice.hands || undefined,
         }, { now: api.now() });
         api.logEvent(row);
         // The Check verdict (renderPractice above): the same isIndependentOk
@@ -1983,7 +2097,7 @@ function mountSongsPanel(hostEl, api) {
       if (result) {
         practice.lastHeat = barHeat(practice.song, result.matches);
         practice.lastHeatBars = step.bars;
-        practice.lastAssessed = assessmentLines(dims, unassessed, { step, instrument: practice.instrument });
+        practice.lastAssessed = assessmentLines(dims, unassessed, { step: judgedStep, instrument: practice.instrument });
       }
       // A check-phase step's SECOND consecutive miss on the SAME thing
       // (failedDimension, inside repairFor) becomes a short repair on just
@@ -1992,7 +2106,7 @@ function mountSongsPanel(hostEl, api) {
       // alone here (repairFor's returnTo): the plan position does not move,
       // the repair sits on top of it until passed.
       if (!passed && result && phaseOf(step) === 'check' && trailingFailsOnStep(practice.results, practice.stepIndex) >= 2) {
-        const repairStep = repairFor(step, result, step.passRule);
+        const repairStep = repairFor(judgedStep, result, step.passRule);
         if (repairStep) {
           repairStep.returnTo = practice.stepIndex;
           practice.repair = { step: repairStep, returnTo: practice.stepIndex };
