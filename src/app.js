@@ -1267,8 +1267,8 @@ import { register as registerPathway } from './ui/pathway.js';
 
   // ---------- judging ----------
   const timeQ = (rt, limit) => rt <= 0.4 * limit ? 1 : clamp(1 - 0.4 * (rt - 0.4 * limit) / (0.6 * limit), 0.6, 1);
-  function passEl(extraQ, msg, assistance) {
-    const e = cur(); e.rt = now() - e.t0; e.q = e.failed ? 0 : timeQ(e.rt, task.limit) * (extraQ === undefined ? 1 : extraQ); if (assistance) e.assistance = assistance; flashGood = performance.now(); lastInputAt = now();
+  function passEl(extraQ, msg, assistance, input) {
+    const e = cur(); e.rt = now() - e.t0; e.q = e.failed ? 0 : timeQ(e.rt, task.limit) * (extraQ === undefined ? 1 : extraQ); if (assistance) e.assistance = assistance; if (typeof input === 'string') e.input = input; flashGood = performance.now(); lastInputAt = now();
     if (!e.failed && !e.helped) say(msg || (inf(e.id).short + ': yes, in ' + e.rt.toFixed(1) + ' s.'), 'ok'); else say('That is the one. ' + inf(e.id).short + (e.info.string ? ' lives on string ' + e.info.string + (e.info.fret ? ', fret ' + e.info.fret : ', open') : '') + '.', '');
     task.idx++; held = []; holdFor = 0; holdCents = []; wrongFor = 0;
     if (task.idx >= task.els.length) finishTask(); else { cur().t0 = now(); refreshPrompt(); }
@@ -1281,38 +1281,54 @@ import { register as registerPathway } from './ui/pathway.js';
     // it just never touches the SRS model (see credit()'s `warm` early
     // return above). `dims.pitch` is the one dimension a built-in drill
     // ever judges here (q > 0 is the whole pass/fail signal); `input` is
-    // left off (unknown by the time finishTask runs -- see onNote()'s
-    // `source` comment above) rather than guessed.
-    task.els.forEach(e => { credit(e.id, e.q || 0, from, task.warm, e.rt, gradeOutcome({ helped: !!e.helped, failed: !!e.failed, assistance: e.assistance || null, q: e.q || 0 })); logEvent(makeEvent({ instrument: mod, skill: e.id, source: task.warm ? 'warmup' : 'drill', assistance: e.helped ? 'shown' : (e.assistance || 'none'), dims: { pitch: e.q > 0 ? 'ok' : 'miss' }, unassessed: [], activeMs: Math.round((e.rt || 0) * 1000), bpmTarget: null, bpmActual: null, hands: e.info.kind === 'hands-together' ? handsModeFromId(e.id) : undefined }, { now: modelNow })); from = e.id; if (!(e.q > 0)) anyFail = true; });
+    // the route of the passing note (passEl's 4th argument, threaded down
+    // from onNote()'s `source`) and is left off rather than guessed when
+    // no route was passed: the debug hook or grooveInject calling onNote
+    // with no third argument, and onPitch's own pluck-chord and sustain
+    // passEl calls (microphone rows, never a kbd note).
+    task.els.forEach(e => { credit(e.id, e.q || 0, from, task.warm, e.rt, gradeOutcome({ helped: !!e.helped, failed: !!e.failed, assistance: e.assistance || null, q: e.q || 0 })); logEvent(makeEvent({ instrument: mod, skill: e.id, source: task.warm ? 'warmup' : 'drill', assistance: e.helped ? 'shown' : (e.assistance || 'none'), dims: { pitch: e.q > 0 ? 'ok' : 'miss' }, unassessed: [], activeMs: Math.round((e.rt || 0) * 1000), bpmTarget: null, bpmActual: null, hands: e.info.kind === 'hands-together' ? handsModeFromId(e.id) : undefined, input: e.input }, { now: modelNow })); from = e.id; if (!(e.q > 0)) anyFail = true; });
     lastItem = from; nextTaskAt = now() + (anyFail ? 1.5 : 0.7); if (task.kind === 'ear') nextTaskAt = now() + (anyFail ? 2.6 : 1.1); save(); showAll();
   };
   function dirWord(got, want) { let d = ((pc(want) - pc(got)) + 12) % 12; if (d > 6) d -= 12; return d > 0 ? 'higher' : 'lower'; }
   // a played note (MIDI key, screen key, or a plucked note the microphone
   // recognised); `source` is 'midi' for a real MIDI note-on, 'computer-key'
-  // for the physical-keyboard keydown branch, and left undefined for every
-  // other caller (screen keys, the mic path, the debug hook). Besides (a)
-  // the plain-text "heard" messages below and (b) hands-together grading
-  // using the real MIDI held-note set instead of the note-on timer window,
-  // it is now also handed straight through to forwardSongNote() so a song
-  // practice attempt can tell a real keyboard from a stand-in the same way
+  // for the physical-keyboard keydown branch, 'screen' for a canvas tap or
+  // canvas Enter/Space, and 'mic' for the microphone path -- left undefined
+  // when a caller passes none (the debug hook, grooveInject).
+  // A built-in drill/warm-up row now records this route as `input` (passed
+  // through passEl to finishTask's logEvent); a song step still only ever
+  // gets 'midi' or 'computer-key' forwarded to it (see the comment at the
+  // forwardSongNote call below) -- a canvas tap or a mic note inside a song
+  // stays untagged, exactly as before. Besides (a) the plain-text "heard"
+  // messages below and (b) hands-together grading using the real MIDI
+  // held-note set instead of the note-on timer window, it is now also
+  // handed straight through to forwardSongNote() so a song practice
+  // attempt can tell a real keyboard from a stand-in the same way
   // (src/ui/songs.js's advance()) -- never anything about credit, mastery or
   // pass/fail, which stay blind to it.
   function onNote(midi, exact, source) {
-    forwardSongNote(midi, exact, undefined, source);
+    // Songs only ever learn a route they already understand (a real
+    // keyboard or a stand-in for one) -- forwarding 'screen' or 'mic' here
+    // would silently start logging song step input for a canvas tap during
+    // a kbd song, and could put 'mic' on a song row too, which would make
+    // src/ui/songs.js's own comments about that field (advance()'s region,
+    // and its "left off rather than guessed" convention) wrong. Tagging
+    // song screen clicks is a separate follow-up, not this change.
+    forwardSongNote(midi, exact, undefined, (source === 'midi' || source === 'computer-key') ? source : undefined);
     if (MODS[mod] && MODS[mod].kit) { const p = pieceForMidi(midi); if (p === null) coach('MIDI note ' + midi + ' is not one of the drums on this kit' + (playing ? ', so it counts as an extra hit.' : '.')); else if (!playing) coach(kitName(p) + ' heard -- start an exercise to see it judged.'); onHit(p, tapAudioTime(), source); return; }
     lastInputAt = now(); pressed[midi] = performance.now();
     if (source === 'midi') { const notJudging = !playing || !task || task.done; const outOfView = !notJudging && mod === 'kbd' && (midi < kbdRange()[0] || midi > kbdRange()[1]); if (notJudging) coach(nname(midi) + ' heard' + (playing ? '.' : ' -- start an exercise to see it judged.')); else if (outOfView) coach(nname(midi) + ' heard, but that key is not drawn on screen right now.'); }
     if (!playing || !task || task.done) return; const e = cur(); if (!e) return; const i = e.info;
     if (MODS[mod].input === 'tap') { onTap(); return; }
     if (task.kind === 'groove') { grooveOnset(midi); return; }
-    if (i.kind === 'chord') { if (!exact) return; held.push({ p: pc(midi), t: now() }); held = held.filter(x => now() - x.t < 1.5); const got = {}; held.forEach(x => { got[x.p] = 1; }); if (i.pcs.indexOf(pc(midi)) < 0) { failEl(nname(midi) + ' is not in ' + i.label + ' (' + i.pcs.map(x => NAMES[x]).join(', ') + ').', e.id + '>x' + pc(midi)); held = []; return; } if (i.pcs.every(x => got[x])) passEl(); return; }
+    if (i.kind === 'chord') { if (!exact) return; held.push({ p: pc(midi), t: now() }); held = held.filter(x => now() - x.t < 1.5); const got = {}; held.forEach(x => { got[x.p] = 1; }); if (i.pcs.indexOf(pc(midi)) < 0) { failEl(nname(midi) + ' is not in ' + i.label + ' (' + i.pcs.map(x => NAMES[x]).join(', ') + ').', e.id + '>x' + pc(midi)); held = []; return; } if (i.pcs.every(x => got[x])) passEl(undefined, undefined, undefined, source); return; }
     if (i.kind === 'hands-together') {
       const ex = i.ex, handsMode = handsModeFromId(e.id);
       if (!exact) {
         const g = gradeHandsTogetherApprox(ex, midi, handsMode);
         if (!g.ok) { if (g.wrong === false) return; failEl(nname(midi) + ' is not part of ' + ex.short + ' (approximate: a microphone only hears one note at a time).', e.id + '>xa' + midi); return; }
         const approxTail = handsMode === 'right' ? 'Right hand checked; the left hand was not.' : handsMode === 'left' ? 'Left hand checked; the right hand was not.' : 'Connect a MIDI keyboard to grade both hands together.';
-        passEl(0.7, 'Approximate (one note heard, microphone): ' + (g.hand === 'rh' ? 'right' : 'left') + ' hand, ' + nname(midi) + '. ' + approxTail, 'approximate'); return;
+        passEl(0.7, 'Approximate (one note heard, microphone): ' + (g.hand === 'rh' ? 'right' : 'left') + ' hand, ' + nname(midi) + '. ' + approxTail, 'approximate', source); return;
       }
       // K3, level 14 (j<n>t): LEARN (untimed, both notes just held together)
       // then CHECK (timed: gradeTimedPair reads real note-on/note-off
@@ -1336,7 +1352,7 @@ import { register as registerPathway } from './ui/pathway.js';
           held.push({ m: midi, t: now() }); held = held.filter(x => now() - x.t < 0.6);
           const g = gradeHandsTogetherExact(ex, held.map(x => x.m), 'both');
           if (g.wrong.length) { failEl(wrongMsg, e.id + '>x' + midi); held = []; return; }
-          if (g.ok) passEl(undefined, ex.short + ': together. Practice only: held notes need a MIDI keyboard or computer keys.', 'guided');
+          if (g.ok) passEl(undefined, ex.short + ': together. Practice only: held notes need a MIDI keyboard or computer keys.', 'guided', source);
           return;
         }
         // CHECK: only a real note-on (MIDI or computer key) counts -- a
@@ -1359,13 +1375,13 @@ import { register as registerPathway } from './ui/pathway.js';
       const heldMidis = source === 'midi' ? Array.from(realMidiHeld) : (held.push({ m: midi, t: now() }), held = held.filter(x => now() - x.t < 0.6), held.map(x => x.m));
       const g = gradeHandsTogetherExact(ex, heldMidis, handsMode);
       if (g.wrong.length) { failEl(nname(midi) + ' is not part of ' + ex.short + ' (' + fingeringLabel(ex) + ').', e.id + '>x' + midi); if (source !== 'midi') held = []; return; }
-      if (g.ok) passEl(undefined, ex.short + ': ' + (handsMode === 'right' ? 'right hand' : handsMode === 'left' ? 'left hand' : 'both hands together') + '. ' + fingeringLabel(ex) + '.');
+      if (g.ok) passEl(undefined, ex.short + ': ' + (handsMode === 'right' ? 'right hand' : handsMode === 'left' ? 'left hand' : 'both hands together') + '. ' + fingeringLabel(ex) + '.', undefined, source);
       return;
     }
     if (i.kind !== 'note') return;
     const policy = i.anywhere ? 'fold' : (OCTAVE_POLICY[mod] || 'fold');
     const judged = judgePitch({ heardMidi: midi, targetMidi: i.midi, policy });
-    if (judged.ok) { passEl(); return; }
+    if (judged.ok) { passEl(undefined, undefined, undefined, source); return; }
     let where = ''; if (policy === 'exact') { const st = midi - i.midi; where = Math.abs(st) === 12 ? 'Right note, wrong octave: go one octave ' + (st > 0 ? 'down' : 'up') + '.' : 'Go ' + Math.abs(st) + ' key' + (Math.abs(st) > 1 ? 's' : '') + ' to the ' + (st > 0 ? 'left' : 'right') + '.'; }
     else if (i.string) { let df = ((pc(i.midi) - pc(midi)) + 12) % 12; if (df > 6) df -= 12; where = 'Go ' + Math.abs(df) + ' fret' + (Math.abs(df) > 1 ? 's' : '') + ' ' + (df > 0 ? 'higher' : 'lower') + '.'; }
     else where = 'Go ' + dirWord(midi, i.midi) + '.';
@@ -1383,7 +1399,7 @@ import { register as registerPathway } from './ui/pathway.js';
     const ex = e.info.ex;
     e.pair.off[midi] = performance.now();
     const g = gradeTimedPair(ex, e.pair);
-    if (g.state === 'pass') { passEl(undefined, ex.short + ': together, in time.'); return; }
+    if (g.state === 'pass') { passEl(undefined, ex.short + ': together, in time.', undefined, source); return; }
     if (g.state === 'fail') { failEl(g.reason, e.id + '>t'); e.pair.on = {}; e.pair.off = {}; }
   }
   function answer(id) {
@@ -1417,7 +1433,7 @@ import { register as registerPathway } from './ui/pathway.js';
       if (e.info.kind === 'chord') { if (fr.rms < gates.chord || !fr.chroma) { holdFor = 0; return; } const j = judgeChord({ chroma: fr.chroma, targetPcs: e.info.pcs }); e.score = j.score; if (j.ok) { holdFor += dt; if (holdFor > 0.18) passEl(undefined, e.info.label + ': that rings true.'); } else holdFor = 0; if (fr.rms > 0.02) lastInputAt = now(); return; }
       if (fr.rms < gates.note || !fr.freq) { if (++stableN > 2 && fr.rms < releaseFloor(gates)) released = true; stableMidi = -1; return; }
       const m = Math.round(fr.midi); if (m === stableMidi) stableN++; else { stableMidi = m; stableN = 1; }
-      if (stableN === 3 && (released || m !== lastFired)) { lastFired = m; released = false; onNote(m, false); }
+      if (stableN === 3 && (released || m !== lastFired)) { lastFired = m; released = false; onNote(m, false, 'mic'); }
       return;
     }
     if (M.input === 'sustain') {
@@ -2486,9 +2502,9 @@ import { register as registerPathway } from './ui/pathway.js';
   // common way) never released it -- noteState is the same held-note ledger
   // MIDI note-off, window blur and tab-hidden already clear into.
   document.addEventListener('keyup', ev => { if (mod === 'kbd' && PCKEYS[ev.key.toLowerCase()] !== undefined) { const m = PCKEYS[ev.key.toLowerCase()]; noteState.noteOff('computer-key', 0, m); onNoteOff(m, 'computer-key'); } });
-  cv.addEventListener('pointerdown', ev => { const r = cv.getBoundingClientRect(), x = (ev.clientX - r.left) * cv.width / r.width, y = (ev.clientY - r.top) * cv.height / r.height; ensureAudio(); if (MODS[mod] && MODS[mod].kit && kitBox) { const p = pieceAt((x - kitBox.x) / kitBox.s, (y - kitBox.y) / kitBox.s); if (p) onHit(p, tapAudioTime(ev), 'click'); } if (mod === 'kbd') { const k = keyRects.find(q => x >= q.x && x <= q.x + q.w && y >= q.y && y <= q.y + q.h); if (k) { tone(k.m, now() + 0.01, 0.5, 0.15); onNote(k.m, true); } } if (mod === 'tuner') { const play = playRects.find(q => x >= q.x && x <= q.x + q.w && y >= q.y && y <= q.y + q.h); if (play) { tone(play.m, now() + 0.02, 1.6, 0.2); return; } const row = rowRects.find(q => x >= q.x && x <= q.x + q.w && y >= q.y && y <= q.y + q.h); if (row) tunerLock = tunerLock === row.idx ? null : row.idx; } });
+  cv.addEventListener('pointerdown', ev => { const r = cv.getBoundingClientRect(), x = (ev.clientX - r.left) * cv.width / r.width, y = (ev.clientY - r.top) * cv.height / r.height; ensureAudio(); if (MODS[mod] && MODS[mod].kit && kitBox) { const p = pieceAt((x - kitBox.x) / kitBox.s, (y - kitBox.y) / kitBox.s); if (p) onHit(p, tapAudioTime(ev), 'click'); } if (mod === 'kbd') { const k = keyRects.find(q => x >= q.x && x <= q.x + q.w && y >= q.y && y <= q.y + q.h); if (k) { tone(k.m, now() + 0.01, 0.5, 0.15); onNote(k.m, true, 'screen'); } } if (mod === 'tuner') { const play = playRects.find(q => x >= q.x && x <= q.x + q.w && y >= q.y && y <= q.y + q.h); if (play) { tone(play.m, now() + 0.02, 1.6, 0.2); return; } const row = rowRects.find(q => x >= q.x && x <= q.x + q.w && y >= q.y && y <= q.y + q.h); if (row) tunerLock = tunerLock === row.idx ? null : row.idx; } });
   // item 3 (Wave W, w-fixes): keyboard path onto the same canvas piano -- arrow keys move the focus cursor, Enter/Space plays the focused key.
-  cv.addEventListener('keydown', ev => { if (mod !== 'kbd') return; const order = kbdOrder(); if (!order.length) return; if (ev.key === 'ArrowRight' || ev.key === 'ArrowUp') { ev.preventDefault(); kbdFocusIdx = Math.min(order.length - 1, kbdFocusIdx + 1); } else if (ev.key === 'ArrowLeft' || ev.key === 'ArrowDown') { ev.preventDefault(); kbdFocusIdx = Math.max(0, kbdFocusIdx - 1); } else if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); const k = order[Math.min(kbdFocusIdx, order.length - 1)]; if (k) { ensureAudio(); tone(k.m, now() + 0.01, 0.5, 0.15); onNote(k.m, true); } } });
+  cv.addEventListener('keydown', ev => { if (mod !== 'kbd') return; const order = kbdOrder(); if (!order.length) return; if (ev.key === 'ArrowRight' || ev.key === 'ArrowUp') { ev.preventDefault(); kbdFocusIdx = Math.min(order.length - 1, kbdFocusIdx + 1); } else if (ev.key === 'ArrowLeft' || ev.key === 'ArrowDown') { ev.preventDefault(); kbdFocusIdx = Math.max(0, kbdFocusIdx - 1); } else if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); const k = order[Math.min(kbdFocusIdx, order.length - 1)]; if (k) { ensureAudio(); tone(k.m, now() + 0.01, 0.5, 0.15); onNote(k.m, true, 'screen'); } } });
   $('tapPad').addEventListener('pointerdown', ev => { ev.preventDefault(); ensureAudio(); onTap(ev); });
   $('replayBtn').addEventListener('click', function () { this.blur(); if (task && !task.done) { playRef(task); lastInputAt = now(); } });
   $('showMeBtn').addEventListener('click', function () { this.blur(); const e = cur(); if (!task || task.done || !e) return; if (!e.failed && !e.helped) { e.helped = true; e.reveal = true; } say('Shown. This one is help, not a test: no credit and no penalty.', ''); refreshPrompt(); });
