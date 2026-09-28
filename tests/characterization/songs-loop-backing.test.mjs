@@ -31,6 +31,13 @@ const PHRASE_MIDI = [64, 62, 60];
 // (reproduced 2026-09-27: 5/9 concurrency=20 attempts of this file never
 // reached the tempo ladder step at all, stuck on a rhythm/phrase-slow step
 // that a late note pushed outside its own timing tolerance).
+// Polling still lost under heavy load (3 of 50 full-suite runs on
+// 2026-09-27), because songsNote() stamps a note with the clock at the
+// moment the call runs, and a starved page runs the 4ms check late. Each
+// note now goes through songsNoteAt(midi, offset), stamped at its exact
+// offset from the attempt's start however late the call itself runs -- the
+// same fix as tests/helpers/songs-note.mjs. The poll stays so notes still
+// arrive in order and never ahead of their own time.
 async function playAttempt(page, delaysMs) {
   const script = `
     (async () => {
@@ -51,7 +58,7 @@ async function playAttempt(page, delaysMs) {
         while (window.__coach.audioNow() < targetSec) {
           await new Promise(r => setTimeout(r, 4));
         }
-        window.__coach.songsNote(midi, true);
+        window.__coach.songsNoteAt(midi, cumMs / 1000, true);
       }
       await new Promise(r => setTimeout(r, 80));
       const stopBtn = Array.from(document.querySelectorAll('.panel-songs-practice button')).find(b => b.textContent === 'Stop and check');
@@ -128,5 +135,28 @@ test('a missed attempt on the tempo-ladder step drops the shown rate below full 
   const rateText = await page.evaluate("document.querySelector('.panel-songs-rate').textContent");
   assert.notEqual(rateText, 'Full speed', 'the rate readout should drop after a missed attempt');
   assert.ok(rateText.startsWith('Playing at '), 'unexpected rate text: ' + rateText);
+  assert.deepEqual(page.exceptions, []);
+});
+
+// A starved runner fires the page's short timers late. That lateness must
+// never reach a note's timestamp, or a correct answer is judged late and the
+// walk above never reaches the ladder step (seen in 3 of 50 full-suite runs
+// on 2026-09-27: "waitFor timed out ... 'Play it up to speed'"). This makes
+// the lateness certain instead of rare: every 4 ms timer in the page -- the
+// polling interval playAttempt uses; the app has none on this path -- waits
+// 254 ms instead.
+const LATE_SHORT_TIMERS = `(() => {
+  const orig = window.setTimeout;
+  window.setTimeout = function (fn, ms, ...rest) { return orig.call(window, fn, ms === 4 ? 254 : ms, ...rest); };
+})();`;
+
+test('the walk still reaches the tempo-ladder step when the page runs its short timers late', async (t) => {
+  const page = await launchPage(htmlPath, { initScript: LATE_SHORT_TIMERS });
+  t.after(() => page.close());
+
+  await getToFirstTempoLadderStep(page);
+
+  const rateText = await page.evaluate("document.querySelector('.panel-songs-rate').textContent");
+  assert.equal(rateText, 'Full speed');
   assert.deepEqual(page.exceptions, []);
 });

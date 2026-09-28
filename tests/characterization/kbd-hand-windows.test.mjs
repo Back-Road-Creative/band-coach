@@ -110,6 +110,10 @@ test('two draws at different task.idx give identical row bounds', async (t) => {
 test('in a hands-together task, the right-hand and left-hand target keys carry different marks', async (t) => {
   const page = await launchPage(htmlPath);
   t.after(() => page.close());
+  // K2: Both is gated behind each hand alone having been shown (see tests/
+  // unit/hands-together-gate.test.mjs); seed it shown so this stays on Both
+  // -- otherwise a right-only task never draws a left-hand target at all.
+  await page.evaluate("window.__coach.db().mods.kbd.item.j1r = { stability: 1, difficulty: 0.3, lastSeen: Date.now(), reps: 1, lapses: 0, seen: 1 }; window.__coach.db().mods.kbd.item.j1l = { stability: 1, difficulty: 0.3, lastSeen: Date.now(), reps: 1, lapses: 0, seen: 1 };");
   await toLevel(page, 13);
 
   const info = await page.evaluate('window.__coach.cur().info');

@@ -1,6 +1,7 @@
-// Orders one practice sitting into at most four plain-language blocks:
+// Orders one practice sitting into up to five plain-language blocks:
 // review what is due, work the weakest active skill, use that skill in a
-// phrase/song, then check it independently. Pure, no DOM, no AudioContext,
+// phrase/song, check it independently, and (keyboard only) a suggested
+// starter song to play. Pure, no DOM, no AudioContext,
 // no Date.now() -- callers supply `now` and pass in src/core/srs.js's own
 // `due` function, exactly the way src/core/groove.js takes its clock from
 // the caller. This module never imports srs.js itself, so a unit test can
@@ -13,16 +14,23 @@
 // block, built directly from summarizeEvents() (see that module's own
 // comment) rather than from planSession's own ordering.
 
-// planSession({ instrumentId, level, activeIds, items, events, now, due })
-// -> ordered array of up to four blocks:
+// planSession({ instrumentId, level, activeIds, items, events, now, due,
+// sessions, songFor, today }) -> ordered array of up to five blocks:
 //   { kind: 'review', ids }            -- SRS-due ids among ones already seen
 //   { kind: 'weak', id, why }          -- the active id needing the most work
 //   { kind: 'apply', skill }           -- that same id, marked for use in a phrase/song
 //   { kind: 'check', ids }             -- review ids + the weak id, no hints
+//   { kind: 'song', songId, title, done } -- a suggested starter song, always LAST
 // `items` is S.item-shaped: a map of id -> { stability, difficulty, lastSeen,
-// reps, lapses }. `instrumentId`/`level` are accepted for the caller's own
-// bookkeeping/future song lookups; this module does not read them.
-export function planSession({ instrumentId, level, activeIds, items, events = [], now, due } = {}) {
+// reps, lapses }. `instrumentId`/`level` are now read, but only to look up
+// the song block: `songFor(level)` (optional; when it is not a function, or
+// returns null/non-object, no song block is added) names {songId, title} for
+// this level, and `done` is derived from `sessions` (optional, defaults to
+// []) -- true when some row has `d === today`, `source === 'song'`,
+// `songId` matching and `mod === instrumentId`. The song block is appended
+// even when there is nothing else to plan (no weak/apply/check), so a
+// fresh learner with no item records yet still sees it.
+export function planSession({ instrumentId, level, activeIds, items, events = [], now, due, sessions, songFor, today } = {}) {
   const ids = Array.isArray(activeIds) ? activeIds : [];
   const itemsMap = items || {};
   const blocks = [];
@@ -65,6 +73,15 @@ export function planSession({ instrumentId, level, activeIds, items, events = []
     blocks.push({ kind: 'check', ids: checkIds });
   }
 
+  if (typeof songFor === 'function') {
+    const song = songFor(level);
+    if (song && typeof song === 'object' && song.songId) {
+      const rows = Array.isArray(sessions) ? sessions : [];
+      const done = rows.some(r => r && r.d === today && r.source === 'song' && r.songId === song.songId && r.mod === instrumentId);
+      blocks.push({ kind: 'song', songId: song.songId, title: song.title, done: done });
+    }
+  }
+
   return blocks;
 }
 
@@ -82,11 +99,13 @@ export function describePlan(blocks, nameOf) {
   const weak = list.find(b => b.kind === 'weak');
   const apply = list.find(b => b.kind === 'apply');
   const check = list.find(b => b.kind === 'check');
+  const song = list.find(b => b.kind === 'song');
   const parts = [];
   if (review) parts.push(review.ids.length + ' to review');
   if (weak) parts.push(name(weak.id));
   if (apply) parts.push('use it in a phrase');
   if (check) parts.push('a check');
+  if (song) parts.push('play ' + song.title + (song.done ? ' (done today)' : ''));
   if (!parts.length) return 'Today: nothing new due -- free practice.';
   return 'Today: ' + parts.join(', then ') + '.';
 }
