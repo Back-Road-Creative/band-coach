@@ -222,8 +222,15 @@ export function judgeAttempt(expectedNotes, playedEvents, opts = {}) {
   if (onsetMatched) judgeOnsets(groupIntoChords(notes), played, onsetAt, matches, extraList, bpm, ticksPerQuarter, policy, clock, percussion);
   for (const chord of onsetMatched ? [] : groupIntoChords(notes)) {
     if (chord.length === 1) {
-      // Single expected note at this tick: the original forward-only
-      // search, unchanged — no chord window, no extras.
+      // Single expected note at this tick: the original forward-only search
+      // (no chord window) -- but anything skipped over on the way to the
+      // match is, by construction, a non-match under this note's pitch (the
+      // loop breaks on the FIRST match), so once the right note is found,
+      // every played event between cursor and it is a wrong note struck
+      // before the right one -- an extra, same as the chord path's unclaimed
+      // window events. A totally missed note (foundAt === -1) leaves cursor
+      // where it was, so nothing here is "unclaimed" yet -- a later step
+      // may still match these same events.
       const note = chord[0];
       const expectedAt = timed ? onsetAt(note.start) : null;
       let foundAt = -1;
@@ -237,6 +244,7 @@ export function judgeAttempt(expectedNotes, playedEvents, opts = {}) {
         matches.push(missedNote(note));
         continue;
       }
+      for (let i = cursor; i < foundAt; i++) extraList.push(played[i]);
       matches.push(matchOneNote(note, played[foundAt], timed, expectedAt, bpm, ticksPerQuarter, onsetAt, clock));
       cursor = foundAt + 1;
       continue;

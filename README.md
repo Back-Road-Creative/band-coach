@@ -461,9 +461,12 @@ words, and it names the actual direction — held too short says "Hold each note
 held too long (running into the next note) says "Let each note go a little sooner — it's running
 into the next one.", a mix of both says "Match each note's length — some ran short, some ran
 long."; being out of tune says "A little sharp — aim for the middle of the note." (or "flat") —
-instead of the generic retry prompt. A chord step also refuses a wrong extra note struck alongside
-the right ones (`maxExtras` on every judged step's passRule, `src/song/lesson.js`): hitting every
-expected note is not enough to pass if the learner also struck a note that was not asked for.
+instead of the generic retry prompt. Every judged step also refuses a wrong extra note struck
+alongside or before the right one — a chord step's window, and a one-note step's wrong note
+played ahead of the right one, both count the same way (`maxExtras` on every judged step's
+passRule, `src/song/lesson.js`): hitting every expected note is not enough to pass if the learner
+also struck a note that was not asked for. A same-pitch repeat of the expected note (a key bounce
+or re-strike) is still absorbed, not counted as an extra.
 A failed try always names the first concrete thing to fix — the missed note, the late note, the
 hold/tune reason above, or the extra note — instead of a generic retry prompt
 (`firstCorrection()` in `src/ui/songs/practice.js`).
