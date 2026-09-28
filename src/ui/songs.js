@@ -63,7 +63,7 @@ import { writeBandPack, readBandPack } from '../song/band-pack.js';
 import { exportMidi } from '../song/export-midi.js';
 import { exportMusicXml } from '../song/export-musicxml.js';
 import { exportAbc } from '../song/export-abc.js';
-import { makeEvent } from '../core/learning-events.js';
+import { makeEvent, isIndependentOk } from '../core/learning-events.js';
 import { t } from '../core/i18n.js';
 import { classifyAddFile, ADD_ACCEPT, ADD_HELP_LINE, UNSUPPORTED_MESSAGE } from './songs/add-source.js';
 import { createRecordDoor, transcribeAudioFile } from './songs/record-door.js';
@@ -487,7 +487,7 @@ function mountSongsPanel(hostEl, api) {
   let currentChallenge = null;
 
   // practice state for the currently chosen song+part, or null
-  let practice = null; // { song, partId, instrument, plan, results, stepIndex, recording, playedEvents, recordStartSec, stop, assistance, lessonKey, resumeRate }
+  let practice = null; // { song, partId, instrument, plan, results, stepIndex, recording, playedEvents, recordStartSec, stop, assistance, lessonKey, resumeRate, mode, lastCheckVerdict }
   // The "Notes heard so far" paragraph from the last renderPractice(), when
   // a recording is possible for the current step. Captured notes update its
   // text in place (updateCount()) instead of rebuilding practiceSection, so
@@ -1114,6 +1114,14 @@ function mountSongsPanel(hostEl, api) {
   // again" button) skips the lookup outright.
   function startPractice(song, partId, instrumentOverride, opts = {}) {
     stopRecording();
+    // A song lesson has three modes on one control (never saved -- every
+    // new open starts in Learn): 'learn' (today's behaviour, assistance
+    // 'shown'), 'rehearse' (same views, "Play it" hidden, still 'shown')
+    // and 'check' (the whole step view/fingering/hint/"Play it" hidden,
+    // assistance 'none'). Anything else opts.mode names collapses to
+    // 'learn', same as no mode at all.
+    const mode = opts.mode === 'rehearse' || opts.mode === 'check' ? opts.mode : 'learn';
+    const assistance = mode === 'check' ? 'none' : 'shown';
     const instrumentId = instrumentOverride ? instrumentOverride.id : api.mod();
     const instrument = instrumentOverride || api.instrument(instrumentId);
     if (!instrument) {
@@ -1145,14 +1153,25 @@ function mountSongsPanel(hostEl, api) {
     // lessonKey (src/song/lesson-resume.js): the seven fields that together
     // say "this is the same lesson" -- song identity+revision, part,
     // arrangement, the setup that changes what is played, the song's own
-    // tempo curve, and the assistance scope (always 'none' in Songs today).
-    // Unless a fresh start was asked for, a saved place matching this exact
-    // key is looked up and resumed; anything in the key differing (a note
-    // edit, another part, a capo/tuning/harp-key/instrument change, a
-    // tempo change) means no match, so the lesson starts at step 1 with no
-    // message, same as always.
-    const lessonKeyValue = lessonKey({ song: arrangedSong, partId, instrumentId, setup, arrangement, assistance: 'none' });
-    const foundEntry = opts.fresh ? null : sanitizeLessonEntry(findLesson(sanitizeLessonList((store.get() || {}).lessons), lessonKeyValue), plan.steps.length);
+    // tempo curve, and the assistance scope (Learn and Rehearse share
+    // 'shown'; Check is always 'none'). Unless a fresh start was asked
+    // for, a saved place matching this exact key is looked up and resumed;
+    // anything in the key differing (a note edit, another part, a capo/
+    // tuning/harp-key/instrument change, a tempo change) means no match, so
+    // the lesson starts at step 1 with no message, same as always. Check
+    // never reads (or, in saveLesson() below, writes) the saved-place list
+    // at all, so it always starts at step 1 -- a one-time legacy fallback
+    // (a place saved under the OLD, always-'none' key) is tried only
+    // outside Check, so an old entry is picked up once and then, since
+    // saveLesson() writes the 'shown' key into the same slot, migrated.
+    const lessonKeyValue = lessonKey({ song: arrangedSong, partId, instrumentId, setup, arrangement, assistance });
+    const foundEntry = mode === 'check' || opts.fresh
+      ? null
+      : sanitizeLessonEntry(
+        findLesson(sanitizeLessonList((store.get() || {}).lessons), lessonKeyValue)
+          || findLesson(sanitizeLessonList((store.get() || {}).lessons), { ...lessonKeyValue, assist: 'none' }),
+        plan.steps.length
+      );
     // A saved entry still sitting at step 0 with an empty trailing tail
     // carries no actual progress (every fresh open writes one via
     // saveLesson() below) -- resuming it would be a false "Picking up where
@@ -1180,7 +1199,7 @@ function mountSongsPanel(hostEl, api) {
     // on -- built once per practice session, not per step, so a phrase
     // crossing a tempoMap change plays, counts in and is judged against the
     // same tempo curve throughout.
-    practice = { song: arrangedSong, partId, instrument, instrumentId, plan, arrangement, results: resumeEntry ? resumeEntry.tail.slice() : [], stepIndex: resumeEntry ? resumeEntry.stepIndex : 0, repair: null, recording: false, countingIn: false, countInTimer: null, playedEvents: [], recordStartSec: 0, stop: null, loopTransport: null, loopTransportStepIndex: null, clock: createSongClock(arrangedSong), assistance: 'none', lessonKey: lessonKeyValue, resumeRate: resumeEntry ? resumeEntry.rate : null, returnTo: opts.returnTo || null };
+    practice = { song: arrangedSong, baseSong: song, partId, instrument, instrumentId, plan, arrangement, results: resumeEntry ? resumeEntry.tail.slice() : [], stepIndex: resumeEntry ? resumeEntry.stepIndex : 0, repair: null, recording: false, countingIn: false, countInTimer: null, playedEvents: [], recordStartSec: 0, stop: null, loopTransport: null, loopTransportStepIndex: null, clock: createSongClock(arrangedSong), mode, assistance, lastCheckVerdict: null, lessonKey: lessonKeyValue, resumeRate: resumeEntry ? resumeEntry.rate : null, returnTo: opts.returnTo || null };
     currentPractice = practice;
     if (resumeEntry) say('Picking up where you left off.', 'ok');
     saveLesson();
@@ -1233,6 +1252,13 @@ function mountSongsPanel(hostEl, api) {
   function saveLesson() {
     const level = practice.plan.level;
     const prevLessons = sanitizeLessonList((store.get() || {}).lessons);
+    // Check never reads (startPractice above) or writes the saved-place
+    // list: `lessons` passes through unchanged, so a Check attempt never
+    // creates, moves or drops an entry another mode is relying on.
+    if (practice.mode === 'check') {
+      store.set({ songId: practice.song.id, partId: practice.partId, instrumentId: practice.instrumentId, level, lessons: prevLessons });
+      return;
+    }
     const finished = practice.stepIndex >= practice.plan.steps.length;
     const sameSlot = (e) => e.key.songId === practice.lessonKey.songId && e.key.partId === practice.lessonKey.partId && e.key.setup.split('|')[0] === practice.lessonKey.setup.split('|')[0];
     const lessons = finished
@@ -1255,7 +1281,22 @@ function mountSongsPanel(hostEl, api) {
   // an instrument. Computed lazily here, only for the song actually open --
   // never for the whole library up front.
   function renderPlayItOn(song, partId, currentInstrumentId) {
-    return renderPlayItOnCards(song, partId, currentInstrumentId, (instrument) => startPractice(song, partId, instrument));
+    return renderPlayItOnCards(song, partId, currentInstrumentId, (instrument) => startPractice(song, partId, instrument, { mode: practice.mode }));
+  }
+
+  // Shared restart used by the mode control (a click on a DIFFERENT mode
+  // button) and "Practise again": if the current lesson has judged steps
+  // that were never logged (hide()'s own guard, above), logs that session
+  // first, exactly as leaving Songs mid-lesson does, so switching mode or
+  // restarting never silently drops a Learn/Rehearse session's practice
+  // log row. practice.instrument (never api.mod()) is passed through so a
+  // "Play it on…" instrument choice survives a mode switch or restart.
+  function restart(mode, fresh) {
+    if (practice.judgedCount && !practice.sessionLogged && typeof api.logSession === 'function') {
+      const summary = summarizePracticeSession(practice, api.now());
+      if (summary) { practice.sessionLogged = true; api.logSession(summary); }
+    }
+    startPractice(practice.baseSong || practice.song, practice.partId, practice.instrument, { mode, fresh, returnTo: practice.returnTo });
   }
 
   // The count element's own text for the current practice state: "Counting
@@ -1303,7 +1344,21 @@ function mountSongsPanel(hostEl, api) {
     if (stepIndex >= plan.steps.length) {
       markSongPassed(practice.song.id);
       practiceSection.appendChild(el('p', { text: 'Nicely done. You have played through the whole piece.' }));
-      practiceSection.appendChild(el('button', { type: 'button', text: 'Practise again', onclick: () => startPractice(practice.song, practice.partId, undefined, { fresh: true }) }));
+      // The whole-piece verdict (Check mode only): the same line shown next
+      // to the heat strip on a normal step render, below, repeated here so
+      // it is still visible once the last step's own strip is replaced by
+      // this end screen.
+      if (practice.mode === 'check' && practice.lastCheckVerdict) {
+        practiceSection.appendChild(el('p', {
+          class: 'panel-songs-check-result',
+          text: practice.lastCheckVerdict === 'counted' ? t('songs.mode.counted') : t('songs.mode.practiceOnly'),
+        }));
+      }
+      // "Practise again" keeps the mode and returnTo it started with
+      // (restart(), above) -- a second run started from the keyboard
+      // hand-off must still end with "Back to practice" (C11a), and a
+      // second Check run must still be a Check.
+      practiceSection.appendChild(el('button', { type: 'button', text: 'Practise again', onclick: () => restart(practice.mode, true) }));
       practiceSection.appendChild(el('button', {
         type: 'button', text: 'Back to songs',
         onclick: () => { practice = null; currentPractice = null; practiceSection.hidden = true; libraryDetails.open = true; },
@@ -1372,22 +1427,28 @@ function mountSongsPanel(hostEl, api) {
     // A percussion part (P4-12) gets its own kit staff instead of the
     // pitched staffView -- a drum piece has no pitch/key/transposition for
     // staffView's writtenMidi to resolve.
-    if (step.notes.length && practice.instrument.kit) {
-      renderStepView(practiceSection, kitView(practice.song, step));
-    } else if (step.notes.length) {
-      renderStepView(practiceSection, staffView(practice.song, step, practice.instrument, practice.arrangement));
+    // Check hides the whole step view (staff/tab/kit, whose aria-label
+    // carries the note names), the fingering line and the step hint -- the
+    // no-help attempt is meant to show nothing the learner would otherwise
+    // have to recall on their own.
+    if (practice.mode !== 'check') {
+      if (step.notes.length && practice.instrument.kit) {
+        renderStepView(practiceSection, kitView(practice.song, step));
+      } else if (step.notes.length) {
+        renderStepView(practiceSection, staffView(practice.song, step, practice.instrument, practice.arrangement));
+      }
+      // Tab / fingering row (P4-9): the SAME arrangement as arrangementLine
+      // above, so a capo/tuning caption and a tab diagram never disagree --
+      // fretted gets a drawn tab, bowed/keys/harmonica get a one-line caption,
+      // everything else (wind/brass/percussion/voice) has nothing more to add.
+      if (step.notes.length && practice.arrangement.family === 'fretted') {
+        renderStepView(practiceSection, tabView(step, practice.arrangement, practice.instrument, practice.plan.fit.notes));
+      } else if (step.notes.length) {
+        const fingering = fingeringLine(step, practice.arrangement, practice.instrument, practice.plan.fit.notes);
+        if (fingering) practiceSection.appendChild(el('p', { class: 'panel-songs-fingering', text: fingering.text }));
+      }
+      practiceSection.appendChild(el('p', { text: stepHint(step) }));
     }
-    // Tab / fingering row (P4-9): the SAME arrangement as arrangementLine
-    // above, so a capo/tuning caption and a tab diagram never disagree --
-    // fretted gets a drawn tab, bowed/keys/harmonica get a one-line caption,
-    // everything else (wind/brass/percussion/voice) has nothing more to add.
-    if (step.notes.length && practice.arrangement.family === 'fretted') {
-      renderStepView(practiceSection, tabView(step, practice.arrangement, practice.instrument, practice.plan.fit.notes));
-    } else if (step.notes.length) {
-      const fingering = fingeringLine(step, practice.arrangement, practice.instrument, practice.plan.fit.notes);
-      if (fingering) practiceSection.appendChild(el('p', { class: 'panel-songs-fingering', text: fingering.text }));
-    }
-    practiceSection.appendChild(el('p', { text: stepHint(step) }));
     // A phrase whose own span crosses a tempoMap change (practice.clock's
     // changesBetween, src/song/clock.js) is told so before the learner plays
     // it -- never for an untimed (bpm 0, "pitches") step, which has no
@@ -1408,8 +1469,12 @@ function mountSongsPanel(hostEl, api) {
       practiceSection.appendChild(el('p', { class: 'panel-songs-rate', text: rateLabel(practice.loopTransport.getRate()) }));
     }
 
-    const playBtn = el('button', { type: 'button', text: 'Play it', onclick: () => playPhrase(step) });
-    practiceSection.appendChild(playBtn);
+    // "Play it" (the demo) is Learn-only -- Rehearse and Check are both
+    // meant to be played without hearing it first.
+    if (practice.mode === 'learn') {
+      const playBtn = el('button', { type: 'button', text: 'Play it', onclick: () => playPhrase(step) });
+      practiceSection.appendChild(playBtn);
+    }
 
     if (step.passRule) {
       const recordBtn = el('button', {
@@ -1422,6 +1487,39 @@ function mountSongsPanel(hostEl, api) {
       practiceSection.appendChild(countEl);
     } else {
       practiceSection.appendChild(el('button', { type: 'button', text: 'Next', onclick: () => advance(true, null) }));
+    }
+
+    // The mode control (Learn/Rehearse/Check, on one control -- the mode is
+    // chosen per lesson and is not saved). Placed after the transport, on
+    // normal step renders only (never here on the end screen or in repair,
+    // both of which return early above) -- keeps songs-lesson-first's
+    // "Play it within a phone's first screen" unchanged. Clicking a
+    // different mode restarts the lesson in it; clicking the current mode
+    // does nothing.
+    const modeGroup = el('div', { class: 'panel-songs-mode', role: 'group', 'aria-label': t('songs.mode.label') });
+    // Literal ids (never built with string concatenation) so the static
+    // scan (tests/unit/i18n-app-keys.test.mjs) can see every t() call this
+    // file makes.
+    const MODE_LABELS = { learn: t('songs.mode.learn'), rehearse: t('songs.mode.rehearse'), check: t('songs.mode.check') };
+    for (const m of ['learn', 'rehearse', 'check']) {
+      modeGroup.appendChild(el('button', {
+        type: 'button',
+        'data-mode': m,
+        'aria-pressed': String(m === practice.mode),
+        text: MODE_LABELS[m],
+        onclick: () => { if (m !== practice.mode) restart(m, false); },
+      }));
+    }
+    practiceSection.appendChild(modeGroup);
+
+    // Check verdict (advance() below sets/clears it): whether the last
+    // passed judged try actually counted, or was practice only -- shown
+    // next to the heat strip.
+    if (practice.mode === 'check' && practice.lastCheckVerdict) {
+      practiceSection.appendChild(el('p', {
+        class: 'panel-songs-check-result',
+        text: practice.lastCheckVerdict === 'counted' ? t('songs.mode.counted') : t('songs.mode.practiceOnly'),
+      }));
     }
 
     // The last judged try's bar-by-bar result (advance() below), kept on
@@ -1452,7 +1550,9 @@ function mountSongsPanel(hostEl, api) {
   function renderRepairStep(step) {
     practiceSection.appendChild(el('h4', { text: repairTitle(step) }));
     practiceSection.appendChild(el('p', { text: 'Just these notes, then back to the phrase.' }));
-    practiceSection.appendChild(el('button', { type: 'button', text: 'Play it', onclick: () => playPhrase(step) }));
+    if (practice.mode !== 'check') {
+      practiceSection.appendChild(el('button', { type: 'button', text: 'Play it', onclick: () => playPhrase(step) }));
+    }
     practiceSection.appendChild(el('button', {
       type: 'button',
       text: practice.recording ? 'Stop and check' : 'Your turn',
@@ -1571,10 +1671,12 @@ function mountSongsPanel(hostEl, api) {
     practice.countingIn = true;
     practice.playedEvents = [];
     // Starting a new try retires the previous try's bar strip and its
-    // Not-assessed list.
+    // Not-assessed list, and (Check only) the last verdict line -- a fresh
+    // attempt has not been judged yet.
     practice.lastHeat = null;
     practice.lastHeatBars = null;
     practice.lastAssessed = null;
+    practice.lastCheckVerdict = null;
 
     // Real listening only begins once the count-in ends (below); this is the
     // rest of the old startRecording() body, unchanged, just deferred.
@@ -1850,13 +1952,25 @@ function mountSongsPanel(hostEl, api) {
       const input = (judgedSources.length && judgedSources.every((s) => s !== undefined))
         ? (judgedSources.every((s) => s === judgedSources[0]) ? judgedSources[0] : 'mixed')
         : undefined;
+      // Check names its own route for every event, never leaving it off:
+      // the real route above, or 'unknown' when the route was left off (a
+      // screen click, the debug hook, or a caller that never told onNote()
+      // a source) -- so a Check row is always readable on its own, without
+      // having to infer "no input field" as anything.
+      const loggedInput = practice.mode === 'check' ? (input !== undefined ? input : 'unknown') : input;
       if (typeof api.logEvent === 'function') {
-        api.logEvent(makeEvent({
+        const row = makeEvent({
           instrument: practice.instrumentId, skill: step.kind + ':' + step.phraseIndex, source: 'song',
           songId: practice.song.id, partId: practice.partId, assistance: practice.assistance,
           dims, unassessed, activeMs: Math.max(0, Math.round(elapsedMs || 0)),
-          bpmTarget: step.bpm || null, bpmActual: step.bpm || null, input,
-        }, { now: api.now() }));
+          bpmTarget: step.bpm || null, bpmActual: step.bpm || null, input: loggedInput,
+        }, { now: api.now() });
+        api.logEvent(row);
+        // The Check verdict (renderPractice above): the same isIndependentOk
+        // predicate Progress and the pathway use, so the label can never
+        // disagree with what actually counts. A fail clears it -- nothing
+        // was judged worth a verdict on this try.
+        if (practice.mode === 'check') practice.lastCheckVerdict = passed ? (isIndependentOk(row) ? 'counted' : 'practice') : null;
       }
       // A failed try gets told the FIRST concrete thing to fix -- the
       // missed note, the late note, the hold/tune reason, or the extra note
@@ -1897,6 +2011,7 @@ function mountSongsPanel(hostEl, api) {
       practice.lastHeat = null;
       practice.lastHeatBars = null;
       practice.lastAssessed = null;
+      practice.lastCheckVerdict = null;
     }
     practice.stepIndex = nextStep(practice.plan, practice.results);
     practice.playedEvents = [];
