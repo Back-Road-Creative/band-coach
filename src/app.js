@@ -53,7 +53,6 @@ import { isReviewCurrent } from './instruments/review.js';
 import { starterSongs } from './song/starter/index.js';
 import { pathwayState } from './core/pathway.js';
 import { reviewItems as kbdPathwayOutcomes, outcomeReviewed } from './instruments/kbd-pathway.js';
-import { register as registerPathway } from './ui/pathway.js';
 // slot:import:notation-wire
 //
 // slot:import:a11y
@@ -84,6 +83,7 @@ import { registerFingerings } from './ui/fingerings.js';
 //
 //
 import { register as registerPlayalong } from './ui/playalong.js';
+import { register as registerPathway } from './ui/pathway.js';
 //
 //
 // slot:import:w-fixes
