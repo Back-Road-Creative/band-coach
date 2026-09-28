@@ -217,9 +217,11 @@ test('Check never reads or writes the saved place; Rehearse shares Learn\'s', as
   const said = await page.evaluate("document.getElementById('panelSay').textContent");
   assert.ok(!said.includes('Picking up where you left off.'), 'Check must not say it is resuming: ' + said);
 
-  await new Promise((r) => setTimeout(r, 50));
+  // The live DB, not localStorage: store.set() reaches localStorage only
+  // through app.js's debounced save(), so a storage read right after the
+  // Check click would still show Learn's write whatever Check did.
   const stillSaved = await page.evaluate(
-    "(() => { try { const l = JSON.parse(localStorage.getItem('bandcoach.v1')).panels.songs.lessons[0]; return l.stepIndex === 1 && l.key.assist === 'shown'; } catch (e) { return false; } })()"
+    "(() => { const ls = window.__coach.db().panels.songs.lessons; return ls.length === 1 && ls[0].stepIndex === 1 && ls[0].key.assist === 'shown'; })()"
   );
   assert.ok(stillSaved, 'Check must not overwrite the saved place');
 
