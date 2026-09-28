@@ -97,8 +97,10 @@ connected MIDI keyboard so it plays itself — lives in `src/core/midi.js` (`sch
 
 When a keyboard song attempt is recorded as played on the computer keys, or pieced together from
 more than one route, "My progress" (below) does not count it as passed on your own: it is practice
-worth having but not proof the skill transferred to a real keyboard. Drill attempts and on-screen
-clicks are not labelled with their route yet, so for now they are still counted as before.
+worth having but not proof the skill transferred to a real keyboard. A keyboard drill or warm-up
+answer now records its route too, and one played on the computer keys or on-screen keys is the
+same story: practice, not counted as passed on your own. An on-screen click during a song is still
+not labelled with its route.
 
 ## Build it from source
 
@@ -234,26 +236,24 @@ startup.
 Every judged drill answer, warm-up answer and judged song step leaves one small record — which
 instrument and skill it was, whether it was independent or asked for help, which parts (pitch,
 timing, hold, tune) were actually checked, and how long it took — kept alongside the practice log
-described above. A song step's record also keeps which input actually played it (MIDI, computer
-keys, mic, or a mix), left off entirely when that route is unknown rather than guessed at. The raw
-sound of your playing or singing is never recorded; only the judged result is. The record keeps
-the most recent 500 attempts plus, for each skill, the first time it
-was played right (from a drill, and from anywhere), so it never grows without limit. The "My
-described above. The raw sound of your playing or singing is never recorded; only the judged
-result is. The record keeps the most recent 500 attempts plus, for each skill, the first time it
-was played right (from a drill, and from anywhere) and, for each song played on that skill, the
-play that first counted as applied (per-skill records are kept first when space runs short), so it
-never grows without limit. The "My
-progress" panel turns that record into one plain line — how many attempts were passed with help,
-passed independently, retained on a later check (not just repeated in the same sitting), and
-applied in a song rather than a drill — or, with nothing recorded yet, says so plainly instead of
-claiming anything is retained. A given song only counts toward "applied" once per skill, no matter
-how many times it is replayed — practising the same tune over and over is not new evidence a skill
-transferred to a different song, so it is not counted as though it were. A keyboard song attempt
-recorded as played on the computer keys, or from a mixed route, never counts toward passed on your
-own (or, in turn, retained or applied), whatever the judged result — attempts whose route is not
-recorded (drills, on-screen clicks, older records) are still counted as before.
-transferred to a different song, so it is not counted as though it were.
+described above. A drill answer's, a warm-up answer's, and a song step's record also keeps which
+input actually played it (MIDI, computer keys, on-screen keys, or mic), left off entirely when that
+route is unknown rather than guessed at. The raw sound of your playing or singing is never
+recorded; only the judged result is. The record keeps the most recent 500 attempts plus, for each
+skill, the first time it was played right (from a drill, and from anywhere) and, for each song
+played on that skill, the play that first counted as applied (per-skill records are kept first when
+space runs short), so it never grows without limit. The "My progress" panel turns that record into
+one plain line — how many attempts were passed with help, passed independently, retained on a
+later check (not just repeated in the same sitting), and applied in a song rather than a drill — or,
+with nothing recorded yet, says so plainly instead of claiming anything is retained. A given song
+only counts toward "applied" once per skill, no matter how many times it is replayed — practising
+the same tune over and over is not new evidence a skill transferred to a different song, so it is
+not counted as though it were. A keyboard song attempt recorded as played on the computer keys, or
+from a mixed route, never counts toward passed on your own (or, in turn, retained or applied),
+whatever the judged result — the same is true of a keyboard drill or warm-up answer played on the
+computer keys or on-screen keys: it counts as practice, not proof the skill transferred to a real
+keyboard. Attempts whose route is not recorded (on-screen clicks in a song, older records) are
+still counted as before.
 
 ## Today's plan
 
