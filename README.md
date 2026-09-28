@@ -406,6 +406,10 @@ A MusicXML (`.xml`, `.musicxml`, `.mxl`) piano part written on two staves import
 marked for a hand (staff 1 right, staff 2 left; see "Piano hands together"), so it counts as a
 two-handed part; MIDI, ABC and Guitar Pro imports carry no hand data and stay one-handed
 (`node --test tests/unit/import-musicxml-hands.test.mjs`).
+With the keyboard picked, importing a single song file also says, in one line, what changes to fit
+the keyboard — how many notes are too low or too high and will be skipped, or that the part moved
+by an octave — using `fidelityReport` (`src/song/eval/fidelity.js`); a file that fits as written
+shows no such line (`node --test tests/characterization/songs-import-fidelity.test.mjs`).
 A
 teacher can also hand a student a whole set of songs at once as a **challenge**: a plain `.json`
 file (`src/song/challenge.js`, schema `challenge/1`) holding a title, an optional note, and a list
@@ -976,7 +980,8 @@ learner has attempted anything; picking a card starts that same song on the
 chosen instrument without leaving the panel.
 
 `src/song/eval/fidelity.js`'s `fidelityReport(sourceNotes, song, partId, instrument)`
-is a pure, non-user-facing measurement of the same divergence, returning
+is a pure, non-user-facing measurement of the same divergence (worded for the learner only by
+Songs' import notice -- see Songs), returning
 `{dropped, merged, octaveShift, shiftSemitones, outOfRange, chordReduced, hands}`:
 `dropped`/`merged` compare the part's notes against an optional pre-import note
 list; `octaveShift`, `shiftSemitones`, `outOfRange` and `chordReduced` all come

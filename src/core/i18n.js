@@ -66,6 +66,22 @@ export const en = {
   // lesson in the first screen instead of below the whole library -- see
   // the .panel-songs-library <details> in mountSongsPanel().
   'songs.libraryToggle': 'Your song library',
+  // E6c: a single-song notation import's own plain-words notice for what
+  // changed to fit the KEYBOARD (src/ui/songs.js's fidelityNoticeText,
+  // built on E6a's fidelityReport, src/song/eval/fidelity.js). dropped/
+  // merged are unreachable for kbd today (see fidelityNoticeText's own
+  // comment) but kept here for whenever a caller with real sourceNotes
+  // reuses the same function.
+  'songs.fidelity.outOfRange.one': '1 note is too low or too high for the keyboard and will be skipped',
+  'songs.fidelity.outOfRange.many': '{count} notes are too low or too high for the keyboard and will be skipped',
+  'songs.fidelity.octaveShift.up.one': 'Moved up 1 octave to fit the keyboard',
+  'songs.fidelity.octaveShift.up.many': 'Moved up {count} octaves to fit the keyboard',
+  'songs.fidelity.octaveShift.down.one': 'Moved down 1 octave to fit the keyboard',
+  'songs.fidelity.octaveShift.down.many': 'Moved down {count} octaves to fit the keyboard',
+  'songs.fidelity.dropped.one': '1 note was dropped',
+  'songs.fidelity.dropped.many': '{count} notes were dropped',
+  'songs.fidelity.merged.one': '1 chord was merged into a single note',
+  'songs.fidelity.merged.many': '{count} chords were merged into single notes',
   'picker.tools': 'Tools',
   'setup.button': 'Set up input',
   'setup.connect': 'Connect',
