@@ -20,6 +20,13 @@ async function connectMidi(page) {
   await page.evaluate("document.getElementById('ioBtn').click()");
 }
 
+// K2: level 13's Both option is gated behind each hand alone having been
+// shown (see tests/unit/hands-together-gate.test.mjs) -- seeding it shown
+// keeps these MIDI-focused setups on Both, which every assertion below
+// (each expecting a real note-off/blur/unplug to matter for BOTH hands)
+// already assumes; unseeded, the right-hand note alone would pass on its own.
+const HANDS_ALONE_SEED = "window.__coach.db().mods.kbd.item.j1r = { stability: 1, difficulty: 0.3, lastSeen: Date.now(), reps: 1, lapses: 0, seen: 1 }; window.__coach.db().mods.kbd.item.j1l = { stability: 1, difficulty: 0.3, lastSeen: Date.now(), reps: 1, lapses: 0, seen: 1 };";
+
 // ---------- characterization: the real ioBtn path already does this ----------
 
 test('CURRENT: a real MIDI note-on through the fake port is judged during a running keyboard exercise', async (t) => {
@@ -172,6 +179,7 @@ test('NEW: hands-together grades from real note-on/note-off state, not a 600ms t
 
   await page.evaluate("window.__coach.setMod('kbd')");
   await page.evaluate('window.__coach.state().level = 13');
+  await page.evaluate(HANDS_ALONE_SEED);
   await midiAddPort(page, 'p1', 'Test Keys');
   await connectMidi(page);
   await page.waitFor("document.getElementById('ioBtn').hidden === true");
@@ -197,6 +205,7 @@ test('NEW: a note-off releases a held hands-together note from the real held set
 
   await page.evaluate("window.__coach.setMod('kbd')");
   await page.evaluate('window.__coach.state().level = 13');
+  await page.evaluate(HANDS_ALONE_SEED);
   await midiAddPort(page, 'p1', 'Test Keys');
   await connectMidi(page);
   await page.waitFor("document.getElementById('ioBtn').hidden === true");
@@ -252,6 +261,7 @@ test('NEW: a note-off from a second port does not release a note still held on t
 
   await page.evaluate("window.__coach.setMod('kbd')");
   await page.evaluate('window.__coach.state().level = 13');
+  await page.evaluate(HANDS_ALONE_SEED);
   await midiAddPort(page, 'p1', 'Keys One');
   await midiAddPort(page, 'p2', 'Keys Two');
   await connectMidi(page);
@@ -274,6 +284,7 @@ test('NEW: window blur releases every held MIDI note', async (t) => {
 
   await page.evaluate("window.__coach.setMod('kbd')");
   await page.evaluate('window.__coach.state().level = 13');
+  await page.evaluate(HANDS_ALONE_SEED);
   await midiAddPort(page, 'p1', 'Test Keys');
   await connectMidi(page);
   await page.waitFor("document.getElementById('ioBtn').hidden === true");
@@ -319,6 +330,7 @@ test('NEW: unplugging a MIDI port releases the notes it was holding', async (t) 
 
   await page.evaluate("window.__coach.setMod('kbd')");
   await page.evaluate('window.__coach.state().level = 13');
+  await page.evaluate(HANDS_ALONE_SEED);
   await midiAddPort(page, 'p1', 'Test Keys');
   await connectMidi(page);
   await page.waitFor("document.getElementById('ioBtn').hidden === true");
