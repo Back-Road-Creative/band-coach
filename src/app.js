@@ -50,6 +50,9 @@ import { layoutPercussionMeasure } from './notation/percussion.js';
 import { songFor, KBD_LEVEL_PITCH_POOLS as KBD_POOLS } from './instruments/kbd-songs.js';
 import { itemReview, contentRev } from './instruments/review-ledger.js';
 import { isReviewCurrent } from './instruments/review.js';
+import { starterSongs } from './song/starter/index.js';
+import { pathwayState } from './core/pathway.js';
+import { reviewItems as kbdPathwayOutcomes, outcomeReviewed } from './instruments/kbd-pathway.js';
 // slot:import:notation-wire
 //
 // slot:import:a11y
@@ -928,7 +931,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
   }
   function sanitizeDB(v, defaultLatencyMs, modelNow) {
     const notate = {}; NOTATE_MOD_IDS.forEach(m => { notate[m] = 'names'; });
-    const d = { v: 1, mods: {}, sessions: [], events: [], prefs: { mod: 'kbd', wind: 'bb', voice: 'low', kbdHands: 'both', names: true, noiseFloor: null, inputDeviceId: null, notate: notate, theme: 'system', noteNaming: { system: 'letters', accidentals: 'mixed' } } }; v = (v && typeof v === 'object') ? v : {};
+    const d = { v: 1, mods: {}, sessions: [], events: [], prefs: { mod: 'kbd', wind: 'bb', voice: 'low', kbdHands: 'both', sessionMinutes: null, names: true, noiseFloor: null, inputDeviceId: null, notate: notate, theme: 'system', noteNaming: { system: 'letters', accidentals: 'mixed' } } }; v = (v && typeof v === 'object') ? v : {};
     MOD_IDS.forEach(m => { d.mods[m] = sanitizeModel(m, v.mods && v.mods[m], modelNow); });
     if (Array.isArray(v.sessions)) d.sessions = v.sessions.filter(x => x && typeof x.d === 'string' && MODS[x.mod]).slice(-60).map(x => {
       // source/songId (a panel-logged row, e.g. a finished or abandoned song
@@ -962,6 +965,12 @@ import { register as registerPlayalong } from './ui/playalong.js';
     // sanitising pattern as prefs.wind/prefs.voice above -- an unrecognised
     // or missing saved value sanitises to 'both', today's only behaviour.
     d.prefs.kbdHands = ['both', 'right', 'left'].indexOf(p.kbdHands) >= 0 ? p.kbdHands : 'both';
+    // Session length E7c: 5/10/15 minutes or no limit at all (null, today's
+    // only behaviour) -- same allow-list sanitising pattern as
+    // prefs.kbdHands above, so any other saved value (a string '5', 0, 20,
+    // garbage) sanitises to no limit rather than a target the coach can't
+    // explain.
+    d.prefs.sessionMinutes = [5, 10, 15].indexOf(p.sessionMinutes) >= 0 ? p.sessionMinutes : null;
     // "Show: staff / names / both" is per-instrument and defaults to 'names',
     // i.e. today's display, untouched, for any instrument not set.
     const pn = (p.notate && typeof p.notate === 'object') ? p.notate : {};
@@ -1645,7 +1654,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
       if (now() - lastInputAt > 30 && el > lim + 8) { if (e.failed && !task.warm) { /* this one does not count: nobody was there */ e.failed = false; } task.done = true; task = null; takeBreak('away'); return; }
     }
     if (sess.sinceBreak > 25 * 60 && Date.now() > sess.snoozeUntil) { takeBreak('long'); return; }
-    if (sess.target && sess.active > sess.target * 60) { sess.target = 0; takeBreak('target'); return; }
+    if (sess.target && sess.active > sess.target * 60) { const mins = sess.target; sess.target = 0; takeBreak('target', mins); return; }
     if (!sess.capWarned && todayMinutes() >= 45) { sess.capWarned = true; coach('That is 45 minutes of practice today across your instruments. Skill settles in while you rest, so more today buys little. Finish this level bar and call it.'); }
   }
   let lastFrame = 0, lastPitchAt = 0, listenOnsetDetector = null;
@@ -2077,16 +2086,42 @@ import { register as registerPlayalong } from './ui/playalong.js';
   function todayMinutes() { const t = today(); let m = 0; DB.sessions.forEach(x => { if (x.d === t) m += x.min; }); return m + (sess ? sess.active / 60 : 0); }
   function dayStreak() { const days = {}; DB.sessions.forEach(x => { days[x.d] = 1; }); if (sess) days[today()] = 1; let n = 0; const d = new Date(); while (days[dayKey(d)]) { n++; d.setDate(d.getDate() - 1); } return n; }
   const tiredPattern = () => { const l = DB.sessions.slice(-3); return l.length === 3 && l.every(x => x.min >= 20 && x.a2 < x.a1 - 0.1); };
+  // pathwayLineShown: has this page load already shown the keyboard pathway's
+  // "Welcome back" line? Set once startSession() shows it, so a learner who
+  // pauses/resumes or ends and restarts a session mid-visit is not told the
+  // same "next step" line over and over -- see the returning-learner test.
+  let pathwayLineShown = false;
   function startSession() {
     refreshModelClock(); ensureAudio(); sess = newSession(); recent = []; streak = 0; errCount = 0; task = null; lastItem = null; lastInputAt = now(); chunk = 0; say('');
-    let msg = 'Level ' + S.level + ': ' + D().name + '.'; if (tiredPattern()) { sess.target = 15; msg = 'Your last three sessions each ended weaker than they started, which is what tired practice looks like. Today is capped at 15 minutes. ' + msg; } else if (todayMinutes() >= 45) msg = 'You already have ' + Math.round(todayMinutes()) + ' minutes in today. Keep this one short. ' + msg;
+    // Session length E7c: the learner's own choice (DB.prefs.sessionMinutes,
+    // 0 meaning no limit) sets today's target before the tired check below,
+    // so tiredPattern()'s 15-minute cap only tightens it, never loosens it.
+    sess.target = DB.prefs.sessionMinutes || 0;
+    let msg = 'Level ' + S.level + ': ' + D().name + '.'; if (tiredPattern()) { sess.target = sess.target ? Math.min(sess.target, 15) : 15; msg = 'Your last three sessions each ended weaker than they started, which is what tired practice looks like. Today is capped at ' + sess.target + ' minutes. ' + msg; } else if (todayMinutes() >= 45) msg = 'You already have ' + Math.round(todayMinutes()) + ' minutes in today. Keep this one short. ' + msg;
     if (S.judged > 5 && !customOn) { sess.warm = 4; msg += ' First a short warm-up through what you know; it does not count.'; }
-    // Plan this sitting (review what's due, the weakest active skill, apply it, check it) --
-    // pure, so it only needs today's active ids/items/events, not anything DOM/task-shaped.
-    sessionPlan = planSession({ instrumentId: mod, level: S.level, activeIds: activeItems(mod, S.level), items: S.item, events: DB.events, now: modelNow, due: due });
+    // A returning keyboard learner (a prior kbd session logged on an earlier
+    // day) is told, once per page load, which keyboard-path step comes next
+    // (src/core/pathway.js's pathwayState) -- plain English literals plus
+    // the one existing t('review.unreviewed') key, so no new i18n key is
+    // needed for this.
+    if (mod === 'kbd' && !pathwayLineShown && DB.sessions.some(r => r && r.mod === 'kbd' && r.d < today())) {
+      const ps = pathwayState({ events: DB.events, sessions: DB.sessions, midiProof: midiPortInputs.some(i => midiHeard.has(i)), level: S.level, now: modelNow });
+      const outcome = kbdPathwayOutcomes().find(o => o.value.step === ps.step);
+      if (outcome) msg = 'Welcome back. Next on your keyboard path: ' + outcome.value.text + (outcomeReviewed(outcome.id) ? '' : ' ' + t('review.unreviewed')) + ' ' + msg;
+      pathwayLineShown = true;
+    }
+    // Plan this sitting (review what's due, the weakest active skill, apply it, check it,
+    // and, on keyboard, a suggested starter song) -- pure, so it only needs today's active
+    // ids/items/events/sessions, not anything DOM/task-shaped.
+    sessionPlan = planSession({ instrumentId: mod, level: S.level, activeIds: activeItems(mod, S.level), items: S.item, events: DB.events, now: modelNow, due: due, sessions: DB.sessions, today: today(), songFor: mod === 'kbd' ? (lvl => { const e = songFor(lvl); if (!e) return null; const s = starterSongs.find(x => x.id === e.songId); return { songId: e.songId, title: s ? s.title : e.songId }; }) : undefined });
     planProgress = { review: 0, weak: 0, apply: 0, check: 0 };
     msg += ' ' + describePlan(sessionPlan, id => inf(id).short);
     const why = describeWhy(sessionPlan, id => inf(id).short); if (why) msg += ' ' + why;
+    // The song block's own unreviewed label, matching the same test the
+    // hand-off button's own note uses (renderOpts, app.js:2109 as of this
+    // writing) -- the suggestion is teaching content no player has checked,
+    // so it is never claimed reviewed just because it appears in the plan.
+    if (mod === 'kbd' && sessionPlan.some(b => b.kind === 'song')) { const entry = songFor(S.level); if (entry && !isReviewCurrent(itemReview(entry.id, contentRev(entry)))) { const s = starterSongs.find(x => x.id === entry.songId); msg += ' ' + (s ? s.title : entry.songId) + ': ' + t('review.unreviewed'); } }
     playing = true; paused = false; $('playBtn').textContent = 'Pause'; $('endBtn').hidden = false; coach(msg); showAll(); wakeLock.acquire();
   }
   // logSession(): a panel (e.g. a song lesson) logs its own practice as a
@@ -2122,14 +2157,18 @@ import { register as registerPlayalong } from './ui/playalong.js';
   }
   const BREAKS = {
     user: ['Paused', 'Take your time. A pause of 90 seconds or more counts as a break and resets your energy.', 0], away: ['You stepped away', 'Nothing came in for a while, so I paused. The exercise you left does not count against you.', 0], hidden: ['Paused', 'The page was hidden, so I stopped the clock. Nothing was counted while you were gone.', 0],
-    error: ['Paused to recover', 'Something went wrong inside the trainer. It repaired its state and your progress is safe.', 0], tired: ['Break time: 2 minutes', '', 120], long: ['Break time: 5 minutes', '25 minutes without a break. Stand up, shake out your hands, get water. Practice past this point mostly rehearses mistakes.', 300], target: ['That is today\'s 15 minutes', 'Short and fresh beats long and tired. End here, or take a break and do one more block.', 300]
+    error: ['Paused to recover', 'Something went wrong inside the trainer. It repaired its state and your progress is safe.', 0], tired: ['Break time: 2 minutes', '', 120], long: ['Break time: 5 minutes', '25 minutes without a break. Stand up, shake out your hands, get water. Practice past this point mostly rehearses mistakes.', 300], target: ['That is today\'s practice', 'Short and fresh beats long and tired. End here, or take a break and do one more block.', 300]
   };
   const breakTrap = createFocusTrap({ container: $('breakCard'), onEscape: () => resume() });
-  function takeBreak(kind) {
+  function takeBreak(kind, mins) {
     if (!sess || paused) return; const b = BREAKS[kind]; playing = false; paused = true; pauseInfo = { at: Date.now(), secs: b[2] }; let why = b[1];
     if (kind === 'tired') why = 'Your accuracy slid from ' + Math.round(100 * sess.best30) + '% at your best today to ' + Math.round(100 * mean(sess.w30)) + '%' + (sess.bestRt && sess.rts.length >= 10 && median(sess.rts) > sess.bestRt * 1.3 ? ', and you are getting slower to answer' : '') + '. That pattern is fatigue, not lack of skill. Two minutes away fixes more than two more minutes of pushing.';
     if (kind === 'error') { const last = getErrors().slice(-1)[0]; if (last) why += ' Last error: ' + last.message; }
-    $('breakTitle').textContent = b[0]; $('breakWhy').textContent = why; $('breakClock').hidden = !b[2]; $('snoozeBtn').hidden = !(kind === 'tired' || kind === 'long'); $('breakCard').hidden = false; $('playBtn').textContent = 'Resume'; task = null; bar = null; save(); showAll(); breakTrap.activate($('playBtn'));
+    // Session length E7c: the title names the real minute count the learner
+    // chose (sess.target, captured by the caller above before it is zeroed)
+    // instead of BREAKS.target's generic fallback string.
+    let title = b[0]; if (kind === 'target' && mins) title = 'That is today\'s ' + mins + ' minutes';
+    $('breakTitle').textContent = title; $('breakWhy').textContent = why; $('breakClock').hidden = !b[2]; $('snoozeBtn').hidden = !(kind === 'tired' || kind === 'long'); $('breakCard').hidden = false; $('playBtn').textContent = 'Resume'; task = null; bar = null; save(); showAll(); breakTrap.activate($('playBtn'));
   }
   function tickBreak() { if (!pauseInfo || !pauseInfo.secs) return; const left = Math.max(0, pauseInfo.secs - (Date.now() - pauseInfo.at) / 1000); $('breakClock').textContent = left > 0 ? Math.floor(left / 60) + ':' + ('0' + Math.floor(left % 60)).slice(-2) : 'Ready when you are'; }
   function resume() {
@@ -2209,6 +2248,10 @@ import { register as registerPlayalong } from './ui/playalong.js';
     const box = $('modOpts'); box.innerHTML = ''; const sel = (id, label, opts, val, on) => { const l = document.createElement('label'); l.htmlFor = id; l.textContent = label + ' '; const s = document.createElement('select'); s.id = id; Object.keys(opts).forEach(k => { const o = document.createElement('option'); o.value = k; o.textContent = opts[k][0]; s.appendChild(o); }); s.value = val; s.addEventListener('change', () => on(s.value)); l.appendChild(s); box.appendChild(l); };
     const btn = (id, text, on, primary) => { const b = document.createElement('button'); b.type = 'button'; b.id = id; b.className = 'small' + (primary ? ' primary' : ''); b.textContent = text; b.addEventListener('click', () => { b.blur(); on(); }); box.appendChild(b); return b; };
     const chk = (id, text, val, on) => { const l = document.createElement('label'); l.htmlFor = id; const c = document.createElement('input'); c.type = 'checkbox'; c.id = id; c.checked = val; c.addEventListener('change', () => on(c.checked)); l.appendChild(c); l.appendChild(document.createTextNode(' ' + text)); box.appendChild(l); };
+    // Session length E7c: 5/10/15 minutes or no limit, per DB.prefs.sessionMinutes
+    // -- a change takes effect at the next Start, never a running session's
+    // sess.target, so it cannot fire a surprise break or cancel one mid-session.
+    if (!TOOLS[mod]) sel('optSessionMinutes', 'Session length', { none: ['No limit'], '5': ['5 minutes'], '10': ['10 minutes'], '15': ['15 minutes'] }, DB.prefs.sessionMinutes ? String(DB.prefs.sessionMinutes) : 'none', v => { DB.prefs.sessionMinutes = v === 'none' ? null : +v; save(); });
     if (NOTATE_MOD_IDS.indexOf(mod) >= 0) sel('optNotate', 'Show', { names: ['Note names (today)'], staff: ['Staff'], both: ['Staff and names'] }, DB.prefs.notate[mod], v => { DB.prefs.notate[mod] = v; save(); });
     if (mod === 'wind') { sel('optWind', 'My instrument', WIND_KINDS, DB.prefs.wind, v => { DB.prefs.wind = v; task = null; save(); }); chk('optRef', 'Play me the note first', false, () => {}); }
     if (mod === 'voice') sel('optVoice', 'My range', Object.assign({}, VOICE_KINDS, DB.prefs.voiceRange ? { mine: ['My range (found by test)', tonicFromRange(exerciseRangeFor(DB.prefs.voiceRange)).tonic] } : {}), DB.prefs.voice, v => { DB.prefs.voice = v; task = null; save(); });

@@ -256,6 +256,11 @@ computer keys or on-screen keys: it counts as practice, not proof the skill tran
 keyboard. Attempts whose route is not recorded (on-screen clicks in a song, older records) are
 still counted as before.
 
+On the keyboard, a starter song played on your own also counts as applied for the notes it uses:
+if you had already played one of those notes right in a drill, a correct song attempt counts once
+toward "Applied in a song". The same song only counts once, however often you replay it, and only
+attempts where the notes themselves were checked count.
+
 ## Today's plan
 
 Starting a drill session (`src/core/curriculum.js`'s `planSession`/`describePlan`, `src/app.js`'s
@@ -267,6 +272,24 @@ recomputed -- either it slipped before, or it is the one you've practiced least 
 follows that same order — review first, then the weak skill on its own, then applying it, then
 the blind check — before falling back to today's ordinary level-by-level practice once all four
 are done.
+
+On a keyboard level with a suggested starter song (`songFor` from `src/instruments/kbd-songs.js`),
+the plan ends with "then play &lt;title&gt;" -- shown as done once a song session for that song is
+logged today, which survives opening Songs and reloading the page. The suggestion carries the "Not
+yet checked by a player" label, the same one beside the "Play a song with these notes" button.
+A learner returning to keyboard practice on a later day also gets one "Welcome back" line naming
+their next keyboard-path step (`src/core/pathway.js`'s `pathwayState`), shown once on the first
+session of that visit.
+
+A "Session length" selector (No limit / 5 / 10 / 15 minutes) sits in every instrument's options
+(not the Tuner or Capture tools), saved to `prefs.sessionMinutes`; an invalid saved value (anything but 5, 10, 15 or no choice at all)
+falls back to No limit rather than a target the coach can't explain. The choice sets the new
+session's target when `src/app.js`'s `startSession` runs — a change made mid-session waits for
+the next Start, so it can neither fire a surprise break nor cancel one already showing. At the
+target, the coach pauses with "That is today's N minutes", naming the real minute count instead
+of a fixed number. The tired-pattern cap (three sessions in a row that each ended weaker than
+they started) still applies, but only when its 15 minutes is lower than the learner's own
+choice — see `tests/characterization/session-length-choice.test.mjs`.
 
 ## Turning an audio file into notes
 
@@ -359,12 +382,25 @@ plain paper, black on white, with nothing else on the page. A teacher challenge'
 under their own **Assignments** heading below the song list, separate from a single open song's
 own actions.
 
-Reopening a song carries on from the step you left off on, at the same practice speed, with a
-plain "Picking up where you left off." line — a **"Carry on: &lt;title&gt;"** button above the
-list offers the most recent one whenever no lesson is on screen. Editing the song's notes,
-choosing another part or instrument, changing capo, tuning or harmonica key, or a tempo change
-starts the lesson fresh at the first step instead, with no message, since any of those makes it a
-different lesson to learn. "Practise again" always starts at the beginning, whatever was saved.
+Reopening a song, in Learn or Rehearse, carries on from the step you left off on, at the same
+practice speed, with a plain "Picking up where you left off." line — a **"Carry on:
+&lt;title&gt;"** button above the list offers the most recent one whenever no lesson is on screen.
+A place saved before lesson modes existed still carries on, in Learn, the same way. Check always
+starts at step 1 and never changes what was saved. Editing the song's notes, choosing another part
+or instrument, changing capo, tuning or harmonica key, or a tempo change starts the lesson fresh at
+the first step instead, with no message, since any of those makes it a different lesson to learn.
+"Practise again" starts at the beginning, in the same mode, whatever was saved — for a lesson
+opened from keyboard practice, it still ends with "Back to practice".
+
+A song lesson has three modes on one control, chosen per lesson (not saved — every new open starts
+in Learn). **Learn** shows everything: the notation, the fingering line, the step's own hint, and a
+"Play it" button that plays the phrase first. **Rehearse** shows the same views and hint but hides
+"Play it" — Learn and Rehearse share one saved place, so switching between them mid-lesson keeps
+your spot. **Check** hides the notation, the fingering line, the hint and "Play it" outright — the
+no-help attempt — and always starts at step 1 without touching the saved place. Tries in Learn and
+Rehearse are kept as practice with help; only a Check try can count as done on your own. After a
+passed Check try, and again once the whole piece is done, a line says whether that try actually
+counted as a check or was practice only; on keyboard, only a real MIDI keyboard counts.
 
 Opening the editor screen (via a song's own **Edit notes**) shows its own row: **Edit
 notes**, **Play along**, **Export**, **Share**, **Save a copy** — Edit notes opens *any* song,
@@ -394,6 +430,10 @@ A MusicXML (`.xml`, `.musicxml`, `.mxl`) piano part written on two staves import
 marked for a hand (staff 1 right, staff 2 left; see "Piano hands together"), so it counts as a
 two-handed part; MIDI, ABC and Guitar Pro imports carry no hand data and stay one-handed
 (`node --test tests/unit/import-musicxml-hands.test.mjs`).
+With the keyboard picked, importing a single song file also says, in one line, what changes to fit
+the keyboard — how many notes are too low or too high and will be skipped, or that the part moved
+by an octave — using `fidelityReport` (`src/song/eval/fidelity.js`); a file that fits as written
+shows no such line (`node --test tests/characterization/songs-import-fidelity.test.mjs`).
 A
 teacher can also hand a student a whole set of songs at once as a **challenge**: a plain `.json`
 file (`src/song/challenge.js`, schema `challenge/1`) holding a title, an optional note, and a list
@@ -1011,7 +1051,8 @@ learner has attempted anything; picking a card starts that same song on the
 chosen instrument without leaving the panel.
 
 `src/song/eval/fidelity.js`'s `fidelityReport(sourceNotes, song, partId, instrument)`
-is a pure, non-user-facing measurement of the same divergence, returning
+is a pure, non-user-facing measurement of the same divergence (worded for the learner only by
+Songs' import notice -- see Songs), returning
 `{dropped, merged, octaveShift, shiftSemitones, outOfRange, chordReduced, hands}`:
 `dropped`/`merged` compare the part's notes against an optional pre-import note
 list; `octaveShift`, `shiftSemitones`, `outOfRange` and `chordReduced` all come

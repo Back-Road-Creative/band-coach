@@ -76,7 +76,8 @@ export function validateEvent(ev) {
 // rhythm; a caller can override it per summarizeEvents call.
 export const RETAIN_GAP_MS = 20 * 3600 * 1000;
 
-// summarizeEvents(events, { instrument?, skill?, retainGapMs? }) -> counts
+// summarizeEvents(events, { instrument?, skill?, retainGapMs?, skillMap?,
+// skillMapInstrument? }) -> counts
 // per one of the plan's understandable states (6.4 lists five):
 //   - withHelp: assistance was not 'none' (a Show me / guided / approximate
 //     attempt -- practice happened, but it is not independent evidence).
@@ -101,6 +102,26 @@ export const RETAIN_GAP_MS = 20 * 3600 * 1000;
 //     over and over is not new evidence of transfer, only a song event with
 //     no songId (songId is optional on validateEvent) is counted every time,
 //     same as before, since there is no identity to dedupe it against.
+//     `skillMap` (songId -> array of drill skill ids) is a second, optional
+//     bridge for the common case where a song event's OWN skill never shares
+//     an instrument|skill group with the drill skills it actually uses (e.g.
+//     a keyboard drill logs 'n64' while a song step logs 'phrase-slow:0') --
+//     see src/instruments/kbd-songs.js's KBD_SONG_SKILL_MAP for the
+//     keyboard's own map. An event only takes this path when it is counted,
+//     independent-ok, song-sourced, NOT already counted by the rule above,
+//     its songId has a skillMap entry, `skillMapInstrument` is undefined or
+//     matches ev.instrument, and ev.dims.pitch is 'ok' (mapped skills are
+//     note identities, so a step that never checked pitch -- a rhythm-only
+//     pass -- is not evidence the note transferred). It then credits applied
+//     at most once if any mapped skill has an instrument|skill group whose
+//     earliestNonSongOkAt is set and earlier than this event -- reusing the
+//     same groups the rule above builds, never creating one for a skill that
+//     was never drilled. Dedupe is by instrument+songId (separate from the
+//     rule above's per-group appliedSongIds), so a song credited through the
+//     map counts at most once no matter how many of its steps or replays
+//     qualify. The instrument/skill filters (`instrument`/`skill` above)
+//     still apply only to the song event's own skill -- `skill: 'n64'` does
+//     not pull song rows into the count through this bridge.
 // retained and applied are refinements of independent, not separate buckets
 // -- every event counted as either is also counted in independent, so the
 // five numbers do not sum to the event count. History is built from ALL
@@ -130,11 +151,12 @@ export function isIndependentOk(ev) {
   return !withHelp && assessed.length > 0 && assessed.every((k) => dims[k] === 'ok');
 }
 
-export function summarizeEvents(events, { instrument, skill, retainGapMs } = {}) {
+export function summarizeEvents(events, { instrument, skill, retainGapMs, skillMap, skillMapInstrument } = {}) {
   const gapMs = isFiniteNumber(retainGapMs) ? retainGapMs : RETAIN_GAP_MS;
   const out = { introduced: 0, withHelp: 0, independent: 0, retained: 0, applied: 0 };
   const sorted = (events || []).filter((ev) => ev && typeof ev === 'object').slice().sort((a, b) => a.at - b.at);
   const groups = new Map(); // instrument|skill -> { earliestOkAt, earliestNonSongOkAt, appliedSongIds }
+  const mappedSongIds = new Set(); // 'instrument|songId' already credited through skillMap -- see the doc comment above
   sorted.forEach((ev) => {
     const key = ev.instrument + '\u0001' + ev.skill;
     let g = groups.get(key);
@@ -148,6 +170,7 @@ export function summarizeEvents(events, { instrument, skill, retainGapMs } = {})
         out.independent++;
         if (g.earliestOkAt !== null && (ev.at - g.earliestOkAt) >= gapMs) out.retained++;
         const songSourced = ev.source === 'song' || !!ev.songId;
+        let alreadyApplied = false;
         if (songSourced && g.earliestNonSongOkAt !== null && ev.at > g.earliestNonSongOkAt) {
           // A songId already credited for this instrument+skill does not count
           // again -- replaying the same song is not new transfer evidence. An
@@ -155,7 +178,24 @@ export function summarizeEvents(events, { instrument, skill, retainGapMs } = {})
           // it is (as before) counted every time it qualifies.
           if (!ev.songId || !g.appliedSongIds.has(ev.songId)) {
             out.applied++;
+            alreadyApplied = true;
             if (ev.songId) g.appliedSongIds.add(ev.songId);
+          }
+        }
+        // skillMap bridge (see doc comment above): only when the native rule
+        // above did not already credit this event, songSourced with a mapped
+        // songId, the instrument filter (if any) matches, and this event's
+        // own pitch dimension was checked ok.
+        if (!alreadyApplied && songSourced && ev.songId && skillMap && Array.isArray(skillMap[ev.songId])
+          && (skillMapInstrument === undefined || ev.instrument === skillMapInstrument)
+          && ev.dims && ev.dims.pitch === 'ok') {
+          const dedupeKey = ev.instrument + '|' + ev.songId;
+          if (!mappedSongIds.has(dedupeKey)) {
+            const credited = skillMap[ev.songId].some((s) => {
+              const mg = groups.get(ev.instrument + '\u0001' + s);
+              return mg && mg.earliestNonSongOkAt !== null && ev.at > mg.earliestNonSongOkAt;
+            });
+            if (credited) { out.applied++; mappedSongIds.add(dedupeKey); }
           }
         }
       } else out.introduced++;
