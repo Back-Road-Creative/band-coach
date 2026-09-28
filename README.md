@@ -99,6 +99,8 @@ When a keyboard song attempt is recorded as played on the computer keys, or piec
 more than one route, "My progress" (below) does not count it as passed on your own: it is practice
 worth having but not proof the skill transferred to a real keyboard. A keyboard drill or warm-up
 answer now records its route too, and one played on the computer keys or on-screen keys is the
+same story: practice, not counted as passed on your own. An on-screen click during a song is still
+not labelled with its route.
 same story: practice, not counted as passed on your own. A keyboard song is played on a MIDI keyboard or the
 computer keys; the on-screen keys are hidden while a song is open.
 
@@ -237,6 +239,7 @@ startup.
 Every judged drill answer, warm-up answer and judged song step leaves one small record — which
 instrument and skill it was, whether it was independent or asked for help, which parts (pitch,
 timing, hold, tune) were actually checked, and how long it took — kept alongside the practice log
+described above. A drill answer's, a warm-up answer's, and a song step's record also keeps which
 described above. A song try that fails only because of an extra note struck alongside the right
 ones (a song step's own limit on wrong notes) is folded into the pitch check as a miss — or the
 timing check, on a rhythm or percussion step where pitch is never judged at all — so a try like
