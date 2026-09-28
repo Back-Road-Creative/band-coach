@@ -203,11 +203,64 @@ the five-item `reviewItems()` list so the panel's step count stays five.
 Proof: `node --test tests/unit/pathway-transfer-retention.test.mjs`.
 
 This assumes every event's `at` is a real epoch-millisecond timestamp.
-`src/ui/songs.js` currently logs song-check `at` from the audio clock
-(seconds, not epoch ms, per its `{ now: api.now() }` call) -- a separate
-unit (`fix/song-event-epoch-clock`) fixes that at the source; `pathway.js`
-adds no workaround for a mixed clock, since detecting or correcting that is
-that unit's job, not this pure function's.
+It is: `makeEvent()` (`src/core/learning-events.js`) defaults `at` to
+`Date.now()`, and since #324 (`fix/song-event-epoch-clock`) the song-check
+call site in `src/ui/songs.js` passes no `now` override, so song rows use
+the same clock as drill rows (its inline comment says why `api.now()`, the
+audio clock in seconds, must never stamp `at`). `pathway.js` adds no
+workaround for a mixed clock. Rows saved on a learner's device before #324
+may still carry an audio-clock `at`; nothing migrates them. Live proof that
+a fresh check row carries a real epoch-ms `at`: journey 3 in "Keyboard
+pathway close-out" below, whose day-boundary math only works against a
+real clock.
+
+## Keyboard pathway close-out
+
+Four end-to-end keyboard-learner journeys, each driven start to finish through real entry points
+only -- clicks, a real MIDI message over a fake port, a real `KeyboardEvent`, a real `change`
+event -- never `window.__coach` to drive a step (only to read state no real entry point can be
+asked for: the audio clock, the recording's own start time, a mastery item's numbers). Proof:
+`node --test --test-concurrency=1 tests/characterization/kbd-journey-scenarios.test.mjs`.
+
+1. **First visit with a MIDI keyboard.** setup -> lesson -> song -> check -> return, all through
+   real clicks and real MIDI notes, ending in a clean Check-mode play of the whole piece.
+2. **Computer keys only.** The same walkthrough, every note a real computer-key press: practice
+   genuinely progresses, Check mode is genuinely reached and played, but the pathway never reaches
+   return and Progress never counts an independent pass -- a computer-key attempt is practice, not
+   proof, on this instrument.
+3. **Returning the next day.** Day 1 ends at return, offering to wait. `Date.now()` (not the event
+   data) is moved forward a real day and the page reloaded, so day 2 is the same profile, one real
+   day later. The pathway now offers a recheck; playing it cleanly is read back as retained, both
+   through the pathway panel's own `.pathway-retained` note and through Progress's "Retained on a
+   later check" count.
+4. **Hand-alone to Both at level 13.** Twelve real "Skip ahead" clicks reach level 13, where Both
+   hands together starts locked; playing the right hand alone, then the left hand alone (a real
+   `change` event switches the Hands selector between them), on real MIDI, unlocks Both -- also
+   reached with a real `change` event.
+
+None of these is claimed reviewed by a player: every outcome text the pathway or the song hand-off
+shows still carries "Not yet checked by a player" (`Reviewed by: none yet`), same as everywhere
+else this teaching content appears. This close-out proves the pathway's own plumbing works end to
+end through the UI a learner actually uses; it says nothing about whether a musician has checked
+the curriculum itself. The four journeys also do not exercise the "How to play this" peek (#336) or
+the one-correction review (#337), both in main but landed after this branch was cut, nor the
+keyboard trainer's level 17 position change (#338), which was not in main when this was written --
+none of them is named or implied anywhere in these four journeys.
+
+**Finding: "Passed on your own" and the pathway's own check disagree about what counts.** Journey 1
+measured this directly rather than assuming the task brief's "exactly one independent pass": Check
+mode always restarts a lesson at step 1 (see "Keyboard pathway (contract)" above), so reaching the
+final whole-piece Check row means every earlier judged step (rhythm, pitches, phrase-slow, each
+tempo-ladder rung) was also just played cleanly, with no assistance, on real MIDI -- and
+`isIndependentOk()` says yes to every one of them. `src/core/pathway.js`'s own `qualifies()` only
+looks at the final whole-piece row (`skill === 'whole:null'`), but `src/ui/history.js`'s
+`#historyRetention` line has no such filter -- it counts every independent-ok row app-wide. A real
+learner's first successful Check-mode walkthrough of a song will see "Passed on your own: N" for N
+= every judged step of that walkthrough, not 1. Journey 1's assertion is tied to the real,
+dynamically-computed count (`events.filter(isIndependentOk).length`), not a fixed number, so it can
+never drift out of step with what the app actually does; no code changed to "fix" this, since
+whether N should mean "this song's steps" or "this pathway's one qualifying row" is a product
+decision this unit's scope does not cover.
 
 ## Known gaps
 

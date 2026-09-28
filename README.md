@@ -779,6 +779,16 @@ individual pitch they use is taught earlier -- playing both hands together is it
 left-hand arrangement is teaching content made for Band Coach, same as any other hand-off
 suggestion, and shows "Not yet checked by a player" beside it too.
 
+The keyboard pathway itself -- connect a MIDI keyboard, work the trainer, open the suggested song,
+check the whole piece, return a day later -- is proven end to end by four real browser journeys
+(a first MIDI visit, a computer-keys-only attempt that never passes the check, a next-day recheck
+that reads back as retained, and reaching Both hands together at level 13 through real "Skip ahead"
+clicks and a real Hands-selector change): `docs/journeys.md`'s "Keyboard pathway close-out" section,
+proof `node --test --test-concurrency=1 tests/characterization/kbd-journey-scenarios.test.mjs`. That
+section also records a finding worth knowing before reading Progress's own numbers: the first time
+a learner passes a song's Check mode, "Passed on your own" counts every judged step of that
+walkthrough, not just the one whole-piece row the pathway itself is watching for.
+
 ## Capo, alternate tunings and a left-handed view
 
 The "How to play it" panel's fretted-instrument diagrams (guitar, bass, ukulele, mandolin,
