@@ -745,11 +745,16 @@ is at level 14 itself. The approximate (microphone) pass message says plainly wh
 checked in Right only/Left only mode, rather than the both-hands wording. One-handed passes never
 move you past level 13 on their own: the level holds until the both-hands exercises are ready.
 
-If you already have a genuinely used both-hands record from before this lock existed (or from any
-other route into a plain `j1`-`j5` id), Both is grandfathered open from the start — `bothUnlocked()`
-in `src/core/hands-together.js` treats "shown" as actually having been drilled (seen or reps above
-zero), never just an id that happens to exist in your saved model, so an untouched placeholder entry
-never falsely unlocks it. A "before you start" line names each hand's starting finger and key (the
+"Played" here means a judged attempt (`reps` above zero), never merely having been offered the
+drill — the right-hand-alone and left-hand-alone ids each get a fresh placeholder the instant the
+level 13 drill first builds an element for them, before a single note is played, so Both stays
+locked through that moment; a Show me (helped) attempt does not count either, since it is not a
+real test. If you already have a genuinely used both-hands record from before this lock existed
+(or from any other route into a plain `j1`-`j5` id), Both is grandfathered open from the start —
+`bothUnlocked()` in `src/core/hands-together.js` treats that older record as "drilled" a little
+more loosely (seen or reps above zero, since it predates the one-handed ids), never just an id that
+happens to exist in your saved model, so an untouched placeholder entry never falsely unlocks it.
+A "before you start" line names each hand's starting finger and key (the
 C five-finger position — `prepLine()`), labelled "Not yet checked by a player" since this wording
 has not been reviewed by an actual piano teacher yet. Your saved Hands preference is never rewritten
 by the lock: if it still reads Both while locked the drill quietly runs Right only underneath, and

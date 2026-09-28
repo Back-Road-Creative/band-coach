@@ -70,17 +70,19 @@ test('live flip: playing each hand alone unlocks Both without a page reload', as
   await page.evaluate("document.getElementById('playBtn').click()");
   await page.waitFor('window.__coach.task()');
 
-  // Play right-hand-only elements until j1r registers as shown.
+  // Play right-hand-only elements until j1r registers a graded attempt
+  // (reps > 0) -- seen alone (set the instant an element is BUILT, before
+  // any note is played) must not be enough; see bothUnlocked()'s comment.
   for (let i = 0; i < 20; i++) {
-    const seen = await page.evaluate("(window.__coach.db().mods.kbd.item.j1r || {}).seen || 0");
-    if (seen > 0) break;
+    const reps = await page.evaluate("(window.__coach.db().mods.kbd.item.j1r || {}).reps || 0");
+    if (reps > 0) break;
     const info = await page.evaluate('window.__coach.cur().info');
     await midiNoteOn(page, 'p1', info.ex.rh.midi);
     await page.waitFor("document.getElementById('feedback').className === 'ok'");
     await page.evaluate("document.getElementById('feedback').className = ''");
     await page.waitFor('window.__coach.task() && window.__coach.cur()');
   }
-  assert.ok(await page.evaluate("(window.__coach.db().mods.kbd.item.j1r || {}).seen || 0") > 0, 'expected j1r to register as shown within 20 elements');
+  assert.ok(await page.evaluate("(window.__coach.db().mods.kbd.item.j1r || {}).reps || 0") > 0, 'expected j1r to register a graded attempt within 20 elements');
 
   // Switch to Left only with a real change event.
   await page.evaluate(`
@@ -88,18 +90,27 @@ test('live flip: playing each hand alone unlocks Both without a page reload', as
     sel.value = 'left';
     sel.dispatchEvent(new Event('change'));
   `);
-  await page.waitFor('window.__coach.task()');
+  await page.waitFor('window.__coach.task() && window.__coach.cur()');
+
+  // The first left-only element is now BUILT -- seen just went to 1 -- but
+  // no left note has been played yet, so reps is still 0. This is the
+  // defect itself: the old code unlocked Both right here, on "shown", not
+  // "played". Both must still read locked.
+  assert.equal(await page.evaluate("(window.__coach.db().mods.kbd.item.j1l || {}).seen || 0") > 0, true, 'expected j1l to already be shown (seen) before any left note is played');
+  assert.equal(await page.evaluate("(window.__coach.db().mods.kbd.item.j1l || {}).reps || 0"), 0, 'expected j1l to have no graded attempt yet');
+  assert.equal(await page.evaluate("document.querySelector('#optKbdHands option[value=\"both\"]').disabled"), true, 'Both must stay locked on shown-only evidence, not merely "will unlock later"');
+  assert.ok(await page.evaluate("document.getElementById('kbdBothLock')"), 'the lock note must still be present on shown-only evidence');
 
   for (let i = 0; i < 20; i++) {
-    const seen = await page.evaluate("(window.__coach.db().mods.kbd.item.j1l || {}).seen || 0");
-    if (seen > 0) break;
+    const reps = await page.evaluate("(window.__coach.db().mods.kbd.item.j1l || {}).reps || 0");
+    if (reps > 0) break;
     const info = await page.evaluate('window.__coach.cur().info');
     await midiNoteOn(page, 'p1', info.ex.lh.midi);
     await page.waitFor("document.getElementById('feedback').className === 'ok'");
     await page.evaluate("document.getElementById('feedback').className = ''");
     await page.waitFor('window.__coach.task() && window.__coach.cur()');
   }
-  assert.ok(await page.evaluate("(window.__coach.db().mods.kbd.item.j1l || {}).seen || 0") > 0, 'expected j1l to register as shown within 20 elements');
+  assert.ok(await page.evaluate("(window.__coach.db().mods.kbd.item.j1l || {}).reps || 0") > 0, 'expected j1l to register a graded attempt within 20 elements');
 
   assert.equal(await page.evaluate("document.querySelector('#optKbdHands option[value=\"both\"]').disabled"), false);
   assert.equal(await page.evaluate("document.getElementById('kbdBothLock')"), null);

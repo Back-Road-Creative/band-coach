@@ -14,7 +14,7 @@ const htmlPath = HTML_PATH;
 // K2: Both is gated behind each hand alone having been shown (see tests/unit/
 // hands-together-gate.test.mjs); seeding it as already shown keeps this
 // setup on Both, which is what the assertion below assumes.
-const HANDS_ALONE_SEED = "window.__coach.db().mods.kbd.item.j1r = { stability: 1, difficulty: 0.3, lastSeen: Date.now(), reps: 0, lapses: 0, seen: 1 }; window.__coach.db().mods.kbd.item.j1l = { stability: 1, difficulty: 0.3, lastSeen: Date.now(), reps: 0, lapses: 0, seen: 1 };";
+const HANDS_ALONE_SEED = "window.__coach.db().mods.kbd.item.j1r = { stability: 1, difficulty: 0.3, lastSeen: Date.now(), reps: 1, lapses: 0, seen: 1 }; window.__coach.db().mods.kbd.item.j1l = { stability: 1, difficulty: 0.3, lastSeen: Date.now(), reps: 1, lapses: 0, seen: 1 };";
 
 async function toHandsTogether(page) {
   await page.evaluate("window.__coach.setMod('kbd')");
