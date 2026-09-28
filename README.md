@@ -237,7 +237,10 @@ startup.
 Every judged drill answer, warm-up answer and judged song step leaves one small record — which
 instrument and skill it was, whether it was independent or asked for help, which parts (pitch,
 timing, hold, tune) were actually checked, and how long it took — kept alongside the practice log
-described above. A drill answer's, a warm-up answer's, and a song step's record also keeps which
+described above. A song try that fails only because of an extra note struck alongside the right
+ones (a song step's own limit on wrong notes) is folded into the pitch check as a miss — or the
+timing check, on a rhythm or percussion step where pitch is never judged at all — so a try like
+that is never counted as passed on your own, even though every other part checked out fine. A drill answer's, a warm-up answer's, and a song step's record also keeps which
 input actually played it (MIDI, computer keys, on-screen keys, or mic), left off entirely when that
 route is unknown rather than guessed at. The raw sound of your playing or singing is never
 recorded; only the judged result is. The record keeps the most recent 500 attempts plus, for each
