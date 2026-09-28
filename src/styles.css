@@ -418,6 +418,7 @@
   .panel-pathway .pathway-steps li.pathway-current { border-color: var(--good); border-width: 2px; }
   .panel-pathway .pathway-here { color: var(--good); font-size: 13px; }
   .panel-pathway .pathway-wait { color: var(--warn); font-size: 13px; }
+  .panel-pathway .pathway-unreviewed { color: var(--warn); font-size: 13px; }
   /* */
   /* slot:css:w-fixes */
   /* */

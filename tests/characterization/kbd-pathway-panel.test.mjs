@@ -27,13 +27,14 @@ test('song step: the current step is "song", one action opens Hot Cross Buns', a
   await page.waitFor("!document.getElementById('panelHost').hidden");
 
   const lis = await page.evaluate(
-    "Array.from(document.querySelectorAll('.pathway-steps li')).map(li => ({ step: li.getAttribute('data-step'), current: li.getAttribute('aria-current'), text: li.textContent }))"
+    "Array.from(document.querySelectorAll('.pathway-steps li')).map(li => ({ step: li.getAttribute('data-step'), current: li.getAttribute('aria-current'), text: li.textContent, hasUnreviewedLabel: !!li.querySelector('[role=\\\"note\\\"]') }))"
   );
   assert.equal(lis.length, 5, `expected 5 pathway steps, got: ${JSON.stringify(lis)}`);
   const current = lis.filter((li) => li.current === 'step');
   assert.equal(current.length, 1, `expected exactly one current step, got: ${JSON.stringify(lis)}`);
   assert.equal(current[0].step, 'song', `expected current step "song", got: ${JSON.stringify(lis)}`);
   assert.ok(current[0].text.includes('Not yet checked by a player'), `expected the unreviewed label, got: ${current[0].text}`);
+  assert.ok(lis.every((li) => li.hasUnreviewedLabel), `expected the unreviewed label element (same note style as the trainer's) on every step, got: ${JSON.stringify(lis)}`);
 
   await page.evaluate("document.getElementById('pathwayAction').click()");
   await page.waitFor("document.getElementById('songsPracticeHeading')");
@@ -77,8 +78,15 @@ test('setup step: no proof at all, the action goes to the trainer and closes the
   const page = await launchPage(htmlPath);
   t.after(() => page.close());
 
-  await page.evaluate("window.__coach.state().level = 2");
   await page.evaluate("window.__coach.setMod('kbd')");
+  // Decoy the stored mod away from 'kbd' AFTER the kbdPathwayBtn button has
+  // already rendered (it only renders while the current mod is 'kbd' --
+  // src/app.js's `if (mod === 'kbd') btn('kbdPathwayBtn', ...)` -- so the
+  // panel itself can only be reached this way). If the action button's
+  // handler never calls api.setMod('kbd'), prefs.mod stays at this decoy
+  // value and the assertion below goes red -- proof the click, not
+  // leftover state, is what puts 'kbd' back.
+  await page.evaluate("window.__coach.db().prefs.mod = 'decoy-not-kbd'");
 
   await page.evaluate("document.getElementById('kbdPathwayBtn').click()");
   await page.waitFor("!document.getElementById('panelHost').hidden");
@@ -91,6 +99,6 @@ test('setup step: no proof at all, the action goes to the trainer and closes the
   await page.evaluate("document.getElementById('pathwayAction').click()");
   await page.waitFor("window.__coach.panelOpen() === null");
   const mod = await page.evaluate("window.__coach.db().prefs.mod");
-  assert.equal(mod, 'kbd', 'expected the mod to still be kbd after the trainer hand-off');
+  assert.equal(mod, 'kbd', 'expected the action button to switch prefs.mod back to kbd');
   assert.deepEqual(page.exceptions, []);
 });

@@ -46,7 +46,7 @@ export function register(panels) {
           + (isCurrent ? ' aria-current="step" class="pathway-current"' : '') + '>'
           + '<strong>' + STEP_NAMES[outcome.value.step] + '</strong>'
           + (isCurrent ? ' <span class="pathway-here">' + t('pathway.current') + '</span>' : '')
-          + ' -- ' + outcome.value.text + (unreviewed ? ' ' + t('review.unreviewed') : '')
+          + ' -- ' + outcome.value.text + (unreviewed ? ' <span class="pathway-unreviewed" role="note">' + t('review.unreviewed') + '</span>' : '')
           + '</li>';
       }).join('');
 
