@@ -164,6 +164,46 @@ test('level 15: a full held-bass pass', async (t) => {
 // starved runner those gaps can drift enough to flip a pass/fail edge, so
 // each runs under retryFlaky (tests/helpers/browser.mjs), one fresh page per
 // attempt, following tests/characterization/songs-tempo-change.test.mjs.
+test('level 15: after a wrong-melody fail, keeping the bass held lets the retry pass without re-pressing it', async (t) => {
+  const page = await launchPage(htmlPath, { initScript: FAKE_MIDI_INIT });
+  t.after(() => page.close());
+  await startTask(page, 15);
+
+  const info = await page.evaluate('window.__coach.cur().info');
+  const rh = info.ex.rh.midi, lh = info.ex.lh.midi;
+  const melody = heldBassMelody(info.ex);
+  const wrongMidi = melody[0].midi + 1; // anything other than the expected first melody note
+
+  await learnPass(page, 'p1', rh, lh);
+
+  // Press the bass, play a WRONG melody note (fails), but keep the bass held.
+  await sendOne(page, 'p1', lh, true);
+  await sendOne(page, 'p1', wrongMidi, true);
+  await sendOne(page, 'p1', wrongMidi, false);
+
+  await page.waitFor("document.getElementById('feedback').className === 'no'");
+  await clearFeedback(page);
+
+  // Still holding the bass: play the correct melody, then release the bass.
+  // A learner who never let go must be able to complete the element from
+  // here -- if the bass's onset were wrongly cleared on the fail above, the
+  // bass note-off below would be ignored (not in e.pair.on) and this would
+  // hang forever instead of reaching task.done.
+  for (const n of melody) {
+    await sendOne(page, 'p1', n.midi, true);
+    await sendOne(page, 'p1', n.midi, false);
+  }
+  await sendOne(page, 'p1', lh, false);
+
+  await page.waitFor('window.__coach.task() && window.__coach.task().done', 5000);
+
+  const events = await page.evaluate('window.__coach.db().events');
+  const last = events[events.length - 1];
+  assert.match(last.skill, /^j\dh$/, 'the retry must be graded and credited to the held-bass item, not stuck failing forever');
+
+  assert.deepEqual(page.exceptions, []);
+});
+
 test('level 16: right hand wrong (second note not near the midpoint) fails naming the right hand', async (t) => {
   await retryFlaky({
     attempts: 3,
@@ -277,6 +317,51 @@ test('level 16: a full split-rhythm pass', async (t) => {
         const last = events[events.length - 1];
         if (page.exceptions.length) return { ok: false, error: 'page exceptions: ' + JSON.stringify(page.exceptions) };
         if (!/^j\dd$/.test(last.skill) || last.assistance !== 'none') return { ok: false, error: 'unexpected last event: ' + JSON.stringify(last) };
+        return { ok: true };
+      } finally {
+        await page.close();
+      }
+    }
+  });
+});
+
+test('level 16: a right-hand tap-and-release before the bass is pressed does not sour the real attempt', async (t) => {
+  // A stray right-hand press (and release) that lands BEFORE the bass goes
+  // down -- e.g. a learner tapping the melody key first -- must not become
+  // rhOns[0]/rhOffs[0] for the real attempt that follows.
+  await retryFlaky({
+    attempts: 3,
+    what: 'level 16: an early right-hand tap is ignored',
+    describe: (r) => r.error || 'ok',
+    accept: (r) => r.ok,
+    attempt: async () => {
+      const page = await launchPage(htmlPath, { initScript: FAKE_MIDI_INIT });
+      try {
+        await startTask(page, 16);
+
+        const info = await page.evaluate('window.__coach.cur().info');
+        const rh = info.ex.rh.midi, lh = info.ex.lh.midi;
+
+        await learnPass(page, 'p1', rh, lh);
+
+        // Tap and release the right hand once, before the bass is down.
+        await sendOne(page, 'p1', rh, true);
+        await sendOne(page, 'p1', rh, false);
+
+        await page.evaluate(`(async function () {
+          window.__midiSend('p1', [${onBytes(lh, true).join(',')}]);
+          window.__midiSend('p1', [${onBytes(rh, true).join(',')}]);
+          await new Promise(function (r) { setTimeout(r, 500); });
+          window.__midiSend('p1', [${onBytes(rh, false).join(',')}]);
+          window.__midiSend('p1', [${onBytes(rh, true).join(',')}]);
+          await new Promise(function (r) { setTimeout(r, 500); });
+          window.__midiSend('p1', [${onBytes(rh, false).join(',')}]);
+          window.__midiSend('p1', [${onBytes(lh, false).join(',')}]);
+        })()`);
+
+        await page.waitFor("document.getElementById('feedback').className === 'ok'", 5000);
+        await page.waitFor('window.__coach.task() && window.__coach.task().done', 5000);
+        if (page.exceptions.length) return { ok: false, error: 'page exceptions: ' + JSON.stringify(page.exceptions) };
         return { ok: true };
       } finally {
         await page.close();

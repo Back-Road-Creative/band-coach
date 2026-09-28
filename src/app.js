@@ -1383,12 +1383,36 @@ import { register as registerPlayalong } from './ui/playalong.js';
           if (midi === ex.lh.midi) { e.pair.on[midi] = performance.now(); e.pair.off = {}; e.pair.notes = []; return; }
           e.pair.notes.push({ midi: midi, ms: performance.now(), bassHeld: (ex.lh.midi in e.pair.on) && noteState.isHeld(ex.lh.midi) });
           const g = gradeHeldBass(ex, { bassOn: e.pair.on[ex.lh.midi], bassOff: e.pair.off[ex.lh.midi], notes: e.pair.notes });
-          if (g.state === 'fail') { failEl(g.reason, e.id + '>h'); e.pair.on = {}; e.pair.off = {}; e.pair.notes = []; }
+          // A fail while the bass is STILL physically down is only the
+          // melody's fault -- clearing e.pair.on here would make the very
+          // next melody note read bassHeld:false (nothing in e.pair.on to
+          // check against) and the bass's own note-off get ignored (not in
+          // e.pair.on), telling a learner who never let go that their left
+          // hand let go. Keep the bass's onset and only reset the melody, so
+          // the retry grades from the bass still being held; a fail with the
+          // bass already up resets as before (there is no held bass left to
+          // preserve).
+          if (g.state === 'fail') { failEl(g.reason, e.id + '>h'); if (noteState.isHeld(ex.lh.midi)) { e.pair.notes = []; } else { e.pair.on = {}; e.pair.off = {}; e.pair.notes = []; } }
           return;
         }
         if (stage === 'split') {
           if (midi !== ex.rh.midi && midi !== ex.lh.midi) { failEl(wrongMsg, e.id + '>x' + midi); return; }
-          if (midi === ex.lh.midi) { e.pair.on[midi] = performance.now(); delete e.pair.off[midi]; }
+          if (midi === ex.lh.midi) {
+            // A stray right-hand tap-and-release BEFORE the bass ever goes
+            // down (a learner tapping the melody key first, or tapping it
+            // again right after a fail reset) must not squat rhOns[0]/
+            // rhOffs[0] -- gradeSplitRhythm reads rhOns[0] as the onset
+            // paired against the bass's own onset, so a stale completed tap
+            // there pushes the real first note into rhOns[1] and throws off
+            // every comparison after it. Pressing the bass starts the RH
+            // lists fresh for this attempt -- but ONLY when rhOns/rhOffs are
+            // already balanced (no right-hand note currently held): a right
+            // hand that came in EARLY and is still down when the bass
+            // finally arrives (the left-hand-late case) is real evidence for
+            // this attempt, not a stray tap, and must be kept.
+            if (e.pair.rhOns.length === e.pair.rhOffs.length) { e.pair.rhOns = []; e.pair.rhOffs = []; }
+            e.pair.on[midi] = performance.now(); delete e.pair.off[midi];
+          }
           else if (e.pair.rhOns.length === e.pair.rhOffs.length) { e.pair.rhOns.push(performance.now()); }
           const g = gradeSplitRhythm(ex, { lhOn: e.pair.on[ex.lh.midi], lhOff: e.pair.off[ex.lh.midi], rhOns: e.pair.rhOns, rhOffs: e.pair.rhOffs });
           e.pair.last = { rh: g.rh.state, lh: g.lh.state };
