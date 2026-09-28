@@ -124,10 +124,10 @@ Proof: `node --test --test-concurrency=1 tests/characterization/a11y-axe.test.mj
 
 ## Keyboard pathway (contract)
 
-Five steps a keyboard learner moves through, decided by `pathwayState()`
-(`src/core/pathway.js`) from saved events and sessions plus the caller's
-live MIDI proof and current level -- no DOM, no clock of its own, the
-caller supplies `now`:
+Five listed steps a keyboard learner moves through, decided by
+`pathwayState()` (`src/core/pathway.js`) from saved events and sessions plus
+the caller's live MIDI proof and current level -- no DOM, no clock of its
+own, the caller supplies `now`:
 
 - **setup** -- connect a MIDI keyboard. Neither live proof this page load
   nor a MIDI event ever logged for `kbd`.
@@ -165,6 +165,30 @@ by `node --test --test-concurrency=1
 tests/characterization/kbd-pathway-panel.test.mjs`.
 `src/app.js`'s `startSession` is the first caller of `pathwayState`, and shows the step's outcome
 text once per visit for a returning keyboard learner (`tests/characterization/plan-song-block.test.mjs`).
+
+**P3 -- a 'complete' step past 'return'.** The FIRST qualifying check row
+(the earliest one, not the latest -- see `earliestCheckRow()`) becomes the
+anchor: its songId is "the song already checked". While in 'return',
+`pathwayState()` also looks for a second qualifying row on a DIFFERENT
+songId (`latestTransferRow()`) -- same MIDI-input, no-assistance,
+whole-piece rule as the original check, just on a song the check row didn't
+already prove. Once BOTH that transfer row exists AND a full day has passed
+since the anchor check (the same day boundary 'return' already waits out),
+`pathwayState()` returns `step: 'complete'`. A repeated qualifying row on
+the SAME song as the anchor is never a transfer -- it only refreshes the
+anchor song's own wait/recheck date, exactly as before P3.
+
+The panel (`src/ui/pathway.js`) offers the transfer song -- chosen by
+`transferSongFor(level, checkSongId)` (`src/instruments/kbd-pathway.js`,
+same "highest level-unlocked song" rule as the ordinary song hand-off, just
+skipping the song already checked) -- in Check mode as soon as 'return' is
+reached, alongside the existing wait/recheck action; it never waits for the
+day to offer it. Once `pathwayState()` reaches 'complete', the panel shows
+the result text instead of any further action. Both the transfer offer and
+the complete result carry kbd-pathway.js's "Not yet checked by a player"
+label (`TRANSFER_TEXT`/`COMPLETE_TEXT`), kept out of the five-item
+`reviewItems()` list so the panel's step count stays five. Proof:
+`node --test tests/unit/pathway-transfer-retention.test.mjs`.
 
 ## Known gaps
 

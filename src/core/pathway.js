@@ -3,7 +3,10 @@
 // UI do about it? Pure -- no DOM, no Date.now(): caller supplies `now`,
 // exactly like src/core/groove.js supplies its own clock. P1 covers the
 // 'kbd' instrument/mod only; P2 wires this into a panel, P3 adds a
-// 'complete' step past 'return'.
+// 'complete' step past 'return' -- a qualifying MIDI/no-assistance row on a
+// DIFFERENT song (the transfer song) than the original check, once a full
+// day has passed since that check (the same day 'return' already waits
+// out).
 
 import { isIndependentOk } from './learning-events.js';
 
@@ -45,27 +48,67 @@ function qualifies(ev) {
     && ev.assistance === 'none' && ev.skill === 'whole:null' && isIndependentOk(ev);
 }
 
-// latestCheckRow: the most recent qualifying row, by `at`. Returns null when
-// none exists.
-function latestCheckRow(events) {
+// earliestCheckRow: the FIRST qualifying row ever logged, by `at` -- "the
+// first independent song check" the transfer/retention rules below anchor
+// to. Its songId is the one the recheck/transfer distinction is drawn
+// against; a later qualifying row on that same song only refreshes the
+// wait/recheck date (latestForSong below), it never starts a new anchor.
+// Returns null when none exists.
+function earliestCheckRow(events) {
   let best = null;
-  events.forEach((ev) => { if (qualifies(ev) && (!best || ev.at > best.at)) best = ev; });
+  events.forEach((ev) => { if (qualifies(ev) && (!best || ev.at < best.at)) best = ev; });
+  return best;
+}
+
+// latestForSong: the most recent qualifying row whose songId matches
+// `songId` (including a shared `undefined` for pre-songId rows) -- what
+// 'return's own wait/recheck date tracks, so repeating the SAME song's
+// check resets that date exactly as it always has.
+function latestForSong(events, songId) {
+  let best = null;
+  events.forEach((ev) => { if (qualifies(ev) && ev.songId === songId && (!best || ev.at > best.at)) best = ev; });
+  return best;
+}
+
+// latestTransferRow: the most recent qualifying row (same MIDI/no-assistance
+// whole-piece rule as qualifies()) whose songId differs from the anchor
+// check's -- proof the learner carried the same skill to a piece they were
+// never drilled to pass, not just repeated the one they were checked on. A
+// row with no songId at all (an older row logged before songId rode along
+// on song sessions/events) never counts as a transfer -- there is nothing to
+// compare it against.
+function latestTransferRow(events, excludeSongId) {
+  let best = null;
+  events.forEach((ev) => { if (qualifies(ev) && typeof ev.songId === 'string' && ev.songId !== excludeSongId && (!best || ev.at > best.at)) best = ev; });
   return best;
 }
 
 // pathwayState({ events, sessions, midiProof, level, now }) -> { step,
-// action, checkAt? }. events/sessions tolerate undefined, empty, or
-// non-object rows without throwing -- a caller loading a saved DB never
-// gets to assume every row is well-formed.
+// action, checkAt?, transferAt?, transferSongId? }. events/sessions
+// tolerate undefined, empty, or non-object rows without throwing -- a
+// caller loading a saved DB never gets to assume every row is well-formed.
 export function pathwayState({ events, sessions, midiProof, level, now }) {
   const evs = asArray(events).filter(isObj);
   const rows = asArray(sessions);
-  const checkRow = latestCheckRow(evs);
-  if (checkRow) {
+  const anchor = earliestCheckRow(evs);
+  if (anchor) {
+    const checkRow = latestForSong(evs, anchor.songId) || anchor;
     const dueAt = checkRow.at + DAY_MS;
+    const transferRow = latestTransferRow(evs, anchor.songId);
+    // 'complete' needs BOTH pieces of evidence: a transfer-song row, AND a
+    // full day since the original check (the same "recent" boundary
+    // 'return' already uses for its own recheck) -- a transfer logged
+    // within the first day still counts once the day passes, so this does
+    // not require a THIRD row proving the original song was retained; the
+    // day itself, with the original check still standing unchallenged, is
+    // what 'return's own wait/recheck action already treats as the
+    // retention boundary.
+    if (transferRow && now >= dueAt) {
+      return { step: 'complete', action: { kind: 'complete' }, checkAt: checkRow.at, transferAt: transferRow.at, transferSongId: transferRow.songId };
+    }
     return now < dueAt
-      ? { step: 'return', action: { kind: 'wait', dueAt: dueAt }, checkAt: checkRow.at }
-      : { step: 'return', action: { kind: 'recheck' }, checkAt: checkRow.at };
+      ? { step: 'return', action: { kind: 'wait', dueAt: dueAt }, checkAt: checkRow.at, checkSongId: checkRow.songId }
+      : { step: 'return', action: { kind: 'recheck' }, checkAt: checkRow.at, checkSongId: checkRow.songId };
   }
   if (!hasProof(evs, midiProof)) return { step: 'setup', action: { kind: 'connect-midi' } };
   if (level <= 1) return { step: 'lesson', action: { kind: 'trainer' } };

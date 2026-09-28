@@ -8,8 +8,36 @@
 
 import { isReviewCurrent } from './review.js';
 import { itemReview, contentRev } from './review-ledger.js';
+import { reviewItems as songReviewItems } from './kbd-songs.js';
 
 const NOT_YET = 'Not yet checked by a player';
+
+// P3's two extra outcomes, past 'return' -- kept OUT of OUTCOMES/reviewItems
+// below (that array is the five-step panel list P2 already ships, proven by
+// tests/unit/pathway.test.mjs's exact count of 5) since these two are shown
+// only once a check row exists, never as one of the five ordered steps.
+// Both carry the same "not a player review yet" label as every other
+// outcome in this file.
+export const TRANSFER_TEXT = { id: 'kbd.pathway.transfer', text: 'Play a different song, one you have not checked yet, in Check mode.', label: NOT_YET };
+export const COMPLETE_TEXT = { id: 'kbd.pathway.complete', text: 'The first song is retained and a different song is checked too -- the keyboard pathway is complete.', label: NOT_YET };
+
+// transferSongFor(level, excludeSongId): the next starter song the keyboard
+// pathway can offer as a transfer check -- same "highest minLevel <= level"
+// rule kbd-songs.js's songFor() uses for the ordinary song hand-off, just
+// skipping excludeSongId (the song the learner's first independent check
+// already passed on, so offering it back would prove nothing new). Reuses
+// kbd-songs.js's own reviewItems() (not the raw ENTRIES) so a caller gets
+// the same ledger-labelled `current` flag the ordinary hand-off carries --
+// this suggestion is unreviewed exactly when that one is. Returns null when
+// every unlocked song IS excludeSongId (nothing else to transfer to yet).
+export function transferSongFor(level, excludeSongId) {
+  let best = null;
+  songReviewItems().forEach((entry) => {
+    if (entry.songId === excludeSongId) return;
+    if (entry.minLevel <= level && (!best || entry.minLevel > best.minLevel)) best = entry;
+  });
+  return best;
+}
 
 // One outcome per src/core/pathway.js step, in the same order pathwayState
 // evaluates them. `id` is the stable content id this review ledger keys
