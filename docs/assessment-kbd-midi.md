@@ -40,13 +40,28 @@ the pure `isIndependentOk`/`pathwayState` contract in
   unsourced seam only when no focusable key names the target pitch. The
   debug hook (`window.__coach`) is otherwise used only to WALK PAST steps
   that are not the one under test, via unsourced notes that log `'unknown'`
-  and can never count (T2's assertions confirm this directly for the
-  pitches step; the walk helper relies on it for every other step).
+  and can never count — `walkToStep` now asserts this directly on every
+  row it produces (`row.input === 'unknown'` and `isIndependentOk(row) ===
+  false`), not just on T5's aggregate independent-count check.
+- **T4(b)'s canvas path was measured, not assumed.** `t.diagnostic()` logs
+  which route delivered the unsourced note, and every run observed
+  `hook-fallback`, never the on-screen canvas cursor. Reading
+  `kbdFocusInfo()`/`kbdOrder()` (`src/app.js`) shows why: `kbdOrder()`
+  is built from `keyRects`, which is only populated by the keyboard-mod
+  drawing loop (`src/app.js` `draw()`'s `mod === 'kbd'` branch) — the
+  song-practice screen this suite drives never runs that draw path, so
+  `keyRects` stays empty and `kbdFocusInfo()` returns `null` on every
+  attempt. This is recorded as measured against the grounded spec's
+  expectation (`src/app.js:2323` with `kbdRange` `[60,72]`), not adjusted
+  to match it.
 - Tolerances and expected note offsets are read from the app's own
   `buildLessonPlan(song, 'melody', instrumentById.kbd)` output at test
-  start, never hard-coded — e.g. the rhythm step's `passRule.maxMeanErrorMs`
-  is 120ms (`src/song/lesson.js`), matched exactly by the app's own
-  `hitRateFor`/`sustainRules`/`percussionRules` composition.
+  start, never hard-coded. The plan's four judged-timing tolerances
+  (`passRule.maxMeanErrorMs`, `src/song/lesson.js`) are: rhythm 120ms,
+  phrase-slow 150ms, tempo-ladder 100ms, whole-piece 120ms. T1 exercises
+  the rhythm step's 120ms and T5 the whole-piece step's 120ms; this suite
+  does not exercise phrase-slow or tempo-ladder directly (see "What was
+  not measured").
 - All timing is measured through the app's own AudioContext clock
   (`window.__coach.audioNow() - window.__coach.songsRecordStart()`), read
   in the same in-page turn as the send; every timing-sensitive case is
@@ -106,25 +121,37 @@ M3 sample failure (T4):
 
 ## Findings (no fixes in this unit — follow-ups only)
 
-1. **Extras are invisible to the pathway/Progress contract.** `maxExtras`
-   is a `passRule` field (`src/song/lesson.js`), but `dimsFromStep`
-   (`src/ui/songs/assessed.js`) never turns "too many extra notes" into a
-   `dims` key — so an attempt that only failed on `maxExtras` is invisible
-   to `isIndependentOk`/`qualifies`, which only look at `dims`.
+1. **Extras are invisible to the pathway/Progress contract, and an
+   extras-only failure still counts.** `maxExtras` is a `passRule` field
+   (`src/song/lesson.js`), but `dimsFromStep` (`src/ui/songs/assessed.js`)
+   never turns "too many extra notes" into a `dims` key — so an attempt
+   that only failed on `maxExtras` still has every `dims` entry `'ok'`.
+   `isIndependentOk` and `pathway.js`'s `qualifies()` only look at `dims`,
+   so such an attempt reads as independent-ok: `summarizeEvents` counts it
+   toward Progress's "Passed on your own" tally, and it would qualify P1's
+   `pathwayState` toward `'return'`, exactly as if it had genuinely passed.
+   Follow-up: add an `extras` (or `maxExtras`) key to `dimsFromStep`'s
+   output and gate `isIndependentOk` on it, in its own unit.
 2. **Two clocks in one event stream.** Song rows record `at` as
    AudioContext seconds (`src/ui/songs.js`); drill rows use epoch
    milliseconds. `pathwayState`'s `DAY_MS` spacing (`src/core/pathway.js`)
    and any cross-source ordering by `at` mix these two scales without
-   normalizing them.
+   normalizing them. Follow-up: normalize `at` to one clock (or carry an
+   explicit clock tag on every row) before either DAY_MS spacing or any
+   cross-source sort relies on it, in its own unit.
 3. **Duplicate/misfired note-ons are absorbed silently.** The single-note
    forward-search match path in `judgeAttempt`
    (`src/ui/songs/practice.js`, ~line 199) never populates `extras` — a
    duplicate note-on, or a wrong-note-then-right-note pair, on a
    single-expected-note step is matched and the surplus is dropped without
    comment (demonstrated directly in T2's "duplicate note-on" case, which
-   asserts the row is counted, not that this is desired behavior).
+   asserts the row is counted, not that this is desired behavior). Follow-up:
+   have the single-note match path record unmatched note-ons as `extras`
+   the same way the multi-note path does, in its own unit.
 4. **No latency compensation.** `matchOneNote`
    (`src/ui/songs/practice.js:116`) compares raw onset time against the
    expected time with no allowance for MIDI transport, OS, or human motor
    latency — the timing budget measured in T1 is purely the app's own
-   tolerance window, not a device-aware one.
+   tolerance window, not a device-aware one. Follow-up: measure typical
+   MIDI-to-`onmidimessage` latency on real hardware and decide whether a
+   fixed compensation offset belongs in `matchOneNote`, in its own unit.

@@ -157,6 +157,7 @@ async function walkToStep(page, plan, targetKind) {
       await clickButtonNamed(page, 'Next');
       continue;
     }
+    const beforeWalk = await page.evaluate('window.__coach.db().events.length');
     await clickButtonNamed(page, 'Your turn');
     await page.waitFor("document.querySelector('.panel-songs-count') && document.querySelector('.panel-songs-count').textContent.startsWith('Notes heard so far')");
     const offsets = offsetsForStep(step);
@@ -166,6 +167,15 @@ async function walkToStep(page, plan, targetKind) {
     await page.waitFor(`document.querySelector('.panel-songs-count').textContent.includes('${offsets.length}')`);
     await clickButtonNamed(page, 'Stop and check');
     await page.waitFor("document.querySelector('.panel-songs-practice h4') || document.querySelector('.panel-songs-practice p')");
+    // The unsourced hook note used to walk PAST this step must itself log
+    // 'unknown' and never count -- otherwise it would silently inflate
+    // Progress/pathway before the step under test is even reached (see M3
+    // in docs/assessment-kbd-midi.md, which breaks exactly this).
+    await page.waitFor('window.__coach.db().events.length > ' + beforeWalk);
+    const walkedEvents = await page.evaluate('window.__coach.db().events');
+    const walkedRow = walkedEvents[walkedEvents.length - 1];
+    assert.equal(walkedRow.input, 'unknown', `walked-past ${step.kind} row must log 'unknown'`);
+    assert.equal(isIndependentOk(walkedRow), false, `walked-past ${step.kind} row must never count`);
   }
   await page.waitFor(headingStartsWith(targetHeading));
   return targetStep;
@@ -218,7 +228,10 @@ test('T1: a rhythm-step note early or late both miss the onset; on time counts',
           await page.waitFor('window.__coach.db().events.length > ' + before);
           const events = await page.evaluate('window.__coach.db().events');
           const row = events[events.length - 1];
-          return { measuredT, row, exceptions: page.exceptions.slice() };
+          const checkResultText = await page.evaluate(
+            "(document.querySelector('.panel-songs-check-result') && document.querySelector('.panel-songs-check-result').textContent) || null"
+          );
+          return { measuredT, row, checkResultText, exceptions: page.exceptions.slice() };
         } finally {
           await page.close();
         }
@@ -234,6 +247,8 @@ test('T1: a rhythm-step note early or late both miss the onset; on time counts',
   );
   assert.equal(early.row.input, 'midi');
   assert.equal(early.row.dims.onset, 'miss');
+  assert.equal(isIndependentOk(early.row), false);
+  assert.notEqual(early.checkResultText, en['songs.mode.counted']);
   assert.deepEqual(early.exceptions, []);
 
   const late = await runCase(
@@ -248,6 +263,8 @@ test('T1: a rhythm-step note early or late both miss the onset; on time counts',
   );
   assert.equal(late.row.input, 'midi');
   assert.equal(late.row.dims.onset, 'miss');
+  assert.equal(isIndependentOk(late.row), false);
+  assert.notEqual(late.checkResultText, en['songs.mode.counted']);
   assert.deepEqual(late.exceptions, []);
 
   const onTime = await runCase(
@@ -324,6 +341,11 @@ test('T2: a wrong note, a wrong octave and a velocity-0 note-on all miss the pit
       const row = events[events.length - 1];
       assert.equal(row.dims.pitch, 'miss');
       assert.equal(isIndependentOk(row), false);
+      assert.ok(!(await page.evaluate("!!document.querySelector('.panel-songs-check-result')")), 'a failed try shows no check-result line');
+      assert.notEqual(
+        pathwayState({ events: [{ ...row, skill: 'whole:null' }], sessions: [], midiProof: true, level: 2, now: row.at }).step,
+        'return'
+      );
       assert.deepEqual(page.exceptions, []);
     } finally {
       await page.close();
@@ -355,6 +377,11 @@ test('T2: a wrong note, a wrong octave and a velocity-0 note-on all miss the pit
       // outcome a wrong note gives, not a missing row and not a crash.
       assert.equal(row.dims.pitch, 'miss');
       assert.equal(isIndependentOk(row), false);
+      assert.ok(!(await page.evaluate("!!document.querySelector('.panel-songs-check-result')")), 'a failed try shows no check-result line');
+      assert.notEqual(
+        pathwayState({ events: [{ ...row, skill: 'whole:null' }], sessions: [], midiProof: true, level: 2, now: row.at }).step,
+        'return'
+      );
       assert.deepEqual(page.exceptions, []);
     } finally {
       await page.close();
@@ -488,6 +515,7 @@ test('T4: a step judged from more than one input route logs "mixed" or "unknown"
     await page.waitFor('window.__coach.db().events.length > ' + before);
     const events = await page.evaluate('window.__coach.db().events');
     const row = events[events.length - 1];
+    t.diagnostic(`T4(b) unsourced note delivered via: ${pathUsed}`);
     assert.equal(row.input, 'unknown', `path used: ${pathUsed}`);
     const resultText = await page.evaluate("document.querySelector('.panel-songs-check-result').textContent");
     assert.equal(resultText, en['songs.mode.practiceOnly']);
