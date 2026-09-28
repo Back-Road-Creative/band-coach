@@ -83,6 +83,7 @@ import { registerFingerings } from './ui/fingerings.js';
 //
 //
 import { register as registerPlayalong } from './ui/playalong.js';
+import { register as registerPathway } from './ui/pathway.js';
 //
 //
 // slot:import:w-fixes
@@ -2395,6 +2396,12 @@ import { register as registerPlayalong } from './ui/playalong.js';
     // the review label sits right beside the button rather than only in a
     // tooltip -- never claim it is reviewed when isReviewCurrent says no.
     if (mod === 'kbd') { const song = songFor(S.level); if (song) { btn('kbdSongHandoff', t('kbd.songHandoff.button'), () => { requestOpenSong(panelApi, song.songId, undefined, 'kbd', 'kbd'); openPanel('songs'); }); if (!isReviewCurrent(itemReview(song.id, contentRev(song)))) { const note = document.createElement('span'); note.setAttribute('role', 'note'); note.className = 'small'; note.textContent = t('review.unreviewed'); box.appendChild(note); } } }
+    // P2: "Your keyboard path" opens a panel naming all five
+    // src/core/pathway.js steps and the one action for whichever is current
+    // -- shown at every kbd level (unlike the song hand-off above, which
+    // needs a suggested song), since 'setup'/'lesson' come before any song
+    // is suggested at all.
+    if (mod === 'kbd') btn('kbdPathwayBtn', t('pathway.open'), () => openPanel('pathway'));
     if (mod === 'rhy') btn('calBtn', calRun ? 'Listening for 8 taps…' : 'Calibrate timing (' + Math.round(DB.latencyMs || 0) + ' ms)', startCalibrate, false);
     if (mod === 'capture') { btn('capGo', cap.on ? 'Stop' : 'Listen', () => { if (cap.on) capStop(); else { ensureAudio(); cap.on = true; cap.notes = []; cap.start = now(); cap.curM = -1; renderOpts(); } }, true); btn('capPlay', 'Play it back', () => { ensureAudio(); const t0 = now() + 0.1; cap.notes.forEach(n => tone(n.m, t0 + n.t - (cap.notes[0] ? cap.notes[0].t : 0), Math.max(0.2, n.d))); }); const lessons = {}; MOD_IDS.filter(m => hasMasteryScheme(m)).forEach(m => { lessons[m] = [MODS[m].name]; }); sel('capTo', cap.notes.length + ' notes. Practise on', lessons, 'kbd', () => {});
       // 'Make it a lesson': the captured tune becomes a draft Song (src/song/
@@ -2870,6 +2877,11 @@ import { register as registerPlayalong } from './ui/playalong.js';
     // logEvent(): see the logEvent() helper near logSession() above -- lets
     // a panel (a judged song step) leave its own row in DB.events.
     logEvent: ev => logEvent(ev),
+    // midiProof(): live proof this page load has actually heard a MIDI byte
+    // -- same test src/core/pathway.js's caller at startSession (2020) uses,
+    // exposed here so a mounted panel (the keyboard pathway panel) can ask
+    // the same question pathwayState needs without reaching past the API.
+    midiProof: () => midiPortInputs.some(i => midiHeard.has(i)),
   };
   //
   //
@@ -2892,6 +2904,9 @@ import { register as registerPlayalong } from './ui/playalong.js';
   //
   //
   registerPlayalong(panels);
+  //
+  //
+  registerPathway(panels);
   //
   //
   // slot:panel:w-fixes
