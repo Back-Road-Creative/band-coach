@@ -166,29 +166,48 @@ tests/characterization/kbd-pathway-panel.test.mjs`.
 `src/app.js`'s `startSession` is the first caller of `pathwayState`, and shows the step's outcome
 text once per visit for a returning keyboard learner (`tests/characterization/plan-song-block.test.mjs`).
 
-**P3 -- a 'complete' step past 'return'.** The FIRST qualifying check row
-(the earliest one, not the latest -- see `earliestCheckRow()`) becomes the
-anchor: its songId is "the song already checked". While in 'return',
-`pathwayState()` also looks for a second qualifying row on a DIFFERENT
-songId (`latestTransferRow()`) -- same MIDI-input, no-assistance,
-whole-piece rule as the original check, just on a song the check row didn't
-already prove. Once BOTH that transfer row exists AND a full day has passed
-since the anchor check (the same day boundary 'return' already waits out),
-`pathwayState()` returns `step: 'complete'`. A repeated qualifying row on
-the SAME song as the anchor is never a transfer -- it only refreshes the
-anchor song's own wait/recheck date, exactly as before P3.
+**P3 -- a 'complete' step past 'return', needing two pieces of played
+evidence, not just elapsed time.** The FIRST qualifying check row (the
+earliest one ever logged, not the latest -- see `earliestCheckRow()`)
+becomes the anchor: its songId is "the song already checked", and its `at`
+fixes `dueAt` (`anchor.at + DAY_MS`) for good -- a later qualifying row,
+same song or different, never moves that date. From the anchor,
+`pathwayState()` looks for:
 
-The panel (`src/ui/pathway.js`) offers the transfer song -- chosen by
-`transferSongFor(level, checkSongId)` (`src/instruments/kbd-pathway.js`,
-same "highest level-unlocked song" rule as the ordinary song hand-off, just
-skipping the song already checked) -- in Check mode as soon as 'return' is
-reached, alongside the existing wait/recheck action; it never waits for the
-day to offer it. Once `pathwayState()` reaches 'complete', the panel shows
-the result text instead of any further action. Both the transfer offer and
-the complete result carry kbd-pathway.js's "Not yet checked by a player"
-label (`TRANSFER_TEXT`/`COMPLETE_TEXT`), kept out of the five-item
-`reviewItems()` list so the panel's step count stays five. Proof:
-`node --test tests/unit/pathway-transfer-retention.test.mjs`.
+- **retained** (`earliestRetainedRow()`) -- the earliest qualifying row, ANY
+  songId, at or after `dueAt`. Real evidence the check still held up a day
+  later, not the day simply having passed with nothing played.
+- **transfer** (`latestTransferRow()`) -- a qualifying row on a DIFFERENT
+  songId than the anchor's, any time after it. One row can satisfy both at
+  once (e.g. the very first check on a different song lands a day later);
+  a same-song recheck, however late, only ever counts toward retained.
+
+`pathwayState()` returns `step: 'complete'` once BOTH exist. With only one
+(or neither), 'return' continues with a different action: `wait` before
+`dueAt`; `recheck` once `dueAt` has passed with no retained row yet;
+`transfer` once retained exists but transfer doesn't (the same-song recheck
+is never re-offered at that point -- that evidence is already in).
+
+The panel (`src/ui/pathway.js`) offers the transfer song only once action
+`transfer` is reached, chosen by `transferSongFor(level, anchorSongId,
+seenSongIds)` (`src/instruments/kbd-pathway.js`; `seenSongIds` is every
+songId any kbd song-source event carries, so the offer is a song "the
+learner has not seen" and not just one they haven't been checked on --
+falling back to excluding only the anchor song once nothing else unlocked
+is left unseen). It shows the retained result as soon as `pathwayState`
+reports a `retainedAt` (mid-'return' or at 'complete'), and the transfer
+result only at 'complete'. All of this copy --
+`RETAINED_TEXT`/`TRANSFER_TEXT`/`TRANSFER_DONE_TEXT`/`COMPLETE_TEXT` --
+carries kbd-pathway.js's "Not yet checked by a player" label, kept out of
+the five-item `reviewItems()` list so the panel's step count stays five.
+Proof: `node --test tests/unit/pathway-transfer-retention.test.mjs`.
+
+This assumes every event's `at` is a real epoch-millisecond timestamp.
+`src/ui/songs.js` currently logs song-check `at` from the audio clock
+(seconds, not epoch ms, per its `{ now: api.now() }` call) -- a separate
+unit (`fix/song-event-epoch-clock`) fixes that at the source; `pathway.js`
+adds no workaround for a mixed clock, since detecting or correcting that is
+that unit's job, not this pure function's.
 
 ## Known gaps
 

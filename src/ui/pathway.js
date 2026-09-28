@@ -4,11 +4,13 @@
 // src/instruments/kbd-pathway.js "Not yet checked by a player" label until a
 // real player's review lands in the review ledger -- teaching content is
 // never claimed reviewed just because this panel shows it. P3: once
-// 'return' is reached, this panel also offers a transfer song (in Check
-// mode) and, once both a day has passed and that transfer lands, shows the
-// 'complete' result -- see the extraHtml block below.
+// 'return' has BOTH a retained (any song, a day later) and a transfer
+// (a different song, any time) row, pathwayState() reports 'complete'; with
+// only retained evidence in hand it instead offers the transfer song (in
+// Check mode, never re-offering the same-song recheck) -- see the
+// extraHtml block below for how the two results render.
 import { pathwayState } from '../core/pathway.js';
-import { reviewItems as kbdPathwayOutcomes, outcomeReviewed, transferSongFor, TRANSFER_TEXT, COMPLETE_TEXT } from '../instruments/kbd-pathway.js';
+import { reviewItems as kbdPathwayOutcomes, outcomeReviewed, transferSongFor, RETAINED_TEXT, TRANSFER_TEXT, TRANSFER_DONE_TEXT, COMPLETE_TEXT } from '../instruments/kbd-pathway.js';
 import { songFor } from '../instruments/kbd-songs.js';
 import { starterSongs } from '../song/starter/index.js';
 import { requestOpenSong } from './songs.js';
@@ -53,41 +55,53 @@ export function register(panels) {
           + '</li>';
       }).join('');
 
+      // P3: seenSongIds is every songId any kbd song-source event carries --
+      // "a transfer song the learner has not seen" -- passed to
+      // transferSongFor so it never re-offers a song already played, only
+      // falling back to the anchor-only exclusion when nothing else is
+      // unlocked (see that function's own comment).
+      const seenSongIds = (db.events || []).filter((ev) => ev && ev.instrument === 'kbd' && ev.source === 'song' && typeof ev.songId === 'string').map((ev) => ev.songId);
+      let transferEntry = null;
+      if (ps.step === 'return' && ps.action.kind === 'transfer') transferEntry = transferSongFor(level, ps.checkSongId, seenSongIds);
+      const transferStarter = transferEntry ? starterSongs.find((s) => s.id === transferEntry.songId) : null;
+      const transferTitle = transferStarter ? transferStarter.title : (transferEntry ? transferEntry.songId : '');
+
       let actionHtml = '';
       const kind = ps.action.kind;
       if (kind === 'connect-midi' || kind === 'trainer') {
         actionHtml = '<button type="button" id="pathwayAction">' + t('pathway.action.trainer') + '</button>';
       } else if (kind === 'open-song' && song) {
         actionHtml = '<button type="button" id="pathwayAction">' + t('pathway.action.song', { title: title }) + '</button>';
-      } else if ((kind === 'check-song' || kind === 'recheck') && song) {
+      } else if (kind === 'check-song' && song) {
+        actionHtml = '<button type="button" id="pathwayAction">' + t('pathway.action.check', { title: title }) + '</button>';
+      } else if (kind === 'recheck' && song) {
         actionHtml = '<button type="button" id="pathwayAction">' + t('pathway.action.check', { title: title }) + '</button>';
       } else if (kind === 'wait') {
         actionHtml = '<p class="pathway-wait">' + t('pathway.action.wait', { date: new Date(ps.action.dueAt).toLocaleDateString() }) + '</p>';
+      } else if (kind === 'transfer' && transferEntry) {
+        actionHtml = '<button type="button" id="pathwayAction">' + t('pathway.action.check', { title: transferTitle }) + '</button>';
       }
 
       // P3: 'return' and 'complete' both fall past the five listed steps
       // above (kbd-pathway.js's OUTCOMES stays five long -- see its own
       // comment), so their extra copy renders here instead, using the same
-      // "Not yet checked by a player" label. In 'return', a transfer song --
-      // one the learner has NOT already passed the check on -- is offered
-      // in Check mode alongside the existing wait/recheck action; the panel
-      // never asks for a THIRD song, just the one this pathway hands off
-      // (kbd-songs.js's transferSongFor). 'complete' shows both results
-      // (the retained song and the transferred one) with no further action.
+      // "Not yet checked by a player" label. The panel shows BOTH results
+      // (retained, transfer) whenever pathwayState has evidence for them --
+      // a retained result can appear mid-'return' (action 'transfer'), the
+      // transfer result only once 'complete'.
       let extraHtml = '';
-      let transferEntry = null;
+      if (ps.retainedAt !== undefined) {
+        extraHtml += '<p class="pathway-retained" role="note">' + RETAINED_TEXT.text
+          + ' <span class="pathway-unreviewed" role="note">' + RETAINED_TEXT.label + '</span></p>';
+      }
       if (ps.step === 'complete') {
-        extraHtml = '<p class="pathway-complete" role="note">' + COMPLETE_TEXT.text
+        extraHtml += '<p class="pathway-transfer-done" role="note">' + TRANSFER_DONE_TEXT.text
+          + ' <span class="pathway-unreviewed" role="note">' + TRANSFER_DONE_TEXT.label + '</span></p>'
+          + '<p class="pathway-complete" role="note">' + COMPLETE_TEXT.text
           + ' <span class="pathway-unreviewed" role="note">' + COMPLETE_TEXT.label + '</span></p>';
-      } else if (ps.step === 'return') {
-        transferEntry = transferSongFor(level, ps.checkSongId);
-        if (transferEntry) {
-          const transferStarter = starterSongs.find((s) => s.id === transferEntry.songId);
-          const transferTitle = transferStarter ? transferStarter.title : transferEntry.songId;
-          extraHtml = '<p class="pathway-transfer" role="note">' + TRANSFER_TEXT.text
-            + ' <span class="pathway-unreviewed" role="note">' + TRANSFER_TEXT.label + '</span></p>'
-            + '<button type="button" id="pathwayTransferAction">' + t('pathway.action.check', { title: transferTitle }) + '</button>';
-        }
+      } else if (kind === 'transfer' && transferEntry) {
+        extraHtml += '<p class="pathway-transfer" role="note">' + TRANSFER_TEXT.text
+          + ' <span class="pathway-unreviewed" role="note">' + TRANSFER_TEXT.label + '</span></p>';
       }
 
       el.innerHTML = '<div class="panel-pathway">'
@@ -105,13 +119,7 @@ export function register(panels) {
           if (kind === 'connect-midi' || kind === 'trainer') { api.setMod('kbd'); return; }
           if (kind === 'open-song' && song) { requestOpenSong(api, song.songId, undefined, 'kbd', 'kbd'); api.openPanel('songs'); return; }
           if ((kind === 'check-song' || kind === 'recheck') && song) { requestOpenSong(api, song.songId, undefined, 'kbd', 'kbd', 'check'); api.openPanel('songs'); return; }
-        });
-      }
-
-      const transferBtn = el.querySelector('#pathwayTransferAction');
-      if (transferBtn && transferEntry) {
-        transferBtn.addEventListener('click', () => {
-          requestOpenSong(api, transferEntry.songId, undefined, 'kbd', 'kbd', 'check'); api.openPanel('songs');
+          if (kind === 'transfer' && transferEntry) { requestOpenSong(api, transferEntry.songId, undefined, 'kbd', 'kbd', 'check'); api.openPanel('songs'); return; }
         });
       }
     },
