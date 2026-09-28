@@ -825,12 +825,15 @@ starts a fresh one under the new mode rather than leaving a half-graded task beh
 left-only practice is tracked on its own id (`j1r`/`j1l` etc., alongside the both-hands `j1`), so
 passing the one-handed drill never counts toward, and never uses up, both-hands mastery — the two
 are scheduled by the spaced-repetition system independently. The choice is saved with the rest of
-your preferences and survives a reload. Above level 16, the "Everything, faster" levels mix hands
+your preferences and survives a reload. Above level 17, the "Everything, faster" levels mix hands
 material back in with every other kind of drill; a plain `j1`-style id that turns up there is always
 the both-hands exercise, whatever the selector is currently set to — only an id with the `r`/`l`
 suffix is graded one-handed, and a `j1t`/`j1h`/`j1d`-style id (level 14's timed pair, level 15's
 held bass or level 16's split rhythm, all below) is still graded on a real MIDI keyboard or the
-computer keys, but practice-only on screen taps, exactly as it is on its own dedicated level. The approximate (microphone) pass message says plainly which hand was
+computer keys, but practice-only on screen taps, exactly as it is on its own dedicated level; a
+`j1p`-style id (level 17's position change) is graded the same way on a real MIDI keyboard or the
+computer keys, and — unlike the timed/held/split ids — a screen tap grades it exactly too, exactly
+as it is on its own dedicated level. The approximate (microphone) pass message says plainly which hand was
 checked in Right only/Left only mode, rather than the both-hands wording. One-handed passes never
 move you past level 13 on their own: the level holds until the both-hands exercises are ready.
 
@@ -909,8 +912,28 @@ a player" for the same reason as levels 14-15. See `tests/unit/hands-together-st
 `tests/characterization/kbd-levels-15-16.test.mjs` for the exact rules and the real-MIDI/computer-
 key walk-throughs.
 
-Levels 15-16 were inserted before "Everything, faster", so a saved keyboard level of 15 or above now
-opens these levels, and "Everything, faster (k)" is level 16+k (it was 14+k); saved levels are not
+Level 17, "Hands together: hand position change", reuses the same five pairs' own `j1p`-`j5p` ids
+(its own mastery too). Unlike levels 14-16, it is not timed against the other hand at all: the
+right hand plays the ordinary five-finger position first (its `oldRh` note, thumb on the position's
+letter, same finger as levels 13-16), then — without lifting the left hand, which holds its own note
+throughout — moves up a fourth (`POSITION_SHIFT_SEMITONES`, 5 semitones; a fifth would push the
+G-position's shifted target to MIDI 74, past the fixed 60-72 right-hand row the on-screen keyboard
+always draws for these levels, so a fourth is the largest shift that stays on screen) and plays the
+same finger shape there. There is no LEARN/CHECK split and no millisecond tolerance to miss — one
+grader, `gradePositionChange()`, covers both the pre-shift and post-shift chord, telling them apart
+by whether the shift has already happened once this attempt. Playing the old position again after
+the shift is a scored fail naming it ("that is the old position"), not a silent no-op and not a
+second pass. A "before you start" line names the starting position and the shift before the
+exercise begins, the same as level 13's own prep line. This grading runs on a real MIDI keyboard or
+the computer keys, and — because there is no hold to lose and no release timing at stake — a screen
+tap (or the on-screen focus cursor's Enter/Space) is graded exactly the same way as a computer key,
+unlike every timed/held/split level above. A microphone pass stays approximate. The level is
+labelled "Not yet checked by a player" for the same reason as levels 14-16. See
+`tests/unit/hands-together.test.mjs` and `tests/characterization/kbd-level17-position.test.mjs` for
+the exact rules and the real-MIDI/computer-key walk-throughs. Reviewed by: none yet.
+
+Levels 15-17 were inserted before "Everything, faster", so a saved keyboard level of 15 or above now
+opens these levels, and "Everything, faster (k)" is level 17+k (it was 14+k); saved levels are not
 renumbered.
 
 A song note itself can also say which hand plays it: an optional `hand: 'rh'` / `hand: 'lh'` field

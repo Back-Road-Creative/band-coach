@@ -65,22 +65,27 @@ export const HANDS_TOGETHER_EXERCISES = STEPS.map((s, i) => ({
 // crediting a mode-suffixed id keeps a right-only pass from ever counting
 // towards, or consuming, the shared both-hands item), 'j<n>t' (level 14's
 // timed both-hands pair -- "matching rhythms"), 'j<n>h' (level 15's held
-// bass) or 'j<n>d' (level 16's split rhythm) -- t/h/d are each their own
-// distinct mastery again, so none of them ever credits or consumes the
-// plain both-hands item, or each other's. Any other trailing character is
-// not a recognised id.
+// bass), 'j<n>d' (level 16's split rhythm) or 'j<n>p' (level 17's position
+// change) -- t/h/d/p are each their own distinct mastery again, so none of
+// them ever credits or consumes the plain both-hands item, or each other's.
+// Any other trailing character is not a recognised id.
 function parseId(id) {
   if (typeof id !== 'string') return null;
-  const m = /^(j\d+)([rlthd])?$/.exec(id);
+  const m = /^(j\d+)([rlthdp])?$/.exec(id);
   if (!m) return null;
   const suf = m[2];
-  const stage = suf === 't' ? 'timed' : suf === 'h' ? 'held' : suf === 'd' ? 'split' : 'plain';
+  const stage = suf === 't' ? 'timed' : suf === 'h' ? 'held' : suf === 'd' ? 'split' : suf === 'p' ? 'position' : 'plain';
   return { baseId: m[1], mode: suf === 'r' ? 'right' : suf === 'l' ? 'left' : 'both', timed: suf === 't', stage: stage };
 }
 
+// Level 17's own exercise table (declared after gradePositionChange below,
+// which describes the shift) is consulted here for 'position'-stage ids --
+// every other id still resolves against the unshifted HANDS_TOGETHER_EXERCISES,
+// unchanged.
 export function handsTogetherById(id) {
   const parsed = parseId(id);
   if (!parsed) return null;
+  if (parsed.stage === 'position') return HANDS_POSITION_EXERCISES.find(e => e.id === parsed.baseId + 'p') || null;
   return HANDS_TOGETHER_EXERCISES.find(e => e.id === parsed.baseId) || null;
 }
 
@@ -374,4 +379,65 @@ export function gradeSplitRhythm(exercise, rec) {
   const state = (lh.state === 'fail' || rh.state === 'fail') ? 'fail' : (lh.state === 'pass' && rh.state === 'pass') ? 'pass' : 'waiting';
   const reason = lh.state === 'fail' ? lh.reason : rh.state === 'fail' ? rh.reason : null;
   return { state: state, reason: reason, rh: rh, lh: lh };
+}
+
+// Level 17 ("hand position change"): the right hand plays the five-finger
+// position, then moves UP by a fixed interval and plays the same shape in
+// the new position, while the left hand keeps holding its own note
+// underneath, unchanged throughout -- a real, untimed five-finger position
+// change, the standard next step after levels 13-16's fixed-position
+// material. POSITION_SHIFT_SEMITONES is a fourth (5 semitones), not the
+// more obvious fifth: a fifth would push the G pair's shifted right-hand
+// note to MIDI 74, past the on-screen keyboard's fixed right-hand row
+// (60-72 -- see kbdRange()/drawKeys() in src/app.js), so it would never be
+// drawn once the shift happened. A fourth keeps every pair's shifted target
+// (65, 67, 69, 70, 72) inside that row. `oldRh` is the pre-shift right-hand
+// note/finger, kept alongside the already-shifted `rh` so
+// gradePositionChange() below can name "the old position" once the shift
+// has happened.
+export const POSITION_SHIFT_SEMITONES = 5;
+
+export const HANDS_POSITION_EXERCISES = STEPS.map((s, i) => ({
+  id: 'j' + (i + 1) + 'p',
+  name: s.name,
+  label: s.name + ' position, then move the right hand up',
+  short: s.name + ' (position change)',
+  rh: { midi: s.rh + POSITION_SHIFT_SEMITONES, finger: s.rf },
+  lh: { midi: s.lh, finger: s.lf },
+  oldRh: { midi: s.rh, finger: s.rf }
+}));
+
+// A one-line "before you start" caption for level 17, naming the shift
+// before it happens -- the coach's "preparation line" pattern (see
+// prepLine() above), but naming BOTH the starting key and the shift, since
+// the whole point of this level is the move partway through.
+export function positionPrepLine(exercise, nameOf) {
+  const namer = nameOf || (m => nameFor(m, { octave: true }));
+  const lh = exercise.lh, oldRh = exercise.oldRh;
+  return 'Before you start: right hand thumb (finger ' + oldRh.finger + ') on ' + namer(oldRh.midi) +
+    '; left hand ' + FINGER_WORD[lh.finger] + ' (finger ' + lh.finger + ') on ' + namer(lh.midi) +
+    '. Partway through, move your right hand up to ' + namer(exercise.rh.midi) + ' and play the same shape there.';
+}
+
+// gradePositionChange(exercise, heldMidis, moved) -- exact-input hands-
+// together grading, the same shape as gradeHandsTogetherExact above but
+// with a second expected right-hand key: before the shift (`moved` false)
+// the right hand's note is exercise.oldRh.midi; once `moved` is true (the
+// pre-shift chord has already been matched once this attempt) that SAME old
+// key is no longer accepted silently -- it is a scored fail naming the
+// shift (`oldPosition: true`), the one thing a caller cannot get from the
+// plain exact grader, which has no notion of "used to be right, now is
+// not". Any note that is neither the currently-expected right-hand key nor
+// the held left-hand key is `wrong`, exactly as gradeHandsTogetherExact
+// treats it -- except the old right-hand key itself once moved, which is
+// `oldPosition`, not `wrong` (a caller reports it with its own reason
+// instead). Never mutates its input.
+export function gradePositionChange(exercise, heldMidis, moved) {
+  const midis = heldMidis || [];
+  const targetRh = moved ? exercise.rh.midi : exercise.oldRh.midi;
+  const rh = midis.includes(targetRh);
+  const lh = midis.includes(exercise.lh.midi);
+  const oldPosition = !!moved && !rh && midis.includes(exercise.oldRh.midi);
+  const wrong = midis.filter(m => m !== targetRh && m !== exercise.lh.midi && !(moved && m === exercise.oldRh.midi));
+  return { ok: rh && lh && wrong.length === 0, rh: rh, lh: lh, wrong: wrong, oldPosition: oldPosition };
 }
