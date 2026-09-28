@@ -1312,8 +1312,9 @@ import { register as registerPlayalong } from './ui/playalong.js';
   // A built-in drill/warm-up row now records this route as `input` (passed
   // through passEl to finishTask's logEvent); a song step still only ever
   // gets 'midi' or 'computer-key' forwarded to it (see the comment at the
-  // forwardSongNote call below) -- a canvas tap or a mic note inside a song
-  // stays untagged, exactly as before. Besides (a) the plain-text "heard"
+  // forwardSongNote call below). A canvas tap or a mic note never reaches a
+  // song step at all: openPanel() hides #mainArea (so #cv) and clears `task`
+  // (so onPitch returns before calling onNote) the moment Songs opens. Besides (a) the plain-text "heard"
   // messages below and (b) hands-together grading using the real MIDI
   // held-note set instead of the note-on timer window, it is now also
   // handed straight through to forwardSongNote() so a song practice
@@ -1322,12 +1323,11 @@ import { register as registerPlayalong } from './ui/playalong.js';
   // pass/fail, which stay blind to it.
   function onNote(midi, exact, source) {
     // Songs only ever learn a route they already understand (a real
-    // keyboard or a stand-in for one) -- forwarding 'screen' or 'mic' here
-    // would silently start logging song step input for a canvas tap during
-    // a kbd song, and could put 'mic' on a song row too, which would make
-    // src/ui/songs.js's own comments about that field (advance()'s region,
-    // and its "left off rather than guessed" convention) wrong. Tagging
-    // song screen clicks is a separate follow-up, not this change.
+    // keyboard or a stand-in for one). 'screen' and 'mic' cannot arrive here
+    // while a song is open (see openPanel()), so this gate only matters if a
+    // later UI change makes #cv reachable during songs: such a tap would
+    // then reach advance() with no route, and its row keeps `input` off
+    // rather than guessed (src/ui/songs.js's advance()).
     forwardSongNote(midi, exact, undefined, (source === 'midi' || source === 'computer-key') ? source : undefined);
     if (MODS[mod] && MODS[mod].kit) { const p = pieceForMidi(midi); if (p === null) coach('MIDI note ' + midi + ' is not one of the drums on this kit' + (playing ? ', so it counts as an extra hit.' : '.')); else if (!playing) coach(kitName(p) + ' heard -- start an exercise to see it judged.'); onHit(p, tapAudioTime(), source); return; }
     lastInputAt = now(); pressed[midi] = performance.now();

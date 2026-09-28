@@ -140,8 +140,8 @@ export const RETAIN_GAP_MS = 20 * 3600 * 1000;
 // never independent-ok either, however its dims came back: a keyboard
 // attempt made without a real MIDI keyboard is practice, not proof the
 // skill transferred to the instrument. A row with no `input` field at all
-// (legacy rows, drill rows recorded before input was tagged, and today's
-// on-screen song clicks) keeps its existing meaning.
+// (legacy rows, drill rows recorded before input was tagged, and song rows
+// from a hook-driven note with no route) keeps its existing meaning.
 export function isIndependentOk(ev) {
   const withHelp = !!(ev.assistance && ev.assistance !== 'none');
   if (ev.instrument === 'kbd' && typeof ev.input === 'string' && ev.input !== 'midi') return false;
