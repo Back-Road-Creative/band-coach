@@ -97,7 +97,20 @@ test('an unreadable file shows a plain-words message instead of a dead end', asy
   const badPath = join(dir, 'not-audio.wav');
   writeFileSync(badPath, Buffer.from('this is not an audio file, just plain text bytes'));
 
-  const page = await launchPage(HTML_PATH);
+  // A slow decode, as on a long recording or a busy machine: the refusal
+  // arrives well after "Working it out…" (src/ui/songs.js) is on the status
+  // line, so the check below has to wait for the settled message rather than
+  // read whatever text is there first.
+  const page = await launchPage(HTML_PATH, {
+    initScript: `(() => {
+      const proto = (window.BaseAudioContext || window.AudioContext).prototype;
+      const decode = proto.decodeAudioData;
+      proto.decodeAudioData = function (...args) {
+        const self = this;
+        return new Promise((r) => setTimeout(r, 800)).then(() => decode.apply(self, args));
+      };
+    })();`,
+  });
   t.after(() => page.close());
   await openAddSongSection(page);
 
@@ -105,7 +118,8 @@ test('an unreadable file shows a plain-words message instead of a dead end', asy
   // P3-12: the message now lands on Songs' own status line (src/ui/songs.js's
   // say(), .panel-songs-msg) instead of the editor's -- Add a song's file
   // door is the one place a bad file is reported now.
-  await page.waitFor("document.querySelector('.panel-songs-msg').textContent.length > 0", 20000);
+  // "Working it out…" is the in-progress line, not the answer: wait past it.
+  await page.waitFor("(() => { const s = document.querySelector('.panel-songs-msg').textContent; return s.length > 0 && s !== 'Working it out…'; })()", 20000);
 
   const message = await page.evaluate("document.querySelector('.panel-songs-msg').textContent");
   assert.match(message, /could not/i);
