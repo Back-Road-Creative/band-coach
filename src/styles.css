@@ -273,6 +273,11 @@
   .how-inline-body { overflow-x: auto; max-width: 100%; }
   .how-inline-badge { color: var(--warn); font-size: 13px; margin: 0; }
   .how-inline-desc { margin: 0; }
+  /* Trainer peek (C1a): the SAME how-inline toggle/body, dropped right
+     under the hint text beside the active note instead of under a Songs
+     step -- never a second stylesheet section, just placement (a little
+     top margin so it does not crowd the hint line). */
+  #howPeekHost { margin-top: 6px; }
   @media (max-width: 400px) { .panel-songs-list { flex-direction: column; } .panel-songs-play-on-list { flex-direction: column; } }
   /* */
   .panel-editor { display: flex; flex-direction: column; gap: 12px; max-width: 100%; }
