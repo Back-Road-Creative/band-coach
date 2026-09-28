@@ -59,9 +59,19 @@ test('planSession: unchanged when no songFor/sessions/today are passed', () => {
     n60: item({ stability: 5, lastSeen: 0, reps: 3 }),
     G4: item({ stability: 5, lastSeen: 0, reps: 4, lapses: 2 })
   };
-  const withExtras = planSession({ instrumentId: 'kbd', level: 1, activeIds: ['n60', 'G4'], items, now, due });
-  const withoutExtras = planSession({ instrumentId: 'kbd', level: 1, activeIds: ['n60', 'G4'], items, now, due });
-  assert.deepEqual(withExtras, withoutExtras);
+  const base = { instrumentId: 'kbd', level: 1, activeIds: ['n60', 'G4'], items, now, due };
+  const withoutExtras = planSession(base);
+  const withUnusableSongFor = planSession({ ...base, songFor: undefined, sessions: [{ d: TODAY, mod: 'kbd', source: 'song', songId: 'hot-cross-buns' }], today: TODAY });
+  const withNonFunctionSongFor = planSession({ ...base, songFor: 'not-a-function', sessions: [{ d: TODAY, mod: 'kbd', source: 'song', songId: 'hot-cross-buns' }], today: TODAY });
+  const expected = [
+    { kind: 'review', ids: ['G4', 'n60'] },
+    { kind: 'weak', id: 'G4', why: 'slipped before, worth another pass' },
+    { kind: 'apply', skill: 'G4' },
+    { kind: 'check', ids: ['G4', 'n60'] }
+  ];
+  assert.deepEqual(withoutExtras, expected);
+  assert.deepEqual(withUnusableSongFor, expected);
+  assert.deepEqual(withNonFunctionSongFor, expected);
 });
 
 test('nextPlanStep: a song block is never served as a drill', () => {
