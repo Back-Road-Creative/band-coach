@@ -97,6 +97,21 @@ export function songFor(level) {
   return best;
 }
 
+// songId -> the drill skill ids (src/app.js's N(), 'n' + midi, built from
+// KBD_LEVEL_PITCH_POOLS above) a fully-taught starter song uses -- so a song
+// play can be credited as "applied" for a note the player has already
+// drilled on its own, even though a drill event's skill ('n64') and a song
+// event's skill ('phrase-slow:0'/'pitches:0'/etc, see src/ui/songs.js) never
+// share an instrument|skill group in src/core/learning-events.js's own
+// applied rule. Only songs ENTRIES already fully teaches (minLevel !== null)
+// are mapped -- a song reaching outside the keyboard trainer's own levels has
+// no drill ids to point at. Built from ENTRIES' own ids/pitches, never from a
+// second pass over starterSongs, so it can never disagree with ENTRIES about
+// which songs qualify.
+export const KBD_SONG_SKILL_MAP = Object.freeze(Object.fromEntries(
+  ENTRIES.map((entry) => [entry.songId, Object.freeze(pitchesOf(starterSongs.find((s) => s.id === entry.songId)).map((p) => 'n' + p))])
+));
+
 // Every hand-off entry alongside whether a real player has reviewed it
 // through the shared per-item ledger (src/instruments/review-ledger.js) --
 // this map is teaching content the app's authors assembled, not something a
