@@ -6,7 +6,7 @@ import { createLibrary, indexedDbStore, memoryStore } from './song/library.js';
 import { captureToSong } from './song/capture.js';
 import { toAudioTime, judgeTap, medianLatency } from './core/timing.js';
 import { DEFAULT_STABILITY_DAYS, MIN_STABILITY_DAYS, MAX_STABILITY_DAYS, GRADE, retrievability, review, due, migrateItem } from './core/srs.js';
-import { handsTogetherById, handsModeFromId, fingeringLabel, gradeHandsTogetherExact, gradeHandsTogetherApprox, bothUnlocked, effectiveHands, prepLine, HANDS_TOGETHER_EXERCISES, isTimedPairId, gradeTimedPair, PAIR_ONSET_TOL_MS, PAIR_RELEASE_TOL_MS } from './core/hands-together.js';
+import { handsTogetherById, handsModeFromId, fingeringLabel, gradeHandsTogetherExact, gradeHandsTogetherApprox, bothUnlocked, effectiveHands, prepLine, HANDS_TOGETHER_EXERCISES, isTimedPairId, gradeTimedPair, PAIR_ONSET_TOL_MS, PAIR_RELEASE_TOL_MS, isStagedPairId, handsStageFromId, heldBassMelody, gradeHeldBass, gradeSplitRhythm, SPLIT_MID_TOL_RATIO } from './core/hands-together.js';
 import { createMidiParser } from './core/midi.js';
 import { createNoteState } from './core/note-state.js';
 import { PCKEYS } from './core/pckeys.js';
@@ -47,7 +47,7 @@ import { layoutFor as harpLayoutFor } from './instruments/how/harmonica.js';
 import { pieceForMidi, TRAINER_LEVELS as KIT_LEVELS } from './instruments/drum-kit.js';
 import { kitLayout, pieceAt } from './instruments/how/drum-kit.js';
 import { layoutPercussionMeasure } from './notation/percussion.js';
-import { songFor, KBD_LEVEL_PITCH_POOLS as KBD_POOLS } from './instruments/kbd-songs.js';
+import { songFor, KBD_LEVEL_PITCH_POOLS as KBD_POOLS, KBD_SONG_SKILL_MAP } from './instruments/kbd-songs.js';
 import { itemReview, contentRev } from './instruments/review-ledger.js';
 import { isReviewCurrent } from './instruments/review.js';
 import { starterSongs } from './song/starter/index.js';
@@ -83,6 +83,7 @@ import { registerFingerings } from './ui/fingerings.js';
 //
 //
 import { register as registerPlayalong } from './ui/playalong.js';
+import { register as registerPathway } from './ui/pathway.js';
 //
 //
 // slot:import:w-fixes
@@ -482,7 +483,16 @@ import { register as registerPlayalong } from './ui/playalong.js';
         { name: 'Chords: C, F and G', add: ['cC', 'cF', 'cG'], task: 'chord', pool: 'c', limit: 12 }, { name: 'Chords: A minor, D minor, E minor', add: ['cAm', 'cDm', 'cEm'], task: 'chord', pool: 'c', limit: 10 },
         { name: 'Chord changes', task: 'seq', len: 2, pool: 'c', limit: 8 },
         { name: 'Hands together: five-finger position (MIDI exact, mic approximate)', add: ['j1', 'j2', 'j3', 'j4', 'j5'], task: 'hands', pool: 'j', limit: 10 },
-        { name: 'Hands together: matching rhythms (MIDI or computer keys)', add: ['j1t', 'j2t', 'j3t', 'j4t', 'j5t'], task: 'hands', pool: 'j', sfx: 't', timed: true, limit: 10 }
+        { name: 'Hands together: matching rhythms (MIDI or computer keys)', add: ['j1t', 'j2t', 'j3t', 'j4t', 'j5t'], task: 'hands', pool: 'j', sfx: 't', timed: true, limit: 10 },
+        // K4: levels 15-16 are two more LEARN-then-CHECK stages on the same
+        // five pairs (src/core/hands-together.js), each its own distinct
+        // mastery -- `stage` is what onNote/onNoteOff/renderOpts key their
+        // CHECK-phase branching off (handsStageFromId), and `timed: true`
+        // (carried over unchanged from level 14) is what keeps every
+        // existing `!D().timed`/`!d.timed` guard skipping the level-13
+        // hands-selector lock and prep line for these levels too.
+        { name: 'Hands together: held bass under the melody (MIDI or computer keys)', add: ['j1h', 'j2h', 'j3h', 'j4h', 'j5h'], task: 'hands', pool: 'j', sfx: 'h', timed: true, stage: 'held', limit: 14 },
+        { name: 'Hands together: different rhythms in each hand (MIDI or computer keys)', add: ['j1d', 'j2d', 'j3d', 'j4d', 'j5d'], task: 'hands', pool: 'j', sfx: 'd', timed: true, stage: 'split', limit: 14 }
       ] },
     gtr: { name: 'Guitar', tag: 'microphone', color: '#f28b25', input: 'pluck', fmin: 70, fmax: 1200, tuning: [40, 45, 50, 55, 59, 64], frets: 12, help: 'Guitar: press Connect to let the page listen through your microphone or audio interface. On a single-note lesson, play one clean note at a time; if it hears a strum instead it will tell you so rather than staying silent. It hears the pitch, not which string you used, so any place that gives the right note counts. Chord listening is experimental: the microphone hears a chord as one blended sound, not separate notes, and a very noisy room can fool it either way.', levels: null },
     bass: { name: 'Bass', tag: 'microphone', color: '#e8392f', input: 'pluck', fmin: 36, fmax: 500, tuning: [28, 33, 38, 43], frets: 12, help: 'Bass: press Connect to let the page listen. Play one clean note at a time and let it ring for a moment; low notes take a little longer to recognise.', levels: null },
@@ -731,7 +741,9 @@ import { register as registerPlayalong } from './ui/playalong.js';
   const WIND_KINDS = { c: ['Concert pitch: flute, oboe, violin', 0, 'treble'], bb: ['B flat: trumpet, clarinet, soprano sax', -2, 'treble'], bbt: ['B flat, octave lower: tenor sax', -14, 'treble'], eb: ['E flat: alto sax', -9, 'treble'], ebb: ['E flat, octave lower: baritone sax', -21, 'treble'], f: ['F: French horn', -7, 'treble'], bc: ['Bass clef: trombone, euphonium, tuba', -19, 'bass'] };
   const VOICE_KINDS = { low: ['Lower voice (Do = C3)', 48], mid: ['Middle voice (Do = G3)', 55], high: ['Higher voice (Do = C4)', 60] };
 
-  function levelDef(mod, L) { const T = MODS[mod].levels; if (L <= T.length) return T[L - 1]; const k = L - T.length, last = T[T.length - 1]; return { name: 'Everything, faster (' + k + ')', task: 'mix', limit: Math.max(2.5, (last.limit || 8) - 0.75 * k), bpm: Math.min(120, (last.bpm || 72) + 6 * k), fast: true }; }
+  // K4: "Everything, faster (k)" anchors on the last level WITHOUT a `stage`
+  // (level 15/16 carry one) so appending a staged level never re-anchors it.
+  function levelDef(mod, L) { const T = MODS[mod].levels; if (L <= T.length) return T[L - 1]; const k = L - T.length, unstaged = T.filter(x => !x.stage), last = unstaged.length ? unstaged[unstaged.length - 1] : T[T.length - 1]; return { name: 'Everything, faster (' + k + ')', task: 'mix', limit: Math.max(2.5, (last.limit || 8) - 0.75 * k), bpm: Math.min(120, (last.bpm || 72) + 6 * k), fast: true }; }
   function activeItems(mod, L) { const T = MODS[mod].levels, out = []; for (let i = 0; i < Math.min(L, T.length); i++) (T[i].add || []).forEach(id => out.push(id)); return out; }
   // what an item id means
   let info = function (mod, id, prefs) {
@@ -818,7 +830,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
   info = function (m, id, prefs) { const hk = (prefs && Number.isInteger(prefs.harpKey) && prefs.harpKey >= 0 && prefs.harpKey <= 11) ? prefs.harpKey : 0; if (id[0] === 'h') { const mm = /^h([bd])(\d+)$/.exec(id), dir = mm[1], hole = +mm[2], layout = harpLayoutFor(hk), midi = layout[hole - 1][dir === 'b' ? 'blow' : 'draw']; return { kind: 'note', midi: midi, hole: hole, dir: dir, note: nname(midi), label: (dir === 'b' ? 'Blow ' : 'Draw ') + hole + ' (' + nname(midi) + ')', short: (dir === 'b' ? 'Blow ' : 'Draw ') + hole }; } if (id[0] === 'y') { const mm = /^y(\d+)x(\d)$/.exec(id), hole = +mm[1], depth = +mm[2], layout = harpLayoutFor(hk), b = layout[hole - 1].bends.find(x => x.semitonesBent === depth), dir = b.action === 'draw' ? 'd' : 'b'; return { kind: 'note', midi: b.pitch, hole: hole, dir: dir, bend: depth, note: nname(b.pitch), label: (dir === 'b' ? 'Blow ' : 'Draw ') + hole + ' bent ' + depth + (depth === 1 ? ' semitone' : ' semitones') + ' (' + nname(b.pitch) + ')', short: (dir === 'b' ? 'Blow ' : 'Draw ') + hole + ' ↓' + depth }; } return _info(m, id, prefs); };
   validId = function (m, id) { if (typeof id === 'string' && id[0] === 'h') return /^h[bd]([1-9]|10)$/.test(id); if (typeof id === 'string' && id[0] === 'y') { const mm = /^y([1-9]|10)x([1-3])$/.exec(id); return !!mm && HARP_BEND_DEPTHS[+mm[1] - 1].indexOf(+mm[2]) >= 0; } return _valid(m, id); };
   const _info2 = info, _valid2 = validId;
-  info = function (m, id, prefs) { if (typeof id === 'string' && id[0] === 'j' && handsTogetherById(id)) { const ex = handsTogetherById(id); const timed = isTimedPairId(id); return { kind: 'hands-together', ex: ex, label: ex.label + (timed ? ', in time' : ''), short: timed ? ex.name + ' (both hands, in time)' : ex.short, timed: timed }; } return _info2(m, id, prefs); };
+  info = function (m, id, prefs) { if (typeof id === 'string' && id[0] === 'j' && handsTogetherById(id)) { const ex = handsTogetherById(id); const timed = isTimedPairId(id), stage = handsStageFromId(id); const label = stage === 'held' ? ex.label + ', bass held' : stage === 'split' ? ex.label + ', different rhythms' : ex.label + (timed ? ', in time' : ''); const short = stage === 'held' ? ex.name + ' (left hand holds)' : stage === 'split' ? ex.name + ' (different rhythms)' : timed ? ex.name + ' (both hands, in time)' : ex.short; return { kind: 'hands-together', ex: ex, label: label, short: short, timed: timed }; } return _info2(m, id, prefs); };
   validId = function (m, id) { if (typeof id === 'string' && id[0] === 'j') return !!handsTogetherById(id); return _valid2(m, id); };
   // Bowed instruments (violin, viola, cello, double-bass) reuse the 's'
   // string+fret item id scheme (stringLevels above) so the fingerings panel
@@ -929,9 +941,33 @@ import { register as registerPlayalong } from './ui/playalong.js';
     Object.keys(v.acc || {}).forEach(k => { s.acc[k] = num(v.acc[k], 0, 0, 3); }); Object.keys(v.cr || {}).forEach(k => { if (validId(m, k)) s.cr[k] = num(v.cr[k], 0, -80, 80); });
     return s;
   }
+  // repairEventClocks (bc-clk): before this fix, src/ui/songs.js stamped a song row's
+  // `at` with the audio clock (seconds since page load, resets to 0 every reload)
+  // instead of epoch ms like every other row -- so a saved row with a finite `at`
+  // under EVENT_CLOCK_EPOCH_FLOOR (1e12 ms is the year 2001; the audio clock could
+  // never reach that many SECONDS of page-open time) came from that bug and its
+  // stamped `at` is not the real time. Repaired with the `at` of the next row in
+  // array order (DB.events is append-only -- logEvent only pushes, boundEvents only
+  // drops rows, never reorders, so array order IS push order) that has a real epoch
+  // `at`; a bad row with no later epoch row (nothing trustworthy comes after it) falls
+  // back to `modelNow`, the load time -- never earlier than the truth, so a
+  // return/retention wait (src/core/pathway.js) is never granted early. `id` is left
+  // untouched.
+  const EVENT_CLOCK_EPOCH_FLOOR = 1e12;
+  function repairEventClocks(events, modelNow) {
+    const out = events.slice();
+    for (let i = 0; i < out.length; i++) {
+      if (Number.isFinite(out[i].at) && out[i].at < EVENT_CLOCK_EPOCH_FLOOR) {
+        let fixedAt = modelNow;
+        for (let j = i + 1; j < out.length; j++) { if (Number.isFinite(out[j].at) && out[j].at >= EVENT_CLOCK_EPOCH_FLOOR) { fixedAt = out[j].at; break; } }
+        out[i] = Object.assign({}, out[i], { at: fixedAt });
+      }
+    }
+    return out;
+  }
   function sanitizeDB(v, defaultLatencyMs, modelNow) {
     const notate = {}; NOTATE_MOD_IDS.forEach(m => { notate[m] = 'names'; });
-    const d = { v: 1, mods: {}, sessions: [], events: [], prefs: { mod: 'kbd', wind: 'bb', voice: 'low', kbdHands: 'both', names: true, noiseFloor: null, inputDeviceId: null, notate: notate, theme: 'system', noteNaming: { system: 'letters', accidentals: 'mixed' } } }; v = (v && typeof v === 'object') ? v : {};
+    const d = { v: 1, mods: {}, sessions: [], events: [], prefs: { mod: 'kbd', wind: 'bb', voice: 'low', kbdHands: 'both', sessionMinutes: null, names: true, noiseFloor: null, inputDeviceId: null, notate: notate, theme: 'system', noteNaming: { system: 'letters', accidentals: 'mixed' } } }; v = (v && typeof v === 'object') ? v : {};
     MOD_IDS.forEach(m => { d.mods[m] = sanitizeModel(m, v.mods && v.mods[m], modelNow); });
     if (Array.isArray(v.sessions)) d.sessions = v.sessions.filter(x => x && typeof x.d === 'string' && MODS[x.mod]).slice(-60).map(x => {
       // source/songId (a panel-logged row, e.g. a finished or abandoned song
@@ -948,7 +984,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
     // the SAME validateEvent() a writer runs before push -- a corrupt or
     // hand-edited row is dropped here, never thrown, exactly like an
     // invalid DB.sessions row above is filtered rather than crashing load.
-    if (Array.isArray(v.events)) d.events = boundEvents(v.events.filter(x => validateEvent(x).ok));
+    if (Array.isArray(v.events)) d.events = boundEvents(repairEventClocks(v.events.filter(x => validateEvent(x).ok), modelNow), { skillMap: KBD_SONG_SKILL_MAP, skillMapInstrument: 'kbd' });
     const p = v.prefs || {}; if (MODS[p.mod]) d.prefs.mod = p.mod; if (WIND_KINDS[p.wind]) d.prefs.wind = p.wind; d.prefs.voiceRange = (p.voiceRange && typeof p.voiceRange === 'object' && Number.isFinite(p.voiceRange.low) && Number.isFinite(p.voiceRange.high) && p.voiceRange.low < p.voiceRange.high) ? { low: clamp(Math.round(p.voiceRange.low), 24, 96), high: clamp(Math.round(p.voiceRange.high), 24, 96) } : null; const VKp = Object.assign({}, VOICE_KINDS, d.prefs.voiceRange ? { mine: ['My range (found by test)', tonicFromRange(exerciseRangeFor(d.prefs.voiceRange)).tonic] } : {}); if (VKp[p.voice]) d.prefs.voice = p.voice; d.prefs.names = p.names !== false;
     d.prefs.noiseFloor = (typeof p.noiseFloor === 'number' && isFinite(p.noiseFloor) && p.noiseFloor >= 0) ? clamp(p.noiseFloor, 0, 1) : null;
     d.prefs.inputDeviceId = typeof p.inputDeviceId === 'string' && p.inputDeviceId ? p.inputDeviceId : null;
@@ -965,6 +1001,12 @@ import { register as registerPlayalong } from './ui/playalong.js';
     // sanitising pattern as prefs.wind/prefs.voice above -- an unrecognised
     // or missing saved value sanitises to 'both', today's only behaviour.
     d.prefs.kbdHands = ['both', 'right', 'left'].indexOf(p.kbdHands) >= 0 ? p.kbdHands : 'both';
+    // Session length E7c: 5/10/15 minutes or no limit at all (null, today's
+    // only behaviour) -- same allow-list sanitising pattern as
+    // prefs.kbdHands above, so any other saved value (a string '5', 0, 20,
+    // garbage) sanitises to no limit rather than a target the coach can't
+    // explain.
+    d.prefs.sessionMinutes = [5, 10, 15].indexOf(p.sessionMinutes) >= 0 ? p.sessionMinutes : null;
     // "Show: staff / names / both" is per-instrument and defaults to 'names',
     // i.e. today's display, untouched, for any instrument not set.
     const pn = (p.notate && typeof p.notate === 'object') ? p.notate : {};
@@ -1118,7 +1160,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
     pool = poolFor(dd);
     // B1(4): for a dedicated 'hands' task, suffix the pool to the current
     // mode ('j1r'/'j1l') so a right/left-only pass credits its own id, never
-    // the shared 'j1' both-hands id. (Level 15+'s mixed 'seq'/'one' pools can
+    // the shared 'j1' both-hands id. (Level 17+'s mixed 'seq'/'one' pools can
     // still hand out a plain 'j<n>' id here -- that element is always graded
     // as both-hands, by id, wherever it is graded; see handsModeFromId.) K2:
     // a dedicated 'hands' task also runs through effectiveHands(), which
@@ -1134,7 +1176,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
     // -- so the gate skips a timed level entirely.
     const handsPref = d.task === 'hands' && !d.timed ? effectiveHands(DB.prefs.kbdHands, bothUnlocked(S)) : DB.prefs.kbdHands;
     // Only a PLAIN 'j<n>' id ever gets a hand suffix appended -- an already-
-    // suffixed id (level 14's 'j<n>t', which a level 15+ mixed 'hands' task
+    // suffixed id (level 14's 'j<n>t', which a level 17+ mixed 'hands' task
     // can also hand out via dd.pool='j' with no sfx filter) must never come
     // out as 'j1tr': that matches no id parseId() recognises at all.
     if (kind === 'hands') { const handsSuf = handsPref === 'right' ? 'r' : handsPref === 'left' ? 'l' : ''; if (handsSuf) pool = pool.map(id => /^j\d+$/.test(id) ? id + handsSuf : id); }
@@ -1191,13 +1233,17 @@ import { register as registerPlayalong } from './ui/playalong.js';
       }
     }
     const t = { kind: kind, els: [], idx: 0, warm: warm, limit: d.limit || 8, ref: d.ref || 'none', blind: planBlind, t0: now(), done: false, revealed: false };
-    // K3: any element whose id isTimedPairId (a level-14 j<n>t, however it
-    // was reached -- the dedicated level, warm-up, or a level 15+ mix's
-    // 'one'/'seq' pool) gets its own e.pair scratchpad: LEARN/CHECK phase,
-    // and the per-pitch note-on/note-off timestamps gradeTimedPair reads.
-    // Plain objects/arrays, not Maps/Sets, so hook.cur() (a straight object
-    // copy across the debug-hook boundary) serialises it whole for a test.
-    const mk = id => { S.tick++; it(id, modelNow).seen = S.tick; const e = { id: id, info: inf(id), failed: false, t0: 0, rt: 0, reveal: shouldReveal({ exposures: it(id, modelNow).reps }) && !planBlind }; if (isTimedPairId(id)) e.pair = { phase: 'learn', on: {}, off: {}, learnOn: [] }; return e; };
+    // K3/K4: any element whose id isStagedPairId (a level 14/15/16 j<n>t /
+    // j<n>h / j<n>d, however it was reached -- the dedicated level, warm-up,
+    // or a level 17+ mix's 'one'/'seq' pool) gets its own e.pair scratchpad:
+    // LEARN/CHECK phase, the per-pitch note-on/note-off timestamps
+    // gradeTimedPair/gradeHeldBass read, `notes` (level 15's melody
+    // note-ons), `rhOns`/`rhOffs` (level 16's right-hand onsets/releases)
+    // and `last` (level 16's latest per-hand verdict, which survives a
+    // reset -- see onNote's split branch below). Plain objects/arrays, not
+    // Maps/Sets, so hook.cur() (a straight object copy across the debug-hook
+    // boundary) serialises it whole for a test.
+    const mk = id => { S.tick++; it(id, modelNow).seen = S.tick; const e = { id: id, info: inf(id), failed: false, t0: 0, rt: 0, reveal: shouldReveal({ exposures: it(id, modelNow).reps }) && !planBlind }; if (isStagedPairId(id)) e.pair = { phase: 'learn', on: {}, off: {}, learnOn: [], notes: [], rhOns: [], rhOffs: [], last: null }; return e; };
     if (kind === 'one' || kind === 'chord' || kind === 'hold' || kind === 'hands') t.els.push(mk(pick(lastItem, pool, modelNow)));
     else if (kind === 'seq') { let from = lastItem; for (let i = 0; i < seqLen; i++) { const id = pick(from, pool, modelNow); t.els.push(mk(id)); from = id; } if (planApplyId && !t.els.some(e => e.id === planApplyId)) t.els[t.els.length - 1] = mk(planApplyId); }
     else if (kind === 'run') {
@@ -1252,7 +1298,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
     else { const verb = mod === 'voice' ? 'Sing' : 'Play'; p = verb + ' ' + t.els.map((el, k) => (k === t.idx ? '<b>' : '') + promptFor(el.info, el.reveal) + (k === t.idx ? '</b>' : '')).join(' → '); if (t.kind === 'hold') p = (mod === 'voice' ? 'Hold ' : 'Hold ') + '<b>' + e.info.label + '</b> for two seconds'; h = hintFor(e); playRef(t); }
     $('prompt').innerHTML = p; $('hint').textContent = (t.warm ? 'Warm-up, does not count. ' : '') + h; updateDesc();
   }
-  function hintFor(e) { const i = e.info; if (i.string && MODS[mod].fretless) return (e.reveal ? i.label + '. The dot shows the position.' : 'Find this pitch on the string.') + ' There is no fret to feel for — match the pitch, and the gauge shows sharp or flat.'; if (i.string) return coreHintFor(i, e.reveal); if (i.anywhere) return 'Any string, any octave.'; if (i.kind === 'chord') return 'All the notes together: ' + i.pcs.map(x => NAMES[x]).join(', ') + '.'; if (i.kind === 'hands-together') { if (isTimedPairId(e.id)) return 'Right hand: finger ' + i.ex.rh.finger + ', ' + nname(i.ex.rh.midi) + '. Left hand: finger ' + i.ex.lh.finger + ', ' + nname(i.ex.lh.midi) + '. First play them together at your own pace; then press both at the same moment and let go together. Screen taps: practice only -- held notes need a MIDI keyboard or computer keys.'; const hMode = handsModeFromId(e.id); if (hMode === 'right') return 'Right hand: finger ' + i.ex.rh.finger + ', ' + nname(i.ex.rh.midi) + '. The left hand (' + nname(i.ex.lh.midi) + ') may play along but is not checked. A MIDI keyboard or two hands on the computer keys grades the right-hand note exactly; a microphone grades it approximately.'; if (hMode === 'left') return 'Left hand: finger ' + i.ex.lh.finger + ', ' + nname(i.ex.lh.midi) + '. The right hand (' + nname(i.ex.rh.midi) + ') may play along but is not checked. A MIDI keyboard or two hands on the computer keys grades the left-hand note exactly; a microphone grades it approximately.'; return fingeringLabel(i.ex) + ' (' + nname(i.ex.rh.midi) + ' right hand, ' + nname(i.ex.lh.midi) + ' left hand). A MIDI keyboard or two hands on the computer keys grades both notes exactly; a microphone only hears one note at a time, so that grading is approximate.'; } if (mod === 'voice') return task.ref === 'target' ? 'You heard the note. Sing it back in any octave and hold it.' : 'You heard Do. Find ' + i.short + ' from it.'; if (MODS[mod].staff) return t('hint.staffNote', { label: i.label }); return e.reveal ? 'New key: it is lit up this time.' : ''; }
+  function hintFor(e) { const i = e.info; if (i.string && MODS[mod].fretless) return (e.reveal ? i.label + '. The dot shows the position.' : 'Find this pitch on the string.') + ' There is no fret to feel for — match the pitch, and the gauge shows sharp or flat.'; if (i.string) return coreHintFor(i, e.reveal); if (i.anywhere) return 'Any string, any octave.'; if (i.kind === 'chord') return 'All the notes together: ' + i.pcs.map(x => NAMES[x]).join(', ') + '.'; if (i.kind === 'hands-together') { const stage = handsStageFromId(e.id); if (stage === 'held') { const mel = heldBassMelody(i.ex); return 'Left hand: finger ' + i.ex.lh.finger + ', ' + nname(i.ex.lh.midi) + ' -- hold it down. Right hand plays ' + mel.map(n => nname(n.midi) + ' (finger ' + n.finger + ')').join(', ') + ' over it, while the left hand keeps holding. Screen taps: practice only -- held notes need a MIDI keyboard or computer keys.'; } if (stage === 'split') { return 'Right hand: two even notes, ' + nname(i.ex.rh.midi) + ' then ' + nname(i.ex.rh.midi) + ' again. Left hand: one long note, ' + nname(i.ex.lh.midi) + ', held under both. Screen taps: practice only -- held notes need a MIDI keyboard or computer keys.'; } if (isTimedPairId(e.id)) return 'Right hand: finger ' + i.ex.rh.finger + ', ' + nname(i.ex.rh.midi) + '. Left hand: finger ' + i.ex.lh.finger + ', ' + nname(i.ex.lh.midi) + '. First play them together at your own pace; then press both at the same moment and let go together. Screen taps: practice only -- held notes need a MIDI keyboard or computer keys.'; const hMode = handsModeFromId(e.id); if (hMode === 'right') return 'Right hand: finger ' + i.ex.rh.finger + ', ' + nname(i.ex.rh.midi) + '. The left hand (' + nname(i.ex.lh.midi) + ') may play along but is not checked. A MIDI keyboard or two hands on the computer keys grades the right-hand note exactly; a microphone grades it approximately.'; if (hMode === 'left') return 'Left hand: finger ' + i.ex.lh.finger + ', ' + nname(i.ex.lh.midi) + '. The right hand (' + nname(i.ex.rh.midi) + ') may play along but is not checked. A MIDI keyboard or two hands on the computer keys grades the left-hand note exactly; a microphone grades it approximately.'; return fingeringLabel(i.ex) + ' (' + nname(i.ex.rh.midi) + ' right hand, ' + nname(i.ex.lh.midi) + ' left hand). A MIDI keyboard or two hands on the computer keys grades both notes exactly; a microphone only hears one note at a time, so that grading is approximate.'; } if (mod === 'voice') return task.ref === 'target' ? 'You heard the note. Sing it back in any octave and hold it.' : 'You heard Do. Find ' + i.short + ' from it.'; if (MODS[mod].staff) return t('hint.staffNote', { label: i.label }); return e.reveal ? 'New key: it is lit up this time.' : ''; }
   function refreshPrompt() { if (!task || task.kind === 'ear' || task.kind === 'bar' || task.kind === 'hold') return; const verb = mod === 'voice' ? 'Sing' : 'Play'; $('prompt').innerHTML = verb + ' ' + task.els.map((el, k) => (k === task.idx ? '<b>' : '') + promptFor(el.info, el.reveal) + (k === task.idx ? '</b>' : '')).join(' → '); const e = cur(); if (e) $('hint').textContent = (task.warm ? 'Warm-up, does not count. ' : '') + hintFor(e); updateDesc(); }
   // text mirror of the canvas for the visually-hidden #cvDesc element (unit 7.7 item 1):
   // revealed mirrors the current element's own reveal/failed flag, never invents one.
@@ -1260,8 +1306,8 @@ import { register as registerPlayalong } from './ui/playalong.js';
 
   // ---------- judging ----------
   const timeQ = (rt, limit) => rt <= 0.4 * limit ? 1 : clamp(1 - 0.4 * (rt - 0.4 * limit) / (0.6 * limit), 0.6, 1);
-  function passEl(extraQ, msg, assistance) {
-    const e = cur(); e.rt = now() - e.t0; e.q = e.failed ? 0 : timeQ(e.rt, task.limit) * (extraQ === undefined ? 1 : extraQ); if (assistance) e.assistance = assistance; flashGood = performance.now(); lastInputAt = now();
+  function passEl(extraQ, msg, assistance, input) {
+    const e = cur(); e.rt = now() - e.t0; e.q = e.failed ? 0 : timeQ(e.rt, task.limit) * (extraQ === undefined ? 1 : extraQ); if (assistance) e.assistance = assistance; if (typeof input === 'string') e.input = input; flashGood = performance.now(); lastInputAt = now();
     if (!e.failed && !e.helped) say(msg || (inf(e.id).short + ': yes, in ' + e.rt.toFixed(1) + ' s.'), 'ok'); else say('That is the one. ' + inf(e.id).short + (e.info.string ? ' lives on string ' + e.info.string + (e.info.fret ? ', fret ' + e.info.fret : ', open') : '') + '.', '');
     task.idx++; held = []; holdFor = 0; holdCents = []; wrongFor = 0;
     if (task.idx >= task.els.length) finishTask(); else { cur().t0 = now(); refreshPrompt(); }
@@ -1274,44 +1320,64 @@ import { register as registerPlayalong } from './ui/playalong.js';
     // it just never touches the SRS model (see credit()'s `warm` early
     // return above). `dims.pitch` is the one dimension a built-in drill
     // ever judges here (q > 0 is the whole pass/fail signal); `input` is
-    // left off (unknown by the time finishTask runs -- see onNote()'s
-    // `source` comment above) rather than guessed.
-    task.els.forEach(e => { credit(e.id, e.q || 0, from, task.warm, e.rt, gradeOutcome({ helped: !!e.helped, failed: !!e.failed, assistance: e.assistance || null, q: e.q || 0 })); logEvent(makeEvent({ instrument: mod, skill: e.id, source: task.warm ? 'warmup' : 'drill', assistance: e.helped ? 'shown' : (e.assistance || 'none'), dims: { pitch: e.q > 0 ? 'ok' : 'miss' }, unassessed: [], activeMs: Math.round((e.rt || 0) * 1000), bpmTarget: null, bpmActual: null, hands: e.info.kind === 'hands-together' ? handsModeFromId(e.id) : undefined }, { now: modelNow })); from = e.id; if (!(e.q > 0)) anyFail = true; });
+    // the route of the passing note (passEl's 4th argument, threaded down
+    // from onNote()'s `source`) and is left off rather than guessed when
+    // no route was passed: the debug hook or grooveInject calling onNote
+    // with no third argument, and onPitch's own pluck-chord and sustain
+    // passEl calls (microphone rows, never a kbd note).
+    task.els.forEach(e => { credit(e.id, e.q || 0, from, task.warm, e.rt, gradeOutcome({ helped: !!e.helped, failed: !!e.failed, assistance: e.assistance || null, q: e.q || 0 })); logEvent(makeEvent({ instrument: mod, skill: e.id, source: task.warm ? 'warmup' : 'drill', assistance: e.helped ? 'shown' : (e.assistance || 'none'), dims: { pitch: e.q > 0 ? 'ok' : 'miss' }, unassessed: [], activeMs: Math.round((e.rt || 0) * 1000), bpmTarget: null, bpmActual: null, hands: e.info.kind === 'hands-together' ? handsModeFromId(e.id) : undefined, input: e.input }, { now: modelNow })); from = e.id; if (!(e.q > 0)) anyFail = true; });
     lastItem = from; nextTaskAt = now() + (anyFail ? 1.5 : 0.7); if (task.kind === 'ear') nextTaskAt = now() + (anyFail ? 2.6 : 1.1); save(); showAll();
   };
   function dirWord(got, want) { let d = ((pc(want) - pc(got)) + 12) % 12; if (d > 6) d -= 12; return d > 0 ? 'higher' : 'lower'; }
   // a played note (MIDI key, screen key, or a plucked note the microphone
   // recognised); `source` is 'midi' for a real MIDI note-on, 'computer-key'
-  // for the physical-keyboard keydown branch, and left undefined for every
-  // other caller (screen keys, the mic path, the debug hook). Besides (a)
-  // the plain-text "heard" messages below and (b) hands-together grading
-  // using the real MIDI held-note set instead of the note-on timer window,
-  // it is now also handed straight through to forwardSongNote() so a song
-  // practice attempt can tell a real keyboard from a stand-in the same way
+  // for the physical-keyboard keydown branch, 'screen' for a canvas tap or
+  // canvas Enter/Space, and 'mic' for the microphone path -- left undefined
+  // when a caller passes none (the debug hook, grooveInject).
+  // A built-in drill/warm-up row now records this route as `input` (passed
+  // through passEl to finishTask's logEvent); a song step still only ever
+  // gets 'midi' or 'computer-key' forwarded to it (see the comment at the
+  // forwardSongNote call below). A canvas tap or a mic note never reaches a
+  // song step at all: openPanel() hides #mainArea (so #cv) and clears `task`
+  // (so onPitch returns before calling onNote) the moment Songs opens. Besides (a) the plain-text "heard"
+  // messages below and (b) hands-together grading using the real MIDI
+  // held-note set instead of the note-on timer window, it is now also
+  // handed straight through to forwardSongNote() so a song practice
+  // attempt can tell a real keyboard from a stand-in the same way
   // (src/ui/songs.js's advance()) -- never anything about credit, mastery or
   // pass/fail, which stay blind to it.
   function onNote(midi, exact, source) {
-    forwardSongNote(midi, exact, undefined, source);
+    // Songs only ever learn a route they already understand (a real
+    // keyboard or a stand-in for one). 'screen' and 'mic' cannot arrive here
+    // while a song is open (see openPanel()), so this gate only matters if a
+    // later UI change makes #cv reachable during songs: such a tap would
+    // then reach advance() with no route, and its row keeps `input` off
+    // rather than guessed (src/ui/songs.js's advance()).
+    forwardSongNote(midi, exact, undefined, (source === 'midi' || source === 'computer-key') ? source : undefined);
     if (MODS[mod] && MODS[mod].kit) { const p = pieceForMidi(midi); if (p === null) coach('MIDI note ' + midi + ' is not one of the drums on this kit' + (playing ? ', so it counts as an extra hit.' : '.')); else if (!playing) coach(kitName(p) + ' heard -- start an exercise to see it judged.'); onHit(p, tapAudioTime(), source); return; }
     lastInputAt = now(); pressed[midi] = performance.now();
     if (source === 'midi') { const notJudging = !playing || !task || task.done; const outOfView = !notJudging && mod === 'kbd' && (midi < kbdRange()[0] || midi > kbdRange()[1]); if (notJudging) coach(nname(midi) + ' heard' + (playing ? '.' : ' -- start an exercise to see it judged.')); else if (outOfView) coach(nname(midi) + ' heard, but that key is not drawn on screen right now.'); }
     if (!playing || !task || task.done) return; const e = cur(); if (!e) return; const i = e.info;
     if (MODS[mod].input === 'tap') { onTap(); return; }
     if (task.kind === 'groove') { grooveOnset(midi); return; }
-    if (i.kind === 'chord') { if (!exact) return; held.push({ p: pc(midi), t: now() }); held = held.filter(x => now() - x.t < 1.5); const got = {}; held.forEach(x => { got[x.p] = 1; }); if (i.pcs.indexOf(pc(midi)) < 0) { failEl(nname(midi) + ' is not in ' + i.label + ' (' + i.pcs.map(x => NAMES[x]).join(', ') + ').', e.id + '>x' + pc(midi)); held = []; return; } if (i.pcs.every(x => got[x])) passEl(); return; }
+    if (i.kind === 'chord') { if (!exact) return; held.push({ p: pc(midi), t: now() }); held = held.filter(x => now() - x.t < 1.5); const got = {}; held.forEach(x => { got[x.p] = 1; }); if (i.pcs.indexOf(pc(midi)) < 0) { failEl(nname(midi) + ' is not in ' + i.label + ' (' + i.pcs.map(x => NAMES[x]).join(', ') + ').', e.id + '>x' + pc(midi)); held = []; return; } if (i.pcs.every(x => got[x])) passEl(undefined, undefined, undefined, source); return; }
     if (i.kind === 'hands-together') {
       const ex = i.ex, handsMode = handsModeFromId(e.id);
       if (!exact) {
         const g = gradeHandsTogetherApprox(ex, midi, handsMode);
         if (!g.ok) { if (g.wrong === false) return; failEl(nname(midi) + ' is not part of ' + ex.short + ' (approximate: a microphone only hears one note at a time).', e.id + '>xa' + midi); return; }
         const approxTail = handsMode === 'right' ? 'Right hand checked; the left hand was not.' : handsMode === 'left' ? 'Left hand checked; the right hand was not.' : 'Connect a MIDI keyboard to grade both hands together.';
-        passEl(0.7, 'Approximate (one note heard, microphone): ' + (g.hand === 'rh' ? 'right' : 'left') + ' hand, ' + nname(midi) + '. ' + approxTail, 'approximate'); return;
+        passEl(0.7, 'Approximate (one note heard, microphone): ' + (g.hand === 'rh' ? 'right' : 'left') + ' hand, ' + nname(midi) + '. ' + approxTail, 'approximate', source); return;
       }
-      // K3, level 14 (j<n>t): LEARN (untimed, both notes just held together)
-      // then CHECK (timed: gradeTimedPair reads real note-on/note-off
-      // timestamps off e.pair, never realMidiHeld/the 0.6s window below --
-      // it needs each hand's OWN moment, not just "both down right now").
-      if (isTimedPairId(e.id)) {
+      // K3/K4, levels 14-16 (j<n>t/j<n>h/j<n>d): LEARN (untimed, both notes
+      // just held together -- shared across all three stages) then CHECK,
+      // which branches by handsStageFromId: 'timed' is gradeTimedPair
+      // (unchanged from K3); 'held'/'split' are gradeHeldBass/
+      // gradeSplitRhythm, both of which also need each hand's OWN moment
+      // (real note-on/note-off timestamps off e.pair), never realMidiHeld/
+      // the 0.6s window below.
+      if (isStagedPairId(e.id)) {
+        const stage = handsStageFromId(e.id);
         const wrongMsg = nname(midi) + ' is not part of ' + ex.short + ' (' + fingeringLabel(ex) + ').';
         if (e.pair.phase === 'learn') {
           if (source === 'midi' || source === 'computer-key') {
@@ -1320,7 +1386,11 @@ import { register as registerPlayalong } from './ui/playalong.js';
             const freshHeld = e.pair.learnOn.filter(m => noteState.isHeld(m));
             const g = gradeHandsTogetherExact(ex, freshHeld, 'both');
             if (g.wrong.length) { failEl(wrongMsg, e.id + '>x' + midi); e.pair.learnOn = []; return; }
-            if (g.ok) { e.pair.phase = 'check'; e.pair.on = {}; e.pair.off = {}; say('Good. Now in time: let go, then press both keys at the same moment and let go together.', ''); refreshPrompt(); }
+            if (g.ok) {
+              e.pair.phase = 'check'; e.pair.on = {}; e.pair.off = {}; e.pair.notes = []; e.pair.rhOns = []; e.pair.rhOffs = [];
+              const goLine = stage === 'held' ? 'Good. Now let go, press the bass again and keep holding it, then play the melody over it.' : stage === 'split' ? 'Good. Now let go, then hold the left hand under two even right-hand notes.' : 'Good. Now in time: let go, then press both keys at the same moment and let go together.';
+              say(goLine, ''); refreshPrompt();
+            }
             return;
           }
           // Screen tap, on-screen Enter/Space, or the debug hook: no note-off
@@ -1329,17 +1399,60 @@ import { register as registerPlayalong } from './ui/playalong.js';
           held.push({ m: midi, t: now() }); held = held.filter(x => now() - x.t < 0.6);
           const g = gradeHandsTogetherExact(ex, held.map(x => x.m), 'both');
           if (g.wrong.length) { failEl(wrongMsg, e.id + '>x' + midi); held = []; return; }
-          if (g.ok) passEl(undefined, ex.short + ': together. Practice only: held notes need a MIDI keyboard or computer keys.', 'guided');
+          if (g.ok) passEl(undefined, ex.short + ': together. Practice only: held notes need a MIDI keyboard or computer keys.', 'guided', source);
           return;
         }
         // CHECK: only a real note-on (MIDI or computer key) counts -- a
         // screen tap or the debug hook has no matching note-off, so it can
         // never complete the timing check and is silently ignored here.
         if (source !== 'midi' && source !== 'computer-key') return;
-        if (midi !== ex.rh.midi && midi !== ex.lh.midi) { failEl(wrongMsg, e.id + '>x' + midi); return; }
-        e.pair.on[midi] = performance.now(); delete e.pair.off[midi];
-        const g = gradeTimedPair(ex, e.pair);
-        if (g.state === 'fail') { failEl(g.reason, e.id + '>t'); e.pair.on = {}; e.pair.off = {}; }
+        if (stage === 'timed') {
+          if (midi !== ex.rh.midi && midi !== ex.lh.midi) { failEl(wrongMsg, e.id + '>x' + midi); return; }
+          e.pair.on[midi] = performance.now(); delete e.pair.off[midi];
+          const g = gradeTimedPair(ex, e.pair);
+          if (g.state === 'fail') { failEl(g.reason, e.id + '>t'); e.pair.on = {}; e.pair.off = {}; }
+          return;
+        }
+        if (stage === 'held') {
+          if (midi === ex.lh.midi) { e.pair.on[midi] = performance.now(); e.pair.off = {}; e.pair.notes = []; return; }
+          e.pair.notes.push({ midi: midi, ms: performance.now(), bassHeld: (ex.lh.midi in e.pair.on) && noteState.isHeld(ex.lh.midi) });
+          const g = gradeHeldBass(ex, { bassOn: e.pair.on[ex.lh.midi], bassOff: e.pair.off[ex.lh.midi], notes: e.pair.notes });
+          // A fail while the bass is STILL physically down is only the
+          // melody's fault -- clearing e.pair.on here would make the very
+          // next melody note read bassHeld:false (nothing in e.pair.on to
+          // check against) and the bass's own note-off get ignored (not in
+          // e.pair.on), telling a learner who never let go that their left
+          // hand let go. Keep the bass's onset and only reset the melody, so
+          // the retry grades from the bass still being held; a fail with the
+          // bass already up resets as before (there is no held bass left to
+          // preserve).
+          if (g.state === 'fail') { failEl(g.reason, e.id + '>h'); if (noteState.isHeld(ex.lh.midi)) { e.pair.notes = []; } else { e.pair.on = {}; e.pair.off = {}; e.pair.notes = []; } }
+          return;
+        }
+        if (stage === 'split') {
+          if (midi !== ex.rh.midi && midi !== ex.lh.midi) { failEl(wrongMsg, e.id + '>x' + midi); return; }
+          if (midi === ex.lh.midi) {
+            // A stray right-hand tap-and-release BEFORE the bass ever goes
+            // down (a learner tapping the melody key first, or tapping it
+            // again right after a fail reset) must not squat rhOns[0]/
+            // rhOffs[0] -- gradeSplitRhythm reads rhOns[0] as the onset
+            // paired against the bass's own onset, so a stale completed tap
+            // there pushes the real first note into rhOns[1] and throws off
+            // every comparison after it. Pressing the bass starts the RH
+            // lists fresh for this attempt -- but ONLY when rhOns/rhOffs are
+            // already balanced (no right-hand note currently held): a right
+            // hand that came in EARLY and is still down when the bass
+            // finally arrives (the left-hand-late case) is real evidence for
+            // this attempt, not a stray tap, and must be kept.
+            if (e.pair.rhOns.length === e.pair.rhOffs.length) { e.pair.rhOns = []; e.pair.rhOffs = []; }
+            e.pair.on[midi] = performance.now(); delete e.pair.off[midi];
+          }
+          else if (e.pair.rhOns.length === e.pair.rhOffs.length) { e.pair.rhOns.push(performance.now()); }
+          const g = gradeSplitRhythm(ex, { lhOn: e.pair.on[ex.lh.midi], lhOff: e.pair.off[ex.lh.midi], rhOns: e.pair.rhOns, rhOffs: e.pair.rhOffs });
+          e.pair.last = { rh: g.rh.state, lh: g.lh.state };
+          if (g.state === 'fail') { failEl(g.reason, e.id + '>d'); e.pair.on = {}; e.pair.off = {}; e.pair.rhOns = []; e.pair.rhOffs = []; }
+          return;
+        }
         return;
       }
       // Real MIDI: heldMidis comes from actual note-on/note-off state
@@ -1352,32 +1465,59 @@ import { register as registerPlayalong } from './ui/playalong.js';
       const heldMidis = source === 'midi' ? Array.from(realMidiHeld) : (held.push({ m: midi, t: now() }), held = held.filter(x => now() - x.t < 0.6), held.map(x => x.m));
       const g = gradeHandsTogetherExact(ex, heldMidis, handsMode);
       if (g.wrong.length) { failEl(nname(midi) + ' is not part of ' + ex.short + ' (' + fingeringLabel(ex) + ').', e.id + '>x' + midi); if (source !== 'midi') held = []; return; }
-      if (g.ok) passEl(undefined, ex.short + ': ' + (handsMode === 'right' ? 'right hand' : handsMode === 'left' ? 'left hand' : 'both hands together') + '. ' + fingeringLabel(ex) + '.');
+      if (g.ok) passEl(undefined, ex.short + ': ' + (handsMode === 'right' ? 'right hand' : handsMode === 'left' ? 'left hand' : 'both hands together') + '. ' + fingeringLabel(ex) + '.', undefined, source);
       return;
     }
     if (i.kind !== 'note') return;
     const policy = i.anywhere ? 'fold' : (OCTAVE_POLICY[mod] || 'fold');
     const judged = judgePitch({ heardMidi: midi, targetMidi: i.midi, policy });
-    if (judged.ok) { passEl(); return; }
+    if (judged.ok) { passEl(undefined, undefined, undefined, source); return; }
     let where = ''; if (policy === 'exact') { const st = midi - i.midi; where = Math.abs(st) === 12 ? 'Right note, wrong octave: go one octave ' + (st > 0 ? 'down' : 'up') + '.' : 'Go ' + Math.abs(st) + ' key' + (Math.abs(st) > 1 ? 's' : '') + ' to the ' + (st > 0 ? 'left' : 'right') + '.'; }
     else if (i.string) { let df = ((pc(i.midi) - pc(midi)) + 12) % 12; if (df > 6) df -= 12; where = 'Go ' + Math.abs(df) + ' fret' + (Math.abs(df) > 1 ? 's' : '') + ' ' + (df > 0 ? 'higher' : 'lower') + '.'; }
     else where = 'Go ' + dirWord(midi, i.midi) + '.';
     failEl('That was ' + nname(midi) + ', the note is ' + nname(i.midi) + '. ' + where, e.id + '>' + nname(midi));
   }
-  // K3: the note-off half of level 14's CHECK phase (onNote above handles
-  // every note-on). Only a real MIDI or computer-key release reaches here
-  // (handleMidiMessage's note-off branch, keyup) -- a screen tap or the
-  // debug hook never fires this, so a CHECK-phase pair can only ever pass
-  // on real held-note evidence. Ignored outside CHECK (LEARN's note-offs
-  // mean nothing) and for a pitch with no recorded onset (nothing to time).
+  // K3/K4: the note-off half of levels 14-16's CHECK phase (onNote above
+  // handles every note-on). Only a real MIDI or computer-key release
+  // reaches here (handleMidiMessage's note-off branch, keyup) -- a screen
+  // tap or the debug hook never fires this, so a CHECK-phase pair can only
+  // ever pass on real held-note evidence. Ignored outside CHECK (LEARN's
+  // note-offs mean nothing).
   function onNoteOff(midi, source) {
     if (!playing || !task || task.done) return; const e = cur(); if (!e || !e.pair || e.pair.phase !== 'check') return;
-    if (!(midi in e.pair.on)) return;
-    const ex = e.info.ex;
-    e.pair.off[midi] = performance.now();
-    const g = gradeTimedPair(ex, e.pair);
-    if (g.state === 'pass') { passEl(undefined, ex.short + ': together, in time.'); return; }
-    if (g.state === 'fail') { failEl(g.reason, e.id + '>t'); e.pair.on = {}; e.pair.off = {}; }
+    const ex = e.info.ex, stage = handsStageFromId(e.id);
+    if (stage === 'timed') {
+      if (!(midi in e.pair.on)) return;
+      e.pair.off[midi] = performance.now();
+      const g = gradeTimedPair(ex, e.pair);
+      if (g.state === 'pass') { passEl(undefined, ex.short + ': together, in time.', undefined, source); return; }
+      if (g.state === 'fail') { failEl(g.reason, e.id + '>t'); e.pair.on = {}; e.pair.off = {}; }
+      return;
+    }
+    if (stage === 'held') {
+      if (midi !== ex.lh.midi || !(midi in e.pair.on)) return;
+      if (noteState.isHeld(midi)) return; // another port is still holding the bass
+      e.pair.off[midi] = performance.now();
+      const g = gradeHeldBass(ex, { bassOn: e.pair.on[midi], bassOff: e.pair.off[midi], notes: e.pair.notes });
+      if (g.state === 'pass') { passEl(undefined, ex.short + ': bass held, melody played over it.', undefined, source); return; }
+      if (g.state === 'fail') { failEl(g.reason, e.id + '>h'); e.pair.on = {}; e.pair.off = {}; e.pair.notes = []; }
+      return;
+    }
+    if (stage === 'split') {
+      if (midi === ex.lh.midi) {
+        if (!(midi in e.pair.on)) return;
+        if (noteState.isHeld(midi)) return; // another port is still holding it
+        e.pair.off[midi] = performance.now();
+      } else if (midi === ex.rh.midi) {
+        if (e.pair.rhOns.length <= e.pair.rhOffs.length) return;
+        if (noteState.isHeld(midi)) return; // another port is still holding it
+        e.pair.rhOffs.push(performance.now());
+      } else return;
+      const g = gradeSplitRhythm(ex, { lhOn: e.pair.on[ex.lh.midi], lhOff: e.pair.off[ex.lh.midi], rhOns: e.pair.rhOns, rhOffs: e.pair.rhOffs });
+      e.pair.last = { rh: g.rh.state, lh: g.lh.state };
+      if (g.state === 'pass') { passEl(undefined, ex.short + ': two even notes over one held bass.', undefined, source); return; }
+      if (g.state === 'fail') { failEl(g.reason, e.id + '>d'); e.pair.on = {}; e.pair.off = {}; e.pair.rhOns = []; e.pair.rhOffs = []; }
+    }
   }
   function answer(id) {
     lastInputAt = now(); if (!playing || !task || task.kind !== 'ear' || task.done) return; const e = cur(), right = id === e.id; e.rt = now() - e.t0; e.q = right ? timeQ(e.rt, task.limit) : 0; task.revealed = true; updateDesc();
@@ -1410,7 +1550,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
       if (e.info.kind === 'chord') { if (fr.rms < gates.chord || !fr.chroma) { holdFor = 0; return; } const j = judgeChord({ chroma: fr.chroma, targetPcs: e.info.pcs }); e.score = j.score; if (j.ok) { holdFor += dt; if (holdFor > 0.18) passEl(undefined, e.info.label + ': that rings true.'); } else holdFor = 0; if (fr.rms > 0.02) lastInputAt = now(); return; }
       if (fr.rms < gates.note || !fr.freq) { if (++stableN > 2 && fr.rms < releaseFloor(gates)) released = true; stableMidi = -1; return; }
       const m = Math.round(fr.midi); if (m === stableMidi) stableN++; else { stableMidi = m; stableN = 1; }
-      if (stableN === 3 && (released || m !== lastFired)) { lastFired = m; released = false; onNote(m, false); }
+      if (stableN === 3 && (released || m !== lastFired)) { lastFired = m; released = false; onNote(m, false, 'mic'); }
       return;
     }
     if (M.input === 'sustain') {
@@ -1625,7 +1765,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
       if (now() - lastInputAt > 30 && el > lim + 8) { if (e.failed && !task.warm) { /* this one does not count: nobody was there */ e.failed = false; } task.done = true; task = null; takeBreak('away'); return; }
     }
     if (sess.sinceBreak > 25 * 60 && Date.now() > sess.snoozeUntil) { takeBreak('long'); return; }
-    if (sess.target && sess.active > sess.target * 60) { sess.target = 0; takeBreak('target'); return; }
+    if (sess.target && sess.active > sess.target * 60) { const mins = sess.target; sess.target = 0; takeBreak('target', mins); return; }
     if (!sess.capWarned && todayMinutes() >= 45) { sess.capWarned = true; coach('That is 45 minutes of practice today across your instruments. Skill settles in while you rest, so more today buys little. Finish this level bar and call it.'); }
   }
   let lastFrame = 0, lastPitchAt = 0, listenOnsetDetector = null;
@@ -2064,7 +2204,11 @@ import { register as registerPlayalong } from './ui/playalong.js';
   let pathwayLineShown = false;
   function startSession() {
     refreshModelClock(); ensureAudio(); sess = newSession(); recent = []; streak = 0; errCount = 0; task = null; lastItem = null; lastInputAt = now(); chunk = 0; say('');
-    let msg = 'Level ' + S.level + ': ' + D().name + '.'; if (tiredPattern()) { sess.target = 15; msg = 'Your last three sessions each ended weaker than they started, which is what tired practice looks like. Today is capped at 15 minutes. ' + msg; } else if (todayMinutes() >= 45) msg = 'You already have ' + Math.round(todayMinutes()) + ' minutes in today. Keep this one short. ' + msg;
+    // Session length E7c: the learner's own choice (DB.prefs.sessionMinutes,
+    // 0 meaning no limit) sets today's target before the tired check below,
+    // so tiredPattern()'s 15-minute cap only tightens it, never loosens it.
+    sess.target = DB.prefs.sessionMinutes || 0;
+    let msg = 'Level ' + S.level + ': ' + D().name + '.'; if (tiredPattern()) { sess.target = sess.target ? Math.min(sess.target, 15) : 15; msg = 'Your last three sessions each ended weaker than they started, which is what tired practice looks like. Today is capped at ' + sess.target + ' minutes. ' + msg; } else if (todayMinutes() >= 45) msg = 'You already have ' + Math.round(todayMinutes()) + ' minutes in today. Keep this one short. ' + msg;
     if (S.judged > 5 && !customOn) { sess.warm = 4; msg += ' First a short warm-up through what you know; it does not count.'; }
     // A returning keyboard learner (a prior kbd session logged on an earlier
     // day) is told, once per page load, which keyboard-path step comes next
@@ -2112,7 +2256,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
   // DB.sessions row -- a caller bug must never crash a practice session.
   function logEvent(ev) {
     const check = validateEvent(ev); if (!check.ok) { recordError('logEvent', new Error('dropped invalid event -- ' + check.errors.join('; '))); return; }
-    DB.events.push(ev); DB.events = boundEvents(DB.events); save();
+    DB.events.push(ev); DB.events = boundEvents(DB.events, { skillMap: KBD_SONG_SKILL_MAP, skillMapInstrument: 'kbd' }); save();
   }
   function endSession() {
     if (!sess) return; const min = sess.active / 60; let line = 'Session ended. Too short to log.';
@@ -2124,14 +2268,18 @@ import { register as registerPlayalong } from './ui/playalong.js';
   }
   const BREAKS = {
     user: ['Paused', 'Take your time. A pause of 90 seconds or more counts as a break and resets your energy.', 0], away: ['You stepped away', 'Nothing came in for a while, so I paused. The exercise you left does not count against you.', 0], hidden: ['Paused', 'The page was hidden, so I stopped the clock. Nothing was counted while you were gone.', 0],
-    error: ['Paused to recover', 'Something went wrong inside the trainer. It repaired its state and your progress is safe.', 0], tired: ['Break time: 2 minutes', '', 120], long: ['Break time: 5 minutes', '25 minutes without a break. Stand up, shake out your hands, get water. Practice past this point mostly rehearses mistakes.', 300], target: ['That is today\'s 15 minutes', 'Short and fresh beats long and tired. End here, or take a break and do one more block.', 300]
+    error: ['Paused to recover', 'Something went wrong inside the trainer. It repaired its state and your progress is safe.', 0], tired: ['Break time: 2 minutes', '', 120], long: ['Break time: 5 minutes', '25 minutes without a break. Stand up, shake out your hands, get water. Practice past this point mostly rehearses mistakes.', 300], target: ['That is today\'s practice', 'Short and fresh beats long and tired. End here, or take a break and do one more block.', 300]
   };
   const breakTrap = createFocusTrap({ container: $('breakCard'), onEscape: () => resume() });
-  function takeBreak(kind) {
+  function takeBreak(kind, mins) {
     if (!sess || paused) return; const b = BREAKS[kind]; playing = false; paused = true; pauseInfo = { at: Date.now(), secs: b[2] }; let why = b[1];
     if (kind === 'tired') why = 'Your accuracy slid from ' + Math.round(100 * sess.best30) + '% at your best today to ' + Math.round(100 * mean(sess.w30)) + '%' + (sess.bestRt && sess.rts.length >= 10 && median(sess.rts) > sess.bestRt * 1.3 ? ', and you are getting slower to answer' : '') + '. That pattern is fatigue, not lack of skill. Two minutes away fixes more than two more minutes of pushing.';
     if (kind === 'error') { const last = getErrors().slice(-1)[0]; if (last) why += ' Last error: ' + last.message; }
-    $('breakTitle').textContent = b[0]; $('breakWhy').textContent = why; $('breakClock').hidden = !b[2]; $('snoozeBtn').hidden = !(kind === 'tired' || kind === 'long'); $('breakCard').hidden = false; $('playBtn').textContent = 'Resume'; task = null; bar = null; save(); showAll(); breakTrap.activate($('playBtn'));
+    // Session length E7c: the title names the real minute count the learner
+    // chose (sess.target, captured by the caller above before it is zeroed)
+    // instead of BREAKS.target's generic fallback string.
+    let title = b[0]; if (kind === 'target' && mins) title = 'That is today\'s ' + mins + ' minutes';
+    $('breakTitle').textContent = title; $('breakWhy').textContent = why; $('breakClock').hidden = !b[2]; $('snoozeBtn').hidden = !(kind === 'tired' || kind === 'long'); $('breakCard').hidden = false; $('playBtn').textContent = 'Resume'; task = null; bar = null; save(); showAll(); breakTrap.activate($('playBtn'));
   }
   function tickBreak() { if (!pauseInfo || !pauseInfo.secs) return; const left = Math.max(0, pauseInfo.secs - (Date.now() - pauseInfo.at) / 1000); $('breakClock').textContent = left > 0 ? Math.floor(left / 60) + ':' + ('0' + Math.floor(left % 60)).slice(-2) : 'Ready when you are'; }
   function resume() {
@@ -2211,6 +2359,10 @@ import { register as registerPlayalong } from './ui/playalong.js';
     const box = $('modOpts'); box.innerHTML = ''; const sel = (id, label, opts, val, on) => { const l = document.createElement('label'); l.htmlFor = id; l.textContent = label + ' '; const s = document.createElement('select'); s.id = id; Object.keys(opts).forEach(k => { const o = document.createElement('option'); o.value = k; o.textContent = opts[k][0]; s.appendChild(o); }); s.value = val; s.addEventListener('change', () => on(s.value)); l.appendChild(s); box.appendChild(l); };
     const btn = (id, text, on, primary) => { const b = document.createElement('button'); b.type = 'button'; b.id = id; b.className = 'small' + (primary ? ' primary' : ''); b.textContent = text; b.addEventListener('click', () => { b.blur(); on(); }); box.appendChild(b); return b; };
     const chk = (id, text, val, on) => { const l = document.createElement('label'); l.htmlFor = id; const c = document.createElement('input'); c.type = 'checkbox'; c.id = id; c.checked = val; c.addEventListener('change', () => on(c.checked)); l.appendChild(c); l.appendChild(document.createTextNode(' ' + text)); box.appendChild(l); };
+    // Session length E7c: 5/10/15 minutes or no limit, per DB.prefs.sessionMinutes
+    // -- a change takes effect at the next Start, never a running session's
+    // sess.target, so it cannot fire a surprise break or cancel one mid-session.
+    if (!TOOLS[mod]) sel('optSessionMinutes', 'Session length', { none: ['No limit'], '5': ['5 minutes'], '10': ['10 minutes'], '15': ['15 minutes'] }, DB.prefs.sessionMinutes ? String(DB.prefs.sessionMinutes) : 'none', v => { DB.prefs.sessionMinutes = v === 'none' ? null : +v; save(); });
     if (NOTATE_MOD_IDS.indexOf(mod) >= 0) sel('optNotate', 'Show', { names: ['Note names (today)'], staff: ['Staff'], both: ['Staff and names'] }, DB.prefs.notate[mod], v => { DB.prefs.notate[mod] = v; save(); });
     if (mod === 'wind') { sel('optWind', 'My instrument', WIND_KINDS, DB.prefs.wind, v => { DB.prefs.wind = v; task = null; save(); }); chk('optRef', 'Play me the note first', false, () => {}); }
     if (mod === 'voice') sel('optVoice', 'My range', Object.assign({}, VOICE_KINDS, DB.prefs.voiceRange ? { mine: ['My range (found by test)', tonicFromRange(exerciseRangeFor(DB.prefs.voiceRange)).tonic] } : {}), DB.prefs.voice, v => { DB.prefs.voice = v; task = null; save(); });
@@ -2248,12 +2400,35 @@ import { register as registerPlayalong } from './ui/playalong.js';
     // no effect on a j<n>t element -- both hands are always required, in
     // time -- so the lock/prep block above is skipped and this note takes
     // its place instead.
-    if (mod === 'kbd' && D().timed) {
+    if (mod === 'kbd' && D().timed && !D().stage) {
       const rhythmText = 'Both hands, in time: press together, let go together. Screen taps are practice only: held notes need a MIDI keyboard or computer keys.';
       const note = document.createElement('span'); note.id = 'kbdRhythmNote'; note.className = 'small';
       note.textContent = rhythmText; box.appendChild(note);
       if (!isReviewCurrent(itemReview('kbd.handsTogether.rhythm', contentRev({ text: rhythmText, onsetMs: PAIR_ONSET_TOL_MS, releaseMs: PAIR_RELEASE_TOL_MS })))) {
         const review = document.createElement('span'); review.id = 'kbdRhythmReview'; review.setAttribute('role', 'note'); review.className = 'small';
+        review.textContent = t('review.unreviewed'); box.appendChild(review);
+      }
+    }
+    // K4: level 15 ("held bass") and level 16 ("split rhythm") are each
+    // their own D().stage, so the level-14 note above is skipped for them
+    // and one of these takes its place instead -- same "Not yet checked by
+    // a player" review-ledger pattern, keyed on its own content string so a
+    // wording change on one level never silently reuses a stale review.
+    if (mod === 'kbd' && D().stage === 'held') {
+      const heldText = 'Left hand: press and hold the bass note. Right hand: play the three-note melody over it, still holding the bass. Letting go of the bass too soon fails the exercise. Screen taps are practice only: held notes need a MIDI keyboard or computer keys.';
+      const note = document.createElement('span'); note.id = 'kbdHeldNote'; note.className = 'small';
+      note.textContent = heldText; box.appendChild(note);
+      if (!isReviewCurrent(itemReview('kbd.handsTogether.held', contentRev({ text: heldText })))) {
+        const review = document.createElement('span'); review.id = 'kbdHeldReview'; review.setAttribute('role', 'note'); review.className = 'small';
+        review.textContent = t('review.unreviewed'); box.appendChild(review);
+      }
+    }
+    if (mod === 'kbd' && D().stage === 'split') {
+      const splitText = 'Right hand: two even notes. Left hand: one long note, held under both. Each hand is judged on its own. Screen taps are practice only: held notes need a MIDI keyboard or computer keys.';
+      const note = document.createElement('span'); note.id = 'kbdSplitNote'; note.className = 'small';
+      note.textContent = splitText; box.appendChild(note);
+      if (!isReviewCurrent(itemReview('kbd.handsTogether.split', contentRev({ text: splitText, onsetMs: PAIR_ONSET_TOL_MS, releaseMs: PAIR_RELEASE_TOL_MS, midTolRatio: SPLIT_MID_TOL_RATIO })))) {
+        const review = document.createElement('span'); review.id = 'kbdSplitReview'; review.setAttribute('role', 'note'); review.className = 'small';
         review.textContent = t('review.unreviewed'); box.appendChild(review);
       }
     }
@@ -2269,6 +2444,12 @@ import { register as registerPlayalong } from './ui/playalong.js';
     // the review label sits right beside the button rather than only in a
     // tooltip -- never claim it is reviewed when isReviewCurrent says no.
     if (mod === 'kbd') { const song = songFor(S.level); if (song) { btn('kbdSongHandoff', t('kbd.songHandoff.button'), () => { requestOpenSong(panelApi, song.songId, undefined, 'kbd', 'kbd'); openPanel('songs'); }); if (!isReviewCurrent(itemReview(song.id, contentRev(song)))) { const note = document.createElement('span'); note.setAttribute('role', 'note'); note.className = 'small'; note.textContent = t('review.unreviewed'); box.appendChild(note); } } }
+    // P2: "Your keyboard path" opens a panel naming all five
+    // src/core/pathway.js steps and the one action for whichever is current
+    // -- shown at every kbd level (unlike the song hand-off above, which
+    // needs a suggested song), since 'setup'/'lesson' come before any song
+    // is suggested at all.
+    if (mod === 'kbd') btn('kbdPathwayBtn', t('pathway.open'), () => openPanel('pathway'));
     if (mod === 'rhy') btn('calBtn', calRun ? 'Listening for 8 taps…' : 'Calibrate timing (' + Math.round(DB.latencyMs || 0) + ' ms)', startCalibrate, false);
     if (mod === 'capture') { btn('capGo', cap.on ? 'Stop' : 'Listen', () => { if (cap.on) capStop(); else { ensureAudio(); cap.on = true; cap.notes = []; cap.start = now(); cap.curM = -1; renderOpts(); } }, true); btn('capPlay', 'Play it back', () => { ensureAudio(); const t0 = now() + 0.1; cap.notes.forEach(n => tone(n.m, t0 + n.t - (cap.notes[0] ? cap.notes[0].t : 0), Math.max(0.2, n.d))); }); const lessons = {}; MOD_IDS.filter(m => hasMasteryScheme(m)).forEach(m => { lessons[m] = [MODS[m].name]; }); sel('capTo', cap.notes.length + ' notes. Practise on', lessons, 'kbd', () => {});
       // 'Make it a lesson': the captured tune becomes a draft Song (src/song/
@@ -2461,9 +2642,9 @@ import { register as registerPlayalong } from './ui/playalong.js';
   // common way) never released it -- noteState is the same held-note ledger
   // MIDI note-off, window blur and tab-hidden already clear into.
   document.addEventListener('keyup', ev => { if (mod === 'kbd' && PCKEYS[ev.key.toLowerCase()] !== undefined) { const m = PCKEYS[ev.key.toLowerCase()]; noteState.noteOff('computer-key', 0, m); onNoteOff(m, 'computer-key'); } });
-  cv.addEventListener('pointerdown', ev => { const r = cv.getBoundingClientRect(), x = (ev.clientX - r.left) * cv.width / r.width, y = (ev.clientY - r.top) * cv.height / r.height; ensureAudio(); if (MODS[mod] && MODS[mod].kit && kitBox) { const p = pieceAt((x - kitBox.x) / kitBox.s, (y - kitBox.y) / kitBox.s); if (p) onHit(p, tapAudioTime(ev), 'click'); } if (mod === 'kbd') { const k = keyRects.find(q => x >= q.x && x <= q.x + q.w && y >= q.y && y <= q.y + q.h); if (k) { tone(k.m, now() + 0.01, 0.5, 0.15); onNote(k.m, true); } } if (mod === 'tuner') { const play = playRects.find(q => x >= q.x && x <= q.x + q.w && y >= q.y && y <= q.y + q.h); if (play) { tone(play.m, now() + 0.02, 1.6, 0.2); return; } const row = rowRects.find(q => x >= q.x && x <= q.x + q.w && y >= q.y && y <= q.y + q.h); if (row) tunerLock = tunerLock === row.idx ? null : row.idx; } });
+  cv.addEventListener('pointerdown', ev => { const r = cv.getBoundingClientRect(), x = (ev.clientX - r.left) * cv.width / r.width, y = (ev.clientY - r.top) * cv.height / r.height; ensureAudio(); if (MODS[mod] && MODS[mod].kit && kitBox) { const p = pieceAt((x - kitBox.x) / kitBox.s, (y - kitBox.y) / kitBox.s); if (p) onHit(p, tapAudioTime(ev), 'click'); } if (mod === 'kbd') { const k = keyRects.find(q => x >= q.x && x <= q.x + q.w && y >= q.y && y <= q.y + q.h); if (k) { tone(k.m, now() + 0.01, 0.5, 0.15); onNote(k.m, true, 'screen'); } } if (mod === 'tuner') { const play = playRects.find(q => x >= q.x && x <= q.x + q.w && y >= q.y && y <= q.y + q.h); if (play) { tone(play.m, now() + 0.02, 1.6, 0.2); return; } const row = rowRects.find(q => x >= q.x && x <= q.x + q.w && y >= q.y && y <= q.y + q.h); if (row) tunerLock = tunerLock === row.idx ? null : row.idx; } });
   // item 3 (Wave W, w-fixes): keyboard path onto the same canvas piano -- arrow keys move the focus cursor, Enter/Space plays the focused key.
-  cv.addEventListener('keydown', ev => { if (mod !== 'kbd') return; const order = kbdOrder(); if (!order.length) return; if (ev.key === 'ArrowRight' || ev.key === 'ArrowUp') { ev.preventDefault(); kbdFocusIdx = Math.min(order.length - 1, kbdFocusIdx + 1); } else if (ev.key === 'ArrowLeft' || ev.key === 'ArrowDown') { ev.preventDefault(); kbdFocusIdx = Math.max(0, kbdFocusIdx - 1); } else if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); const k = order[Math.min(kbdFocusIdx, order.length - 1)]; if (k) { ensureAudio(); tone(k.m, now() + 0.01, 0.5, 0.15); onNote(k.m, true); } } });
+  cv.addEventListener('keydown', ev => { if (mod !== 'kbd') return; const order = kbdOrder(); if (!order.length) return; if (ev.key === 'ArrowRight' || ev.key === 'ArrowUp') { ev.preventDefault(); kbdFocusIdx = Math.min(order.length - 1, kbdFocusIdx + 1); } else if (ev.key === 'ArrowLeft' || ev.key === 'ArrowDown') { ev.preventDefault(); kbdFocusIdx = Math.max(0, kbdFocusIdx - 1); } else if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); const k = order[Math.min(kbdFocusIdx, order.length - 1)]; if (k) { ensureAudio(); tone(k.m, now() + 0.01, 0.5, 0.15); onNote(k.m, true, 'screen'); } } });
   $('tapPad').addEventListener('pointerdown', ev => { ev.preventDefault(); ensureAudio(); onTap(ev); });
   $('replayBtn').addEventListener('click', function () { this.blur(); if (task && !task.done) { playRef(task); lastInputAt = now(); } });
   $('showMeBtn').addEventListener('click', function () { this.blur(); const e = cur(); if (!task || task.done || !e) return; if (!e.failed && !e.helped) { e.helped = true; e.reveal = true; } say('Shown. This one is help, not a test: no credit and no penalty.', ''); refreshPrompt(); });
@@ -2744,6 +2925,11 @@ import { register as registerPlayalong } from './ui/playalong.js';
     // logEvent(): see the logEvent() helper near logSession() above -- lets
     // a panel (a judged song step) leave its own row in DB.events.
     logEvent: ev => logEvent(ev),
+    // midiProof(): live proof this page load has actually heard a MIDI byte
+    // -- same test src/core/pathway.js's caller at startSession (2020) uses,
+    // exposed here so a mounted panel (the keyboard pathway panel) can ask
+    // the same question pathwayState needs without reaching past the API.
+    midiProof: () => midiPortInputs.some(i => midiHeard.has(i)),
   };
   //
   //
@@ -2766,6 +2952,9 @@ import { register as registerPlayalong } from './ui/playalong.js';
   //
   //
   registerPlayalong(panels);
+  //
+  //
+  registerPathway(panels);
   //
   //
   // slot:panel:w-fixes
@@ -2864,7 +3053,9 @@ import { register as registerPlayalong } from './ui/playalong.js';
   }
   applyStaticLabels(document);
   loadDB(); if (!Array.isArray(DB.custom)) DB.custom = []; $('optNames').checked = DB.prefs.names; $('optTheme').value = DB.prefs.theme; applyTheme(DB.prefs.theme); $('optNoteSystem').value = DB.prefs.noteNaming.system; $('optAccidentals').value = DB.prefs.noteNaming.accidentals; buildPicker(); pickerAsSheet = hasSavedMod; setInstrumentSheetOpen(!hasSavedMod); buildNav(); setMod(mod); requestAnimationFrame(frame);
-  const hook = !__DEBUG_HOOK__ ? null : { state: () => S, db: () => DB, sess: () => sess, task: () => task, cur: cur, note: onNote, answer: answer, tap: onTap, bar: () => bar, playing: () => playing, setMod: setMod, testSource: testSource, heard: () => heard, yin: yin, cap: () => cap, tuner: () => tunerState, tunerLock: () => tunerLock, deaf: () => deafWindow.isDeaf(), deafUntil: () => deafWindow.until(), exportProgress: doExportProgress, importProgress: doImportProgress, audioNow: audioNow, modelNow: () => modelNow, plan: () => sessionPlan, planProgress: () => planProgress };
+  const hook = !__DEBUG_HOOK__ ? null : { state: () => S, db: () => DB, sess: () => sess, task: () => task, cur: cur, note: onNote, answer: answer, tap: onTap, bar: () => bar, playing: () => playing, setMod: setMod, testSource: testSource, heard: () => heard, yin: yin, cap: () => cap, tuner: () => tunerState, tunerLock: () => tunerLock, deaf: () => deafWindow.isDeaf(), deafUntil: () => deafWindow.until(), exportProgress: doExportProgress, importProgress: doImportProgress, audioNow: audioNow, modelNow: () => modelNow, plan: () => sessionPlan, planProgress: () => planProgress,
+    // levelDef(): D() -- a test's seam onto a mix level's limit/bpm.
+    levelDef: () => D() };
   // Debug-hook slots: replace ONLY your own line with
   //   if (__DEBUG_HOOK__) Object.assign(hook, { … });
   if (__DEBUG_HOOK__) Object.assign(hook, { errors: getErrors });
