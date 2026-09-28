@@ -30,8 +30,9 @@ export function writtenMidi(instrument, soundingMidi) {
 }
 
 // The key this instrument's part should be notated in, given the song's
-// (sounding) key -- same tonic shift writtenPart already applied inline.
-// Octave-only shifts (writtenOctaveUp) never change a key's name.
+// (sounding) key -- the same tonic shift as writtenMidi's, applied to a key
+// name instead of a pitch. Octave-only shifts (writtenOctaveUp) never change
+// a key's name.
 export function writtenKeyName(instrument, songKey) {
   const transposition = instrument.transposition || 0;
   return keyByTonicMode(mod12(songKey.tonic - transposition), songKey.mode).name;
@@ -71,30 +72,4 @@ export function writtenNote(instrument) {
   if (interval === 0) return null;
   const direction = interval > 0 ? 'higher' : 'lower';
   return 'Written ' + intervalName(Math.abs(interval)) + ' ' + direction + ' than it sounds';
-}
-
-// notes: [{ start, dur, midi, ... }] in SOUNDING pitch (the shared Song note
-// shape). instrument: a src/instruments/*.js record. key: optional Song-shape
-// { tonic, mode } (sounding); when given, the returned `key` is the written
-// key this part should be notated in.
-//
-// Returns { notes, key }: `notes` is a NEW array, each note spread from the
-// input with a `written` field added (sounding pitch is untouched, still on
-// `midi`); `key` is null unless a `key` argument was passed.
-export function writtenPart(notes, instrument, key) {
-  const writtenNotes = notes.map(n => ({ ...n, written: writtenMidi(instrument, n.midi) }));
-  const writtenKey = key
-    ? keyByTonicMode(mod12(key.tonic - (instrument.transposition || 0)), key.mode)
-    : null;
-  return { notes: writtenNotes, key: writtenKey };
-}
-
-// Inverse of writtenPart's pitch conversion: notes given in WRITTEN pitch
-// (on `midi`, matching the shared note shape) -> notes in SOUNDING pitch.
-// Used by anything that starts from notation (e.g. an editor typing written
-// notes for a transposing instrument) and needs the real, mic/MIDI-audible
-// pitch back out.
-export function soundingFromWritten(writtenNotes, instrument) {
-  const transposition = instrument.transposition || 0;
-  return writtenNotes.map(n => ({ ...n, midi: n.midi + transposition }));
 }

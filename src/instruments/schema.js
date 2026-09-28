@@ -1,6 +1,7 @@
 // Instrument record schema + hand-written validator. Zero dependencies on purpose:
-// this module is imported by build/build.mjs's bundle target eventually, and by
-// plain `node --test` unit tests, so it must run standalone in either place.
+// nothing in src/app.js's bundle imports this module (see the ALLOW_LIST in
+// tests/build/reachable.test.mjs) -- only plain `node --test` unit tests do,
+// so it must run standalone there with no build step of its own.
 
 const FAMILIES = ['keys', 'fretted', 'bowed', 'wind', 'brass', 'voice', 'percussion', 'free-reed'];
 const INPUTS = ['mic', 'midi', 'mic+midi', 'tap'];

@@ -1,14 +1,12 @@
 // Quantizes heard notes (wall-clock seconds, straight from the pitch
 // tracker) onto the song's tempo map, in ticks -- with a per-note confidence
 // so the UI can flag onsets that landed far from any sensible grid point,
-// triplet detection so a swung/compound passage isn't force-fit to straight
-// 16ths, and pickup-bar inference so a recording that starts mid-bar (an
-// anacrusis) gets a sane bar 1 once `shiftBarline` (src/song/edit.js) is
-// applied to the result. Pure: no DOM, no AudioContext, no clock reads --
-// everything (notes, tempo map, options) is a parameter, and the caller owns
-// applying `shiftBarline` itself. This is a fresh implementation for the
-// tempo-map shape from src/song/model.js (A2, tempoMap[{tick,bpm}]); it does
-// not read or change src/song/transcribe.js's own single-bpm quantize.
+// and triplet detection so a swung/compound passage isn't force-fit to
+// straight 16ths. Pure: no DOM, no AudioContext, no clock reads -- everything
+// (notes, tempo map, options) is a parameter. This is a fresh implementation
+// for the tempo-map shape from src/song/model.js (A2, tempoMap[{tick,bpm}]);
+// it does not read or change src/song/transcribe.js's own single-bpm
+// quantize.
 
 const DEFAULT_PPQ = 480;
 
@@ -120,39 +118,4 @@ export function quantizeNotes(notes, tempoMap, opts = {}) {
     const confidence = Math.max(0, Math.min(1, 1 - dist / (unit / 2)));
     return { midi: n.midi, tick, durTicks: endTick - tick, confidence };
   });
-}
-
-// Infers a pickup (anacrusis) length in ticks from a set of quantized notes:
-// the phase (tick mod bar length) most heavily weighted by note duration and
-// confidence is treated as "where the recurring strong beat actually falls
-// within the bar". `shiftBarline(song, pickupTicks)` (src/song/edit.js) adds
-// pickupTicks to every note, which is the forward shift that lands that
-// phase exactly on a bar boundary (adding `barTicks - phase`, rather than
-// subtracting `phase`, keeps every shifted note at or after tick 0, which is
-// what shiftBarline requires). Returns 0 (no pickup) if there are no notes,
-// or if the phase found is already 0.
-export function inferPickup(quantized, metre, opts = {}) {
-  const ppq = isFiniteNumber(opts.ppq) && opts.ppq > 0 ? opts.ppq : DEFAULT_PPQ;
-  const list = Array.isArray(quantized) ? quantized : [];
-  if (!list.length) return 0;
-  const num = metre && isFiniteNumber(metre.num) && metre.num >= 1 ? metre.num : 4;
-  const den = metre && isFiniteNumber(metre.den) && metre.den > 0 ? metre.den : 4;
-  const barTicks = num * (4 / den) * ppq;
-  if (!(barTicks > 0)) return 0;
-
-  const weightOf = (n) => Math.max(1e-6, isFiniteNumber(n.durTicks) ? n.durTicks : 1) * (isFiniteNumber(n.confidence) ? Math.max(0.05, n.confidence) : 1);
-  const totalWeight = list.reduce((s, n) => s + weightOf(n), 0) || 1;
-
-  const step = Math.max(1, Math.round(ppq / 16));
-  let best = { phase: 0, weight: -1 };
-  for (let phase = 0; phase < barTicks; phase += step) {
-    let weight = 0;
-    list.forEach((n) => {
-      const rel = ((n.tick - phase) % barTicks + barTicks) % barTicks;
-      if (rel < step / 2 || rel > barTicks - step / 2) weight += weightOf(n);
-    });
-    if (weight > best.weight) best = { phase, weight };
-  }
-  if (best.weight / totalWeight < 0.3 || best.phase === 0) return 0;
-  return Math.round((barTicks - best.phase) % barTicks);
 }

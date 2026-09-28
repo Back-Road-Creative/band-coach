@@ -3,7 +3,36 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { evaluateClip, evaluateManifest, readWav, encodeWavPCM16 } from '../../src/song/eval/pcm.js';
+import { evaluateClip, evaluateManifest, readWav } from '../../src/song/eval/pcm.js';
+
+// Encodes a mono Float32Array (samples in [-1, 1]) as a PCM-16 mono WAV
+// buffer, so the round-trip test below has a real WAV to hand readWav
+// without shipping a binary fixture. Only this test needs it -- the corpus
+// itself is expected to arrive as real recordings, not synthesized here.
+function encodeWavPCM16(pcm, sampleRate) {
+  const bytesPerSample = 2;
+  const dataSize = pcm.length * bytesPerSample;
+  const buf = Buffer.alloc(44 + dataSize);
+  buf.write('RIFF', 0, 'ascii');
+  buf.writeUInt32LE(36 + dataSize, 4);
+  buf.write('WAVE', 8, 'ascii');
+  buf.write('fmt ', 12, 'ascii');
+  buf.writeUInt32LE(16, 16); // fmt chunk size
+  buf.writeUInt16LE(1, 20); // format code: PCM integer
+  buf.writeUInt16LE(1, 22); // channels: mono
+  buf.writeUInt32LE(sampleRate, 24);
+  buf.writeUInt32LE(sampleRate * bytesPerSample, 28); // byte rate
+  buf.writeUInt16LE(bytesPerSample, 32); // block align
+  buf.writeUInt16LE(16, 34); // bits per sample
+  buf.write('data', 36, 'ascii');
+  buf.writeUInt32LE(dataSize, 40);
+  for (let i = 0; i < pcm.length; i++) {
+    const clamped = Math.max(-1, Math.min(1, pcm[i]));
+    const int16 = clamped < 0 ? clamped * 32768 : clamped * 32767;
+    buf.writeInt16LE(Math.round(int16), 44 + i * bytesPerSample);
+  }
+  return buf;
+}
 
 // A4 = MIDI 69 = 440 Hz, same reference the rest of the app tunes to
 // (src/audio/range.js).
