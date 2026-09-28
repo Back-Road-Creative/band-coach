@@ -69,17 +69,26 @@ export function fingeringLabel(exercise) {
   return 'right hand finger ' + exercise.rh.finger + ', left hand finger ' + exercise.lh.finger;
 }
 
-// Has this SRS model actually SEEN evidence for both hands played alone, or
-// already holds a genuinely used both-hands (plain j<n>) item? "Shown" means
-// seen>0 or reps>0 -- NOT mere key existence: it()/evaluate() create seen:0,
-// reps:0 placeholder items for ids they only glance at (weight() over every
-// pool id, evaluate() over the plain j ids once ready>=1), and those must
-// never count as evidence a hand was actually practised.
+// Has this SRS model actually PLAYED (a graded attempt, reps>0) both hands
+// alone, or already holds a genuinely used both-hands (plain j<n>) item? For
+// j1r/j1l, `seen` alone is NOT enough: mk() (src/app.js) sets seen the
+// instant an element is BUILT, before the learner has played a single note,
+// so a seen>0/reps:0 item is only evidence the drill was offered, not that
+// it was played -- reps is only ever written by review() (src/app.js's
+// credit()), once an element has actually been judged. The plain j<n>
+// grandfather clause is unchanged from before this distinction existed:
+// seen>0 or reps>0 still counts there (an older both-hands record's `seen`
+// is still real historical evidence, since level 13's own gate never
+// existed to create a seen-without-reps plain j<n> item in the first
+// place), and it()/evaluate() still create seen:0, reps:0 placeholder items
+// for ids they only glance at (weight() over every pool id, evaluate() over
+// the plain j ids once ready>=1) which never count as evidence either way.
 export function bothUnlocked(model) {
   if (!model || typeof model !== 'object') return false;
   const items = model.item || {};
+  const played = it => !!it && (it.reps | 0) > 0;
   const used = it => !!it && ((it.seen | 0) > 0 || (it.reps | 0) > 0);
-  return (used(items.j1r) && used(items.j1l)) || HANDS_TOGETHER_EXERCISES.some(e => used(items[e.id]));
+  return (played(items.j1r) && played(items.j1l)) || HANDS_TOGETHER_EXERCISES.some(e => used(items[e.id]));
 }
 
 // The Hands mode the level-13 task actually builds: 'both' stays gated to

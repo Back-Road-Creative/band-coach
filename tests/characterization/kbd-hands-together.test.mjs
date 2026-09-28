@@ -18,7 +18,7 @@ const masteryOf = (item, now) => (item ? retrievability(item, now) : 0.4);
 // gate.test.mjs and tests/characterization/kbd-hand-alone-gate.test.mjs.
 // Seeding both hands' alone-items as already shown keeps this file's setup
 // on Both, which is what every existing assertion here already assumes.
-const HANDS_ALONE_SEED = "window.__coach.db().mods.kbd.item.j1r = { stability: 1, difficulty: 0.3, lastSeen: Date.now(), reps: 0, lapses: 0, seen: 1 }; window.__coach.db().mods.kbd.item.j1l = { stability: 1, difficulty: 0.3, lastSeen: Date.now(), reps: 0, lapses: 0, seen: 1 };";
+const HANDS_ALONE_SEED = "window.__coach.db().mods.kbd.item.j1r = { stability: 1, difficulty: 0.3, lastSeen: Date.now(), reps: 1, lapses: 0, seen: 1 }; window.__coach.db().mods.kbd.item.j1l = { stability: 1, difficulty: 0.3, lastSeen: Date.now(), reps: 1, lapses: 0, seen: 1 };";
 
 async function toHandsTogether(page) {
   await page.evaluate("window.__coach.setMod('kbd')");
