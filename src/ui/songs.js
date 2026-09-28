@@ -609,13 +609,11 @@ function mountSongsPanel(hostEl, api) {
   const resultEl = el('div', { class: 'panel-learn-result' });
   resultEl.hidden = true;
 
-  // The mic door (src/ui/songs/record-door.js), reused with idPrefix
-  // 'songs' so its ids/classes (songsBpm, panel-songs-beat, panel-songs-
-  // record-btn, panel-songs-meter, ...) never collide with Learn this's own
-  // copy (idPrefix 'learn') if both happen to be mounted at once.
+  // The mic door (src/ui/songs/record-door.js), Songs' only caller: its own
+  // ids/classes are the literal panel-songs-* names (songsBpm, panel-songs-
+  // beat, panel-songs-record-btn, panel-songs-meter, ...).
   const door = createRecordDoor(api, {
     say,
-    idPrefix: 'songs',
     onStart() { resultEl.hidden = true; resultEl.innerHTML = ''; },
     onTake: onMicTake,
   });
