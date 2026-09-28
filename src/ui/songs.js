@@ -433,8 +433,13 @@ export function renderPlayItOnCards(song, partId, currentInstrumentId, onPick) {
 // so it survives exactly as long as a real click-through would need and no
 // longer -- mountSongsPanel's show() below reads it once and clears it.
 const OPEN_REQUEST_STORE_ID = 'songs-open-request';
-export function requestOpenSong(api, songId, partId, instrumentId) {
-  api.store(OPEN_REQUEST_STORE_ID).set({ songId, partId: partId || null, instrumentId: instrumentId || null });
+// returnTo (C11a): an optional mod id to hand back to api.setMod() once this
+// lesson reaches its end (renderPractice's 'Back to practice' below) --
+// omitted by every caller before this one (capture's 'Make it a lesson',
+// the editor, songs/review.js), which is exactly why it is the 5th,
+// optional parameter rather than a change to any of their call sites.
+export function requestOpenSong(api, songId, partId, instrumentId, returnTo) {
+  api.store(OPEN_REQUEST_STORE_ID).set({ songId, partId: partId || null, instrumentId: instrumentId || null, returnTo: returnTo || null });
 }
 
 // P3-5: written by hide() below when Add a song was busy (the mic door
@@ -1175,7 +1180,7 @@ function mountSongsPanel(hostEl, api) {
     // on -- built once per practice session, not per step, so a phrase
     // crossing a tempoMap change plays, counts in and is judged against the
     // same tempo curve throughout.
-    practice = { song: arrangedSong, partId, instrument, instrumentId, plan, arrangement, results: resumeEntry ? resumeEntry.tail.slice() : [], stepIndex: resumeEntry ? resumeEntry.stepIndex : 0, repair: null, recording: false, countingIn: false, countInTimer: null, playedEvents: [], recordStartSec: 0, stop: null, loopTransport: null, loopTransportStepIndex: null, clock: createSongClock(arrangedSong), assistance: 'none', lessonKey: lessonKeyValue, resumeRate: resumeEntry ? resumeEntry.rate : null };
+    practice = { song: arrangedSong, partId, instrument, instrumentId, plan, arrangement, results: resumeEntry ? resumeEntry.tail.slice() : [], stepIndex: resumeEntry ? resumeEntry.stepIndex : 0, repair: null, recording: false, countingIn: false, countInTimer: null, playedEvents: [], recordStartSec: 0, stop: null, loopTransport: null, loopTransportStepIndex: null, clock: createSongClock(arrangedSong), assistance: 'none', lessonKey: lessonKeyValue, resumeRate: resumeEntry ? resumeEntry.rate : null, returnTo: opts.returnTo || null };
     currentPractice = practice;
     if (resumeEntry) say('Picking up where you left off.', 'ok');
     saveLesson();
@@ -1303,6 +1308,16 @@ function mountSongsPanel(hostEl, api) {
         type: 'button', text: 'Back to songs',
         onclick: () => { practice = null; currentPractice = null; practiceSection.hidden = true; libraryDetails.open = true; },
       }));
+      // 'Back to practice' (C11a): only a lesson opened WITH a returnTo (the
+      // kbd practice hand-off) gets this -- a song reached any other way
+      // (the library list, Carry on, a challenge) has nothing to return to,
+      // so it must not appear there. api.setMod() is closePanel()+setMod()
+      // (src/app.js's panelApi), so this both closes Songs and lands back on
+      // returnTo's practice screen in one call.
+      if (practice.returnTo) {
+        const returnTo = practice.returnTo;
+        practiceSection.appendChild(el('button', { type: 'button', text: t('kbd.songHandoff.back'), onclick: () => { practice = null; currentPractice = null; api.setMod(returnTo); } }));
+      }
       return;
     }
     if (practice.repair) {
@@ -2138,16 +2153,24 @@ function mountSongsPanel(hostEl, api) {
     const req = api.store(OPEN_REQUEST_STORE_ID).get();
     if (!req || !req.songId) return;
     api.store(OPEN_REQUEST_STORE_ID).set(null);
-    const song = await library.get(req.songId);
+    // A starter song (e.g. the kbd practice hand-off's Hot Cross Buns) is
+    // never IN the library -- library.get() alone would come back null and
+    // silently drop the request, same bug renderCarryOn already had to work
+    // around above. Checked first, same order renderCarryOn uses.
+    const starter = starterSongs.find((s) => s.id === req.songId);
+    const song = starter || (await library.get(req.songId));
     if (!song || !song.parts.length) return;
     const partId = req.partId || song.parts[0].id;
     const instrument = req.instrumentId ? READY_INSTRUMENTS.find((i) => i.id === req.instrumentId) : undefined;
     // Goes straight to startPractice(), skipping openSong()'s own part-list
     // branch (a hand-off from Learn this/the editor always names a real
     // part) -- but a song opened this way still needs its own action row
-    // (P3-8), same as any other way into a lesson.
-    songHeader(song, req.songId);
-    startPractice(song, partId, instrument);
+    // (P3-8), same as any other way into a lesson. A starter song passes
+    // null as the library id here (never its starter id), the same reason
+    // openSong() below does: passing the starter id would route the action
+    // row's 'Edit notes' at openEditorPanel with a starter id it cannot open.
+    songHeader(song, starter ? null : req.songId);
+    startPractice(song, partId, instrument, { returnTo: req.returnTo || null });
   }
 
   // "Carry on: <title>": the newest saved lesson place still short of the

@@ -195,66 +195,90 @@ test('a duplicated-mono interface (same signal on both channels) does not get lo
 // A channel falling silent mid-session (a cable re-patched, an interface
 // input switched) must be noticed by the periodic re-check, not just the
 // one-time decision made when the mic first opened.
+// Retried per the `retryFlaky` note in tests/helpers/browser.mjs: this
+// failed once in a full-suite run with a TypeError reading `before.freq` --
+// `before` stayed null for the WHOLE fixed 2000ms before-poll (a starved
+// runner never got a stable reading), not a bad value from a completed
+// read. `attempt` therefore never lets a null before/after escape as a
+// thrown error (retryFlaky does not catch throws by design): it reports
+// `null` freq so the attempt is recorded and retried instead of aborting.
+// Passed 5/5 on 3 isolated re-runs. The fixed 2000ms before-poll budget is
+// unchanged -- it exists to stay under the fixture's 3s switch point
+// regardless of load, and widening it would hide a genuine routing defect
+// as readily as a runner-starvation one.
 test('routing recovers when the live channel switches mid-session (a cable re-patch)', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'mic-channel-mono-'));
   const wavPath = join(dir, 'switch.wav');
   const buf = pluckChannelSwitch(FREQ, SR, 6.0, 3.0, { seed: 5, decay: 0.99995, brightness: 0.4, firstSide: 'left' });
   writePluckWav(wavPath, buf, SR);
 
-  const page = await launchPage(htmlPath, { fakeAudioFile: wavPath });
-  try {
-    await page.evaluate("window.__coach.setMod('gtr')");
-    await page.evaluate("document.getElementById('ioBtn').click()");
-    await page.waitFor('window.__coach.devices().length > 0', 5000);
-    const t1 = Date.now();
+  const r = await retryFlaky({
+    what: 'routing recovering onto the right channel after a mid-session cable re-patch',
+    describe: (res) => (res ? `beforeFreq=${res.beforeFreq}, afterFreq=${res.afterFreq}, afterRms=${res.afterRms}` : 'nothing captured'),
+    accept: (res) => res && res.beforeFreq > 0 && res.afterFreq > 0,
+    attempt: async () => {
+      const page = await launchPage(htmlPath, { fakeAudioFile: wavPath });
+      try {
+        await page.evaluate("window.__coach.setMod('gtr')");
+        await page.evaluate("document.getElementById('ioBtn').click()");
+        await page.waitFor('window.__coach.devices().length > 0', 5000);
+        const t1 = Date.now();
 
-    // Before the 3s switch point: routed off the left channel. Polls
-    // in-page (same reasoning as heardStable above -- a single fixed-time
-    // read can land on a transient clarity-zero blip under load) but the
-    // budget is a fixed 2000ms, NOT effectiveWaitMs: this has to stay
-    // comfortably under the fixture's own 3s switch point regardless of
-    // how high the wait floor is raised for a slow box, or it would end up
-    // reading the POST-switch channel instead.
-    const before = await page.evaluate(`(async () => {
-      const start = Date.now();
-      let stable = 0, last = null;
-      while (Date.now() - start < 2000) {
-        const h = window.__coach.heard();
-        if (h && h.freq > 0) { stable++; last = h; if (stable >= 2) return last; }
-        else { stable = 0; }
-        await new Promise(r => setTimeout(r, 50));
-      }
-      return last || window.__coach.heard();
-    })()`);
-    assert.ok(before.freq > 0, `expected the left channel to be heard before the switch, got freq ${before.freq}`);
+        // Before the 3s switch point: routed off the left channel. Polls
+        // in-page (same reasoning as heardStable above -- a single fixed-time
+        // read can land on a transient clarity-zero blip under load) but the
+        // budget is a fixed 2000ms, NOT effectiveWaitMs: this has to stay
+        // comfortably under the fixture's own 3s switch point regardless of
+        // how high the wait floor is raised for a slow box, or it would end up
+        // reading the POST-switch channel instead.
+        const before = await page.evaluate(`(async () => {
+          const start = Date.now();
+          let stable = 0, last = null;
+          while (Date.now() - start < 2000) {
+            const h = window.__coach.heard();
+            if (h && h.freq > 0) { stable++; last = h; if (stable >= 2) return last; }
+            else { stable = 0; }
+            await new Promise(r => setTimeout(r, 50));
+          }
+          return last || window.__coach.heard();
+        })()`);
 
-    // Past the switch point (3s): wait until at least 3.6s has ELAPSED
-    // SINCE MIC-OPEN (measured, not guessed -- the before-poll above can
-    // itself take anywhere from ~0ms to 2000ms depending on load, so a
-    // fixed follow-up wait would either undershoot the switch point on a
-    // slow run or needlessly oversleep on a fast one) before trusting any
-    // reading to the right channel: solidly past both the 3s switch and at
-    // least one 300ms periodic re-check. Then poll+read in ONE call
-    // (rather than waitFor followed by a separate evaluate) so there is no
-    // round-trip gap in which a fresh transient blip could land between
-    // the check and the read.
-    const elapsedMs = Date.now() - t1;
-    const remainingMs = Math.max(0, 3600 - elapsedMs);
-    if (remainingMs > 0) await page.evaluate(`new Promise(r => setTimeout(r, ${remainingMs}))`);
-    const afterBudgetMs = effectiveWaitMs(5000);
-    const after = await page.evaluate(`(async () => {
-      const start = Date.now();
-      let stable = 0, last = null;
-      while (Date.now() - start < ${afterBudgetMs}) {
-        const h = window.__coach.heard();
-        if (h && h.freq > 0) { stable++; last = h; if (stable >= 2) return last; }
-        else { stable = 0; }
-        await new Promise(r => setTimeout(r, 50));
+        // Past the switch point (3s): wait until at least 3.6s has ELAPSED
+        // SINCE MIC-OPEN (measured, not guessed -- the before-poll above can
+        // itself take anywhere from ~0ms to 2000ms depending on load, so a
+        // fixed follow-up wait would either undershoot the switch point on a
+        // slow run or needlessly oversleep on a fast one) before trusting any
+        // reading to the right channel: solidly past both the 3s switch and at
+        // least one 300ms periodic re-check. Then poll+read in ONE call
+        // (rather than waitFor followed by a separate evaluate) so there is no
+        // round-trip gap in which a fresh transient blip could land between
+        // the check and the read.
+        const elapsedMs = Date.now() - t1;
+        const remainingMs = Math.max(0, 3600 - elapsedMs);
+        if (remainingMs > 0) await page.evaluate(`new Promise(r => setTimeout(r, ${remainingMs}))`);
+        const afterBudgetMs = effectiveWaitMs(5000);
+        const after = await page.evaluate(`(async () => {
+          const start = Date.now();
+          let stable = 0, last = null;
+          while (Date.now() - start < ${afterBudgetMs}) {
+            const h = window.__coach.heard();
+            if (h && h.freq > 0) { stable++; last = h; if (stable >= 2) return last; }
+            else { stable = 0; }
+            await new Promise(r => setTimeout(r, 50));
+          }
+          return last || window.__coach.heard();
+        })()`);
+
+        return {
+          beforeFreq: before ? before.freq : null,
+          afterFreq: after ? after.freq : null,
+          afterRms: after ? after.rms : null,
+        };
+      } finally {
+        await page.close();
       }
-      return last || window.__coach.heard();
-    })()`);
-    assert.ok(after.freq > 0, `expected routing to recover onto the right channel after the switch, got freq ${after.freq} (rms ${after.rms})`);
-  } finally {
-    await page.close();
-  }
+    },
+  });
+  assert.ok(r.beforeFreq > 0, `expected the left channel to be heard before the switch, got freq ${r.beforeFreq}`);
+  assert.ok(r.afterFreq > 0, `expected routing to recover onto the right channel after the switch, got freq ${r.afterFreq} (rms ${r.afterRms})`);
 });
