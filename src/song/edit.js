@@ -217,49 +217,6 @@ export function setTie(song, partIndex, noteIndex, tie) {
   return finalizePart(song, partIndex, notes, [noteIndex]);
 }
 
-// ----------------------------------------------------------- selection ops
-
-function inRange(note, range) {
-  return note.start >= range.start && note.start < range.end;
-}
-
-export function transposeRange(song, partIndex, range, semitones) {
-  const orig = song.parts[partIndex].notes;
-  const notes = orig.map((n) => (inRange(n, range) ? { ...n, midi: clampMidi(n.midi + semitones) } : n));
-  return finalizePart(song, partIndex, notes, computeChanged(orig, notes));
-}
-
-export function shiftRange(song, partIndex, range, deltaTicks, grid = 0) {
-  const orig = song.parts[partIndex].notes;
-  const selected = [];
-  const others = [];
-  for (const n of orig) (inRange(n, range) ? selected : others).push(n);
-  const shifted = selected.map((n) => {
-    let start = snap(n.start + deltaTicks, grid);
-    if (start < 0) start = 0;
-    return { ...n, start };
-  });
-  const notes = resolveOverlaps(sortNotes(others.concat(shifted)));
-  return finalizePart(song, partIndex, notes, computeChanged(orig, notes));
-}
-
-export function deleteRange(song, partIndex, range) {
-  const orig = song.parts[partIndex].notes;
-  const notes = orig.filter((n) => !inRange(n, range));
-  return finalizePart(song, partIndex, notes, []);
-}
-
-export function quantizeRange(song, partIndex, range, grid) {
-  const orig = song.parts[partIndex].notes;
-  const notes = orig.map((n) => {
-    if (!inRange(n, range)) return n;
-    const start = Math.max(0, snap(n.start, grid));
-    return start === n.start ? n : { ...n, start };
-  });
-  const resolved = resolveOverlaps(sortNotes(notes));
-  return finalizePart(song, partIndex, resolved, computeChanged(orig, resolved));
-}
-
 // ----------------------------------------------------------------- song ops
 
 export function setBpm(song, bpm) {
@@ -273,12 +230,6 @@ export function setBpm(song, bpm) {
 export function setMetre(song, metre) {
   const newSong = cloneSong(song);
   newSong.metre = { ...metre };
-  return { song: newSong, changed: [] };
-}
-
-export function setKey(song, key) {
-  const newSong = cloneSong(song);
-  newSong.key = key ? { ...key } : null;
   return { song: newSong, changed: [] };
 }
 

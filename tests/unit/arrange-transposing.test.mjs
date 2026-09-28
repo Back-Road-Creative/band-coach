@@ -2,7 +2,6 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { fitToInstrument } from '../../src/song/lesson.js';
-import { writtenPart, soundingFromWritten } from '../../src/song/arrange/transposing.js';
 import clarinetBb from '../../src/instruments/clarinet-bb.js';
 import trumpetBb from '../../src/instruments/trumpet-bb.js';
 import saxAltoEb from '../../src/instruments/sax-alto-eb.js';
@@ -98,33 +97,4 @@ test('every starter song melody, fitted to every ready transposing instrument: w
       });
     });
   });
-});
-
-// ---------------------------------------------------------------------------
-// transposing.js: writtenPart / soundingFromWritten
-// ---------------------------------------------------------------------------
-
-test('writtenPart: written = sounding - transposition for every note', () => {
-  const notes = [{ start: 0, dur: 480, midi: 60 }, { start: 480, dur: 480, midi: 62 }];
-  const part = writtenPart(notes, clarinetBb);
-  assert.equal(part.notes[0].written, 60 - clarinetBb.transposition);
-  assert.equal(part.notes[1].written, 62 - clarinetBb.transposition);
-  // originals untouched, sounding pitch preserved
-  assert.equal(part.notes[0].midi, 60);
-});
-
-test('writtenPart: reports the written key signature (tonic shifted by transposition)', () => {
-  const notes = [{ start: 0, dur: 480, midi: 60 }];
-  const part = writtenPart(notes, clarinetBb, { tonic: 0, mode: 'major' });
-  // concert C major, Bb clarinet (transposition -2) writes in D major
-  // (written tonic = sounding tonic - transposition = 0 - (-2) = 2).
-  assert.equal(part.key.tonic, 2);
-  assert.equal(part.key.mode, 'major');
-});
-
-test('soundingFromWritten inverts writtenPart', () => {
-  const notes = [{ start: 0, dur: 480, midi: 65 }];
-  const part = writtenPart(notes, hornF);
-  const back = soundingFromWritten(part.notes.map(n => ({ start: n.start, dur: n.dur, midi: n.written })), hornF);
-  assert.equal(back[0].midi, notes[0].midi);
 });

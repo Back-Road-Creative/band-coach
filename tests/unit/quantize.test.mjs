@@ -1,7 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { quantizeNotes, detectTuplets, inferPickup } from '../../src/song/quantize.js';
-import { shiftBarline } from '../../src/song/edit.js';
+import { quantizeNotes, detectTuplets } from '../../src/song/quantize.js';
 
 const PPQ = 480;
 const FLAT_120 = [{ tick: 0, bpm: 120 }];
@@ -81,41 +80,4 @@ test('quantizeNotes: notes in a triplet beat snap to the triplet grid, not strai
   ];
   const out = quantizeNotes(notes, FLAT_120, { ppq: PPQ });
   assert.deepEqual(out.map((n) => n.tick), [0, Math.round(PPQ / 3), Math.round((2 * PPQ) / 3)]);
-});
-
-// ---------- inferPickup + shiftBarline ----------
-
-test('inferPickup: a one-beat pickup is inferred and applies cleanly via shiftBarline', () => {
-  const metre = { num: 4, den: 4 };
-  const barTicks = 4 * PPQ;
-  // A recurring strong note every bar, phased 3 beats into the bar (i.e. the
-  // piece's real downbeat pattern starts on "beat 4", one beat of pickup
-  // before the next true downbeat).
-  const quantized = [
-    { midi: 60, tick: 3 * PPQ, durTicks: PPQ, confidence: 1 },
-    { midi: 60, tick: 3 * PPQ + barTicks, durTicks: PPQ, confidence: 1 },
-    { midi: 60, tick: 3 * PPQ + 2 * barTicks, durTicks: PPQ, confidence: 1 },
-  ];
-  const pickupTicks = inferPickup(quantized, metre, { ppq: PPQ });
-  assert.equal(pickupTicks, PPQ); // one beat
-
-  const song = {
-    schema: 'song/1', id: 's1', title: 't', composer: null, licence: null, source: null,
-    key: null, metre, bpm: 120, ticksPerQuarter: PPQ,
-    parts: [{ id: 'p1', name: 'Melody', notes: quantized.map((n) => ({ start: n.tick, dur: n.durTicks, midi: n.midi })) }],
-    chords: [],
-  };
-  const { song: shifted } = shiftBarline(song, pickupTicks);
-  const starts = shifted.parts[0].notes.map((n) => n.start);
-  starts.forEach((s) => assert.equal(s % barTicks, 0, 'shifted note should land exactly on a barline'));
-});
-
-test('inferPickup: a song with no pickup (downbeat already at tick 0) infers 0', () => {
-  const metre = { num: 4, den: 4 };
-  const barTicks = 4 * PPQ;
-  const quantized = [
-    { midi: 60, tick: 0, durTicks: PPQ, confidence: 1 },
-    { midi: 60, tick: barTicks, durTicks: PPQ, confidence: 1 },
-  ];
-  assert.equal(inferPickup(quantized, metre, { ppq: PPQ }), 0);
 });

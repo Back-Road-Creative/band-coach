@@ -9,13 +9,8 @@ import {
   splitNote,
   mergeWithNext,
   setTie,
-  transposeRange,
-  shiftRange,
-  deleteRange,
-  quantizeRange,
   setBpm,
   setMetre,
-  setKey,
   shiftBarline,
   halveDurations,
   doubleDurations,
@@ -246,74 +241,6 @@ test('setTie: sets and clears tieFromPrev', () => {
   assert.equal('tieFromPrev' in off.song.parts[0].notes[1], false);
 });
 
-// ---------- selection ops ----------
-
-test('transposeRange: shifts pitches of notes starting within [start,end)', () => {
-  const song = fixture();
-  const { song: out, changed } = transposeRange(song, 0, { start: 0, end: 960 }, 5);
-  const notes = out.parts[0].notes;
-  assert.equal(notes[0].midi, 65);
-  assert.equal(notes[1].midi, 67);
-  assert.equal(notes[2].midi, 64, 'note starting at 960 is outside the half-open range');
-  assert.deepEqual(changed.sort(), [0, 1]);
-});
-
-test('transposeRange: a range covering nothing changes nothing', () => {
-  const song = fixture();
-  const { song: out, changed } = transposeRange(song, 0, { start: 5000, end: 6000 }, 5);
-  assert.deepEqual(
-    out.parts[0].notes.map((n) => n.midi),
-    [60, 62, 64],
-  );
-  assert.deepEqual(changed, []);
-});
-
-test('shiftRange: moves selected notes and resolves any resulting overlap', () => {
-  const song = fixture();
-  const { song: out } = shiftRange(song, 0, { start: 0, end: 480 }, 700, 1);
-  const notes = out.parts[0].notes;
-  assertSorted(notes);
-  assertNoOverlap(notes);
-  assertPositiveDurations(notes);
-  const moved = notes.find((n) => n.midi === 60);
-  assert.equal(moved.start, 700);
-});
-
-test('shiftRange: clamps below zero', () => {
-  const song = fixture();
-  const { song: out } = shiftRange(song, 0, { start: 480, end: 960 }, -10000, 1);
-  const moved = out.parts[0].notes.find((n) => n.midi === 62);
-  assert.equal(moved.start, 0);
-});
-
-test('deleteRange: removes every note starting within the range', () => {
-  const song = fixture();
-  const { song: out, changed } = deleteRange(song, 0, { start: 0, end: 960 });
-  assert.deepEqual(
-    out.parts[0].notes.map((n) => n.midi),
-    [64],
-  );
-  assert.deepEqual(changed, []);
-});
-
-test('deleteRange: a range covering nothing changes nothing', () => {
-  const song = fixture();
-  const { song: out } = deleteRange(song, 0, { start: 5000, end: 6000 });
-  assert.equal(out.parts[0].notes.length, 3);
-});
-
-test('quantizeRange: snaps selected note starts to the grid and keeps sort/no-overlap', () => {
-  const song = fixture();
-  song.parts[0].notes[1].start = 500; // slightly off-grid
-  const { song: out, changed } = quantizeRange(song, 0, { start: 0, end: 2000 }, 480);
-  const notes = out.parts[0].notes;
-  assertSorted(notes);
-  assertNoOverlap(notes);
-  const q = notes.find((n) => n.midi === 62);
-  assert.equal(q.start, 480);
-  assert.ok(changed.includes(notes.indexOf(q)));
-});
-
 // ---------- song ops ----------
 
 test('setBpm: replaces bpm, refuses non-positive', () => {
@@ -333,14 +260,6 @@ test('setMetre: re-bars without moving any note', () => {
     out.parts[0].notes.map((n) => n.start),
     before,
   );
-});
-
-test('setKey: replaces the key, accepts null', () => {
-  const song = fixture();
-  const a = setKey(song, { tonic: 7, mode: 'minor' });
-  assert.deepEqual(a.song.key, { tonic: 7, mode: 'minor' });
-  const b = setKey(song, null);
-  assert.equal(b.song.key, null);
 });
 
 test('shiftBarline: shifts every note and chord start by the pickup, keeps spacing', () => {
