@@ -731,8 +731,11 @@ both hands were heard. It is still graded for real by the spaced-repetition sche
 only one hand was actually confirmed it does not count toward level progress the way an exact pass
 does.
 
-A "Hands" selector on the keyboard options panel picks Both / Right only / Left only. Both is the
-long-standing drill above: both hands' notes are required, and any other held note is wrong.
+A "Hands" selector on the keyboard options panel picks Both / Right only / Left only. At level 13,
+Both stays locked until you have played the right hand alone and the left hand alone at least once
+each — a lock note beside the selector says so, and until then the drill runs Right only regardless
+of what the selector shows. Both is the long-standing drill once unlocked: both hands' notes are
+required, and any other held note is wrong.
 Right only and Left only ask for just the named hand's note — the other hand may play along (it is
 optional accompaniment, never required and never marked wrong), but only the named hand's note is
 what actually passes the exercise or is recorded as evidence the learner played it; the on-screen
@@ -748,6 +751,17 @@ suffix is graded one-handed. The approximate (microphone) pass message says plai
 checked in Right only/Left only mode, rather than the both-hands wording. One-handed passes never
 move you past level 13 on their own: the level holds until the both-hands exercises are ready.
 
+If you already have a genuinely used both-hands record from before this lock existed (or from any
+other route into a plain `j1`-`j5` id), Both is grandfathered open from the start — `bothUnlocked()`
+in `src/core/hands-together.js` treats "shown" as actually having been drilled (seen or reps above
+zero), never just an id that happens to exist in your saved model, so an untouched placeholder entry
+never falsely unlocks it. A "before you start" line names each hand's starting finger and key (the
+C five-finger position — `prepLine()`), labelled "Not yet checked by a player" since this wording
+has not been reviewed by an actual piano teacher yet. Your saved Hands preference is never rewritten
+by the lock: if it still reads Both while locked the drill quietly runs Right only underneath, and
+returns to Both with no extra step the moment it unlocks. See `tests/unit/hands-together-gate.test.mjs`
+and `tests/characterization/kbd-hand-alone-gate.test.mjs` for the exact rules and the real-MIDI
+walk-through.
 A song note itself can also say which hand plays it: an optional `hand: 'rh'` / `hand: 'lh'` field
 (`src/song/model.js`). A keyboard arrangement honours that tag instead of guessing from the
 middle-C split (`src/song/arrange/keys.js`), and the Hands selector above is only offered on a song

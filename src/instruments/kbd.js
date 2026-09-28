@@ -1,6 +1,6 @@
-// Extracted from src/app.js MODS.kbd (app.js:68-76). Range 48-72 is the lowest
-// and highest MIDI note reached across all nine levels (app.js:70-75, N(48..72)).
-// Keyboard reads exact MIDI pitches, no octave folding, so octavePolicy is exact.
+// Extracted from src/app.js MODS.kbd. Range 48-72 is the lowest and highest
+// MIDI note reached across all thirteen levels. Keyboard reads exact MIDI
+// pitches, no octave folding, so octavePolicy is exact.
 export default {
   id: 'kbd',
   name: 'Keyboard',
