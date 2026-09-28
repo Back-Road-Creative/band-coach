@@ -79,17 +79,29 @@ async function readLevelDef(page, mod, level) {
   return page.evaluate('window.__coach.levelDef()');
 }
 
+// The first level past the curriculum is the first "Everything, faster (1)"
+// mix level. Found by walking up rather than hard-coded, so appending another
+// staged level (K5 added 17) moves the probe instead of turning it into a
+// real level's row -- the anchor it checks is the same either way.
+async function readFirstMixLevelDef(page, mod) {
+  for (let level = 1; level <= 40; level++) {
+    const def = await readLevelDef(page, mod, level);
+    if (def.task === 'mix') return def;
+  }
+  throw new Error(`no mix level within 40 for ${mod}`);
+}
+
 // K4 bug: appending staged levels 15-16 after level 14 silently re-anchored
 // "Everything, faster (k)"'s limit/bpm onto level 16 instead of level 14.
 test('levelDef: K4 (levels 15-16) does not move the "Everything, faster" mix level off its pre-K4 anchor', async (t) => {
   const page = await launchPage(htmlPath, { initScript: FAKE_MIDI_INIT });
   t.after(() => page.close());
 
-  const kbdDef = await readLevelDef(page, 'kbd', 17);
+  const kbdDef = await readFirstMixLevelDef(page, 'kbd');
   assert.equal(kbdDef.limit, 9.25, 'must anchor on level 14 (matching rhythms, limit 10), not level 16 (limit 14)');
   assert.equal(kbdDef.bpm, 78, 'bpm must anchor the same pre-K4 level');
 
-  const voiceDef = await readLevelDef(page, 'voice', 9);
+  const voiceDef = await readFirstMixLevelDef(page, 'voice');
   assert.equal(voiceDef.limit, 11.25, 'an instrument untouched by K4 must see no change to its own mix level');
   assert.equal(voiceDef.bpm, 78);
 
