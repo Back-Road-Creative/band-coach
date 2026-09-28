@@ -1681,7 +1681,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
   }
 
   // ---------- drawing ----------
-  const cv = $('cv'), g = cv.getContext('2d'); let keyRects = [], rowRects = [], playRects = [], lastStaff = null;
+  const cv = $('cv'), g = cv.getContext('2d'); let keyRects = [], rowRects = [], playRects = [], lastStaff = null, kbdOverviewRect = null;
   cv.tabIndex = 0; // item 3 (Wave W, w-fixes): keyboard-reachable so a keyboard-only learner can play the on-screen piano
   // item 3 (Wave W, w-fixes): a keyboard-driven focus cursor over the current keyRects, sorted left to right.
   let kbdFocusIdx = 0;
@@ -1718,6 +1718,22 @@ import { register as registerPlayalong } from './ui/playalong.js';
     const markFor = m => o.rhMidi === m ? 'R' : o.lhMidi === m ? 'L' : null;
     for (let m = lo; m <= hi; m++) if (isW(m)) { rr(xs[m] + 1, y0, kw - 2, h, 4); g.fillStyle = fill(m, '#e9edf6'); g.fill(); const mk = markFor(m); if (mk) { g.fillStyle = '#06101d'; font(kw * 0.4, 800); g.textAlign = 'center'; g.fillText(mk, xs[m] + kw / 2, y0 + kw * 0.46); } keyRects.push({ m: m, x: xs[m], y: y0, w: kw, h: h, black: false, row: o.row, hand: o.hand, mark: mk }); if (o.names) { g.fillStyle = '#3a4363'; font(kw * 0.34, 600); g.textAlign = 'center'; g.fillText(nname(m) + (pc(m) === 0 ? (Math.floor(m / 12) - 1) : ''), xs[m] + kw / 2, y0 + h - kw * 0.2); } }
     for (let m = lo; m <= hi; m++) if (!isW(m) && xs[m - 1] !== undefined) { const bx = xs[m - 1] + kw * 0.68; rr(bx, y0, kw * 0.64, h * 0.62, 3); g.fillStyle = fill(m, '#10131c'); g.fill(); g.strokeStyle = '#05070c'; g.lineWidth = 1; g.stroke(); const mk = markFor(m); if (mk) { g.fillStyle = '#e9edf6'; font(kw * 0.32, 800); g.textAlign = 'center'; g.fillText(mk, bx + kw * 0.32, y0 + h * 0.62 * 0.52); } keyRects.unshift({ m: m, x: bx, y: y0, w: kw * 0.64, h: h * 0.62, black: true, row: o.row, hand: o.hand, mark: mk }); }
+  }
+  // item D2 (Wave kbd): a full 88-key (A0-C8, MIDI 21-108) strip, drawn once
+  // per frame under the rows, marking the [lo, hi] window the rows above are
+  // currently showing -- so a learner sees where those one or two octaves
+  // sit inside the whole keyboard, not just their names. Purely decorative:
+  // it pushes nothing into keyRects, so it adds no hit rects and no new
+  // arrow-key focus stop. The marked window is set off by both a brighter
+  // fill and a stroked outline, never colour alone.
+  function drawKbdOverview(x0, y0, w, h, lo, hi) {
+    const isW = m => [0, 2, 4, 5, 7, 9, 11].indexOf(pc(m)) >= 0; let nW = 0; for (let m = 21; m <= 108; m++) if (isW(m)) nW++; const kw = w / nW; let i = 0; const xs = {};
+    for (let m = 21; m <= 108; m++) if (isW(m)) { xs[m] = x0 + i * kw; i++; }
+    const loW = isW(lo) ? lo : lo - 1, hiW = isW(hi) ? hi : hi + 1;
+    g.fillStyle = '#1b2130'; g.fillRect(x0, y0, w, h);
+    g.fillStyle = accent(); g.fillRect(xs[loW], y0, xs[hiW] + kw - xs[loW], h);
+    g.strokeStyle = '#e9edf6'; g.lineWidth = 2; g.strokeRect(xs[loW] + 1, y0 + 1, xs[hiW] + kw - xs[loW] - 2, h - 2);
+    kbdOverviewRect = { x: x0, y: y0, w: w, h: h, lo: 21, hi: 108, win: { lo: lo, hi: hi, x: xs[loW], y: y0, w: xs[hiW] + kw - xs[loW], h: h } };
   }
   function drawFret(M, e, W, H) {
     const ns = M.tuning.length, nf = M.frets, x0 = W * 0.15, x1 = W * 0.97, y0 = H * 0.16, y1 = H * 0.84, fx = f => f === 0 ? x0 - W * 0.035 : x0 + (x1 - x0) * ((f - 0.5) / nf), sy = s => y0 + (y1 - y0) * ((s - 1) / (ns - 1));
@@ -1865,7 +1881,7 @@ import { register as registerPlayalong } from './ui/playalong.js';
     }
   }
   function draw() {
-    size(); const W = cv.width, H = cv.height; g.clearRect(0, 0, W, H); rowRects = []; keyRects = [];
+    size(); const W = cv.width, H = cv.height; g.clearRect(0, 0, W, H); rowRects = []; keyRects = []; kbdOverviewRect = null;
     if (TOOLS[mod]) { if (mod === 'tuner') drawTuner(W, H); else drawCapture(W, H); return; }
     const M = MODS[mod], e = playing && task && !task.done ? cur() : null, showE = e || (task && task.done ? task.els[task.els.length - 1] : null);
     if (mod === 'kbd') { const kr = kbdRange(); const tg = []; let rhMidi = null, lhMidi = null; if (e) { if (e.info.kind === 'chord') { if (e.reveal || e.failed) e.info.pcs.forEach(x => tg.push(60 + x)); } else if (e.info.kind === 'hands-together') { if (e.reveal || e.failed) { tg.push(e.info.ex.rh.midi, e.info.ex.lh.midi); rhMidi = e.info.ex.rh.midi; lhMidi = e.info.ex.lh.midi; } } else if (e.reveal || e.failed) tg.push(e.info.midi); } const good = performance.now() - flashGood < 300 && task ? task.els.slice(0, task.idx).map(x => x.info.midi).filter(x => x) : []; const kOpts = { target: tg, good: good, names: DB.prefs.names, rhMidi: rhMidi, lhMidi: lhMidi };
@@ -1879,15 +1895,18 @@ import { register as registerPlayalong } from './ui/playalong.js';
         // white keys each keep every key at or above that floor by
         // construction, and name which hand's octave each row is -- the
         // layout depends only on kr (kbdRange()), never on task/task.idx, so
-        // neither row ever moves mid-phrase.
-        const x0 = W * 0.03, rowW = W * 0.94, labelH = H * 0.07, gap = H * 0.02, rowH = (H * 0.7 - 2 * labelH - gap) / 2;
+        // neither row ever moves mid-phrase. item D2 (Wave kbd): a phone
+        // canvas still left the narrowest key just under a 40px floor at
+        // W*0.03/W*0.94 -- W*0.02/W*0.96 clears it (340*0.96/8 = 40.8px).
+        const x0 = W * 0.02, rowW = W * 0.96, labelH = H * 0.07, gap = H * 0.02, rowH = (H * 0.7 - 2 * labelH - gap) / 2;
         const label = (text, ly) => { g.fillStyle = '#93a0bd'; font(labelH * 0.55, 600); g.textAlign = 'left'; g.fillText(text, x0, ly + labelH * 0.72); };
         const y0 = H * 0.18, y1 = y0 + labelH, y2 = y1 + rowH + gap, y3 = y2 + labelH;
         label('Left hand · ' + nname(48, true) + '–' + nname(59, true), y0);
         drawKeys(x0, y1, rowW, rowH, 48, 59, Object.assign({}, kOpts, { row: 0, hand: 'lh' }));
         label('Right hand · ' + nname(60, true) + '–' + nname(72, true), y2);
         drawKeys(x0, y3, rowW, rowH, 60, 72, Object.assign({}, kOpts, { row: 1, hand: 'rh' }));
-      } else drawKeys(W * 0.03, H * 0.18, W * 0.94, H * 0.7, kr[0], kr[1], kOpts);
+      } else drawKeys(W * 0.02, H * 0.18, W * 0.96, H * 0.7, kr[0], kr[1], kOpts);
+      drawKbdOverview(W * 0.02, H * 0.905, W * 0.96, H * 0.07, kr[0], kr[1]);
       if (e && e.info.kind === 'chord') { g.fillStyle = '#e9edf6'; font(H * 0.11); g.textAlign = 'center'; g.fillText(e.info.sym, W / 2, H * 0.13); } if (document.activeElement === cv) { const fi = kbdFocusInfo(); if (fi) { g.strokeStyle = '#ffd23f'; g.lineWidth = 4; g.strokeRect(fi.x + 2, fi.y + 2, fi.w - 4, fi.h - 4); } } }
     else if (M.tuning) drawFret(M, e, W, H); else if (mod === 'voice') drawVoice(e, W, H); else if (M.staff) drawStaff(M, e, W, H); else if (mod === 'harp') drawHarp(e, W, H);
     else if (mod === 'mallet-percussion') { const rec = instrumentById['mallet-percussion'], tg = e && e.info.kind === 'note' && (e.reveal || e.failed) ? [e.info.midi] : []; drawKeys(W * 0.03, H * 0.18, W * 0.94, H * 0.7, rec.range.low, rec.range.high, { target: tg, good: [], names: DB.prefs.names }); }
@@ -2797,6 +2816,11 @@ import { register as registerPlayalong } from './ui/playalong.js';
   // check row grouping, hit-rect size and hand marks without guessing the
   // layout formula itself.
   if (__DEBUG_HOOK__) Object.assign(hook, { kbdKeys: () => keyRects.map(k => ({ m: k.m, x: k.x, y: k.y, w: k.w, h: k.h, black: k.black, row: k.row, hand: k.hand, mark: k.mark })) });
+  // item D2 (Wave kbd): the full-keyboard overview drawKbdOverview() set last
+  // frame, or null when nothing drew one (non-kbd mods) -- a deep-cloned
+  // snapshot, same as kbdKeys(), so a test can hold one frame's value past
+  // the next draw() without it changing under it.
+  if (__DEBUG_HOOK__) Object.assign(hook, { kbdOverview: () => kbdOverviewRect ? JSON.parse(JSON.stringify(kbdOverviewRect)) : null });
   if (__DEBUG_HOOK__) Object.assign(hook, { audioHeardTicks: () => audioHeardTicks });
   if (__DEBUG_HOOK__) Object.assign(hook, { rangeHeld: () => rangeTest && rangeTest.curMidi !== null ? { stage: rangeTest.stage, midi: rangeTest.curMidi, ms: performance.now() - rangeTest.curSince } : null });
   if (__DEBUG_HOOK__) Object.assign(hook, { micHits: () => drumMicHits.slice() });
