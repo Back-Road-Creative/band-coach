@@ -5,7 +5,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { keyForVoice, arrangeVoice } from '../../src/song/arrange/voice.js';
 import { exerciseRangeFor } from '../../src/instruments/how/voice-range.js';
-import { starterSongs } from '../../src/song/starter/index.js';
+import { starterMelodies as starterSongs } from '../../src/song/starter/index.js';
 
 // Typical alto/bass comfortable ranges, matching voice-range.js's own
 // VOICE_TYPES table (widest starter-song ambitus is 14 semitones, well

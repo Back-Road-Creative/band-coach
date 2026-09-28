@@ -195,8 +195,9 @@ of rules, so it catches whatever the other a11y characterization tests above wer
 look for.
 
 `src/song/eval/roundtrip.js` scores transcription against *synthetic* pitch frames rendered from
-the starter songs — useful for catching a pipeline regression, but it never runs real audio
-through the detector. `src/song/eval/pcm.js` does: it runs a labelled real-audio clip through the
+the one-hand starter melodies (`starterMelodies`, `src/song/starter/index.js`) — useful for
+catching a pipeline regression, but it never runs real audio through the detector; the harness is
+monophonic, so the two-hand starters are left out rather than scored as if they were one line. `src/song/eval/pcm.js` does: it runs a labelled real-audio clip through the
 same `framesFromPCM` → `transcribe` path Learn this uses, and scores the result (precision,
 recall, F1, onset/release timing error, octave errors) against hand-made ground truth.
 `tests/fixtures/audio/README.md` documents the corpus manifest format the eval reads and ships
@@ -664,6 +665,12 @@ that song's lesson in the Songs panel, with a "Back to practice" button at the e
 `provenance`-less curriculum this whole section is about: the suggestion map is teaching content
 the app's authors assembled, not something a musician has checked against a method book, so its
 button always shows "Not yet checked by a player" right beside it rather than implying otherwise.
+Two starters, "Ode to Joy (theme), both hands" and "Twinkle, Twinkle, Little Star, both hands",
+carry an explicit left-hand part (`src/song/starter/index.js`) and are never suggested before the
+keyboard trainer's hands-together level (13, `KBD_HANDS_TOGETHER_LEVEL`) even though every
+individual pitch they use is taught earlier -- playing both hands together is its own skill. Their
+left-hand arrangement is teaching content made for Band Coach, same as any other hand-off
+suggestion, and shows "Not yet checked by a player" beside it too.
 
 ## Capo, alternate tunings and a left-handed view
 
@@ -1082,7 +1089,10 @@ it was is only revealed after grading, never before), rhythm dictation, rhythms 
 two at higher levels, of a starter song's own note durations and rests, pitch dropped -- the song
 title is shown up front, since this is a sight-reading drill rather than a by-ear one, and it
 grades with rhythm dictation's own checker unchanged), chord progressions, scales and modes,
-chord inversions, in-tune-or-not intonation discrimination, and sing-it-back.
+chord inversions, in-tune-or-not intonation discrimination, and sing-it-back. Song dictation and
+song rhythm both draw only from the one-hand starter melodies (`starterMelodies`,
+`src/song/starter/index.js`) -- a two-hand starter is never pulled apart into a monophonic phrase
+or tapped-back rhythm.
 
 ## Find your own singing range
 
