@@ -50,6 +50,9 @@ import { layoutPercussionMeasure } from './notation/percussion.js';
 import { songFor, KBD_LEVEL_PITCH_POOLS as KBD_POOLS } from './instruments/kbd-songs.js';
 import { itemReview, contentRev } from './instruments/review-ledger.js';
 import { isReviewCurrent } from './instruments/review.js';
+import { starterSongs } from './song/starter/index.js';
+import { pathwayState } from './core/pathway.js';
+import { reviewItems as kbdPathwayOutcomes, outcomeReviewed } from './instruments/kbd-pathway.js';
 // slot:import:notation-wire
 //
 // slot:import:a11y
@@ -2054,16 +2057,38 @@ import { register as registerPlayalong } from './ui/playalong.js';
   function todayMinutes() { const t = today(); let m = 0; DB.sessions.forEach(x => { if (x.d === t) m += x.min; }); return m + (sess ? sess.active / 60 : 0); }
   function dayStreak() { const days = {}; DB.sessions.forEach(x => { days[x.d] = 1; }); if (sess) days[today()] = 1; let n = 0; const d = new Date(); while (days[dayKey(d)]) { n++; d.setDate(d.getDate() - 1); } return n; }
   const tiredPattern = () => { const l = DB.sessions.slice(-3); return l.length === 3 && l.every(x => x.min >= 20 && x.a2 < x.a1 - 0.1); };
+  // pathwayLineShown: has this page load already shown the keyboard pathway's
+  // "Welcome back" line? Set once startSession() shows it, so a learner who
+  // pauses/resumes or ends and restarts a session mid-visit is not told the
+  // same "next step" line over and over -- see the returning-learner test.
+  let pathwayLineShown = false;
   function startSession() {
     refreshModelClock(); ensureAudio(); sess = newSession(); recent = []; streak = 0; errCount = 0; task = null; lastItem = null; lastInputAt = now(); chunk = 0; say('');
     let msg = 'Level ' + S.level + ': ' + D().name + '.'; if (tiredPattern()) { sess.target = 15; msg = 'Your last three sessions each ended weaker than they started, which is what tired practice looks like. Today is capped at 15 minutes. ' + msg; } else if (todayMinutes() >= 45) msg = 'You already have ' + Math.round(todayMinutes()) + ' minutes in today. Keep this one short. ' + msg;
     if (S.judged > 5 && !customOn) { sess.warm = 4; msg += ' First a short warm-up through what you know; it does not count.'; }
-    // Plan this sitting (review what's due, the weakest active skill, apply it, check it) --
-    // pure, so it only needs today's active ids/items/events, not anything DOM/task-shaped.
-    sessionPlan = planSession({ instrumentId: mod, level: S.level, activeIds: activeItems(mod, S.level), items: S.item, events: DB.events, now: modelNow, due: due });
+    // A returning keyboard learner (a prior kbd session logged on an earlier
+    // day) is told, once per page load, which keyboard-path step comes next
+    // (src/core/pathway.js's pathwayState) -- plain English literals plus
+    // the one existing t('review.unreviewed') key, so no new i18n key is
+    // needed for this.
+    if (mod === 'kbd' && !pathwayLineShown && DB.sessions.some(r => r && r.mod === 'kbd' && r.d < today())) {
+      const ps = pathwayState({ events: DB.events, sessions: DB.sessions, midiProof: midiPortInputs.some(i => midiHeard.has(i)), level: S.level, now: modelNow });
+      const outcome = kbdPathwayOutcomes().find(o => o.value.step === ps.step);
+      if (outcome) msg = 'Welcome back. Next on your keyboard path: ' + outcome.value.text + (outcomeReviewed(outcome.id) ? '' : ' ' + t('review.unreviewed')) + ' ' + msg;
+      pathwayLineShown = true;
+    }
+    // Plan this sitting (review what's due, the weakest active skill, apply it, check it,
+    // and, on keyboard, a suggested starter song) -- pure, so it only needs today's active
+    // ids/items/events/sessions, not anything DOM/task-shaped.
+    sessionPlan = planSession({ instrumentId: mod, level: S.level, activeIds: activeItems(mod, S.level), items: S.item, events: DB.events, now: modelNow, due: due, sessions: DB.sessions, today: today(), songFor: mod === 'kbd' ? (lvl => { const e = songFor(lvl); if (!e) return null; const s = starterSongs.find(x => x.id === e.songId); return { songId: e.songId, title: s ? s.title : e.songId }; }) : undefined });
     planProgress = { review: 0, weak: 0, apply: 0, check: 0 };
     msg += ' ' + describePlan(sessionPlan, id => inf(id).short);
     const why = describeWhy(sessionPlan, id => inf(id).short); if (why) msg += ' ' + why;
+    // The song block's own unreviewed label, matching the same test the
+    // hand-off button's own note uses (renderOpts, app.js:2109 as of this
+    // writing) -- the suggestion is teaching content no player has checked,
+    // so it is never claimed reviewed just because it appears in the plan.
+    if (mod === 'kbd' && sessionPlan.some(b => b.kind === 'song')) { const entry = songFor(S.level); if (entry && !isReviewCurrent(itemReview(entry.id, contentRev(entry)))) { const s = starterSongs.find(x => x.id === entry.songId); msg += ' ' + (s ? s.title : entry.songId) + ': ' + t('review.unreviewed'); } }
     playing = true; paused = false; $('playBtn').textContent = 'Pause'; $('endBtn').hidden = false; coach(msg); showAll(); wakeLock.acquire();
   }
   // logSession(): a panel (e.g. a song lesson) logs its own practice as a
