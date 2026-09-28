@@ -163,7 +163,7 @@ test('repairFor: null when failedDimension found nothing to isolate (extras)', (
   assert.equal(repairFor(checkStep, result, checkStep.passRule), null);
 });
 
-test('repairFor: pitch miss isolates the missed note plus one neighbour either side', () => {
+test('repairFor: pitch miss isolates exactly the ONE missed note (R1V2: single-note repair, no neighbours)', () => {
   const result = {
     hitRate: 0.75, meanErrorMs: 10, meanAbsCents: 5, durationScore: 1, judgedCount: 4, hitCount: 3,
     matches: [
@@ -180,12 +180,28 @@ test('repairFor: pitch miss isolates the missed note plus one neighbour either s
   assert.equal(repair.phraseIndex, checkStep.phraseIndex);
   assert.equal(repair.bars, checkStep.bars);
   assert.equal(repair.bpm, checkStep.bpm);
-  assert.deepEqual(repair.notes.map((n) => n.midi), [60, 62, 64]);
-  assert.equal(repair.originTick, 0);
+  assert.deepEqual(repair.notes.map((n) => n.midi), [62]);
+  assert.equal(repair.originTick, 240);
   // pitch isolation is untimed, like the "pitches" step kind -- a missed
   // note's own timing was never what failed here.
   assert.equal(repair.passRule.maxMeanErrorMs, null);
   assert.ok(repair.passRule.hitRate <= 0.8);
+});
+
+test('repairFor: several notes fail the SAME dim -- isolates only the single WORST one', () => {
+  const result = {
+    hitRate: 1, meanErrorMs: 200, meanAbsCents: 5, durationScore: 1, judgedCount: 4, hitCount: 4,
+    matches: [
+      hitMatch({ midi: 60, start: 0, errorMs: 200 }),
+      hitMatch({ midi: 62, start: 240, errorMs: 300 }),
+      hitMatch({ midi: 64, start: 480, errorMs: 250 }),
+      hitMatch({ midi: 65, start: 720 }),
+    ],
+    extras: { count: 0, list: [] },
+  };
+  const repair = repairFor(checkStep, result, checkStep.passRule);
+  assert.equal(repair.dim, 'onset');
+  assert.deepEqual(repair.notes.map((n) => n.midi), [62]);
 });
 
 test('repairFor: onset isolation clears the pitch timing threshold to null (untimed retry)', () => {
@@ -204,18 +220,21 @@ test('repairFor: onset isolation clears the pitch timing threshold to null (unti
   assert.equal(repair.passRule.maxMeanErrorMs, checkStep.passRule.maxMeanErrorMs);
 });
 
-test('repairFor: caps the isolated notes at 6', () => {
+test('repairFor: many misses at once still isolates just one note (R1V2: no cap needed, always exactly one)', () => {
   const bigStep = {
     ...checkStep,
     notes: Array.from({ length: 10 }, (_, i) => ({ start: i * 240, dur: 240, midi: 60 + i })),
   };
-  const matches = bigStep.notes.map((n, i) => (i === 5 ? missMatch(n.midi, n.start) : hitMatch({ midi: n.midi, start: n.start })));
+  const matches = bigStep.notes.map((n, i) => (i === 3 || i === 5 || i === 7 ? missMatch(n.midi, n.start) : hitMatch({ midi: n.midi, start: n.start })));
   const result = {
-    hitRate: 0.5, meanErrorMs: 10, meanAbsCents: 5, durationScore: 1, judgedCount: 10, hitCount: 9,
+    hitRate: 0.3, meanErrorMs: 10, meanAbsCents: 5, durationScore: 1, judgedCount: 10, hitCount: 7,
     matches, extras: { count: 0, list: [] },
   };
   const repair = repairFor(bigStep, result, bigStep.passRule);
-  assert.ok(repair.notes.length <= 6);
+  assert.equal(repair.notes.length, 1);
+  // pitch has no severity of its own to rank misses by -- the first one
+  // broken in the phrase is the one worth fixing first.
+  assert.equal(repair.notes[0].midi, bigStep.notes[3].midi);
 });
 
 test('repairFor: pitches step (bpm 0, untimed) stays untimed in the repair', () => {

@@ -110,9 +110,30 @@ test('a check step failed twice on the same thing drops into a repair, and passi
   );
   assert.equal(instructionText, 'Just these notes, then back to the phrase.');
 
-  // Passing the repair (play every isolated note in order, well inside
-  // tolerance) returns to the phrase-slow step it isolated from.
-  await playAttempt(page, [50, 1091, 1091]);
+  // Passing the repair (R1V2: the repair now isolates exactly the single
+  // worst note -- every note here missed the same way, so "worst" falls
+  // back to the first one broken in the phrase, PHRASE_MIDI[0]) returns to
+  // the phrase-slow step it isolated from.
+  const script = `
+    (async () => {
+      const turnBtn = Array.from(document.querySelectorAll('.panel-songs-practice button')).find(b => b.textContent === 'Your turn');
+      if (turnBtn) turnBtn.click();
+      while (!(document.querySelector('.panel-songs-count') && document.querySelector('.panel-songs-count').textContent.startsWith('Notes heard so far'))) {
+        await new Promise(r => setTimeout(r, 4));
+      }
+      const t0 = window.__coach.songsRecordStart();
+      const at = t0 + 50 / 1000;
+      await new Promise(resolve => {
+        const fire = () => { if (window.__coach.audioNow() >= at) { window.__coach.songsNote(${PHRASE_MIDI[0]}, true); resolve(); } else setTimeout(fire, 4); };
+        fire();
+      });
+      await new Promise(r => setTimeout(r, 80));
+      const stopBtn = Array.from(document.querySelectorAll('.panel-songs-practice button')).find(b => b.textContent === 'Stop and check');
+      if (stopBtn) stopBtn.click();
+      return true;
+    })()
+  `;
+  await page.evaluate(script);
   await page.waitFor(
     "document.querySelector('.panel-songs-practice h4') && document.querySelector('.panel-songs-practice h4').textContent.startsWith('Play it slowly')"
   );

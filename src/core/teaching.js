@@ -50,27 +50,26 @@ export function nextPhase(phase, passed) {
 
 // notes/matches share the same index order (judgeAttempt, practice.js) --
 // so noteIndices (from failedDimension) index straight into step.notes.
-// Isolating just the failing note(s) with nothing around them plays like a
-// pop quiz, not a phrase, so each failing index also pulls in its immediate
-// neighbour on either side, then the whole set is capped at 6 notes,
-// trimming neighbours (never a failing note itself) first.
-function notesAround(notes, noteIndices) {
-  const keep = new Set(noteIndices);
-  noteIndices.forEach((i) => {
-    if (i - 1 >= 0) keep.add(i - 1);
-    if (i + 1 < notes.length) keep.add(i + 1);
-  });
-  const sorted = Array.from(keep).sort((a, b) => a - b);
-  while (sorted.length > 6) {
-    const dropAt = sorted.findIndex((i) => !noteIndices.includes(i));
-    if (dropAt === -1) break; // every kept index is itself a failing note -- leave it, rare (>6 failures at once)
-    sorted.splice(dropAt, 1);
-  }
-  return sorted.map((i) => notes[i]);
+// Several notes can fail the SAME dim in one try (three missed pitches, say)
+// -- repairFor below isolates only the single WORST of them (plan §7B unit
+// R1V2): one clear thing to fix reads as a repair, not a second pop quiz
+// over the whole failing set. "Worst" is dim-specific severity (the biggest
+// timing miss, the furthest-out cents, the furthest-out hold ratio); a
+// dim with no severity of its own (pitch: a note is either heard or it
+// isn't; piece: right drum or wrong one) has no way to rank its misses, so
+// the first one broken in the phrase -- the one the learner hit first --
+// is the one worth fixing first.
+function worstNoteIndex(dim, result, noteIndices) {
+  if (noteIndices.length <= 1) return noteIndices[0];
+  const matches = result.matches || [];
+  if (dim === 'onset') return noteIndices.reduce((best, i) => (Math.abs(matches[i].errorMs) > Math.abs(matches[best].errorMs) ? i : best));
+  if (dim === 'tune') return noteIndices.reduce((best, i) => (Math.abs(matches[i].cents) > Math.abs(matches[best].cents) ? i : best));
+  if (dim === 'hold') return noteIndices.reduce((best, i) => (Math.abs(matches[i].durRatio - 1) > Math.abs(matches[best].durRatio - 1) ? i : best));
+  return noteIndices[0];
 }
 
-// A short repair exercise for a FAILED check step, isolating just the
-// note(s) that failed plus one neighbour either side, then returning to the
+// A short repair exercise for a FAILED check step, isolating the SINGLE
+// worst note that failed (worstNoteIndex above), then returning to the
 // original step (returnTo -- the caller, src/ui/songs.js, fills in the
 // stepIndex to come back to; repairFor only knows the step, not its
 // position in the plan). null when failedDimension found nothing to isolate
@@ -80,9 +79,10 @@ function notesAround(notes, noteIndices) {
 // around).
 export function repairFor(step, result, passRule) {
   const { dim, noteIndices } = failedDimension(result, passRule);
-  if (!dim || dim === 'extras') return null;
-  const notes = notesAround(step.notes, noteIndices);
-  if (!notes.length) return null;
+  if (!dim || dim === 'extras' || !noteIndices.length) return null;
+  const note = step.notes[worstNoteIndex(dim, result, noteIndices)];
+  if (!note) return null;
+  const notes = [note];
   let repairPassRule = { ...passRule, hitRate: Math.min(passRule.hitRate, 0.8) };
   // pitch isolation is untimed, like the "pitches" step kind -- the note
   // that was missed was never judged on WHEN it landed, only whether it

@@ -118,7 +118,7 @@ function candidateShifts(instrument) {
 // group: no new schema field needed, and it can never disagree with a
 // record's own file since it is derived from the same `transposition` value
 // every other convention in this codebase already keys off.
-function rangeIsWrittenPitch(instrument) {
+export function rangeIsWrittenPitch(instrument) {
   return instrument.transposition % 12 !== 0;
 }
 

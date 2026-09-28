@@ -124,6 +124,11 @@ same headless Chromium the tests use and writes `dist/screenshot-desktop.png` (1
 visually without a human pasting an ad hoc shell command, and `tests/build/shots.test.mjs` proves
 the capability itself still works.
 
+Run `npm run review-packet -- kbd` to build a standalone, offline review packet for a real player
+to check the keyboard trainer's teaching content against a named method book -- see
+[docs/review-workflow.md](docs/review-workflow.md) for what it contains and what its downloaded
+result is for.
+
 ## Test
 
 ```
@@ -439,6 +444,15 @@ checked on each row. A one-hand lesson carries on from its own saved place, and 
 replaces that saved place rather than starting a second one. A melody-only song shows no Hands
 control.
 
+In Learn and Rehearse, a **"How to play this"** button under the current step expands the same
+"How to play it" diagram and description shown elsewhere in the app, for the lesson's instrument
+and the step's first note, using the saved capo, tuning, left-handed setting and harmonica key.
+It shows the "Not yet checked by a player" line for an instrument no musician has reviewed yet.
+Escape, or pressing the button again, collapses it and returns focus to the button. It is hidden
+in Check, the no-help attempt, same as the notation and fingering line it sits beside, and it
+only appears for an instrument the "How to play it" panel can draw — so it does not appear for
+keyboard.
+
 Opening the editor screen (via a song's own **Edit notes**) shows its own row: **Edit
 notes**, **Play along**, **Export**, **Share**, **Save a copy** — Edit notes opens *any* song,
 starter tunes included, straight in "Record a tune": saving a starter's edits makes "My copy of
@@ -513,9 +527,15 @@ words, and it names the actual direction — held too short says "Hold each note
 held too long (running into the next note) says "Let each note go a little sooner — it's running
 into the next one.", a mix of both says "Match each note's length — some ran short, some ran
 long."; being out of tune says "A little sharp — aim for the middle of the note." (or "flat") —
-instead of the generic retry prompt. A chord step also refuses a wrong extra note struck alongside
-the right ones (`maxExtras` on every judged step's passRule, `src/song/lesson.js`): hitting every
-expected note is not enough to pass if the learner also struck a note that was not asked for.
+instead of the generic retry prompt. Every judged step also refuses a wrong extra note struck
+alongside or before the right one — a chord step's window, and a one-note step's wrong note
+played ahead of the right one, both count the same way (`maxExtras` on every judged step's
+passRule, `src/song/lesson.js`): hitting every expected note is not enough to pass if the learner
+also struck a note that was not asked for. A same-pitch repeat of the expected note (a key bounce
+or re-strike) is still absorbed, not counted as an extra. A one-note step's wrong note is only
+counted this way from an exact input (MIDI) — a mic-heard blip ahead of the right note is exempt,
+since mic pitch is already treated as approximate everywhere else and a pitch tracker often reads
+a short wrong pitch or an octave jump right at a note's attack.
 A failed try always names the first concrete thing to fix — the missed note, the late note, the
 hold/tune reason above, or the extra note — instead of a generic retry prompt
 (`firstCorrection()` in `src/ui/songs/practice.js`).
@@ -537,9 +557,10 @@ library actually assigned each song (never assumed from the file), so a title th
 one already saved is still the song a challenge's progress or a band pack's part assignment
 points at, not a stale id nobody kept. A step that fails on the SAME thing twice in a row (the
 same missed note, late note, or hold/tune reason `firstCorrection()`'s own check already names)
-becomes a short repair on just those notes plus a neighbour either side (`repairFor()` in
-`src/core/teaching.js`), instead of a third run at the whole phrase; passing the repair returns to
-the original step where it left off.
+becomes a short repair on just the single worst note (`repairFor()` in `src/core/teaching.js`),
+instead of a third run at the whole phrase; passing that one note returns to the original step
+where it left off. A repair try is logged as guided assistance, not independent evidence — it is
+a redo of a note the step already failed on, not a fresh, unaided attempt.
 
 ## Play along with a recording
 
@@ -729,6 +750,13 @@ their pass by editing that instrument's record in `src/instruments/*.js`, settin
 `{ reference: '<method book or standard name>', reviewedBy: '<name>', reviewedAt: 'YYYY-MM-DD' }`
 (all three filled in together, never just one or two).
 
+Per-item reviews (one curriculum level, one song hand-off, one pathway step -- see
+`docs/review-workflow.md`) land a different way: a result file downloaded from a review packet is
+applied with `npm run review-apply`, which writes an entry keyed by the item's id and content hash
+into `src/instruments/review-ledger.js`, lands through a normal PR like any other source change, and
+never touches a record's `provenance`. That means applying one of these never moves the "Content
+reviewed" column in the table above -- it stays provisional until someone edits `provenance` by hand.
+
 The table above answers "can I practise/assess this, and is its chart reviewed" per instrument, but
 not what any of that means for readiness to ship. `docs/capabilities.md`'s capability and maturity
 matrix (`src/instruments/capability.js`) answers that: it derives a `tier` for every record
@@ -741,6 +769,8 @@ that song's lesson in the Songs panel, with a "Back to practice" button at the e
 `src/instruments/kbd-songs.js`. Which songs get suggested, and at which level, comes from the same
 `provenance`-less curriculum this whole section is about: the suggestion map is teaching content
 the app's authors assembled, not something a musician has checked against a method book, so its
+button shows "Not yet checked by a player" right beside it until a player's review of that exact
+entry lands in the ledger, rather than implying otherwise.
 button always shows "Not yet checked by a player" right beside it rather than implying otherwise.
 Two starters, "Ode to Joy (theme), both hands" and "Twinkle, Twinkle, Little Star, both hands",
 carry an explicit left-hand part (`src/song/starter/index.js`) and are never suggested before the
@@ -793,6 +823,15 @@ Every drill's "Show me" button reveals the current item on request. Show me is h
 it never counts for or against you: the spaced-repetition record and your level are left exactly
 as they were, and only the session's help counter moves (`src/app.js` `credit()` /
 `src/core/grade-outcome.js`).
+
+Beside the active note, a **"How to play this"** toggle offers the same "How to play it" diagram
+and description Learn/Rehearse shows under a song step, drawn for the drill's own instrument and
+current note. Opening it counts the same as Show me — help, not a test, no credit and no penalty,
+and (like Show me) it logs the attempt with assistance "shown" once you play the note. Unlike the
+main "How to play it" panel, opening this toggle never ends the running session or the current
+task: it expands the diagram right where you are, instead of switching screens. It is hidden under
+the same conditions Show me is (ear training, rhythm reading, drum kit), and for a note the panel
+has no diagram for at all (keyboard, today's only such instrument).
 
 ## Piano hands together
 

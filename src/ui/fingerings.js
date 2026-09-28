@@ -9,6 +9,7 @@ import { noteName, chromaticRange } from './fingerings/notes.js';
 import { readFingeringSetup } from './fingerings/setup.js';
 import { isReviewed } from '../instruments/review.js';
 import { t } from '../core/i18n.js';
+import { rangeIsWrittenPitch } from '../song/lesson.js';
 
 // Human-readable labels for fretboard.js's named-tuning keys (alternateTuningsFor).
 const TUNING_LABELS = {
@@ -234,6 +235,65 @@ function diagramFor(instrument, how) {
   }
 }
 
+// The unreviewed-instrument text (src/instruments/review.js's isReviewed),
+// shared by the panel's own reviewHost badge (renderReview below) and
+// Songs' inline expander (renderHowInline) so the two callers never drift
+// apart on wording. Returns null when the instrument IS reviewed -- both
+// callers skip the badge entirely in that case, same as before this split.
+function reviewText(instrument) {
+  if (isReviewed(instrument.provenance)) return null;
+  const reference = instrument.provenance && instrument.provenance.reference;
+  return reference ? t('review.unreviewedWithRef', { reference }) : t('review.unreviewed');
+}
+
+// A running counter for `aria-controls`/id pairs on the inline expander --
+// Songs can render more than one lesson's practice section per page
+// lifetime (Practise again, a new song), so a fixed id would collide with
+// a stale, still-mounted-but-detached copy from an earlier render.
+let howInlineSeq = 0;
+
+// Songs' "How to play this" (C1b): the SAME diagram and description the
+// Fingerings panel gives for `instrument`/`soundingMidi`, dropped inline
+// under the current lesson step, collapsed by default. Returns null (and
+// appends nothing) when this instrument has no how diagram at all
+// (howKindFor null -- keyboard, today's only such instrument). `setup` is
+// the caller's own instrumentSetup() result (capo/tuning/leftHanded/
+// harpKey), read fresh at render time rather than cached on `practice`.
+export function renderHowInline(container, instrument, soundingMidi, setup) {
+  if (!howKindFor(instrument)) return null;
+  const rangeMidi = rangeIsWrittenPitch(instrument) ? soundingMidi - instrument.transposition : soundingMidi;
+  const how = computeHow(instrument, rangeMidi, { capo: setup.capo, tuning: setup.tuning, leftHanded: setup.leftHanded, key: setup.harpKey });
+  const id = 'howInline' + (++howInlineSeq);
+  const toggle = el('button', { type: 'button', className: 'how-inline-toggle', 'aria-expanded': 'false', 'aria-controls': id, text: t('howInline.button') });
+  const bodyChildren = [];
+  const badgeText = reviewText(instrument);
+  if (badgeText) bodyChildren.push(el('p', { className: 'how-inline-badge', role: 'note', text: badgeText }));
+  bodyChildren.push(diagramFor(instrument, how));
+  bodyChildren.push(el('p', { className: 'how-inline-desc', text: how.description }));
+  const body = el('div', { id, className: 'how-inline-body', hidden: true }, bodyChildren);
+  toggle.addEventListener('click', () => {
+    const expanded = toggle.getAttribute('aria-expanded') === 'true';
+    toggle.setAttribute('aria-expanded', String(!expanded));
+    body.hidden = expanded;
+  });
+  const wrapper = el('div', { className: 'how-inline' }, [toggle, body]);
+  // Escape collapses THIS expander without closing the whole Songs panel --
+  // panels.js's own container-level Escape listener (src/ui/panels.js) only
+  // backs off when `ev.defaultPrevented`, so preventDefault() here is load-
+  // bearing, not decorative. A collapsed expander does nothing on Escape,
+  // so the panel's own handler still gets to close Songs as normal.
+  wrapper.addEventListener('keydown', ev => {
+    if (ev.key !== 'Escape') return;
+    if (toggle.getAttribute('aria-expanded') !== 'true') return;
+    ev.preventDefault();
+    toggle.setAttribute('aria-expanded', 'false');
+    body.hidden = true;
+    toggle.focus();
+  });
+  container.appendChild(wrapper);
+  return { toggle, body };
+}
+
 export function registerFingerings(panels) {
   panels.register({
     id: 'fingerings',
@@ -328,9 +388,8 @@ export function registerFingerings(panels) {
       // recomputing on an instrument switch, in selectInstrument() below.
       function renderReview() {
         reviewHost.innerHTML = '';
-        if (isReviewed(instrument.provenance)) return;
-        const reference = instrument.provenance && instrument.provenance.reference;
-        const text = reference ? t('review.unreviewedWithRef', { reference }) : t('review.unreviewed');
+        const text = reviewText(instrument);
+        if (!text) return;
         reviewHost.appendChild(el('p', { className: 'fing-review-badge', role: 'note', text }));
       }
 
