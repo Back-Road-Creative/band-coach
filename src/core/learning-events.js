@@ -76,7 +76,8 @@ export function validateEvent(ev) {
 // rhythm; a caller can override it per summarizeEvents call.
 export const RETAIN_GAP_MS = 20 * 3600 * 1000;
 
-// summarizeEvents(events, { instrument?, skill?, retainGapMs? }) -> counts
+// summarizeEvents(events, { instrument?, skill?, retainGapMs?, skillMap?,
+// skillMapInstrument? }) -> counts
 // per one of the plan's understandable states (6.4 lists five):
 //   - withHelp: assistance was not 'none' (a Show me / guided / approximate
 //     attempt -- practice happened, but it is not independent evidence).
@@ -101,6 +102,26 @@ export const RETAIN_GAP_MS = 20 * 3600 * 1000;
 //     over and over is not new evidence of transfer, only a song event with
 //     no songId (songId is optional on validateEvent) is counted every time,
 //     same as before, since there is no identity to dedupe it against.
+//     `skillMap` (songId -> array of drill skill ids) is a second, optional
+//     bridge for the common case where a song event's OWN skill never shares
+//     an instrument|skill group with the drill skills it actually uses (e.g.
+//     a keyboard drill logs 'n64' while a song step logs 'phrase-slow:0') --
+//     see src/instruments/kbd-songs.js's KBD_SONG_SKILL_MAP for the
+//     keyboard's own map. An event only takes this path when it is counted,
+//     independent-ok, song-sourced, NOT already counted by the rule above,
+//     its songId has a skillMap entry, `skillMapInstrument` is undefined or
+//     matches ev.instrument, and ev.dims.pitch is 'ok' (mapped skills are
+//     note identities, so a step that never checked pitch -- a rhythm-only
+//     pass -- is not evidence the note transferred). It then credits applied
+//     at most once if any mapped skill has an instrument|skill group whose
+//     earliestNonSongOkAt is set and earlier than this event -- reusing the
+//     same groups the rule above builds, never creating one for a skill that
+//     was never drilled. Dedupe is by instrument+songId (separate from the
+//     rule above's per-group appliedSongIds), so a song credited through the
+//     map counts at most once no matter how many of its steps or replays
+//     qualify. The instrument/skill filters (`instrument`/`skill` above)
+//     still apply only to the song event's own skill -- `skill: 'n64'` does
+//     not pull song rows into the count through this bridge.
 // retained and applied are refinements of independent, not separate buckets
 // -- every event counted as either is also counted in independent, so the
 // five numbers do not sum to the event count. History is built from ALL
@@ -119,8 +140,8 @@ export const RETAIN_GAP_MS = 20 * 3600 * 1000;
 // never independent-ok either, however its dims came back: a keyboard
 // attempt made without a real MIDI keyboard is practice, not proof the
 // skill transferred to the instrument. A row with no `input` field at all
-// (legacy rows, drill rows recorded before input was tagged, and today's
-// on-screen song clicks) keeps its existing meaning.
+// (legacy rows, drill rows recorded before input was tagged, and song rows
+// from a hook-driven note with no route) keeps its existing meaning.
 export function isIndependentOk(ev) {
   const withHelp = !!(ev.assistance && ev.assistance !== 'none');
   if (ev.instrument === 'kbd' && typeof ev.input === 'string' && ev.input !== 'midi') return false;
@@ -129,11 +150,12 @@ export function isIndependentOk(ev) {
   return !withHelp && assessed.length > 0 && assessed.every((k) => dims[k] === 'ok');
 }
 
-export function summarizeEvents(events, { instrument, skill, retainGapMs } = {}) {
+export function summarizeEvents(events, { instrument, skill, retainGapMs, skillMap, skillMapInstrument } = {}) {
   const gapMs = isFiniteNumber(retainGapMs) ? retainGapMs : RETAIN_GAP_MS;
   const out = { introduced: 0, withHelp: 0, independent: 0, retained: 0, applied: 0 };
   const sorted = (events || []).filter((ev) => ev && typeof ev === 'object').slice().sort((a, b) => a.at - b.at);
   const groups = new Map(); // instrument|skill -> { earliestOkAt, earliestNonSongOkAt, appliedSongIds }
+  const mappedSongIds = new Set(); // 'instrument|songId' already credited through skillMap -- see the doc comment above
   sorted.forEach((ev) => {
     const key = ev.instrument + '\u0001' + ev.skill;
     let g = groups.get(key);
@@ -147,6 +169,7 @@ export function summarizeEvents(events, { instrument, skill, retainGapMs } = {})
         out.independent++;
         if (g.earliestOkAt !== null && (ev.at - g.earliestOkAt) >= gapMs) out.retained++;
         const songSourced = ev.source === 'song' || !!ev.songId;
+        let alreadyApplied = false;
         if (songSourced && g.earliestNonSongOkAt !== null && ev.at > g.earliestNonSongOkAt) {
           // A songId already credited for this instrument+skill does not count
           // again -- replaying the same song is not new transfer evidence. An
@@ -154,7 +177,24 @@ export function summarizeEvents(events, { instrument, skill, retainGapMs } = {})
           // it is (as before) counted every time it qualifies.
           if (!ev.songId || !g.appliedSongIds.has(ev.songId)) {
             out.applied++;
+            alreadyApplied = true;
             if (ev.songId) g.appliedSongIds.add(ev.songId);
+          }
+        }
+        // skillMap bridge (see doc comment above): only when the native rule
+        // above did not already credit this event, songSourced with a mapped
+        // songId, the instrument filter (if any) matches, and this event's
+        // own pitch dimension was checked ok.
+        if (!alreadyApplied && songSourced && ev.songId && skillMap && Array.isArray(skillMap[ev.songId])
+          && (skillMapInstrument === undefined || ev.instrument === skillMapInstrument)
+          && ev.dims && ev.dims.pitch === 'ok') {
+          const dedupeKey = ev.instrument + '|' + ev.songId;
+          if (!mappedSongIds.has(dedupeKey)) {
+            const credited = skillMap[ev.songId].some((s) => {
+              const mg = groups.get(ev.instrument + '\u0001' + s);
+              return mg && mg.earliestNonSongOkAt !== null && ev.at > mg.earliestNonSongOkAt;
+            });
+            if (credited) { out.applied++; mappedSongIds.add(dedupeKey); }
           }
         }
       } else out.introduced++;
@@ -220,7 +260,33 @@ export const EVENT_ANCHOR_MAX = 200;
 // anything. The result never mutates its input: anchors first (group
 // anchors, then song anchors, both in their original order), then the
 // window.
-export function boundEvents(events, { max = EVENT_HISTORY_MAX, anchorMax = EVENT_ANCHOR_MAX } = {}) {
+//
+// `skillMap`/`skillMapInstrument` (optional): the same skillMap bridge
+// summarizeEvents accepts (see its own doc comment above), passed here so
+// boundEvents can anchor a song row that only ever counts as `applied`
+// THROUGH the map -- its own instrument|skill group (a step id like
+// 'phrase-slow:0') never has a non-song-ok row of its own, so the plain
+// per-group "earliest independent-ok" anchor above is not enough: with
+// several replays of the same mapped song under that one group, the
+// earliest-ok anchor keeps the FIRST replay, which is not always the one
+// that actually landed after the mapped drill skill's success (exactly the
+// reason the native-rule song anchor above does not just keep a song's
+// first play either). So a second, map-aware anchor pass runs after the
+// native one: for every dropped, independent-ok, song-sourced row whose
+// songId has a skillMap entry (matching skillMapInstrument, if given) and
+// whose own dims.pitch is 'ok', it qualifies when the row's `at` lands after
+// the EARLIEST across-the-whole-list non-song-ok `at` of ANY of its mapped
+// skills' groups (the same rule summarizeEvents' bridge applies, and the
+// same `groupNonSongOkAt` map the native song-anchor pass already built, so
+// this never disagrees with it about what counts as "the drill already
+// succeeded"). At most one map anchor is kept per (instrument, songId) --
+// mirroring summarizeEvents' own `mappedSongIds` once-per-song dedupe -- and
+// only when the window does not already hold an equal-or-earlier qualifying
+// row for that same (instrument, songId). Map anchors share the same
+// `anchorMax` budget as the native song anchors (added to that pool, then
+// trimmed together by the same latest-`at`-first rule), never a second,
+// separate budget.
+export function boundEvents(events, { max = EVENT_HISTORY_MAX, anchorMax = EVENT_ANCHOR_MAX, skillMap, skillMapInstrument } = {}) {
   const list = Array.isArray(events) ? events : [];
   const window = list.slice(-max);
   const dropped = list.slice(0, Math.max(0, list.length - max));
@@ -328,8 +394,64 @@ export function boundEvents(events, { max = EVENT_HISTORY_MAX, anchorMax = EVENT
   });
   songAnchorCandidates.sort((a, b) => originalIndex.get(a) - originalIndex.get(b));
 
+  // Map anchors (skillMap bridge, see the doc comment above): a song row
+  // that only ever counts as `applied` through skillMap sits in its OWN
+  // group (its step id, e.g. 'phrase-slow:0'), which never has a
+  // non-song-ok row of its own, so the native song-anchor pass above never
+  // sees it. Same shape as that pass, but keyed by instrument+songId (not
+  // group+songId, matching summarizeEvents' `mappedSongIds` dedupe) and
+  // qualified against ANY of the songId's mapped skills' groups.
+  const mapAnchorCandidates = [];
+  if (skillMap) {
+    const mapSongKey = (ev) => ev.instrument + '|' + ev.songId;
+    const mapQualifies = (ev) => {
+      if (!isSongSourced(ev) || !ev.songId || !Array.isArray(skillMap[ev.songId])) return false;
+      if (skillMapInstrument !== undefined && ev.instrument !== skillMapInstrument) return false;
+      if (!ev.dims || ev.dims.pitch !== 'ok') return false;
+      return skillMap[ev.songId].some((s) => {
+        const at = groupNonSongOkAt.get(ev.instrument + '\u0001' + s);
+        return at !== undefined && ev.at > at;
+      });
+    };
+    const windowMapSongOkAt = new Map(); // instrument|songId -> earliest `at` of a qualifying map-credited row already in the window
+    window.forEach((ev) => {
+      if (!isIndependentOk(ev) || !mapQualifies(ev)) return;
+      const mKey = mapSongKey(ev);
+      if (!windowMapSongOkAt.has(mKey) || ev.at < windowMapSongOkAt.get(mKey)) windowMapSongOkAt.set(mKey, ev.at);
+    });
+    const droppedEarliestMapSongOk = new Map(); // instrument|songId -> the earliest qualifying map-credited row among the dropped rows
+    dropped.forEach((ev) => {
+      if (!isIndependentOk(ev) || !mapQualifies(ev)) return;
+      const mKey = mapSongKey(ev);
+      const cur = droppedEarliestMapSongOk.get(mKey);
+      if (!cur || ev.at < cur.at) droppedEarliestMapSongOk.set(mKey, ev);
+    });
+    droppedEarliestMapSongOk.forEach((row, mKey) => {
+      const coveredByWindow = windowMapSongOkAt.has(mKey) && windowMapSongOkAt.get(mKey) <= row.at;
+      if (coveredByWindow) return;
+      // At least one of the mapped skills' non-song-ok evidence must
+      // actually survive in the trimmed result (window or kept group
+      // anchor) -- the same "dropped outright if the evidence it depends on
+      // did not survive" rule the native song-anchor pass applies, here
+      // generalised across every mapped skill instead of a single group.
+      const survives = skillMap[row.songId].some((s) => {
+        const key = row.instrument + '\u0001' + s;
+        return windowNonSongOkAt.has(key) || (nonSongAnchorKey.has(key) && keptGroupAnchorSet.has(droppedEarliestNonSongOk.get(key)));
+      });
+      if (!survives) return;
+      mapAnchorCandidates.push(row);
+    });
+  }
+  mapAnchorCandidates.sort((a, b) => originalIndex.get(a) - originalIndex.get(b));
+
+  // Both anchor kinds share the one anchorMax budget after group anchors:
+  // combine them (deduping any row object the native pass already selected)
+  // before applying the same latest-`at`-first eviction.
+  const songAnchorSet = new Set(songAnchorCandidates);
+  const anchorCandidates = songAnchorCandidates.concat(mapAnchorCandidates.filter((row) => !songAnchorSet.has(row)));
+
   const remainingBudget = Math.max(0, anchorMax - keptGroupAnchors.length);
-  let keptSongAnchors = songAnchorCandidates;
+  let keptSongAnchors = anchorCandidates;
   if (keptSongAnchors.length > remainingBudget) {
     const latestFirst = keptSongAnchors.slice().sort((a, b) => b.at - a.at).slice(0, remainingBudget);
     const keepSet = new Set(latestFirst);

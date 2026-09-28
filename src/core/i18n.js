@@ -110,6 +110,27 @@ export const en = {
   // way back once that lesson ends (src/ui/songs.js's renderPractice).
   'kbd.songHandoff.button': 'Play a song with these notes',
   'kbd.songHandoff.back': 'Back to practice',
+  // Songs lesson modes (C11b): the one control's own label and its three
+  // buttons, plus the counted/practice-only line a Check try's own verdict
+  // shows (src/ui/songs.js's mode control and advance()).
+  'songs.mode.label': 'Lesson mode',
+  'songs.mode.learn': 'Learn',
+  'songs.mode.rehearse': 'Rehearse',
+  'songs.mode.check': 'Check',
+  'songs.mode.counted': 'This try counted as a check.',
+  'songs.mode.practiceOnly': 'Practice only: this try did not count as a check. On keyboard, only a MIDI keyboard counts.',
+  // Songs hand selector (H3), src/ui/songs.js's renderPractice: the Both/
+  // Right/Left control (keyboard two-hand songs only), the prep line naming
+  // each hand's starting note, and the "this hand rests" line a step with
+  // nothing for the chosen hand shows instead of "Your turn".
+  'songs.hands.label': 'Hands',
+  'songs.hands.both': 'Both hands',
+  'songs.hands.right': 'Right hand',
+  'songs.hands.left': 'Left hand',
+  'songs.hands.startRight': 'Right hand starts on {note}.',
+  'songs.hands.startLeft': 'Left hand starts on {note}.',
+  'songs.hands.restRight': 'The right hand rests here. Listen, then press Next.',
+  'songs.hands.restLeft': 'The left hand rests here. Listen, then press Next.',
 };
 
 const locales = { en };
