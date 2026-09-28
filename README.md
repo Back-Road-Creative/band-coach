@@ -744,6 +744,14 @@ suffix is graded one-handed. The approximate (microphone) pass message says plai
 checked in Right only/Left only mode, rather than the both-hands wording. One-handed passes never
 move you past level 13 on their own: the level holds until the both-hands exercises are ready.
 
+A song note itself can also say which hand plays it: an optional `hand: 'rh'` / `hand: 'lh'` field
+(`src/song/model.js`). A keyboard arrangement honours that tag instead of guessing from the
+middle-C split (`src/song/arrange/keys.js`), and the Hands selector above is only offered on a song
+part when its notes actually name both hands — a melody-only song like Frère Jacques or Amazing
+Grace stays one-handed even though some of its notes dip below middle C and would otherwise be
+guessed onto the left hand. That logic lives in `src/song/hand-filter.js`
+(`node --test tests/unit/song-hand-filter.test.mjs`).
+
 ## Harmonica: any of the 12 keys, plus bends
 
 The harmonica mod is not locked to a C harmonica. A "My harmonica is in the key of" selector on
