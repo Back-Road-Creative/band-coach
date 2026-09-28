@@ -99,8 +99,8 @@ When a keyboard song attempt is recorded as played on the computer keys, or piec
 more than one route, "My progress" (below) does not count it as passed on your own: it is practice
 worth having but not proof the skill transferred to a real keyboard. A keyboard drill or warm-up
 answer now records its route too, and one played on the computer keys or on-screen keys is the
-same story: practice, not counted as passed on your own. An on-screen click during a song is still
-not labelled with its route.
+same story: practice, not counted as passed on your own. A keyboard song is played on a MIDI keyboard or the
+computer keys; the on-screen keys are hidden while a song is open.
 
 ## Build it from source
 
@@ -237,7 +237,10 @@ startup.
 Every judged drill answer, warm-up answer and judged song step leaves one small record — which
 instrument and skill it was, whether it was independent or asked for help, which parts (pitch,
 timing, hold, tune) were actually checked, and how long it took — kept alongside the practice log
-described above. A drill answer's, a warm-up answer's, and a song step's record also keeps which
+described above. A song try that fails only because of an extra note struck alongside the right
+ones (a song step's own limit on wrong notes) is folded into the pitch check as a miss — or the
+timing check, on a rhythm or percussion step where pitch is never judged at all — so a try like
+that is never counted as passed on your own, even though every other part checked out fine. A drill answer's, a warm-up answer's, and a song step's record also keeps which
 input actually played it (MIDI, computer keys, on-screen keys, or mic), left off entirely when that
 route is unknown rather than guessed at. The raw sound of your playing or singing is never
 recorded; only the judged result is. The record keeps the most recent 500 attempts plus, for each
@@ -260,6 +263,14 @@ On the keyboard, a starter song played on your own also counts as applied for th
 if you had already played one of those notes right in a drill, a correct song attempt counts once
 toward "Applied in a song". The same song only counts once, however often you replay it, and only
 attempts where the notes themselves were checked count.
+
+On the keyboard, a starter song played on your own also counts as applied for the notes it uses:
+if you had already played one of those notes right in a drill, a correct song attempt counts once
+toward "Applied in a song". The same song only counts once, however often you replay it, and only
+attempts where the notes themselves were checked count. When older attempts are trimmed off the
+record, the song attempt that earned that credit is kept alongside the drill attempt it depends
+on, so "Applied in a song" never quietly drops just because history grew past the 500-attempt
+window.
 
 ## Today's plan
 
@@ -802,12 +813,12 @@ starts a fresh one under the new mode rather than leaving a half-graded task beh
 left-only practice is tracked on its own id (`j1r`/`j1l` etc., alongside the both-hands `j1`), so
 passing the one-handed drill never counts toward, and never uses up, both-hands mastery — the two
 are scheduled by the spaced-repetition system independently. The choice is saved with the rest of
-your preferences and survives a reload. Above level 14, the "Everything, faster" levels mix hands
+your preferences and survives a reload. Above level 16, the "Everything, faster" levels mix hands
 material back in with every other kind of drill; a plain `j1`-style id that turns up there is always
 the both-hands exercise, whatever the selector is currently set to — only an id with the `r`/`l`
-suffix is graded one-handed, and a `j1t`-style id (level 14's timed pair, below) is still graded in
-time on a real MIDI keyboard or the computer keys, but practice-only on screen taps, exactly as it
-is at level 14 itself. The approximate (microphone) pass message says plainly which hand was
+suffix is graded one-handed, and a `j1t`/`j1h`/`j1d`-style id (level 14's timed pair, level 15's
+held bass or level 16's split rhythm, all below) is still graded on a real MIDI keyboard or the
+computer keys, but practice-only on screen taps, exactly as it is on its own dedicated level. The approximate (microphone) pass message says plainly which hand was
 checked in Right only/Left only mode, rather than the both-hands wording. One-handed passes never
 move you past level 13 on their own: the level holds until the both-hands exercises are ready.
 
@@ -846,6 +857,49 @@ level is labelled "Not yet checked by a player" since this wording has not been 
 actual piano teacher yet. See `tests/unit/hands-together-timed.test.mjs` and
 `tests/characterization/kbd-level14-rhythm.test.mjs` for the exact rules and the real-MIDI/computer-
 key walk-throughs.
+
+Level 15, "Hands together: held bass under the melody", reuses the same five pairs' own `j1h`-`j5h`
+ids (again a distinct mastery, never credited or consumed by any other hands-together id). The left
+hand holds its bass note (LEARN is the same untimed both-notes-held pass as level 14) and, once
+held, CHECK asks for a fresh bass note-on followed by a short three-note melody in the right hand
+(`heldBassMelody()` in `src/core/hands-together.js` — the right hand's own note, its neighbouring
+pair's note, then the right hand's own note again, e.g. C-D-C; the top pair, G, has no pair above
+it to borrow from, so it plays G-F-G instead) while the bass keeps sounding. A melody note played while the bass has already
+been let go, or the bass being released before the last melody note-on, fails with a plain-language
+reason naming the left hand and the hold; a melody note that is not the next one expected fails
+naming the expected note instead. The exercise passes on the bass note-off, once it comes after the
+last melody note-on (`gradeHeldBass()`). This grading needs real note-on/note-off events, so — the
+same as level 14 — it only runs on a real MIDI keyboard or the computer keys; a screen tap (or the
+on-screen focus cursor's Enter/Space) still lets you practice the notes, but only ever reaches the
+LEARN pass, marked practice-only, never counted as independent evidence and never moving you up a
+level on its own — use "Skip ahead" to move on without one. A microphone pass stays approximate, the
+same as at levels 13-14. The level is labelled "Not yet checked by a player" since this wording has
+not been reviewed by an actual piano teacher yet. See `tests/unit/hands-together-stages.test.mjs`
+and `tests/characterization/kbd-levels-15-16.test.mjs` for the exact rules and the real-MIDI/
+computer-key walk-throughs.
+
+Level 16, "Hands together: different rhythms in each hand", reuses the same five pairs' own
+`j1d`-`j5d` ids (its own mastery too). LEARN is the same untimed both-notes-held pass again; CHECK
+asks the right hand to play its note twice, evenly spaced, while the left hand holds its own note as
+one long note underneath the two. Unlike every earlier hands-together level, each hand gets its OWN
+pass/fail verdict rather than one shared one (`gradeSplitRhythm()`): the left hand must come in
+within `PAIR_ONSET_TOL_MS` of the right hand's first note, must not let go before the right hand's
+second note, and must let go within `PAIR_RELEASE_TOL_MS` of the right hand's second release; the
+right hand's second note must land within `PAIR_RELEASE_TOL_MS` (or, for a longer-held left-hand
+note, `SPLIT_MID_TOL_RATIO` — 0.2 — times how long the left-hand note is held, whichever is larger)
+of the exact midpoint of the held left-hand note. The latest verdict for each hand is kept even
+across a failed attempt, so the app (and a test, through the debug hook) can always read which hand
+most recently passed and which failed. As with levels 14-15, this needs real note-on/note-off
+events, so it only runs on a real MIDI keyboard or the computer keys; a screen tap only ever reaches
+the practice-only LEARN pass, never independent evidence and never moving the level on its own — use
+"Skip ahead" instead. A microphone pass stays approximate. The level is labelled "Not yet checked by
+a player" for the same reason as levels 14-15. See `tests/unit/hands-together-stages.test.mjs` and
+`tests/characterization/kbd-levels-15-16.test.mjs` for the exact rules and the real-MIDI/computer-
+key walk-throughs.
+
+Levels 15-16 were inserted before "Everything, faster", so a saved keyboard level of 15 or above now
+opens these levels, and "Everything, faster (k)" is level 16+k (it was 14+k); saved levels are not
+renumbered.
 
 A song note itself can also say which hand plays it: an optional `hand: 'rh'` / `hand: 'lh'` field
 (`src/song/model.js`). A keyboard arrangement honours that tag instead of guessing from the

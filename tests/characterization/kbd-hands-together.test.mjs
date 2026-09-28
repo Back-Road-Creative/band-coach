@@ -208,7 +208,7 @@ test('hands together: an approximate Right-only pass names the hand, never the b
   assert.doesNotMatch(msg, /connect a midi keyboard to grade both hands together/i, 'a one-hand mode must not tell the learner to grade "both hands together"');
 });
 
-// Above level 14 (the last dedicated "hands" level), levelDef falls into
+// Above level 16 (the last dedicated "hands" level), levelDef falls into
 // task 'mix' (levelDef's synthesised "Everything, faster (k)"), which cycles
 // through every task kind seen across the mod's own levels -- including
 // 'seq' and 'one', whose pool is every active id except chords and note
@@ -229,11 +229,11 @@ async function completeElement(page, e) {
   return true;
 }
 
-test('hands together: a plain both-hands id inside a mixed (level 15+) task is still graded and credited as both-hands, even in Right-only mode', async (t) => {
+test('hands together: a plain both-hands id inside a mixed (level 17+) task is still graded and credited as both-hands, even in Right-only mode', async (t) => {
   const page = await launchPage(htmlPath);
   t.after(() => page.close());
   await page.evaluate("window.__coach.setMod('kbd')");
-  await page.evaluate('window.__coach.state().level = 15');
+  await page.evaluate('window.__coach.state().level = 17');
   await page.evaluate("document.getElementById('playBtn').click()");
   await page.waitFor('window.__coach.task()');
 
