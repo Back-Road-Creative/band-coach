@@ -1,4 +1,4 @@
-// i18n scaffold -- English only ships. This is the seam a later locale
+// i18n scaffold -- English and Spanish (es, below) ship. This is the seam a locale
 // plugs into, not a translation sweep: today it carries the strings that
 // have already been moved through t() (see src/app.js's options/backup/
 // update-check area), and grows as more slices convert. Pure -- no DOM,
@@ -57,6 +57,7 @@ export const en = {
   'nav.settings': 'Settings',
   'settings.title': 'Settings',
   'settings.look': 'Look and names',
+  'settings.language': 'Language',
   'settings.backups': 'Backups and reset',
   'settings.updates': 'Updates',
   'settings.how': 'How this works',
@@ -155,7 +156,112 @@ export const en = {
   'pathway.action.wait': 'Come back on {date} to check it again',
 };
 
-const locales = { en };
+// Spanish (es). MACHINE-TRANSLATED first pass -- every en key has an entry
+// (tests/unit/i18n-locales.test.mjs fails a key that is missing or whose
+// {param} tokens differ) but no native speaker has reviewed the wording yet.
+// Same order as `en` so the two tables can be read side by side. Strings the
+// app has not yet routed through t() still show in English.
+export const es = {
+  'storage.saveFailed': 'Tu progreso de hace un momento no se pudo guardar en este dispositivo (puede que el almacenamiento esté lleno o que la navegación privada lo esté bloqueando). Sigue tocando: seguiré intentando guardar.',
+  'backup.saved': 'Copia de seguridad guardada en tus descargas. Guarda ese archivo en un lugar seguro.',
+  'backup.restored': 'Copia de seguridad restaurada.',
+  'backup.readError': 'No se pudo leer ese archivo.',
+  'backup.confirmRestore': '¿Restaurar esta copia de seguridad? Reemplazará tu progreso actual.',
+  'reset.progressCleared': 'Progreso de {name} borrado. Vuelves al nivel 1.',
+  'hint.staffNote': 'Lee {label} en el pentagrama y tócalo. Mantenlo firme.',
+  'kbd.help': 'Teclado: conecta un teclado MIDI y pulsa Conectar, o haz clic en las teclas de la pantalla, o usa las teclas del ordenador como práctica en pantalla (no es un teclado real): a w s e d f t g y h u j k tocan de Do4 a Do5, y z x c v b n m tocan de Do3 a Si3 (solo notas naturales, sin sostenidos en esa fila). Las teclas nuevas se iluminan las dos primeras veces; después las encuentras tú solo. Manos juntas: un teclado MIDI real, o dos manos en las teclas del ordenador (una en cada fila), comprueba ambas notas y las califica con exactitud; un micrófono solo oye una nota a la vez, así que esa calificación es aproximada.',
+  'update.checking': 'Comprobando…',
+  'update.devBuild': 'Esta es una versión de desarrollo ({version}).',
+  'update.upToDate': 'Estás usando la última versión ({version}).',
+  'update.behind': 'Ya está disponible la versión {version}. ',
+  'update.error': 'No se pudo conectar con el servidor de actualizaciones. ',
+  'update.downloadLinkText': 'Descargar la versión actual',
+
+  'app.subtitle': 'Un entrenador, muchos instrumentos. Te enseña dónde están las cosas, luego los movimientos entre ellas, elige cada siguiente ejercicio según tus propios resultados y vigila tu energía para que la práctica se mantenga fresca.',
+  'nav.label': 'Principal',
+  'nav.practice': 'Práctica',
+  'nav.songs': 'Canciones',
+  'nav.progress': 'Progreso',
+  'nav.instrument': 'Instrumento: {name}',
+  'nav.chooseInstrument': 'Elige un instrumento',
+  'nav.settings': 'Ajustes',
+  'settings.title': 'Ajustes',
+  'settings.look': 'Apariencia y nombres',
+  'settings.language': 'Idioma',
+  'settings.backups': 'Copias de seguridad y reinicio',
+  'settings.updates': 'Actualizaciones',
+  'settings.how': 'Cómo funciona',
+  'songs.addRow': 'Añadir una canción',
+  'songs.libraryToggle': 'Tu biblioteca de canciones',
+  'picker.tools': 'Herramientas',
+  'setup.button': 'Configurar entrada',
+  'setup.connect': 'Conectar',
+  'setup.midiDetails': 'Detalles de MIDI',
+  'setup.inputLabel': 'Entrada',
+  'setup.defaultMic': 'Micrófono predeterminado',
+  'setup.checkMic': 'Comprobar mi micrófono',
+
+  'fingerings.unavailable': 'La guía para este instrumento aún no está lista aquí.',
+  'review.unreviewed': 'Aún no revisado por un músico.',
+  'review.unreviewedWithRef': 'Aún no revisado por un músico (anotado según {reference}).',
+
+  'break.back': 'Ya volví, continuar',
+  'break.snooze': 'Seguir 5 minutos más',
+  'break.end': 'Terminar la sesión',
+  'stage.tapPad': 'Toca aquí, o pulsa la barra espaciadora',
+  'stage.replay': 'Oírlo otra vez',
+  'stage.showMe': 'Muéstramelo',
+  'side.end': 'Terminar la sesión',
+  'side.energyEyebrow': 'Tu energía en esta sesión',
+  'energy.full': 'Con energía',
+  'side.easier': 'Hazlo más fácil',
+  'side.harder': 'Avanzar',
+  'side.feedbackEyebrow': 'Respuesta al instante',
+  'stats.last20': 'últimas 20',
+  'stats.streak': 'racha',
+  'stats.rtLabel': 's para responder',
+  'side.weakEyebrow': 'En qué se apoya el entrenador',
+  'side.backupDismiss': 'Descartar',
+  'rail.reset': 'Reiniciar este instrumento (borra el progreso)',
+  'rail.backupSave': 'Guardar una copia de seguridad',
+  'rail.backupRestore': 'Restaurar una copia de seguridad',
+  'rail.checkUpdates': 'Buscar actualizaciones',
+  'rail.updateHelp': 'Le pide al sitio web de Band Coach el número de la última versión. No envía nada sobre cómo tocas.',
+  'kbd.songHandoff.button': 'Tocar una canción con estas notas',
+  'kbd.songHandoff.back': 'Volver a la práctica',
+  'songs.mode.label': 'Modo de lección',
+  'songs.mode.learn': 'Aprender',
+  'songs.mode.rehearse': 'Ensayar',
+  'songs.mode.check': 'Comprobar',
+  'songs.mode.counted': 'Este intento contó como comprobación.',
+  'songs.mode.practiceOnly': 'Solo práctica: este intento no contó como comprobación. En el teclado, solo cuenta un teclado MIDI.',
+  'songs.hands.label': 'Manos',
+  'songs.hands.both': 'Ambas manos',
+  'songs.hands.right': 'Mano derecha',
+  'songs.hands.left': 'Mano izquierda',
+  'songs.hands.startRight': 'La mano derecha empieza en {note}.',
+  'songs.hands.startLeft': 'La mano izquierda empieza en {note}.',
+  'songs.hands.restRight': 'Aquí descansa la mano derecha. Escucha y luego pulsa Siguiente.',
+  'songs.hands.restLeft': 'Aquí descansa la mano izquierda. Escucha y luego pulsa Siguiente.',
+  'howInline.button': 'Cómo tocar esto',
+  'pathway.open': 'Tu camino con el teclado',
+  'pathway.title': 'Tu camino con el teclado',
+  'pathway.tag': 'Camino',
+  'pathway.current': 'Estás aquí',
+  'pathway.step.setup': 'Preparación',
+  'pathway.step.lesson': 'Lección',
+  'pathway.step.song': 'Canción',
+  'pathway.step.check': 'Comprobar',
+  'pathway.step.return': 'Volver',
+  'pathway.action.trainer': 'Ir al entrenador de teclado',
+  'pathway.action.song': 'Abrir {title} en Canciones',
+  'pathway.action.check': 'Comprobar {title} en Canciones',
+  'pathway.action.wait': 'Vuelve el {date} para comprobarlo otra vez',
+};
+
+export const LOCALES = [{ code: 'en', name: 'English' }, { code: 'es', name: 'Español' }];
+
+const locales = { en, es };
 let activeLocale = 'en';
 
 // Adds/merges strings into a locale (creating it if new) without discarding

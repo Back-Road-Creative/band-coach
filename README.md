@@ -237,12 +237,19 @@ level changes, one cell per day, for the last 8 weeks) and a daily minutes goal 
 practice log itself only keeps the most recent 60 sessions, so days older than that say "earlier
 sessions not kept" rather than a false zero. "Print this week's report" turns the last 7 days into a
 one-page, printer-friendly summary for a teacher or parent. The backup, restore and "Check for updates" messages
-above are read from the English string table in `src/core/i18n.js` (`t(id, params)`) rather than
-hardcoded — a scaffold for a future locale, though only English ships today. `src/index.html`'s own
+above are read from the string tables in `src/core/i18n.js` (`t(id, params)`) rather than
+hardcoded. Settings > Language switches the app between English and Español (the choice is saved
+with your other preferences, travels in a backup, and is applied at startup before the first
+screen; `<html lang>` follows it). What is translated: the nav bar, page headings and static
+labels, the keyboard help, and the backup/restore/update messages. Everything not yet routed
+through `t()` -- most of the exercise prompts, coach lines, song and lesson text and some
+Settings labels -- stays in English whichever language is picked. The Spanish table is a
+machine-translated first pass that has not yet been reviewed by a native speaker; a unit test
+fails if any English string lacks a Spanish one. `src/index.html`'s own
 static labels (headings, button text, help copy `src/app.js` never rewrites at runtime) go through
 the same table: each element carries `data-i18n="<id>"` and keeps its English text in the markup as
-a pre-JS/no-JS fallback, and `applyStaticLabels` in `src/app.js` overwrites it from `t(id)` once at
-startup.
+a pre-JS/no-JS fallback, and `applyStaticLabels` in `src/app.js` overwrites it from `t(id)` at
+startup and again whenever the language is changed.
 
 ## Progress
 
