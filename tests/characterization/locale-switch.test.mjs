@@ -75,3 +75,29 @@ for (const width of [320, 390]) {
     assert.equal(wide, '[]', `${width}px settings: elements past the right edge`);
   });
 }
+
+test('in Spanish the practice step buttons carry the names the Spanish prompts tell you to press', async (t) => {
+  const initScript = "localStorage.setItem('bandcoach.v1', JSON.stringify({ prefs: { locale: 'es' } }));";
+  const page = await launchPage(htmlPath, { initScript });
+  t.after(() => page.close());
+  const buttons = "JSON.stringify(Array.from(document.querySelectorAll('.panel-songs-practice button')).map(b => b.textContent))";
+  const click = label => page.evaluate(`Array.from(document.querySelectorAll('.panel-songs-practice button')).find(b => b.textContent === ${JSON.stringify(label)}).click()`);
+  await page.evaluate("window.__coach.setMod('kbd')");
+  await page.evaluate("window.__coach.openPanel('songs')");
+  await page.waitFor("document.querySelectorAll('.panel-songs-row button').length > 0");
+  await page.evaluate("Array.from(document.querySelectorAll('.panel-songs-row button')).find(b => b.textContent.startsWith('Ode to Joy')).click()");
+  await page.waitFor("document.querySelector('.panel-songs-practice h4')");
+  let labels = JSON.parse(await page.evaluate(buttons));
+  assert.ok(labels.includes('Tócalo'), `Listen step shows Tócalo, got ${labels}`);
+  assert.ok(labels.includes('Siguiente'), `Listen step shows Siguiente, got ${labels}`);
+  assert.ok(!labels.includes('Next') && !labels.includes('Play it'), `no English step buttons, got ${labels}`);
+  await click('Siguiente');
+  await page.waitFor("document.querySelector('.panel-songs-practice h4').textContent.startsWith('Mira y escucha')");
+  const heading = await page.evaluate("document.querySelector('.panel-songs-practice h4').textContent");
+  assert.match(heading, /\(compases \d+-\d+\)$/, `demo heading names the bars in Spanish, got ${heading}`);
+  assert.match(await page.evaluate("document.querySelector('.panel-songs-practice p').textContent"), /pulsa Siguiente/);
+  await click('Siguiente');
+  await page.waitFor(`${buttons}.includes('Te toca')`);
+  await click('Te toca');
+  await page.waitFor(`${buttons}.includes('Parar y comprobar')`);
+});

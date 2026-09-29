@@ -1602,7 +1602,7 @@ function mountSongsPanel(hostEl, api) {
     // "Play it" (the demo) is Learn-only -- Rehearse and Check are both
     // meant to be played without hearing it first.
     if (practice.mode === 'learn') {
-      const playBtn = el('button', { type: 'button', text: 'Play it', onclick: () => playPhrase(step) });
+      const playBtn = el('button', { type: 'button', text: t('songs.step.play'), onclick: () => playPhrase(step) });
       practiceSection.appendChild(playBtn);
     }
 
@@ -1626,18 +1626,18 @@ function mountSongsPanel(hostEl, api) {
         class: 'panel-songs-hands-rest',
         text: practice.hands === 'left' ? t('songs.hands.restLeft') : t('songs.hands.restRight'),
       }));
-      practiceSection.appendChild(el('button', { type: 'button', text: 'Next', onclick: () => advance(true, null, 0, { unassessed: true }) }));
+      practiceSection.appendChild(el('button', { type: 'button', text: t('songs.step.next'), onclick: () => advance(true, null, 0, { unassessed: true }) }));
     } else if (step.passRule) {
       const recordBtn = el('button', {
         type: 'button',
-        text: practice.recording ? 'Stop and check' : 'Your turn',
+        text: practice.recording ? t('songs.step.stopCheck') : t('songs.step.yourTurn'),
         onclick: () => (practice.recording ? finishRecording(step) : startRecording(step)),
       });
       practiceSection.appendChild(recordBtn);
       countEl = el('p', { class: 'panel-songs-count', text: countLabel() });
       practiceSection.appendChild(countEl);
     } else {
-      practiceSection.appendChild(el('button', { type: 'button', text: 'Next', onclick: () => advance(true, null) }));
+      practiceSection.appendChild(el('button', { type: 'button', text: t('songs.step.next'), onclick: () => advance(true, null) }));
     }
 
     // The mode control (Learn/Rehearse/Check, on one control -- the mode is
@@ -1745,7 +1745,7 @@ function mountSongsPanel(hostEl, api) {
   // plays the passage slowly once when it opens (the click that got here
   // is the gesture the audio needs) and again on "Play it slowly".
   function renderInterlude(step) {
-    const span = (b) => 'bars ' + (b[0] + 1) + '-' + (b[1] + 1);
+    const span = (b) => t('songs.bars', { from: b[0] + 1, to: b[1] + 1 });
     if (step.kind === 'demo') {
       practiceSection.appendChild(el('h4', { text: t('songs.demo.title') + ' (' + span(step.bars) + ')' }));
       practiceSection.appendChild(el('p', { text: t('songs.demo.body') }));
@@ -1757,7 +1757,7 @@ function mountSongsPanel(hostEl, api) {
       practiceSection.appendChild(el('h4', { text: t('songs.transfer.title') }));
       practiceSection.appendChild(el('p', { text: t('songs.transfer.body', { from: span(step.fromBars), to: span(step.toBars) }) }));
     }
-    practiceSection.appendChild(el('button', { type: 'button', text: 'Next', onclick: () => { practice.interlude = null; renderPractice(); } }));
+    practiceSection.appendChild(el('button', { type: 'button', text: t('songs.step.next'), onclick: () => { practice.interlude = null; renderPractice(); } }));
   }
 
   // A repair step (src/core/teaching.js repairFor) is a handful of notes,
@@ -1769,11 +1769,11 @@ function mountSongsPanel(hostEl, api) {
     practiceSection.appendChild(el('h4', { text: repairTitle(step) }));
     practiceSection.appendChild(el('p', { text: 'Just these notes, then back to the phrase.' }));
     if (practice.mode !== 'check') {
-      practiceSection.appendChild(el('button', { type: 'button', text: 'Play it', onclick: () => playPhrase(step) }));
+      practiceSection.appendChild(el('button', { type: 'button', text: t('songs.step.play'), onclick: () => playPhrase(step) }));
     }
     practiceSection.appendChild(el('button', {
       type: 'button',
-      text: practice.recording ? 'Stop and check' : 'Your turn',
+      text: practice.recording ? t('songs.step.stopCheck') : t('songs.step.yourTurn'),
       onclick: () => (practice.recording ? finishRecording(step) : startRecording(step)),
     }));
     countEl = el('p', { class: 'panel-songs-count', text: countLabel() });

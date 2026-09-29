@@ -142,6 +142,11 @@ export const en = {
   // Songs teaching loop (src/core/teaching.js): the unjudged demo step before
   // a passage's guided steps, the hand-on step after a passed check, and the
   // notes for a delayed review (src/ui/songs.js renderInterlude/advance()).
+  'songs.step.play': 'Play it',
+  'songs.step.next': 'Next',
+  'songs.step.yourTurn': 'Your turn',
+  'songs.step.stopCheck': 'Stop and check',
+  'songs.bars': 'bars {from}-{to}',
   'songs.demo.title': 'Watch and listen',
   'songs.demo.body': 'The app plays this passage slowly. You are not being judged yet. Play it again as often as you like, then press Next.',
   'songs.demo.again': 'Play it slowly',
@@ -283,6 +288,11 @@ export const es = {
   'songs.mode.check': 'Comprobar',
   'songs.mode.counted': 'Este intento contó como comprobación.',
   'songs.mode.practiceOnly': 'Solo práctica: este intento no contó como comprobación. En el teclado, solo cuenta un teclado MIDI.',
+  'songs.step.play': 'Tócalo',
+  'songs.step.next': 'Siguiente',
+  'songs.step.yourTurn': 'Te toca',
+  'songs.step.stopCheck': 'Parar y comprobar',
+  'songs.bars': 'compases {from}-{to}',
   'songs.demo.title': 'Mira y escucha',
   'songs.demo.body': 'La app toca este pasaje despacio. Todavía no se te evalúa. Vuelve a escucharlo tantas veces como quieras y luego pulsa Siguiente.',
   'songs.demo.again': 'Tocarlo despacio',
