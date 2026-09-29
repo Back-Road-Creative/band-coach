@@ -206,6 +206,8 @@ export const es = {
   'setup.inputLabel': 'Entrada',
   'setup.defaultMic': 'Micrófono predeterminado',
   'setup.checkMic': 'Comprobar mi micrófono',
+  'setup.outputLabel': 'Tocar las canciones en',
+  'setup.noOutput': 'Sin salida MIDI (en silencio)',
 
   'fingerings.unavailable': 'La guía para este instrumento aún no está lista aquí.',
   'review.unreviewed': 'Aún no revisado por un músico.',
@@ -243,6 +245,8 @@ export const es = {
   'songs.mode.check': 'Comprobar',
   'songs.mode.counted': 'Este intento contó como comprobación.',
   'songs.mode.practiceOnly': 'Solo práctica: este intento no contó como comprobación. En el teclado, solo cuenta un teclado MIDI.',
+  'songs.playForMe': 'Tócala por mí',
+  'songs.playForMeStop': 'Dejar de tocar',
   'songs.hands.label': 'Manos',
   'songs.hands.both': 'Ambas manos',
   'songs.hands.right': 'Mano derecha',
