@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { drawSVG, escapeXML } from '../../../src/notation/draw-svg.js';
+import { drawSVG, drawSVGRows, escapeXML } from '../../../src/notation/draw-svg.js';
 import { layoutMeasure } from '../../../src/notation/layout.js';
 import { CLEF_PATHS, ACCIDENTAL_PATHS } from '../../../src/notation/glyphs.js';
 
@@ -129,4 +129,32 @@ test('drawSVG: draws every primitive of a real measure without throwing, well-fo
   const svg = drawSVG(primitives, {}, { width: 400, height: 200 });
   assertWellFormedXML(svg);
   assert.ok(svg.length > 100);
+});
+
+test('drawSVG: opts.title and opts.desc emit escaped <title>/<desc> with role="img" labelling', () => {
+  const svg = drawSVG([{ type: 'line', x: 0, y: 5, length: 10 }], {}, { title: 'Tom & "Jerry" <1>', desc: "Guitar, part 1's melody" });
+  assertWellFormedXML(svg);
+  assert.match(svg, /<title id="svg-title">Tom &amp; &quot;Jerry&quot; &lt;1&gt;<\/title>/);
+  assert.match(svg, /<desc id="svg-desc">Guitar, part 1&apos;s melody<\/desc>/);
+  assert.match(svg, /role="img"/);
+  assert.match(svg, /aria-labelledby="svg-title svg-desc"/);
+});
+
+test('drawSVG: no title/desc leaves the document unchanged (no empty <title>)', () => {
+  const svg = drawSVG([{ type: 'line', x: 0, y: 5, length: 10 }], {}, {});
+  assert.doesNotMatch(svg, /<title|<desc|role=/);
+});
+
+test('drawSVGRows: stacks each row in a translated group and sizes the sheet', () => {
+  const rows = [
+    { y0: 0, primitives: [{ type: 'line', x: 0, y: 5, length: 10 }] },
+    { y0: 90, primitives: [{ type: 'line', x: 0, y: 5, length: 10 }, { type: 'barline', x: 3, y1: 0, y2: 20 }] },
+  ];
+  const svg = drawSVGRows(rows, {}, { width: 340, height: 180, title: 'Two rows', desc: 'Piano' });
+  assertWellFormedXML(svg);
+  assert.match(svg, /width="340" height="180" viewBox="0 0 340 180"/);
+  assert.match(svg, /<title id="svg-title">Two rows<\/title>/);
+  assert.equal((svg.match(/<g class="row" transform="translate\(0 (?:0|90)\)">/g) || []).length, 2);
+  assert.match(svg, /translate\(0 90\)/);
+  assert.equal((svg.match(/<line /g) || []).length, 3);
 });

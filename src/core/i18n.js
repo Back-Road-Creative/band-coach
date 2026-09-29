@@ -66,6 +66,12 @@ export const en = {
   // lesson in the first screen instead of below the whole library -- see
   // the .panel-songs-library <details> in mountSongsPanel().
   'songs.libraryToggle': 'Your song library',
+  // "Download sheet (SVG)" in an open song's action row: the button, the <desc> read to a
+  // screen reader (instrument known / not picked yet), and what is said if building fails.
+  'songs.sheetDownload': 'Download sheet (SVG)',
+  'songs.sheetDesc': 'Sheet music for {instrument}, part 1.',
+  'songs.sheetDescNoInstrument': 'Sheet music, part 1.',
+  'songs.sheetError': 'That song could not be saved as a sheet: {reason}',
   'picker.tools': 'Tools',
   'setup.button': 'Set up input',
   'setup.connect': 'Connect',
