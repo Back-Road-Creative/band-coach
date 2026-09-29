@@ -1,0 +1,11 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {"matcher": "Bash|apply_patch",
+       "hooks": [{"type": "command", "command": "d=/home/dev/workspaces/.codex/gov/dispatch.py; if [ -f \"$d\" ]; then CODEX_GOV_ENFORCE=1 python3 \"$d\" PreToolUse; else echo '[codex-gov] band-coach: workspace dispatcher not on this box; no guards' >&2; fi", "timeout": 15}]}
+    ],
+    "Stop": [
+      {"hooks": [{"type": "command", "command": "d=/home/dev/workspaces/.codex/gov/dispatch.py; if [ -f \"$d\" ]; then CODEX_GOV_ENFORCE=1 python3 \"$d\" Stop; fi", "timeout": 15}]}
+    ]
+  }
+}

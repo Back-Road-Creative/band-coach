@@ -129,6 +129,11 @@ to check the keyboard trainer's teaching content against a named method book -- 
 [docs/review-workflow.md](docs/review-workflow.md) for what it contains and what its downloaded
 result is for.
 
+Working on this repo with an AI coding agent: `.codex/hooks.json` gives a Codex session started
+here the same command guards a Claude Code session already gets from its user-level hooks (no direct
+push to `main`, no destructive git). It calls the workspace dispatcher at
+`/home/dev/workspaces/.codex/gov/dispatch.py` by absolute path and does nothing on a box without it.
+
 ## Test
 
 ```
