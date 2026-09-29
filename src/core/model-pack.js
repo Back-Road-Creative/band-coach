@@ -24,15 +24,27 @@
 // changed under an unchanged version number is treated as a miss rather
 // than silently served stale, and nothing is ever cached until its checksum
 // has been verified against the manifest's own claim.
+// Base URL and default pack: a pack lives at `<base><name>/manifest.json`
+// on the same Pages site update-check.js asks, mirroring VERSION_CHECK_URL.
+const MODEL_PACK_BASE_URL = 'https://back-road-creative.github.io/band-coach/model-packs/';
+export const DEFAULT_MODEL_PACK = 'core';
+export const packManifestUrl = (name = DEFAULT_MODEL_PACK) => `${MODEL_PACK_BASE_URL}${name}/manifest.json`;
+
 export async function loadPack({ manifestUrl, fetchImpl, store, digest = sha256Hex, inFlight } = {}) {
   if (typeof fetchImpl !== 'function') throw new Error('no fetch implementation was supplied to loadPack');
   if (!store) throw new Error('no store was supplied to loadPack');
 
-  const manifestRes = await fetchImpl(manifestUrl);
-  if (!manifestRes || !manifestRes.ok) throw new Error(`could not reach the model-pack manifest at ${manifestUrl}`);
-  const manifest = await manifestRes.json();
+  // Any failure before the manifest is usable carries code 'no-manifest', so a UI can say
+  // "nothing is published yet" without string-matching, and keep a bad download distinct.
+  const noManifest = (msg) => Object.assign(new Error(msg), { code: 'no-manifest' });
+  let manifest;
+  try {
+    const manifestRes = await fetchImpl(manifestUrl);
+    if (!manifestRes || !manifestRes.ok) throw new Error();
+    manifest = await manifestRes.json();
+  } catch (e) { throw noManifest(`could not reach the model-pack manifest at ${manifestUrl}`); }
   const name = manifest && manifest.name;
-  if (!name) throw new Error('model-pack manifest is missing its name');
+  if (!name) throw noManifest('model-pack manifest is missing its name');
 
   const cached = await store.get(name);
   if (cached && cached.version === manifest.version && cached.sha256 === manifest.sha256) {
@@ -87,6 +99,53 @@ export function createMemoryStore() {
     },
     async set(key, value) {
       map.set(key, value);
+    },
+  };
+}
+
+// Real persistence for a browser: one object store, keyed by pack name, each
+// value the same shape `loadPack` writes ({ name, version, sha256, bytes }).
+// Returns null when there is no indexedDB at all (a caller feature-detects
+// by checking the return value, never by browser-sniffing) rather than
+// throwing, since a missing IndexedDB is a capability gap this module must
+// report truthfully, not a fatal error.
+export function createIndexedDBStore({
+  dbName = 'band-coach-model-packs',
+  storeName = 'packs',
+  indexedDB: idbOverride,
+} = {}) {
+  const idb = idbOverride || (typeof indexedDB !== 'undefined' ? indexedDB : undefined);
+  if (!idb) return null;
+
+  function openDB() {
+    return new Promise((resolve, reject) => {
+      const req = idb.open(dbName, 1);
+      req.onupgradeneeded = () => {
+        if (!req.result.objectStoreNames.contains(storeName)) req.result.createObjectStore(storeName);
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  return {
+    async get(key) {
+      const db = await openDB();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(storeName, 'readonly');
+        const req = tx.objectStore(storeName).get(key);
+        req.onsuccess = () => resolve(req.result === undefined ? null : req.result);
+        req.onerror = () => reject(req.error);
+      });
+    },
+    async set(key, value) {
+      const db = await openDB();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(storeName, 'readwrite');
+        tx.objectStore(storeName).put(value, key);
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error);
+      });
     },
   };
 }
