@@ -84,3 +84,17 @@ test('the job timeout leaves headroom over the measured suite duration', () => {
       + 'so anything under 20 turns a slow runner into a cancelled run with no failing test',
   );
 });
+
+// The release size budget is the cheap, decisive check: on 2026-09-28 it failed
+// only AFTER the 7m47s browser suite (the gate step itself takes about 5 s), so
+// the author waited for the whole suite to learn about a size overrun. The gate
+// runs first, once. `npm test` still runs it again as `posttest`, which is the
+// local guarantee; CI needs no separate trailing gate step.
+test('ci runs the release gate exactly once, before the browser suite', () => {
+  const text = workflow();
+  const gates = [...text.matchAll(/^\s*-\s*run:\s*npm run gate\s*$/gm)];
+  assert.equal(gates.length, 1, 'exactly one `npm run gate` step; npm test already runs it as posttest');
+  const tests = [...text.matchAll(/^\s*-\s*run:\s*npm test\s*$/gm)];
+  assert.equal(tests.length, 1, 'exactly one `npm test` step');
+  assert.ok(gates[0].index < tests[0].index, 'the gate step must precede the npm test step so a size-budget failure surfaces in seconds, not after the suite');
+});

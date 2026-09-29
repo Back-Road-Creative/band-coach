@@ -35,9 +35,11 @@ jobs:
       - name: locate Chrome
         run: echo "CHROME_BIN=$(which google-chrome)" >> "$GITHUB_ENV"
       - run: npm ci
-      - run: npm test
+      # Cheap and decisive first (about 5 s): a size-budget failure must not wait
+      # behind the browser suite. `npm test` re-runs it as posttest.
+      - run: npm run gate
         env:
           CI: true
-      - run: npm run gate
+      - run: npm test
         env:
           CI: true
