@@ -580,6 +580,18 @@ instead of a third run at the whole phrase; passing that one note returns to the
 where it left off. A repair try is logged as guided assistance, not independent evidence — it is
 a redo of a note the step already failed on, not a fresh, unaided attempt.
 
+The lesson follows the whole teaching loop (`src/core/teaching.js`: explain, demo, guided, check,
+repair, transfer), moving between its phases with `nextPhase()`. In Learn mode, pressing Next on a
+passage's Listen step opens a **Watch and listen** step: the app plays the passage slowly (55% of
+its tempo, through the same playback as "Play it"), with "Play it slowly" to hear it again and Next
+to carry on. Nothing is judged or logged in it, and Rehearse and Check skip it. Once a passage's
+last check step passes, a **Next section** step hands the same skill on to the following section
+(also unjudged; Next starts that section's own Listen step). When there is no next section, the
+passage is instead queued for a **delayed review** (one per song and part, the latest passage passed) (`songs-review` in the saved data, so it travels
+with save, load and the progress backup) and the lesson simply tells you so; the next time you open
+that song in a later session, its first step reminds you to play that passage through once. Check
+mode never queues a review, and neither does a step your chosen hand rests through.
+
 ## Play along with a recording
 
 The "Play Along" panel (`src/ui/playalong.js`) opens an audio file of a song, works out its

@@ -12,6 +12,7 @@ import { join } from 'node:path';
 import { HTML_PATH } from '../helpers/html-path.mjs';
 import { launchPage, retryFlaky } from '../helpers/browser.mjs';
 import { FAKE_MIDI_INIT, midiAddPort } from '../helpers/fake-midi.mjs';
+import { skipDemo } from '../helpers/songs-demo.mjs';
 
 const htmlPath = HTML_PATH;
 
@@ -64,6 +65,7 @@ async function clickNext(page) {
   await page.evaluate(
     "Array.from(document.querySelectorAll('.panel-songs-practice button')).find(b => b.textContent === 'Next').click()"
   );
+  await skipDemo(page);
 }
 
 async function judgeFirstStepWith(page, sendNoteJs) {

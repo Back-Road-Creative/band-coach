@@ -129,6 +129,16 @@ export const en = {
   'songs.mode.check': 'Check',
   'songs.mode.counted': 'This try counted as a check.',
   'songs.mode.practiceOnly': 'Practice only: this try did not count as a check. On keyboard, only a MIDI keyboard counts.',
+  // Songs teaching loop (src/core/teaching.js): the unjudged demo step before
+  // a passage's guided steps, the hand-on step after a passed check, and the
+  // notes for a delayed review (src/ui/songs.js renderInterlude/advance()).
+  'songs.demo.title': 'Watch and listen',
+  'songs.demo.body': 'The app plays this passage slowly. You are not being judged yet. Play it again as often as you like, then press Next.',
+  'songs.demo.again': 'Play it slowly',
+  'songs.transfer.title': 'Next section',
+  'songs.transfer.body': 'You passed {from}. Carry the same skill into {to}: listen first, then your turn. Press Next to start.',
+  'songs.transfer.queued': 'Nice. Bars {bars} are saved for a quick review the next time you come back.',
+  'songs.review.due': 'Review from last time: bars {bars}. Play through it once, then carry on.',
   // Songs hand selector (H3), src/ui/songs.js's renderPractice: the Both/
   // Right/Left control (keyboard two-hand songs only), the prep line naming
   // each hand's starting note, and the "this hand rests" line a step with
