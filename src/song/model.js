@@ -262,6 +262,10 @@ export function validateSong(song) {
     song.chords.forEach((chord, i) => validateChord(chord, i, errors));
   }
 
+  // Optional swing ratio (long:short of a beat's two eighths; 1 = straight, 2 = triplet swing).
+  if (song.swing !== undefined && (!isFiniteNumber(song.swing) || song.swing <= 0)) {
+    fail('swing must be a positive number (got ' + JSON.stringify(song.swing) + ')');
+  }
   validateTickList(song.tempoMap, 'tempoMap', checkTempoFields, errors);
   validateTickList(song.metreChanges, 'metreChanges', checkMetreFields, errors);
   validateTickList(song.keyChanges, 'keyChanges', checkKeyFields, errors);
@@ -478,6 +482,7 @@ export function normalizeSong(raw) {
     chords
   };
   if (tempoMap !== undefined) song.tempoMap = tempoMap;
+  if (isFiniteNumber(raw.swing) && raw.swing > 0) song.swing = raw.swing;
   if (metreChanges !== undefined) song.metreChanges = metreChanges;
   if (keyChanges !== undefined) song.keyChanges = keyChanges;
 

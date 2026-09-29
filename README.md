@@ -91,9 +91,15 @@ route is unknown (as with a screen-key click) — so a later look at your histor
 played on a real keyboard from one played on the computer keys as a stand-in, without ever
 guessing at a route the app never actually recorded.
 
-The pure scheduling and sending logic for "play it for me" — a song's notes sent out to a
-connected MIDI keyboard so it plays itself — lives in `src/core/midi.js` (`scheduleSong`,
-`playOnOutput`, `stopAll`, `describeOutputs`); there is no button wired to it yet.
+"Play it for me" sends a song's notes out to a connected MIDI keyboard so it plays itself. Open
+"Set up input", pick your keyboard under "Play songs on" (it only appears when the browser
+reports a MIDI output), then press "Play it for me" on a song's practice step; it follows the song's
+own tempo, tempo changes included, and the same button turns into "Stop playing", which silences the
+keyboard at once. Leaving or hiding the tab also stops it. While the keyboard is playing, anything it
+sends back is ignored, so its own playing is never judged as yours. With no output picked there is
+no button, and Check mode never shows it (hearing the answer would spoil the check). The scheduling
+and sending logic lives in `src/core/midi.js` (`scheduleSong`, `playOnOutput`, `stopAll`,
+`describeOutputs`).
 
 When a keyboard song attempt is recorded as played on the computer keys, or pieced together from
 more than one route, "My progress" (below) does not count it as passed on your own: it is practice
@@ -345,6 +351,14 @@ at a time, from a file the same as from the mic — unless "More than one note a
 checked, in which case a multipitch detector (`src/audio/analysis/multipitch.js`) splits the file
 into a melody/bass/inner part per voice it hears, each shown as its own labelled lane once opened
 for editing.
+
+An imported recording follows the tempo it was actually played at: the clip's beat track becomes the
+song's `tempoMap` (`tempoMapFromBeats`, `src/audio/analysis/tempo-map.js`) and the notes are
+quantized against that map, so a tune that speeds up or slows down stays on its beats instead of
+drifting off one flat tempo. `estimateSwing` reads the offbeat eighths against those beats and the
+ratio is saved on the song as `swing` (1 = straight, 2 = triplet swing; it survives save, load and
+backup). The result shows one plain line, "swung" (ratio 1.4 or more) or "straight". A clip with no
+steady pulse gets neither: it keeps the single estimated tempo and no `swing` field.
 
 Both frame sources (`framesFromPCM` and `record.js`'s `sampleFrame`) only ever emit a frame for a
 window the tracker actually heard clearly — a rest is simply the absence of a frame, never a fake

@@ -1576,6 +1576,15 @@ function mountSongsPanel(hostEl, api) {
       practiceSection.appendChild(playBtn);
     }
 
+    // "Play it for me": plays this part to the MIDI keyboard the learner picked in the io strip. Only once an
+    // output is picked (nothing to send to otherwise), and never in Check mode where hearing it gives the answer away.
+    if (practice.mode !== 'check' && api.midiOut && api.midiOut.ready()) {
+      const song = practice.song, partIndex = Math.max(0, song.parts.findIndex((p) => p.id === practice.partId));
+      const label = () => (api.midiOut.playing() ? t('songs.playForMeStop') : t('songs.playForMe'));
+      const forMeBtn = el('button', { type: 'button', class: 'panel-songs-play-for-me', text: label(), onclick: () => { if (api.midiOut.playing()) api.midiOut.stop(); else api.midiOut.play(song, partIndex, () => { forMeBtn.textContent = label(); }); forMeBtn.textContent = label(); } });
+      practiceSection.appendChild(forMeBtn);
+    }
+
     const split = handSplit(step);
     if (step.passRule && !split.assessed) {
       // The chosen hand rests through this whole step -- nothing to judge,
@@ -2404,7 +2413,7 @@ function mountSongsPanel(hostEl, api) {
         return;
       }
       if (destroyed || door.generation() !== gen) return;
-      say('');
+      say((report && report.feelLine) || '', 'ok'); // one plain swung/straight line (from the beat track), when there was one
       setSongStatus(markDraft, storedId, { needsCheck: warnings.length, source: 'file', originalAudioKept: false });
       // P3-8: remembered the same way onMicTake() does, above.
       lastAudioRecSongId = storedId;

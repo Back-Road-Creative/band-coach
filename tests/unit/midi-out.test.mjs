@@ -181,3 +181,21 @@ test('stopAll: channel is masked into the status byte low nibble', () => {
   assert.equal(output.sent[0].bytes[0], 0xb0 | 3);
   assert.equal(output.sent[1].bytes[0], 0x80 | 3);
 });
+
+// ---- tempoMap -----------------------------------------------------------
+
+test('scheduleSong: with no bpm override, honours song.tempoMap (a tempo change part-way through)', () => {
+  // 120 bpm for the first quarter (500ms), then 60 bpm (1000ms per quarter).
+  const song = songWithNotes([
+    { start: 0, dur: TICKS_PER_QUARTER, midi: 60 },
+    { start: TICKS_PER_QUARTER, dur: TICKS_PER_QUARTER, midi: 62 },
+  ], { tempoMap: [{ tick: TICKS_PER_QUARTER, bpm: 60 }] });
+  const m = scheduleSong(song, { partIndex: 0, startMs: 100 });
+  assert.deepEqual(m.map(x => Math.round(x.atMs)), [100, 600, 600, 1600]);
+});
+
+test('scheduleSong: an explicit bpm still overrides the tempoMap flat', () => {
+  const song = songWithNotes([{ start: 0, dur: TICKS_PER_QUARTER, midi: 60 }], { tempoMap: [{ tick: TICKS_PER_QUARTER, bpm: 60 }] });
+  const m = scheduleSong(song, { partIndex: 0, bpm: 120, startMs: 0 });
+  assert.equal(Math.round(m[1].atMs), 500);
+});

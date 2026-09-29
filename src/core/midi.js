@@ -13,6 +13,7 @@
 // like garbage bytes with no status nibble to test.
 
 import { ticksToSeconds } from '../song/model.js';
+import { createSongClock } from '../song/clock.js';
 
 const NOTE_ON = 0x90, NOTE_OFF = 0x80, CONTROL_CHANGE = 0xb0, ALL_NOTES_OFF_CC = 123;
 const PROGRAM_CHANGE = 0xc0, CHANNEL_PRESSURE = 0xd0;
@@ -93,7 +94,11 @@ export function scheduleSong(song, opts) {
   const partIndex = o.partIndex || 0;
   const part = song.parts[partIndex];
   if (!part) throw new Error('scheduleSong: no part at index ' + partIndex + ' (song has ' + song.parts.length + ' part' + (song.parts.length === 1 ? '' : 's') + ')');
+  // An explicit opts.bpm plays the whole part flat at that tempo; without one
+  // the song's own tempo curve (song.bpm plus song.tempoMap) is followed.
   const bpm = o.bpm;
+  const clock = bpm === undefined ? createSongClock(song) : null;
+  const secAt = tick => clock ? clock.sec(0, tick) : ticksToSeconds(tick, bpm);
   const startMs = o.startMs || 0;
   const channel = (o.channel || 0) & 0x0f;
   const semitones = o.transpose || 0;
@@ -104,8 +109,8 @@ export function scheduleSong(song, opts) {
     if (note.midi === null || note.midi === undefined || !Number.isFinite(note.midi) || note.dur <= 0) continue; // a rest -- nothing to play
     const pitch = clampByte(note.midi + semitones);
     const velocity = Number.isFinite(note.velocity) ? clampByte(note.velocity) : 80;
-    const onMs = startMs + ticksToSeconds(note.start, bpm) * 1000;
-    const offMs = startMs + ticksToSeconds(note.start + note.dur, bpm) * 1000;
+    const onMs = startMs + secAt(note.start) * 1000;
+    const offMs = startMs + secAt(note.start + note.dur) * 1000;
     const stillOpen = openOffByPitch.get(pitch);
     if (stillOpen && stillOpen.atMs > onMs) stillOpen.atMs = onMs; // cut the earlier note short instead of letting it outlive the new one
     const onEvent = { atMs: onMs, bytes: [NOTE_ON | channel, pitch, velocity], order: 1 };
