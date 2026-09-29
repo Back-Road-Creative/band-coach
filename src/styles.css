@@ -509,7 +509,9 @@
   .settings-view h2 { font: 700 28px/1.1 var(--display); margin: 0; }
   .settings-group { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; display: flex; flex-direction: column; align-items: flex-start; gap: 10px; }
   .settings-group h3 { font: 600 13px var(--body); color: var(--muted); margin: 0; }
-  .settings-group label { display: flex; gap: 7px; align-items: center; cursor: pointer; }
+  /* wrap + shrink so a long label (Spanish) or a wide <select> option never pushes the page sideways at 320px */
+  .settings-group label { display: flex; flex-wrap: wrap; gap: 7px; align-items: center; cursor: pointer; max-width: 100%; }
+  .settings-group select { max-width: 100%; }
   .settings-group input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px; }
   .settings-group p { color: var(--muted); font-size: 14px; margin: 0; max-width: 64ch; }
   .settings-group p strong { color: var(--text); font-weight: 600; }

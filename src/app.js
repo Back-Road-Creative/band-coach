@@ -18,7 +18,7 @@ import { resolveAppVersion, DEV_VERSION } from './core/version.js';
 import { loadPack, packStatus, createIndexedDBStore, packManifestUrl, DEFAULT_MODEL_PACK } from './core/model-pack.js';
 import { checkForUpdate, FALLBACK_DOWNLOAD_URL } from './core/update-check.js';
 import { setNoteNaming, sanitizeNoteNaming, name as noteNameFor } from './core/note-names.js';
-import { t } from './core/i18n.js';
+import { t, setLocale, LOCALES } from './core/i18n.js';
 import { yin } from './audio/yin.js';
 import { createPitchNode } from './audio/pitch-worklet.js';
 //
@@ -102,6 +102,8 @@ import { register as registerPathway } from './ui/pathway.js';
   // lives here; the English text is left in the HTML too as the pre-JS/no-JS
   // fallback, and this only overwrites it with the identical string today.
   function applyStaticLabels(root) { root.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.getAttribute('data-i18n')); }); }
+  // Language pick (Settings > Language, DB.prefs.locale): switches t(), <html lang>, the static labels and the nav landmark name. Dynamic text picks the new language up the next time it is drawn.
+  function applyLocale(code) { setLocale(code); document.documentElement.lang = code; applyStaticLabels(document); $('mainNav').setAttribute('aria-label', t('nav.label')); }
   const deafWindow = createDeafWindow({ now: () => performance.now() });
   // ---------- accessibility: wake lock, dialog focus, reduced motion ----------
   const wakeLock = createWakeLock();
@@ -476,7 +478,7 @@ import { register as registerPathway } from './ui/pathway.js';
     return L;
   }
   const MODS = {
-    kbd: { name: 'Keyboard', tag: 'MIDI or on-screen keys', color: '#2f93ee', input: 'midi', help: t('kbd.help'),
+    kbd: { name: 'Keyboard', tag: 'MIDI or on-screen keys', color: '#2f93ee', input: 'midi', get help() { return t('kbd.help'); },
       // Each level's new notes come from KBD_LEVEL_PITCH_POOLS (src/instruments/
       // kbd-songs.js), the one copy the song hand-off also reads.
       levels: [
@@ -979,7 +981,7 @@ import { register as registerPathway } from './ui/pathway.js';
   }
   function sanitizeDB(v, defaultLatencyMs, modelNow) {
     const notate = {}; NOTATE_MOD_IDS.forEach(m => { notate[m] = 'names'; });
-    const d = { v: 1, mods: {}, sessions: [], events: [], prefs: { mod: 'kbd', wind: 'bb', voice: 'low', kbdHands: 'both', sessionMinutes: null, names: true, noiseFloor: null, inputDeviceId: null, notate: notate, theme: 'system', noteNaming: { system: 'letters', accidentals: 'mixed' } } }; v = (v && typeof v === 'object') ? v : {};
+    const d = { v: 1, mods: {}, sessions: [], events: [], prefs: { mod: 'kbd', wind: 'bb', voice: 'low', kbdHands: 'both', sessionMinutes: null, names: true, noiseFloor: null, inputDeviceId: null, notate: notate, theme: 'system', locale: 'en', noteNaming: { system: 'letters', accidentals: 'mixed' } } }; v = (v && typeof v === 'object') ? v : {};
     MOD_IDS.forEach(m => { d.mods[m] = sanitizeModel(m, v.mods && v.mods[m], modelNow); });
     if (Array.isArray(v.sessions)) d.sessions = v.sessions.filter(x => x && typeof x.d === 'string' && MODS[x.mod]).slice(-60).map(x => {
       // source/songId (a panel-logged row, e.g. a finished or abandoned song
@@ -1004,6 +1006,7 @@ import { register as registerPathway } from './ui/pathway.js';
     // sanitises to 'system' so a corrupt/old backup never leaves the toggle
     // stuck on nothing it can render.
     d.prefs.theme = ['system', 'light', 'dark'].indexOf(p.theme) >= 0 ? p.theme : 'system';
+    d.prefs.locale = LOCALES.some(l => l.code === p.locale) ? p.locale : 'en';
     // Note naming J2: letters / German (H/B) / fixed-do solfege, each in
     // sharps, flats or mixed spelling -- unknown or missing sanitises to
     // today's default so nname() never has a pref it can't render.
@@ -2810,6 +2813,7 @@ import { register as registerPathway } from './ui/pathway.js';
   // overriding the OS setting either way (see src/styles.css).
   function applyTheme(t) { if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t); else document.documentElement.removeAttribute('data-theme'); }
   $('optTheme').addEventListener('change', function () { DB.prefs.theme = this.value; applyTheme(this.value); save(); });
+  $('optLocale').addEventListener('change', function () { DB.prefs.locale = LOCALES.some(l => l.code === this.value) ? this.value : 'en'; applyLocale(DB.prefs.locale); updateNavInstrumentLabel(); showAll(); save(); });
   function applyNoteNaming() { DB.prefs.noteNaming = { system: $('optNoteSystem').value, accidentals: $('optAccidentals').value }; setNoteNaming(DB.prefs.noteNaming); save(); showAll(); }
   $('optNoteSystem').addEventListener('change', applyNoteNaming); $('optAccidentals').addEventListener('change', applyNoteNaming);
 
@@ -2966,7 +2970,7 @@ import { register as registerPathway } from './ui/pathway.js';
     }
     const priorLatencyMs = DB && DB.latencyMs;
     modelNow = Date.now(); DB = sanitizeDB(result.db, undefined, modelNow); DB.latencyMs = num(priorLatencyMs, DB.latencyMs, 0, 300); if (!Array.isArray(DB.custom)) DB.custom = [];
-    $('optNames').checked = DB.prefs.names; $('optTheme').value = DB.prefs.theme; applyTheme(DB.prefs.theme); setNoteNaming(DB.prefs.noteNaming); $('optNoteSystem').value = DB.prefs.noteNaming.system; $('optAccidentals').value = DB.prefs.noteNaming.accidentals; setMod(DB.prefs.mod);
+    $('optNames').checked = DB.prefs.names; $('optTheme').value = DB.prefs.theme; applyTheme(DB.prefs.theme); $('optLocale').value = DB.prefs.locale; applyLocale(DB.prefs.locale); setNoteNaming(DB.prefs.noteNaming); $('optNoteSystem').value = DB.prefs.noteNaming.system; $('optAccidentals').value = DB.prefs.noteNaming.accidentals; setMod(DB.prefs.mod);
     writeDB();
     let stored; try { stored = localStorage.getItem(KEY); } catch (e) {}
     if (stored !== lastStored) { const error = 'Your restored progress could not be saved on this device (storage may be full).'; coach(error); return { ok: false, error }; }
@@ -3207,8 +3211,7 @@ import { register as registerPathway } from './ui/pathway.js';
     document.querySelectorAll('#mainNav button[data-route]').forEach(b => b.addEventListener('click', () => { focusDestination(b.dataset.route, routeTo(b.dataset.route), b); }));
     updateNavState();
   }
-  applyStaticLabels(document);
-  loadDB(); if (!Array.isArray(DB.custom)) DB.custom = []; $('optNames').checked = DB.prefs.names; $('optTheme').value = DB.prefs.theme; applyTheme(DB.prefs.theme); $('optNoteSystem').value = DB.prefs.noteNaming.system; $('optAccidentals').value = DB.prefs.noteNaming.accidentals; buildPicker(); pickerAsSheet = hasSavedMod; setInstrumentSheetOpen(!hasSavedMod); buildNav(); setMod(mod); requestAnimationFrame(frame);
+  loadDB(); applyLocale(DB.prefs.locale); if (!Array.isArray(DB.custom)) DB.custom = []; $('optNames').checked = DB.prefs.names; $('optTheme').value = DB.prefs.theme; $('optLocale').value = DB.prefs.locale; applyTheme(DB.prefs.theme); $('optNoteSystem').value = DB.prefs.noteNaming.system; $('optAccidentals').value = DB.prefs.noteNaming.accidentals; buildPicker(); pickerAsSheet = hasSavedMod; setInstrumentSheetOpen(!hasSavedMod); buildNav(); setMod(mod); requestAnimationFrame(frame);
   const hook = !__DEBUG_HOOK__ ? null : { state: () => S, db: () => DB, sess: () => sess, task: () => task, cur: cur, note: onNote, answer: answer, tap: onTap, bar: () => bar, playing: () => playing, setMod: setMod, testSource: testSource, heard: () => heard, yin: yin, cap: () => cap, tuner: () => tunerState, tunerLock: () => tunerLock, deaf: () => deafWindow.isDeaf(), deafUntil: () => deafWindow.until(), exportProgress: doExportProgress, importProgress: doImportProgress, audioNow: audioNow, modelNow: () => modelNow, plan: () => sessionPlan, planProgress: () => planProgress,
     // levelDef(): D() -- a test's seam onto a mix level's limit/bpm.
     levelDef: () => D() };
