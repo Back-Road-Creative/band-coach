@@ -31,7 +31,9 @@ export async function playSongNoteWhenListening(page, midi, exact = true) {
   await page.evaluate(`(async () => {
     const turnBtn = Array.from(document.querySelectorAll('.panel-songs-practice button')).find(b => b.textContent === 'Your turn');
     if (turnBtn) turnBtn.click();
+    const deadline = Date.now() + 20000; // a screen with no "Your turn" (an interlude) fails fast instead of hanging the file
     while (!(document.querySelector('.panel-songs-count') && document.querySelector('.panel-songs-count').textContent.startsWith('Notes heard so far'))) {
+      if (Date.now() > deadline) throw new Error('never started listening; screen: ' + ((document.querySelector('.panel-songs-practice h4') || {}).textContent || '(no heading)'));
       await new Promise(r => setTimeout(r, 4));
     }
     window.__coach.songsNoteAt(${JSON.stringify(midi)}, 0, ${JSON.stringify(exact)});

@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { HTML_PATH } from '../helpers/html-path.mjs';
 import { launchPage } from '../helpers/browser.mjs';
+import { skipDemo } from '../helpers/songs-demo.mjs';
 
 const htmlPath = HTML_PATH;
 
@@ -67,6 +68,7 @@ test('choosing a one-part starter song opens a practice lesson, starting with a 
   await page.evaluate(
     "Array.from(document.querySelectorAll('.panel-songs-practice button')).find(b => b.textContent === 'Next').click()"
   );
+  await skipDemo(page);
   await page.waitFor("document.querySelector('.panel-songs-practice h4').textContent !== '" + stepTitle + "'");
   const secondTitle = await page.evaluate("document.querySelector('.panel-songs-practice h4').textContent");
   assert.notEqual(secondTitle, stepTitle);
@@ -87,6 +89,7 @@ test('recording via the keyboard/MIDI note forward counts notes and can be judge
   await page.evaluate(
     "Array.from(document.querySelectorAll('.panel-songs-practice button')).find(b => b.textContent === 'Next').click()"
   );
+  await skipDemo(page);
   await page.waitFor(
     "Array.from(document.querySelectorAll('.panel-songs-practice button')).some(b => b.textContent === 'Your turn')"
   );
@@ -137,6 +140,7 @@ test('a correctly played song note feeds the trainer\'s readiness/level-up path,
   await page.evaluate(
     "Array.from(document.querySelectorAll('.panel-songs-practice button')).find(b => b.textContent === 'Next').click()"
   );
+  await skipDemo(page);
   await page.waitFor(
     "Array.from(document.querySelectorAll('.panel-songs-practice button')).some(b => b.textContent === 'Your turn')"
   );
@@ -181,6 +185,7 @@ test('capturing a note while recording does not steal keyboard focus from the re
   await page.evaluate(
     "Array.from(document.querySelectorAll('.panel-songs-practice button')).find(b => b.textContent === 'Next').click()"
   );
+  await skipDemo(page);
   await page.waitFor(
     "Array.from(document.querySelectorAll('.panel-songs-practice button')).some(b => b.textContent === 'Your turn')"
   );
