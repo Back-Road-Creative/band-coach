@@ -16,6 +16,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { HTML_PATH } from '../helpers/html-path.mjs';
 import { launchPage } from '../helpers/browser.mjs';
+import { skipDemo } from '../helpers/songs-demo.mjs';
 
 function challengeJson() {
   return JSON.stringify({
@@ -52,6 +53,7 @@ test('songsNoteAt stamps a late-delivered note at the attempt start, so a timed 
   // listen step -> Next; the next step is the timed rhythm check.
   await page.waitFor(`!!${BTN('Next')}`);
   await page.evaluate(`${BTN('Next')}.click()`);
+  await skipDemo(page);
   await page.waitFor(`!!${BTN('Your turn')}`);
   const rhythmTitle = await page.evaluate(TITLE);
 

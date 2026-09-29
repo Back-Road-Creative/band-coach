@@ -10,6 +10,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { HTML_PATH } from '../helpers/html-path.mjs';
 import { launchPage } from '../helpers/browser.mjs';
+import { skipDemo } from '../helpers/songs-demo.mjs';
 
 const htmlPath = HTML_PATH;
 
@@ -162,6 +163,7 @@ test('one judged song step logs a DB.events row with source "song" and songId, a
   // Drive through the listen step (Next), then the first judged step
   // (rhythm) only -- one judged step is enough to prove the event shape.
   await page.evaluate("Array.from(document.querySelectorAll('.panel-songs-practice button')).find(b => b.textContent === 'Next').click()");
+  await skipDemo(page);
   await page.waitFor("Array.from(document.querySelectorAll('.panel-songs-practice button')).some(b => b.textContent === 'Your turn')");
   await page.evaluate(
     "Array.from(document.querySelectorAll('.panel-songs-practice button')).find(b => b.textContent === 'Your turn').click()"

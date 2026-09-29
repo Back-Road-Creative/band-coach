@@ -12,11 +12,11 @@
 // precedence order a second time.
 import { failedDimension } from '../ui/songs/practice.js';
 
-// The whole loop, in order. `demo` and `transfer` are named here so a later
-// unit can wire them up (demo: an explicit "watch it played" step before the
-// learner is asked to guess at the phrase; transfer: a delayed review once a
-// step has been passed) -- neither has a plan.steps `kind` yet, so phaseOf
-// below never returns them for a real step.
+// The whole loop, in order. `demo` and `transfer` have their own step kinds
+// (demoFor / interludeAfter below): runtime steps src/ui/songs.js slots in
+// between plan steps the way it does a repair, never entries in
+// buildLessonPlan's own plan.steps (that would shift every saved
+// stepIndex a learner is resuming from).
 export const PHASES = ['explain', 'demo', 'guided', 'check', 'repair', 'transfer'];
 
 // Which loop phase a src/song/lesson.js buildLessonPlan step belongs to. A
@@ -26,6 +26,8 @@ export const PHASES = ['explain', 'demo', 'guided', 'check', 'repair', 'transfer
 // learner is actually checked against the full phrase at speed. "repair" is
 // the short isolated exercise repairFor (below) builds.
 export function phaseOf(step) {
+  if (step && step.kind === 'demo') return 'demo';
+  if (step && step.kind === 'transfer') return 'transfer';
   if (!step || !step.passRule) return 'explain';
   if (step.kind === 'rhythm' || step.kind === 'pitches') return 'guided';
   if (step.kind === 'repair') return 'repair';
@@ -99,4 +101,100 @@ export function repairFor(step, result, passRule) {
     notes,
     passRule: repairPassRule,
   };
+}
+
+// ---------------------------------------------------------------------------
+// demo and transfer: the two runtime step kinds
+// ---------------------------------------------------------------------------
+
+const DEMO_TEMPO_SCALE = 0.55; // same slow speed as the plan's own phrase-slow step
+
+// The passage played slowly for the learner to watch and hear before being
+// asked to play it: never judged (passRule null), so nothing about it ever
+// enters practice.results. `step` is any step of the passage with its 1x
+// tempo (the listen step); an untimed one (bpm 0) stays untimed.
+export function demoFor(step) {
+  return {
+    kind: 'demo',
+    phraseIndex: step.phraseIndex,
+    bars: step.bars,
+    originTick: step.originTick,
+    bpm: step.bpm > 0 ? Math.round(step.bpm * DEMO_TEMPO_SCALE) : 0,
+    tempoScale: step.bpm > 0 ? DEMO_TEMPO_SCALE : 0,
+    notes: step.notes,
+    passRule: null,
+  };
+}
+
+// One passage's identity for "is this phrase's check sequence finished":
+// a phrase's own steps share a phraseIndex; chain steps reuse the index of
+// the phrase they extend to, so they are told apart by kind.
+function sectionKey(step) {
+  return (step.kind === 'chain' || step.kind === 'whole' ? step.kind : 'phrase') + ':' + step.phraseIndex;
+}
+
+// Whether a demo or transfer step belongs between `prev` (the step just
+// finished, `passed` or not) and `next` (the plan step nextStep picked), and
+// which. Driven by nextPhase: explain -> demo shows before the first guided
+// step (Learn only -- Rehearse and Check are meant to be played without
+// hearing it first); check + passed -> transfer once the passage's last check
+// step is done (not between ladder rungs). Check never earns anything to
+// review and a rested hand (`unassessed`) judged nothing, so both get null.
+//   { step, blocking, review }: `blocking` true is a screen of its own
+//   (next section is coming); false is a note only, with `review` the
+//   { phraseIndex, bars, kind } to queue for a later session because there
+//   is no next section to carry the skill into.
+export function interludeAfter({ prev, passed, next, mode, unassessed }) {
+  if (!prev || unassessed) return null;
+  const phase = nextPhase(phaseOf(prev), passed);
+  if (phase === 'demo') {
+    if (mode !== 'learn' || !next || phaseOf(next) !== 'guided') return null;
+    return { step: demoFor(prev), blocking: true, review: null };
+  }
+  if (phase === 'transfer' && phaseOf(prev) === 'check') {
+    if (mode === 'check') return null;
+    if (next && phaseOf(next) === 'check' && sectionKey(next) === sectionKey(prev)) return null;
+    const step = { kind: 'transfer', phraseIndex: prev.phraseIndex, fromBars: prev.bars, toBars: null, passRule: null, notes: [] };
+    if (next && next.kind === 'listen') return { step: { ...step, toBars: next.bars }, blocking: true, review: null };
+    return { step, blocking: false, review: { phraseIndex: prev.phraseIndex, bars: prev.bars, kind: prev.kind } };
+  }
+  return null;
+}
+
+// The delayed review queue (persisted by src/ui/songs.js in
+// api.store('songs-review') -> DB.panels, so save/load/backup carry it like
+// every other panel store). Newest first, one entry per song+part (the latest passage passed),
+// bounded. The caller owns the clock: `at` is the caller's epoch ms.
+export const REVIEW_MAX = 20;
+const reviewSame = (a, b) => a.songId === b.songId && a.partId === b.partId; // one review per song+part: the latest passage passed replaces the earlier one
+
+export function sanitizeReviewQueue(raw) {
+  const items = raw && typeof raw === 'object' && Array.isArray(raw.items) ? raw.items : [];
+  const out = [];
+  for (const e of items) {
+    if (!e || typeof e !== 'object') continue;
+    const { songId, partId, instrumentId, phraseIndex, bars, kind, at } = e;
+    if (typeof songId !== 'string' || typeof partId !== 'string' || typeof kind !== 'string') continue;
+    if (!Array.isArray(bars) || bars.length !== 2 || !bars.every(Number.isInteger)) continue;
+    if (!Number.isFinite(at)) continue;
+    if (phraseIndex !== null && !Number.isInteger(phraseIndex)) continue;
+    out.push({ songId, partId, instrumentId: typeof instrumentId === 'string' ? instrumentId : null, phraseIndex, bars: [bars[0], bars[1]], kind, at });
+    if (out.length >= REVIEW_MAX) break;
+  }
+  return out;
+}
+
+export function addReview(queue, entry, at) {
+  const rest = queue.filter((e) => !reviewSame(e, entry));
+  return [{ ...entry, bars: [entry.bars[0], entry.bars[1]], at }, ...rest].slice(0, REVIEW_MAX);
+}
+
+// Due = queued before `before` (the moment the current app session began),
+// i.e. in an EARLIER session -- "next session", not the next minute.
+export function dueReviews(queue, { songId, partId, before }) {
+  return queue.filter((e) => e.songId === songId && e.partId === partId && e.at < before);
+}
+
+export function dropReviews(queue, { songId, partId, before }) {
+  return queue.filter((e) => !(e.songId === songId && e.partId === partId && e.at < before));
 }

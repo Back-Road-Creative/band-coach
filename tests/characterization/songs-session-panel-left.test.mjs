@@ -12,6 +12,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { HTML_PATH } from '../helpers/html-path.mjs';
 import { launchPage } from '../helpers/browser.mjs';
+import { skipDemo } from '../helpers/songs-demo.mjs';
 
 const htmlPath = HTML_PATH;
 
@@ -54,6 +55,7 @@ test('leaving the Songs panel after a judged step logs exactly one session row, 
   // The listen step judges nothing (passRule: null) -- step past it with
   // Next, then judge exactly ONE real step (the rhythm step) before leaving.
   await page.evaluate("Array.from(document.querySelectorAll('.panel-songs-practice button')).find(b => b.textContent === 'Next').click()");
+  await skipDemo(page);
   await page.evaluate(
     "Array.from(document.querySelectorAll('.panel-songs-practice button')).find(b => b.textContent === 'Your turn').click()"
     );

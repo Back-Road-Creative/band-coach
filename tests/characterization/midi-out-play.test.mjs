@@ -8,6 +8,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { HTML_PATH } from '../helpers/html-path.mjs';
 import { launchPage } from '../helpers/browser.mjs';
+import { skipDemo } from '../helpers/songs-demo.mjs';
 import { FAKE_MIDI_INIT, midiAddPort, midiAddOutput, midiOutSent } from '../helpers/fake-midi.mjs';
 
 const htmlPath = HTML_PATH;
@@ -35,6 +36,7 @@ test('Play it for me sends the song to the picked MIDI output, Stop sends CC 123
     await openOde(page);
     // Step to a judged step so a count of heard notes exists.
     await page.evaluate("Array.from(document.querySelectorAll('.panel-songs-practice button')).find(b => b.textContent === 'Next').click()");
+    await skipDemo(page);
     await page.evaluate("Array.from(document.querySelectorAll('.panel-songs-practice button')).find(b => b.textContent === 'Your turn').click()");
     await page.waitFor("document.querySelector('.panel-songs-count') && document.querySelector('.panel-songs-count').textContent.startsWith('Notes heard so far')");
 

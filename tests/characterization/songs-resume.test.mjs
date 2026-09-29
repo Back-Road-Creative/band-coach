@@ -12,6 +12,7 @@ import { join } from 'node:path';
 import { HTML_PATH } from '../helpers/html-path.mjs';
 import { launchPage } from '../helpers/browser.mjs';
 import { playSongNoteWhenListening } from '../helpers/songs-note.mjs';
+import { skipDemo } from '../helpers/songs-demo.mjs';
 
 const htmlPath = HTML_PATH;
 
@@ -41,6 +42,7 @@ async function openHotCrossBunsAndAdvanceOneStep(page) {
   await page.evaluate(
     "Array.from(document.querySelectorAll('.panel-songs-practice button')).find(b => b.textContent === 'Next').click()"
   );
+  await skipDemo(page);
   await page.waitFor("document.querySelector('.panel-songs-practice h4').textContent.startsWith('Clap the rhythm')");
   await page.waitFor(
     "(() => { try { return JSON.parse(localStorage.getItem('bandcoach.v1')).panels.songs.lessons[0].stepIndex === 1; } catch (e) { return false; } })()"

@@ -29,6 +29,7 @@ import { byId as instrumentById } from '../../src/instruments/index.js';
 import { isIndependentOk, summarizeEvents } from '../../src/core/learning-events.js';
 import { pathwayState } from '../../src/core/pathway.js';
 import { en } from '../../src/core/i18n.js';
+import { skipDemo } from '../helpers/songs-demo.mjs';
 
 const htmlPath = HTML_PATH;
 const TPQ = 480;
@@ -158,6 +159,7 @@ async function walkToStep(page, plan, targetKind) {
     if (!heading.startsWith(STEP_HEADING[step.kind])) continue;
     if (!step.passRule) {
       await clickButtonNamed(page, 'Next');
+      await skipDemo(page);
       continue;
     }
     const beforeWalk = await page.evaluate('window.__coach.db().events.length');
