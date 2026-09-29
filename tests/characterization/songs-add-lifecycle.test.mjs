@@ -79,6 +79,21 @@ async function openAddSongSection(page) {
   );
 }
 
+// Runs `action` in the page the instant Cancel appears. The button is only
+// visible while the analysis is in flight, and a fast runner finishes this
+// 20s WAV in a few seconds -- a Node-side poll (or a Node-side closePanel())
+// that a starved event loop delays past that window never sees it, and the
+// test times out or saves a song (CI 2026-09-29: "waitFor timed out after
+// 20000ms: !...cancel-btn.hidden"). A MutationObserver armed before the file
+// is dropped fires at handleFile's first await, so the action always lands
+// mid-analysis.
+async function onAnalysisStart(page, action) {
+  await page.evaluate(`(() => {
+    const b = document.querySelector('.panel-songs-cancel-btn');
+    new MutationObserver((m, o) => { if (!b.hidden) { o.disconnect(); ${action} } }).observe(b, { attributes: true, attributeFilter: ['hidden'] });
+  })()`);
+}
+
 test('Cancel during analysis saves nothing', async (t) => {
   const dir = mkdtempSync(join(tmpdir(), 'band-coach-add-lifecycle-'));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
@@ -91,9 +106,8 @@ test('Cancel during analysis saves nothing', async (t) => {
   await openAddSongSection(page);
   const rowsBefore = await page.evaluate("document.querySelectorAll('.panel-songs-row').length");
 
+  await onAnalysisStart(page, 'b.click();');
   await page.setFileInput('#songsFileInput', wavPath);
-  await page.waitFor("!document.querySelector('.panel-songs-cancel-btn').hidden");
-  await page.evaluate("document.querySelector('.panel-songs-cancel-btn').click()");
 
   await page.waitFor("document.querySelector('.panel-songs-msg').textContent === 'Stopped. Nothing was saved.'");
   assert.deepEqual(page.exceptions, [], 'Cancel during analysis must not throw');
@@ -116,9 +130,8 @@ test('leaving Songs mid-analysis saves nothing and says so on return', async (t)
   await openAddSongSection(page);
   const rowsBefore = await page.evaluate("document.querySelectorAll('.panel-songs-row').length");
 
+  await onAnalysisStart(page, "window.__coach.closePanel(); window.__coach.openPanel('songs');");
   await page.setFileInput('#songsFileInput', wavPath);
-  await page.evaluate("window.__coach.closePanel()");
-  await page.evaluate("window.__coach.openPanel('songs')");
 
   await page.waitFor(
     "document.querySelector('.panel-songs-msg').textContent === 'Your last recording was stopped before it finished. Nothing was saved.'",
@@ -168,8 +181,9 @@ test('an analysis that finishes after leaving does not add a song', async (t) =>
   await openAddSongSection(page);
   const rowsBefore = await page.evaluate("document.querySelectorAll('.panel-songs-row').length");
 
+  await onAnalysisStart(page, 'window.__coach.closePanel();');
   await page.setFileInput('#songsFileInput', wavPath);
-  await page.evaluate("window.__coach.closePanel()");
+  await page.waitFor("document.getElementById('panelHost').hidden");
   // Longer than a 20s WAV's decode+transcribe takes, so the analysis has
   // genuinely finished in the background before Songs is reopened.
   await new Promise((r) => setTimeout(r, 6000));
