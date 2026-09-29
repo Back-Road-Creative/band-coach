@@ -542,7 +542,9 @@ async function launchPageOnce(htmlPath, options = {}) {
   // the CDP-level equivalent of a learner picking a file, since a page
   // script cannot construct a File backed by disk content itself. `selector`
   // is a CSS selector for the input; `filePath` an absolute path. Dispatches
-  // a real 'change' event afterwards so the page's own listener fires.
+  // a real 'change' event afterwards so the page's own listener fires --
+  // unless the page already reacted to setFileInputFiles' own change event
+  // by removing the input (e.g. leaving the screen mid-analysis).
   async function setFileInput(selector, filePath) {
     const { result } = await send('Runtime.evaluate', {
       expression: `document.querySelector(${JSON.stringify(selector)})`,
@@ -552,7 +554,7 @@ async function launchPageOnce(htmlPath, options = {}) {
     }
     await send('DOM.setFileInputFiles', { files: [filePath], objectId: result.objectId });
     await evaluate(
-      `document.querySelector(${JSON.stringify(selector)}).dispatchEvent(new Event('change', { bubbles: true }))`
+      `(() => { const el = document.querySelector(${JSON.stringify(selector)}); if (el) el.dispatchEvent(new Event('change', { bubbles: true })); })()`
     );
   }
 
