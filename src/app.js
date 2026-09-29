@@ -7,7 +7,7 @@ import { captureToSong } from './song/capture.js';
 import { toAudioTime, judgeTap, medianLatency } from './core/timing.js';
 import { DEFAULT_STABILITY_DAYS, MIN_STABILITY_DAYS, MAX_STABILITY_DAYS, GRADE, retrievability, review, due, migrateItem } from './core/srs.js';
 import { handsTogetherById, handsModeFromId, fingeringLabel, gradeHandsTogetherExact, gradeHandsTogetherApprox, bothUnlocked, effectiveHands, prepLine, HANDS_TOGETHER_EXERCISES, isTimedPairId, gradeTimedPair, PAIR_ONSET_TOL_MS, PAIR_RELEASE_TOL_MS, isStagedPairId, handsStageFromId, heldBassMelody, gradeHeldBass, gradeSplitRhythm, SPLIT_MID_TOL_RATIO, gradePositionChange, POSITION_SHIFT_SEMITONES, HANDS_POSITION_EXERCISES, positionPrepLine } from './core/hands-together.js';
-import { createMidiParser } from './core/midi.js';
+import { createMidiParser, describeOutputs, scheduleSong, playOnOutput, stopAll } from './core/midi.js';
 import { createNoteState } from './core/note-state.js';
 import { PCKEYS } from './core/pckeys.js';
 import { createTeardown } from './core/session-teardown.js';
@@ -366,6 +366,8 @@ import { register as registerPathway } from './ui/pathway.js';
   let teardownRunCount = 0;
   teardown.add('mic', () => { if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; micReady = false; } });
   teardown.add('audioContext', () => { if (actx && actx.state === 'running') actx.suspend(); });
+  // "Play it for me" (see midiOutPlay below): a hidden/closed tab must not leave a keyboard sounding.
+  teardown.add('midiOut', () => midiOutStop());
   function runTeardown(reason) { teardownRunCount++; teardown.run(reason); }
   async function refreshMicDevices() {
     if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return;
@@ -2630,6 +2632,42 @@ import { register as registerPathway } from './ui/pathway.js';
     $('midiDetailsText').textContent = lines.join('\n');
   }
   $('midiDetailsBtn').addEventListener('click', function () { this.blur(); const el = $('midiDetails'); el.hidden = !el.hidden; if (!el.hidden) renderMidiDetails(); });
+  // ---------- MIDI out: "Play it for me" ----------
+  // midiOutPorts: the live MIDIAccess.outputs that are connected; midiOutId: the one the learner picked in
+  // #midiOutSelect ('' = none, and then no Play it for me button is offered -- nothing to play to). midiOutBusy
+  // is true from the first scheduled note until the last one ends (or Stop): handleMidiMessage drops input
+  // while it is, since a keyboard that plays itself also reports those notes back as if the learner pressed them.
+  let midiOutPorts = [], midiOutId = '', midiOutBusy = false, midiOutTimer = null, midiOutActive = null, midiOutOnEnd = null;
+  function midiOutSelected() { return midiOutPorts.find(p => p.id === midiOutId) || null; }
+  function midiOutRefresh(access) {
+    const all = []; if (access && access.outputs && access.outputs.forEach) access.outputs.forEach(p => all.push(p));
+    midiOutPorts = all.filter(p => p.state === 'connected');
+    if (midiOutId && !midiOutSelected()) { midiOutStop(); midiOutId = ''; }
+    const sel = $('midiOutSelect'), lab = $('midiOutLabel'); if (!sel) return;
+    while (sel.options.length > 1) sel.remove(1);
+    midiOutPorts.forEach((p, i) => { const o = document.createElement('option'); o.value = p.id; o.textContent = describeOutputs([p]).names[0]; sel.appendChild(o); });
+    sel.value = midiOutId; sel.hidden = lab.hidden = !midiOutPorts.length;
+  }
+  function midiOutStop() {
+    clearTimeout(midiOutTimer); midiOutTimer = null;
+    const out = midiOutActive, done = midiOutOnEnd; midiOutActive = null; midiOutOnEnd = null; midiOutBusy = false;
+    if (out) { try { stopAll(out, 0); } catch (e) {} }
+    if (done) done();
+  }
+  // Schedules one part of `song` on the picked output on the performance.now() timeline (Web MIDI's own
+  // timestamp clock), following song.tempoMap. onEnd fires once, on natural end or Stop.
+  function midiOutPlay(song, partIndex, onEnd) {
+    const out = midiOutSelected(); if (!out) return false;
+    midiOutStop();
+    const startMs = performance.now() + 150;
+    let msgs; try { msgs = scheduleSong(song, { partIndex: partIndex || 0, startMs, channel: 0 }); } catch (e) { return false; }
+    if (!msgs.length) return false;
+    playOnOutput(out, msgs);
+    midiOutActive = out; midiOutOnEnd = onEnd || null; midiOutBusy = true;
+    midiOutTimer = setTimeout(midiOutStop, Math.max(0, msgs[msgs.length - 1].atMs - performance.now()) + 250);
+    return true;
+  }
+  $('midiOutSelect').addEventListener('change', function () { midiOutStop(); midiOutId = this.value || ''; });
   // One raw MIDI message from an opened port: blink, log it for the details
   // readout, parse it (createMidiParser keeps running status per port), and
   // feed note-on/off into onNote()/the real held-note set.
@@ -2642,6 +2680,7 @@ import { register as registerPathway } from './ui/pathway.js';
     midiHeard.add(input); if (midiPortInputs.indexOf(input) !== -1) midiOn = true;
     midiLog.unshift(Array.from(d).map(b => b.toString(16).padStart(2, '0')).join(' ')); if (midiLog.length > 8) midiLog.length = 8;
     ioRefresh();
+    if (midiOutBusy) return; // the keyboard is playing a song back for the learner and echoes its own notes as input -- not the learner playing, so not judged
     let parser = midiParsers.get(input); if (!parser) { parser = createMidiParser(); midiParsers.set(input, parser); }
     parser.feed(d).forEach(evt => { if (evt.type === 'on') { noteState.noteOn(input, evt.channel, evt.note); realMidiHeld.add(evt.note); onNote(evt.note, true, 'midi'); } else { noteState.noteOff(input, evt.channel, evt.note); if (!noteState.isHeld(evt.note)) realMidiHeld.delete(evt.note); onNoteOff(evt.note, 'midi'); } });
   }
@@ -2658,6 +2697,7 @@ import { register as registerPathway } from './ui/pathway.js';
     }
     navigator.requestMIDIAccess().then(a => {
       const wire = () => {
+        midiOutRefresh(a);
         const inputs = []; a.inputs.forEach(i => inputs.push(i));
         // A port this app had open that onstatechange no longer lists at all
         // (unplugged, or Windows handed its note port back to a DAW): null
@@ -3019,6 +3059,8 @@ import { register as registerPathway } from './ui/pathway.js';
     // exposed here so a mounted panel (the keyboard pathway panel) can ask
     // the same question pathwayState needs without reaching past the API.
     midiProof: () => midiPortInputs.some(i => midiHeard.has(i)),
+    // midiOut: "Play it for me" (see midiOutPlay near handleMidiMessage) -- ready() is true only once the learner has picked a connected output.
+    midiOut: { ready: () => !!midiOutSelected(), playing: () => midiOutBusy, play: (song, partIndex, onEnd) => midiOutPlay(song, partIndex, onEnd), stop: () => midiOutStop() },
   };
   //
   //

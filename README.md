@@ -91,9 +91,15 @@ route is unknown (as with a screen-key click) — so a later look at your histor
 played on a real keyboard from one played on the computer keys as a stand-in, without ever
 guessing at a route the app never actually recorded.
 
-The pure scheduling and sending logic for "play it for me" — a song's notes sent out to a
-connected MIDI keyboard so it plays itself — lives in `src/core/midi.js` (`scheduleSong`,
-`playOnOutput`, `stopAll`, `describeOutputs`); there is no button wired to it yet.
+"Play it for me" sends a song's notes out to a connected MIDI keyboard so it plays itself. Open
+"Set up input", pick your keyboard under "Play songs on" (it only appears when the browser
+reports a MIDI output), then press "Play it for me" on a song's practice step; it follows the song's
+own tempo, tempo changes included, and the same button turns into "Stop playing", which silences the
+keyboard at once. Leaving or hiding the tab also stops it. While the keyboard is playing, anything it
+sends back is ignored, so its own playing is never judged as yours. With no output picked there is
+no button, and Check mode never shows it (hearing the answer would spoil the check). The scheduling
+and sending logic lives in `src/core/midi.js` (`scheduleSong`, `playOnOutput`, `stopAll`,
+`describeOutputs`).
 
 When a keyboard song attempt is recorded as played on the computer keys, or pieced together from
 more than one route, "My progress" (below) does not count it as passed on your own: it is practice

@@ -74,6 +74,8 @@ export const en = {
   'setup.inputLabel': 'Input',
   'setup.defaultMic': 'Default microphone',
   'setup.checkMic': 'Check my microphone',
+  'setup.outputLabel': 'Play songs on',
+  'setup.noOutput': 'No MIDI output (silent)',
 
   // "How to play it" panel (src/ui/fingerings.js): the routing fallback for
   // an instrument this app cannot yet draw guidance for, and the badge that
@@ -126,6 +128,8 @@ export const en = {
   // Right/Left control (keyboard two-hand songs only), the prep line naming
   // each hand's starting note, and the "this hand rests" line a step with
   // nothing for the chosen hand shows instead of "Your turn".
+  'songs.playForMe': 'Play it for me',
+  'songs.playForMeStop': 'Stop playing',
   'songs.hands.label': 'Hands',
   'songs.hands.both': 'Both hands',
   'songs.hands.right': 'Right hand',
