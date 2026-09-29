@@ -40,6 +40,8 @@
     <button type="button" class="small" id="midiDetailsBtn" hidden data-i18n="setup.midiDetails">MIDI details</button>
     <label for="micDeviceSelect" class="small" data-i18n="setup.inputLabel">Input</label>
     <select id="micDeviceSelect" aria-label="Input device"><option value="" data-i18n="setup.defaultMic">Default microphone</option></select>
+    <label for="midiOutSelect" class="small" id="midiOutLabel" data-i18n="setup.outputLabel" hidden>Play songs on</label>
+    <select id="midiOutSelect" aria-label="MIDI output" hidden><option value="" data-i18n="setup.noOutput">No MIDI output (silent)</option></select>
     <button type="button" class="small" id="calibrateBtn" data-i18n="setup.checkMic">Check my microphone</button>
     <div class="meterbox thin mic-meter" role="progressbar" aria-label="Microphone level" aria-valuemin="0" aria-valuemax="100"><div id="micLevelFill"></div></div>
     <span id="calibrateResult" role="status"></span>
