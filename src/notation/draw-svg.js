@@ -94,15 +94,40 @@ const DRAWERS = {
   fretNumber: (p) => svgText(String(p.fret), p.x, p.string * 10),
 };
 
-// Renders `primitives` (the same list drawPrimitives() consumes) as a standalone,
-// self-contained SVG document string. `opts.width`/`opts.height` size the viewport;
-// unknown primitive types are skipped, matching drawPrimitives()'s own behavior.
-export function drawSVG(primitives, theme, opts = {}) {
-  const width = opts.width || 400;
-  const height = opts.height || 200;
-  const body = primitives.map((p) => {
+function svgBody(primitives, theme) {
+  return primitives.map((p) => {
     const draw = DRAWERS[p.type];
     return draw ? draw(p, theme) : '';
   }).join('');
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">${body}</svg>`;
+}
+
+// Accessible name/description for the whole document: <title>/<desc> plus role="img" and
+// aria-labelledby, only for the parts opts supplies (no empty elements, no dangling ids).
+function svgA11y(opts) {
+  const ids = [];
+  let inner = '';
+  if (opts.title) { ids.push('svg-title'); inner += `<title id="svg-title">${escapeXML(opts.title)}</title>`; }
+  if (opts.desc) { ids.push('svg-desc'); inner += `<desc id="svg-desc">${escapeXML(opts.desc)}</desc>`; }
+  return { attrs: ids.length ? ` role="img" aria-labelledby="${ids.join(' ')}"` : '', inner };
+}
+
+function svgDoc(width, height, opts, body) {
+  const a = svgA11y(opts);
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"${a.attrs}>${a.inner}${body}</svg>`;
+}
+
+// Renders `primitives` (the same list drawPrimitives() consumes) as a standalone,
+// self-contained SVG document string. `opts.width`/`opts.height` size the viewport;
+// `opts.title`/`opts.desc` (optional) become an escaped <title>/<desc> for screen readers;
+// unknown primitive types are skipped, matching drawPrimitives()'s own behavior.
+export function drawSVG(primitives, theme, opts = {}) {
+  return svgDoc(opts.width || 400, opts.height || 200, opts, svgBody(primitives, theme));
+}
+
+// Renders a whole sheet: `rows` are layoutSong()'s rows ({ y0, primitives }), each drawn in
+// its own <g class="row"> translated down by y0 -- the same offset the canvas print path
+// applies with ctx.translate -- so the file stacks rows exactly as the screen does.
+export function drawSVGRows(rows, theme, opts = {}) {
+  const body = rows.map((row) => `<g class="row" transform="translate(0 ${row.y0 || 0})">${svgBody(row.primitives, theme)}</g>`).join('');
+  return svgDoc(opts.width || 400, opts.height || 200, opts, body);
 }
