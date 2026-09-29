@@ -23,7 +23,6 @@ const SRC_JS = join(root, 'src', 'app.js');
 // file has to leave this list, not rot in it) and must genuinely be outside
 // the bundle -- reachable.test.mjs itself checks both.
 const ALLOW_LIST = {
-  'src/core/model-pack.js': 'opt-in model loading, parked pending a product decision (plan 2026-09-19 / 09-24)',
   'src/instruments/schema.js': 'instrument record validator, run by tests/unit only',
   'src/notation/draw-svg.js': 'SVG notation renderer, parked pending a product decision (README:583-584)',
   'src/song/eval/note-f1.js': 'CI evaluation harness (tests/unit/eval-*.test.mjs)',

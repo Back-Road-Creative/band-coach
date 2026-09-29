@@ -176,3 +176,17 @@ test('sha256Hex hashes real bytes via an injected SubtleCrypto-like digest funct
   const hex = await sha256Hex(new TextEncoder().encode('x').buffer, fakeSubtle);
   assert.equal(hex, 'dead');
 });
+
+test('createIndexedDBStore returns null (not a throw) when there is no indexedDB', async () => {
+  const { createIndexedDBStore } = await import('../../src/core/model-pack.js');
+  assert.equal(createIndexedDBStore({ indexedDB: null }), null);
+});
+
+test('a missing or unreadable manifest rejects with code no-manifest; a bad download does not', async () => {
+  const { loadPack, createMemoryStore } = await import('../../src/core/model-pack.js');
+  const store = createMemoryStore();
+  await assert.rejects(loadPack({ manifestUrl: 'x', store, fetchImpl: async () => ({ ok: false }) }), { code: 'no-manifest' });
+  await assert.rejects(loadPack({ manifestUrl: 'x', store, fetchImpl: async () => { throw new Error('offline'); } }), { code: 'no-manifest' });
+  const fetchImpl = async (u) => u === 'x' ? { ok: true, json: async () => ({ name: 'n', version: '1', sha256: 'a', url: 'y' }) } : { ok: false };
+  await assert.rejects(loadPack({ manifestUrl: 'x', store, fetchImpl }), (e) => e.code !== 'no-manifest');
+});

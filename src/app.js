@@ -15,6 +15,7 @@ import { createTeardown } from './core/session-teardown.js';
 // slot line, so parallel branches never edit adjacent lines.
 import { recordError, getErrors } from './core/error-log.js';
 import { resolveAppVersion, DEV_VERSION } from './core/version.js';
+import { loadPack, packStatus, createIndexedDBStore, packManifestUrl, DEFAULT_MODEL_PACK } from './core/model-pack.js';
 import { checkForUpdate, FALLBACK_DOWNLOAD_URL } from './core/update-check.js';
 import { setNoteNaming, sanitizeNoteNaming, name as noteNameFor } from './core/note-names.js';
 import { t } from './core/i18n.js';
@@ -2968,6 +2969,28 @@ import { register as registerPathway } from './ui/pathway.js';
       checkForUpdate({ currentVersion: APP_VERSION, fetchImpl: typeof fetch === 'function' ? fetch : undefined })
         .then(renderUpdateResult, () => renderUpdateResult({ status: 'error', downloadUrl: FALLBACK_DOWNLOAD_URL }))
         .then(() => { updBtn.disabled = false; });
+    });
+  })();
+
+  // ---------- optional model pack: same consent-on-press shape as the update check above. Nothing
+  // is requested until the button is pressed; the status line only ever READS the local IndexedDB
+  // cache (src/core/model-pack.js carries fetch/verify/cache policy and is unit-tested on its own).
+  (function () {
+    const btn = $('modelPackBtn'), out = $('modelPackStatus');
+    if (!btn || !out) return;
+    const store = createIndexedDBStore(), inFlight = new Set();
+    if (!store) { btn.disabled = true; out.textContent = t('modelPack.noStorage'); return; }
+    function render() {
+      packStatus({ store, packName: DEFAULT_MODEL_PACK, inFlight }).then(s => { out.textContent = s.state === 'cached' ? t('modelPack.cached', { version: s.version }) : s.state === 'downloading' ? t('modelPack.downloading') : t('modelPack.absent'); }, () => { out.textContent = t('modelPack.absent'); });
+    }
+    render();
+    btn.addEventListener('click', function () {
+      this.blur();
+      if (btn.disabled) return;
+      btn.disabled = true; out.textContent = t('modelPack.downloading');
+      loadPack({ manifestUrl: packManifestUrl(), fetchImpl: typeof fetch === 'function' ? fetch : undefined, store, inFlight })
+        .then(() => render(), e => { out.textContent = t(e && e.code === 'no-manifest' ? 'modelPack.notPublished' : 'modelPack.failed'); })
+        .then(() => { btn.disabled = false; });
     });
   })();
 
