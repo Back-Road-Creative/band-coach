@@ -78,6 +78,14 @@
       </div>
     </div>
     <div class="settings-group">
+      <h3 data-i18n="settings.modelPack">Model pack</h3>
+      <div class="update-check">
+        <button type="button" class="small" id="modelPackBtn" data-i18n="rail.modelPack">Download model pack</button>
+        <p class="update-check-help" id="modelPackHelp" data-i18n="rail.modelPackHelp">Optional. An extra download that some features can use; Band Coach works fully without it. Only fetched when you press the button, and nothing about your playing is sent.</p>
+        <span id="modelPackStatus" role="status"></span>
+      </div>
+    </div>
+    <div class="settings-group">
       <h3 data-i18n="settings.how">How this works</h3>
       <p id="helpText"></p>
       <p><strong>How it decides:</strong> no dice. The next exercise is always the item or move with the largest need score (low knowledge, weak move, not seen lately), so the same results always give the same lesson. Knowledge fades if you stay away, so old material comes back.</p>

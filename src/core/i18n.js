@@ -40,6 +40,12 @@ export const en = {
   'update.behind': 'Version {version} is out. ',
   'update.error': "Couldn't reach the update server. ",
   'update.downloadLinkText': 'Download the current version',
+  'modelPack.absent': 'Not downloaded.',
+  'modelPack.downloading': 'Downloading…',
+  'modelPack.cached': 'Downloaded (version {version}).',
+  'modelPack.notPublished': 'No model pack is published yet.',
+  'modelPack.failed': "The download didn't finish, so nothing was kept. Try again.",
+  'modelPack.noStorage': "This browser can't keep a download, so the model pack isn't available here.",
 
   // Static page labels -- headings, button text, help copy that src/app.js
   // never rewrites at runtime. Applied once at startup by applyStaticLabels
@@ -60,6 +66,7 @@ export const en = {
   'settings.language': 'Language',
   'settings.backups': 'Backups and reset',
   'settings.updates': 'Updates',
+  'settings.modelPack': 'Model pack',
   'settings.how': 'How this works',
   'songs.addRow': 'Add a song',
   // A9: the collapsible <summary> wrapping the song list, Carry-on banner
@@ -113,6 +120,8 @@ export const en = {
   'rail.backupSave': 'Save a backup',
   'rail.backupRestore': 'Restore a backup',
   'rail.checkUpdates': 'Check for updates',
+  'rail.modelPack': 'Download model pack',
+  'rail.modelPackHelp': 'Optional. An extra download that some features can use; Band Coach works fully without it. Only fetched when you press the button, and nothing about your playing is sent.',
   'rail.updateHelp': 'Asks the Band Coach website for the latest version number. Sends nothing about your playing.',
   // Keyboard practice -> Songs hand-off (C11a): the button that opens a
   // starter song's lesson once the notes it uses are all taught, and the
