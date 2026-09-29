@@ -72,6 +72,7 @@ import { requestOpenInEditor } from './editor.js';
 import { sanitizeStatusLedger, markDraft, markChecked, statusFor, statusLabel } from './songs/song-status.js';
 import { layoutSong } from './editor/layout-song.js';
 import { drawPrimitives } from '../notation/draw-canvas.js';
+import { drawSVGRows } from '../notation/draw-svg.js';
 import { instrumentSetup } from './fingerings/setup.js';
 import { renderHowInline } from './fingerings.js';
 import { arrangeFor, songForArrangement } from '../song/arrange/index.js';
@@ -1061,6 +1062,25 @@ function mountSongsPanel(hostEl, api) {
       },
     });
 
+    // The layout both "Print" (canvas) and "Download sheet (SVG)" draw from: part 1 of THIS
+    // song laid out by layoutSong() at SHEET_WIDTH for the CURRENT instrument's clef.
+    // Clef: the same rule clefFor() in editor.js applies to the CURRENT instrument's
+    // record (rec.clefs) -- a grand-staff instrument (kbd) gets 'grand', anything else
+    // its own first listed clef, 'treble' when no instrument is picked yet.
+    // Key name: the same PC-to-key-name table keyName() in editor.js uses, for the same
+    // { tonic, mode } shape (src/song/model.js) -- not exported there, so kept here too.
+    const SHEET_WIDTH = 340;
+    function songSheetLayout(song) {
+      const rec = api.instrument(api.mod());
+      const clef = rec && Array.isArray(rec.clefs) && rec.clefs.length
+        ? (rec.clefs.indexOf('grand') >= 0 ? 'grand' : rec.clefs[0])
+        : 'treble';
+      const key = song.key
+        ? (song.key.mode === 'minor' ? PC_TO_MINOR_KEY[song.key.tonic] : PC_TO_MAJOR_KEY[song.key.tonic])
+        : 'C';
+      return layoutSong(song, 0, { clef, key, width: SHEET_WIDTH });
+    }
+
     // "Print": lays out part 1 of THIS song (src/ui/editor/layout-song.js -- the same call
     // editor.js's own render() makes for the notation canvas) onto a hidden black-on-white
     // sheet (printSheetEl above), then opens the browser's print dialog the same way
@@ -1079,20 +1099,8 @@ function mountSongsPanel(hostEl, api) {
         printSheetEl.querySelector('h1').textContent = song.title;
         const canvas = printSheetEl.querySelector('canvas');
 
-        // Clef: the same rule clefFor() in editor.js applies to the CURRENT instrument's
-        // record (rec.clefs) -- a grand-staff instrument (kbd) gets 'grand', anything else
-        // its own first listed clef, 'treble' when no instrument is picked yet.
-        const rec = api.instrument(api.mod());
-        const clef = rec && Array.isArray(rec.clefs) && rec.clefs.length
-          ? (rec.clefs.indexOf('grand') >= 0 ? 'grand' : rec.clefs[0])
-          : 'treble';
-        // Key name: the same PC-to-key-name table keyName() in editor.js uses, for the same
-        // { tonic, mode } shape (src/song/model.js) -- not exported there, so kept here too.
-        const key = song.key
-          ? (song.key.mode === 'minor' ? PC_TO_MINOR_KEY[song.key.tonic] : PC_TO_MAJOR_KEY[song.key.tonic])
-          : 'C';
-        const width = 340;
-        const layout = layoutSong(song, 0, { clef, key, width });
+        const width = SHEET_WIDTH;
+        const layout = songSheetLayout(song);
         canvas.width = width;
         canvas.height = layout.barCount * layout.rowHeight;
         const ctx = canvas.getContext('2d');
@@ -1117,12 +1125,34 @@ function mountSongsPanel(hostEl, api) {
       },
     });
 
+    // "Download sheet (SVG)": the same rows "Print" draws on canvas, as one standalone SVG
+    // file (src/notation/draw-svg.js) with the song title as its <title> and the instrument
+    // and part as its <desc>, saved through the shared triggerDownload().
+    const sheetBtn = el('button', {
+      type: 'button', class: 'panel-songs-action-sheet', text: t('songs.sheetDownload'),
+      onclick: () => {
+        let svg;
+        try {
+          const layout = songSheetLayout(song);
+          const rec = api.instrument(api.mod());
+          const desc = rec && rec.name ? t('songs.sheetDesc', { instrument: rec.name }) : t('songs.sheetDescNoInstrument');
+          svg = drawSVGRows(layout.rows, {}, { width: SHEET_WIDTH, height: Math.max(1, layout.barCount * layout.rowHeight), title: song.title, desc });
+        } catch (e) {
+          say(t('songs.sheetError', { reason: e && e.message ? e.message : String(e) }), 'no');
+          return;
+        }
+        const fileBase = (song.title || 'song').replace(/[^\w.-]+/g, '_') || 'song';
+        triggerDownload([svg], 'image/svg+xml', fileBase + '.svg');
+      },
+    });
+
     songHeaderSection.appendChild(editBtn);
     songHeaderSection.appendChild(playAlongBtn);
     songHeaderSection.appendChild(exportBtn);
     songHeaderSection.appendChild(shareBtn);
     songHeaderSection.appendChild(saveCopyBtn);
     songHeaderSection.appendChild(printBtn);
+    songHeaderSection.appendChild(sheetBtn);
   }
 
   function openSong(song, libraryId) {
