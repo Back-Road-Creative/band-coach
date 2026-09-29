@@ -12,6 +12,8 @@
 //   window.__midiSend(id, bytes)            -- deliver a raw message (plain array of byte numbers) on a port
 //   window.__midiSetOpenResult(id, ok)      -- make that port's input.open() resolve (true) or reject (false)
 //   window.__midiReject()                   -- makes the NEXT requestMIDIAccess() call reject (permission denied)
+//   window.__midiAddOutput(id, name)        -- add an output port (MIDIOutput shape); its send(bytes, atMs) is recorded
+//   window.__midiOutSent                    -- every {id, bytes, atMs} any output was sent, in call order
 //   window.__midiMakeUnavailable()          -- deletes navigator.requestMIDIAccess entirely (no Web MIDI at all)
 export const FAKE_MIDI_INIT = `
   window.__midiPorts = new Map();
@@ -34,6 +36,16 @@ export const FAKE_MIDI_INIT = `
       },
     };
   }
+
+  window.__midiOutPorts = new Map();
+  window.__midiOutSent = [];
+  window.__midiAddOutput = function (id, name) {
+    const out = { id: id, name: name, manufacturer: 'Fake Instruments', type: 'output', state: 'connected', connection: 'closed',
+      send: function (bytes, atMs) { window.__midiOutSent.push({ id: id, bytes: Array.from(bytes), atMs: atMs }); } };
+    window.__midiOutPorts.set(id, out);
+    window.__midiAccessListeners.forEach(function (fn) { fn({ port: out }); });
+    return out;
+  };
 
   window.__midiAddPort = function (id, name, state) {
     const input = __midiMakeInput(id, name, state);
@@ -65,7 +77,7 @@ export const FAKE_MIDI_INIT = `
     configurable: true,
     value: function () {
       if (window.__midiRejectNext) { window.__midiRejectNext = false; return Promise.reject(new Error('Permission denied')); }
-      const access = { inputs: { forEach: function (fn) { window.__midiPorts.forEach(fn); } }, outputs: { forEach: function () {} }, onstatechange: null };
+      const access = { inputs: { forEach: function (fn) { window.__midiPorts.forEach(fn); } }, outputs: { forEach: function (fn) { window.__midiOutPorts.forEach(fn); } }, onstatechange: null };
       window.__midiAccessListeners.push(function (ev) { if (access.onstatechange) access.onstatechange(ev); });
       window.__midiAccess = access;
       return Promise.resolve(access);
@@ -75,6 +87,14 @@ export const FAKE_MIDI_INIT = `
 
 export async function midiAddPort(page, id, name, state = 'connected') {
   await page.evaluate(`window.__midiAddPort(${JSON.stringify(id)}, ${JSON.stringify(name)}, ${JSON.stringify(state)})`);
+}
+
+export async function midiAddOutput(page, id, name) {
+  await page.evaluate(`window.__midiAddOutput(${JSON.stringify(id)}, ${JSON.stringify(name)})`);
+}
+
+export async function midiOutSent(page) {
+  return page.evaluate('window.__midiOutSent');
 }
 
 export async function midiRemovePort(page, id) {
