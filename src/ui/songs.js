@@ -52,7 +52,7 @@ import { capabilityFor } from '../instruments/capability.js';
 import { importerFor } from './songs/import-route.js';
 import { judgeAttempt, passesRule, firstCorrection, phraseSec } from './songs/practice.js';
 import { createSongClock } from '../song/clock.js';
-import { phaseOf, repairFor } from '../core/teaching.js';
+import { phaseOf, repairFor, interludeAfter, addReview, dueReviews, dropReviews, sanitizeReviewQueue } from '../core/teaching.js';
 import { barHeat, worstBars } from '../song/bar-heat.js';
 import { dimsFromStep, assessmentLines } from './songs/assessed.js';
 import { createLoopBackingTransport, applyAttemptToTransport, backingBpm, rateLabel } from './songs/loop-backing.js';
@@ -534,6 +534,14 @@ function mountSongsPanel(hostEl, api) {
   // sanitizeStatusLedger() -- never trusted as already-clean, the same rule
   // every other api.store() read in this file follows.
   const statusStore = api.store('song-status');
+  // Delayed reviews (src/core/teaching.js interludeAfter/addReview): a passed
+  // passage with no next section to carry the skill into is queued here and
+  // offered once, at the top of that song's lesson in a LATER app session
+  // (sessionStartedAt is this panel's own start -- entries older than it are
+  // "next session"). Always read through sanitizeReviewQueue, never trusted.
+  const reviewStore = api.store('songs-review');
+  const sessionStartedAt = Date.now();
+  const reviewQueue = () => sanitizeReviewQueue(reviewStore.get());
   function songStatusLedger() { return sanitizeStatusLedger(statusStore.get()); }
   function setSongStatus(fn, songId, opts) {
     statusStore.set(opts !== undefined ? fn(songStatusLedger(), songId, opts) : fn(songStatusLedger(), songId));
@@ -1275,7 +1283,7 @@ function mountSongsPanel(hostEl, api) {
     // on -- built once per practice session, not per step, so a phrase
     // crossing a tempoMap change plays, counts in and is judged against the
     // same tempo curve throughout.
-    practice = { song: arrangedSong, baseSong: song, partId, instrument, instrumentId, plan, arrangement, results: resumeEntry ? resumeEntry.tail.slice() : [], stepIndex: resumeEntry ? resumeEntry.stepIndex : 0, repair: null, recording: false, countingIn: false, countInTimer: null, playedEvents: [], recordStartSec: 0, stop: null, loopTransport: null, loopTransportStepIndex: null, clock: createSongClock(arrangedSong), mode, assistance, hands, lastCheckVerdict: null, lessonKey: lessonKeyValue, resumeRate: resumeEntry ? resumeEntry.rate : null, returnTo: opts.returnTo || null };
+    practice = { song: arrangedSong, baseSong: song, partId, instrument, instrumentId, plan, arrangement, results: resumeEntry ? resumeEntry.tail.slice() : [], stepIndex: resumeEntry ? resumeEntry.stepIndex : 0, repair: null, interlude: null, transferNote: null, recording: false, countingIn: false, countInTimer: null, playedEvents: [], recordStartSec: 0, stop: null, loopTransport: null, loopTransportStepIndex: null, clock: createSongClock(arrangedSong), mode, assistance, hands, lastCheckVerdict: null, lessonKey: lessonKeyValue, resumeRate: resumeEntry ? resumeEntry.rate : null, returnTo: opts.returnTo || null };
     currentPractice = practice;
     if (resumeEntry) say('Picking up where you left off.', 'ok');
     saveLesson();
@@ -1420,6 +1428,7 @@ function mountSongsPanel(hostEl, api) {
     if (stepIndex >= plan.steps.length) {
       markSongPassed(practice.song.id);
       practiceSection.appendChild(el('p', { text: 'Nicely done. You have played through the whole piece.' }));
+      if (practice.transferNote) practiceSection.appendChild(el('p', { class: 'panel-songs-transfer-note', text: practice.transferNote }));
       // The whole-piece verdict (Check mode only): the same line shown next
       // to the heat strip on a normal step render, below, repeated here so
       // it is still visible once the last step's own strip is replaced by
@@ -1449,6 +1458,10 @@ function mountSongsPanel(hostEl, api) {
         const returnTo = practice.returnTo;
         practiceSection.appendChild(el('button', { type: 'button', text: t('kbd.songHandoff.back'), onclick: () => { practice = null; currentPractice = null; api.setMod(returnTo); } }));
       }
+      return;
+    }
+    if (practice.interlude) {
+      renderInterlude(practice.interlude);
       return;
     }
     if (practice.repair) {
@@ -1646,6 +1659,17 @@ function mountSongsPanel(hostEl, api) {
       if (sentences.length) practiceSection.appendChild(el('p', { class: 'panel-songs-hands-prep', text: sentences.join(' ') }));
     }
 
+    // A transfer note (advance() below): the passage just passed had no next
+    // section, so a review of it was queued for a later session.
+    if (practice.transferNote) practiceSection.appendChild(el('p', { class: 'panel-songs-transfer-note', text: practice.transferNote }));
+    // A review queued in an EARLIER session, offered on this song's first step
+    // (never in Check, which shows the learner nothing to lean on).
+    if (stepIndex === 0 && practice.mode !== 'check') {
+      dueReviews(reviewQueue(), { songId: practice.song.id, partId: practice.partId, before: sessionStartedAt }).forEach((r) => {
+        practiceSection.appendChild(el('p', { class: 'panel-songs-review-due', text: t('songs.review.due', { bars: (r.bars[0] + 1) + '-' + (r.bars[1] + 1) }) }));
+      });
+    }
+
     // Check verdict (advance() below sets/clears it): whether the last
     // passed judged try actually counted, or was practice only -- shown
     // next to the heat strip.
@@ -1674,6 +1698,27 @@ function mountSongsPanel(hostEl, api) {
     if (stepIndex === 0) {
       practiceSection.appendChild(renderPlayItOn(practice.song, practice.partId, practice.instrumentId));
     }
+  }
+
+  // A demo or transfer step (src/core/teaching.js interludeAfter): never
+  // judged, no record button, nothing pushed onto practice.results -- "Next"
+  // just clears it and the plan step nextStep already picked shows. A demo
+  // plays the passage slowly once when it opens (the click that got here
+  // is the gesture the audio needs) and again on "Play it slowly".
+  function renderInterlude(step) {
+    const span = (b) => 'bars ' + (b[0] + 1) + '-' + (b[1] + 1);
+    if (step.kind === 'demo') {
+      practiceSection.appendChild(el('h4', { text: t('songs.demo.title') + ' (' + span(step.bars) + ')' }));
+      practiceSection.appendChild(el('p', { text: t('songs.demo.body') }));
+      if (step.notes.length && practice.instrument.kit) renderStepView(practiceSection, kitView(practice.song, step));
+      else if (step.notes.length) renderStepView(practiceSection, staffView(practice.song, step, practice.instrument, practice.arrangement));
+      practiceSection.appendChild(el('button', { type: 'button', text: t('songs.demo.again'), onclick: () => playPhrase(step) }));
+      playPhrase(step);
+    } else {
+      practiceSection.appendChild(el('h4', { text: t('songs.transfer.title') }));
+      practiceSection.appendChild(el('p', { text: t('songs.transfer.body', { from: span(step.fromBars), to: span(step.toBars) }) }));
+    }
+    practiceSection.appendChild(el('button', { type: 'button', text: 'Next', onclick: () => { practice.interlude = null; renderPractice(); } }));
   }
 
   // A repair step (src/core/teaching.js repairFor) is a handful of notes,
@@ -2215,6 +2260,24 @@ function mountSongsPanel(hostEl, api) {
     }
     practice.stepIndex = nextStep(practice.plan, practice.results);
     practice.playedEvents = [];
+    // Demo / transfer (src/core/teaching.js interludeAfter, driven by
+    // nextPhase): an unjudged step between the one just done and the plan
+    // step nextStep chose -- practice.stepIndex is already the plan position,
+    // the interlude sits on top of it like a repair does. With no next
+    // section to carry the skill into, the review is queued instead, and the
+    // learner is only told (transferNote), not stopped.
+    practice.transferNote = null;
+    practice.interlude = null;
+    const inter = interludeAfter({ prev: step, passed, next: practice.plan.steps[practice.stepIndex] || null, mode: practice.mode, unassessed: !!opts.unassessed });
+    if (inter && inter.blocking) practice.interlude = inter.step;
+    else if (inter && inter.review) {
+      reviewStore.set({ v: 1, items: addReview(reviewQueue(), { ...inter.review, songId: practice.song.id, partId: practice.partId, instrumentId: practice.instrumentId }, Date.now()) });
+      practice.transferNote = t('songs.transfer.queued', { bars: (inter.review.bars[0] + 1) + '-' + (inter.review.bars[1] + 1) });
+    }
+    // The learner moved on from the top of this lesson, so a review queued
+    // in an earlier session has been offered -- drop it (never in Check,
+    // which does not show it).
+    if (practice.mode !== 'check') reviewStore.set({ v: 1, items: dropReviews(reviewQueue(), { songId: practice.song.id, partId: practice.partId, before: sessionStartedAt }) });
     saveLesson();
     // The lesson just reached its end (the "whole piece" step passed): log
     // this practice session once, the same moment endSession() logs a

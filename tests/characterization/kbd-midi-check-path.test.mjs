@@ -23,6 +23,7 @@ import { buildLessonPlan } from '../../src/song/lesson.js';
 import { byId as instrumentById } from '../../src/instruments/index.js';
 import { isIndependentOk } from '../../src/core/learning-events.js';
 import { pathwayState } from '../../src/core/pathway.js';
+import { skipDemo } from '../helpers/songs-demo.mjs';
 
 const htmlPath = HTML_PATH;
 const TPQ = 480;
@@ -182,6 +183,7 @@ async function walkToStep(page, plan, targetKind, hands) {
     if (!heading.startsWith(STEP_HEADING[step.kind])) continue;
     if (!step.passRule) {
       await clickButtonNamed(page, 'Next');
+      await skipDemo(page);
       continue;
     }
     const beforeWalk = await page.evaluate('window.__coach.db().events.length');
@@ -235,7 +237,7 @@ async function attemptRhythmStep(page, { mode, hands, preClick, sendJs }) {
   await clickMode(page, mode);
   if (hands) await selectHands(page, hands);
   const heading0 = await currentHeading(page);
-  if (heading0.startsWith('Listen')) await clickButtonNamed(page, 'Next');
+  if (heading0.startsWith('Listen')) { await clickButtonNamed(page, 'Next'); await skipDemo(page); }
   await page.waitFor("document.querySelector('.panel-songs-practice h4') && document.querySelector('.panel-songs-practice h4').textContent.startsWith('Clap the rhythm')");
   if (preClick) await clickButtonNamed(page, preClick);
   const before = await page.evaluate('window.__coach.db().events.length');

@@ -49,6 +49,10 @@ async function leaveAndReturnMidLesson(page) {
 
   await tabToText(page, '.panel-songs-practice button', 'Next');
   await page.press('Enter');
+  // Learn mode's unjudged "Watch and listen" step sits between them; Next again, by keyboard.
+  await page.waitFor("document.querySelector('.panel-songs-practice h4').textContent.startsWith('Watch and listen')");
+  await tabToText(page, '.panel-songs-practice button', 'Next');
+  await page.press('Enter');
   await page.waitFor("document.querySelector('.panel-songs-practice h4').textContent.startsWith('Clap the rhythm')");
 
   await tabToText(page, '#mainNav button[data-route="practice"]', 'Practice');

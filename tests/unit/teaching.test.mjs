@@ -252,3 +252,104 @@ test('repairFor: pitches step (bpm 0, untimed) stays untimed in the repair', () 
   const repair = repairFor(untimedStep, result, untimedStep.passRule);
   assert.equal(repair.bpm, 0);
 });
+
+// ---------------------------------------------------------------------------
+// demo / transfer step kinds, driven by nextPhase (interludeAfter) + the
+// delayed-review queue (transfer with no next section)
+// ---------------------------------------------------------------------------
+
+import { interludeAfter, demoFor, addReview, dueReviews, dropReviews, sanitizeReviewQueue, REVIEW_MAX } from '../../src/core/teaching.js';
+
+const listen = { kind: 'listen', phraseIndex: 0, bars: [0, 1], originTick: 0, bpm: 100, tempoScale: 1, notes: [{ midi: 60, start: 0, dur: 480 }], passRule: null };
+const rhythm = { kind: 'rhythm', phraseIndex: 0, bars: [0, 1], originTick: 0, bpm: 100, tempoScale: 1, notes: listen.notes, passRule: { hitRate: 0.8 } };
+const ladder0 = { kind: 'tempo-ladder', phraseIndex: 0, bars: [0, 1], passRule: { hitRate: 0.8 }, notes: [] };
+const ladder0b = { ...ladder0, tempoScale: 1 };
+const listen1 = { kind: 'listen', phraseIndex: 1, bars: [2, 3], passRule: null, notes: [] };
+const chain1 = { kind: 'chain', phraseIndex: 1, bars: [0, 3], passRule: { hitRate: 0.8 }, notes: [] };
+const whole = { kind: 'whole', phraseIndex: null, bars: [0, 3], passRule: { hitRate: 0.8 }, notes: [] };
+
+test('phaseOf: demo and transfer step kinds map to their own phases', () => {
+  assert.equal(phaseOf({ kind: 'demo', passRule: null }), 'demo');
+  assert.equal(phaseOf({ kind: 'transfer', passRule: null }), 'transfer');
+});
+
+test('demoFor: a slow, unjudged copy of the passage', () => {
+  const d = demoFor(listen);
+  assert.equal(d.kind, 'demo');
+  assert.equal(d.passRule, null);
+  assert.equal(d.bpm, 55);
+  assert.deepEqual(d.bars, [0, 1]);
+  assert.equal(d.notes, listen.notes);
+  assert.equal(demoFor({ ...listen, bpm: 0 }).bpm, 0);
+});
+
+test('interludeAfter: explain -> demo before a guided step, Learn only', () => {
+  const r = interludeAfter({ prev: listen, passed: true, next: rhythm, mode: 'learn' });
+  assert.equal(r.step.kind, 'demo');
+  assert.equal(nextPhase(phaseOf(listen), true), 'demo');
+  assert.equal(interludeAfter({ prev: listen, passed: true, next: rhythm, mode: 'check' }), null);
+  assert.equal(interludeAfter({ prev: listen, passed: true, next: rhythm, mode: 'rehearse' }), null);
+  assert.equal(interludeAfter({ prev: listen, passed: true, next: null, mode: 'learn' }), null);
+});
+
+test('interludeAfter: no interlude between guided/check steps, on a fail, or while a phrase is mid-ladder', () => {
+  assert.equal(interludeAfter({ prev: rhythm, passed: true, next: { ...rhythm, kind: 'pitches' }, mode: 'learn' }), null);
+  assert.equal(interludeAfter({ prev: ladder0, passed: false, next: ladder0, mode: 'learn' }), null);
+  assert.equal(interludeAfter({ prev: ladder0, passed: true, next: ladder0b, mode: 'learn' }), null);
+  assert.equal(interludeAfter({ prev: ladder0, passed: true, next: ladder0b, mode: 'learn' }), null);
+});
+
+test('interludeAfter: check passed with a next section -> transfer step naming both spans, no review', () => {
+  const r = interludeAfter({ prev: ladder0, passed: true, next: listen1, mode: 'learn' });
+  assert.equal(r.step.kind, 'transfer');
+  assert.deepEqual(r.step.fromBars, [0, 1]);
+  assert.deepEqual(r.step.toBars, [2, 3]);
+  assert.equal(r.review, null);
+  assert.equal(r.blocking, true);
+});
+
+test('interludeAfter: check passed with no next section -> non-blocking delayed review of that section', () => {
+  const r = interludeAfter({ prev: ladder0, passed: true, next: chain1, mode: 'learn' });
+  assert.equal(r.blocking, false);
+  assert.equal(r.step.kind, 'transfer');
+  assert.deepEqual(r.review, { phraseIndex: 0, bars: [0, 1], kind: 'tempo-ladder' });
+  const end = interludeAfter({ prev: whole, passed: true, next: null, mode: 'learn' });
+  assert.equal(end.blocking, false);
+  assert.equal(end.review.phraseIndex, null);
+  // Check never writes anything, nor does a rested (unassessed) hand.
+  assert.equal(interludeAfter({ prev: ladder0, passed: true, next: chain1, mode: 'check' }), null);
+  assert.equal(interludeAfter({ prev: ladder0, passed: true, next: chain1, mode: 'learn', unassessed: true }), null);
+});
+
+test('review queue: add dedupes, caps, and only past-session entries are due for that song+part', () => {
+  let q = addReview([], { songId: 's', partId: 'p', instrumentId: 'kbd', phraseIndex: 0, bars: [0, 1], kind: 'whole' }, 1000);
+  q = addReview(q, { songId: 's', partId: 'p', instrumentId: 'kbd', phraseIndex: 0, bars: [0, 1], kind: 'whole' }, 2000);
+  q = addReview(q, { songId: 's', partId: 'p', instrumentId: 'kbd', phraseIndex: null, bars: [0, 3], kind: 'whole' }, 2500);
+  assert.equal(q.length, 1, 'one review per song+part: the later passage replaces the earlier');
+  assert.deepEqual(q[0].bars, [0, 3]);
+  assert.equal(q[0].at, 2500);
+  assert.equal(dueReviews(q, { songId: 's', partId: 'p', before: 2500 }).length, 0);
+  assert.equal(dueReviews(q, { songId: 's', partId: 'p', before: 2501 }).length, 1);
+  assert.equal(dueReviews(q, { songId: 'other', partId: 'p', before: 9999 }).length, 0);
+  assert.equal(dropReviews(q, { songId: 's', partId: 'p', before: 2501 }).length, 0);
+  let big = [];
+  for (let i = 0; i < REVIEW_MAX + 5; i++) big = addReview(big, { songId: 's' + i, partId: 'p', instrumentId: 'kbd', phraseIndex: 0, bars: [0, 1], kind: 'whole' }, i);
+  assert.equal(big.length, REVIEW_MAX);
+  assert.equal(big[0].songId, 's' + (REVIEW_MAX + 4), 'newest first');
+});
+
+test('sanitizeReviewQueue: never trusts saved data, round-trips a clean queue through JSON', () => {
+  assert.deepEqual(sanitizeReviewQueue(null), []);
+  assert.deepEqual(sanitizeReviewQueue({ items: 'x' }), []);
+  const q = addReview([], { songId: 's', partId: 'p', instrumentId: 'kbd', phraseIndex: 1, bars: [2, 3], kind: 'chain' }, 5);
+  assert.deepEqual(sanitizeReviewQueue(JSON.parse(JSON.stringify({ v: 1, items: q }))), q);
+  assert.deepEqual(sanitizeReviewQueue({ items: [null, 3, { songId: 's' }, { songId: 's', partId: 'p', bars: 'no', at: 1 }] }), []);
+});
+
+import { sanitizePanelData } from '../../src/ui/panels.js';
+
+test('review queue survives the saved-db panel sanitiser (save/load/backup path)', () => {
+  const q = addReview([], { songId: 's', partId: 'p', instrumentId: 'kbd', phraseIndex: null, bars: [0, 3], kind: 'whole' }, 7);
+  const back = sanitizePanelData(JSON.parse(JSON.stringify({ 'songs-review': { v: 1, items: q } })));
+  assert.deepEqual(sanitizeReviewQueue(back['songs-review']), q);
+});

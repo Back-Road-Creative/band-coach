@@ -16,6 +16,7 @@ import { starterSongs } from '../../src/song/starter/index.js';
 import { buildLessonPlan } from '../../src/song/lesson.js';
 import { byId as instrumentById } from '../../src/instruments/index.js';
 import { en } from '../../src/core/i18n.js';
+import { skipDemo } from '../helpers/songs-demo.mjs';
 
 const htmlPath = HTML_PATH;
 
@@ -177,6 +178,7 @@ test('Learn logs a shown row with no check-result line', async (t) => {
 
   await openHotCrossBuns(page);
   await clickButtonNamed(page, 'Next');
+  await skipDemo(page);
   await page.waitFor("document.querySelector('.panel-songs-practice h4').textContent.startsWith('Clap the rhythm')");
 
   const before = await page.evaluate('window.__coach.db().events.length');
@@ -207,6 +209,7 @@ test('Check never reads or writes the saved place; Rehearse shares Learn\'s', as
 
   await openHotCrossBuns(page);
   await clickButtonNamed(page, 'Next');
+  await skipDemo(page); // the mode control is not on the unjudged demo screen
   await page.waitFor(
     "(() => { try { const l = JSON.parse(localStorage.getItem('bandcoach.v1')).panels.songs.lessons[0]; return l.stepIndex === 1 && l.key.assist === 'shown'; } catch (e) { return false; } })()"
   );
