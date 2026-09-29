@@ -27,6 +27,8 @@ import { FFTProcessor } from '../audio/analysis/fft.js';
 import { detectPitches } from '../audio/analysis/multipitch.js';
 import { assignVoices } from './voices-assign.js';
 import { quantizeNotes } from './quantize.js';
+import { tempoMapFromBeats, estimateSwing, secondsToTick } from '../audio/analysis/tempo-map.js';
+import { t } from '../core/i18n.js';
 
 const TICKS_PER_QUARTER = 480;
 
@@ -275,6 +277,31 @@ export function quantize(notes, opts = {}) {
   });
 }
 
+// ---- beat track -------------------------------------------------------
+
+// A usable beat track (>= 4 finite ascending seconds) -> the tempo map the music was actually
+// played at, the seconds->tick clock that quantizes against it (beat 0 = tick 0, so a lead-in
+// before the first beat clamps to tick 0), and the swing ratio read off the onsets against those
+// beats. null when there is none, and the caller keeps the flat single-tempo path unchanged.
+const SWUNG_RATIO = 1.4; // ratio >= this reads as swung; a straight player scatters around 1.0
+function beatTrack(beats, onsets) {
+  let list = (Array.isArray(beats) ? beats : []).filter((x) => typeof x === 'number' && isFinite(x));
+  if (list.length < 4) return null;
+  let swing = estimateSwing(onsets, list);
+  // A beat tracker can lock onto the SHORT note of a swung pair (the pulse is the same either
+  // way): the "and" then reads as a ratio well under 1. Slide each beat onto the long note
+  // instead -- the "and" onset sat at fraction swing/(1+swing) of the beat -- and invert the ratio.
+  if (swing > 0 && swing < 1 / SWUNG_RATIO) {
+    const f = swing / (1 + swing);
+    list = list.slice(0, -1).map((b, i) => b + f * (list[i + 1] - b));
+    if (list.length < 4) return null;
+    swing = estimateSwing(onsets, list);
+  }
+  const tempoMap = tempoMapFromBeats(list, { ppq: TICKS_PER_QUARTER });
+  const feelLine = t(swing >= SWUNG_RATIO ? 'songs.import.feelSwung' : 'songs.import.feelStraight');
+  return { tempoMap, swing, feelLine, secondsToTicks: (sec) => Math.max(0, secondsToTick(tempoMap, sec - list[0], TICKS_PER_QUARTER)) };
+}
+
 // ---- inferMetreAndBars -------------------------------------------------
 
 export function inferMetreAndBars(notes, bpm) {
@@ -480,17 +507,19 @@ const ROLE_NAMES = { melody: 'Melody', bass: 'Bass', inner: 'Inner', percussion:
 function transcribePolyphonic(polyphonic, opts) {
   const rawNotes = trackMultipitchNotesWithDuration(polyphonic.pcm, polyphonic.sampleRate, polyphonic);
 
+  const bt = beatTrack(opts.beats, opts.onsets);
   const tempo = estimateTempo(rawNotes.map((n) => n.start));
+  if (bt) tempo.bpm = bt.tempoMap[0].bpm;
   const metre = inferMetreAndBars(rawNotes, tempo.bpm);
   const key = detectKey(rawNotes);
-  const tempoMap = [{ tick: 0, bpm: tempo.bpm }];
+  const tempoMap = bt ? bt.tempoMap : [{ tick: 0, bpm: tempo.bpm }];
 
   const voiceOpts = { onsetEpsilon: 0.05, maxJump: 12, minCoverage: 0.3, hysteresis: 2, ...polyphonic };
   const voiceParts = assignVoices(rawNotes, voiceOpts);
 
   const parts = voiceParts.map((vp) => {
     const forQuantize = vp.notes.map((n) => ({ midi: n.midi, startSec: n.start, durSec: Math.max(0, n.end - n.start) }));
-    const quantized = quantizeNotes(forQuantize, tempoMap, { grid: opts.grid });
+    const quantized = quantizeNotes(forQuantize, tempoMap, { grid: opts.grid, secondsToTicks: bt ? bt.secondsToTicks : undefined });
     const notes = quantized.map((q) => {
       const out = { start: q.tick, dur: q.durTicks, midi: q.midi };
       if (typeof q.confidence === 'number') out.confidence = q.confidence;
@@ -512,6 +541,7 @@ function transcribePolyphonic(polyphonic, opts) {
     parts: parts.length ? parts : [{ id: 'melody', name: 'Melody', notes: [] }],
     chords: [],
   };
+  if (bt) { song.tempoMap = bt.tempoMap; song.swing = bt.swing; }
 
   const voiceCount = parts.length;
   const needsCheck = [KEY_PROFILE_CAVEAT];
@@ -524,7 +554,7 @@ function transcribePolyphonic(polyphonic, opts) {
 
   return {
     song,
-    report: { tempo, metre, key, notesCaptured: rawNotes.length, voices: voiceCount, needsCheck },
+    report: { tempo, metre, key, notesCaptured: rawNotes.length, voices: voiceCount, needsCheck, ...(bt ? { feelLine: bt.feelLine } : {}) },
   };
 }
 
@@ -548,10 +578,15 @@ export function transcribe(frames, opts = {}) {
     };
   }
 
+  const bt = beatTrack(opts.beats, onsets);
   const tempo = estimateTempo(rawNotes.map((n) => n.start));
+  if (bt) tempo.bpm = bt.tempoMap[0].bpm; // the played tempo, not the IOI guess
   const metre = inferMetreAndBars(rawNotes, tempo.bpm);
   const key = detectKey(rawNotes);
-  const quantized = quantize(rawNotes, { bpm: tempo.bpm, grid });
+  const quantized = bt
+    ? quantizeNotes(rawNotes.map((n) => ({ midi: n.midi, startSec: n.start, durSec: n.end - n.start })), bt.tempoMap, { grid, secondsToTicks: bt.secondsToTicks })
+        .map((q) => ({ start: q.tick, dur: q.durTicks, midi: q.midi, confidence: q.confidence }))
+    : quantize(rawNotes, { bpm: tempo.bpm, grid });
 
   const song = {
     schema: 'song/1',
@@ -566,6 +601,7 @@ export function transcribe(frames, opts = {}) {
     parts: [{ id: 'melody', name: 'Melody', notes: quantized }],
     chords: [],
   };
+  if (bt) { song.tempoMap = bt.tempoMap; song.swing = bt.swing; }
 
   const needsCheck = [KEY_PROFILE_CAVEAT];
   if (tempo.confidence < 0.5) needsCheck.push("Tempo is uncertain — confirm the beat before practising to it.");
@@ -574,6 +610,6 @@ export function transcribe(frames, opts = {}) {
 
   return {
     song,
-    report: { tempo, metre, key, notesCaptured: rawNotes.length, needsCheck },
+    report: { tempo, metre, key, notesCaptured: rawNotes.length, needsCheck, ...(bt ? { feelLine: bt.feelLine } : {}) },
   };
 }

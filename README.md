@@ -352,6 +352,14 @@ checked, in which case a multipitch detector (`src/audio/analysis/multipitch.js`
 into a melody/bass/inner part per voice it hears, each shown as its own labelled lane once opened
 for editing.
 
+An imported recording follows the tempo it was actually played at: the clip's beat track becomes the
+song's `tempoMap` (`tempoMapFromBeats`, `src/audio/analysis/tempo-map.js`) and the notes are
+quantized against that map, so a tune that speeds up or slows down stays on its beats instead of
+drifting off one flat tempo. `estimateSwing` reads the offbeat eighths against those beats and the
+ratio is saved on the song as `swing` (1 = straight, 2 = triplet swing; it survives save, load and
+backup). The result shows one plain line, "swung" (ratio 1.4 or more) or "straight". A clip with no
+steady pulse gets neither: it keeps the single estimated tempo and no `swing` field.
+
 Both frame sources (`framesFromPCM` and `record.js`'s `sampleFrame`) only ever emit a frame for a
 window the tracker actually heard clearly — a rest is simply the absence of a frame, never a fake
 one. `eventsToNotes` (`src/song/transcribe.js`) reads that gap directly: a note ends at its own

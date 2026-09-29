@@ -2350,7 +2350,7 @@ function mountSongsPanel(hostEl, api) {
         return;
       }
       if (destroyed || door.generation() !== gen) return;
-      say('');
+      say((report && report.feelLine) || '', 'ok'); // one plain swung/straight line (from the beat track), when there was one
       setSongStatus(markDraft, storedId, { needsCheck: warnings.length, source: 'file', originalAudioKept: false });
       // P3-8: remembered the same way onMicTake() does, above.
       lastAudioRecSongId = storedId;
