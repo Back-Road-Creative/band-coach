@@ -41,8 +41,8 @@ test('an open song shows one row of named actions', async (t) => {
   const actionTexts = await page.evaluate(
     "Array.from(document.querySelectorAll('.panel-songs-song-actions button')).map(b => b.textContent)"
   );
-  // P3-9 adds Print at the end of the row.
-  assert.deepEqual(actionTexts, ['Edit notes', 'Play along', 'Export', 'Share', 'Save a copy', 'Print']);
+  // P3-9 adds Print; the SVG sheet download follows it.
+  assert.deepEqual(actionTexts, ['Edit notes', 'Play along', 'Export', 'Share', 'Save a copy', 'Print', 'Download sheet (SVG)']);
 
   const practiceVisible = await page.evaluate("document.querySelector('.panel-songs-practice').hidden === false");
   assert.ok(practiceVisible, 'the practise section is visible below the action row');
@@ -194,4 +194,44 @@ test('Print draws the song and calls print', async (t) => {
   // print mode ends when the (faked) print dialog closes, same as report mode.
   await page.evaluate("window.dispatchEvent(new Event('afterprint'))");
   assert.equal(await page.evaluate("document.body.classList.contains('printing-song')"), false, 'song print mode must end after printing');
+});
+
+test('Download sheet (SVG) saves the open song as a parseable SVG named for it', async (t) => {
+  const page = await launchPage(htmlPath, { initScript: FAKE_BLOB_CAPTURE_INIT });
+  t.after(() => page.close());
+
+  await openHotCrossBuns(page);
+  await page.evaluate(
+    "Array.from(document.querySelectorAll('.panel-songs-song-actions button')).find(b => b.textContent === 'Download sheet (SVG)').click()"
+  );
+  await page.waitFor('window.__exportedBlobs.length > 0');
+
+  const download = await page.evaluate('window.__downloads[window.__downloads.length - 1]');
+  assert.equal(download, 'Hot_Cross_Buns.svg');
+
+  const result = await page.evaluate(`
+    (async () => {
+      const blob = window.__exportedBlobs[window.__exportedBlobs.length - 1];
+      const text = await blob.text();
+      const doc = new DOMParser().parseFromString(text, 'image/svg+xml');
+      const root = doc.documentElement;
+      const groups = Array.from(root.querySelectorAll('g.row'));
+      return {
+        type: blob.type,
+        rootName: root.localName,
+        parseError: doc.querySelector('parsererror') !== null,
+        title: (root.querySelector('title') || {}).textContent,
+        desc: (root.querySelector('desc') || {}).textContent,
+        rows: groups.length,
+        rowsWithShapes: groups.filter(g => g.querySelector('path, line')).length,
+      };
+    })()
+  `);
+  assert.equal(result.type, 'image/svg+xml');
+  assert.equal(result.rootName, 'svg');
+  assert.equal(result.parseError, false, 'the file parses as XML');
+  assert.equal(result.title, 'Hot Cross Buns');
+  assert.ok(result.desc && result.desc.length > 0, 'the description names the instrument/part');
+  assert.ok(result.rows > 0, 'at least one row is drawn');
+  assert.equal(result.rowsWithShapes, result.rows, 'every row has at least one path or line');
 });
