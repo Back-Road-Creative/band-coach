@@ -231,6 +231,8 @@ export const es = {
   'rail.updateHelp': 'Le pide al sitio web de Band Coach el número de la última versión. No envía nada sobre cómo tocas.',
   'kbd.songHandoff.button': 'Tocar una canción con estas notas',
   'kbd.songHandoff.back': 'Volver a la práctica',
+  'songs.import.feelSwung': 'El aire de esta grabación: swing (las corcheas a contratiempo llegan tarde).',
+  'songs.import.feelStraight': 'El aire de esta grabación: recto (las corcheas son iguales).',
   'songs.mode.label': 'Modo de lección',
   'songs.mode.learn': 'Aprender',
   'songs.mode.rehearse': 'Ensayar',
