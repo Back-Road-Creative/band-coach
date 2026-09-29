@@ -122,6 +122,8 @@ export const en = {
   // Songs lesson modes (C11b): the one control's own label and its three
   // buttons, plus the counted/practice-only line a Check try's own verdict
   // shows (src/ui/songs.js's mode control and advance()).
+  'songs.import.feelSwung': 'The feel of this recording: swung (the offbeat eighths come late).',
+  'songs.import.feelStraight': 'The feel of this recording: straight (the eighths are even).',
   'songs.mode.label': 'Lesson mode',
   'songs.mode.learn': 'Learn',
   'songs.mode.rehearse': 'Rehearse',
