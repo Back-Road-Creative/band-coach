@@ -3020,16 +3020,22 @@ import { register as registerPathway } from './ui/pathway.js';
     if (!btn || !out) return;
     const store = createIndexedDBStore(), inFlight = new Set();
     if (!store) { btn.disabled = true; out.textContent = t('modelPack.noStorage'); return; }
+    // Every status write takes a new ticket; a cache read that resolves after a newer write
+    // (the on-load read losing a race to a fast press) drops its stale answer.
+    let ticket = 0;
+    const say = (text) => { ticket++; out.textContent = text; };
     function render() {
-      packStatus({ store, packName: DEFAULT_MODEL_PACK, inFlight }).then(s => { out.textContent = s.state === 'cached' ? t('modelPack.cached', { version: s.version }) : s.state === 'downloading' ? t('modelPack.downloading') : t('modelPack.absent'); }, () => { out.textContent = t('modelPack.absent'); });
+      const mine = ++ticket;
+      const show = (text) => { if (mine === ticket) out.textContent = text; };
+      packStatus({ store, packName: DEFAULT_MODEL_PACK, inFlight }).then(s => { show(s.state === 'cached' ? t('modelPack.cached', { version: s.version }) : s.state === 'downloading' ? t('modelPack.downloading') : t('modelPack.absent')); }, () => { show(t('modelPack.absent')); });
     }
     render();
     btn.addEventListener('click', function () {
       this.blur();
       if (btn.disabled) return;
-      btn.disabled = true; out.textContent = t('modelPack.downloading');
+      btn.disabled = true; say(t('modelPack.downloading'));
       loadPack({ manifestUrl: packManifestUrl(), fetchImpl: typeof fetch === 'function' ? fetch : undefined, store, inFlight })
-        .then(() => render(), e => { out.textContent = t(e && e.code === 'no-manifest' ? 'modelPack.notPublished' : 'modelPack.failed'); })
+        .then(() => render(), e => { say(t(e && e.code === 'no-manifest' ? 'modelPack.notPublished' : 'modelPack.failed')); })
         .then(() => { btn.disabled = false; });
     });
   })();

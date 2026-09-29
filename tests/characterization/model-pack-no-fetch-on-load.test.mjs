@@ -99,3 +99,32 @@ test('a 404 manifest says no model pack is published yet and caches nothing', as
   await page.waitFor("document.getElementById('modelPackStatus').textContent !== ''");
   assert.match(await status(page), /not downloaded/i, 'nothing was cached');
 });
+
+test('a slow first read of the local cache never overwrites what a press already reported', async (t) => {
+  // The status line's on-load read of IndexedDB can resolve after a fast
+  // press has already failed (a slow runner, a busy disk). Delay only that
+  // first open so the press wins the race every time.
+  const slowFirstOpen = `
+    (() => {
+      const realOpen = IDBFactory.prototype.open;
+      let first = true;
+      IDBFactory.prototype.open = function (...args) {
+        const req = realOpen.apply(this, args);
+        if (!first) return req;
+        first = false;
+        let handler = null;
+        Object.defineProperty(req, 'onsuccess', {
+          get() { return handler; },
+          set(fn) { handler = fn; req.addEventListener('success', (e) => setTimeout(() => handler && handler.call(req, e), 1500)); },
+        });
+        return req;
+      };
+    })();
+  `;
+  const page = await launchPage(HTML_PATH, { initScript: slowFirstOpen + fakePackFetchInit({ manifestOk: false }) });
+  t.after(() => page.close());
+  await page.evaluate("document.getElementById('modelPackBtn').click()");
+  await page.waitFor("/no model pack is published yet/i.test(document.getElementById('modelPackStatus').textContent)");
+  await new Promise((resolve) => setTimeout(resolve, 2000));
+  assert.match(await status(page), /no model pack is published yet/i, 'the late on-load read must not replace the press result');
+});
