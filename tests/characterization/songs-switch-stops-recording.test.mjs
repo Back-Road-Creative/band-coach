@@ -8,6 +8,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { HTML_PATH } from '../helpers/html-path.mjs';
 import { launchPage } from '../helpers/browser.mjs';
+import { skipDemo } from '../helpers/songs-demo.mjs';
 import { writeBandPack } from '../../src/song/band-pack.js';
 import { playSongNoteWhenListening } from '../helpers/songs-note.mjs';
 
@@ -46,6 +47,7 @@ test('opening a different song while recording stops the old song\'s listener, i
   await page.evaluate(
     "Array.from(document.querySelectorAll('.panel-songs-practice button')).find(b => b.textContent === 'Next').click()"
   );
+  await skipDemo(page);
   await page.waitFor(
     "Array.from(document.querySelectorAll('.panel-songs-practice button')).some(b => b.textContent === 'Your turn')"
   );
@@ -147,6 +149,7 @@ test('a listen step\'s "Next" does not carry a stale bar-by-bar result onto the 
   await page.evaluate(
     "Array.from(document.querySelectorAll('.panel-songs-practice button')).find(b => b.textContent === 'Next').click()"
   );
+  await skipDemo(page);
 
   // Pass every one of phrase 0's steps (bars 1-1) by pressing the phrase's
   // one note (midi 60) the instant "Your turn" starts recording -- clicking
@@ -155,6 +158,10 @@ test('a listen step\'s "Next" does not carry a stale bar-by-bar result onto the 
   for (let i = 0; i < 10; i++) {
     const title = await page.evaluate("document.querySelector('.panel-songs-practice h4').textContent");
     if (title.includes('bars 2-2')) break; // reached phrase 1's own listen step
+    if (title.startsWith('Next section')) { // the transfer interlude after phrase 0's check step
+      await page.evaluate("Array.from(document.querySelectorAll('.panel-songs-practice button')).find(b => b.textContent === 'Next').click()");
+      continue;
+    }
     // Wait out the four-beat count-in (N2) -- pressing the note the instant
     // "Your turn" is clicked would now land during the clicks and never be
     // heard. playSongNoteWhenListening() clicks "Your turn", polls in the
@@ -184,6 +191,7 @@ test('a listen step\'s "Next" does not carry a stale bar-by-bar result onto the 
   await page.evaluate(
     "Array.from(document.querySelectorAll('.panel-songs-practice button')).find(b => b.textContent === 'Next').click()"
   );
+  await skipDemo(page);
   await page.waitFor("document.querySelector('.panel-songs-practice h4')");
 
   const strip = await page.evaluate("document.querySelector('.panel-songs-bar-strip')");
