@@ -10,6 +10,8 @@ import { rmsLevel } from '../learn/level.js';
 import { mixToMono } from '../playalong/audio-prep.js';
 import { framesFromPCM } from '../../audio/file-frames.js';
 import { transcribe } from '../../song/transcribe.js';
+import { computeOnsetEnvelope } from '../../audio/analysis/onset-envelope.js';
+import { estimateTempo, trackBeats } from '../../audio/analysis/tempo.js';
 import { rangeForInstrument } from '../../audio/range.js';
 import { validateSong } from '../../song/model.js';
 import { createTakeAccumulator } from '../../audio/take-recorder.js';
@@ -72,8 +74,22 @@ export async function transcribeAudioFile(file, api, opts = {}) {
   const { fmin, fmax } = rangeForInstrument(typeof api.instrument === 'function' ? api.instrument() : null);
   const { frames, onsets } = framesFromPCM(pcm, audioBuffer.sampleRate, { fmin, fmax });
   const polyphonic = opts.polyphonic ? { pcm, sampleRate: audioBuffer.sampleRate } : undefined;
-  const result = transcribe(frames, { title: titleFromFileName(file.name), onsets, polyphonic });
+  const result = transcribe(frames, { title: titleFromFileName(file.name), onsets, polyphonic, beats: beatsOf(pcm, audioBuffer.sampleRate) });
   return { ...result, rec: { pcm, sampleRate: audioBuffer.sampleRate, duration: audioBuffer.duration, fileName: file.name } };
+}
+
+// The beat track of a decoded clip, in seconds -- the same onset-envelope -> estimateTempo ->
+// trackBeats chain analyse() (src/audio/analysis/analyse.js) opens with, without its chroma/
+// chord stages this door never reads. [] when the clip has no usable pulse.
+function beatsOf(pcm, sampleRate) {
+  try {
+    if (!pcm || pcm.length < 512) return [];
+    const { envelope, hopSeconds } = computeOnsetEnvelope(pcm, sampleRate, { frameSize: 512, hopSize: 128 });
+    let peak = 0;
+    for (let i = 0; i < envelope.length; i++) peak = Math.max(peak, envelope[i]);
+    const tempo = estimateTempo(envelope, hopSeconds);
+    return peak > 1e-9 && tempo.bpm > 0 ? trackBeats(envelope, tempo.bpm, hopSeconds) : [];
+  } catch (e) { return []; }
 }
 
 // P3-12: same debug seams src/ui/editor.js's own Listen/Stop used to carry
