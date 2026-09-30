@@ -2431,6 +2431,7 @@ import { register as registerPathway } from './ui/pathway.js';
     const box = $('modOpts'); box.innerHTML = ''; const sel = (id, label, opts, val, on) => { const l = document.createElement('label'); l.htmlFor = id; l.textContent = label + ' '; const s = document.createElement('select'); s.id = id; Object.keys(opts).forEach(k => { const o = document.createElement('option'); o.value = k; o.textContent = opts[k][0]; s.appendChild(o); }); s.value = val; s.addEventListener('change', () => on(s.value)); l.appendChild(s); box.appendChild(l); };
     const btn = (id, text, on, primary) => { const b = document.createElement('button'); b.type = 'button'; b.id = id; b.className = 'small' + (primary ? ' primary' : ''); b.textContent = text; b.addEventListener('click', () => { b.blur(); on(); }); box.appendChild(b); return b; };
     const chk = (id, text, val, on) => { const l = document.createElement('label'); l.htmlFor = id; const c = document.createElement('input'); c.type = 'checkbox'; c.id = id; c.checked = val; c.addEventListener('change', () => on(c.checked)); l.appendChild(c); l.appendChild(document.createTextNode(' ' + text)); box.appendChild(l); };
+    const noteWithReview = (id, text, reviewId, reviewKey, revValue) => { const note = document.createElement('span'); note.id = id; note.className = 'small'; note.textContent = text; box.appendChild(note); if (!isReviewCurrent(itemReview(reviewKey, contentRev(revValue)))) { const review = document.createElement('span'); review.id = reviewId; review.setAttribute('role', 'note'); review.className = 'small'; review.textContent = t('review.unreviewed'); box.appendChild(review); } };
     // Session length E7c: 5/10/15 minutes or no limit, per DB.prefs.sessionMinutes
     // -- a change takes effect at the next Start, never a running session's
     // sess.target, so it cannot fire a surprise break or cancel one mid-session.
@@ -2460,12 +2461,7 @@ import { register as registerPathway } from './ui/pathway.js';
         const lock = document.createElement('span'); lock.id = 'kbdBothLock'; lock.className = 'small'; lock.setAttribute('role', 'note');
         lock.textContent = 'Both unlocks after you have played the right hand alone and the left hand alone.'; box.appendChild(lock);
       }
-      const prep = document.createElement('span'); prep.id = 'kbdHandsPrep'; prep.className = 'small';
-      prep.textContent = prepLine(HANDS_TOGETHER_EXERCISES[0], m => nname(m, true)); box.appendChild(prep);
-      if (!isReviewCurrent(itemReview('kbd.handsTogether.prep', contentRev(prepLine(HANDS_TOGETHER_EXERCISES[0]))))) {
-        const note = document.createElement('span'); note.id = 'kbdHandsPrepReview'; note.setAttribute('role', 'note'); note.className = 'small';
-        note.textContent = t('review.unreviewed'); box.appendChild(note);
-      }
+      noteWithReview('kbdHandsPrep', prepLine(HANDS_TOGETHER_EXERCISES[0], m => nname(m, true)), 'kbdHandsPrepReview', 'kbd.handsTogether.prep', prepLine(HANDS_TOGETHER_EXERCISES[0]));
     }
     // K3: level 14 ("matching rhythms") keeps the Hands selector visible (it
     // is still the same global preference the mix levels read), but it has
@@ -2474,12 +2470,7 @@ import { register as registerPathway } from './ui/pathway.js';
     // its place instead.
     if (mod === 'kbd' && D().timed && !D().stage) {
       const rhythmText = 'Both hands, in time: press together, let go together. Screen taps are practice only: held notes need a MIDI keyboard or computer keys.';
-      const note = document.createElement('span'); note.id = 'kbdRhythmNote'; note.className = 'small';
-      note.textContent = rhythmText; box.appendChild(note);
-      if (!isReviewCurrent(itemReview('kbd.handsTogether.rhythm', contentRev({ text: rhythmText, onsetMs: PAIR_ONSET_TOL_MS, releaseMs: PAIR_RELEASE_TOL_MS })))) {
-        const review = document.createElement('span'); review.id = 'kbdRhythmReview'; review.setAttribute('role', 'note'); review.className = 'small';
-        review.textContent = t('review.unreviewed'); box.appendChild(review);
-      }
+      noteWithReview('kbdRhythmNote', rhythmText, 'kbdRhythmReview', 'kbd.handsTogether.rhythm', { text: rhythmText, onsetMs: PAIR_ONSET_TOL_MS, releaseMs: PAIR_RELEASE_TOL_MS });
     }
     // K4: level 15 ("held bass") and level 16 ("split rhythm") are each
     // their own D().stage, so the level-14 note above is skipped for them
@@ -2488,40 +2479,20 @@ import { register as registerPathway } from './ui/pathway.js';
     // wording change on one level never silently reuses a stale review.
     if (mod === 'kbd' && D().stage === 'held') {
       const heldText = 'Left hand: press and hold the bass note. Right hand: play the three-note melody over it, still holding the bass. Letting go of the bass too soon fails the exercise. Screen taps are practice only: held notes need a MIDI keyboard or computer keys.';
-      const note = document.createElement('span'); note.id = 'kbdHeldNote'; note.className = 'small';
-      note.textContent = heldText; box.appendChild(note);
-      if (!isReviewCurrent(itemReview('kbd.handsTogether.held', contentRev({ text: heldText })))) {
-        const review = document.createElement('span'); review.id = 'kbdHeldReview'; review.setAttribute('role', 'note'); review.className = 'small';
-        review.textContent = t('review.unreviewed'); box.appendChild(review);
-      }
+      noteWithReview('kbdHeldNote', heldText, 'kbdHeldReview', 'kbd.handsTogether.held', { text: heldText });
     }
     if (mod === 'kbd' && D().stage === 'split') {
       const splitText = 'Right hand: two even notes. Left hand: one long note, held under both. Each hand is judged on its own. Screen taps are practice only: held notes need a MIDI keyboard or computer keys.';
-      const note = document.createElement('span'); note.id = 'kbdSplitNote'; note.className = 'small';
-      note.textContent = splitText; box.appendChild(note);
-      if (!isReviewCurrent(itemReview('kbd.handsTogether.split', contentRev({ text: splitText, onsetMs: PAIR_ONSET_TOL_MS, releaseMs: PAIR_RELEASE_TOL_MS, midTolRatio: SPLIT_MID_TOL_RATIO })))) {
-        const review = document.createElement('span'); review.id = 'kbdSplitReview'; review.setAttribute('role', 'note'); review.className = 'small';
-        review.textContent = t('review.unreviewed'); box.appendChild(review);
-      }
+      noteWithReview('kbdSplitNote', splitText, 'kbdSplitReview', 'kbd.handsTogether.split', { text: splitText, onsetMs: PAIR_ONSET_TOL_MS, releaseMs: PAIR_RELEASE_TOL_MS, midTolRatio: SPLIT_MID_TOL_RATIO });
     }
     // K5: level 17 ("hand position change") is its own D().stage too, same
     // "Not yet checked by a player" review-ledger pattern as held/split.
     if (mod === 'kbd' && D().stage === 'position') {
       const positionText = 'Right hand: play the five-finger position, then move up to the new position partway through and play the same shape there. Left hand: holds its note throughout. Playing the old position after the move fails, naming it. Screen taps are graded the same as a computer key here.';
-      const note = document.createElement('span'); note.id = 'kbdPositionNote'; note.className = 'small';
-      note.textContent = positionText; box.appendChild(note);
-      if (!isReviewCurrent(itemReview('kbd.handsTogether.position', contentRev({ text: positionText, shiftSemitones: POSITION_SHIFT_SEMITONES })))) {
-        const review = document.createElement('span'); review.id = 'kbdPositionReview'; review.setAttribute('role', 'note'); review.className = 'small';
-        review.textContent = t('review.unreviewed'); box.appendChild(review);
-      }
+      noteWithReview('kbdPositionNote', positionText, 'kbdPositionReview', 'kbd.handsTogether.position', { text: positionText, shiftSemitones: POSITION_SHIFT_SEMITONES });
       // Named ahead of time, same as level 13's "before you start" line --
       // the shift is not a surprise the player only discovers mid-exercise.
-      const posPrep = document.createElement('span'); posPrep.id = 'kbdPositionPrep'; posPrep.className = 'small';
-      posPrep.textContent = positionPrepLine(HANDS_POSITION_EXERCISES[0], m => nname(m, true)); box.appendChild(posPrep);
-      if (!isReviewCurrent(itemReview('kbd.handsTogether.positionPrep', contentRev(positionPrepLine(HANDS_POSITION_EXERCISES[0]))))) {
-        const prepReview = document.createElement('span'); prepReview.id = 'kbdPositionPrepReview'; prepReview.setAttribute('role', 'note'); prepReview.className = 'small';
-        prepReview.textContent = t('review.unreviewed'); box.appendChild(prepReview);
-      }
+      noteWithReview('kbdPositionPrep', positionPrepLine(HANDS_POSITION_EXERCISES[0], m => nname(m, true)), 'kbdPositionPrepReview', 'kbd.handsTogether.positionPrep', positionPrepLine(HANDS_POSITION_EXERCISES[0]));
     }
     // B(C11a) 'Play a song with these notes': songFor(S.level) names the
     // most advanced starter song whose notes are all already taught (see
