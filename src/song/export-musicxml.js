@@ -17,7 +17,7 @@
 import { TICKS_PER_QUARTER, barsOf, partRange } from './model.js';
 import { spellMidi } from '../notation/spell.js';
 
-// Same letter -> natural pitch-class table as import-musicxml.js's STEP_PC
+// Same letter -> natural pitch-class table as import-common.js's STEP_PC
 // and notation/spell.js's LETTER_BASE_PC. Kept local (not imported) so this
 // module has no dependency beyond model.js and spell.js.
 const LETTER_BASE_PC = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };

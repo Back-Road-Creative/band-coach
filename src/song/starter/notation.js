@@ -38,7 +38,7 @@
 // key, metre ({num, den}), bpm, level, and optionally partId/partName
 // (default 'melody' / 'Melody').
 
-const TICKS_PER_QUARTER = 480;
+import { TICKS_PER_QUARTER } from '../model.js';
 
 const PITCH_SEMITONE = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
 const DURATION_QUARTERS = { w: 4, h: 2, q: 1, e: 0.5, s: 0.25 };

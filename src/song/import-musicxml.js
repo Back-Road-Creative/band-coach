@@ -24,15 +24,9 @@
 import { songIdentity } from './ident.js';
 import { parseXml, elements, element, childText, attr, text } from './xml-lite.js';
 import { readMxlRootEntry } from './unzip-lite.js';
+import { TICKS_PER_QUARTER } from './model.js';
+import { STEP_PC, IMPORT_DEFAULT_BPM, midiFromStep, num } from './import-common.js';
 
-const TICKS_PER_QUARTER = 480;
-const STEP_PC = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
-
-function num(str, fallback) {
-  if (str === undefined || str === null || str === '') return fallback;
-  const n = Number(str);
-  return Number.isFinite(n) ? n : fallback;
-}
 
 function keyFromFifthsAndMode(fifths, modeRaw, warnings) {
   let mode = (modeRaw || 'major').toLowerCase();
@@ -50,7 +44,7 @@ function pitchToMidi(pitchNode) {
   const octave = num(childText(pitchNode, 'octave'), undefined);
   const alter = num(childText(pitchNode, 'alter'), 0);
   if (!(step in STEP_PC) || octave === undefined) return undefined;
-  return (octave + 1) * 12 + STEP_PC[step] + alter;
+  return midiFromStep(step, octave, alter);
 }
 
 // score-timewise nests parts inside measures (measure-major); this file's
@@ -251,7 +245,7 @@ export function importMusicXml(rawText, options = {}) {
     parts.push({ id: partId, name: partNames[partId] || partId, notes });
   }
 
-  if (initialBpm === undefined) { initialBpm = 120; warnings.push('no tempo found; defaulted to 120 bpm'); }
+  if (initialBpm === undefined) { initialBpm = IMPORT_DEFAULT_BPM; warnings.push('no tempo found; defaulted to 120 bpm'); }
 
   const workNode = element(root, 'work');
   const title = childText(root, 'movement-title') || (workNode ? childText(workNode, 'work-title') : undefined) || null;

@@ -45,8 +45,9 @@
 // 5.0 files don't have.
 
 import { songIdentity } from './ident.js';
+import { TICKS_PER_QUARTER } from './model.js';
+import { IMPORT_DEFAULT_BPM } from './import-common.js';
 
-const TICKS_PER_QUARTER = 480;
 const CHANNEL_COUNT = 64;
 // Mirrors model.js's VALID_DENOMINATORS -- this importer validates the
 // metre itself (see the measure-header loop below) rather than trusting a
@@ -621,7 +622,7 @@ export function importGp5(bytes, options = {}) {
     source: fileName ?? null,
     key,
     metre: metre ?? { num: 4, den: 4 },
-    bpm: tempo > 0 ? tempo : 120,
+    bpm: tempo > 0 ? tempo : IMPORT_DEFAULT_BPM,
     ticksPerQuarter: TICKS_PER_QUARTER,
     parts,
     chords: [],
