@@ -29,8 +29,8 @@ import { assignVoices } from './voices-assign.js';
 import { quantizeNotes } from './quantize.js';
 import { tempoMapFromBeats, estimateSwing, secondsToTick } from '../audio/analysis/tempo-map.js';
 import { t } from '../core/i18n.js';
+import { TICKS_PER_QUARTER } from './model.js';
 
-const TICKS_PER_QUARTER = 480;
 
 // ---- eventsToNotes -----------------------------------------------------
 

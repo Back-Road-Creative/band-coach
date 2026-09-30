@@ -5,8 +5,8 @@
 
 import { makeRng, pickFrom } from './rng.js';
 import { checkSequence } from './theory.js';
+import { TICKS_PER_QUARTER } from '../../song/model.js';
 
-const TICKS_PER_QUARTER = 480;
 const BAR_TICKS = TICKS_PER_QUARTER * 4; // 4/4
 
 function vocabularyForLevel(level) {

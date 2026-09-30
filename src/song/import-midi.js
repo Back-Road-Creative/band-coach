@@ -28,6 +28,7 @@
 // GM 39 hand clap), and the part carries `unmapped`, a count of those.
 
 import { pieceForMidi } from '../instruments/drum-kit.js';
+import { IMPORT_DEFAULT_BPM } from './import-common.js';
 
 const MTHD = [0x4d, 0x54, 0x68, 0x64]; // "MThd"
 const MTRK = [0x4d, 0x54, 0x72, 0x6b]; // "MTrk"
@@ -156,7 +157,7 @@ function decodeText(bytes) {
 function handleMeta(metaType, data, absTick, ctx, warnings) {
   if (metaType === 0x51 && data.length >= 3) {
     const microsPerQuarter = (data[0] << 16) | (data[1] << 8) | data[2];
-    const bpm = microsPerQuarter > 0 ? 60000000 / microsPerQuarter : 120;
+    const bpm = microsPerQuarter > 0 ? 60000000 / microsPerQuarter : IMPORT_DEFAULT_BPM;
     if (!ctx.tempoSet) {
       ctx.bpm = bpm;
       ctx.tempoSet = true;
@@ -354,7 +355,7 @@ export function importMidi(bytes, options = {}) {
     }
   });
 
-  const bpm = ctx.bpm ?? 120;
+  const bpm = ctx.bpm ?? IMPORT_DEFAULT_BPM;
   const metre = ctx.metre ?? { num: 4, den: 4 };
   const key = ctx.key ?? null;
   const title = (tracks[0] && tracks[0].name) || (fileName ? stripExt(fileName) : null) || 'Untitled MIDI Import';

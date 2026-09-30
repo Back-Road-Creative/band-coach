@@ -10,12 +10,12 @@
 // with their names and notes -- tests/unit/export-abc.test.mjs checks this
 // ("a multi-part song round-trips through ABC").
 
-const TICKS_PER_QUARTER = 480;
+import { TICKS_PER_QUARTER } from './model.js';
+import { SHARP_ORDER } from './import-common.js';
 
 const NATURAL_LETTER_PC = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
 const SHARP_BLACK_PC = { 1: 'C', 3: 'D', 6: 'F', 8: 'G', 10: 'A' };
 const FLAT_BLACK_PC = { 1: 'D', 3: 'E', 6: 'G', 8: 'A', 10: 'B' };
-const SHARP_ORDER = ['F', 'C', 'G', 'D', 'A', 'E', 'B'];
 // Inverse of import-abc.js's MAJOR_FIFTHS, restricted to the range the
 // tonic/mode -> fifths formula below ever produces (-5..6).
 const FIFTHS_TO_NAME = { 0: 'C', 1: 'G', 2: 'D', 3: 'A', 4: 'E', 5: 'B', 6: 'F#', '-1': 'F', '-2': 'Bb', '-3': 'Eb', '-4': 'Ab', '-5': 'Db' };

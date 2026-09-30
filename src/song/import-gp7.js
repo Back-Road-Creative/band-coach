@@ -45,8 +45,9 @@
 import { songIdentity } from './ident.js';
 import { parseXml, elements, element, childText, attr } from './xml-lite.js';
 import { readZipEntries, readZipEntryData } from './unzip-lite.js';
+import { TICKS_PER_QUARTER } from './model.js';
+import { IMPORT_DEFAULT_BPM, num } from './import-common.js';
 
-const TICKS_PER_QUARTER = 480;
 const NOTE_VALUE_TICKS = {
   Whole: 1920, Half: 960, Quarter: 480, Eighth: 240, '16th': 120, '32nd': 60, '64th': 30, '128th': 15,
 };
@@ -56,12 +57,6 @@ function bytesFrom(input) {
   if (input instanceof ArrayBuffer) return new Uint8Array(input);
   if (ArrayBuffer.isView(input)) return new Uint8Array(input.buffer, input.byteOffset, input.byteLength);
   return input;
-}
-
-function num(str, fallback) {
-  if (str === undefined || str === null || str === '') return fallback;
-  const n = Number(str);
-  return Number.isFinite(n) ? n : fallback;
 }
 
 function ints(str) {
@@ -229,7 +224,7 @@ export function importGp7(bytes, options = {}) {
 
   let bpm = tempoEvents.length ? tempoEvents[0].bpm : undefined;
   const tempoMap = tempoEvents.slice(1).map((e) => ({ tick: e.tick, bpm: e.bpm }));
-  if (bpm === undefined) { bpm = 120; warnings.push('no tempo found; defaulted to 120 bpm'); }
+  if (bpm === undefined) { bpm = IMPORT_DEFAULT_BPM; warnings.push('no tempo found; defaulted to 120 bpm'); }
 
   // Pass 2: for each track, walk its bar-per-MasterBar sequence and read
   // notes off Bars -> Voices -> Beats -> Notes, via each Beat's Rhythm.

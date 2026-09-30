@@ -31,13 +31,12 @@
 // are used for the whole tune, matching the ABC default-unit-length rule.
 
 import { songIdentity } from './ident.js';
+import { TICKS_PER_QUARTER } from './model.js';
+import { SHARP_ORDER, IMPORT_DEFAULT_BPM, midiFromStep } from './import-common.js';
 
-const TICKS_PER_QUARTER = 480;
-const STEP_PC = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
 
 // Key-signature accidentals for a major key of `fifths` sharps(+)/flats(-),
 // derived from the circle of fifths order rather than a typed table.
-const SHARP_ORDER = ['F', 'C', 'G', 'D', 'A', 'E', 'B'];
 const MAJOR_FIFTHS = { C: 0, G: 1, D: 2, A: 3, E: 4, B: 5, 'F#': 6, 'C#': 7, F: -1, Bb: -2, Eb: -3, Ab: -4, Db: -5, Gb: -6, Cb: -7 };
 
 // `\%` in a text field is a literal percent (a bare `%` starts a comment).
@@ -246,7 +245,7 @@ export function importAbc(rawText, options = {}) {
       } else {
         semitone = accKey in vs.barAccidentals ? vs.barAccidentals[accKey] : currentKeySigAcc[stepLetter] || 0;
       }
-      const midi = (octave + 1) * 12 + STEP_PC[stepLetter] + semitone;
+      const midi = midiFromStep(stepLetter, octave, semitone);
       const noteObj = { start: vs.tick, dur: durTicks, midi };
       if (vs.pendingTieMidi === midi) noteObj.tieFromPrev = true;
       vs.pendingTieMidi = tok.tie ? midi : null;
@@ -272,7 +271,7 @@ export function importAbc(rawText, options = {}) {
     source: null,
     key: { tonic: key.tonic, mode: key.mode },
     metre: meter,
-    bpm: tempo ?? 120,
+    bpm: tempo ?? IMPORT_DEFAULT_BPM,
     ticksPerQuarter: TICKS_PER_QUARTER,
     parts,
     chords,

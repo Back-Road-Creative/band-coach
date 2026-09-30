@@ -4,6 +4,8 @@
 // and so the panel's persisted store (api.store('ear')) stays a plain object
 // built entirely from these functions' return values.
 
+import { TICKS_PER_QUARTER } from '../../song/model.js';
+
 // A run of LEVEL_UP_RUN correct answers in a row moves the exercise up one
 // level; a run of LEVEL_DOWN_RUN wrong answers in a row moves it down one.
 // Either transition resets the streak so the next run starts clean.
@@ -41,8 +43,6 @@ export function accuracy(state) {
 
 // ---- rhythm timing: ticks (480/quarter, the shared Song shape) <-> seconds
 // at a fixed playback tempo -----------------------------------------------
-
-export const TICKS_PER_QUARTER = 480;
 
 export function secondsPerQuarter(bpm) {
   return 60 / bpm;
