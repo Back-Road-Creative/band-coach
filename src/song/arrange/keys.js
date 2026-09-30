@@ -40,18 +40,10 @@
 //     through splitHands' middle-C guess. Either way every playable note
 //     is run through fingerHand per hand.
 
+import { groupByStart } from './group.js';
+
 const DEFAULT_SPLIT_MIDI = 60; // middle C
 const DEFAULT_HYSTERESIS = 2; // a whole tone either side of the split point
-
-function groupByStart(notes) {
-  const byStart = new Map();
-  notes.forEach((note, index) => {
-    const list = byStart.get(note.start) || [];
-    list.push({ note, index });
-    byStart.set(note.start, list);
-  });
-  return [...byStart.entries()].sort((a, b) => a[0] - b[0]).map(([start, entries]) => ({ start, entries }));
-}
 
 // splitHands ---------------------------------------------------------------
 

@@ -22,6 +22,7 @@
 //     unplayable notes, tie-broken by lowest total arrangement cost, then
 //     by the lowest capo number.
 import { positionsFor } from '../../instruments/how/fretboard.js';
+import { groupByStart } from './group.js';
 
 const STRETCH_SPAN = 4; // max fret span (frets 0 excluded) a hand can cover at once
 const MAX_CANDIDATES_PER_NOTE = 8; // bounds the combo search for dense chords
@@ -29,16 +30,6 @@ const MOVE_WEIGHT = 1; // cost per fret of average hand movement between groups
 const CROSSING_WEIGHT = 1; // cost per string newly brought into play
 const STRETCH_WEIGHT = 0.5; // soft preference for a chord shape with less stretch
 const FRET_WEIGHT = 0.1; // soft preference for lower frets (open strings first)
-
-function groupByStart(notes) {
-  const byStart = new Map();
-  notes.forEach((note, index) => {
-    const list = byStart.get(note.start) || [];
-    list.push({ note, index });
-    byStart.set(note.start, list);
-  });
-  return [...byStart.entries()].sort((a, b) => a[0] - b[0]).map(([start, entries]) => ({ start, entries }));
-}
 
 function fretsOf(positions) {
   return positions.map(p => p.fret);
