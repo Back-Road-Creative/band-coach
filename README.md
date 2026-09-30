@@ -1245,7 +1245,7 @@ written notes and written key signature for display.
 `fitToInstrument`'s own result into a plain-language badge -- "Fits as
 written", "Transposed to G", "3 notes skipped" -- never a guessed score.
 The songs panel (`src/ui/songs.js`) shows one "Play it on…" card per ready
-instrument, badge included, on a lesson's first (listen) step, before the
+instrument (the card row is `renderPlayItOnCards` in `src/ui/songs/open-request.js`, shared with the review screen in `src/ui/songs/review.js`), badge included, on a lesson's first (listen) step, before the
 learner has attempted anything; picking a card starts that same song on the
 chosen instrument without leaving the panel.
 
