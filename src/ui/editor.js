@@ -33,6 +33,7 @@ import { stashWorking, restoreWorking } from './editor/working-copy.js';
 import { starterSongs } from '../song/starter/index.js';
 import { sanitizeStatusLedger, markDraft, markChecked } from './songs/song-status.js';
 import { requestOpenSong } from './songs/open-request.js';
+import { el } from './dom.js';
 
 // A cross-panel "load this saved song for editing next time Record a tune is
 // shown" request (used by src/ui/learn.js's "Fix it up" button, the same
@@ -118,17 +119,6 @@ export function loadReport(song, needsCheck) {
 function clefFor(rec) {
   if (!rec || !Array.isArray(rec.clefs) || !rec.clefs.length) return 'treble';
   return rec.clefs.indexOf('grand') >= 0 ? 'grand' : rec.clefs[0];
-}
-
-function el(tag, attrs = {}, children = []) {
-  const node = document.createElement(tag);
-  Object.keys(attrs).forEach((k) => {
-    if (k === 'text') node.textContent = attrs[k];
-    else if (k.startsWith('on')) node.addEventListener(k.slice(2), attrs[k]);
-    else node.setAttribute(k, attrs[k]);
-  });
-  (Array.isArray(children) ? children : [children]).forEach((c) => c && node.appendChild(c));
-  return node;
 }
 
 // Test-only escape hatch, for reading the current Song back out in a test

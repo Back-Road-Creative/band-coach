@@ -2,19 +2,9 @@
 // songs/review.js and editor.js can import them without looping back through songs.js.
 import { INSTRUMENTS } from '../../instruments/index.js';
 import { feasibility } from '../../song/feasibility.js';
+import { el } from '../dom.js';
 
 const READY_INSTRUMENTS = INSTRUMENTS.filter((i) => i.status === 'ready');
-
-function el(tag, attrs, children) {
-  const node = document.createElement(tag);
-  for (const k in attrs || {}) {
-    if (k === 'text') node.textContent = attrs[k];
-    else if (k.startsWith('on')) node.addEventListener(k.slice(2), attrs[k]);
-    else node.setAttribute(k, attrs[k]);
-  }
-  (children || []).forEach((c) => { if (c) node.appendChild(c); });
-  return node;
-}
 
 // "Play it on…" row (plan D8): one card per ready instrument with a
 // feasibility badge (src/song/feasibility.js -- itself built only on
