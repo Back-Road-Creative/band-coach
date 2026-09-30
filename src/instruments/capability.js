@@ -1,7 +1,7 @@
 // The capability and maturity matrix: one honest, learner-facing source of
 // truth for what each instrument record actually offers -- derived
 // mechanically from the record itself (schema.js), review.js's isReviewed(),
-// and src/ui/fingerings/how.js's howKindFor(), never hand-typed per row. See
+// and src/instruments/how-kind.js's howKindFor(), never hand-typed per row. See
 // docs/capabilities.md for the generated table and the promises this backs.
 //
 // A record's internal `status: 'ready'` means implementation availability --
@@ -10,7 +10,7 @@
 // `tier` below is the only field that speaks to maturity, and it is computed,
 // not asserted.
 import { isReviewed } from './review.js';
-import { howKindFor } from '../ui/fingerings/how.js';
+import { howKindFor } from './how-kind.js';
 
 // howKindFor()'s return values that are a formula computed at play time --
 // always correct for any note in range, nothing typed to get wrong.

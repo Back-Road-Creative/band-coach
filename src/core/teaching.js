@@ -6,11 +6,11 @@
 // the caller (src/ui/songs.js) already has (a plan step, a judged result,
 // its passRule); this runs under plain `node --test`.
 
-// failedDimension is practice.js's own decision (shared with firstCorrection,
-// the plain-word failure message) about which rule a judged result failed
+// failedDimension (src/core/pass-rule.js, shared with practice.js's
+// firstCorrection, the plain-word failure message) is the decision about which rule a judged result failed
 // FIRST -- repairFor below reuses it rather than re-deriving the same
 // precedence order a second time.
-import { failedDimension } from '../ui/songs/practice.js';
+import { failedDimension } from './pass-rule.js';
 
 // The whole loop, in order. `demo` and `transfer` have their own step kinds
 // (demoFor / interludeAfter below): runtime steps src/ui/songs.js slots in

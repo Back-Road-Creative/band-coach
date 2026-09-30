@@ -28,29 +28,11 @@ import { fingeringFor } from '../../instruments/how/recorder-whistle.js';
 import { keyedFingeringFor } from '../../instruments/how/keyed-woodwind.js';
 import { kitLayout, describeHit } from '../../instruments/how/drum-kit.js';
 import { pieceForMidi, canonicalMidi } from '../../instruments/drum-kit.js';
+import { howKindFor, BRASS_BY_ID, KEYED_WOODWIND_CHART_BY_ID } from '../../instruments/how-kind.js';
 import { noteName } from './notes.js';
 
-// Which brass preset (src/instruments/how/brass.js's PRESETS) an instrument
-// record uses, and whether it is valved or slide-based. Only instruments
-// this app actually has a record for; euphonium/tuba presets exist in
-// brass.js but nothing in src/instruments/*.js models them yet.
-const BRASS_BY_ID = {
-  'trumpet-bb': { preset: 'trumpet-cornet', style: 'valves' },
-  'horn-f': { preset: 'horn-f-basics', style: 'valves' },
-  trombone: { preset: 'trombone', style: 'slide' }
-};
-
-// Which src/instruments/how/keyed-woodwind.js chart a keyed Boehm-system
-// woodwind record uses (see that file's top comment for the low-confidence
-// caveat on every entry -- a good-faith beginner fingering, not verified
-// against a real chart or player).
-const KEYED_WOODWIND_CHART_BY_ID = {
-  flute: 'flute',
-  'clarinet-bb': 'clarinet',
-  oboe: 'oboe',
-  'sax-alto-eb': 'sax',
-  'sax-tenor-bb': 'sax'
-};
+// Re-exported so src/ui/fingerings.js and the tests keep importing it from here.
+export { howKindFor };
 
 // Which named alternate tunings (fretboard.js's TUNINGS) apply to a fretted
 // instrument, keyed by instrument id — explicit, never guessed from string
@@ -68,24 +50,6 @@ const ALT_TUNINGS_BY_ID = {
 // instruments in this app have only their one real-world tuning.
 export function alternateTuningsFor(instrument) {
   return (instrument && ALT_TUNINGS_BY_ID[instrument.id]) || null;
-}
-
-export function howKindFor(instrument) {
-  if (!instrument) return null;
-  // A drum `kit` (schema.js) is drawn as the kit itself, whatever the family.
-  if (Array.isArray(instrument.kit)) return 'drum-kit';
-  if (Array.isArray(instrument.tuning) && instrument.tuning.length > 0) {
-    return instrument.fretted === false ? 'fingerboard' : 'fretboard';
-  }
-  if (instrument.family === 'brass' && BRASS_BY_ID[instrument.id]) {
-    return BRASS_BY_ID[instrument.id].style === 'slide' ? 'brass-slide' : 'brass-valves';
-  }
-  if (instrument.family === 'free-reed') return 'harmonica';
-  if (instrument.id === 'recorder-descant') return 'recorder';
-  if (instrument.id === 'tin-whistle') return 'whistle';
-  if (KEYED_WOODWIND_CHART_BY_ID[instrument.id]) return 'keyed-woodwind';
-  if (instrument.family === 'voice') return 'voice';
-  return null;
 }
 
 // `tuning` and `capo` are the EFFECTIVE ones (an alternate tuning if the
