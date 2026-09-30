@@ -32,7 +32,7 @@ import { layoutSong } from './editor/layout-song.js';
 import { stashWorking, restoreWorking } from './editor/working-copy.js';
 import { starterSongs } from '../song/starter/index.js';
 import { sanitizeStatusLedger, markDraft, markChecked } from './songs/song-status.js';
-import { requestOpenSong } from './songs.js';
+import { requestOpenSong } from './songs/open-request.js';
 
 // A cross-panel "load this saved song for editing next time Record a tune is
 // shown" request (used by src/ui/learn.js's "Fix it up" button, the same

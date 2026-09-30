@@ -5,7 +5,7 @@
 // result view later (P3-4) instead of duplicating it. No DOM or behaviour
 // change here: every panel-learn-* class and every button label stays
 // exactly as it was in learn.js.
-import { renderPlayItOnCards, requestOpenSong } from '../songs.js';
+import { renderPlayItOnCards, requestOpenSong } from './open-request.js';
 import { requestOpenInEditor } from '../editor.js';
 import { requestPlayalongRecording } from '../playalong.js';
 import { uncertainNotesText, playbackPlanFor } from './review-playback.js';
