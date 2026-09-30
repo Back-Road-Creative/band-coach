@@ -37,6 +37,12 @@ this without touching desktop: `.side` renders as `display: contents` so Start's
 Start — is always within reach. `tests/characterization/journey-first-visit.test.mjs`'s first test
 proves Start stays in the first screen on both the fresh paint and once an instrument is chosen.
 
+The same phone rule also gives the level card (`#levelCard`: level, progress bar and the coach's
+one-line objective) `order: -1`, so it renders straight after Start and both fit in the first
+screen at 390×844 (the card used to sit about 1300px down). Only visual order moves; DOM order,
+Tab order and every control are unchanged. `tests/characterization/phone-objective-beside-start.test.mjs`
+covers it.
+
 ## A finished Practice session shows up in Progress
 
 A learner routes to Practice with the keyboard alone, picks Keyboard, starts, answers enough
