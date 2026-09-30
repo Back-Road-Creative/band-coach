@@ -7,16 +7,13 @@
 
 import { judgePitch } from '../../core/judge.js';
 import { noteName } from '../fingerings/notes.js';
+import { DEFAULT_DURATION_TOLERANCE, passesRule, failedDimension } from '../../core/pass-rule.js';
+// Re-exported so existing importers (src/ui/songs.js, loop-backing.js) keep one import site.
+export { passesRule, failedDimension };
 
 function ticksToSec(ticks, bpm, ticksPerQuarter) {
   return (ticks / ticksPerQuarter) * (60 / bpm);
 }
-
-// Shared with judgeAttempt's own opts.durationTolerance default below and
-// holdTuneFeedback()'s per-hit direction check -- one number, not two, so a
-// hit that reads "outside the band" in the score always means the same
-// thing it means in the feedback text.
-const DEFAULT_DURATION_TOLERANCE = { min: 0.6, max: 1.5 };
 
 // The ONE phrase-local clock (BC-01): seconds from a step's originTick (its
 // phrase's segment start -- the bar src/song/lesson.js cut the phrase at,
@@ -310,7 +307,7 @@ export function judgeAttempt(expectedNotes, playedEvents, opts = {}) {
   const absCents = centsHits.map(Math.abs);
   const meanAbsCents = absCents.length ? absCents.reduce((a, b) => a + b, 0) / absCents.length : null;
   // meanCents: the SIGNED mean (sharp positive, flat negative), unlike
-  // meanAbsCents above -- passesRule() judges the absolute value (a phrase
+  // meanAbsCents above -- passesRule() (src/core/pass-rule.js) judges the absolute value (a phrase
   // that wanders equally sharp and flat is not "in tune" just because the
   // errors cancel out), but the feedback line below needs a direction to
   // tell the learner which way to correct.
@@ -330,7 +327,7 @@ export function judgeAttempt(expectedNotes, playedEvents, opts = {}) {
   // (pieceOk !== null -- see pieceOkFor above); a missed onset or one only
   // the mic heard and could not name never enters this count either way.
   // null (not 0) when nothing could be named at all, so a step can still
-  // pass on timing alone -- passesRule below ignores minPieceRate whenever
+  // pass on timing alone -- passesRule (src/core/pass-rule.js) ignores minPieceRate whenever
   // pieceRate is null, exactly the mic's-limits case this exists for.
   const pieceJudged = matches.filter((m) => m.pieceOk != null);
   const pieceRate = percussion ? (pieceJudged.length ? pieceJudged.filter((m) => m.pieceOk).length / pieceJudged.length : null) : null;
@@ -352,40 +349,6 @@ export function judgeAttempt(expectedNotes, playedEvents, opts = {}) {
   };
 }
 
-// Whether a judgeAttempt() result satisfies a step's passRule. A null
-// passRule (the "listen" step kind) always passes — there is nothing to
-// judge, the learner just heard the phrase.
-export function passesRule(result, passRule) {
-  if (!passRule) return true;
-  if (result.hitRate < passRule.hitRate) return false;
-  if (passRule.maxMeanErrorMs != null) {
-    if (result.meanErrorMs == null) { if (result.judgedCount !== 0) return false; }
-    else if (result.meanErrorMs > passRule.maxMeanErrorMs) return false;
-  }
-  if (passRule.maxMeanAbsCents != null && result.meanAbsCents != null) {
-    if (result.meanAbsCents > passRule.maxMeanAbsCents) return false;
-  }
-  if (passRule.minDurationScore != null && result.durationScore != null) {
-    if (result.durationScore < passRule.minDurationScore) return false;
-  }
-  // minPieceRate (a percussion step, P4-11) is ignored whenever pieceRate is
-  // null -- nothing the mic could name, so there is nothing to hold the
-  // learner to; the step can still pass on hitRate/timing alone.
-  if (passRule.minPieceRate != null && result.pieceRate != null) {
-    if (result.pieceRate < passRule.minPieceRate) return false;
-  }
-  // A wrong note struck alongside a chord (judgeAttempt's extras, above)
-  // never lowers hitRate -- that is deliberate chord-spread leniency, not a
-  // pass on its own -- so a step whose passRule sets maxExtras still has to
-  // gate on it separately here.
-  if (passRule.maxExtras != null && result.extras && result.extras.count > passRule.maxExtras) return false;
-  return true;
-}
-
-// Plain-word feedback for a FAILED step that fell down ONLY on hold or tune
-// -- everything else about it (hit rate, timing) was fine, so telling the
-// learner the one concrete thing to fix beats the generic "try that again"
-// src/ui/songs.js falls back to otherwise. Returns null when there is no
 // hold/tune rule to judge, or when hit rate or timing is what actually
 // failed (those keep the existing generic message -- singling out hold/tune
 // there would be misleading).
@@ -411,79 +374,8 @@ export function holdTuneFeedback(result, passRule) {
     : 'A little flat — aim for the middle of the note.';
 }
 
-// Which rule passesRule (above) found wrong FIRST -- same check order it
-// runs in -- shared by firstCorrection (below, the plain-word message) and
-// src/core/teaching.js's repairFor (which notes to isolate into a repair
-// step). Returns { dim, noteIndices }: dim is null when the try actually
-// passed or nothing enumerated here explains the failure (a hand-built
-// result whose hitRate disagrees with its matches, say); noteIndices index
-// into result.matches, which judgeAttempt (above) always builds in the same
-// order as the step's own `notes` array, so a caller can map straight back
-// to the notes that need isolating.
-export function failedDimension(result, passRule) {
-  if (!passRule || passesRule(result, passRule)) return { dim: null, noteIndices: [] };
-  if (result.hitRate < passRule.hitRate) {
-    const indices = (result.matches || []).reduce((acc, m, i) => { if (!m.ok) acc.push(i); return acc; }, []);
-    if (indices.length) return { dim: 'pitch', noteIndices: indices };
-  }
-  if (passRule.maxMeanErrorMs != null) {
-    const timingFailed = result.meanErrorMs == null
-      ? result.judgedCount !== 0
-      : result.meanErrorMs > passRule.maxMeanErrorMs;
-    if (timingFailed) {
-      const timed = (result.matches || [])
-        .map((m, i) => ({ m, i }))
-        .filter(({ m }) => m.ok && m.errorMs != null);
-      if (timed.length) {
-        let indices = timed.filter(({ m }) => Math.abs(m.errorMs) > passRule.maxMeanErrorMs).map(({ i }) => i);
-        // No single hit individually clears the threshold (the MEAN did, so
-        // several smaller errors added up) -- fall back to the single worst
-        // one, same note firstCorrection's own late/early line already names.
-        if (!indices.length) {
-          const worst = timed.reduce((a, b) => (Math.abs(b.m.errorMs) > Math.abs(a.m.errorMs) ? b : a));
-          indices = [worst.i];
-        }
-        return { dim: 'onset', noteIndices: indices };
-      }
-    }
-  }
-  const holdFailed = passRule.minDurationScore != null && result.durationScore != null
-    && result.durationScore < passRule.minDurationScore;
-  const tuneFailed = passRule.maxMeanAbsCents != null && result.meanAbsCents != null
-    && result.meanAbsCents > passRule.maxMeanAbsCents;
-  // passesRule checks maxMeanAbsCents (tune) before minDurationScore (hold),
-  // so tune is the "first" of the two when both are actually wrong.
-  if (tuneFailed) {
-    const indices = (result.matches || [])
-      .reduce((acc, m, i) => { if (m.ok && m.cents != null && Math.abs(m.cents) > passRule.maxMeanAbsCents) acc.push(i); return acc; }, []);
-    if (indices.length) return { dim: 'tune', noteIndices: indices };
-  }
-  if (holdFailed) {
-    const indices = (result.matches || [])
-      .reduce((acc, m, i) => {
-        if (m.ok && m.durRatio != null
-          && (m.durRatio < DEFAULT_DURATION_TOLERANCE.min || m.durRatio > DEFAULT_DURATION_TOLERANCE.max)) acc.push(i);
-        return acc;
-      }, []);
-    if (indices.length) return { dim: 'hold', noteIndices: indices };
-  }
-  // minPieceRate (P4-11): checked in the same order as passesRule, right
-  // after tune/hold and before extras -- a wrong-drum hit is worth naming
-  // even though the onset itself landed on time.
-  if (passRule.minPieceRate != null && result.pieceRate != null && result.pieceRate < passRule.minPieceRate) {
-    const indices = (result.matches || []).reduce((acc, m, i) => { if (m.pieceOk === false) acc.push(i); return acc; }, []);
-    if (indices.length) return { dim: 'piece', noteIndices: indices };
-  }
-  if (passRule.maxExtras != null && result.extras && result.extras.count > passRule.maxExtras) {
-    // An extra note isn't one of the expected notes -- nothing in `notes` to
-    // isolate a repair around, so this is deliberately empty.
-    return { dim: 'extras', noteIndices: [] };
-  }
-  return { dim: null, noteIndices: [] };
-}
-
 // Plain-word feedback for a FAILED step, naming the FIRST thing passesRule
-// (above) found wrong -- same order passesRule checks in -- instead of the
+// (src/core/pass-rule.js) found wrong -- same order passesRule checks in -- instead of the
 // generic "try that again" src/ui/songs.js used to always fall back to.
 // Returns null when the try passed, or when there is no passRule to judge
 // against (the "listen" step kind).

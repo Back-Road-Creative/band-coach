@@ -749,7 +749,7 @@ dropped.
 
 One row per instrument module in `src/instruments/*.js` (every record with a `status` field),
 generated from the same source the app reads: `status`, whether it has a non-empty `curriculum`,
-which `src/instruments/how/*.js` chart (if any) `howKindFor()`/`computeHow()`
+which `src/instruments/how/*.js` chart (if any) `howKindFor()` (`src/instruments/how-kind.js`)/`computeHow()`
 (`src/ui/fingerings/how.js`) picks for it, and whether that chart is a typed lookup table a
 musician has not yet checked (`src/instruments/how/keyed-woodwind.js` and
 `src/instruments/how/recorder-whistle.js`'s own "NEEDS A MUSICIAN'S CHECK" headers) or a formula
@@ -1198,7 +1198,7 @@ case folding into the record's own written range. Fingering data lives in
 `src/instruments/how/keyed-woodwind.js`: typed lookup tables (same shape as
 `recorder-whistle.js`), one per instrument, since a keyed Boehm-system
 woodwind's fingering does not fall out of a formula the way brass valve/
-slide arithmetic does. `howKindFor()`/`computeHow()`
+slide arithmetic does. `howKindFor()` (`src/instruments/how-kind.js`)/`computeHow()`
 (`src/ui/fingerings/how.js`) wire all five into the fingerings panel under a
 new `'keyed-woodwind'` kind. **Every fingering in that file is a good-faith
 beginner fingering written from general knowledge, not yet checked against
