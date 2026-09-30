@@ -176,6 +176,11 @@
   @media (max-width: 600px) {
     .main > .side { display: contents; }
     .main > .side > .row:first-child { order: -1; }
+    /* BC-2: the level card (level name, progress bar, the coach's one-line
+       objective) follows Start at order -1 so a phone shows "what next" and
+       "how far along" together; the energy card stays with the other cards
+       below the stage. Only visual order moves; DOM order is unchanged. */
+    .main > .side > #levelCard { order: -1; }
     /* The instrument sheet becomes a real bottom sheet: capped height with
        its own scroll so the page below (nav, Start) is always in reach
        instead of the full button list pushing everything else down. Its
