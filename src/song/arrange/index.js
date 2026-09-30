@@ -114,8 +114,9 @@ function harpAdviceText(notes, harpKey) {
 // position in `notes` without bowed.js needing to know about indices at
 // all. fretted.js and keys.js already carry an explicit `index` and need no
 // tagging.
+function unplayableEntry(index, u) { return { index, start: u.start, dur: u.dur, midi: u.midi, reason: u.reason }; }
 function cleanUnplayable(u) {
-  return { index: u.__idx !== undefined ? u.__idx : u.index, start: u.start, dur: u.dur, midi: u.midi, reason: u.reason };
+  return unplayableEntry(u.__idx !== undefined ? u.__idx : u.index, u);
 }
 
 export function arrangeFor(notes, instrument, setup = {}, opts = {}) {
@@ -142,7 +143,7 @@ export function arrangeFor(notes, instrument, setup = {}, opts = {}) {
     result.capo = capo;
     result.tuningName = setup.tuning || null;
     arr.placed.forEach(p => result.placements.set(p.index, { string: p.string, fret: p.fret }));
-    result.unplayable = arr.unplayable.map(u => ({ index: u.index, start: u.start, dur: u.dur, midi: u.midi, reason: u.reason }));
+    result.unplayable = arr.unplayable.map(u => unplayableEntry(u.index, u));
     result.summary = buildSummary(instrument, capo, result.tuningName);
   } else if (family === 'bowed') {
     const arr = arrangeBowed(indexed, instrument);
@@ -153,7 +154,7 @@ export function arrangeFor(notes, instrument, setup = {}, opts = {}) {
     const arr = arrangeKeys(indexed, instrument);
     arr.rh.forEach(n => result.placements.set(n.__idx, { hand: 'rh', finger: n.finger }));
     arr.lh.forEach(n => result.placements.set(n.__idx, { hand: 'lh', finger: n.finger }));
-    result.unplayable = arr.unplayable.map(u => ({ index: u.index, start: u.start, dur: u.dur, midi: u.midi, reason: u.reason }));
+    result.unplayable = arr.unplayable.map(u => unplayableEntry(u.index, u));
     result.summary = buildSummary(instrument, 0, null);
   } else if (family === 'free-reed') {
     const harpKey = Number.isInteger(setup.harpKey) ? setup.harpKey : 0;
