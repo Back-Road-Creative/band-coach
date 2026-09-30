@@ -38,10 +38,6 @@ export function passesRule(result, passRule) {
   return true;
 }
 
-// Plain-word feedback for a FAILED step that fell down ONLY on hold or tune
-// -- everything else about it (hit rate, timing) was fine, so telling the
-// learner the one concrete thing to fix beats the generic "try that again"
-
 // Which rule passesRule found wrong FIRST -- same check order it
 // runs in -- shared by src/ui/songs/practice.js's firstCorrection (the plain-word message) and
 // src/core/teaching.js's repairFor (which notes to isolate into a repair

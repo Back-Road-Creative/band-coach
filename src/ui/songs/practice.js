@@ -349,6 +349,10 @@ export function judgeAttempt(expectedNotes, playedEvents, opts = {}) {
   };
 }
 
+// Plain-word feedback for a FAILED step that fell down ONLY on hold or tune
+// -- everything else about it (hit rate, timing) was fine, so telling the
+// learner the one concrete thing to fix beats the generic "try that again"
+// src/ui/songs.js falls back to otherwise. Returns null when there is no
 // hold/tune rule to judge, or when hit rate or timing is what actually
 // failed (those keep the existing generic message -- singling out hold/tune
 // there would be misleading).
