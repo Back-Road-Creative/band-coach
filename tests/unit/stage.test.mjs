@@ -8,6 +8,7 @@ import { mkdtempSync, writeFileSync, readFileSync, rmSync, existsSync } from 'no
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
+import { readFileSync as readSrc } from 'node:fs';
 import { stage } from '../../build/stage.mjs';
 
 function tmp() { return mkdtempSync(join(tmpdir(), 'bc-stage-')); }
@@ -52,4 +53,11 @@ test('stage refuses a missing source file with a message that names it', () => {
   try {
     assert.throws(() => stage({ from: join(dst, 'nope.html'), dir: dst }), /nope\.html/);
   } finally { rmSync(dst, { recursive: true }); }
+});
+
+test('stage writes the bytes itself rather than calling copyFileSync, which EPERMs on the WSL D: mount', () => {
+  const src = readSrc(new URL('../../build/stage.mjs', import.meta.url), 'utf8');
+  const code = src.split('\n').filter((l) => !l.trimStart().startsWith('//')).join('\n');
+  assert.doesNotMatch(code, /copyFileSync|copyFile\(/);
+  assert.match(code, /writeFileSync\(to, data\)/);
 });
