@@ -916,30 +916,34 @@ function mountSongsPanel(hostEl, api) {
     return copyId;
   }
 
-  // songHeader(song, libraryId): the one row of plain actions above a song's
-  // own practise section (P3-8) -- Edit notes, Play along, Export, Share,
-  // Save a copy, in that order. `libraryId` is null for a starter tune (not
-  // yet saved anywhere a learner owns) and the library's own id otherwise;
-  // called fresh every time a song is opened, so songHeaderSection.innerHTML
-  // reset below also clears any Export toggle left open from a previous song.
-  function songHeader(song, libraryId) {
-    songHeaderSection.hidden = false;
-    songHeaderSection.innerHTML = '';
-    // A9: every real path into a song (a row click via openSong(), a
-    // deep-link via checkOpenRequest(), Carry on's own openSong() call)
-    // runs through this one function first, so this is the one place that
-    // needs to close the library -- reopened by the "Back to songs" button
-    // below once the whole piece is finished.
-    libraryDetails.open = false;
+  // The layout both "Print" (canvas) and "Download sheet (SVG)" draw from: part 1 of THIS
+  // song laid out by layoutSong() at SHEET_WIDTH for the CURRENT instrument's clef.
+  // Clef: the same rule clefFor() in editor.js applies to the CURRENT instrument's
+  // record (rec.clefs) -- a grand-staff instrument (kbd) gets 'grand', anything else
+  // its own first listed clef, 'treble' when no instrument is picked yet.
+  // Key name: the same PC-to-key-name table keyName() in editor.js uses, for the same
+  // { tonic, mode } shape (src/song/model.js) -- not exported there, so kept here too.
+  const SHEET_WIDTH = 340;
+  function songSheetLayout(song) {
+    const rec = api.instrument(api.mod());
+    const clef = rec && Array.isArray(rec.clefs) && rec.clefs.length
+      ? (rec.clefs.indexOf('grand') >= 0 ? 'grand' : rec.clefs[0])
+      : 'treble';
+    const key = song.key
+      ? (song.key.mode === 'minor' ? PC_TO_MINOR_KEY[song.key.tonic] : PC_TO_MAJOR_KEY[song.key.tonic])
+      : 'C';
+    return layoutSong(song, 0, { clef, key, width: SHEET_WIDTH });
+  }
 
-    // "Edit notes": a library song goes straight to the editor; a starter
-    // tune has no id of its own to edit in place, so its own id rides along
-    // under starterId instead (requestOpenInEditor) -- the editor panel
-    // (src/ui/editor.js's checkOpenRequest) resolves that through
-    // starterSongs itself and saves any edit as a brand new "My copy of…"
-    // entry, so editing never touches the shipped starter tune (P3-10;
-    // replaces the earlier "save a copy first" stop-gap).
-    const editBtn = el('button', {
+  // "Edit notes": a library song goes straight to the editor; a starter
+  // tune has no id of its own to edit in place, so its own id rides along
+  // under starterId instead (requestOpenInEditor) -- the editor panel
+  // (src/ui/editor.js's checkOpenRequest) resolves that through
+  // starterSongs itself and saves any edit as a brand new "My copy of…"
+  // entry, so editing never touches the shipped starter tune (P3-10;
+  // replaces the earlier "save a copy first" stop-gap).
+  function headerEditButton(song, libraryId) {
+    return el('button', {
       type: 'button', class: 'panel-songs-action-edit', text: 'Edit notes',
       onclick: () => {
         if (libraryId) {
@@ -950,15 +954,17 @@ function mountSongsPanel(hostEl, api) {
         }
       },
     });
+  }
 
-    // "Play along": hands the SAME decoded recording Play Along would need
-    // off to it directly when one is still held in memory for THIS song
-    // (see lastAudioRec/lastAudioRecSongId above); otherwise
-    // openPlayalongPanel(null) still switches to Play Along, which reads no
-    // pending recording as its normal empty state (playalong.js's own
-    // `if (!pendingRecording) return`) -- so this never needs a separate
-    // api.openPanel() branch to reach the same place.
-    const playAlongBtn = el('button', {
+  // "Play along": hands the SAME decoded recording Play Along would need
+  // off to it directly when one is still held in memory for THIS song
+  // (see lastAudioRec/lastAudioRecSongId above); otherwise
+  // openPlayalongPanel(null) still switches to Play Along, which reads no
+  // pending recording as its normal empty state (playalong.js's own
+  // `if (!pendingRecording) return`) -- so this never needs a separate
+  // api.openPanel() branch to reach the same place.
+  function headerPlayAlongButton(libraryId) {
+    return el('button', {
       type: 'button', class: 'panel-songs-action-playalong', text: 'Play along',
       onclick: () => {
         const rec = libraryId && libraryId === lastAudioRecSongId ? lastAudioRec : null;
@@ -966,12 +972,14 @@ function mountSongsPanel(hostEl, api) {
         if (!opened) say('Open Play Along to use this recording.');
       },
     });
+  }
 
-    // "Export": toggles the SAME MIDI/MusicXML/ABC controls songExportControls()
-    // has always built (songRow() used to render them into every row up
-    // front; now they exist only between one Export press and the next).
+  // "Export": toggles the SAME MIDI/MusicXML/ABC controls songExportControls()
+  // has always built (songRow() used to render them into every row up
+  // front; now they exist only between one Export press and the next).
+  function headerExportButton(song, libraryId) {
     let headerExportEl = null;
-    const exportBtn = el('button', {
+    return el('button', {
       type: 'button', class: 'panel-songs-action-export', text: 'Export',
       onclick: () => {
         if (headerExportEl) { headerExportEl.remove(); headerExportEl = null; return; }
@@ -979,10 +987,12 @@ function mountSongsPanel(hostEl, api) {
         songHeaderSection.appendChild(headerExportEl);
       },
     });
+  }
 
-    // "Share": a one-song .bandpack, via the same downloadBandPackOf()
-    // shareBandPack() (the whole library) uses -- see that helper's comment.
-    const shareBtn = el('button', {
+  // "Share": a one-song .bandpack, via the same downloadBandPackOf()
+  // shareBandPack() (the whole library) uses -- see that helper's comment.
+  function headerShareButton(song) {
+    return el('button', {
       type: 'button', class: 'panel-songs-action-share', text: 'Share',
       onclick: () => {
         const fileBase = (song.title || 'song').replace(/[^\w.-]+/g, '_') || 'song';
@@ -995,41 +1005,26 @@ function mountSongsPanel(hostEl, api) {
         say('Shared "' + song.title + '" as ' + fileBase + '.bandpack.', 'ok');
       },
     });
+  }
 
-    // "Save a copy": library.add() under a new title, see saveCopyOf() above.
-    const saveCopyBtn = el('button', {
+  // "Save a copy": library.add() under a new title, see saveCopyOf() above.
+  function headerSaveCopyButton(song) {
+    return el('button', {
       type: 'button', class: 'panel-songs-action-copy', text: 'Save a copy',
       onclick: async () => {
         await saveCopyOf(song);
         say('Saved a copy: ' + song.title + ' (copy)');
       },
     });
+  }
 
-    // The layout both "Print" (canvas) and "Download sheet (SVG)" draw from: part 1 of THIS
-    // song laid out by layoutSong() at SHEET_WIDTH for the CURRENT instrument's clef.
-    // Clef: the same rule clefFor() in editor.js applies to the CURRENT instrument's
-    // record (rec.clefs) -- a grand-staff instrument (kbd) gets 'grand', anything else
-    // its own first listed clef, 'treble' when no instrument is picked yet.
-    // Key name: the same PC-to-key-name table keyName() in editor.js uses, for the same
-    // { tonic, mode } shape (src/song/model.js) -- not exported there, so kept here too.
-    const SHEET_WIDTH = 340;
-    function songSheetLayout(song) {
-      const rec = api.instrument(api.mod());
-      const clef = rec && Array.isArray(rec.clefs) && rec.clefs.length
-        ? (rec.clefs.indexOf('grand') >= 0 ? 'grand' : rec.clefs[0])
-        : 'treble';
-      const key = song.key
-        ? (song.key.mode === 'minor' ? PC_TO_MINOR_KEY[song.key.tonic] : PC_TO_MAJOR_KEY[song.key.tonic])
-        : 'C';
-      return layoutSong(song, 0, { clef, key, width: SHEET_WIDTH });
-    }
-
-    // "Print": lays out part 1 of THIS song (src/ui/editor/layout-song.js -- the same call
-    // editor.js's own render() makes for the notation canvas) onto a hidden black-on-white
-    // sheet (printSheetEl above), then opens the browser's print dialog the same way
-    // "Print this week's report" does (src/ui/history.js): styles.css's @media print block
-    // scopes its rules to body.printing-song so nothing but this sheet ends up on the page.
-    const printBtn = el('button', {
+  // "Print": lays out part 1 of THIS song (src/ui/editor/layout-song.js -- the same call
+  // editor.js's own render() makes for the notation canvas) onto a hidden black-on-white
+  // sheet (printSheetEl above), then opens the browser's print dialog the same way
+  // "Print this week's report" does (src/ui/history.js): styles.css's @media print block
+  // scopes its rules to body.printing-song so nothing but this sheet ends up on the page.
+  function headerPrintButton(song) {
+    return el('button', {
       type: 'button', class: 'panel-songs-action-print', text: 'Print',
       onclick: () => {
         if (!printSheetEl) {
@@ -1067,11 +1062,13 @@ function mountSongsPanel(hostEl, api) {
         window.print();
       },
     });
+  }
 
-    // "Download sheet (SVG)": the same rows "Print" draws on canvas, as one standalone SVG
-    // file (src/notation/draw-svg.js) with the song title as its <title> and the instrument
-    // and part as its <desc>, saved through the shared triggerDownload().
-    const sheetBtn = el('button', {
+  // "Download sheet (SVG)": the same rows "Print" draws on canvas, as one standalone SVG
+  // file (src/notation/draw-svg.js) with the song title as its <title> and the instrument
+  // and part as its <desc>, saved through the shared triggerDownload().
+  function headerSheetButton(song) {
+    return el('button', {
       type: 'button', class: 'panel-songs-action-sheet', text: t('songs.sheetDownload'),
       onclick: () => {
         let svg;
@@ -1088,14 +1085,31 @@ function mountSongsPanel(hostEl, api) {
         triggerDownload([svg], 'image/svg+xml', fileBase + '.svg');
       },
     });
+  }
 
-    songHeaderSection.appendChild(editBtn);
-    songHeaderSection.appendChild(playAlongBtn);
-    songHeaderSection.appendChild(exportBtn);
-    songHeaderSection.appendChild(shareBtn);
-    songHeaderSection.appendChild(saveCopyBtn);
-    songHeaderSection.appendChild(printBtn);
-    songHeaderSection.appendChild(sheetBtn);
+  // songHeader(song, libraryId): the one row of plain actions above a song's
+  // own practise section (P3-8) -- Edit notes, Play along, Export, Share,
+  // Save a copy, in that order. `libraryId` is null for a starter tune (not
+  // yet saved anywhere a learner owns) and the library's own id otherwise;
+  // called fresh every time a song is opened, so songHeaderSection.innerHTML
+  // reset below also clears any Export toggle left open from a previous song.
+  function songHeader(song, libraryId) {
+    songHeaderSection.hidden = false;
+    songHeaderSection.innerHTML = '';
+    // A9: every real path into a song (a row click via openSong(), a
+    // deep-link via checkOpenRequest(), Carry on's own openSong() call)
+    // runs through this one function first, so this is the one place that
+    // needs to close the library -- reopened by the "Back to songs" button
+    // below once the whole piece is finished.
+    libraryDetails.open = false;
+
+    songHeaderSection.appendChild(headerEditButton(song, libraryId));
+    songHeaderSection.appendChild(headerPlayAlongButton(libraryId));
+    songHeaderSection.appendChild(headerExportButton(song, libraryId));
+    songHeaderSection.appendChild(headerShareButton(song));
+    songHeaderSection.appendChild(headerSaveCopyButton(song));
+    songHeaderSection.appendChild(headerPrintButton(song));
+    songHeaderSection.appendChild(headerSheetButton(song));
   }
 
   function openSong(song, libraryId) {
@@ -1382,58 +1396,42 @@ function mountSongsPanel(hostEl, api) {
     return base + ' ' + n + ' note' + (n === 1 ? ' has' : 's have') + ' no comfortable fingering.';
   }
 
-  function renderPractice() {
-    countEl = null;
-    practiceSection.innerHTML = '';
-    practiceHeadingEl = el('h3', { text: practice.song.title, id: 'songsPracticeHeading', tabindex: '-1' });
-    practiceSection.appendChild(practiceHeadingEl);
-    const arrangementLine = arrangementText(practice.arrangement);
-    if (arrangementLine) practiceSection.appendChild(el('p', { class: 'panel-songs-arrangement', text: arrangementLine }));
-    const { plan, stepIndex } = practice;
-    if (stepIndex >= plan.steps.length) {
-      markSongPassed(practice.song.id);
-      practiceSection.appendChild(el('p', { text: 'Nicely done. You have played through the whole piece.' }));
-      if (practice.transferNote) practiceSection.appendChild(el('p', { class: 'panel-songs-transfer-note', text: practice.transferNote }));
-      // The whole-piece verdict (Check mode only): the same line shown next
-      // to the heat strip on a normal step render, below, repeated here so
-      // it is still visible once the last step's own strip is replaced by
-      // this end screen.
-      if (practice.mode === 'check' && practice.lastCheckVerdict) {
-        practiceSection.appendChild(el('p', {
-          class: 'panel-songs-check-result',
-          text: practice.lastCheckVerdict === 'counted' ? t('songs.mode.counted') : t('songs.mode.practiceOnly'),
-        }));
-      }
-      // "Practise again" keeps the mode and returnTo it started with
-      // (restart(), above) -- a second run started from the keyboard
-      // hand-off must still end with "Back to practice" (C11a), and a
-      // second Check run must still be a Check.
-      practiceSection.appendChild(el('button', { type: 'button', text: 'Practise again', onclick: () => restart(practice.mode, true) }));
-      practiceSection.appendChild(el('button', {
-        type: 'button', text: 'Back to songs',
-        onclick: () => { practice = null; currentPractice = null; practiceSection.hidden = true; libraryDetails.open = true; },
+  function renderPracticeEnd() {
+    markSongPassed(practice.song.id);
+    practiceSection.appendChild(el('p', { text: 'Nicely done. You have played through the whole piece.' }));
+    if (practice.transferNote) practiceSection.appendChild(el('p', { class: 'panel-songs-transfer-note', text: practice.transferNote }));
+    // The whole-piece verdict (Check mode only): the same line shown next
+    // to the heat strip on a normal step render, below, repeated here so
+    // it is still visible once the last step's own strip is replaced by
+    // this end screen.
+    if (practice.mode === 'check' && practice.lastCheckVerdict) {
+      practiceSection.appendChild(el('p', {
+        class: 'panel-songs-check-result',
+        text: practice.lastCheckVerdict === 'counted' ? t('songs.mode.counted') : t('songs.mode.practiceOnly'),
       }));
-      // 'Back to practice' (C11a): only a lesson opened WITH a returnTo (the
-      // kbd practice hand-off) gets this -- a song reached any other way
-      // (the library list, Carry on, a challenge) has nothing to return to,
-      // so it must not appear there. api.setMod() is closePanel()+setMod()
-      // (src/app.js's panelApi), so this both closes Songs and lands back on
-      // returnTo's practice screen in one call.
-      if (practice.returnTo) {
-        const returnTo = practice.returnTo;
-        practiceSection.appendChild(el('button', { type: 'button', text: t('kbd.songHandoff.back'), onclick: () => { practice = null; currentPractice = null; api.setMod(returnTo); } }));
-      }
-      return;
     }
-    if (practice.interlude) {
-      renderInterlude(practice.interlude);
-      return;
+    // "Practise again" keeps the mode and returnTo it started with
+    // (restart(), above) -- a second run started from the keyboard
+    // hand-off must still end with "Back to practice" (C11a), and a
+    // second Check run must still be a Check.
+    practiceSection.appendChild(el('button', { type: 'button', text: 'Practise again', onclick: () => restart(practice.mode, true) }));
+    practiceSection.appendChild(el('button', {
+      type: 'button', text: 'Back to songs',
+      onclick: () => { practice = null; currentPractice = null; practiceSection.hidden = true; libraryDetails.open = true; },
+    }));
+    // 'Back to practice' (C11a): only a lesson opened WITH a returnTo (the
+    // kbd practice hand-off) gets this -- a song reached any other way
+    // (the library list, Carry on, a challenge) has nothing to return to,
+    // so it must not appear there. api.setMod() is closePanel()+setMod()
+    // (src/app.js's panelApi), so this both closes Songs and lands back on
+    // returnTo's practice screen in one call.
+    if (practice.returnTo) {
+      const returnTo = practice.returnTo;
+      practiceSection.appendChild(el('button', { type: 'button', text: t('kbd.songHandoff.back'), onclick: () => { practice = null; currentPractice = null; api.setMod(returnTo); } }));
     }
-    if (practice.repair) {
-      renderRepairStep(practice.repair.step);
-      return;
-    }
-    const step = plan.steps[stepIndex];
+  }
+
+  function syncLoopTransport(step, stepIndex) {
     // A tempo-ladder rung gets its own loop-backing transport (see the
     // `practice = {...}` comment in startPractice() above for the reset
     // rule); any other step kind carries none.
@@ -1453,6 +1451,9 @@ function mountSongsPanel(hostEl, api) {
       practice.loopTransport = null;
       practice.loopTransportStepIndex = null;
     }
+  }
+
+  function renderStepHeading(step, stepIndex, plan) {
     if (plan.fit.unplayable.length && stepIndex === 0) {
       practiceSection.appendChild(el('p', {
         class: 'panel-songs-warn',
@@ -1471,6 +1472,9 @@ function mountSongsPanel(hostEl, api) {
       }));
     }
     practiceSection.appendChild(titleRow);
+  }
+
+  function renderStepBody(step) {
     // Staff view (P4-8): the step's own bars, on this instrument's clef,
     // in written pitch and written key -- pure layout in staffView(), drawn
     // here so a transposing instrument's arrangementLine caption above
@@ -1514,6 +1518,9 @@ function mountSongsPanel(hostEl, api) {
       }
       practiceSection.appendChild(el('p', { text: stepHint(step) }));
     }
+  }
+
+  function renderStepTempo(step) {
     // A phrase whose own span crosses a tempoMap change (practice.clock's
     // changesBetween, src/song/clock.js) is told so before the learner plays
     // it -- never for an untimed (bpm 0, "pitches") step, which has no
@@ -1533,7 +1540,9 @@ function mountSongsPanel(hostEl, api) {
     if (step.kind === 'tempo-ladder' && practice.loopTransport) {
       practiceSection.appendChild(el('p', { class: 'panel-songs-rate', text: rateLabel(practice.loopTransport.getRate()) }));
     }
+  }
 
+  function renderStepTransport(step) {
     // "Play it" (the demo) is Learn-only -- Rehearse and Check are both
     // meant to be played without hearing it first.
     if (practice.mode === 'learn') {
@@ -1574,7 +1583,9 @@ function mountSongsPanel(hostEl, api) {
     } else {
       practiceSection.appendChild(el('button', { type: 'button', text: t('songs.step.next'), onclick: () => advance(true, null) }));
     }
+  }
 
+  function renderModeControl() {
     // The mode control (Learn/Rehearse/Check, on one control -- the mode is
     // chosen per lesson and is not saved). Placed after the transport, on
     // normal step renders only (never here on the end screen or in repair,
@@ -1597,7 +1608,9 @@ function mountSongsPanel(hostEl, api) {
       }));
     }
     practiceSection.appendChild(modeGroup);
+  }
 
+  function renderHandsControl(step) {
     // Hands (H3): only a two-hand keyboard song ever sets practice.hands to
     // anything but null (startPractice above) -- a melody-only song, or any
     // non-keyboard instrument, shows none of this. Placed below the mode
@@ -1632,7 +1645,9 @@ function mountSongsPanel(hostEl, api) {
       if (practice.hands !== 'right' && lhNote) sentences.push(t('songs.hands.startLeft', { note: noteName(lhNote.midi, true) }));
       if (sentences.length) practiceSection.appendChild(el('p', { class: 'panel-songs-hands-prep', text: sentences.join(' ') }));
     }
+  }
 
+  function renderStepFeedback(stepIndex) {
     // A transfer note (advance() below): the passage just passed had no next
     // section, so a review of it was queued for a later session.
     if (practice.transferNote) practiceSection.appendChild(el('p', { class: 'panel-songs-transfer-note', text: practice.transferNote }));
@@ -1663,6 +1678,37 @@ function mountSongsPanel(hostEl, api) {
     if (practice.lastAssessed) {
       practiceSection.appendChild(renderAssessedList(practice.lastAssessed));
     }
+  }
+
+  function renderPractice() {
+    countEl = null;
+    practiceSection.innerHTML = '';
+    practiceHeadingEl = el('h3', { text: practice.song.title, id: 'songsPracticeHeading', tabindex: '-1' });
+    practiceSection.appendChild(practiceHeadingEl);
+    const arrangementLine = arrangementText(practice.arrangement);
+    if (arrangementLine) practiceSection.appendChild(el('p', { class: 'panel-songs-arrangement', text: arrangementLine }));
+    const { plan, stepIndex } = practice;
+    if (stepIndex >= plan.steps.length) {
+      renderPracticeEnd();
+      return;
+    }
+    if (practice.interlude) {
+      renderInterlude(practice.interlude);
+      return;
+    }
+    if (practice.repair) {
+      renderRepairStep(practice.repair.step);
+      return;
+    }
+    const step = plan.steps[stepIndex];
+    syncLoopTransport(step, stepIndex);
+    renderStepHeading(step, stepIndex, plan);
+    renderStepBody(step);
+    renderStepTempo(step);
+    renderStepTransport(step);
+    renderModeControl();
+    renderHandsControl(step);
+    renderStepFeedback(stepIndex);
     // A9: moved from ahead of titleRow/the notation/the transport (playBtn
     // above) to here, below all of it -- 28 instrument cards used to sit
     // between the song title and "Play it", pushing the transport itself
