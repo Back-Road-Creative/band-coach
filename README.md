@@ -887,7 +887,7 @@ at the same time, in C-major five-finger position (RH thumb-on-C, fingers 1-2-3-
 LH little-finger-on-C an octave down, fingers 5-4-3-2-1 on the same letter names), moving in
 parallel motion up the position — the standard first two-hand material in beginner method books.
 The curriculum, fingering table and grading are pure logic in `src/core/hands-together.js`
-(`node --test tests/unit/hands-together.test.mjs`), wired into the keyboard mod's `onNote()` in
+(`node --test tests/unit/hands-together.test.mjs`), wired into the keyboard mod's `onNote()` (its hands-together branch is `onHandsTogetherNote()`) in
 `src/app.js`.
 
 A real MIDI keyboard delivers independent note-on events, so both notes are checked together and
