@@ -1822,6 +1822,132 @@ function mountSongsPanel(hostEl, api) {
     }
   }
 
+  function listenDrumKit() {
+    // A drum kit (P4-12) hears both an e-kit's own MIDI notes AND a real
+    // kit through the microphone, in the SAME try -- unlike every other
+    // instrument, whose input is either 'midi' or a mic pitch, never both.
+    // MIDI names the exact piece (pieceForMidi); the mic can only tell
+    // kick/snare/hi-hat apart (src/audio/drum-classify.js), which is why
+    // judgeAttempt's pieceOkFor (practice.js) treats an unnamed or
+    // MIC_UNNAMEABLE mic hit as not-assessed rather than a miss.
+    // onMidiNote's own `source` is forwarded through unchanged -- it is
+    // 'midi' for a real MIDI note-on, but ALSO fires for computer-key and
+    // screen-click presses while a drum-kit instrument is selected (this
+    // listener hears every route onNote() does, whatever the current
+    // step's instrument is), so a computer-key hit on this same lesson
+    // must never be recorded as 'midi' either.
+    const unsubscribe = onMidiNote((midi, _exact, atAudioSec, source) => {
+      practice.playedEvents.push({ piece: pieceForMidi(midi), atSec: (atAudioSec != null ? atAudioSec : api.now()) - practice.recordStartSec, source });
+      updateCount();
+    });
+    // Best effort: an e-kit alone (no room mic permission) still works
+    // fully through MIDI, so a blocked/denied mic here is silent, not a
+    // dead end -- unlike the mic-only path below, which has nothing else
+    // to fall back on and so DOES say so.
+    api.openMic().catch(() => {});
+    const DRUM_HOP = 512;
+    let capture = null;
+    let lastDrumT = null;
+    const timer = setInterval(() => {
+      const analysers = api.analysers();
+      const audio = api.audio();
+      if (!analysers.time || !audio) return;
+      if (!capture) capture = createDrumCapture({ sampleRate: audio.sampleRate });
+      const buf = new Float32Array(analysers.time.fftSize);
+      analysers.time.getFloatTimeDomainData(buf);
+      const t = api.now();
+      const dt = Math.min(0.2, t - (lastDrumT || t));
+      lastDrumT = t;
+      // Same "split the analyser's newest audio into small hops and push
+      // each one, oldest first" technique as app.js's own listenDrums()
+      // (app.js:1528-1569) -- the analyser's window is a ROLLING read of
+      // its newest samples, so only the hops new since the last tick may
+      // be pushed, or drum-capture.js's onset detector would see the
+      // same audio more than once.
+      const newSamples = Math.max(0, Math.min(buf.length, Math.round((dt || 0.05) * audio.sampleRate)));
+      const nHops = Math.floor(newSamples / DRUM_HOP);
+      let heard = false;
+      for (let c = nHops - 1; c >= 0; c--) {
+        const end = buf.length - c * DRUM_HOP;
+        const chunk = buf.subarray(end - DRUM_HOP, end);
+        const hopAtSec = (t - c * (DRUM_HOP / audio.sampleRate)) - practice.recordStartSec;
+        capture.push(chunk, hopAtSec).forEach((hit) => {
+          practice.playedEvents.push({ piece: hit.piece, atSec: hit.atSec, source: 'mic' });
+          heard = true;
+        });
+      }
+      if (heard) updateCount();
+    }, 50);
+    return () => { unsubscribe(); clearInterval(timer); };
+  }
+
+  function listenMidi() {
+    // pushMidiEvent (above, not this unit's to change) always PUSHES a
+    // new entry for this exact press -- it may also close an earlier
+    // still-open same-pitch entry, but that closed entry is never the
+    // one just pushed -- so the last element right after the call is
+    // always this press's own event, safe to stamp with the route it
+    // actually came from ('midi' for real MIDI, 'computer-key' for the
+    // physical keyboard, undefined for a hook-driven note -- see
+    // onNote()'s `source` comment in src/app.js).
+    const unsubscribe = onMidiNote((midi, _exact, atAudioSec, source) => {
+      pushMidiEvent(practice.playedEvents, midi, (atAudioSec != null ? atAudioSec : api.now()) - practice.recordStartSec);
+      practice.playedEvents[practice.playedEvents.length - 1].source = source;
+      updateCount();
+    });
+    return unsubscribe;
+  }
+
+  function listenMic(onsetsOnly) {
+    api.openMic().catch(() => say('The microphone was blocked. Allow microphone access, or switch to the keyboard.', 'no'));
+    let onset;
+    // The played event still being sounded, so a sustained instrument's
+    // hold/tune rules (src/song/lesson.js) have something real to judge
+    // (durSec/cents) -- every tick this SAME pitch keeps being heard, its
+    // durSec is stamped forward; the moment it drops out (silence, or the
+    // pitch moves on to the next note) durSec is left at that last-seen
+    // value rather than kept open forever. A MIDI/on-screen-key note (see
+    // onMidiNote above) never gets either field: there is no "still
+    // sounding" signal to poll for a discrete key press.
+    let openEvent = null;
+    const timer = setInterval(() => {
+      const analysers = api.analysers();
+      const audio = api.audio();
+      if (!analysers.time || !audio) return;
+      if (!onset) onset = createOnsetDetector({ sampleRate: audio.sampleRate, frameSize: analysers.time.fftSize });
+      const buf = new Float32Array(analysers.time.fftSize);
+      analysers.time.getFloatTimeDomainData(buf);
+      const o = onset.push(buf);
+      // No onset and nothing still sounding: skip YIN entirely this tick.
+      if (!o.onset && !openEvent) return;
+      const toolRange = rangeForInstrument(practice.instrument);
+      const r = yin(buf, audio.sampleRate, toolRange.fmin, toolRange.fmax, api.gates().pitch);
+      const nowSec = api.now() - practice.recordStartSec;
+      if (!o.onset) {
+        if (openEvent && r.freq && r.clarity > 0.5 && Math.round(69 + 12 * Math.log2(r.freq / 440)) === openEvent.midi) {
+          extendHeldEvent(openEvent, r.freq, openEvent.midi, nowSec);
+        } else {
+          openEvent = null;
+        }
+        return;
+      }
+      if (!r.freq || !(r.clarity > 0.7)) {
+        openEvent = null;
+        // "Clap the rhythm": an attack with no clear pitch (a clap, a tap)
+        // is still a beat, so a rhythm step keeps it as an unpitched event.
+        if (onsetsOnly) { practice.playedEvents.push({ midi: null, atSec: nowSec, source: 'mic' }); updateCount(); }
+        return;
+      }
+      const midi = Math.round(69 + 12 * Math.log2(r.freq / 440));
+      const event = playedEventFrom(r.freq, midi, nowSec);
+      event.source = 'mic';
+      practice.playedEvents.push(event);
+      openEvent = event;
+      updateCount();
+    }, 50);
+    return () => clearInterval(timer);
+  }
+
   // Capture's zero IS the phrase origin (step.originTick): an event at atSec
   // 0 is played on the phrase's first bar line, exactly where playPhrase()'s
   // own schedule starts, and judgeAttempt() compares on that same clock.
@@ -1850,127 +1976,7 @@ function mountSongsPanel(hostEl, api) {
     // Real listening only begins once the count-in ends (below); this is the
     // rest of the old startRecording() body, unchanged, just deferred.
     function beginListening() {
-      // A drum kit (P4-12) hears both an e-kit's own MIDI notes AND a real
-      // kit through the microphone, in the SAME try -- unlike every other
-      // instrument, whose input is either 'midi' or a mic pitch, never both.
-      // MIDI names the exact piece (pieceForMidi); the mic can only tell
-      // kick/snare/hi-hat apart (src/audio/drum-classify.js), which is why
-      // judgeAttempt's pieceOkFor (practice.js) treats an unnamed or
-      // MIC_UNNAMEABLE mic hit as not-assessed rather than a miss.
-      // onMidiNote's own `source` is forwarded through unchanged -- it is
-      // 'midi' for a real MIDI note-on, but ALSO fires for computer-key and
-      // screen-click presses while a drum-kit instrument is selected (this
-      // listener hears every route onNote() does, whatever the current
-      // step's instrument is), so a computer-key hit on this same lesson
-      // must never be recorded as 'midi' either.
-      if (practice.instrument.kit) {
-        const unsubscribe = onMidiNote((midi, _exact, atAudioSec, source) => {
-          practice.playedEvents.push({ piece: pieceForMidi(midi), atSec: (atAudioSec != null ? atAudioSec : api.now()) - practice.recordStartSec, source });
-          updateCount();
-        });
-        // Best effort: an e-kit alone (no room mic permission) still works
-        // fully through MIDI, so a blocked/denied mic here is silent, not a
-        // dead end -- unlike the mic-only path below, which has nothing else
-        // to fall back on and so DOES say so.
-        api.openMic().catch(() => {});
-        const DRUM_HOP = 512;
-        let capture = null;
-        let lastDrumT = null;
-        const timer = setInterval(() => {
-          const analysers = api.analysers();
-          const audio = api.audio();
-          if (!analysers.time || !audio) return;
-          if (!capture) capture = createDrumCapture({ sampleRate: audio.sampleRate });
-          const buf = new Float32Array(analysers.time.fftSize);
-          analysers.time.getFloatTimeDomainData(buf);
-          const t = api.now();
-          const dt = Math.min(0.2, t - (lastDrumT || t));
-          lastDrumT = t;
-          // Same "split the analyser's newest audio into small hops and push
-          // each one, oldest first" technique as app.js's own listenDrums()
-          // (app.js:1528-1569) -- the analyser's window is a ROLLING read of
-          // its newest samples, so only the hops new since the last tick may
-          // be pushed, or drum-capture.js's onset detector would see the
-          // same audio more than once.
-          const newSamples = Math.max(0, Math.min(buf.length, Math.round((dt || 0.05) * audio.sampleRate)));
-          const nHops = Math.floor(newSamples / DRUM_HOP);
-          let heard = false;
-          for (let c = nHops - 1; c >= 0; c--) {
-            const end = buf.length - c * DRUM_HOP;
-            const chunk = buf.subarray(end - DRUM_HOP, end);
-            const hopAtSec = (t - c * (DRUM_HOP / audio.sampleRate)) - practice.recordStartSec;
-            capture.push(chunk, hopAtSec).forEach((hit) => {
-              practice.playedEvents.push({ piece: hit.piece, atSec: hit.atSec, source: 'mic' });
-              heard = true;
-            });
-          }
-          if (heard) updateCount();
-        }, 50);
-        practice.stop = () => { unsubscribe(); clearInterval(timer); };
-      } else if (practice.instrument.input === 'midi') {
-        // pushMidiEvent (above, not this unit's to change) always PUSHES a
-        // new entry for this exact press -- it may also close an earlier
-        // still-open same-pitch entry, but that closed entry is never the
-        // one just pushed -- so the last element right after the call is
-        // always this press's own event, safe to stamp with the route it
-        // actually came from ('midi' for real MIDI, 'computer-key' for the
-        // physical keyboard, undefined for a hook-driven note -- see
-        // onNote()'s `source` comment in src/app.js).
-        const unsubscribe = onMidiNote((midi, _exact, atAudioSec, source) => {
-          pushMidiEvent(practice.playedEvents, midi, (atAudioSec != null ? atAudioSec : api.now()) - practice.recordStartSec);
-          practice.playedEvents[practice.playedEvents.length - 1].source = source;
-          updateCount();
-        });
-        practice.stop = unsubscribe;
-      } else {
-        api.openMic().catch(() => say('The microphone was blocked. Allow microphone access, or switch to the keyboard.', 'no'));
-        let onset;
-        // The played event still being sounded, so a sustained instrument's
-        // hold/tune rules (src/song/lesson.js) have something real to judge
-        // (durSec/cents) -- every tick this SAME pitch keeps being heard, its
-        // durSec is stamped forward; the moment it drops out (silence, or the
-        // pitch moves on to the next note) durSec is left at that last-seen
-        // value rather than kept open forever. A MIDI/on-screen-key note (see
-        // onMidiNote above) never gets either field: there is no "still
-        // sounding" signal to poll for a discrete key press.
-        let openEvent = null;
-        const timer = setInterval(() => {
-          const analysers = api.analysers();
-          const audio = api.audio();
-          if (!analysers.time || !audio) return;
-          if (!onset) onset = createOnsetDetector({ sampleRate: audio.sampleRate, frameSize: analysers.time.fftSize });
-          const buf = new Float32Array(analysers.time.fftSize);
-          analysers.time.getFloatTimeDomainData(buf);
-          const o = onset.push(buf);
-          // No onset and nothing still sounding: skip YIN entirely this tick.
-          if (!o.onset && !openEvent) return;
-          const toolRange = rangeForInstrument(practice.instrument);
-          const r = yin(buf, audio.sampleRate, toolRange.fmin, toolRange.fmax, api.gates().pitch);
-          const nowSec = api.now() - practice.recordStartSec;
-          if (!o.onset) {
-            if (openEvent && r.freq && r.clarity > 0.5 && Math.round(69 + 12 * Math.log2(r.freq / 440)) === openEvent.midi) {
-              extendHeldEvent(openEvent, r.freq, openEvent.midi, nowSec);
-            } else {
-              openEvent = null;
-            }
-            return;
-          }
-          if (!r.freq || !(r.clarity > 0.7)) {
-            openEvent = null;
-            // "Clap the rhythm": an attack with no clear pitch (a clap, a tap)
-            // is still a beat, so a rhythm step keeps it as an unpitched event.
-            if (onsetsOnly) { practice.playedEvents.push({ midi: null, atSec: nowSec, source: 'mic' }); updateCount(); }
-            return;
-          }
-          const midi = Math.round(69 + 12 * Math.log2(r.freq / 440));
-          const event = playedEventFrom(r.freq, midi, nowSec);
-          event.source = 'mic';
-          practice.playedEvents.push(event);
-          openEvent = event;
-          updateCount();
-        }, 50);
-        practice.stop = () => clearInterval(timer);
-      }
+      practice.stop = practice.instrument.kit ? listenDrumKit() : practice.instrument.input === 'midi' ? listenMidi() : listenMic(onsetsOnly);
     }
 
     const { bpm, times } = countInFor(step, effectiveBpm(step));
@@ -2082,7 +2088,24 @@ function mountSongsPanel(hostEl, api) {
     return count;
   }
 
-  function advance(passed, result, elapsedMs, opts = {}) {
+  // `input`: which route every JUDGED note in this try actually came
+  // from (a matched note only -- a miss carries no played event to ask,
+  // see practice.js's missedNote). 'midi' only when every one of them
+  // is a real MIDI note-on; the one concrete non-midi route when they
+  // all agree on something else (a computer-key song played end to
+  // end); 'mixed' when they do not agree; and left off the row entirely
+  // -- never guessed -- the moment any judged note's route is unknown
+  // (same "left off rather than guessed" convention finishTask's own
+  // `input` comment documents in src/app.js, for a caller, such as the
+  // debug hook, that never told onNote() a source).
+  // Record only: this never changes credit, mastery or pass/fail above
+  // -- a later check reads this field on its own.
+  function judgedInputOf(result) {
+    if (!result) return undefined;
+    const s = result.matches.filter((m) => m.ok && m.played).map((m) => m.played.source);
+    return (s.length && s.every((x) => x !== undefined)) ? (s.every((x) => x === s[0]) ? s[0] : 'mixed') : undefined;
+  }
+
     // A repair try (src/core/teaching.js repairFor) is a handful of isolated
     // notes, not one of the plan's own steps: it never joins practice.results
     // (nextStep and the tempo-ladder streak logic stay blind to it) and
@@ -2091,147 +2114,112 @@ function mountSongsPanel(hostEl, api) {
     // the same few notes against the original step's own credit). A pass
     // clears the repair and returns to the step it isolated FROM (returnTo);
     // a miss keeps it -- try again, same isolated notes.
-    if (practice.repair) {
-      const repairStep = practice.repair.step;
-      say(passed ? 'Good. Back to the phrase.' : (firstCorrection(result, repairStep.passRule) || 'Not quite yet — try that again.'), passed ? 'ok' : 'no');
-      if (result) {
-        practice.lastHeat = barHeat(practice.song, result.matches);
-        practice.lastHeatBars = repairStep.bars;
-        const { dims, unassessed } = dimsFromStep(repairStep, result, { assess: capabilityFor(practice.instrument).assess });
-        practice.lastAssessed = assessmentLines(dims, unassessed, { step: repairStep, instrument: practice.instrument });
-        // A repair try is never independent evidence -- it is the isolated
-        // redo of the one worst note AFTER the step already failed twice --
-        // so it always logs assistance 'guided' (src/core/learning-events.js
-        // ASSISTANCE/isIndependentOk), regardless of practice.assistance
-        // (which describes the ORIGINAL step's mode, not this retry). Same
-        // one-row-per-judged-try convention as the main branch below, minus
-        // a Check verdict (a repair try is never 'check' mode on its own)
-        // and minus mastery credit (the comment above already covers why:
-        // the per-note credit already ran in finishRecording).
-        if (typeof api.logEvent === 'function') {
-          const judgedSources = result.matches.filter((m) => m.ok && m.played).map((m) => m.played.source);
-          const input = (judgedSources.length && judgedSources.every((s) => s !== undefined))
-            ? (judgedSources.every((s) => s === judgedSources[0]) ? judgedSources[0] : 'mixed')
-            : undefined;
-          api.logEvent(makeEvent({
-            instrument: practice.instrumentId, skill: repairStep.kind + ':' + repairStep.phraseIndex, source: 'song',
-            songId: practice.song.id, partId: practice.partId, assistance: 'guided',
-            dims, unassessed, activeMs: Math.max(0, Math.round(elapsedMs || 0)),
-            bpmTarget: repairStep.bpm || null, bpmActual: repairStep.bpm || null, input,
-            hands: practice.hands || undefined,
-          }, { now: api.now() }));
-        }
-      }
-      if (passed) practice.repair = null;
-      practice.playedEvents = [];
-      renderPractice();
-      return;
-    }
-    const step = practice.plan.steps[practice.stepIndex];
-    // Hands (H3): every read below that touches step.notes reads the CHOSEN
-    // hand's notes only (handSplit's judged half) -- credit, mastery-key
-    // dims, the assessment lines, and a repair's own note isolation
-    // (repairFor indexes step.notes by result.matches, so it must line up
-    // with what judgeAttempt() in finishRecording() above actually judged).
-    // step.kind/phraseIndex/bars/passRule/bpm still read the full step --
-    // those describe the STEP, not which hand is being judged.
-    const judgedStep = handSplit(step).step;
-    practice.results.push({ stepIndex: practice.stepIndex, passed });
-    if (step.passRule && !opts.unassessed) {
-      // Lazily started on the FIRST judged step, not in startPractice(): a
-      // learner who only ever watches the listen step and leaves never
-      // logs an empty session (summarizePracticeSession above returns null
-      // while judgedCount is 0).
-      if (practice.startedAt == null) practice.startedAt = api.now();
-      practice.judgedCount = (practice.judgedCount || 0) + 1;
-      if (passed) practice.judgedOk = (practice.judgedOk || 0) + 1;
-      const credit = creditFor({ step: judgedStep, passed, elapsedMs: elapsedMs || 0, judgedCount: result ? result.judgedCount : undefined, matches: result ? result.matches : undefined });
-      const mapped = mapMasteryKeys(credit.masteryKeys, practice.instrumentId, (api.db().prefs || {}));
-      // A rhythm step is judged on onsets only: a try with any clap or
-      // wrong-pitch hit is no evidence about the notes' pitch mastery.
-      if (!result || result.matches.every((m) => !m.ok || m.pitchOk !== false)) applyMasteryCredit(api, practice.instrumentId, mapped);
-      // One learning-event row per judged step (plan 6.4) -- bpmActual is
-      // the same as bpmTarget (step.bpm): no tempo estimate is measured
-      // from the attempt anywhere in this file, so nothing better is
-      // available to report.
-      const { dims, unassessed } = dimsFromStep(judgedStep, result, { assess: capabilityFor(practice.instrument).assess });
-      // `input`: which route every JUDGED note in this try actually came
-      // from (a matched note only -- a miss carries no played event to ask,
-      // see practice.js's missedNote). 'midi' only when every one of them
-      // is a real MIDI note-on; the one concrete non-midi route when they
-      // all agree on something else (a computer-key song played end to
-      // end); 'mixed' when they do not agree; and left off the row entirely
-      // -- never guessed -- the moment any judged note's route is unknown
-      // (same "left off rather than guessed" convention finishTask's own
-      // `input` comment documents in src/app.js, for a caller, such as the
-      // debug hook, that never told onNote() a source).
-      // Record only: this never changes credit, mastery or pass/fail above
-      // -- a later check reads this field on its own.
-      const judgedSources = result ? result.matches.filter((m) => m.ok && m.played).map((m) => m.played.source) : [];
-      const input = (judgedSources.length && judgedSources.every((s) => s !== undefined))
-        ? (judgedSources.every((s) => s === judgedSources[0]) ? judgedSources[0] : 'mixed')
-        : undefined;
-      // Check names its own route for every event, never leaving it off:
-      // the real route above, or 'unknown' when the route was left off (the
-      // debug hook, or a caller that never told onNote() a source) -- so a Check row is always readable on its own, without
-      // having to infer "no input field" as anything.
-      const loggedInput = practice.mode === 'check' ? (input !== undefined ? input : 'unknown') : input;
+  function advanceRepair(passed, result, elapsedMs) {
+    const repairStep = practice.repair.step;
+    say(passed ? 'Good. Back to the phrase.' : (firstCorrection(result, repairStep.passRule) || 'Not quite yet — try that again.'), passed ? 'ok' : 'no');
+    if (result) {
+      practice.lastHeat = barHeat(practice.song, result.matches);
+      practice.lastHeatBars = repairStep.bars;
+      const { dims, unassessed } = dimsFromStep(repairStep, result, { assess: capabilityFor(practice.instrument).assess });
+      practice.lastAssessed = assessmentLines(dims, unassessed, { step: repairStep, instrument: practice.instrument });
+      // A repair try is never independent evidence -- it is the isolated
+      // redo of the one worst note AFTER the step already failed twice --
+      // so it always logs assistance 'guided' (src/core/learning-events.js
+      // ASSISTANCE/isIndependentOk), regardless of practice.assistance
+      // (which describes the ORIGINAL step's mode, not this retry). Same
+      // one-row-per-judged-try convention as the main branch below, minus
+      // a Check verdict (a repair try is never 'check' mode on its own)
+      // and minus mastery credit (the comment above already covers why:
+      // the per-note credit already ran in finishRecording).
       if (typeof api.logEvent === 'function') {
-        const row = makeEvent({
-          instrument: practice.instrumentId, skill: step.kind + ':' + step.phraseIndex, source: 'song',
-          songId: practice.song.id, partId: practice.partId, assistance: practice.assistance,
+      const input = judgedInputOf(result);
+        api.logEvent(makeEvent({
+          instrument: practice.instrumentId, skill: repairStep.kind + ':' + repairStep.phraseIndex, source: 'song',
+          songId: practice.song.id, partId: practice.partId, assistance: 'guided',
           dims, unassessed, activeMs: Math.max(0, Math.round(elapsedMs || 0)),
-          bpmTarget: step.bpm || null, bpmActual: step.bpm || null, input: loggedInput,
+          bpmTarget: repairStep.bpm || null, bpmActual: repairStep.bpm || null, input,
           hands: practice.hands || undefined,
-        }); // no `now` option: makeEvent defaults to Date.now(), the same epoch-ms clock every other event row uses -- api.now() is the audio clock (seconds since page load) and must never stamp `at`.
-        api.logEvent(row);
-        // The Check verdict (renderPractice above): the same isIndependentOk
-        // predicate Progress and the pathway use, so the label can never
-        // disagree with what actually counts. A fail clears it -- nothing
-        // was judged worth a verdict on this try.
-        if (practice.mode === 'check') practice.lastCheckVerdict = passed ? (isIndependentOk(row) ? 'counted' : 'practice') : null;
+        }, { now: api.now() }));
       }
-      // A failed try gets told the FIRST concrete thing to fix -- the
-      // missed note, the late note, the hold/tune reason, or the extra note
-      // -- instead of the generic retry prompt, so the learner knows the
-      // ONE thing to work on next.
-      const correction = !passed && result ? firstCorrection(result, step.passRule) : null;
-      say(passed
-        ? 'Nice. ' + (result ? result.hitCount + ' of ' + result.judgedCount + ' notes.' : '')
-        : correction || 'Not quite yet — try that again.', passed ? 'ok' : 'no');
-      if (result) {
-        practice.lastHeat = barHeat(practice.song, result.matches);
-        practice.lastHeatBars = step.bars;
-        practice.lastAssessed = assessmentLines(dims, unassessed, { step: judgedStep, instrument: practice.instrument });
-      }
-      // A check-phase step's SECOND consecutive miss on the SAME thing
-      // (failedDimension, inside repairFor) becomes a short repair on just
-      // those notes instead of a third run at the whole phrase -- see
-      // trailingFailsOnStep above. practice.stepIndex is deliberately left
-      // alone here (repairFor's returnTo): the plan position does not move,
-      // the repair sits on top of it until passed.
-      if (!passed && result && phaseOf(step) === 'check' && trailingFailsOnStep(practice.results, practice.stepIndex) >= 2) {
-        const repairStep = repairFor(judgedStep, result, step.passRule);
-        if (repairStep) {
-          repairStep.returnTo = practice.stepIndex;
-          practice.repair = { step: repairStep, returnTo: practice.stepIndex };
-          practice.playedEvents = [];
-          saveLesson();
-          renderPractice();
-          return;
-        }
-      }
-    } else {
-      // A listen step (passRule: null) is judged nothing itself -- clicking
-      // its "Next" runs this same advance() with result: null, so without
-      // this the PREVIOUS step's bar strip (still sitting in lastHeat) rides
-      // along onto the step after the listen step, reading as that new,
-      // never-yet-attempted step's own result.
-      practice.lastHeat = null;
-      practice.lastHeatBars = null;
-      practice.lastAssessed = null;
-      practice.lastCheckVerdict = null;
     }
+    if (passed) practice.repair = null;
+    practice.playedEvents = [];
+    renderPractice();
+  }
+
+  function creditStep(step, judgedStep, passed, result, elapsedMs) {
+    // Lazily started on the FIRST judged step, not in startPractice(): a
+    // learner who only ever watches the listen step and leaves never
+    // logs an empty session (summarizePracticeSession above returns null
+    // while judgedCount is 0).
+    if (practice.startedAt == null) practice.startedAt = api.now();
+    practice.judgedCount = (practice.judgedCount || 0) + 1;
+    if (passed) practice.judgedOk = (practice.judgedOk || 0) + 1;
+    const credit = creditFor({ step: judgedStep, passed, elapsedMs: elapsedMs || 0, judgedCount: result ? result.judgedCount : undefined, matches: result ? result.matches : undefined });
+    const mapped = mapMasteryKeys(credit.masteryKeys, practice.instrumentId, (api.db().prefs || {}));
+    // A rhythm step is judged on onsets only: a try with any clap or
+    // wrong-pitch hit is no evidence about the notes' pitch mastery.
+    if (!result || result.matches.every((m) => !m.ok || m.pitchOk !== false)) applyMasteryCredit(api, practice.instrumentId, mapped);
+    // One learning-event row per judged step (plan 6.4) -- bpmActual is
+    // the same as bpmTarget (step.bpm): no tempo estimate is measured
+    // from the attempt anywhere in this file, so nothing better is
+    // available to report.
+    const { dims, unassessed } = dimsFromStep(judgedStep, result, { assess: capabilityFor(practice.instrument).assess });
+    const input = judgedInputOf(result);
+    // Check names its own route for every event, never leaving it off:
+    // the real route above, or 'unknown' when the route was left off (the
+    // debug hook, or a caller that never told onNote() a source) -- so a Check row is always readable on its own, without
+    // having to infer "no input field" as anything.
+    const loggedInput = practice.mode === 'check' ? (input !== undefined ? input : 'unknown') : input;
+    if (typeof api.logEvent === 'function') {
+      const row = makeEvent({
+        instrument: practice.instrumentId, skill: step.kind + ':' + step.phraseIndex, source: 'song',
+        songId: practice.song.id, partId: practice.partId, assistance: practice.assistance,
+        dims, unassessed, activeMs: Math.max(0, Math.round(elapsedMs || 0)),
+        bpmTarget: step.bpm || null, bpmActual: step.bpm || null, input: loggedInput,
+        hands: practice.hands || undefined,
+      }); // no `now` option: makeEvent defaults to Date.now(), the same epoch-ms clock every other event row uses -- api.now() is the audio clock (seconds since page load) and must never stamp `at`.
+      api.logEvent(row);
+      // The Check verdict (renderPractice above): the same isIndependentOk
+      // predicate Progress and the pathway use, so the label can never
+      // disagree with what actually counts. A fail clears it -- nothing
+      // was judged worth a verdict on this try.
+      if (practice.mode === 'check') practice.lastCheckVerdict = passed ? (isIndependentOk(row) ? 'counted' : 'practice') : null;
+    }
+    // A failed try gets told the FIRST concrete thing to fix -- the
+    // missed note, the late note, the hold/tune reason, or the extra note
+    // -- instead of the generic retry prompt, so the learner knows the
+    // ONE thing to work on next.
+    const correction = !passed && result ? firstCorrection(result, step.passRule) : null;
+    say(passed
+      ? 'Nice. ' + (result ? result.hitCount + ' of ' + result.judgedCount + ' notes.' : '')
+      : correction || 'Not quite yet — try that again.', passed ? 'ok' : 'no');
+    if (result) {
+      practice.lastHeat = barHeat(practice.song, result.matches);
+      practice.lastHeatBars = step.bars;
+      practice.lastAssessed = assessmentLines(dims, unassessed, { step: judgedStep, instrument: practice.instrument });
+    }
+    // A check-phase step's SECOND consecutive miss on the SAME thing
+    // (failedDimension, inside repairFor) becomes a short repair on just
+    // those notes instead of a third run at the whole phrase -- see
+    // trailingFailsOnStep above. practice.stepIndex is deliberately left
+    // alone here (repairFor's returnTo): the plan position does not move,
+    // the repair sits on top of it until passed.
+    if (!passed && result && phaseOf(step) === 'check' && trailingFailsOnStep(practice.results, practice.stepIndex) >= 2) {
+      const repairStep = repairFor(judgedStep, result, step.passRule);
+      if (repairStep) {
+        repairStep.returnTo = practice.stepIndex;
+        practice.repair = { step: repairStep, returnTo: practice.stepIndex };
+        practice.playedEvents = [];
+        saveLesson();
+        renderPractice();
+        return true;
+      }
+    }
+    return false;
+  }
+
+  function finishStep(step, passed, opts) {
     practice.stepIndex = nextStep(practice.plan, practice.results);
     practice.playedEvents = [];
     // Demo / transfer (src/core/teaching.js interludeAfter, driven by
@@ -2261,6 +2249,34 @@ function mountSongsPanel(hostEl, api) {
       if (summary) { practice.sessionLogged = true; api.logSession(summary); }
     }
     renderPractice();
+  }
+
+  function advance(passed, result, elapsedMs, opts = {}) {
+    if (practice.repair) { advanceRepair(passed, result, elapsedMs); return; }
+    const step = practice.plan.steps[practice.stepIndex];
+    // Hands (H3): every read below that touches step.notes reads the CHOSEN
+    // hand's notes only (handSplit's judged half) -- credit, mastery-key
+    // dims, the assessment lines, and a repair's own note isolation
+    // (repairFor indexes step.notes by result.matches, so it must line up
+    // with what judgeAttempt() in finishRecording() above actually judged).
+    // step.kind/phraseIndex/bars/passRule/bpm still read the full step --
+    // those describe the STEP, not which hand is being judged.
+    const judgedStep = handSplit(step).step;
+    practice.results.push({ stepIndex: practice.stepIndex, passed });
+    if (step.passRule && !opts.unassessed) {
+      if (creditStep(step, judgedStep, passed, result, elapsedMs)) return;
+    } else {
+      // A listen step (passRule: null) is judged nothing itself -- clicking
+      // its "Next" runs this same advance() with result: null, so without
+      // this the PREVIOUS step's bar strip (still sitting in lastHeat) rides
+      // along onto the step after the listen step, reading as that new,
+      // never-yet-attempted step's own result.
+      practice.lastHeat = null;
+      practice.lastHeatBars = null;
+      practice.lastAssessed = null;
+      practice.lastCheckVerdict = null;
+    }
+    finishStep(step, passed, opts);
   }
 
   // Shared save-then-review step for a recording, whichever door it came
