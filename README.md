@@ -691,7 +691,9 @@ lesson content isn't written yet; use `status: 'ready'` with a non-empty
 `curriculum` once it is. Run `npm test` — `tests/unit/instruments.test.mjs`
 checks every record against the schema.
 
-`src/app.js`'s own trainer definitions (the `MODS` object) read tuning, name
+The trainer table is built by `buildMods()` in `src/instruments/mods.js` and
+used by `src/app.js` as `MODS` (`MODS.harp` is added in `src/app.js`). Its
+entries read tuning, name
 and mic range for each `'ready'` fretted instrument straight off its
 `src/instruments/` record (`instrumentById`, `rangeForInstrument()`) rather
 than restating them; `MODS`'s built-in keyboard/voice/wind/harp/ear/rhy
@@ -1218,7 +1220,7 @@ octave-key break and use the half-hole technique.
 
 Descant recorder (`src/instruments/recorder-descant.js`) and tin whistle
 (`src/instruments/tin-whistle.js`) ship `status: 'ready'` with their own
-`MODS['recorder-descant']`/`MODS['tin-whistle']` entries (`src/app.js`), input
+`MODS['recorder-descant']`/`MODS['tin-whistle']` entries (`src/instruments/mods.js`), input
 `'sustain'` like `MODS.wind`/`MODS.harp` above — a blown note is held, not
 struck. Both records are written an octave below what they sound (the same
 octave-only notation gap `writtenOctaveUp` documents for guitar/bass, just in
