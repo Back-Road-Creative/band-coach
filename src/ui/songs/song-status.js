@@ -3,9 +3,9 @@
 // same shape/limit rule as api.store('songs-progress') -- see
 // mountSongsPanel's progressStore in src/ui/songs.js). Every song saved
 // through Add a song (plan P3-4/P3-5) is a Draft the moment it lands, since
-// today's import/learn flows already save before review (learn.js:280,
-// :338; songs.js:1286) -- this just gives that state a name and a plain
-// label instead of silently forgetting it.
+// today's import flows already save before review (onMicTake, importAudioFile,
+// importNotationFile and importBandPack in src/ui/songs.js) -- this just gives
+// that state a name and a plain label instead of silently forgetting it.
 //
 // No DOM, no api.store here: every function takes a ledger and returns one
 // (or reads it), so the panel owns the only api.store('song-status').get()/

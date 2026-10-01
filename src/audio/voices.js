@@ -51,8 +51,9 @@ const BRASS_BRIGHTNESS = 0.9;
 // asked for (src/app.js `tone()` sizes the mic's deaf window off the
 // buffer's own length -- see F5, src/audio/deaf-window.js -- so a floor
 // bigger than a real short note, e.g. a fretted play-along's 0.05-0.12s
-// notes, src/ui/editor.js:450 and src/ui/songs.js:302, would make the app
-// stop listening for longer than the arrangement's own note). This
+// notes, playSong() in src/ui/editor.js and playPhrase() in src/ui/songs.js,
+// would make the app stop listening for longer than the arrangement's own
+// note). This
 // EPSILON_SECONDS floor only guards against a zero/negative `seconds`
 // producing a zero-length buffer; it is far below the shortest real
 // duration any caller passes. Instrument character comes from each
