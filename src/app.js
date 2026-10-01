@@ -887,8 +887,8 @@ import { register as registerPathway } from './ui/pathway.js';
 
   // ---------- building the next exercise ----------
   function mixKind() { const kinds = []; MODS[mod].levels.forEach(l => { const t = l.task || 'one'; if (kinds.indexOf(t) < 0) kinds.push(t); }); S.acc.mix = ((S.acc.mix || 0) + 1) % kinds.length; return kinds[S.acc.mix]; }
-  function buildLevelTask() {
-    const d = D(), M = MODS[mod]; let kind = d.task || 'one', warm = false, pool;
+  function resolveTaskKind(d) {
+    let kind = d.task || 'one', warm = false, pool;
     if (kind === 'mix') { kind = mixKind(); }
     const dd = Object.assign({}, d, { task: kind }); if (d.task === 'mix') { if (kind === 'chord') dd.pool = 'c'; if (kind === 'hands') dd.pool = 'j'; if (kind === 'seq' && !dd.len) dd.len = 3; }
     pool = poolFor(dd);
@@ -915,6 +915,9 @@ import { register as registerPathway } from './ui/pathway.js';
     // out as 'j1tr': that matches no id parseId() recognises at all.
     if (kind === 'hands') { const handsSuf = handsPref === 'right' ? 'r' : handsPref === 'left' ? 'l' : ''; if (handsSuf) pool = pool.map(id => /^j\d+$/.test(id) ? id + handsSuf : id); }
     if (sess.warm > 0) { sess.warm--; warm = true; const base = kind === 'bar' || kind === 'kit' ? kind : kind === 'chord' ? 'chord' : 'one'; kind = base; pool = byStrength(pool, modelNow).slice(0, Math.max(2, Math.ceil(pool.length / 2))); }
+    return { kind: kind, warm: warm, pool: pool };
+  }
+  function applySessionPlan(d, M, warm, kind, pool) {
     // Today's plan (src/core/curriculum.js's planSession, ordered by
     // nextPlanStep) steers an ordinary (non-warm-up) level task through its
     // four blocks in turn -- review what came due, drill the weakest active
@@ -966,6 +969,37 @@ import { register as registerPathway } from './ui/pathway.js';
         }
       }
     }
+    return { kind: kind, pool: pool, planKind: planKind, planBlind: planBlind, seqLen: seqLen, planApplyId: planApplyId };
+  }
+  function fillTaskItems(t, kind, pool, d, M, seqLen, planApplyId, mk) {
+    if (kind === 'one' || kind === 'chord' || kind === 'hold' || kind === 'hands') t.els.push(mk(pick(lastItem, pool, modelNow)));
+    else if (kind === 'seq') {
+      let from = lastItem; for (let i = 0; i < seqLen; i++) { const id = pick(from, pool, modelNow); t.els.push(mk(id)); from = id; }
+      if (planApplyId && !t.els.some(e => e.id === planApplyId)) t.els[t.els.length - 1] = mk(planApplyId);
+    }
+    else if (kind === 'run') {
+      const notes = pool.filter(id => id[0] === 'n' || id[0] === 'w'), start = pick(lastItem, notes, modelNow), pre = start[0], all = notes.map(id => +id.slice(1)).sort((a, b) => a - b), lo = all[0], hi = all[all.length - 1], white = [0, 2, 4, 5, 7, 9, 11];
+      let m = +start.slice(1), dir = gate('runDir', 0.5) ? 1 : -1; if (white.indexOf(pc(m)) < 0) m++; const seq = [m];
+      for (let i = 0; i < 4; i++) { let nx = m + dir; while (white.indexOf(pc(nx)) < 0) nx += dir; if (nx > hi || nx < lo) { dir = -dir; nx = m + dir; while (white.indexOf(pc(nx)) < 0) nx += dir; } m = nx; seq.push(m); }
+      seq.forEach(x => t.els.push(mk(pre + x)));
+    }
+    else if (kind === 'ear') { /* no items yet: the answer post-step in buildLevelTask draws one */ }
+    else if (kind === 'bar') {
+      let left = 4, from = lastItem, guard = 0; while (left > 0 && guard++ < 12) { const fit = pool.filter(id => CELLS[id.slice(1)].b <= left); const id = pick(from, fit.length ? fit : ['rq'], modelNow); t.els.push(mk(id)); left -= CELLS[id.slice(1)].b; from = id; }
+      if (!t.els.some(e => e.info.on.length)) { t.els[0] = mk('rq'); }
+    }
+    else if (kind === 'kit') {
+      const L = d.bars ? d : M.levels[S.tick % M.levels.length], b = L.bars[S.tick % L.bars.length]; S.tick++;
+      t.kit = { metre: L.metre, bpm: d.bars ? L.bpm : L.bpm + 6 * (S.level - M.levels.length), swing: L.swing || 0, bar: b, name: L.name }; t.els = [{ id: 'kit', info: { label: L.name }, failed: false, t0: 0, rt: 0, reveal: false }];
+    }
+    else if (kind === 'bar2') {
+      const variants = d.bars || [[['qr']]], cells = variants[S.tick % variants.length]; S.tick++; t.rCells = cells; t.els = [{ id: 'bar2', info: { label: d.name }, failed: false, t0: 0, rt: 0, reveal: false }];
+    }
+  }
+  function buildLevelTask() {
+    const d = D(), M = MODS[mod];
+    const rk = resolveTaskKind(d), warm = rk.warm;
+    const pl = applySessionPlan(d, M, warm, rk.kind, rk.pool), kind = pl.kind, pool = pl.pool, planKind = pl.planKind, planBlind = pl.planBlind;
     const t = { kind: kind, els: [], idx: 0, warm: warm, limit: d.limit || 8, ref: d.ref || 'none', blind: planBlind, t0: now(), done: false, revealed: false };
     // K3/K4: any element whose id isStagedPairId (a level 14/15/16 j<n>t /
     // j<n>h / j<n>d, however it was reached -- the dedicated level, warm-up,
@@ -978,18 +1012,7 @@ import { register as registerPathway } from './ui/pathway.js';
     // Maps/Sets, so hook.cur() (a straight object copy across the debug-hook
     // boundary) serialises it whole for a test.
     const mk = id => { S.tick++; it(id, modelNow).seen = S.tick; const e = { id: id, info: inf(id), failed: false, t0: 0, rt: 0, reveal: shouldReveal({ exposures: it(id, modelNow).reps }) && !planBlind }; if (isStagedPairId(id)) e.pair = { phase: 'learn', on: {}, off: {}, learnOn: [], notes: [], rhOns: [], rhOffs: [], last: null }; return e; };
-    if (kind === 'one' || kind === 'chord' || kind === 'hold' || kind === 'hands') t.els.push(mk(pick(lastItem, pool, modelNow)));
-    else if (kind === 'seq') { let from = lastItem; for (let i = 0; i < seqLen; i++) { const id = pick(from, pool, modelNow); t.els.push(mk(id)); from = id; } if (planApplyId && !t.els.some(e => e.id === planApplyId)) t.els[t.els.length - 1] = mk(planApplyId); }
-    else if (kind === 'run') {
-      const notes = pool.filter(id => id[0] === 'n' || id[0] === 'w'), start = pick(lastItem, notes, modelNow), pre = start[0], all = notes.map(id => +id.slice(1)).sort((a, b) => a - b), lo = all[0], hi = all[all.length - 1], white = [0, 2, 4, 5, 7, 9, 11];
-      let m = +start.slice(1), dir = gate('runDir', 0.5) ? 1 : -1; if (white.indexOf(pc(m)) < 0) m++; const seq = [m];
-      for (let i = 0; i < 4; i++) { let nx = m + dir; while (white.indexOf(pc(nx)) < 0) nx += dir; if (nx > hi || nx < lo) { dir = -dir; nx = m + dir; while (white.indexOf(pc(nx)) < 0) nx += dir; } m = nx; seq.push(m); }
-      seq.forEach(x => t.els.push(mk(pre + x)));
-    }
-    else if (kind === 'ear') { }
-    else if (kind === 'bar') { let left = 4, from = lastItem, guard = 0; while (left > 0 && guard++ < 12) { const fit = pool.filter(id => CELLS[id.slice(1)].b <= left); const id = pick(from, fit.length ? fit : ['rq'], modelNow); t.els.push(mk(id)); left -= CELLS[id.slice(1)].b; from = id; } if (!t.els.some(e => e.info.on.length)) { t.els[0] = mk('rq'); } }
-    else if (kind === 'kit') { const L = d.bars ? d : M.levels[S.tick % M.levels.length], b = L.bars[S.tick % L.bars.length]; S.tick++; t.kit = { metre: L.metre, bpm: d.bars ? L.bpm : L.bpm + 6 * (S.level - M.levels.length), swing: L.swing || 0, bar: b, name: L.name }; t.els = [{ id: 'kit', info: { label: L.name }, failed: false, t0: 0, rt: 0, reveal: false }]; }
-    else if (kind === 'bar2') { const variants = d.bars || [[['qr']]], cells = variants[S.tick % variants.length]; S.tick++; t.rCells = cells; t.els = [{ id: 'bar2', info: { label: d.name }, failed: false, t0: 0, rt: 0, reveal: false }]; }
+    fillTaskItems(t, kind, pool, d, M, pl.seqLen, pl.planApplyId, mk);
     if (M.input === 'answer') { t.kind = 'ear'; if (!t.els.length) t.els.push(mk(pick(lastItem, pool, modelNow))); const e = t.els[0], fam = pool.filter(id => id[0] === e.id[0] && (e.id[0] !== 'i' || id.slice(-1) === e.id.slice(-1))); t.choices = fam.slice().sort((a, b) => (inf(a).semi || 0) - (inf(b).semi || 0) || (a < b ? -1 : 1)); t.root = 55 + ((S.tick * 5) % 12); }
     if (planKind) planProgress[planKind] = (planProgress[planKind] || 0) + 1;
     return t;
@@ -2404,17 +2427,8 @@ import { register as registerPathway } from './ui/pathway.js';
     let parser = midiParsers.get(input); if (!parser) { parser = createMidiParser(); midiParsers.set(input, parser); }
     parser.feed(d).forEach(evt => { if (evt.type === 'on') { noteState.noteOn(input, evt.channel, evt.note); realMidiHeld.add(evt.note); onNote(evt.note, true, 'midi'); } else { noteState.noteOff(input, evt.channel, evt.note); if (!noteState.isHeld(evt.note)) realMidiHeld.delete(evt.note); onNoteOff(evt.note, 'midi'); } });
   }
-  $('ioBtn').addEventListener('click', () => {
-    ensureAudio();
-    if (needsMic()) { if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { ioState('off', 'This browser cannot open a microphone here. Open the standalone copy in Chrome.'); return; } openMic().then(ioRefresh).catch(() => ioState('off', 'The microphone was blocked. Allow it in the browser, or open the standalone copy in Chrome.')); return; }
-    if (!navigator.requestMIDIAccess) {
-      // A drum kit still has the mic to fall back on even when this browser
-      // cannot read MIDI at all (needsMic() stays false for 'mic+midi' so an
-      // e-kit is tried FIRST; see the empty-inputs branch below for the same
-      // fallback when MIDI is readable but nothing is plugged in).
-      if (MODS[mod] && MODS[mod].input === 'mic+midi' && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) { openMic().then(ioRefresh).catch(() => ioState('off', 'The microphone was blocked. Allow it in the browser, or open the standalone copy in Chrome.')); return; }
-      ioState('off', 'This browser cannot read MIDI. Use Chrome or Edge. Screen and computer keys still work as practice, not proof a real keyboard works.'); return;
-    }
+  function connectMic() { openMic().then(ioRefresh).catch(() => ioState('off', 'The microphone was blocked. Allow it in the browser, or open the standalone copy in Chrome.')); }
+  function connectMidi() {
     navigator.requestMIDIAccess().then(a => {
       const wire = () => {
         midiOutRefresh(a);
@@ -2454,6 +2468,19 @@ import { register as registerPathway } from './ui/pathway.js';
       };
       wire(); a.onstatechange = wire;
     }).catch(() => ioState('off', 'MIDI was blocked here. Open the standalone copy in Chrome. Screen and computer keys still work as practice, not proof a real keyboard works.'));
+  }
+  $('ioBtn').addEventListener('click', () => {
+    ensureAudio();
+    if (needsMic()) { if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { ioState('off', 'This browser cannot open a microphone here. Open the standalone copy in Chrome.'); return; } connectMic(); return; }
+    if (!navigator.requestMIDIAccess) {
+      // A drum kit still has the mic to fall back on even when this browser
+      // cannot read MIDI at all (needsMic() stays false for 'mic+midi' so an
+      // e-kit is tried FIRST; see the empty-inputs branch below for the same
+      // fallback when MIDI is readable but nothing is plugged in).
+      if (MODS[mod] && MODS[mod].input === 'mic+midi' && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) { connectMic(); return; }
+      ioState('off', 'This browser cannot read MIDI. Use Chrome or Edge. Screen and computer keys still work as practice, not proof a real keyboard works.'); return;
+    }
+    connectMidi();
   });
   // "Set up input" reveals the whole io strip (Connect, the Input select,
   // Check my microphone, MIDI details, the level meter). #ioBtn and the rest
