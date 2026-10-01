@@ -6,6 +6,7 @@ import path from 'node:path';
 
 import { validateInstrument } from '../../src/instruments/schema.js';
 import { INSTRUMENTS, byId } from '../../src/instruments/index.js';
+import { buildMods } from '../../src/instruments/mods.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const APP_JS_PATH = path.join(__dirname, '..', '..', 'src', 'app.js');
@@ -106,16 +107,8 @@ test('validateInstrument accepts a boolean writtenOctaveUp and rejects anything 
 
 test('READY instrument ids match the instrument ids in today\'s MODS', () => {
   const src = readFileSync(APP_JS_PATH, 'utf8');
-  const modsStart = src.indexOf('const MODS = {');
-  assert.ok(modsStart >= 0, 'could not find "const MODS = {" in app.js');
-  // Find the end of the MODS object literal: the first "\n  };" after modsStart
-  // (the literal is closed at 2-space indent, matching "const MODS = {" itself).
-  const modsEnd = src.indexOf('\n  };', modsStart);
-  assert.ok(modsEnd > modsStart, 'could not find the end of the MODS object literal');
-  const modsBlock = src.slice(modsStart, modsEnd);
-
-  const topLevelIds = new Set();
-  for (const m of modsBlock.matchAll(/^ {4}(\w+): \{/gm)) topLevelIds.add(m[1]);
+  assert.match(src, /const MODS = buildMods\(\);/, 'app.js no longer builds MODS from buildMods()');
+  const topLevelIds = new Set(Object.keys(buildMods()));
   // Instruments added onto MODS after the initial literal (e.g. MODS.harp = {...}).
   for (const m of src.matchAll(/^\s*MODS\.(\w+) = \{/gm)) topLevelIds.add(m[1]);
   // Hyphenated ids (e.g. bass-5-string) cannot be dot-notation properties, so
