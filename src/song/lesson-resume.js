@@ -163,7 +163,7 @@ export function findLesson(list, key) {
 }
 
 // The trailing run of `results` on `stepIndex` -- the only slice nextStep
-// (lesson.js:561-578) and trailingFailsOnStep (songs.js:1569) actually
+// (src/song/lesson.js) and trailingFailsOnStep (src/ui/songs.js) actually
 // read, capped at TAIL_MAX so a saved lesson never carries the whole
 // results history.
 export function resultsTail(results, stepIndex) {
