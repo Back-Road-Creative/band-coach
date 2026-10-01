@@ -2318,140 +2318,131 @@ function mountSongsPanel(hostEl, api) {
     });
   }
 
-  async function handleFile() {
-    const file = importInput.files && importInput.files[0];
-    importInput.value = '';
-    if (!file) return;
-    bandPackPartsEl.innerHTML = '';
-    resultEl.hidden = true;
-    resultEl.innerHTML = '';
-    fidelityMsg.hidden = true;
-    fidelityMsg.textContent = '';
-    // classifyAddFile (src/ui/songs/add-source.js) tells a recording from a
-    // score/challenge/band-pack from an unknown file, so this one input
-    // never has to ask -- routeImportFile still decides how a notation kind
-    // reads/imports (classified.route), unchanged from before.
-    const classified = classifyAddFile(file.name, file.type);
-    if (classified.kind === 'unknown') {
-      say(UNSUPPORTED_MESSAGE, 'no');
-      return;
-    }
-    if (classified.kind === 'audio') {
-      say('Working it out…');
-      // P3-5: Cancel shows only for this branch -- decodeAudioData is the
-      // one real async gap in this pipeline, long enough on a real
-      // recording for a learner to change their mind mid-way. `gen` is this
-      // attempt's own snapshot of the door's shared generation counter
-      // (src/ui/songs/record-door.js); Cancel and leaving Songs (hide()
-      // below) both bump it, which is how a still-running analysis is told
-      // it is no longer the current one.
-      analysing = true;
-      addSongCancelBtn.hidden = false;
-      const gen = door.generation();
-      let result;
-      try {
-        result = await transcribeAudioFile(file, api, {
-          isStale: () => destroyed || door.generation() !== gen,
-          polyphonic: polyphonicCheckbox.checked,
-        });
-      } catch (e) {
-        analysing = false;
-        addSongCancelBtn.hidden = true;
-        if (destroyed || e.cancelled) return; // Cancel/leaving already said its own piece
-        say('That recording could not be read.', 'no');
-        return;
-      }
+  // One add loop for the multi-song imports (band pack, challenge): sequential,
+  // stored ids back in input order. No try/catch -- each caller's own try says it.
+  async function addAllToLibrary(songs) {
+    const storedIds = [];
+    for (const s of songs) storedIds.push(await library.add(s, { now: Date.now() }));
+    return storedIds;
+  }
+
+  async function importAudioFile(file) {
+    say('Working it out…');
+    // P3-5: Cancel shows only for this branch -- decodeAudioData is the
+    // one real async gap in this pipeline, long enough on a real
+    // recording for a learner to change their mind mid-way. `gen` is this
+    // attempt's own snapshot of the door's shared generation counter
+    // (src/ui/songs/record-door.js); Cancel and leaving Songs (hide()
+    // below) both bump it, which is how a still-running analysis is told
+    // it is no longer the current one.
+    analysing = true;
+    addSongCancelBtn.hidden = false;
+    const gen = door.generation();
+    let result;
+    try {
+      result = await transcribeAudioFile(file, api, {
+        isStale: () => destroyed || door.generation() !== gen,
+        polyphonic: polyphonicCheckbox.checked,
+      });
+    } catch (e) {
       analysing = false;
       addSongCancelBtn.hidden = true;
-      const { song, report, rec } = result;
-      const warnings = (report && report.needsCheck) || [];
-      const { ok, errors } = validateSong(song);
-      if (!ok) { say('That recording did not turn into a usable song: ' + errors.join('; '), 'no'); return; }
-      // Never save an analysis that outlived Cancel or leaving Songs: notes
-      // exist by now, but this attempt is no longer the current one.
-      if (destroyed || door.generation() !== gen) return;
-      let storedId;
-      try {
-        storedId = await library.add(song, { now: Date.now() });
-      } catch (e) {
-        say('The song could not be saved: ' + (e && e.message ? e.message : String(e)), 'no');
-        return;
-      }
-      if (destroyed || door.generation() !== gen) return;
-      say((report && report.feelLine) || '', 'ok'); // one plain swung/straight line (from the beat track), when there was one
-      setSongStatus(markDraft, storedId, { needsCheck: warnings.length, source: 'file', originalAudioKept: false });
-      // P3-8: remembered the same way onMicTake() does, above.
-      lastAudioRecSongId = storedId;
-      lastAudioRec = rec || null;
-      renderAddReview({ ...song, id: storedId }, warnings, rec);
-      await refreshList();
+      if (destroyed || e.cancelled) return; // Cancel/leaving already said its own piece
+      say('That recording could not be read.', 'no');
       return;
     }
-    const route = classified.route;
-    if (route.kind === 'band-pack') {
-      let pack;
-      try {
-        const buffer = await readFile(file, route.readAs);
-        pack = readBandPack(new Uint8Array(buffer));
-      } catch (e) {
-        say(e && e.message ? e.message : String(e), 'no');
-        return;
-      }
-      let storedIds;
-      try {
-        storedIds = [];
-        for (const s of pack.songs) storedIds.push(await library.add(s, { now: Date.now() }));
-      } catch (e) {
-        say('The band pack could not be fully saved: ' + (e && e.message ? e.message : String(e)), 'no');
-        return;
-      }
-      // D2: a song whose id collided with one already in the library was
-      // reassigned (song-2, song-3, ...) by library.add() above -- reconciled
-      // here so the part-assignment lines below (and anything read from
-      // pack.songs after this point) name the id that is actually stored.
-      pack.songs = withStoredIds(pack.songs, storedIds);
-      say('Added ' + pack.songs.length + ' song' + (pack.songs.length === 1 ? '' : 's') + ' from band pack "' + pack.name + '".', 'ok');
-      // Part assignments, read-only: one line per song that carries one,
-      // "<title>: <member> plays <part name>, ...". A song with no
-      // assignment (pack.parts[i] is null) gets no line at all.
-      pack.songs.forEach((s, i) => {
-        const assignment = pack.parts[i];
-        if (!assignment) return;
-        const line = Object.entries(assignment)
-          .map(([member, partIndex]) => member + ' plays ' + (s.parts[partIndex] ? s.parts[partIndex].name : 'part ' + (partIndex + 1)))
-          .join(', ');
-        bandPackPartsEl.appendChild(el('p', { class: 'panel-songs-band-pack-parts', text: s.title + ': ' + line }));
-      });
-      await refreshList();
+    analysing = false;
+    addSongCancelBtn.hidden = true;
+    const { song, report, rec } = result;
+    const warnings = (report && report.needsCheck) || [];
+    const { ok, errors } = validateSong(song);
+    if (!ok) { say('That recording did not turn into a usable song: ' + errors.join('; '), 'no'); return; }
+    // Never save an analysis that outlived Cancel or leaving Songs: notes
+    // exist by now, but this attempt is no longer the current one.
+    if (destroyed || door.generation() !== gen) return;
+    let storedId;
+    try {
+      storedId = await library.add(song, { now: Date.now() });
+    } catch (e) {
+      say('The song could not be saved: ' + (e && e.message ? e.message : String(e)), 'no');
       return;
     }
-    if (route.kind === 'challenge') {
-      let challenge;
-      try {
-        const text = await readFile(file, route.readAs);
-        challenge = parseChallenge(text);
-      } catch (e) {
-        say('That file could not be read: ' + (e && e.message ? e.message : String(e)), 'no');
-        return;
-      }
-      let storedIds;
-      try {
-        storedIds = [];
-        for (const s of challenge.songs) storedIds.push(await library.add(s, { now: Date.now() }));
-      } catch (e) {
-        say('The challenge could not be fully saved: ' + (e && e.message ? e.message : String(e)), 'no');
-        return;
-      }
-      // D2: reconcile any collision-reassigned id BEFORE renderChallenge()
-      // reads challenge.songs -- its progress[s.id] lookup and each song's
-      // own "Open" button (openSong(song)) must reference the id that is
-      // actually stored, not the id the file happened to carry.
-      challenge.songs = withStoredIds(challenge.songs, storedIds);
-      say('Added the "' + challenge.title + '" challenge (' + challenge.songs.length + ' song' + (challenge.songs.length === 1 ? '' : 's') + ').', 'ok');
-      renderChallenge(challenge);
-      await refreshList();
+    if (destroyed || door.generation() !== gen) return;
+    say((report && report.feelLine) || '', 'ok'); // one plain swung/straight line (from the beat track), when there was one
+    setSongStatus(markDraft, storedId, { needsCheck: warnings.length, source: 'file', originalAudioKept: false });
+    // P3-8: remembered the same way onMicTake() does, above.
+    lastAudioRecSongId = storedId;
+    lastAudioRec = rec || null;
+    renderAddReview({ ...song, id: storedId }, warnings, rec);
+    await refreshList();
+    return;
+  }
+
+  async function importBandPack(file, route) {
+    let pack;
+    try {
+      const buffer = await readFile(file, route.readAs);
+      pack = readBandPack(new Uint8Array(buffer));
+    } catch (e) {
+      say(e && e.message ? e.message : String(e), 'no');
       return;
     }
+    let storedIds;
+    try {
+      storedIds = await addAllToLibrary(pack.songs);
+    } catch (e) {
+      say('The band pack could not be fully saved: ' + (e && e.message ? e.message : String(e)), 'no');
+      return;
+    }
+    // D2: a song whose id collided with one already in the library was
+    // reassigned (song-2, song-3, ...) by library.add() above -- reconciled
+    // here so the part-assignment lines below (and anything read from
+    // pack.songs after this point) name the id that is actually stored.
+    pack.songs = withStoredIds(pack.songs, storedIds);
+    say('Added ' + pack.songs.length + ' song' + (pack.songs.length === 1 ? '' : 's') + ' from band pack "' + pack.name + '".', 'ok');
+    // Part assignments, read-only: one line per song that carries one,
+    // "<title>: <member> plays <part name>, ...". A song with no
+    // assignment (pack.parts[i] is null) gets no line at all.
+    pack.songs.forEach((s, i) => {
+      const assignment = pack.parts[i];
+      if (!assignment) return;
+      const line = Object.entries(assignment)
+        .map(([member, partIndex]) => member + ' plays ' + (s.parts[partIndex] ? s.parts[partIndex].name : 'part ' + (partIndex + 1)))
+        .join(', ');
+      bandPackPartsEl.appendChild(el('p', { class: 'panel-songs-band-pack-parts', text: s.title + ': ' + line }));
+    });
+    await refreshList();
+    return;
+  }
+
+  async function importChallenge(file, route) {
+    let challenge;
+    try {
+      const text = await readFile(file, route.readAs);
+      challenge = parseChallenge(text);
+    } catch (e) {
+      say('That file could not be read: ' + (e && e.message ? e.message : String(e)), 'no');
+      return;
+    }
+    let storedIds;
+    try {
+      storedIds = await addAllToLibrary(challenge.songs);
+    } catch (e) {
+      say('The challenge could not be fully saved: ' + (e && e.message ? e.message : String(e)), 'no');
+      return;
+    }
+    // D2: reconcile any collision-reassigned id BEFORE renderChallenge()
+    // reads challenge.songs -- its progress[s.id] lookup and each song's
+    // own "Open" button (openSong(song)) must reference the id that is
+    // actually stored, not the id the file happened to carry.
+    challenge.songs = withStoredIds(challenge.songs, storedIds);
+    say('Added the "' + challenge.title + '" challenge (' + challenge.songs.length + ' song' + (challenge.songs.length === 1 ? '' : 's') + ').', 'ok');
+    renderChallenge(challenge);
+    await refreshList();
+    return;
+  }
+
+  async function importNotationFile(file, route) {
     let song, warnings;
     try {
       const data = await readFile(file, route.readAs);
@@ -2500,6 +2491,31 @@ function mountSongsPanel(hostEl, api) {
     else setSongStatus(markChecked, storedId);
     renderAddReview({ ...song, id: storedId }, warnings || [], null);
     await refreshList();
+  }
+
+  async function handleFile() {
+    const file = importInput.files && importInput.files[0];
+    importInput.value = '';
+    if (!file) return;
+    bandPackPartsEl.innerHTML = '';
+    resultEl.hidden = true;
+    resultEl.innerHTML = '';
+    fidelityMsg.hidden = true;
+    fidelityMsg.textContent = '';
+    // classifyAddFile (src/ui/songs/add-source.js) tells a recording from a
+    // score/challenge/band-pack from an unknown file, so this one input
+    // never has to ask -- routeImportFile still decides how a notation kind
+    // reads/imports (classified.route), unchanged from before.
+    const classified = classifyAddFile(file.name, file.type);
+    if (classified.kind === 'unknown') {
+      say(UNSUPPORTED_MESSAGE, 'no');
+      return;
+    }
+    const route = classified.route;
+    if (classified.kind === 'audio') { await importAudioFile(file); return; }
+    if (route.kind === 'band-pack') { await importBandPack(file, route); return; }
+    if (route.kind === 'challenge') { await importChallenge(file, route); return; }
+    await importNotationFile(file, route);
   }
 
   importInput.addEventListener('change', handleFile);
