@@ -68,6 +68,7 @@ import { classifyAddFile, ADD_ACCEPT, ADD_HELP_LINE, UNSUPPORTED_MESSAGE } from 
 import { createRecordDoor, transcribeAudioFile } from './songs/record-door.js';
 import { renderReview, makeHandoffs } from './songs/review.js';
 import { requestOpenInEditor } from './editor.js';
+import { el } from './dom.js';
 import { renderPlayItOnCards, requestOpenSong, OPEN_REQUEST_STORE_ID } from './songs/open-request.js';
 import { sanitizeStatusLedger, markDraft, markChecked, statusFor, statusLabel } from './songs/song-status.js';
 import { layoutSong } from './editor/layout-song.js';
@@ -431,17 +432,6 @@ export function summarizePracticeSession(practice, nowSec) {
 // ---------------------------------------------------------------------------
 // panel
 // ---------------------------------------------------------------------------
-
-function el(tag, attrs, children) {
-  const node = document.createElement(tag);
-  for (const k in attrs || {}) {
-    if (k === 'text') node.textContent = attrs[k];
-    else if (k.startsWith('on')) node.addEventListener(k.slice(2), attrs[k]);
-    else node.setAttribute(k, attrs[k]);
-  }
-  (children || []).forEach((c) => { if (c) node.appendChild(c); });
-  return node;
-}
 
 // P3-5: written by hide() below when Add a song was busy (the mic door
 // counting-in/recording, or a file's recording still being analysed) at the

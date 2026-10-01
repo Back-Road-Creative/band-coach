@@ -15,23 +15,13 @@ import { estimateTempo, trackBeats } from '../../audio/analysis/tempo.js';
 import { rangeForInstrument } from '../../audio/range.js';
 import { validateSong } from '../../song/model.js';
 import { createTakeAccumulator } from '../../audio/take-recorder.js';
+import { el } from '../dom.js';
 
 // Same tail-of-buffer polling interval as src/ui/playalong.js's own "Record a
 // take" capture (startRecordingCapture) -- copied here, not imported, since
 // this module already duplicates learn.js's own copy of the mic door rather
 // than sharing it (see the file header).
 const TAKE_CAPTURE_INTERVAL_MS = 50;
-
-function el(tag, attrs, children) {
-  const node = document.createElement(tag);
-  for (const k in attrs || {}) {
-    if (k === 'text') node.textContent = attrs[k];
-    else if (k.startsWith('on')) node.addEventListener(k.slice(2), attrs[k]);
-    else node.setAttribute(k, attrs[k]);
-  }
-  (children || []).forEach((c) => { if (c) node.appendChild(c); });
-  return node;
-}
 
 // Reads the picked file's own filename as this song's working title (the
 // notation importers already do this for a title-less file); a learner

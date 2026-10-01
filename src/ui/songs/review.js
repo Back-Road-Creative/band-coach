@@ -9,17 +9,7 @@ import { renderPlayItOnCards, requestOpenSong } from './open-request.js';
 import { requestOpenInEditor } from '../editor.js';
 import { requestPlayalongRecording } from '../playalong.js';
 import { uncertainNotesText, playbackPlanFor } from './review-playback.js';
-
-function el(tag, attrs, children) {
-  const node = document.createElement(tag);
-  for (const k in attrs || {}) {
-    if (k === 'text') node.textContent = attrs[k];
-    else if (k.startsWith('on')) node.addEventListener(k.slice(2), attrs[k]);
-    else node.setAttribute(k, attrs[k]);
-  }
-  (children || []).forEach((c) => { if (c) node.appendChild(c); });
-  return node;
-}
+import { el } from '../dom.js';
 
 // Pure decision behind renderReview()'s "Practise this" button: a song whose
 // transcription still has unresolved check items (warnings, from
