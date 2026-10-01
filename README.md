@@ -1451,6 +1451,13 @@ mark a step passed just because nothing looked obviously wrong.
 
 Total: under 5 minutes with a MIDI keyboard on hand, faster without one.
 
+The result of that check, together with the commit and artifact hashes, the scope, the automated
+pass line and the open items, goes in [docs/release-acceptance-record.md](docs/release-acceptance-record.md):
+one section per candidate, signed by whoever ran it. Its D2/E9 ledger lists, per device and
+accessibility dimension, which tests cover it in headless Chromium and which still need a person
+on a real device. A PR merge is an engineering hand-off; an unsigned record is a draft, not a
+release.
+
 ## Browser and device support — what has actually been tested
 
 - **Headless Chromium, via this repo's automated test suite** (`tests/characterization/`,
