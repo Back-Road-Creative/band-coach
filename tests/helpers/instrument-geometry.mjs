@@ -177,5 +177,3 @@ export function kitEmptyPoint(m, opts) {
 export function kitSamplePoints(piece) {
   return Array.from({ length: 8 }, (_, k) => ({ x: piece.cx + 0.7 * piece.r * Math.cos((k * Math.PI) / 4), y: piece.cy + 0.7 * piece.r * Math.sin((k * Math.PI) / 4) }));
 }
-
-export const insideRect = (pt, r) => pt.x >= r.x && pt.x <= r.x + r.w && pt.y >= r.y && pt.y <= r.y + r.h;

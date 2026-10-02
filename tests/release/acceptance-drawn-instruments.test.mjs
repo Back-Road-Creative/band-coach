@@ -36,9 +36,18 @@
 //   next question (a new <b> in #prompt) comes 0.7 s later, 1.5 s after a wrong
 //   answer; keys played in between light but are not judged, so every pass waits
 //   for the new question before the next input.
-// - Test 10 (a judged kit bar) is not attempted: a bar needs a count-in and
-//   hits timed to the audio clock, which this lane cannot place deterministically
-//   with real input.
+// - Test 10 (a judged kit bar) is dropped, after the probe the plan asks for: three
+//   tries, no loop, no retry. One drum at a time, level 1: a 3.9 s count-in (the piece
+//   asked for shows orange), then four quarter notes at 66 bpm, each judged within
+//   150 ms of its beat. Real clicks were aimed at the piece from the moment the orange
+//   went out, and the bar came back "1 missed, 1 extra hit" (try 1), "2 missed, 2 extra
+//   hits" (try 2) and "1 missed, 1 extra hit" (try 3): the first click landed 215 ms
+//   after its beat (page clock, pointerdown against the count-in's end), 82, 11 and 43
+//   ms for the rest, on a box at load average 25-27 on 12 cores, where one DevTools
+//   round trip is the same size as the window. No click can be placed inside a 150 ms
+//   window from outside the page on a loaded machine, so a green mark under each note
+//   would pass or fail with the load, not with the app. Logs: bc-logs/q3c/
+//   probe-t10-m1-1.log, -2.log, -3.log. The bar also costs about 8 s of a 75 s budget.
 //
 // An in-page sampler reads the canvas's own pixels every animation frame around
 // each action. Before it, the key (or piece) the action must reach has to be
@@ -76,9 +85,10 @@ const LEVEL1_TARGET = { C: 60, D: 62, E: 64 };
 // Drawn kit shapes (drawKit fills). The letter on each piece is read from the canvas, not listed:
 // test 9 presses whatever letter is drawn there, so a letter the app changes is not the helper's fault.
 const KIT_SHAPE = { kick: 'drum', snare: 'drum', 'hihat-closed': 'cymbal', 'hihat-pedal': 'drum', 'hihat-open': 'cymbal', 'tom-floor': 'drum', 'tom-mid': 'drum', 'tom-high': 'drum', crash: 'cymbal', ride: 'cymbal' };
-const HEX = { white: '#e9edf6', black: '#10131c', pressed: '#9fb4d8', good: '#5be08a', target: '#2f93ee', flash: '#f3c52f', cymbal: '#2a3140', drum: '#1b2130' };
+const HEX = { white: '#e9edf6', black: '#10131c', pressed: '#9fb4d8', good: '#5be08a', flash: '#f3c52f', cymbal: '#2a3140', drum: '#1b2130' };
 const rgb = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
-const KEY_COLOURS = { pressed: rgb(HEX.pressed), good: rgb(HEX.good), target: rgb(HEX.target) };
+const KEY_COLOURS = { pressed: rgb(HEX.pressed), good: rgb(HEX.good) };
+const COLOUR_NAME = { pressed: `pressed (${HEX.pressed})`, good: `passed (${HEX.good})` };
 const KEY_BUSY = [rgb(HEX.pressed), rgb(HEX.good)];
 const KIT_COLOURS = { flash: rgb(HEX.flash) };
 const KIT_BUSY = [rgb(HEX.flash)];
@@ -111,7 +121,8 @@ const PAGE_SCRIPT = `(function () {
     // window.__q3cSample for a second evaluate to await after the action. Quiet means no
     // group in spec.quietIds (default: all) is lit pressed/passed/flashing. A group that is
     // lit when recording starts but is not in quietIds is only credited once it has gone
-    // unlit and lit again, so the PREVIOUS click's lit key is never credited to this click.
+    // unlit and lit again, so the PREVIOUS click's lit key is never credited to this click; one
+    // that stays lit the whole recording comes back as "masked": a hit on it could not be seen.
     start: async function (spec) {
       var t0 = performance.now(), quiet = false, img;
       var isBusy = function (img, g) { return spec.busy.some(function (c) { return count(img, g, c) >= g.need; }); };
@@ -127,9 +138,9 @@ const PAGE_SCRIPT = `(function () {
       spec.groups.forEach(function (g) { armed[g.id] = !isBusy(img, g); });
       var base = inputs.length;
       window.__q3cSample = (async function () {
-        var seen = {}, begin = performance.now(), after = 0;
+        var seen = {}, begin = performance.now(), after = 0, last = begin, gap = 0;
         for (;;) {
-          var at = await frame(); img = snap();
+          var at = await frame(); img = snap(); gap = Math.max(gap, at - last); last = at;
           var inputAt = inputs.length > base ? inputs[base] : null;
           for (var gi = 0; gi < spec.groups.length; gi++) {
             var g = spec.groups[gi];
@@ -137,7 +148,7 @@ const PAGE_SCRIPT = `(function () {
             for (var name in spec.colours) if (count(img, g, spec.colours[name]) >= g.need) { seen[g.id] = seen[g.id] || {}; if (seen[g.id][name] === undefined) seen[g.id][name] = at; }
           }
           if (inputAt !== null && at > inputAt) after++;
-          if ((inputAt !== null && after >= 3 && at - begin >= 30) || at - begin >= 700) return { seen: seen, inputAt: inputAt, inputs: inputs.length - base, frames: after };
+          if ((inputAt !== null && after >= 3 && at - begin >= 30) || at - begin >= 700) return { seen: seen, inputAt: inputAt, inputs: inputs.length - base, frames: after, maxGap: gap, masked: spec.groups.filter(function (g) { return !armed[g.id]; }).map(function (g) { return g.id; }) };
         }
       })();
       return { quiet: true, waited: waited };
@@ -146,7 +157,6 @@ const PAGE_SCRIPT = `(function () {
 })();`;
 
 // ---- Driving and observing -------------------------------------------------
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const feedback = (page) => page.evaluate("document.getElementById('feedback').textContent.trim()");
 
 async function readTarget(page) {
@@ -200,13 +210,37 @@ function missText(clicked, target) {
   const where = n === 12 ? `Right note, wrong octave: go one octave ${st > 0 ? 'down' : 'up'}.` : `Go ${n} key${n > 1 ? 's' : ''} to the ${st > 0 ? 'left' : 'right'}.`;
   return `That was ${nm(clicked)}, the note is ${nm(target)}. ${where}`;
 }
-const passRe = (target) => new RegExp(`^(?:That is the one\\. ${nm(target)}|${nm(target)}: yes, in [0-9.]+ s)\\.?$`);
+// First try: "<T>: yes, in N s."; after a miss on the same question: "That is the one. <T>." (passEl :1137).
+const passText = (target, afterMiss) => (afterMiss ? new RegExp(`^That is the one\\. ${nm(target)}\\.$`) : new RegExp(`^${nm(target)}: yes, in [0-9.]+ s\\.$`));
+
+// A miss does not end the question, so the pass that follows must read "That is the one." The feedback line
+// before the input says whether this question has had a miss ("That was <X>, the note is <Y>. ..."), read
+// from the page, so one failed input never changes how the next ones are judged.
+const afterMissLine = (before) => before.startsWith('That was ');
+
+// A light lasts 220 ms (key) or 160 ms (piece); a page that stalls longer between two frames cannot show it,
+// so a failure says so rather than blaming the app.
+const stallNote = (res, pulse) => (res.maxGap > pulse * 0.6 ? `; the page went ${Math.round(res.maxGap)} ms between two frames while it was watched, so a ${pulse} ms light could have been missed` : '');
+
+// What a failed keyboard input looked like, in the learner's terms: the key wanted and every
+// key that lit (with the colour it lit), and the keys that could not be watched.
+function keyboardFailure(where, expect, passed, res) {
+  const want = passed ? 'good' : 'pressed', mine = res.seen[expect] || {};
+  const lit = Object.keys(res.seen).map(Number).filter((k) => res.seen[k].pressed !== undefined || res.seen[k].good !== undefined);
+  const others = lit.filter((k) => k !== expect);
+  const colour = lit.includes(expect) && mine[want] === undefined ? `${lbl(expect)} lit ${Object.keys(mine).map((c) => COLOUR_NAME[c]).join(' and ')}, not ${COLOUR_NAME[want]}` : '';
+  const right = lit.includes(expect) && mine[want] !== undefined;
+  const got = [others.length ? others.map(lbl).join(' and ') : '', colour].filter(Boolean).join(' and ');
+  const masked = res.masked.map(lbl);
+  return `${where}: expected ${lbl(expect)} got ${got ? got + (right ? ', as well as the right key' : '') : 'nothing lit'}${masked.length ? `; ${masked.join(' and ')} ${masked.length > 1 ? 'were' : 'was'} still lit from the previous input, so a hit on ${masked.length > 1 ? 'them' : 'it'} could not be seen` : ''}${stallNote(res, 220)}`;
+}
 
 // One keyboard input and everything the learner would notice. `expect` is the
 // MIDI number that must be delivered, or null for "nothing may play here".
 async function keyboardInput(page, ctx, { act, expect, what }) {
   const target = await readTarget(page);
   const before = await feedback(page);
+  const afterMiss = afterMissLine(before);
   await page.evaluate("window.__q3cAsked = document.querySelector('#prompt b')");
   const m = await reachable(page);
   const rects = keyboardRects(m);
@@ -223,15 +257,14 @@ async function keyboardInput(page, ctx, { act, expect, what }) {
   const passed = expect === target;
   const seen = res.seen[expect] || {};
   const evidence = passed ? seen.good !== undefined : seen.pressed !== undefined;
-  const others = lit.filter((k) => k !== expect);
-  if (!evidence || others.length) {
-    throw new Error(`${where}: expected ${lbl(expect)} got ${lit.length ? lit.map(lbl).join(' and ') : 'nothing lit'}${evidence ? ' (and the right key too)' : ''}`);
-  }
+  if (!evidence || lit.some((k) => k !== expect)) throw new Error(keyboardFailure(where, expect, passed, res));
   if (passed) {
-    assert.match(text, passRe(target), `${where}: the feedback for the right note`);
     // The task is done; the next question comes 0.7 s later (1.5 s after a wrong note). Input in
-    // between is lit but not judged, so wait for the new question (a new <b> in the prompt).
+    // between is lit but not judged, so wait for the new question (a new <b> in the prompt) BEFORE
+    // judging the text: a wrong line then fails this input only, never the later ones that start on a
+    // question already over.
     await page.waitFor("document.querySelector('#prompt b') !== null && document.querySelector('#prompt b') !== window.__q3cAsked", 6000);
+    assert.match(text, passText(target, afterMiss), `${where}: the feedback for the right note${afterMiss ? ' after a miss' : ' first time'}`);
   } else assert.equal(text, missText(expect, target), `${where}: the feedback for a wrong note`);
 }
 
@@ -398,7 +431,7 @@ async function kitInput(page, ctx, { act, expect, what }) {
   assert.ok(res.inputs >= 1, `${where}: the page received no input at all`);
   const lit = Object.keys(res.seen).filter((id) => res.seen[id].flash !== undefined);
   if (expect === null) assert.deepEqual(lit, [], `NOTHING MAY PLAY HERE: ${where} flashed ${lit.join(' and ')}`);
-  else assert.deepEqual(lit, [expect], `${where}: expected ${expect} got ${lit.length ? lit.join(' and ') : 'nothing flashed'}`);
+  else assert.deepEqual(lit, [expect], `${where}: expected ${expect} got ${lit.length ? lit.join(' and ') : 'nothing flashed'}${stallNote(res, 160)}`);
   if (expect !== null) await page.audio.waitForRunning();
 }
 
@@ -461,6 +494,7 @@ async function playViewport(t, vp, { full }) {
       } catch (e) {
         if (String(e.message).includes(DISAGREE)) throw e; // the helper is wrong: no click may follow
         failures.push(`${ctx} ${name}: ${e.message}`);
+        await page.evaluate('new Promise((r) => setTimeout(r, 400))'); // let what it lit go out before the next step
       }
     };
     // Test 1, before any click: both instruments, idle.
