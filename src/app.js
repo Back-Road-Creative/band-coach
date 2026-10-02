@@ -237,7 +237,13 @@ import { register as registerPathway } from './ui/pathway.js';
     recordError('worklet-watchdog', new Error('The pitch worklet produced no frames for ' + WORKLET_WATCHDOG_GRACE_S + 's; switched to the main-thread listener.'));
   }
   setInterval(checkWorkletWatchdog, WORKLET_WATCHDOG_POLL_MS);
-  function ensureAudio() { if (!actx) { try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { actx = null; } } if (actx && actx.state === 'suspended') actx.resume(); return actx; }
+  // ensureAudio() CREATES the context, so it belongs on gesture paths only
+  // (clicks, key presses, taps): Chrome logs "The AudioContext was not
+  // allowed to start" for a context created anywhere else. Handlers that
+  // merely bring a learner back (visibilitychange, bfcache pageshow) call
+  // resumeAudio(), which wakes a suspended context and never makes one.
+  function ensureAudio() { if (!actx) { try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { actx = null; } } resumeAudio(); return actx; }
+  function resumeAudio() { if (actx && actx.state === 'suspended') actx.resume(); }
   const now = () => actx ? actx.currentTime : performance.now() / 1000;
   // Instrument-family-shaped reference tone (src/audio/voices.js): a
   // pre-rendered buffer, computed by pure JS synthesis, never an embedded
@@ -2534,7 +2540,7 @@ import { register as registerPathway } from './ui/pathway.js';
   $('playBtn').addEventListener('click', function () { this.blur(); if (!sess) startSession(); else if (paused) resume(); else takeBreak('user'); });
   $('endBtn').addEventListener('click', function () { this.blur(); endSession(); }); $('endBtn2').addEventListener('click', endSession); $('backBtn').addEventListener('click', resume);
   $('snoozeBtn').addEventListener('click', () => { sess.snoozeUntil = Date.now() + 5 * 60000; sess.tiredFor = 0; S.ready = Math.min(S.ready, 0.6); pauseInfo = { at: Date.now(), secs: 0 }; resume(); coach('Five more minutes, then I will ask again. I have eased off the pace meanwhile.'); });
-  document.addEventListener('visibilitychange', () => { if (document.hidden && playing) takeBreak('hidden'); if (document.hidden) { flushSave(); releaseNotes(); runTeardown('hidden'); } else { refreshModelClock(); ensureAudio(); ioRefresh(); } wakeLock.handleVisibilityChange(document); });
+  document.addEventListener('visibilitychange', () => { if (document.hidden && playing) takeBreak('hidden'); if (document.hidden) { flushSave(); releaseNotes(); runTeardown('hidden'); } else { refreshModelClock(); resumeAudio(); ioRefresh(); } wakeLock.handleVisibilityChange(document); });
   // A hidden tab is a pause the learner might return to; pagehide (real tab
   // close, navigation, reload) never comes back, so it gets the same
   // teardown -- a hidden tab that goes straight to being closed must not
@@ -2549,10 +2555,10 @@ import { register as registerPathway } from './ui/pathway.js';
   // frozen now(), can never become due again. The visible branch above
   // covers a plain tab switch; a bfcache restore (Back/Forward Cache) instead
   // fires pageshow with persisted:true and NO visibilitychange at all on some
-  // browsers, so ensureAudio() (a no-op unless actx exists and is suspended)
+  // browsers, so resumeAudio() (a no-op unless actx exists and is suspended)
   // needs its own call here too, or a learner returning from history
   // navigation gets the same frozen clock this whole fix exists to prevent.
-  window.addEventListener('pageshow', ev => { if (ev.persisted) ensureAudio(); });
+  window.addEventListener('pageshow', ev => { if (ev.persisted) resumeAudio(); });
   // A held note has no way to send its own note-off once the window itself
   // loses focus (alt-tab, another app grabbing the keyboard) -- release
   // everything noteState is holding rather than leave a phantom note "held"
@@ -2984,7 +2990,7 @@ import { register as registerPathway } from './ui/pathway.js';
     // behaviour (whether a quiet frame's pitch reaches the page), not on
     // fabricating a pass.
     setNoiseFloorForTest: floor => { DB.prefs.noiseFloor = floor; applyGates(gatesFor(floor)); save(); } });
-  if (__DEBUG_HOOK__) Object.assign(hook, { micOpen: () => micReady, audioSuspended: () => !!(actx && actx.state === 'suspended'), teardownRuns: () => teardownRunCount });
+  if (__DEBUG_HOOK__) Object.assign(hook, { micOpen: () => micReady, audioExists: () => !!actx, audioSuspended: () => !!(actx && actx.state === 'suspended'), teardownRuns: () => teardownRunCount });
   //
   if (__DEBUG_HOOK__) Object.assign(hook, { judgeChord: judgeChord, chroma: chroma });
   if (__DEBUG_HOOK__) Object.assign(hook, { groove: () => groove, grooveLast: () => grooveLast, grooveBpm: () => S.grooveBpm, grooveOn: v => { grooveOn = !!v; task = null; groove = null; }, grooveInject: (midi, atAudioTime) => { const fire = () => { if (audioNow() >= atAudioTime) onNote(midi, true); else setTimeout(fire, 4); }; fire(); } });
