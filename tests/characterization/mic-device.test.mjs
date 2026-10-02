@@ -9,11 +9,17 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { HTML_PATH } from '../helpers/html-path.mjs';
 import { launchPage } from '../helpers/browser.mjs';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { pluck, writePluckWav } from '../helpers/pluck-wav.mjs';
 
 const htmlPath = HTML_PATH;
 
 test('gates default to today\'s constants, the device picker lists an input, and calibration writes a finite noiseFloor', async (t) => {
-  const page = await launchPage(htmlPath);
+  // An explicit quiet room: the default fake mic beeps, which the manual check rightly refuses to learn as the room.
+  const wavPath = writePluckWav(join(mkdtempSync(join(tmpdir(), 'mic-device-')), 'room.wav'), pluck(110, 48000, 6.0, { seed: 3, gain: 0.0003 }), 48000);
+  const page = await launchPage(htmlPath, { fakeAudioFile: wavPath });
   t.after(() => page.close());
 
   // Nothing has calibrated yet: the app must behave exactly as before.
@@ -32,7 +38,8 @@ test('gates default to today\'s constants, the device picker lists an input, and
   // empty (headless fake devices may not label until permission settles) —
   // it should not throw either way.
   await page.evaluate('window.__coach.calibrate()');
-  await page.waitFor("document.getElementById('calibrateResult').textContent.length > 0", 5000);
+  // Connect's own background check also writes here; wait for the manual outcome specifically.
+  await page.waitFor("/room is quiet|background noise/.test(document.getElementById('calibrateResult').textContent)", 5000);
 
   const floor = await page.evaluate('window.__coach.db().prefs.noiseFloor');
   assert.ok(Number.isFinite(floor), `expected calibration to write a finite noiseFloor, got ${floor}`);
