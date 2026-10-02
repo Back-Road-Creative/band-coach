@@ -394,15 +394,17 @@ import { register as registerPathway } from './ui/pathway.js';
     sel.value = micDevices.some(d => d.deviceId === wanted) ? wanted : '';
   }
   function meterUpdate(rms) { const pct = meterLevel(rms) * 100; ['micLevelFill', 'practiceLevelFill'].forEach(id => { const el = $(id); if (!el) return; el.style.width = pct + '%'; const box = el.closest('[role="progressbar"]'); if (box) box.setAttribute('aria-valuenow', String(Math.round(pct))); }); const pm = $('practiceMeter'); if (pm && pm.hidden && micReady) pm.hidden = false; }
-  // Samples the analyser every 50 ms for `ms`: each frame's RMS and whether yin hears a pitch in it (the pitch search is skipped below MIN_FLOOR). `fresh` is false when the input device changed or the mic was torn down meanwhile: the reading is then partly or wholly another stream's.
+  // Samples the analyser every 50 ms for `ms`: each frame's RMS and whether yin hears a pitch in it (the pitch search is skipped below MIN_FLOOR). `fresh` is false when the input device changed or the mic was torn down meanwhile: the reading is then partly or wholly another stream's. The window opens at the first frame with any signal: a stream that has not started delivering yet reads exactly 0 (a real microphone never does), and a window of those is not the room. If nothing arrives within ROOM_AUDIO_WAIT_MS the result has no frames, which the classifier calls unusable.
+  const ROOM_AUDIO_WAIT_MS = 3000;
   async function listenRoom(ms) {
-    const frames = [], gen = micGen, t0 = performance.now();
+    const frames = [], gen = micGen, tWait = performance.now(); let t0 = null;
     await new Promise((resolve, reject) => {
       const iv = setInterval(() => {
         try {
           const buf = new Float32Array(anTime.fftSize); anTime.getFloatTimeDomainData(buf);
           // RMS over the whole window; the pitch search only for audible frames and only on the newest 2048 samples (the full 4096 costs ~5 ms of main thread per 50 ms frame, this about a third of that).
           let sq = 0; for (let i = 0; i < buf.length; i++) sq += buf[i] * buf[i]; const rms = Math.sqrt(sq / buf.length);
+          if (t0 === null) { if (rms > 0) t0 = performance.now(); else { if (performance.now() - tWait > ROOM_AUDIO_WAIT_MS) { clearInterval(iv); resolve(); } return; } }
           const r = rms >= MIN_FLOOR ? yin(buf.subarray(buf.length - 2048), actx.sampleRate, 50, 1000, 0) : null; frames.push({ rms, pitched: !!(r && r.freq && r.clarity > 0.8) });
         } catch (e) { clearInterval(iv); reject(e); return; }
         if (performance.now() - t0 > ms) { clearInterval(iv); resolve(); }

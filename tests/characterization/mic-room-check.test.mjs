@@ -90,6 +90,34 @@ test('T4: steady unpitched noise is the room: the floor is stored and the noisy 
   assert.equal(await page.evaluate('window.__coach.db().prefs.noiseFloorV'), 2, 'the floor carries the current check version');
 });
 
+// A stream that has not delivered audio reads exactly 0, which a real microphone never does. A window of
+// those is no reading: it must not be stored as "your room is quiet" (it stopped the check ever running again).
+const digitalSilence = (secs) => new Float32Array(Math.round(SR * secs));
+const noReading = /Could not get a reading/;
+const checkDone = (page) => page.waitFor("!/Checking the room/.test(document.getElementById('calibrateResult').textContent)", 9000);
+
+test('digital silence during Connect is no reading: nothing stored, defaults kept, the learner is told', async (t) => {
+  const page = await connect(t, digitalSilence(4));
+  await checkDone(page);
+  const floor = await floorOf(page), msg = await resultText(page);
+  assert.equal(floor, null, `an all-zero window stored a floor of ${floor} (the app said "${msg}")`);
+  assert.deepEqual(await page.evaluate('window.__coach.gates()'), DEFAULT_GATES);
+  assert.match(msg, noReading, msg);
+  assert.match(msg, /Check my microphone/);
+  assert.ok(await resultVisible(page));
+});
+
+test('a stream that starts with exact zeros and then delivers a quiet room still has its room learned', async (t) => {
+  // 1.2 s of nothing (under the app\'s wait for audio), then steady noise: the window must open when the noise arrives.
+  const lead = digitalSilence(1.2), room = steadyNoise(0.004, 6), buf = new Float32Array(lead.length + room.length);
+  buf.set(room, lead.length);
+  const page = await connect(t, buf);
+  await checkDone(page);
+  const floor = await floorOf(page);
+  assert.ok(floor > 0.003 && floor < 0.005, `floor ${floor}, "${await resultText(page)}"`);
+  assert.match(await resultText(page), /a lot of background noise/);
+});
+
 test('the background check announces itself while it listens', async (t) => {
   const page = await connect(t, sine(110, 0.014, 2));
   assert.match(await resultText(page), /Checking the room/i);

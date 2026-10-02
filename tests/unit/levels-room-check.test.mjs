@@ -34,8 +34,25 @@ test('frames below the minimum floor are quiet whatever their pitch', () => {
   for (const manual of [false, true]) assert.ok(Number.isFinite(classifyRoomCheck(frames, { manual }).floor));
 });
 
-test('a silent mic (all zero) stores a floor of 0, not an abstain', () => {
-  assert.equal(classifyRoomCheck(rep(30, fr(0)), { manual: false }).floor, 0);
+test('digital silence (every frame exactly 0) is no reading: unusable, never a floor of 0', () => {
+  for (const manual of [false, true]) assert.deepEqual(classifyRoomCheck(rep(30, fr(0)), { manual }), { abstain: 'unusable' });
+  assert.deepEqual(classifyRoomCheck(rep(1, fr(0)), { manual: false }), { abstain: 'unusable' });
+});
+
+test('a window that is mostly digital silence (audio only just arrived) is unusable too: its floor would be 0', () => {
+  // 20 of 30 frames exactly 0, the last 10 a faint steady hiss under the minimum floor: the trimmed median is 0.
+  const frames = [...rep(20, fr(0)), ...rep(10, fr(0.0003))];
+  for (const manual of [false, true]) assert.deepEqual(classifyRoomCheck(frames, { manual }), { abstain: 'unusable' });
+});
+
+test('the other side of the zero rule: a tiny but steady non-zero reading is a real quiet interface, so its floor is stored', () => {
+  for (const manual of [false, true]) {
+    const v = classifyRoomCheck(rep(30, fr(0.000001)), { manual });
+    assert.ok(Math.abs(v.floor - 0.000001) < 1e-12, JSON.stringify(v));
+  }
+  // and a window that is only slightly more than half real hiss keeps the hiss's floor
+  const v = classifyRoomCheck([...rep(10, fr(0)), ...rep(20, fr(0.0003))], { manual: true });
+  assert.ok(Math.abs(v.floor - 0.0003) < 1e-12, JSON.stringify(v));
 });
 
 test('automatic: a quarter of the loud frames pitched abstains; just under a quarter stores', () => {

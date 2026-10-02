@@ -118,6 +118,7 @@ export function classifyRoomCheck(frames, { manual = false } = {}) {
     const loud = fs.filter((f) => f.rms >= MIN_FLOOR);
     if (loud.length && loud.filter((f) => f.pitched).length / loud.length >= PITCHED_SHARE) return { abstain: 'sound' };
   }
+  // A real microphone always reads a little above exactly 0 (its own electronic hiss), so a window whose floor comes out 0 is one where no audio reached the analyser (the stream had not started, or it died): there is nothing to store, and "your room is quiet" would be false.
   const floor = noiseFloor(rms);
-  return Number.isFinite(floor) ? { floor: clamp(floor, 0, 1) } : { abstain: 'unusable' };
+  return floor > 0 && Number.isFinite(floor) ? { floor: clamp(floor, 0, 1) } : { abstain: 'unusable' };
 }
