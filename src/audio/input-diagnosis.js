@@ -16,17 +16,21 @@
 //   'silent'    - RMS stays essentially at noise-floor: nothing is reaching
 //                 the analyser (wrong device, muted, permission granted to
 //                 the wrong input).
-//   'too-quiet' - RMS is above silence but never clears the pitch gate: a
-//                 real signal is arriving, just too soft to judge.
-//   'unclear'   - RMS clears the gate but clarity never clears the
-//                 monophonic threshold: loud enough, but not a single clean
-//                 pitch — the strummed-chord case from the field report.
+//   'too-quiet' - RMS is above silence but only briefly (under 30% of the
+//                 window, e.g. a pluck's attack peak) or never clears the
+//                 pitch gate: a real signal, just too soft to judge.
+//   'unclear'   - RMS clears the gate for a sustained share (>= 30%) of the
+//                 window but clarity never clears the monophonic threshold:
+//                 loud enough, but not a single clean pitch — the
+//                 strummed-chord case from the field report.
 //   'ok'        - at least one frame in the window already reads as a clear
 //                 single pitch; nothing to say.
 // A window with no frames at all, or fewer than needed to span windowSec,
 // reports 'insufficient' so a caller never acts on a half-filled buffer.
 
 const SILENCE_RMS = 0.0015; // below this, treat the channel as carrying no signal at all (matches levels.js MIN_FLOOR)
+
+const UNCLEAR_SHARE = 0.3; // fraction of the window that must be over the gate (yet never clear) to call it a chord
 
 export const INPUT_DIAGNOSIS_MESSAGES = Object.freeze({
   silent: "I'm not hearing anything at all. Check that the right microphone is selected and that it isn't muted.",
@@ -65,8 +69,12 @@ export function diagnoseInput(frames, { gates, clarityGate = 0.8, windowSec = 1.
   const anyAboveSilence = inWindow.some((f) => Number.isFinite(f.rms) && f.rms > SILENCE_RMS);
   if (!anyAboveSilence) return { state: 'silent', message: INPUT_DIAGNOSIS_MESSAGES.silent };
 
-  const anyAboveGate = inWindow.some((f) => Number.isFinite(f.rms) && f.rms >= pitchGate);
-  if (!anyAboveGate) return { state: 'too-quiet', message: INPUT_DIAGNOSIS_MESSAGES['too-quiet'] };
+  // A quiet single pluck's attack peak crosses the gate for a frame or two
+  // while the note itself rings below it; that is "too quiet", not a chord.
+  // 'unclear' needs a SUSTAINED share of frames over the gate that never clear.
+  const finite = inWindow.filter((f) => Number.isFinite(f.rms));
+  const shareAboveGate = finite.length ? finite.filter((f) => f.rms >= pitchGate).length / finite.length : 0;
+  if (shareAboveGate < UNCLEAR_SHARE) return { state: 'too-quiet', message: INPUT_DIAGNOSIS_MESSAGES['too-quiet'] };
 
   return { state: 'unclear', message: INPUT_DIAGNOSIS_MESSAGES.unclear };
 }

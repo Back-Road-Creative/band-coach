@@ -1,4 +1,4 @@
-// F11: absolute loudness gates (0.008 / 0.01 / 0.012 RMS) with no
+// F11: absolute loudness gates (now 0.004 / 0.005 / 0.006 RMS) with no
 // noise-floor calibration, no level meter, no input-device picker. This
 // unit adds a "Check my microphone" calibration (src/app.js
 // calibrateNoiseFloor, backed by the pure src/audio/levels.js), an input
@@ -18,7 +18,7 @@ test('gates default to today\'s constants, the device picker lists an input, and
 
   // Nothing has calibrated yet: the app must behave exactly as before.
   const gatesBefore = await page.evaluate('window.__coach.gates()');
-  assert.deepEqual(gatesBefore, { pitch: 0.008, note: 0.01, chord: 0.012 }, 'default gates must equal today\'s hard-coded constants');
+  assert.deepEqual(gatesBefore, { pitch: 0.004, note: 0.005, chord: 0.006 }, 'default gates must equal the DEFAULT_GATES constants');
 
   // 'gtr' has input: 'pluck', so Connect opens the microphone.
   await page.evaluate("window.__coach.setMod('gtr')");

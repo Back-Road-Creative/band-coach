@@ -1,16 +1,17 @@
-// F11: the app used three hard-coded loudness gates (0.008 / 0.01 / 0.012
-// RMS) with AGC off. A quiet mic or audio interface never crosses them; a
+// F11: the app used three hard-coded loudness gates (originally 0.008 / 0.01
+// / 0.012 RMS, now 0.004 / 0.005 / 0.006) with AGC off. A quiet mic or audio interface never crosses them; a
 // hot one false-triggers on room noise. This module measures a learner's
 // actual noise floor and derives the same three gates from it, so both
-// ends of the hardware spectrum work — and falls back to EXACTLY today's
-// constants when no measurement exists, so every existing test (written
-// against those literals) stays green untouched.
+// ends of the hardware spectrum work — and falls back to the
+// DEFAULT_GATES constants when no measurement exists. Connect measures the
+// room once (src/app.js openMic), so the defaults only serve until then.
 
 const clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
 
-// Today's constants, kept as the no-calibration default and as the ratio
-// the scaled gates preserve.
-export const DEFAULT_GATES = Object.freeze({ pitch: 0.008, note: 0.01, chord: 0.012 });
+// The no-calibration default, and the 1 : 1.25 : 1.5 ratio the scaled gates
+// preserve. Set at a quiet laptop-mic room's level (~ -48 dBFS) so a soft
+// guitar pluck is judged even before the first measurement.
+export const DEFAULT_GATES = Object.freeze({ pitch: 0.004, note: 0.005, chord: 0.006 });
 
 // A measured floor is trusted only inside this band. Below MIN_FLOOR the
 // interface is treated as silent-enough that the default gates already
@@ -46,7 +47,7 @@ export function gatesFor(floorRms) {
   if (!Number.isFinite(floorRms) || floorRms <= 0) return { ...DEFAULT_GATES };
   const clamped = clamp(floorRms, MIN_FLOOR, MAX_FLOOR);
   const pitch = clamped * MARGIN;
-  // Preserve today's ratios (0.008 : 0.01 : 0.012 === 1 : 1.25 : 1.5) so the
+  // Preserve the default ratios (0.004 : 0.005 : 0.006 === 1 : 1.25 : 1.5) so the
   // three thresholds keep the same relative spacing when scaled.
   return { pitch, note: pitch * 1.25, chord: pitch * 1.5 };
 }
@@ -57,9 +58,9 @@ export function gatesFor(floorRms) {
 // calibrated gates entirely -- a quiet mic calibrated down to a lower
 // gates.pitch would never cross 0.006 at all, and a hot mic/noisy room
 // calibrated up past it would treat ordinary room noise as "released."
-// 0.006 / DEFAULT_GATES.pitch (0.008) === 0.75, so releaseFloor() derives
-// the same ratio off whatever gates are active: at the uncalibrated
-// defaults this returns EXACTLY 0.006, keeping today's behaviour untouched.
+// 0.006 / the old DEFAULT_GATES.pitch (0.008) === 0.75, so releaseFloor()
+// derives the same ratio off whatever gates are active: at the uncalibrated
+// defaults (pitch 0.004) this returns 0.003.
 const RELEASE_GATE_RATIO = 0.75;
 
 export function releaseFloor(gatesArg) {

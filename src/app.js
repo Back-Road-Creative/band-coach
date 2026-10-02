@@ -349,7 +349,10 @@ import { register as registerPathway } from './ui/pathway.js';
       try { st = await navigator.mediaDevices.getUserMedia({ audio: wanted }); }
       catch (e) { if (!DB.prefs.inputDeviceId) throw e; st = await navigator.mediaDevices.getUserMedia({ audio: base }); }
       micStream = st; const src = actx.createMediaStreamSource(st); wireAnalysers(monoSum(src)); micReady = true;
-      ensurePitchWorklet(); refreshMicDevices(); return true;
+      ensurePitchWorklet(); refreshMicDevices();
+      // First Connect with no stored floor: measure the room for ~1.5 s in the background so the gates follow this mic, not the fixed defaults.
+      if (DB.prefs.noiseFloor == null) measureNoiseFloor(1500).then(f => { if (DB.prefs.noiseFloor == null) { DB.prefs.noiseFloor = f; applyGates(gatesFor(f)); save(); } }).catch(() => {});
+      return true;
     })();
     try { return await openMicPromise; } finally { openMicPromise = null; }
   }
@@ -366,7 +369,7 @@ import { register as registerPathway } from './ui/pathway.js';
   // called from both sites and needs to be idempotent either way.
   const teardown = createTeardown();
   let teardownRunCount = 0;
-  teardown.add('mic', () => { if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; micReady = false; } });
+  teardown.add('mic', () => { const pm = $('practiceMeter'); if (pm) pm.hidden = true; if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; micReady = false; } });
   teardown.add('audioContext', () => { if (actx && actx.state === 'running') actx.suspend(); });
   // "Play it for me" (see midiOutPlay below): a hidden/closed tab must not leave a keyboard sounding.
   teardown.add('midiOut', () => midiOutStop());
@@ -382,21 +385,26 @@ import { register as registerPathway } from './ui/pathway.js';
     micDevices.forEach((d, i) => { const o = document.createElement('option'); o.value = d.deviceId; o.textContent = d.label || ('Microphone ' + (i + 1)); sel.appendChild(o); });
     sel.value = micDevices.some(d => d.deviceId === wanted) ? wanted : '';
   }
-  function meterUpdate(rms) { const el = $('micLevelFill'); if (!el) return; const pct = meterLevel(rms) * 100; el.style.width = pct + '%'; const box = el.closest('[role="progressbar"]'); if (box) box.setAttribute('aria-valuenow', String(Math.round(pct))); }
-  async function calibrateNoiseFloor() {
-    const resultEl = $('calibrateResult');
-    try { await openMic(); } catch (e) { if (resultEl) resultEl.textContent = 'The microphone was blocked, so it could not be checked.'; return; }
-    if (resultEl) resultEl.textContent = 'Listening for 3 seconds — stay quiet…';
+  function meterUpdate(rms) { const pct = meterLevel(rms) * 100; ['micLevelFill', 'practiceLevelFill'].forEach(id => { const el = $(id); if (!el) return; el.style.width = pct + '%'; const box = el.closest('[role="progressbar"]'); if (box) box.setAttribute('aria-valuenow', String(Math.round(pct))); }); const pm = $('practiceMeter'); if (pm && pm.hidden && micReady) pm.hidden = false; }
+  // Samples the analyser's RMS for `ms` and returns the robust floor (null when the reading is unusable).
+  async function measureNoiseFloor(ms) {
     const samples = [], t0 = performance.now();
     await new Promise(resolve => {
       const iv = setInterval(() => {
         const buf = new Float32Array(anTime.fftSize); anTime.getFloatTimeDomainData(buf);
         let s = 0; for (let i = 0; i < buf.length; i++) s += buf[i] * buf[i]; samples.push(Math.sqrt(s / buf.length));
-        if (performance.now() - t0 > 3000) { clearInterval(iv); resolve(); }
+        if (performance.now() - t0 > ms) { clearInterval(iv); resolve(); }
       }, 50);
     });
     const floor = noiseFloor(samples);
-    DB.prefs.noiseFloor = Number.isFinite(floor) && floor >= 0 ? clamp(floor, 0, 1) : null;
+    return Number.isFinite(floor) && floor >= 0 ? clamp(floor, 0, 1) : null;
+  }
+  async function calibrateNoiseFloor() {
+    const resultEl = $('calibrateResult');
+    try { await openMic(); } catch (e) { if (resultEl) resultEl.textContent = 'The microphone was blocked, so it could not be checked.'; return; }
+    if (resultEl) resultEl.textContent = 'Listening for 3 seconds — stay quiet…';
+    const floor = await measureNoiseFloor(3000);
+    DB.prefs.noiseFloor = floor;
     applyGates(gatesFor(DB.prefs.noiseFloor)); save();
     if (resultEl) resultEl.textContent = (DB.prefs.noiseFloor === null || DB.prefs.noiseFloor < 0.003)
       ? 'Your room is quiet.'

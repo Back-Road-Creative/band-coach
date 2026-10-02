@@ -8,7 +8,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { diagnoseInput, INPUT_DIAGNOSIS_MESSAGES } from '../../src/audio/input-diagnosis.js';
 
-const GATES = { pitch: 0.008 }; // matches DEFAULT_GATES.pitch in levels.js
+const GATES = { pitch: 0.008 }; // a fixed test gate (DEFAULT_GATES.pitch is now 0.004; these cases pin the verdict order at 0.008)
 
 // Builds a run of frames at 50ms spacing (the app's listen()/worklet cadence)
 // covering `seconds` of history, all with the same rms/clarity.
@@ -147,4 +147,20 @@ test('missing/invalid gates falls back to a sane silence-scale default rather th
   const frames = steadyFrames(2, 0, 0);
   assert.doesNotThrow(() => diagnoseInput(frames, {}));
   assert.doesNotThrow(() => diagnoseInput(frames));
+});
+
+// ---------- quiet single pluck: one attack frame must not read as a chord ----------
+
+test('a quiet single pluck (one attack frame over the gate, clarity 0.5, rest below) reads too-quiet, not unclear', () => {
+  const frames = steadyFrames(2, 0.004, 0.9);
+  frames[20] = { ...frames[20], rms: 0.009, clarity: 0.5 };
+  const r = diagnoseInput(frames, { gates: { pitch: 0.005 } }); // the attack peak crosses this gate, the ringing pluck does not
+  assert.equal(r.state, 'too-quiet');
+});
+
+test('a sustained share (>= 0.3) of frames over the gate that is never clear still reads unclear', () => {
+  const frames = steadyFrames(2, 0.004, 0.5);
+  const n = Math.ceil(frames.length * 0.4);
+  for (let i = frames.length - n; i < frames.length; i++) frames[i] = { ...frames[i], rms: 0.02, clarity: 0.5 };
+  assert.equal(diagnoseInput(frames, { gates: GATES }).state, 'unclear');
 });

@@ -57,8 +57,10 @@ they stay tucked away until you need them, so the status line (whether the app i
 the MIDI activity dot are the only things shown up front.
 
 If you have more than one input
-(e.g. an audio interface), pick it from the input list next to Connect. "Check my microphone"
-listens for 3 seconds of quiet and tunes the listening thresholds to your room and hardware
+(e.g. an audio interface), pick it from the input list next to Connect. Connect also listens to
+your room for a moment the first time and sets the listening thresholds from it, and the practice
+screen shows a small level meter while a microphone instrument is listening, so you can see whether
+your playing is reaching the app. "Check my microphone" listens for 3 seconds of quiet and tunes the listening thresholds to your room and hardware
 instead of a one-size-fits-all level, including the level the pitch detector itself gates on; a
 small meter shows the live input level. An instrument plugged into only one channel of a
 2-channel interface is summed into the listening path rather than silenced.
