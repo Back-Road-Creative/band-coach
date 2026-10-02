@@ -1,0 +1,85 @@
+{
+  "format": "band-coach-progress",
+  "formatVersion": 1,
+  "appVersion": "0.1.0",
+  "exportedAt": "2026-09-19T21:00:00.000Z",
+  "db": {
+    "v": 1,
+    "mods": {
+      "kbd": {
+        "level": 3,
+        "ready": 0.4,
+        "item": {
+          "n60": {
+            "m": 0.7,
+            "n": 4,
+            "last": 1700000000000,
+            "seen": 12
+          },
+          "n62": {
+            "m": 0.55,
+            "n": 2,
+            "last": 1700000100000,
+            "seen": 5
+          }
+        },
+        "trans": {},
+        "conf": {},
+        "gain": 0.05,
+        "gate": 0.6,
+        "offset": 0,
+        "acc": {},
+        "cr": {},
+        "tick": 40,
+        "judged": 12,
+        "promo": {
+          "at": -999,
+          "level": 0
+        },
+        "fast": 0
+      }
+    },
+    "sessions": [
+      {
+        "d": "2026-09-01",
+        "mod": "kbd",
+        "min": 12,
+        "acc": 0.8,
+        "a1": 0.7,
+        "a2": 0.9,
+        "from": 1,
+        "to": 3,
+        "breaks": 0
+      },
+      {
+        "d": "2026-09-03",
+        "mod": "kbd",
+        "min": 9,
+        "acc": 0.85,
+        "a1": 0.8,
+        "a2": 0.9,
+        "from": 3,
+        "to": 3,
+        "breaks": 1
+      }
+    ],
+    "prefs": {
+      "mod": "kbd",
+      "wind": "bb",
+      "voice": "low",
+      "names": true,
+      "noiseFloor": null,
+      "inputDeviceId": null,
+      "notate": {
+        "kbd": "names"
+      }
+    },
+    "custom": [
+      60,
+      62,
+      64
+    ],
+    "latencyMs": 40,
+    "panels": {}
+  }
+}

@@ -13,3 +13,9 @@ Format: `phrases` is a list of phrases; each note is `{ "off", "beats" }`, where
 5. The app's own phrase grouping is not compared, only the notes.
 6. The lesson plan built from the song must expect exactly the same notes, in the same order, with the same lengths. Splitting them into steps is allowed; adding, dropping, reordering or re-timing any is not.
 7. A song that fails the rule is left out of the test and reported. Neither the golden file nor the app is changed to make it pass.
+
+## Status of each file
+
+- `mary-had-a-little-lamb.json`: equals the app's tune exactly.
+- `ode-to-joy.json`: the app holds the first two phrases (8 bars); both match, so the app passes as a whole-phrase prefix.
+- `hot-cross-buns.json`: NOT compared. The app writes the "one a penny, two a penny" bars as quarter notes over two bars; this file has them as eighth notes in one bar. Same pitches, different lengths. Left out of the test until a person decides which is right.
