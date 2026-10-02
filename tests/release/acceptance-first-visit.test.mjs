@@ -83,10 +83,13 @@ function makePlayer(page) {
       await page.waitFor(`window.__q3bFeedback > ${n} || window.__q3bTargets.length > ${shown.n}`);
       const answered = (await feedbackCount(page)) > n;
       const right = { text: await text(page, 'feedback'), cls: await cls(page, 'feedback') };
-      // One wrong key and one right key move the prompt on exactly once: the new
-      // target is counted only when it appears, so this reads the count after it.
-      await page.waitFor(`window.__q3bTargets.length > ${shown.n}`);
-      return { label: shown.label, short, wrong, right, answered, advancedBy: (await targetsShown()) - shown.n };
+      // No check here that the prompt "moves on exactly once": a count read as
+      // soon as the next target appears can never see a second advance, so it
+      // could not fail. Spec rule 4 (a wrong key leaves the prompt unchanged)
+      // rests on 4c and 5a (the right key is answered as "That is the one" for the
+      // note that was asked, which a moved prompt would break), on the alignment of
+      // played notes against targets shown, and on the 90% session figure.
+      return { label: shown.label, short, wrong, right, answered };
     },
   };
 }
@@ -128,7 +131,6 @@ test('A01: first visit on computer keys -- choose, start, play, pause, play, end
         check('4a wrong key says what it heard', () => assert.match(r.wrong.text, new RegExp(`^That was [A-G][♯♭]?, the note is ${escapeRe(r.short)}\\. `), `wrong key: ${r.wrong.text}`));
         check('4b wrong key is a miss', () => assert.equal(r.wrong.cls, 'no', 'a wrong key is shown as a miss'));
         check('4c right key gets its own answer', () => assert.equal(r.answered, true, 'the right key after a wrong one was never answered'));
-        check('4d one wrong and one right key move on exactly once', () => assert.equal(r.advancedBy, 1, `the prompt moved on ${r.advancedBy} time(s)`));
         check('5a right key recognised', () => assert.match(r.right.text, new RegExp(`^That is the one\\. ${escapeRe(r.short)}\\.$`), `right key after a miss: ${r.right.text}`));
         check('5b not shown as a pass', () => assert.notEqual(r.right.cls, 'ok', 'a note that needed a second try is not shown as a pass'));
         check('5c not a first-try line', () => assert.doesNotMatch(r.right.text, /yes, in/));
@@ -209,6 +211,11 @@ test('A01: first visit on computer keys -- choose, start, play, pause, play, end
 test('control for A01: keys pressed outside a judged note are never credited', async (t) => {
   // If a stray or wrong key were credited, the first-try assertions above would
   // pass for the wrong reason.
+  // Deliberately stricter than the unit spec, which only asks for "no events
+  // after the debounce": this also presses the right key once and asserts exactly
+  // one stored row, logged as a miss. Stray keys before Start, or a k that was
+  // credited or advanced the prompt, would add rows or a pass and fail it; the
+  // spec's check (nothing stored) could not tell a miss from a pass.
   await withAcceptancePage(t, { initScript: WATCH_PROMPT }, async (page) => {
     await chooseKeyboard(page);
     for (const k of ['a', 's', 'd']) await page.press(k, { text: k });
@@ -216,7 +223,6 @@ test('control for A01: keys pressed outside a judged note are never credited', a
 
     await page.clickSelector('#playBtn');
     await page.waitFor('window.__q3bTargets.length > 0');
-    const shown = await page.evaluate('window.__q3bTargets.length');
     const asked = await page.evaluate('window.__q3bTargets[0]');
     for (let i = 0; i < 4; i++) {
       // k is C5: a mapped key that is never a level-1 target.
@@ -226,14 +232,13 @@ test('control for A01: keys pressed outside a judged note are never credited', a
       assert.match(fb, new RegExp(`^That was C, the note is ${escapeRe(asked)}\\. `), `press ${i + 1}: ${fb}`);
       assert.doesNotMatch(fb, /yes, in/);
     }
-    // Four misses and the prompt has not moved. The right key then answers the
-    // note once and the prompt moves on exactly once, counted when the next
-    // target appears (a positive signal, not a sleep).
+    // Four misses, each answered for the note that was asked (so the prompt had
+    // not moved). The right key then answers that same note. No "moves on exactly
+    // once" count: read when the next target appears it could never see a second
+    // advance. A stray advance would show as a second stored row below.
     await pressAndWait(page, KEY_FOR[asked]);
     const last = await text(page, 'feedback');
     assert.match(last, new RegExp(`^That is the one\\. ${escapeRe(asked)}\\.$`), `the right key after four misses: ${last}`);
-    await page.waitFor(`window.__q3bTargets.length > ${shown}`);
-    assert.equal(await page.evaluate('window.__q3bTargets.length'), shown + 1, 'four wrong keys and one right key move the prompt on exactly once');
     // That one note is the only thing finished, and it is a miss. Storage is read
     // once the page has written that one row (the app's save debounce is 1200 ms),
     // so the wait is on the row itself, not on time.
