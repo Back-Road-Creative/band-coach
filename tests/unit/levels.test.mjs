@@ -102,22 +102,27 @@ test('meterLevel increases monotonically with rms', () => {
 // ---------- releaseFloor (VERIFIED DEFECT 2: src/app.js:650's hard-coded
 // 0.006 release RMS ignored the calibrated gates entirely) ----------
 
-test('releaseFloor equals EXACTLY today\'s hard-coded 0.006 at the uncalibrated default gates', () => {
-  assert.equal(releaseFloor(DEFAULT_GATES), 0.006);
+test('releaseFloor is 0.75 x the default pitch gate (0.003) at the uncalibrated default gates', () => {
+  assert.ok(Math.abs(releaseFloor(DEFAULT_GATES) - 0.003) < 1e-12);
 });
 
 test('releaseFloor scales with a calibrated pitch gate, keeping the same ratio', () => {
-  const quiet = gatesFor(0.002); // a quiet mic lowers gates.pitch below default
-  const noisy = gatesFor(0.02); // a noisy mic/room raises it above default
+  const quiet = gatesFor(0.002); // a quiet room: a low gate
+  const noisy = gatesFor(0.02); // a noisy mic/room raises it
   assert.ok(Math.abs(releaseFloor(quiet) / quiet.pitch - 0.75) < 1e-9);
   assert.ok(Math.abs(releaseFloor(noisy) / noisy.pitch - 0.75) < 1e-9);
-  assert.ok(releaseFloor(quiet) < 0.006, 'a quiet mic must get a LOWER release floor than the old hard-coded constant');
+  assert.ok(releaseFloor(quiet) < releaseFloor(noisy), 'a quiet mic must get a LOWER release floor than a noisy room');
   assert.ok(releaseFloor(noisy) > 0.006, 'a noisy room must get a HIGHER release floor than the old hard-coded constant');
 });
 
 test('releaseFloor falls back to the default pitch gate on a missing/malformed gates object', () => {
-  assert.equal(releaseFloor(null), 0.006);
-  assert.equal(releaseFloor(undefined), 0.006);
-  assert.equal(releaseFloor({}), 0.006);
-  assert.equal(releaseFloor({ pitch: NaN }), 0.006);
+  assert.ok(Math.abs(releaseFloor(null) - 0.003) < 1e-12);
+  assert.ok(Math.abs(releaseFloor(undefined) - 0.003) < 1e-12);
+  assert.ok(Math.abs(releaseFloor({}) - 0.003) < 1e-12);
+  assert.ok(Math.abs(releaseFloor({ pitch: NaN }) - 0.003) < 1e-12);
+});
+
+test('DEFAULT_GATES sit at the quiet-room floor and keep the 1 : 1.25 : 1.5 ratio', () => {
+  assert.deepEqual({ ...DEFAULT_GATES }, { pitch: 0.004, note: 0.005, chord: 0.006 });
+  assert.ok(Math.abs(gatesFor(0.0015).pitch - 0.0045) < 1e-9, 'a measured quiet room still yields 0.0045');
 });

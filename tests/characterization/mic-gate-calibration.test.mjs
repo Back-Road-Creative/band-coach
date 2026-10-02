@@ -46,6 +46,10 @@ test('a quiet pluck the stock gate misses registers once "Check my microphone" l
   t.after(() => page.close());
 
   await page.evaluate("window.__coach.setMod('gtr')");
+  // Connect now auto-measures the room when no floor is stored (and this
+  // fixture is a ringing pluck, not a quiet room), so pin the "before" state
+  // to a stored floor whose gate is the old stock 0.008 (0.008 / MARGIN 3).
+  await page.evaluate('window.__coach.setNoiseFloorForTest(0.008 / 3)');
   await page.evaluate("document.getElementById('ioBtn').click()");
   await page.waitFor('window.__coach.devices().length > 0', 5000);
 
@@ -61,7 +65,7 @@ test('a quiet pluck the stock gate misses registers once "Check my microphone" l
     (s) => s.rms > 0.005 && s.rms < 0.0075,
     { timeoutMs: 8000 },
   );
-  assert.equal(before.gate, 0.008, 'the worklet must start at the stock default rmsGate');
+  assert.ok(Math.abs(before.gate - 0.008) < 1e-9, `the worklet must start at the pinned 0.008 rmsGate, got ${before.gate}`);
   // The sampled band (0.005-0.0075) is entirely below the stock gate
   // (0.008), so this implication is never vacuous here -- it is the same
   // "quiet pluck at the stock gate produces no pitch" claim, stated so a
