@@ -1775,7 +1775,7 @@ import { register as registerPathway } from './ui/pathway.js';
   // The [lo, hi] MIDI range the on-screen keyboard is currently drawing (used
   // both by draw() below and by onNote()'s "heard but not shown" message --
   // a note outside this range never lights up no matter how it arrived).
-  const kbdRange = () => (activeItems(mod, S.level).some(id => id[0] === 'n' && +id.slice(1) < 60) || customOn) ? [48, 72] : [60, 72];
+  const kbdRange = () => [48, 72]; // always two octaves (C3-C5) so a beginner sees both hands' zones from level 1; judged notes/levels/hand gates are unchanged
   // `o.row`/`o.hand` ('lh'/'rh') tag every keyRect this call produces -- unset
   // on the single-octave layout, 0/'lh' or 1/'rh' when draw()'s kbd branch
   // calls this twice for the two labelled rows below. Callers reset keyRects
@@ -1976,7 +1976,7 @@ import { register as registerPathway } from './ui/pathway.js';
         const y0 = H * 0.18, y1 = y0 + labelH, y2 = y1 + rowH + gap, y3 = y2 + labelH;
         label('Left hand · ' + nname(48, true) + '–' + nname(59, true), y0);
         drawKeys(x0, y1, rowW, rowH, 48, 59, Object.assign({}, kOpts, { row: 0, hand: 'lh' }));
-        label('Right hand · ' + nname(60, true) + '–' + nname(72, true), y2);
+        label('Right hand · ' + nname(60, true) + ' · middle C – ' + nname(72, true), y2);
         drawKeys(x0, y3, rowW, rowH, 60, 72, Object.assign({}, kOpts, { row: 1, hand: 'rh' }));
       } else drawKeys(W * 0.02, H * 0.18, W * 0.96, H * 0.7, kr[0], kr[1], kOpts);
       drawKbdOverview(W * 0.02, H * 0.905, W * 0.96, H * 0.07, kr[0], kr[1]);
@@ -3044,7 +3044,7 @@ import { register as registerPathway } from './ui/pathway.js';
   // item B2 (Wave kbd): the raw keyRects the last frame drew, for a test to
   // check row grouping, hit-rect size and hand marks without guessing the
   // layout formula itself.
-  if (__DEBUG_HOOK__) Object.assign(hook, { kbdKeys: () => keyRects.map(k => ({ m: k.m, x: k.x, y: k.y, w: k.w, h: k.h, black: k.black, row: k.row, hand: k.hand, mark: k.mark })) });
+  if (__DEBUG_HOOK__) Object.assign(hook, { kbdRange: () => kbdRange(), kbdKeys: () => keyRects.map(k => ({ m: k.m, x: k.x, y: k.y, w: k.w, h: k.h, black: k.black, row: k.row, hand: k.hand, mark: k.mark })) });
   // item D2 (Wave kbd): the full-keyboard overview drawKbdOverview() set last
   // frame, or null when nothing drew one (non-kbd mods) -- a deep-cloned
   // snapshot, same as kbdKeys(), so a test can hold one frame's value past
