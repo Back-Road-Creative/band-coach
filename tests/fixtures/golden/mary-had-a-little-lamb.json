@@ -1,0 +1,13 @@
+{
+  "id": "mary-had-a-little-lamb",
+  "title": "Mary Had a Little Lamb",
+  "source": "traditional melody, transcribed independently of the app's song data",
+  "reviewedBy": "none yet",
+  "meter": "4/4",
+  "phrases": [
+    [{"off": 0, "beats": 1}, {"off": -2, "beats": 1}, {"off": -4, "beats": 1}, {"off": -2, "beats": 1}, {"off": 0, "beats": 1}, {"off": 0, "beats": 1}, {"off": 0, "beats": 2}],
+    [{"off": -2, "beats": 1}, {"off": -2, "beats": 1}, {"off": -2, "beats": 2}, {"off": 0, "beats": 1}, {"off": 3, "beats": 1}, {"off": 3, "beats": 2}],
+    [{"off": 0, "beats": 1}, {"off": -2, "beats": 1}, {"off": -4, "beats": 1}, {"off": -2, "beats": 1}, {"off": 0, "beats": 1}, {"off": 0, "beats": 1}, {"off": 0, "beats": 1}, {"off": 0, "beats": 1}],
+    [{"off": -2, "beats": 1}, {"off": -2, "beats": 1}, {"off": 0, "beats": 1}, {"off": -2, "beats": 1}, {"off": -4, "beats": 4}]
+  ]
+}
