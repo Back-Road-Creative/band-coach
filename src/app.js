@@ -346,7 +346,7 @@ import { register as registerPathway } from './ui/pathway.js';
   // concurrent callers means only one getUserMedia() call is ever made.
   let openMicPromise = null;
   // micGen advances when the input device changes and when the mic is torn down; a room check that finishes for an older stream discards its result. roomSeq numbers room checks so only the newest one writes (a manual check supersedes the background one).
-  let micGen = 0, roomSeq = 0;
+  let micGen = 0, roomSeq = 0, manualSeq = 0;
   async function openMic() {
     ensureAudio(); if (micReady) return true;
     if (openMicPromise) return openMicPromise;
@@ -427,9 +427,10 @@ import { register as registerPathway } from './ui/pathway.js';
   async function calibrateNoiseFloor() {
     const resultEl = $('calibrateResult'), say = s => { if (resultEl) resultEl.textContent = s; };
     try { await openMic(); } catch (e) { say('The microphone was blocked, so it could not be checked.'); return; }
-    const my = ++roomSeq; // after openMic: the background check it may just have started is superseded
+    const my = ++roomSeq, mine = ++manualSeq; // after openMic: the background check it may just have started is superseded
     say('Listening for 3 seconds — stay quiet…');
     let r; try { r = await listenRoom(3000); } catch (e) { say(ROOM_NO_READING); return; }
+    if (mine !== manualSeq) return; // a newer manual check owns the message; never write 'interrupted' over it
     if (!r.fresh) { say('The check was interrupted because the microphone changed or stopped. Press "Check my microphone" to try again.'); return; }
     if (my !== roomSeq) return; // a newer manual check owns the message now
     const v = classifyRoomCheck(r.frames, { manual: true });

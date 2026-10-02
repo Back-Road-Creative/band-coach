@@ -157,6 +157,22 @@ test('T8: a manual check interrupted by a device switch discards its result and 
   assert.ok(first - switchedAt >= 1300, `a floor was written ${Math.round(first - switchedAt)} ms after the switch, before the new device's own check could finish`);
 });
 
+test('T8b: a stale interrupted check never writes over a newer manual check\'s message', async (t) => {
+  const page = await connect(t, quietRoom());
+  await page.waitFor('window.__coach.devices().length > 1', 5000);
+  const ids = await page.evaluate('window.__coach.devices().map(d => d.deviceId)');
+  const t0 = Date.now();
+  await pressCheck(page); // A, interrupted by the switch below
+  await sleep(500);
+  await page.evaluate(`(() => { const sel = document.getElementById('micDeviceSelect'); sel.value = ${JSON.stringify(ids[1])}; sel.dispatchEvent(new Event('change')); })()`);
+  await sleep(500);
+  await pressCheck(page); // B, started on the new device and still listening when A finishes
+  await sleep(Math.max(0, 3500 - (Date.now() - t0))); // A's 3 s window has ended; B's has not
+  const mid = await resultText(page);
+  assert.match(mid, /Listening/, `the stale check wrote "${mid}" over the check that is still running`);
+  await page.waitFor("/room is quiet/i.test(document.getElementById('calibrateResult').textContent)", 6000);
+});
+
 const STORE_KEY = 'bandcoach.v1';
 async function loadWithPrefs(t, prefs) {
   const page = await launchPage(HTML_PATH);
