@@ -21,17 +21,30 @@ const NATURALS = ['C', 'D', 'E', 'F', 'G', 'A', 'B'];
 // Test-owned note-taking, installed before the app boots (and again after a
 // reload): every new <b> the prompt shows is a new target. Counting new nodes
 // tells a fresh target from the one just answered, with no sleeps and no read
-// of app state.
+// of app state. It also counts every rewrite of #feedback, so a test can wait
+// for the screen to answer THIS key press instead of reading the last answer.
 const WATCH_PROMPT = `(() => {
   const seen = new WeakSet();
   window.__q3bTargets = [];
+  window.__q3bFeedback = 0;
   const scan = () => { const b = document.querySelector('#prompt b'); if (b && !seen.has(b)) { seen.add(b); window.__q3bTargets.push(b.textContent); } };
-  new MutationObserver(scan).observe(document, { childList: true, subtree: true });
+  new MutationObserver((records) => { scan(); for (const m of records) if (m.target.id === 'feedback') window.__q3bFeedback++; }).observe(document, { childList: true, subtree: true });
 })()`;
 
 const text = (page, id) => page.evaluate(`document.getElementById(${JSON.stringify(id)}).textContent.trim()`);
 const cls = (page, id) => page.evaluate(`document.getElementById(${JSON.stringify(id)}).className`);
 const hidden = (page, id) => page.evaluate(`document.getElementById(${JSON.stringify(id)}).hidden`);
+const escapeRe = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const feedbackCount = (page) => page.evaluate('window.__q3bFeedback');
+// Presses a key, then waits until #feedback has been rewritten by that press.
+const pressAndWait = async (page, key) => {
+  const n = await feedbackCount(page);
+  await page.press(key, { text: key });
+  await page.waitFor(`window.__q3bFeedback > ${n}`);
+};
+// A first-try pass names the note that was asked for, so a leftover line from
+// the previous note can never satisfy it.
+const firstTry = (short) => new RegExp(`^${escapeRe(short)}: yes, in \\d+\\.\\d s\\.$`);
 const stored = (page) => page.evaluate("JSON.parse(localStorage.getItem('bandcoach.v1') || 'null')");
 
 // The learner's view of "what do I play": the newest <b> in the prompt, typed
@@ -49,18 +62,15 @@ function makePlayer(page) {
       consumed = shown.n;
       const key = KEY_FOR[shown.label];
       if (!key) throw new Error(`the prompt asks for "${shown.label}", which has no computer key in this test's table`);
-      let wrong = null;
+      let wrongFeedback = null;
       if (wrongFirst) {
         const next = NATURALS[(NATURALS.indexOf(shown.label) + 1) % NATURALS.length];
-        wrong = KEY_FOR[next];
-        const prev = await text(page, 'feedback');
-        await page.press(wrong, { text: wrong });
-        await page.waitFor(`document.getElementById('feedback').textContent.trim() !== ${JSON.stringify(prev)}`);
+        await pressAndWait(page, KEY_FOR[next]);
+        wrongFeedback = { text: await text(page, 'feedback'), cls: await cls(page, 'feedback'), targetsAfter: await targetsShown() };
       }
-      const wrongFeedback = wrong ? { text: await text(page, 'feedback'), cls: await cls(page, 'feedback'), targetsAfter: await targetsShown() } : null;
-      await page.press(key, { text: key });
-      await page.waitFor("document.getElementById('feedback').textContent.trim() !== ''");
-      return { label: shown.label, key, wrong, wrongFeedback, feedback: await text(page, 'feedback'), feedbackClass: await cls(page, 'feedback'), targetsBefore: shown.n };
+      await pressAndWait(page, key);
+      // The note's letter as the feedback prints it ("C (high)" is shown as "C").
+      return { label: shown.label, short: shown.label.split(' ')[0], wrongFeedback, feedback: await text(page, 'feedback'), feedbackClass: await cls(page, 'feedback'), targetsBefore: shown.n };
     },
   };
 }
@@ -92,19 +102,19 @@ test('A01: first visit on computer keys -- choose, start, play, pause, play, end
     const played = [];
     for (let i = 0; i < 5; i++) {
       const r = await player.playTarget({ wrongFirst: i === 2 });
-      played.push(r);
+      played.push(r.label);
       if (i === 2) {
         // 4. The wrong key is heard and corrected; the target does not move.
-        assert.match(r.wrongFeedback.text, /^That was [A-G][♯♭]?, the note is [A-G]\. /, `wrong key: ${r.wrongFeedback.text}`);
+        assert.match(r.wrongFeedback.text, new RegExp(`^That was [A-G][♯♭]?, the note is ${escapeRe(r.short)}\\. `), `wrong key: ${r.wrongFeedback.text}`);
         assert.equal(r.wrongFeedback.cls, 'no', 'a wrong key is shown as a miss');
         assert.equal(r.wrongFeedback.targetsAfter, r.targetsBefore, 'the same target stays on screen after a wrong key');
         // 5. The right key is recognised but not credited as first-try.
-        assert.match(r.feedback, /^That is the one\. [A-G]\.$/, `right key after a miss: ${r.feedback}`);
+        assert.match(r.feedback, new RegExp(`^That is the one\\. ${escapeRe(r.short)}\\.$`), `right key after a miss: ${r.feedback}`);
         assert.notEqual(r.feedbackClass, 'ok', 'a note that needed a second try is not shown as a pass');
         assert.doesNotMatch(r.feedback, /yes, in/);
       } else {
         // 3. A first-try note.
-        assert.match(r.feedback, /^[A-G]: yes, in \d+\.\d s\.$/, `first-try note ${i + 1}: ${r.feedback}`);
+        assert.match(r.feedback, firstTry(r.short), `first-try note ${i + 1} (${r.label}): ${r.feedback}`);
         assert.equal(r.feedbackClass, 'ok');
       }
     }
@@ -125,7 +135,8 @@ test('A01: first visit on computer keys -- choose, start, play, pause, play, end
     // 7. Five more, then End.
     for (let i = 0; i < 5; i++) {
       const r = await player.playTarget();
-      assert.match(r.feedback, /^[A-G]: yes, in \d+\.\d s\.$/, `first-try note ${i + 6}: ${r.feedback}`);
+      played.push(r.label);
+      assert.match(r.feedback, firstTry(r.short), `first-try note ${i + 6} (${r.label}): ${r.feedback}`);
       assert.equal(r.feedbackClass, 'ok');
     }
     await page.clickSelector('#endBtn');
@@ -136,6 +147,8 @@ test('A01: first visit on computer keys -- choose, start, play, pause, play, end
     assert.doesNotMatch(done, /Too short to log/);
     t.diagnostic(`A01 start line: ${coach}`);
     t.diagnostic(`A01 targets shown: ${JSON.stringify(await page.evaluate('window.__q3bTargets'))}; session line: ${done}`);
+    // Every note the learner played was the one the screen asked for, in order.
+    assert.deepEqual(played, (await page.evaluate('window.__q3bTargets')).slice(0, played.length), 'played notes match the targets shown');
     const pct = Number(/(\d+)% right/.exec(done)[1]);
     assert.equal(pct, 90, `nine first-try passes in ten judged notes is 90%, got ${pct}%`);
 
@@ -183,20 +196,24 @@ test('control for A01: keys pressed outside a judged note are never credited', a
     await page.clickSelector('#playBtn');
     await page.waitFor('window.__q3bTargets.length > 0');
     const shown = await page.evaluate('window.__q3bTargets.length');
+    const asked = await page.evaluate('window.__q3bTargets[0]');
     for (let i = 0; i < 4; i++) {
       // k is C5: a mapped key that is never a level-1 target.
-      await page.press('k', { text: 'k' });
-      await page.waitFor("document.getElementById('feedback').textContent.trim() !== ''");
+      await pressAndWait(page, 'k');
       const fb = await text(page, 'feedback');
       assert.equal(await cls(page, 'feedback'), 'no', `press ${i + 1} is shown as a miss: ${fb}`);
-      assert.match(fb, /^That was C, the note is [CDE]\. /, `press ${i + 1}: ${fb}`);
+      assert.match(fb, new RegExp(`^That was C, the note is ${escapeRe(asked)}\\. `), `press ${i + 1}: ${fb}`);
       assert.doesNotMatch(fb, /yes, in/);
       assert.equal(await page.evaluate('window.__q3bTargets.length'), shown, 'the target is still the same one');
     }
-    // Nothing finished, so nothing is stored once the save debounce has passed.
+    // Nothing finished, so nothing is stored. Switching to another tab is what a
+    // learner does, and the app saves at once when its tab is hidden, so storage
+    // is current when it is read (no wait on the 1200 ms debounce).
+    await page.background();
     await page.waitFor("(() => { try { return localStorage.getItem('bandcoach.v1') !== null; } catch (e) { return false; } })()");
     const db = await stored(page);
     assert.deepEqual(db.events || [], [], 'no judged note was logged');
+    await page.foreground();
     assert.deepEqual(page.exceptions, [], 'no uncaught exceptions');
   });
 });
