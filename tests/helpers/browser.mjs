@@ -738,9 +738,10 @@ async function launchPageOnce(htmlPath, options = {}) {
     }
     await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: to.x, y: to.y, button: 'left', buttons: 0, clickCount: 1 });
   }
-  // Where a person would aim at `selector`: scrolled into view, then the centre
-  // of its box (reading the box is observation, not input). Missing, hidden,
-  // disabled or covered controls are errors: a person could not click them.
+  // Where a person would aim at `selector`: the centre of its box. A control off
+  // screen is first scrolled into view by the driver (el.scrollIntoView() in the
+  // page, not wheel input); reading the box is observation, not input. Missing,
+  // hidden, disabled or covered controls are errors: a person could not click them.
   async function centreOf(selector) {
     const r = await evaluate(`(() => {
       const el = document.querySelector(${JSON.stringify(selector)});

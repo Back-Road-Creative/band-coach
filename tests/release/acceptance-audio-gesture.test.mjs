@@ -16,7 +16,9 @@ const audioWarnings = (page) =>
 
 test('A02: no AudioContext warning on load or on tab return; a real click on Start makes sound, still with no warning', async (t) => {
   await withAcceptancePage(t, {}, async (page) => {
-    // 1. Loaded, nothing touched: no gesture yet.
+    // 1. Loaded, nothing touched: no gesture yet. Two frames and half a second
+    // first, so a warning raised late in boot is reported here, not as step 2's.
+    await page.evaluate('new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(r, 500))))');
     assert.deepEqual(audioWarnings(page), [], 'no AudioContext warning on load');
     assert.equal(page.audio.running().length, 0, 'no sound has started on load');
 

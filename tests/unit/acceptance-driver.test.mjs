@@ -10,7 +10,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-  launchPage, browserArgs, findAcceptanceBrowser, acceptanceHtmlPath, withAcceptancePage,
+  launchPage, browserArgs, findAcceptanceBrowser, acceptanceHtmlPath, withAcceptancePage, effectiveWaitMs,
 } from '../helpers/browser.mjs';
 
 const fixture = (name) => fileURLToPath(new URL(`../fixtures/acceptance/${name}`, import.meta.url));
@@ -112,7 +112,7 @@ test('acceptance launch: refuses a page that still carries the debug hook', asyn
 test('acceptance launch: an AudioContext warning is seen in the browser log and the console warnings', async (t) => {
   const page = await launchPage(fixture('context-on-load.html'), { acceptance: true });
   t.after(() => page.close());
-  const deadline = Date.now() + 10000;
+  const deadline = Date.now() + effectiveWaitMs(10000);
   const seen = () => [...page.consoleWarnings, ...page.logEntries.map((e) => e.text)].filter((x) => AUDIO_WARNING.test(x));
   while (!seen().length && Date.now() < deadline) await new Promise((r) => setTimeout(r, 50));
   assert.ok(seen().length >= 1, `no AudioContext warning recorded: ${JSON.stringify({ w: page.consoleWarnings, l: page.logEntries })}`);
@@ -170,7 +170,17 @@ test('real input: clickSelector clicks the centre of the element and refuses wha
 
   await page.clickSelector('#far');
   const far = (await page.evaluate('window.__events.splice(0)')).find((e) => e.type === 'click');
-  assert.equal(far.target, 'far', 'a control below the fold is scrolled to first, as a person would');
+  assert.equal(far.target, 'far', 'a control below the fold is scrolled into view first (by the driver in the page, not by wheel input)');
+});
+
+test('real input: tapSelector touches the centre of the element and refuses a covered one', async (t) => {
+  const page = await launchPage(DRIVER, { acceptance: true });
+  t.after(() => page.close());
+  await page.tapSelector('#hit');
+  const ev = await page.evaluate('window.__events.splice(0)');
+  assert.ok(ev.some((e) => e.type === 'pointerdown' && e.pointerType === 'touch' && e.target === 'hit' && e.x === 100 && e.y === 40), `a touch at the centre of #hit: ${JSON.stringify(ev)}`);
+  assert.ok(ev.some((e) => e.type === 'click' && e.target === 'hit' && e.trusted), `which the page sees as a trusted click: ${JSON.stringify(ev)}`);
+  await assert.rejects(() => page.tapSelector('#cover'), /covered|obscured/i, 'a control with something over it is not tappable either');
 });
 
 test('permissions: deny and grant are answered by the browser, not by a flag', async (t) => {
@@ -186,6 +196,18 @@ test('permissions: deny and grant are answered by the browser, not by a flag', a
   await page.clickSelector('#mic');
   await page.waitFor("document.getElementById('out').textContent !== ''");
   assert.equal(await page.evaluate("document.getElementById('out').textContent"), 'mic:granted:1');
+});
+
+test('permissions: resetPermissions puts a denied permission back to asking', async (t) => {
+  const page = await launchPage(DRIVER, { acceptance: true });
+  t.after(() => page.close());
+  const state = () => page.evaluate("navigator.permissions.query({ name: 'microphone' }).then((s) => s.state)");
+  const fresh = await state();
+  await page.deny(['microphone']);
+  assert.equal(await state(), 'denied');
+  await page.resetPermissions();
+  assert.equal(await state(), fresh, 'back to what a fresh profile starts with');
+  assert.notEqual(fresh, 'denied', 'and a fresh profile does not start denied');
 });
 
 test('background and return: the page sees real visibilitychange events, hidden then visible', async (t) => {
