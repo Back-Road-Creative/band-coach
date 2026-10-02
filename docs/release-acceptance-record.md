@@ -43,6 +43,18 @@ later content or code change gets its own record; it never inherits an earlier s
 | Unresolved limitations | The plan residuals listed under "Plan-unit residuals" in the comprehensive plan (B1, B2, B3, C1, C11, E1, E2, E4, E5, E6, E7) all still hold. iPhone microphone behaviour unmeasured. Firefox and Safari fallbacks unconfirmed by hand. No performance budget (E10) has been measured on real hardware. Rollback: a bad release is withdrawn by deleting the GitHub release and re-tagging; that rehearsal has not been done. |
 | Reviewer / date | _unsigned_ |
 
+## Candidate: `e4b6fb5` hand-tested 2026-10-01 -- NOT READY
+
+| Field | Value |
+|---|---|
+| Commit | `e4b6fb5` (`origin/main`, 2026-10-01, after #368). |
+| Candidate artifact | `npm run build -- --release` at `e4b6fb5`: `dist/release/band-coach.html` sha256 `14e3da0346fefe61977954d74ffecaf55e3af571ceb8aed631be4d8d5031fcfa`, 631,021 bytes, copied to `D:\band-coach.html` for the hand run. No tag or GitHub release for this commit. |
+| Manual runs | One, by JP, 2026-10-01 evening EDT, windowed Chrome on Windows opening `D:\band-coach.html` from `file://`, with a real microphone and a MIDI keyboard that connected under v1.9.0. Verdict from the tester: not ready to release. |
+| Automated checks | CI `test` green on `e4b6fb5`. The automated suite did not catch any of the findings below: it launches Chromium with `--autoplay-policy=no-user-gesture-required`, grants mic and MIDI without a prompt, and feeds a synthetic signal well above the default gate. |
+| Findings (reproduced headless unless marked) | 1. Two "The AudioContext was not allowed to start" warnings on load and on tab return (`visibilitychange` and `pageshow` handlers called `ensureAudio()`, which creates the context without a gesture). Reproduced with the harness autoplay flag removed; fix: PR "never create the AudioContext from a tab return". 2. MIDI did not connect: Chrome 124+ shows a permission prompt for Web MIDI; a declined or dismissed prompt rejected with `NotAllowedError` and the app showed "MIDI was blocked here", the text written for the `SecurityError` case, with no way to ask again. Reproduced with the prompt denied; fix: PR "say what Chrome asked for when MIDI is refused". 3. Guitar through the microphone was judged almost never: a quiet pluck (attack RMS about 0.009, ring about 0.004) fell under the default `note` gate 0.01 and the diagnosis called an attack-peak signal "unclear" before "too quiet". Reproduced with a recorded pluck through the fake mic; fix: PR "gate at the room's own floor". 4. Drum kit drawn in a 16:8.2 canvas with ten unlabeled symbols; a beginner cannot tell which is which. Confirmed by screenshot; fix: PR "draw the kit full height with the piece names". 5. On-screen keyboard is one octave (MIDI 48 to 72) at every level, so two-handed playing is impossible on screen; fix: PR "two octaves with hand zones from level 1". 6. "Unsafe attempt to load URL file:///D:/band-coach.html from frame with URL file:///D:/band-coach.html" in the console: **not reproduced** headless; nothing in the app issues a same-URL request. Open. 7. A fresh profile opens on "Today: nothing new due -- free practice", which reads as an empty app. Open. |
+| Mic and MIDI together | They are independent inputs. MIDI is the keyboard pathway's proof source; the microphone judges guitar, bass and voice. Nothing uses both at once. |
+| Reviewer / date | JP, 2026-10-01, hand run; record written by the session that reproduced the findings. **Not accepted.** Re-run the five-minute check on a build that carries the five fix PRs above before any tag. |
+
 ## D2 / E9 evidence ledger
 
 What the automated suite proves for each interaction, device and accessibility dimension, and
