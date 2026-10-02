@@ -373,7 +373,7 @@ test('NEW: permission denied says so plainly', async (t) => {
   await connectMidi(page);
   await page.waitFor("document.getElementById('ioText').textContent.length > 0");
   const text = await page.evaluate("document.getElementById('ioText').textContent");
-  assert.match(text, /blocked/i);
+  assert.match(text, /could not reach MIDI/i); // a plain Error rejection is not a permission refusal; see midi-denied-retry.test.mjs
 });
 
 // ---------- new behaviour: proof of a working keyboard is per DEVICE, not
@@ -427,7 +427,7 @@ test('NEW: MIDI blocked/denied says screen/computer keys are practice, not proof
   await connectMidi(page);
   await page.waitFor("document.getElementById('ioText').textContent.length > 0");
   const text = await page.evaluate("document.getElementById('ioText').textContent");
-  assert.match(text, /blocked/i);
+  assert.match(text, /could not reach MIDI/i); // a plain Error rejection is not a permission refusal; see midi-denied-retry.test.mjs
   assert.match(text, /practice, not proof/i);
 });
 
@@ -439,6 +439,6 @@ test('NEW: MIDI available but nothing plugged in says screen/computer keys are p
   await connectMidi(page);
   await page.waitFor("document.getElementById('ioText').textContent.length > 0");
   const text = await page.evaluate("document.getElementById('ioText').textContent");
-  assert.match(text, /No MIDI device found/i);
+  assert.match(text, /No MIDI device is plugged in/i);
   assert.match(text, /practice, not proof/i);
 });
