@@ -169,3 +169,19 @@ test('nextPlanStep: a block the plan never produced (no review due) is skipped, 
   ];
   assert.equal(nextPlanStep(blocks, {}).kind, 'weak');
 });
+
+// A learner with no history at this level gets an empty plan by design
+// (planSession has nothing to review and no weak spot to pick). That is a
+// first sitting, not a day off, so the line must invite them to play, never
+// read as "nothing to do". `seen: false` names that case; a learner WITH
+// history and nothing due keeps the old "nothing new due" line.
+test('describePlan: empty plan on a first sitting invites the learner to play', () => {
+  const line = describePlan([], undefined, { seen: false });
+  assert.match(line, /^Today: /);
+  assert.doesNotMatch(line, /nothing new due|free practice/);
+  assert.match(line, /first/i);
+});
+
+test('describePlan: empty plan with history still says nothing is due', () => {
+  assert.equal(describePlan([], undefined, { seen: true }), 'Today: nothing new due -- free practice.');
+});

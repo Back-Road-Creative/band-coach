@@ -67,3 +67,20 @@ test('the coach line says why the weak skill was picked', async (t) => {
   assert.match(coachText, /C: slipped before, worth another pass\./, `expected the coach line to say why, got: ${coachText}`);
   assert.doesNotMatch(coachText, /\bn\d{2}\b/, `expected no raw id in the coach line, got: ${coachText}`);
 });
+
+// A fresh profile (no item records at all) starting its first session must
+// not be told "nothing new due -- free practice": that reads as an empty day
+// to someone who has not played a note yet. JP hit this on the 2026-10-01
+// hand test (docs/release-acceptance-record.md, finding 7).
+test('a fresh profile\'s first session is invited to play, not told nothing is due', async (t) => {
+  const page = await launchPage(HTML_PATH);
+  t.after(() => page.close());
+
+  await page.evaluate("window.__coach.setMod('kbd')");
+  await page.evaluate("document.getElementById('playBtn').click()");
+  await page.waitFor('window.__coach.task()');
+
+  const coachText = await page.evaluate("document.getElementById('coach').textContent");
+  assert.doesNotMatch(coachText, /nothing new due|free practice/, `fresh profile coach line: ${coachText}`);
+  assert.match(coachText, /Today: .*first/i, `expected a first-sitting line, got: ${coachText}`);
+});
