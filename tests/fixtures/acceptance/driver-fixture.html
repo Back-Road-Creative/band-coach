@@ -1,0 +1,25 @@
+<!doctype html>
+<!-- Stand-in page for tests/unit/acceptance-driver.test.mjs. Not the app. -->
+<html><head><meta charset="utf-8"><title>driver fixture</title>
+<style>body{margin:0}button{position:absolute;left:40px;width:120px;height:40px}
+#hit{top:20px}#cover{top:120px}#veil{position:absolute;left:30px;top:110px;width:140px;height:60px}
+#pad{position:absolute;left:300px;top:20px;width:300px;height:200px;background:#ddd}
+#far{top:1500px}</style></head><body>
+<button id="hit" type="button">Hit</button>
+<button id="cover" type="button">Covered</button><div id="veil"></div>
+<div id="pad"></div>
+<button id="far" type="button">Far down the page</button>
+<button id="mic" type="button" style="top:180px">Mic</button>
+<button id="sound" type="button" style="top:230px">Sound</button>
+<pre id="out" style="position:absolute;left:40px;top:290px"></pre>
+<script>
+window.__events = []; window.__visibility = [];
+var log = function (e, extra) { __events.push(Object.assign({ type: e.type, x: e.clientX, y: e.clientY, trusted: e.isTrusted, target: e.target.id, pointerType: e.pointerType }, extra || {})); };
+['click', 'pointerdown', 'pointerup'].forEach(function (n) { document.addEventListener(n, function (e) { log(e); }, true); });
+document.getElementById('pad').addEventListener('pointermove', function (e) { if (e.buttons) log(e); });
+document.getElementById('mic').addEventListener('click', function () {
+  navigator.mediaDevices.getUserMedia({ audio: true }).then(function (s) { document.getElementById('out').textContent = 'mic:granted:' + s.getAudioTracks().length; }, function (e) { document.getElementById('out').textContent = 'mic:' + e.name; });
+});
+document.getElementById('sound').addEventListener('click', function () { window.__ctx = new AudioContext(); window.__ctx.resume(); });
+document.documentElement.setAttribute('data-coach-ready', '1');
+</script></body></html>

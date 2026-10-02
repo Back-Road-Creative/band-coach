@@ -1,0 +1,7 @@
+<!doctype html>
+<!-- Starts an AudioContext with no gesture: Chrome refuses and says so. -->
+<html><head><meta charset="utf-8"><title>context on load</title></head><body>
+<script>
+window.__ctx = new AudioContext(); window.__ctx.resume();
+document.documentElement.setAttribute('data-coach-ready', '1');
+</script></body></html>

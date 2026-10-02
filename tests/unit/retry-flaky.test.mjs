@@ -10,9 +10,13 @@
 //   - a transient failure followed by success passes, and returns the
 //     successful result rather than the failed one;
 //   - a measurement that works first time costs exactly one attempt, so the
-//     retry adds no wall-clock to a healthy suite.
+//     retry adds no wall-clock to a healthy suite;
+//   - a discarded attempt is never silent: the run that finally passes still
+//     says, in node --test's own output, that it threw an attempt away.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { retryFlaky } from '../helpers/browser.mjs';
 
 test('retryFlaky: a first-attempt success costs exactly one attempt', async () => {
@@ -76,4 +80,24 @@ test('retryFlaky: a throwing attempt is not swallowed', async () => {
     /browser failed to launch/,
   );
   assert.equal(calls, 1, 'a thrown error must abort immediately, not burn the retry budget');
+});
+
+test('retryFlaky: a discarded attempt leaves a line in node --test output even when the retry passes', () => {
+  // A retry that hides its first attempt makes a measurement that fails half
+  // the time look healthy. Run a real `node --test` child on a fixture that is
+  // wrong once, then right, and read what a person reading the log would see.
+  // A test file runs inside node's own runner, which marks its environment so
+  // a nested `node --test` refuses to start ("run() is being called
+  // recursively"); the child has to be told it is a fresh top-level run.
+  const env = { ...process.env };
+  delete env.NODE_TEST_CONTEXT;
+  const fixture = fileURLToPath(new URL('../fixtures/acceptance/flaky-once.mjs', import.meta.url));
+  for (const reporter of ['spec', 'tap']) {
+    const child = spawnSync(process.execPath, ['--test', `--test-reporter=${reporter}`, fixture], { encoding: 'utf8', env });
+    const out = child.stdout + child.stderr;
+    assert.equal(child.status, 0, `the fixture passes on its second attempt (${reporter}):\n${out}`);
+    assert.match(out, /retryFlaky/, `the log names the retry helper (${reporter}):\n${out}`);
+    assert.match(out, /the pitch spread/, `the log names what was measured (${reporter}):\n${out}`);
+    assert.match(out, /attempt 1[^\n]*spread 47 cents/, `the log carries the discarded attempt's own detail (${reporter}):\n${out}`);
+  }
 });
