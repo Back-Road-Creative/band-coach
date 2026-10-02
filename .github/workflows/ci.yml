@@ -9,14 +9,16 @@ name: ci
 #
 # The job timeout is a budget over the MEASURED suite, not a target: ten
 # passing runs on 2026-10-02 took 12.9-15.0 min on ubuntu-latest (14.7, 15.0,
-# 14.3, 14.8, 14.9, 14.8, 14.9, 14.7, 12.9, 14.8), and the acceptance lane runs inside both
-# gate runs, so the budget is 30 min. Earlier, three PR runs launched together
-# were cancelled at 10m06s with nothing failing.
-# tests/unit/ci-workflow-no-duplicate-run.test.mjs and ci-workflow-artifacts-weekly.test.mjs
-# pin the headroom. A failed or cancelled run uploads dist/test-artifacts/ so its
-# screenshots and logs survive. The weekly run on a fresh browser is a separate
-# file (weekly-current-browser.yml): bin/autoland.py counts every ci.yml run on a
-# commit whatever its event, so a scheduled run here would feed the merge barrier.
+# 14.3, 14.8, 14.9, 14.8, 14.9, 14.7, 12.9, 14.8). Every tests/release/ file,
+# acceptance-* included, runs in both gate runs, so the budget is 30 min.
+# Earlier, three PR runs launched together were cancelled at 10m06s with
+# nothing failing. tests/unit/ci-workflow-no-duplicate-run.test.mjs and
+# ci-workflow-artifacts-weekly.test.mjs pin the headroom. A failed or
+# cancelled run uploads dist/test-artifacts/ so its screenshots and logs
+# survive. The weekly run on a fresh browser is a separate file
+# (weekly-current-browser.yml): bin/autoland.py counts every ci.yml run on a
+# commit whatever its event, so a scheduled run here would feed the merge
+# barrier.
 on:
   push:
     branches: [main]

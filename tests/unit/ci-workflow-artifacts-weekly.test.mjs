@@ -8,10 +8,14 @@
 // workflow cannot be imported and there is no YAML dependency.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-const read = (name) => readFileSync(fileURLToPath(new URL('../../.github/workflows/' + name, import.meta.url)), 'utf8');
+const read = (name) => {
+  const file = fileURLToPath(new URL('../../.github/workflows/' + name, import.meta.url));
+  assert.ok(existsSync(file), `.github/workflows/${name} must exist`);
+  return readFileSync(file, 'utf8');
+};
 const ci = () => read('ci.yml');
 const weekly = () => read('weekly-current-browser.yml');
 
@@ -75,6 +79,8 @@ test('ci.yml has no schedule or workflow_dispatch trigger', () => {
   const on = block(ci(), 'on');
   assert.doesNotMatch(on, /^\s*schedule:/m, 'a scheduled ci.yml run would feed the autoland barrier');
   assert.doesNotMatch(on, /^\s*workflow_dispatch:/m, 'a manual ci.yml run would feed the autoland barrier');
+  const inline = /^on:([^\n]*)$/m.exec(ci());
+  assert.doesNotMatch(inline[1], /schedule|workflow_dispatch/, 'nor in the inline form, on: [push, workflow_dispatch]');
 });
 
 test('the weekly workflow triggers only on schedule and workflow_dispatch', () => {
