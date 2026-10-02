@@ -91,8 +91,7 @@ for (const [label, gain] of [['quiet', 0.12], ['loud', 1.0]]) {
       assert.ok(first, 'the app said nothing in #feedback about a correct pluck (no pass record)');
       assert.ok(isPass(first), `the first thing said about the correct pluck was not a pass: ${first.cls} ${JSON.stringify(first.text)}`);
       assert.match(first.text, /^E \(string 6\): yes, in \d+\.\d s\.$/);
-      await page.waitFor("(document.querySelector('#prompt b') || {}).textContent !== 'E'");
-      assert.notEqual(await promptLetter(page), GTR.letter, 'the prompt moved to the next note');
+      await page.waitFor("(document.querySelector('#prompt b') || {}).textContent !== 'E'").catch(() => assert.fail('the prompt did not move to the next note after a pass'));
     });
   });
 }
@@ -150,7 +149,7 @@ test('T5 a silent microphone is reported once, in plain words, and nothing is ju
 test('T6 room noise with no note is called too quiet to judge, and nothing is judged', async (t) => {
   await run(t, 't6', [], { noiseFloorRms: 0.05 }, GTR, async (page, started) => {
     assert.ok(await firstRecord(page, (r) => r.el === 'coach' && r.text === MSG.quiet), 'the learner was never told the sound is too quiet to judge');
-    await waitUntilPageTime(page, started + 9500);
+    await waitUntilPageTime(page, started + 2 * LOOP_SECONDS * 1000 - 500); // two loops, as T5: the item timeout always lands in the window
     assertOnlyTimeout(await lines(page), 'a noisy room');
   });
 });
