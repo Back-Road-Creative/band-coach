@@ -79,6 +79,16 @@ test('burst rule: peak three times the median or less stores, clearly more absta
   }
 });
 
+test('burst rule: the reference is the floor the window would store, not the median (a quiet pluck train decays to a low floor)', () => {
+  // 12 frames in the decay tails, 17 at mid level, one pluck: peak is 2.9x the median (so the median rule stores it) but 3.9x the floor
+  // that would be stored (0.0012), so the gates built from it would sit under the pluck. That is playing, not the room.
+  const decaying = (peak) => [...rep(12, fr(0.0008)), ...rep(17, fr(0.0016)), fr(peak)];
+  for (const manual of [false, true]) {
+    assert.deepEqual(classifyRoomCheck(decaying(0.0047), { manual }), { abstain: 'sound' }, 'peak 3.9x the would-be floor is playing');
+    assert.ok(Math.abs(classifyRoomCheck(decaying(0.0034), { manual }).floor - 0.0012) < 1e-12, 'peak 2.8x the would-be floor is still a room');
+  }
+});
+
 test('burst rule: a peak under the minimum floor is never a burst, one at or over it is', () => {
   const silent = rep(29, fr(0.0001));
   for (const manual of [false, true]) {

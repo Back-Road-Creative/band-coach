@@ -66,22 +66,22 @@ one-size-fits-all level, including the level the pitch detector itself gates on;
 shows the live input level. An instrument plugged into only one channel of a 2-channel interface
 is summed into the listening path rather than silenced.
 
-Both checks say what they are doing and what they heard in the line beside the button ("Checking
-the room — stay quiet", then "Your room is quiet." or a background-noise warning). If you start
-playing while Connect's check is listening, it does not mistake your playing for the room: it says
-it heard sound, keeps the standard settings (nothing is saved) and points you to "Check my
-microphone"; the next Connect tries again. Steady pitched sound counts as playing for Connect's
-check, and so do repeated plucks, strums or drum hits. "Check my microphone" only turns you away
-for those repeated hits, so a steady hum in a room is learned there, but it tells you it heard
-playing and asks you to try again in silence if you were playing, and saves nothing. Both checks wait up to 3 seconds for the
-microphone to start delivering sound before they listen; if none arrives (a silent or not-yet-started
-input, never a real quiet room) they say they could not get a reading, keep the standard settings and
-save nothing, rather than telling you the room is quiet. The room level belongs to the microphone it
-was measured on: picking a different input forgets it and the
-new input gets its own check, and a check still running when you switch inputs or the microphone
-stops is thrown away ("Check my microphone" says it was interrupted). A room level saved by an older
-version of the app may have learned playing, so it is discarded the next time the app starts, and
-the same goes for one inside a progress file you restore; the next Connect measures again.
+Both checks say what they are doing and what they heard in the line beside the button ("Checking the
+room — stay quiet", then "Your room is quiet." or a background-noise warning). If you start playing
+while Connect's check is listening, it does not mistake your playing for the room: it says it heard
+sound, keeps the standard settings (nothing is saved) and points you to "Check my microphone"; the
+next Connect tries again. Steady pitched sound counts as playing for Connect's check, and so do
+repeated plucks, strums or drum hits. "Check my microphone" only turns you away for those repeated
+hits, so a steady hum in a room is learned there, but it tells you it heard playing and asks you to
+try again in silence if you were playing, and saves nothing. Both checks wait up to 3 seconds for
+the microphone to start delivering sound before they listen; if none arrives (a silent or
+not-yet-started input, never a real quiet room) they say they could not get a reading, keep the
+standard settings and save nothing, rather than telling you the room is quiet. The room level
+belongs to the microphone it was measured on: picking a different input forgets it and the new input
+gets its own check, and a check still running when you switch inputs or the microphone stops is
+thrown away ("Check my microphone" says it was interrupted). A room level saved by an older version
+of the app may have learned playing, so it is discarded the next time the app starts, and the same
+goes for one inside a progress file you restore; the next Connect measures again.
 
 Switching away from the tab (or backgrounding the app on a phone) stops the microphone and
 suspends audio outright, rather than merely pausing the exercise on screen — the OS mic indicator

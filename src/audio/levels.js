@@ -92,12 +92,13 @@ export const ROOM_CHECK_VERSION = 2;
 // a very quiet interface is still the room). Of the louder frames, this share
 // being pitched means someone is playing, singing or humming.
 const PITCHED_SHARE = 0.25;
-// Peak this many times the median frame means plucks, strums or drum hits, not
-// a steady room. The median is of ALL frames, so a window of silence with one
-// hit is bursty too.
+// A peak this many times the floor the window would store means plucks, strums
+// or drum hits, not a steady room: the gates built from that floor would sit
+// under what was heard. The floor is the trimmed median of ALL frames (a window
+// of silence with one hit has floor 0, so it is bursty too). It is deliberately
+// not the plain median: a quiet pluck train decays to a low floor between hits
+// while its median sits close to its peak (measured 2.8x to 3.1x, on the line).
 const BURST_RATIO = 3;
-
-const median = (xs) => { const s = xs.slice().sort((a, b) => a - b), m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
 
 // `frames` is one measurement window: [{ rms, pitched }] per analysis frame.
 // Returns { floor } to store, or { abstain: 'sound' | 'unusable' }.
@@ -112,13 +113,12 @@ const median = (xs) => { const s = xs.slice().sort((a, b) => a - b), m = s.lengt
 export function classifyRoomCheck(frames, { manual = false } = {}) {
   const fs = (Array.isArray(frames) ? frames : []).filter((f) => f && Number.isFinite(f.rms) && f.rms >= 0);
   if (!fs.length) return { abstain: 'unusable' };
-  const rms = fs.map((f) => f.rms), peak = Math.max(...rms);
-  if (peak >= MIN_FLOOR && peak > BURST_RATIO * median(rms)) return { abstain: 'sound' };
+  const rms = fs.map((f) => f.rms), peak = Math.max(...rms), floor = noiseFloor(rms);
+  if (peak >= MIN_FLOOR && peak > BURST_RATIO * floor) return { abstain: 'sound' };
   if (!manual) {
     const loud = fs.filter((f) => f.rms >= MIN_FLOOR);
     if (loud.length && loud.filter((f) => f.pitched).length / loud.length >= PITCHED_SHARE) return { abstain: 'sound' };
   }
   // A real microphone always reads a little above exactly 0 (its own electronic hiss), so a window whose floor comes out 0 is one where no audio reached the analyser (the stream had not started, or it died): there is nothing to store, and "your room is quiet" would be false.
-  const floor = noiseFloor(rms);
   return floor > 0 && Number.isFinite(floor) ? { floor: clamp(floor, 0, 1) } : { abstain: 'unusable' };
 }

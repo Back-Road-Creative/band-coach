@@ -25,8 +25,9 @@ test('release build: a steady 110 Hz note during Connect is not stored as the ro
   await page.evaluate("document.getElementById('setupBtn').click()");
   await page.evaluate("document.getElementById('ioBtn').click()");
   await page.waitFor("document.getElementById('ioBtn').hidden === true", 8000);
-  // The 1.5 s check, then the app's 1.2 s debounce before anything reaches storage.
-  await sleep(4200);
+  // Wait for the check to say it is done (it may first wait for the stream to deliver audio), then the app's 1.2 s debounce before anything reaches storage.
+  await page.waitFor("!/Checking the room/.test(document.getElementById('calibrateResult').textContent)", 9000);
+  await sleep(1500);
 
   const stored = await page.evaluate("(() => { try { const v = JSON.parse(localStorage.getItem('bandcoach.v1') || 'null'); return v && v.prefs ? (v.prefs.noiseFloor ?? null) : null; } catch (e) { return 'unreadable'; } })()");
   assert.equal(stored, null, `the shipped build saved a room floor of ${stored} while a note was playing`);

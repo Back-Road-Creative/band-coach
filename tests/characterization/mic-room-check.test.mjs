@@ -54,8 +54,13 @@ const floorOf = (page) => page.evaluate('window.__coach.db().prefs.noiseFloor');
 const resultText = (page) => page.evaluate("document.getElementById('calibrateResult').textContent");
 const resultVisible = (page) => page.evaluate("(() => { const el = document.getElementById('calibrateResult'); return !document.getElementById('setupSheet').hidden && el.getClientRects().length > 0; })()");
 
+// The check ends when it says so, not after a fixed time: it first waits up to 3 s for the stream to deliver
+// audio, then listens 1.5 s (auto) or 3 s (manual), so a slow start moves the end by seconds.
+const checkDone = (page) => page.waitFor("!/Checking the room/.test(document.getElementById('calibrateResult').textContent)", 9000);
+const manualDone = (page) => page.waitFor("!/Listening for/.test(document.getElementById('calibrateResult').textContent)", 12000);
+
 async function assertAutoAbstained(page, what) {
-  await sleep(2600); // the 1.5 s check window plus slack
+  await checkDone(page);
   const floor = await floorOf(page);
   assert.equal(floor, null, `${what}: the room check stored a floor of ${floor} while someone was playing`);
   assert.deepEqual(await page.evaluate('window.__coach.gates()'), DEFAULT_GATES, `${what}: gates must stay at the defaults`);
@@ -81,6 +86,15 @@ test('T2b: drum-like noise bursts during Connect are not learned as the room', a
   await assertAutoAbstained(page, 'drum hits');
 });
 
+test('T2c: drum hits that arrive after more than a second of exact zeros are still not learned as the room', async (t) => {
+  // A slow-starting stream: 1.5 s of nothing, then playing. The check waits for the audio, so it ends after
+  // about 3 s here, past a fixed 2.6 s sleep; it must still hear the hits and abstain, not store a floor of 0.
+  const hits = noiseBursts(0.01, 4), buf = new Float32Array(Math.round(1.5 * SR) + hits.length);
+  buf.set(hits, Math.round(1.5 * SR));
+  const page = await connect(t, buf);
+  await assertAutoAbstained(page, 'drum hits after a 1.5 s zero lead');
+});
+
 test('T4: steady unpitched noise is the room: the floor is stored and the noisy message is shown', async (t) => {
   const page = await connect(t, steadyNoise(0.004, 2));
   await page.waitFor('Number.isFinite(window.__coach.db().prefs.noiseFloor)', 6000);
@@ -94,7 +108,6 @@ test('T4: steady unpitched noise is the room: the floor is stored and the noisy 
 // those is no reading: it must not be stored as "your room is quiet" (it stopped the check ever running again).
 const digitalSilence = (secs) => new Float32Array(Math.round(SR * secs));
 const noReading = /Could not get a reading/;
-const checkDone = (page) => page.waitFor("!/Checking the room/.test(document.getElementById('calibrateResult').textContent)", 9000);
 
 test('digital silence during Connect is no reading: nothing stored, defaults kept, the learner is told', async (t) => {
   const page = await connect(t, digitalSilence(4));
@@ -154,12 +167,24 @@ test('T7: "Check my microphone" while playing stores nothing and asks for silenc
   const page = await connect(t, pluckTrain(0.005, 4.2));
   await pressCheck(page);
   assert.match(await resultText(page), /Listening for 3 seconds/);
-  await sleep(3800);
+  await manualDone(page);
   assert.equal(await floorOf(page), null, 'a manual check that heard playing must store nothing');
   assert.deepEqual(await page.evaluate('window.__coach.gates()'), DEFAULT_GATES);
   const msg = await resultText(page);
   assert.match(msg, /heard playing/i, msg);
   assert.match(msg, /silence/i, msg);
+});
+
+test('T7c: a manual check on a slow-starting stream still hears the playing that follows', async (t) => {
+  // Drum hits, not plucks: a quiet pluck train sits near the manual check's burst threshold, so which phase the 3 s window lands on decides it; hits are unambiguous.
+  const hits = noiseBursts(0.01, 4), buf = new Float32Array(Math.round(1.5 * SR) + hits.length); // 1.5 s of nothing: under the 3 s wait, past what a fixed 3.8 s sleep covers
+  buf.set(hits, Math.round(1.5 * SR));
+  const page = await connect(t, buf);
+  await pressCheck(page);
+  await manualDone(page);
+  assert.equal(await floorOf(page), null, 'a manual check that heard playing must store nothing');
+  const msg = await resultText(page);
+  assert.match(msg, /heard playing/i, msg);
 });
 
 test('T7b: a manual check supersedes the background check, so nothing is written twice', async (t) => {
