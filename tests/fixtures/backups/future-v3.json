@@ -1,0 +1,166 @@
+{
+  "format": "band-coach-progress",
+  "formatVersion": 3,
+  "appVersion": "1.0.0",
+  "exportedAt": "2026-10-02T12:00:00.000Z",
+  "db": {
+    "v": 1,
+    "mods": {
+      "kbd": {
+        "level": 3,
+        "ready": 0.4,
+        "item": {
+          "n60": {
+            "m": 0.7,
+            "n": 4,
+            "last": 1700000000000,
+            "seen": 12
+          },
+          "n62": {
+            "m": 0.55,
+            "n": 2,
+            "last": 1700000100000,
+            "seen": 5
+          }
+        },
+        "trans": {},
+        "conf": {},
+        "gain": 0.05,
+        "gate": 0.6,
+        "offset": 0,
+        "acc": {},
+        "cr": {},
+        "tick": 40,
+        "judged": 12,
+        "promo": {
+          "at": -999,
+          "level": 0
+        },
+        "fast": 0
+      }
+    },
+    "sessions": [
+      {
+        "d": "2026-09-01",
+        "mod": "kbd",
+        "min": 12,
+        "acc": 0.8,
+        "a1": 0.7,
+        "a2": 0.9,
+        "from": 1,
+        "to": 3,
+        "breaks": 0
+      },
+      {
+        "d": "2026-09-03",
+        "mod": "kbd",
+        "min": 9,
+        "acc": 0.85,
+        "a1": 0.8,
+        "a2": 0.9,
+        "from": 3,
+        "to": 3,
+        "breaks": 1
+      },
+      {
+        "d": "2026-09-05",
+        "mod": "kbd",
+        "min": 15,
+        "acc": 0.9,
+        "a1": 0.85,
+        "a2": 0.95,
+        "from": 3,
+        "to": 4,
+        "breaks": 0
+      }
+    ],
+    "events": [
+      {
+        "v": 1,
+        "id": "e1",
+        "at": 1700000000000,
+        "instrument": "kbd",
+        "skill": "n60",
+        "source": "drill",
+        "assistance": "none",
+        "dims": {
+          "pitch": "ok"
+        },
+        "unassessed": [],
+        "activeMs": 400
+      },
+      {
+        "v": 1,
+        "id": "e2",
+        "at": 1700000050000,
+        "instrument": "kbd",
+        "skill": "n62",
+        "source": "drill",
+        "assistance": "none",
+        "dims": {
+          "pitch": "miss"
+        },
+        "unassessed": [],
+        "activeMs": 650,
+        "hands": "left",
+        "contentRev": "rev-1"
+      }
+    ],
+    "prefs": {
+      "mod": "kbd",
+      "wind": "bb",
+      "voice": "low",
+      "names": true,
+      "noiseFloor": null
+    },
+    "custom": [
+      60,
+      62,
+      64
+    ]
+  },
+  "songs": [
+    {
+      "schema": "song/1",
+      "id": "user-song-1",
+      "title": "My Little Tune",
+      "composer": "Me",
+      "licence": "Own work",
+      "source": "Typed in by the learner.",
+      "key": {
+        "tonic": 0,
+        "mode": "major"
+      },
+      "metre": {
+        "num": 4,
+        "den": 4
+      },
+      "bpm": 90,
+      "ticksPerQuarter": 480,
+      "parts": [
+        {
+          "id": "melody",
+          "name": "Melody",
+          "notes": [
+            {
+              "start": 0,
+              "dur": 480,
+              "midi": 60
+            },
+            {
+              "start": 480,
+              "dur": 480,
+              "midi": 62
+            },
+            {
+              "start": 960,
+              "dur": 960,
+              "midi": 64
+            }
+          ]
+        }
+      ],
+      "chords": []
+    }
+  ]
+}
