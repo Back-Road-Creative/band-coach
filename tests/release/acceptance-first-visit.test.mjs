@@ -56,21 +56,37 @@ function makePlayer(page) {
     // Marks everything shown so far as answered (used right before a resume,
     // which always presents a fresh target).
     sync: async () => { consumed = await targetsShown(); },
+    // With `wrongFirst` the learner presses a neighbouring natural first, then
+    // the right key. Every wait is on something the screen did: the answer to a
+    // key press, or the next target appearing. Never a fixed sleep.
     async playTarget({ wrongFirst = false } = {}) {
       await page.waitFor(`window.__q3bTargets.length > ${consumed}`);
       const shown = await page.evaluate("({ n: window.__q3bTargets.length, label: document.querySelector('#prompt b').textContent })");
       consumed = shown.n;
       const key = KEY_FOR[shown.label];
       if (!key) throw new Error(`the prompt asks for "${shown.label}", which has no computer key in this test's table`);
-      let wrongFeedback = null;
-      if (wrongFirst) {
-        const next = NATURALS[(NATURALS.indexOf(shown.label) + 1) % NATURALS.length];
-        await pressAndWait(page, KEY_FOR[next]);
-        wrongFeedback = { text: await text(page, 'feedback'), cls: await cls(page, 'feedback'), targetsAfter: await targetsShown() };
-      }
-      await pressAndWait(page, key);
       // The note's letter as the feedback prints it ("C (high)" is shown as "C").
-      return { label: shown.label, short: shown.label.split(' ')[0], wrongFeedback, feedback: await text(page, 'feedback'), feedbackClass: await cls(page, 'feedback'), targetsBefore: shown.n };
+      const short = shown.label.split(' ')[0];
+      if (!wrongFirst) {
+        await pressAndWait(page, key);
+        return { label: shown.label, short, feedback: await text(page, 'feedback'), feedbackClass: await cls(page, 'feedback') };
+      }
+      // A neighbour on the same row only exists for a plain natural: for anything
+      // else (C (high) has no neighbour here) refuse rather than guess a key.
+      if (!NATURALS.includes(shown.label)) throw new Error(`wrongFirst has no neighbouring natural to press for the prompted note "${shown.label}"`);
+      await pressAndWait(page, KEY_FOR[NATURALS[(NATURALS.indexOf(shown.label) + 1) % NATURALS.length]]);
+      const wrong = { text: await text(page, 'feedback'), cls: await cls(page, 'feedback') };
+      const n = await feedbackCount(page);
+      await page.press(key, { text: key });
+      // The right key's own answer, or (if it was swallowed) the next target: either
+      // ends the wait, and `answered` says which one it was.
+      await page.waitFor(`window.__q3bFeedback > ${n} || window.__q3bTargets.length > ${shown.n}`);
+      const answered = (await feedbackCount(page)) > n;
+      const right = { text: await text(page, 'feedback'), cls: await cls(page, 'feedback') };
+      // One wrong key and one right key move the prompt on exactly once: the new
+      // target is counted only when it appears, so this reads the count after it.
+      await page.waitFor(`window.__q3bTargets.length > ${shown.n}`);
+      return { label: shown.label, short, wrong, right, answered, advancedBy: (await targetsShown()) - shown.n };
     },
   };
 }
@@ -104,14 +120,19 @@ test('A01: first visit on computer keys -- choose, start, play, pause, play, end
       const r = await player.playTarget({ wrongFirst: i === 2 });
       played.push(r.label);
       if (i === 2) {
-        // 4. The wrong key is heard and corrected; the target does not move.
-        assert.match(r.wrongFeedback.text, new RegExp(`^That was [A-G][♯♭]?, the note is ${escapeRe(r.short)}\\. `), `wrong key: ${r.wrongFeedback.text}`);
-        assert.equal(r.wrongFeedback.cls, 'no', 'a wrong key is shown as a miss');
-        assert.equal(r.wrongFeedback.targetsAfter, r.targetsBefore, 'the same target stays on screen after a wrong key');
-        // 5. The right key is recognised but not credited as first-try.
-        assert.match(r.feedback, new RegExp(`^That is the one\\. ${escapeRe(r.short)}\\.$`), `right key after a miss: ${r.feedback}`);
-        assert.notEqual(r.feedbackClass, 'ok', 'a note that needed a second try is not shown as a pass');
-        assert.doesNotMatch(r.feedback, /yes, in/);
+        // 4. The wrong key is heard and corrected. 5. The right key after it is
+        // recognised, answered, and not credited as first-try. Each is checked on
+        // its own and reported together, so one broken rule names every check it breaks.
+        const misses = [];
+        const check = (name, fn) => { try { fn(); } catch (e) { misses.push(`${name}: ${e.message.split('\n')[0]}`); } };
+        check('4a wrong key says what it heard', () => assert.match(r.wrong.text, new RegExp(`^That was [A-G][♯♭]?, the note is ${escapeRe(r.short)}\\. `), `wrong key: ${r.wrong.text}`));
+        check('4b wrong key is a miss', () => assert.equal(r.wrong.cls, 'no', 'a wrong key is shown as a miss'));
+        check('4c right key gets its own answer', () => assert.equal(r.answered, true, 'the right key after a wrong one was never answered'));
+        check('4d one wrong and one right key move on exactly once', () => assert.equal(r.advancedBy, 1, `the prompt moved on ${r.advancedBy} time(s)`));
+        check('5a right key recognised', () => assert.match(r.right.text, new RegExp(`^That is the one\\. ${escapeRe(r.short)}\\.$`), `right key after a miss: ${r.right.text}`));
+        check('5b not shown as a pass', () => assert.notEqual(r.right.cls, 'ok', 'a note that needed a second try is not shown as a pass'));
+        check('5c not a first-try line', () => assert.doesNotMatch(r.right.text, /yes, in/));
+        assert.deepEqual(misses, [], 'wrong key then right key');
       } else {
         // 3. A first-try note.
         assert.match(r.feedback, firstTry(r.short), `first-try note ${i + 1} (${r.label}): ${r.feedback}`);
@@ -204,16 +225,21 @@ test('control for A01: keys pressed outside a judged note are never credited', a
       assert.equal(await cls(page, 'feedback'), 'no', `press ${i + 1} is shown as a miss: ${fb}`);
       assert.match(fb, new RegExp(`^That was C, the note is ${escapeRe(asked)}\\. `), `press ${i + 1}: ${fb}`);
       assert.doesNotMatch(fb, /yes, in/);
-      assert.equal(await page.evaluate('window.__q3bTargets.length'), shown, 'the target is still the same one');
     }
-    // Nothing finished, so nothing is stored. Switching to another tab is what a
-    // learner does, and the app saves at once when its tab is hidden, so storage
-    // is current when it is read (no wait on the 1200 ms debounce).
-    await page.background();
-    await page.waitFor("(() => { try { return localStorage.getItem('bandcoach.v1') !== null; } catch (e) { return false; } })()");
+    // Four misses and the prompt has not moved. The right key then answers the
+    // note once and the prompt moves on exactly once, counted when the next
+    // target appears (a positive signal, not a sleep).
+    await pressAndWait(page, KEY_FOR[asked]);
+    const last = await text(page, 'feedback');
+    assert.match(last, new RegExp(`^That is the one\\. ${escapeRe(asked)}\\.$`), `the right key after four misses: ${last}`);
+    await page.waitFor(`window.__q3bTargets.length > ${shown}`);
+    assert.equal(await page.evaluate('window.__q3bTargets.length'), shown + 1, 'four wrong keys and one right key move the prompt on exactly once');
+    // That one note is the only thing finished, and it is a miss. Storage is read
+    // once the page has written that one row (the app's save debounce is 1200 ms),
+    // so the wait is on the row itself, not on time.
+    await page.waitFor("(() => { try { return JSON.parse(localStorage.getItem('bandcoach.v1')).events.length >= 1; } catch (e) { return false; } })()");
     const db = await stored(page);
-    assert.deepEqual(db.events || [], [], 'no judged note was logged');
-    await page.foreground();
+    assert.deepEqual((db.events || []).map((e) => e.dims && e.dims.pitch), ['miss'], 'only the one note finished, logged as a miss, never a pass');
     assert.deepEqual(page.exceptions, [], 'no uncaught exceptions');
   });
 });
