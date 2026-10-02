@@ -13,6 +13,8 @@
 // never left stuck in a modal. A caller must not answer dialogs itself during a
 // pick (two answers would race); dialogs the page opens after the pick returns
 // are the caller's. The result lists the dialogs seen: { dialogs: [{ type, message }] }.
+// A rejection for an unanswered dialog comes after the pick has landed: the
+// input already holds the file and its change handler has run.
 //
 // DOM.setFileInputFiles does not apply the input's accept filter (a .txt lands
 // in an accept="audio/*" input), so a test cannot use chooseFile to show that
