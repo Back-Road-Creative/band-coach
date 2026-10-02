@@ -2083,7 +2083,9 @@ import { register as registerPathway } from './ui/pathway.js';
     // ids/items/events/sessions, not anything DOM/task-shaped.
     sessionPlan = planSession({ instrumentId: mod, level: S.level, activeIds: activeItems(mod, S.level), items: S.item, now: modelNow, due: due, sessions: DB.sessions, today: today(), songFor: mod === 'kbd' ? (lvl => { const e = songFor(lvl); if (!e) return null; const s = starterSongs.find(x => x.id === e.songId); return { songId: e.songId, title: s ? s.title : e.songId }; }) : undefined });
     planProgress = { review: 0, weak: 0, apply: 0, check: 0 };
-    msg += ' ' + describePlan(sessionPlan, id => inf(id).short);
+    // `seen`: has this learner any item record at this level yet? A fresh
+    // profile's empty plan is a first sitting, not a day off (curriculum.js).
+    msg += ' ' + describePlan(sessionPlan, id => inf(id).short, { seen: activeItems(mod, S.level).some(id => !!S.item[id]) });
     const why = describeWhy(sessionPlan, id => inf(id).short); if (why) msg += ' ' + why;
     // The song block's own unreviewed label, matching the same test the
     // hand-off button's own note uses (renderOpts, app.js:2109 as of this

@@ -85,8 +85,12 @@ export function planSession({ instrumentId, level, activeIds, items, now, due, s
 // `nameOf(id) -> string` names the weak block's id in plain words (e.g. the
 // app passes `id => inf(id).short`, turning a raw id like 'n67' into 'G4');
 // defaults to the identity function so a caller that does not pass one gets
-// today's behaviour unchanged.
-export function describePlan(blocks, nameOf) {
+// today's behaviour unchanged. `opts.seen` says whether this learner has any
+// history at this level: an empty plan with `seen: false` is a first sitting
+// (planSession has nothing to review and no weak spot yet), so the line
+// invites them to play instead of reading as a day with nothing to do;
+// `seen` omitted or true keeps the "nothing new due" wording.
+export function describePlan(blocks, nameOf, opts) {
   const list = Array.isArray(blocks) ? blocks : [];
   const name = typeof nameOf === 'function' ? nameOf : (id => String(id));
   const review = list.find(b => b.kind === 'review');
@@ -100,7 +104,10 @@ export function describePlan(blocks, nameOf) {
   if (apply) parts.push('use it in a phrase');
   if (check) parts.push('a check');
   if (song) parts.push('play ' + song.title + (song.done ? ' (done today)' : ''));
-  if (!parts.length) return 'Today: nothing new due -- free practice.';
+  if (!parts.length) {
+    if (opts && opts.seen === false) return 'Today: your first sitting here -- play what the screen asks, and tomorrow\'s plan builds from it.';
+    return 'Today: nothing new due -- free practice.';
+  }
   return 'Today: ' + parts.join(', then ') + '.';
 }
 
