@@ -464,6 +464,7 @@
   .timebar { height: 6px; border-radius: 3px; background: var(--ground); border: 1px solid var(--line); overflow: hidden; }
   #timeFill { height: 100%; width: 100%; background: var(--accent); }
   canvas { display: block; width: 100%; max-width: 100%; aspect-ratio: 16 / 8.2; touch-action: manipulation; }
+  canvas.kit { aspect-ratio: 16 / 10; }
   .choices { display: flex; flex-wrap: wrap; gap: 8px; }
   .choices button { flex: 1 1 140px; }
   .choices button.right { background: var(--good); border-color: var(--good); color: #04130a; }

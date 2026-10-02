@@ -5,7 +5,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { kitLayout, describeHit, pieceAt } from '../../src/instruments/how/drum-kit.js';
+import { kitLayout, describeHit, pieceAt, spreadX } from '../../src/instruments/how/drum-kit.js';
 import { PIECES } from '../../src/instruments/drum-kit.js';
 
 test('kitLayout places every kit piece exactly once, fully inside the unit square', () => {
@@ -70,4 +70,12 @@ test('describeHit gives a plain sentence for every piece and null for anything e
   assert.match(describeHit('hihat-pedal'), /left foot/);
   assert.equal(describeHit('cowbell'), null);
   assert.equal(describeHit(undefined), null);
+});
+
+test('pieceAt in a stretched box hits in pixels: circles stay round, sized by the shorter side', () => {
+  const w = 500, h = 200, m = Math.min(w, h);
+  for (const p of kitLayout()) assert.equal(pieceAt(spreadX(p.x), p.y, w, h), p.id);
+  const k = kitLayout().find(p => p.id === 'kick'), kx = spreadX(k.x);
+  assert.equal(pieceAt(kx + (k.r * m * 0.9) / w, k.y, w, h), 'kick');
+  assert.equal(pieceAt(kx + (k.r * m * 1.1) / w, k.y, w, h), null);
 });
