@@ -46,7 +46,7 @@ import { rangeForInstrument, FALLBACK_RANGE, frameSizeForInstrument } from './au
 import { renderVoice } from './audio/voices.js';
 import { layoutFor as harpLayoutFor } from './instruments/how/harmonica.js';
 import { pieceForMidi } from './instruments/drum-kit.js';
-import { kitLayout, pieceAt } from './instruments/how/drum-kit.js';
+import { kitLayout, pieceAt, spreadX } from './instruments/how/drum-kit.js';
 import { layoutPercussionMeasure } from './notation/percussion.js';
 import { songFor, KBD_SONG_SKILL_MAP } from './instruments/kbd-songs.js';
 import { buildMods } from './instruments/mods.js';
@@ -1483,7 +1483,7 @@ import { register as registerPathway } from './ui/pathway.js';
   // A MIDI note, a kit key and a click on the drawn kit all land in onHit() as one tap { t, piece }.
   const KIT = instrumentById['drum-kit'].kit, KIT_KEYS = {}; KIT.forEach(p => { KIT_KEYS[p.key] = p.id; });
   const kitName = id => { const p = KIT.find(k => k.id === id); return p ? p.name : 'a note off the kit'; };
-  let kitFlash = { piece: null, at: -1e12 }, kitBox = null;
+  let kitFlash = { piece: null, at: -1e12 }, kitBox = null, kitLabels = [];
   function startKitBar() {
     const k = task.kit, M = RHY.METRES[k.metre], phrase = RHY.buildPhrase({ metre: k.metre, cells: k.bar.cells }), beatSec = (60 / k.bpm) * (M.beatUnit / RHY.TPQ), t0 = now() + 0.15, playAt = t0 + M.beats * beatSec, times = RHY.onsetsOf(phrase.events, { bpm: k.bpm, swing: k.swing });
     let tick = 0; const beats = [], mt = k.metre.split('/').map(Number); phrase.events.forEach(ev => { if (!ev.rest && !ev.tied) beats.push(tick / RHY.TPQ); tick += ev.dur; });
@@ -1873,17 +1873,20 @@ import { register as registerPathway } from './ui/pathway.js';
   // The bar on a percussion staff (top), the kit from above (bottom): the bar's drums outlined, filled
   // while the count-in runs, the piece just hit flashing; after judging, a mark under each note.
   // what each drawn piece is called on the kit (a beginner reads the name; the key letter is only a hint)
-  const KIT_DRAW_NAMES = { kick: ['Kick'], snare: ['Snare'], 'hihat-closed': ['Hi-hat', 'closed'], 'hihat-pedal': ['Hi-hat', 'pedal'], 'hihat-open': ['Hi-hat', 'open'], 'tom-floor': ['Floor tom'], 'tom-mid': ['Mid tom'], 'tom-high': ['High tom'], crash: ['Crash'], ride: ['Ride'] };
+  const KIT_DRAW_NAMES = { kick: ['Kick'], snare: ['Snare'], 'hihat-closed': ['Hi-hat', 'closed'], 'hihat-pedal': ['Hi-hat', 'pedal'], 'hihat-open': ['Hi-hat', 'open'], 'tom-floor': ['Floor tom', '', 'l'], 'tom-mid': ['Mid tom'], 'tom-high': ['High tom', '', 'l'], crash: ['Crash'], ride: ['Ride'] };
   function drawKit(W, H) {
-    const on = bar && task && task.kind === 'kit' && bar.staff, t = now(), pre = on && t < bar.playAt, want = {}, s = on ? Math.min(H * 0.6, W * 0.9) : Math.min(H * 0.92, W * 0.9), box = { x: (W - s) / 2, y: on ? H * 0.4 : (H - s) / 2, s: s };
-    kitBox = box; if (on) { bar.kitBox = box; bar.onsets.forEach(o => o.pieces.forEach(p => { want[p] = 1; }));
-      const sc = Math.min(W * 0.9 / 400, H * 0.42 / 130), x0 = (W - 400 * sc) / 2, y0 = H * 0.02;
+    const on = bar && task && task.kind === 'kit' && bar.staff, t = now(), pre = on && t < bar.playAt, want = {}, bw = W * 0.94, bh = on ? H * 0.62 : H * 0.9, box = { x: (W - bw) / 2, y: on ? H * 0.37 : (H - bh) / 2, w: bw, h: bh, s: bh }, m = Math.min(bw, bh);
+    kitBox = box; kitLabels = []; if (on) { bar.kitBox = box; bar.onsets.forEach(o => o.pieces.forEach(p => { want[p] = 1; }));
+      const sc = Math.min(W * 0.9 / 400, H * 0.33 / 130), x0 = (W - 400 * sc) / 2, y0 = H * 0.02;
       g.save(); g.translate(x0, y0); g.scale(sc, sc); g.strokeStyle = '#c9ced9'; g.fillStyle = '#e9edf6'; g.lineWidth = 1.5 / sc; drawPrimitives(g, bar.staff, {}); g.restore();
       bar.onsets.forEach((o, i) => { const x = x0 + (bar.noteX[i] || 0) * sc; if (o.flam) { g.fillStyle = '#93a0bd'; font(11 * sc, 700); g.textAlign = 'center'; g.fillText('flam', x, y0 + 10 * sc); } if (!bar.judged || !o.res) return; const bad = o.res.some(r => r.dt === undefined), off = Math.max(...o.res.map(r => Math.abs(r.dt || 0))); g.fillStyle = bad ? '#ff6b5e' : off > 0.05 ? '#f3c52f' : '#5be08a'; g.beginPath(); g.arc(x, y0 + 122 * sc, 5 * sc, 0, 7); g.fill(); }); }
-    kitLayout().forEach(p => { const x = box.x + p.x * s, y = box.y + p.y * s, flash = kitFlash.piece === p.id && performance.now() - kitFlash.at < 160, lit = flash || (pre && want[p.id]);
-      g.beginPath(); g.arc(x, y, p.r * s, 0, 7); g.fillStyle = flash ? '#f3c52f' : lit ? '#f08a4b' : p.shape === 'cymbal' ? '#2a3140' : '#1b2130'; g.fill(); g.strokeStyle = want[p.id] ? '#f08a4b' : '#93a0bd'; g.lineWidth = want[p.id] ? 3 : 1.5; g.stroke();
-      g.fillStyle = lit ? '#05070c' : '#e9edf6'; const nm = KIT_DRAW_NAMES[p.id], fs = Math.max(13, s * 0.042); font(fs, 700); g.textAlign = 'center'; g.fillText(nm[0], x, y - (nm[1] ? fs * 0.1 : -fs * 0.15)); if (nm[1]) { font(Math.max(11, fs * 0.8), 400); g.fillText(nm[1], x, y + fs * 0.95); }
-      font(Math.max(11, s * 0.032), 700); g.fillStyle = lit ? '#05070c' : '#f3c52f'; g.fillText(KIT.find(k => k.id === p.id).key.toUpperCase(), x, y + p.r * s - Math.max(4, s * 0.012)); });
+    // the layout is a unit square stretched to the box (x by width, y by height); circles stay round, sized by the shorter side
+    kitLayout().forEach(p => { const x = box.x + spreadX(p.x) * bw, y = box.y + p.y * bh, rr = p.r * m, flash = kitFlash.piece === p.id && performance.now() - kitFlash.at < 160, lit = flash || (pre && want[p.id]);
+      g.beginPath(); g.arc(x, y, rr, 0, 7); g.fillStyle = flash ? '#f3c52f' : lit ? '#f08a4b' : p.shape === 'cymbal' ? '#2a3140' : '#1b2130'; g.fill(); g.strokeStyle = want[p.id] ? '#f08a4b' : '#93a0bd'; g.lineWidth = want[p.id] ? 3 : 1.5; g.stroke();
+      const nm = KIT_DRAW_NAMES[p.id], fs = Math.max(13, m * 0.05), key = KIT.find(k => k.id === p.id).key.toUpperCase(); font(fs, 700); const tw = g.measureText(nm[0]).width, inside = tw + 6 <= rr * 2 && !nm[1] && !nm[2], left = nm[2] === 'l';
+      // a name that does not fit in its circle is written beside it (to the right), never squeezed or overlapping its neighbours
+      g.fillStyle = inside && lit ? '#05070c' : '#e9edf6'; if (inside) { g.textAlign = 'center'; g.fillText(nm[0], x, y - fs * 0.05); kitLabels.push({ id: p.id, x: x - tw / 2, y: y - fs * 1.05, w: tw, h: fs * 1.2 }); } else { const lx = left ? x - rr - 5 : x + rr + 5; g.textAlign = left ? 'right' : 'left'; g.fillText(nm[0], lx, y - (nm[1] ? 1 : -fs * 0.35)); let lw = tw; if (nm[1]) { font(Math.max(11, fs * 0.85), 400); g.fillText(nm[1], lx, y + fs * 0.95); lw = Math.max(tw, g.measureText(nm[1]).width); } kitLabels.push({ id: p.id, x: left ? lx - lw : lx, y: y - fs * 1.05, w: lw, h: nm[1] ? fs * 2.2 : fs * 1.2 }); }
+      font(Math.max(11, m * 0.034), 700); g.textAlign = 'center'; g.fillStyle = lit ? '#05070c' : '#f3c52f'; g.fillText(key, x, inside ? y + rr - Math.max(4, m * 0.012) : y + 4); });
   }
   function drawBar2(W, H) {
     if (!bar || !task) return; const x0 = W * 0.1, x1 = W * 0.94, y = H * 0.48, t = now(), stem = H * 0.26, nh = H * 0.045;
@@ -2520,7 +2523,7 @@ import { register as registerPathway } from './ui/pathway.js';
   // common way) never released it -- noteState is the same held-note ledger
   // MIDI note-off, window blur and tab-hidden already clear into.
   document.addEventListener('keyup', ev => { if (mod === 'kbd' && PCKEYS[ev.key.toLowerCase()] !== undefined) { const m = PCKEYS[ev.key.toLowerCase()]; noteState.noteOff('computer-key', 0, m); onNoteOff(m, 'computer-key'); } });
-  cv.addEventListener('pointerdown', ev => { const r = cv.getBoundingClientRect(), x = (ev.clientX - r.left) * cv.width / r.width, y = (ev.clientY - r.top) * cv.height / r.height; ensureAudio(); if (MODS[mod] && MODS[mod].kit && kitBox) { const p = pieceAt((x - kitBox.x) / kitBox.s, (y - kitBox.y) / kitBox.s); if (p) onHit(p, tapAudioTime(ev), 'click'); } if (mod === 'kbd') { const k = keyRects.find(q => x >= q.x && x <= q.x + q.w && y >= q.y && y <= q.y + q.h); if (k) { tone(k.m, now() + 0.01, 0.5, 0.15); onNote(k.m, true, 'screen'); } } if (mod === 'tuner') { const play = playRects.find(q => x >= q.x && x <= q.x + q.w && y >= q.y && y <= q.y + q.h); if (play) { tone(play.m, now() + 0.02, 1.6, 0.2); return; } const row = rowRects.find(q => x >= q.x && x <= q.x + q.w && y >= q.y && y <= q.y + q.h); if (row) tunerLock = tunerLock === row.idx ? null : row.idx; } });
+  cv.addEventListener('pointerdown', ev => { const r = cv.getBoundingClientRect(), x = (ev.clientX - r.left) * cv.width / r.width, y = (ev.clientY - r.top) * cv.height / r.height; ensureAudio(); if (MODS[mod] && MODS[mod].kit && kitBox) { const p = pieceAt((x - kitBox.x) / kitBox.w, (y - kitBox.y) / kitBox.h, kitBox.w, kitBox.h); if (p) onHit(p, tapAudioTime(ev), 'click'); } if (mod === 'kbd') { const k = keyRects.find(q => x >= q.x && x <= q.x + q.w && y >= q.y && y <= q.y + q.h); if (k) { tone(k.m, now() + 0.01, 0.5, 0.15); onNote(k.m, true, 'screen'); } } if (mod === 'tuner') { const play = playRects.find(q => x >= q.x && x <= q.x + q.w && y >= q.y && y <= q.y + q.h); if (play) { tone(play.m, now() + 0.02, 1.6, 0.2); return; } const row = rowRects.find(q => x >= q.x && x <= q.x + q.w && y >= q.y && y <= q.y + q.h); if (row) tunerLock = tunerLock === row.idx ? null : row.idx; } });
   // item 3 (Wave W, w-fixes): keyboard path onto the same canvas piano -- arrow keys move the focus cursor, Enter/Space plays the focused key.
   cv.addEventListener('keydown', ev => { if (mod !== 'kbd') return; const order = kbdOrder(); if (!order.length) return; if (ev.key === 'ArrowRight' || ev.key === 'ArrowUp') { ev.preventDefault(); kbdFocusIdx = Math.min(order.length - 1, kbdFocusIdx + 1); } else if (ev.key === 'ArrowLeft' || ev.key === 'ArrowDown') { ev.preventDefault(); kbdFocusIdx = Math.max(0, kbdFocusIdx - 1); } else if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); const k = order[Math.min(kbdFocusIdx, order.length - 1)]; if (k) { ensureAudio(); tone(k.m, now() + 0.01, 0.5, 0.15); onNote(k.m, true, 'screen'); } } });
   $('tapPad').addEventListener('pointerdown', ev => { ev.preventDefault(); ensureAudio(); onTap(ev); });
@@ -3035,7 +3038,7 @@ import { register as registerPathway } from './ui/pathway.js';
   if (__DEBUG_HOOK__) Object.assign(hook, { kbdOverview: () => kbdOverviewRect ? JSON.parse(JSON.stringify(kbdOverviewRect)) : null });
   if (__DEBUG_HOOK__) Object.assign(hook, { audioHeardTicks: () => audioHeardTicks });
   if (__DEBUG_HOOK__) Object.assign(hook, { rangeHeld: () => rangeTest && rangeTest.curMidi !== null ? { stage: rangeTest.stage, midi: rangeTest.curMidi, ms: performance.now() - rangeTest.curSince } : null });
-  if (__DEBUG_HOOK__) Object.assign(hook, { kitBox: () => kitBox });
+  if (__DEBUG_HOOK__) Object.assign(hook, { kitBox: () => kitBox, kitLabels: () => kitLabels });
   if (__DEBUG_HOOK__) Object.assign(hook, { micHits: () => drumMicHits.slice() });
   if (__DEBUG_HOOK__) window.__coach = hook;
 

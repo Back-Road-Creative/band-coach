@@ -54,14 +54,22 @@ export function describeHit(pieceId) {
   return Object.prototype.hasOwnProperty.call(DESCRIPTIONS, pieceId) ? DESCRIPTIONS[pieceId] : null;
 }
 
+// On a wide canvas the pieces' x spread (0.13 .. 0.80 of the unit square) is
+// stretched to 0.07 .. 0.93 so the kit uses the whole width. Used by the
+// trainer's drawing and by pieceAt when it is given a box size.
+export function spreadX(x) { return 0.07 + (x - 0.13) * (0.86 / 0.67); }
+
 // The piece whose drawn circle contains (x, y), the nearest centre winning
-// where two touch, or null for empty space.
-export function pieceAt(x, y) {
+// where two touch, or null for empty space. With w and h (the pixel size the
+// unit square is stretched to, as the trainer's canvas does, x spread by
+// spreadX) the test is made in pixels: circles stay round, their radius is r times the shorter side.
+export function pieceAt(x, y, w = 1, h = 1) {
   let best = null;
   let bestDist = Infinity;
+  const m = Math.min(w, h);
   for (const p of kitLayout()) {
-    const d = Math.hypot(x - p.x, y - p.y);
-    if (d <= p.r && d < bestDist) { best = p.id; bestDist = d; }
+    const d = Math.hypot((x - (w === 1 && h === 1 ? p.x : spreadX(p.x))) * w, (y - p.y) * h);
+    if (d <= p.r * m && d < bestDist) { best = p.id; bestDist = d; }
   }
   return best;
 }

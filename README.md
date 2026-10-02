@@ -1141,8 +1141,8 @@ the last level). The right time on the wrong drum is reported as "wrong drum",
 with the drum it wanted. A MIDI note that isn't on the kit counts as an extra
 hit, and the coach line says so.
 Every drum on the drawn kit is labelled with its name (Kick, Snare, Hi-hat, Floor tom ...), with its
-computer key as a small yellow hint; before you start, the kit fills the whole canvas, and the
-canvas is taller for the kit than for other instruments.
+computer key as a small yellow hint (a name too long for its circle sits beside it); the kit is laid
+out across the full width, before you start it fills the canvas height, and the canvas is taller for the kit than for other instruments.
 
 Through the microphone, `src/app.js`'s `listenDrums()` runs an onset detector
 plus `src/audio/drum-classify.js`'s band-energy classifier on every hit, and

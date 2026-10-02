@@ -132,12 +132,12 @@ test('a click on the drawn kit plays that piece', async (t) => {
   const onsets = await startKit(page, 1, 0);
   await page.waitFor('window.__coach.bar().kitBox');
   const box = await page.evaluate('window.__coach.bar().kitBox');
-  const { kitLayout } = await import('../../src/instruments/how/drum-kit.js');
+  const { kitLayout, spreadX } = await import('../../src/instruments/how/drum-kit.js');
   const kick = kitLayout().find(p => p.id === 'kick');
   for (const o of onsets) {
     await page.evaluate(`(function () {
       const cv = document.getElementById('cv'), r = cv.getBoundingClientRect();
-      const x = ${box.x + kick.x * box.s}, y = ${box.y + kick.y * box.s};
+      const x = ${box.x + spreadX(kick.x) * box.w}, y = ${box.y + kick.y * box.h};
       const offset = window.__coach.audioNow() - performance.now() / 1000;
       const ev = new PointerEvent('pointerdown', { bubbles: true, clientX: r.left + x * r.width / cv.width, clientY: r.top + y * r.height / cv.height });
       Object.defineProperty(ev, 'timeStamp', { value: (${o.t} - offset) * 1000 });
