@@ -60,7 +60,8 @@ const checkDone = (page) => page.waitFor("!/Checking the room/.test(document.get
 const manualDone = (page) => page.waitFor("!/Listening for/.test(document.getElementById('calibrateResult').textContent)", 12000);
 
 async function assertAutoAbstained(page, what) {
-  await checkDone(page);
+  // Wait for a minimum time AND the outcome: a build with no "Checking the room" message (base) would otherwise return at once and read the floor before the 1.5 s check has written anything.
+  await Promise.all([sleep(2600), checkDone(page)]);
   const floor = await floorOf(page);
   assert.equal(floor, null, `${what}: the room check stored a floor of ${floor} while someone was playing`);
   assert.deepEqual(await page.evaluate('window.__coach.gates()'), DEFAULT_GATES, `${what}: gates must stay at the defaults`);

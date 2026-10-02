@@ -71,15 +71,15 @@ test('automatic: pitched frames under the minimum floor do not count toward the 
   assert.deepEqual(classifyRoomCheck(loudPitched, { manual: false }), { abstain: 'sound' });
 });
 
-test('burst rule: peak three times the median or less stores, clearly more abstains (both checks)', () => {
+test('burst rule: a peak three times the would-be floor (trimmed median) or less stores, clearly more abstains (both checks)', () => {
   const base = rep(29, fr(0.004));
   for (const manual of [false, true]) {
-    assert.ok(Number.isFinite(classifyRoomCheck([...base, fr(0.010)], { manual }).floor), 'peak 2.5x median is still a steady room');
-    assert.deepEqual(classifyRoomCheck([...base, fr(0.014)], { manual }), { abstain: 'sound' }, 'peak 3.5x median is a hit');
+    assert.ok(Number.isFinite(classifyRoomCheck([...base, fr(0.010)], { manual }).floor), 'peak 2.5x the would-be floor is still a steady room');
+    assert.deepEqual(classifyRoomCheck([...base, fr(0.014)], { manual }), { abstain: 'sound' }, 'peak 3.5x the would-be floor is a hit');
   }
 });
 
-test('burst rule: the reference is the floor the window would store, not the median (a quiet pluck train decays to a low floor)', () => {
+test('burst rule: the reference is the floor the window would store, not the plain median (a quiet pluck train decays to a low floor)', () => {
   // 12 frames in the decay tails, 17 at mid level, one pluck: peak is 2.9x the median (so the median rule stores it) but 3.9x the floor
   // that would be stored (0.0012), so the gates built from it would sit under the pluck. That is playing, not the room.
   const decaying = (peak) => [...rep(12, fr(0.0008)), ...rep(17, fr(0.0016)), fr(peak)];

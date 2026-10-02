@@ -94,10 +94,11 @@ export const ROOM_CHECK_VERSION = 2;
 const PITCHED_SHARE = 0.25;
 // A peak this many times the floor the window would store means plucks, strums
 // or drum hits, not a steady room: the gates built from that floor would sit
-// under what was heard. The floor is the trimmed median of ALL frames (a window
-// of silence with one hit has floor 0, so it is bursty too). It is deliberately
-// not the plain median: a quiet pluck train decays to a low floor between hits
-// while its median sits close to its peak (measured 2.8x to 3.1x, on the line).
+// under what was heard. The floor the window would store comes from ALL frames
+// (a window of silence with one hit has floor 0, so it is bursty too). It is
+// the reference, not the window's middle value: a quiet pluck train decays to a
+// low floor between hits while its middle value sits close to its peak
+// (measured 2.8x to 3.1x, on the line), and only the floor is what the gates use.
 const BURST_RATIO = 3;
 
 // `frames` is one measurement window: [{ rms, pitched }] per analysis frame.
