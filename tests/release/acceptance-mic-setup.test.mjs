@@ -31,7 +31,7 @@
 //       as a todo until a src unit fixes it.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { withAcceptancePage } from '../helpers/browser.mjs';
+import { withAcceptancePage, effectiveWaitMs } from '../helpers/browser.mjs';
 import { quietRoom, learnerPlaying, writeFixture, RECORDER_SCRIPT } from '../fixtures/acceptance/mic-journey.mjs';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -60,12 +60,14 @@ const connect = (page) => page.clickSelector('#ioBtn');
 const recorder = (page) => page.evaluate('window.__a04');
 // Waits for the first recorder entry matching `pred` (source text over `e`),
 // and fails with the whole recording rather than a bare timeout.
+// The deadline honours the driver's wait floor (BAND_COACH_WAIT_FLOOR_MS), like page.waitFor.
 async function until(page, what, pred, ms = 10000) {
+  const limit = effectiveWaitMs(ms);
   const start = Date.now();
   for (;;) {
     const hit = await page.evaluate(`(window.__a04.find((e) => ${pred}) || null)`);
     if (hit) return hit;
-    if (Date.now() - start > ms) assert.fail(`${what}: never recorded in ${ms} ms. Recorder: ${JSON.stringify((await recorder(page)).filter((e) => e.kind !== 'dot'))}`);
+    if (Date.now() - start > limit) assert.fail(`${what}: never recorded in ${limit} ms. Recorder: ${JSON.stringify((await recorder(page)).filter((e) => e.kind !== 'dot'))}`);
     await sleep(50);
   }
 }
@@ -276,7 +278,7 @@ test('T6 microphone blocked after connecting, then allowed: Connect listens agai
   });
 });
 
-test('T7 microphone allowed again after a blocked check: the old "blocked" message does not stay', { todo: 'src defect: #calibrateResult keeps the blocked text after a reconnect (see q10b, probe P5)' }, async (t) => {
+test('T7 microphone allowed again after a blocked check: the old "blocked" message does not stay', { todo: 'src defect: #calibrateResult keeps the blocked text after a reconnect (see the P5 note at the top of this file: the observed text was \'The microphone was blocked, so it could not be checked.\')' }, async (t) => {
   await learner(t, 'quiet', async (page) => {
     await connectedThenBlocked(page);
     await page.clickSelector('#calibrateBtn');
