@@ -31,7 +31,7 @@ import { chroma, judgeChord } from './audio/chords.js';
 //
 import { makeGrid, scoreTake, tempoLadder } from './core/groove.js';
 import { stepTuner } from './core/tuner.js';
-//
+import { wrongNoteHint } from './core/wrong-note.js';
 import { shouldReveal, promptFor, hintFor as coreHintFor } from './core/reveal.js';
 import { gradeOutcome } from './core/grade-outcome.js';
 import { makeEvent, validateEvent, boundEvents } from './core/learning-events.js';
@@ -1180,7 +1180,6 @@ import { register as registerPathway } from './ui/pathway.js';
     task.els.forEach(e => { credit(e.id, e.q || 0, from, task.warm, e.rt, gradeOutcome({ helped: !!e.helped, failed: !!e.failed, assistance: e.assistance || null, q: e.q || 0 })); logEvent(makeEvent({ instrument: mod, skill: e.id, source: task.warm ? 'warmup' : 'drill', assistance: e.helped ? 'shown' : (e.assistance || 'none'), dims: { pitch: e.q > 0 ? 'ok' : 'miss' }, unassessed: [], activeMs: Math.round((e.rt || 0) * 1000), bpmTarget: null, bpmActual: null, hands: e.info.kind === 'hands-together' ? handsModeFromId(e.id) : undefined, input: e.input }, { now: modelNow })); from = e.id; if (!(e.q > 0)) anyFail = true; });
     lastItem = from; nextTaskAt = now() + (anyFail ? 1.5 : 0.7); if (task.kind === 'ear') nextTaskAt = now() + (anyFail ? 2.6 : 1.1); save(); showAll();
   };
-  function dirWord(got, want) { let d = ((pc(want) - pc(got)) + 12) % 12; if (d > 6) d -= 12; return d > 0 ? 'higher' : 'lower'; }
   // a played note (MIDI key, screen key, or a plucked note the microphone
   // recognised); `source` is 'midi' for a real MIDI note-on, 'computer-key'
   // for the physical-keyboard keydown branch, 'screen' for a canvas tap or
@@ -1222,9 +1221,7 @@ import { register as registerPathway } from './ui/pathway.js';
     const policy = i.anywhere ? 'fold' : (OCTAVE_POLICY[mod] || 'fold');
     const judged = judgePitch({ heardMidi: midi, targetMidi: i.midi, policy });
     if (judged.ok) { passEl(undefined, undefined, undefined, source); return; }
-    let where = ''; if (policy === 'exact') { const st = midi - i.midi; where = Math.abs(st) === 12 ? 'Right note, wrong octave: go one octave ' + (st > 0 ? 'down' : 'up') + '.' : 'Go ' + Math.abs(st) + ' key' + (Math.abs(st) > 1 ? 's' : '') + ' to the ' + (st > 0 ? 'left' : 'right') + '.'; }
-    else if (i.string) { let df = ((pc(i.midi) - pc(midi)) + 12) % 12; if (df > 6) df -= 12; where = 'Go ' + Math.abs(df) + ' fret' + (Math.abs(df) > 1 ? 's' : '') + ' ' + (df > 0 ? 'higher' : 'lower') + '.'; }
-    else where = 'Go ' + dirWord(midi, i.midi) + '.';
+    const where = wrongNoteHint({ heardMidi: midi, targetMidi: i.midi, policy, fretted: !!i.string && !MODS[mod].fretless });
     failEl('That was ' + nname(midi) + ', the note is ' + nname(i.midi) + '. ' + where, e.id + '>' + nname(midi));
   }
   // onNote's hands-together branch, moved out as-is (same statements, same order).

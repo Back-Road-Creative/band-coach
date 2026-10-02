@@ -216,6 +216,9 @@ Six kinds of tests live under `tests/`:
   version, the launch flags and what is simulated. A failing test writes a screenshot, the console
   and log entries, the requests and that identity to `dist/test-artifacts/<test file>/<test name>/`.
   It drives `dist/release/band-coach.html`, or the file in `BAND_COACH_HTML`.
+  `tests/release/acceptance-live-capture.test.mjs` plays looped plucked-string WAVs (a pass quiet and loud, a wrong
+  note on a guitar and on mallet bars, a repeat, silence, room noise, a clipped note, a chord) through the fake
+  microphone and reads #feedback and #coach as a learner would; about 105 s on a busy box, 11 launches.
 - `tests/build/pages.test.mjs` and `tests/build/pages-offline.test.mjs` check the "phone copy"
   PWA build (below): the file set, the manifest, the generated icons, the service worker's
   precache list, that it never changes the one-file release build, and — in headless Chromium
