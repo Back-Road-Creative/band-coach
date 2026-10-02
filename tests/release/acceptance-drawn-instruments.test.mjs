@@ -84,6 +84,8 @@ const COMPUTER_KEYS = { a: 60, w: 61, s: 62, e: 63, d: 64, f: 65, t: 66, g: 67, 
 const LEVEL1_TARGET = { C: 60, D: 62, E: 64 };
 // Drawn kit shapes (drawKit fills). The letter on each piece is read from the canvas, not listed:
 // test 9 presses whatever letter is drawn there, so a letter the app changes is not the helper's fault.
+// The key letter drawn on each piece (the spec's own literals, from src/instruments/drum-kit.js:33-42@708aef7: the help text there names them).
+const KIT_LETTERS = { kick: 'F', snare: 'J', 'hihat-closed': 'D', 'hihat-pedal': 'C', 'hihat-open': 'E', 'tom-floor': 'K', 'tom-mid': 'I', 'tom-high': 'U', crash: 'R', ride: 'O' };
 const KIT_SHAPE = { kick: 'drum', snare: 'drum', 'hihat-closed': 'cymbal', 'hihat-pedal': 'drum', 'hihat-open': 'cymbal', 'tom-floor': 'drum', 'tom-mid': 'drum', 'tom-high': 'drum', crash: 'cymbal', ride: 'cymbal' };
 const HEX = { white: '#e9edf6', black: '#10131c', pressed: '#9fb4d8', good: '#5be08a', flash: '#f3c52f', cymbal: '#2a3140', drum: '#1b2130' };
 const rgb = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
@@ -257,15 +259,23 @@ async function keyboardInput(page, ctx, { act, expect, what }) {
   const passed = expect === target;
   const seen = res.seen[expect] || {};
   const evidence = passed ? seen.good !== undefined : seen.pressed !== undefined;
-  if (!evidence || lit.some((k) => k !== expect)) throw new Error(keyboardFailure(where, expect, passed, res));
+  // The task is done when the target was played; the next question comes 0.7 s later (1.5 s after a
+  // wrong note). Input in between is lit but not judged, so wait for the new question (a new <b> in
+  // the prompt) BEFORE judging or throwing: a failure then belongs to this input only, never to the
+  // later ones that start on a question already over. On a failed light check the question may not
+  // have ended at all, so that wait is shorter and its timeout is ignored.
+  const nextQuestion = (ms) => page.waitFor("document.querySelector('#prompt b') !== null && document.querySelector('#prompt b') !== window.__q3cAsked", ms);
+  if (!evidence || lit.some((k) => k !== expect)) {
+    if (passed) await nextQuestion(3000).catch(() => {});
+    throw new Error(keyboardFailure(where, expect, passed, res));
+  }
   if (passed) {
-    // The task is done; the next question comes 0.7 s later (1.5 s after a wrong note). Input in
-    // between is lit but not judged, so wait for the new question (a new <b> in the prompt) BEFORE
-    // judging the text: a wrong line then fails this input only, never the later ones that start on a
-    // question already over.
-    await page.waitFor("document.querySelector('#prompt b') !== null && document.querySelector('#prompt b') !== window.__q3cAsked", 6000);
-    assert.match(text, passText(target, afterMiss), `${where}: the feedback for the right note${afterMiss ? ' after a miss' : ' first time'}`);
-  } else assert.equal(text, missText(expect, target), `${where}: the feedback for a wrong note`);
+    await nextQuestion(6000);
+    assert.match(text, passText(target, afterMiss), `${where}: the feedback for the right note${afterMiss ? ' after a miss' : ' first time'}: got "${text}", wanted ${afterMiss ? `"That is the one. ${nm(target)}."` : `"${nm(target)}: yes, in <seconds> s."`}`);
+  } else {
+    const wanted = missText(expect, target);
+    assert.equal(text, wanted, `${where}: the feedback for a wrong note: got "${text}", wanted "${wanted}"`);
+  }
 }
 
 const keyAt = (rects, midi) => rects.keys.find((k) => k.midi === midi);
@@ -316,8 +326,9 @@ async function checkKitGeometry(page, ctx, vp) {
   const all = kitRects(m);
   const texts = await page.evaluate('window.__q3c.texts()');
   for (const p of all) {
-    const drawn = texts.find((t) => /^[A-Z]$/.test(t.text) && near1(t.x, p.cx) && t.y >= p.cy - p.r && t.y <= p.cy + p.r);
-    if (!drawn) disagree(`${p.id}: no key letter was drawn within 1 px of x ${p.cx.toFixed(1)} and inside y ${(p.cy - p.r).toFixed(1)}-${(p.cy + p.r).toFixed(1)}`);
+    const letter = KIT_LETTERS[p.id];
+    const drawn = texts.find((t) => t.text === letter && near1(t.x, p.cx) && t.y >= p.cy - p.r && t.y <= p.cy + p.r);
+    if (!drawn) disagree(`${p.id}: its key letter "${letter}" was not drawn within 1 px of x ${p.cx.toFixed(1)} and inside y ${(p.cy - p.r).toFixed(1)}-${(p.cy + p.r).toFixed(1)}${texts.some((t) => /^[A-Z]$/.test(t.text) && near1(t.x, p.cx) && t.y >= p.cy - p.r && t.y <= p.cy + p.r) ? ` (a different letter is drawn there)` : ''}`);
   }
   const pts = all.flatMap((p) => kitSamplePoints(p).map((s) => ({ ...s, p })));
   const got = await page.evaluate(`window.__q3c.px(${JSON.stringify(pts.map(({ x, y }) => ({ x, y })))})`);
