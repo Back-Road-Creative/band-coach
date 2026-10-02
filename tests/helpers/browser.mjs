@@ -893,6 +893,18 @@ async function launchPageOnce(htmlPath, options = {}) {
     foreground,
     visibilityLog,
     audio,
+    // Raw DevTools access for a test that needs a domain this driver does not
+    // wrap: dialogs, downloads, network conditions, emulated media. send() goes
+    // to this page's session and browserSend() to the browser; on(fn) sees this
+    // page's events until the function it returns is called.
+    cdp: {
+      send,
+      browserSend: (method, params) => browser.send(method, params),
+      on(fn) {
+        page.listeners.add(fn);
+        return () => page.listeners.delete(fn);
+      },
+    },
     screenshot,
     close,
     consoleErrors,

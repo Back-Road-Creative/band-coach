@@ -210,6 +210,28 @@ test('permissions: resetPermissions puts a denied permission back to asking', as
   assert.notEqual(fresh, 'denied', 'and a fresh profile does not start denied');
 });
 
+test('cdp: a test answers a confirm() dialog through the raw protocol, and a removed listener hears nothing more', async (t) => {
+  const page = await launchPage(DRIVER, { acceptance: true });
+  t.after(() => page.close());
+  const answer = (accept, seen) => (msg) => {
+    if (msg.method !== 'Page.javascriptDialogOpening') return;
+    seen.push(msg.params.message);
+    page.cdp.send('Page.handleJavaScriptDialog', { accept }).catch((e) => seen.push('error: ' + e.message));
+  };
+  const first = [];
+  const off = page.cdp.on(answer(true, first));
+  assert.equal(await page.evaluate("confirm('Replace your progress?')"), true, 'accepted from outside the page');
+  off();
+  const second = [];
+  const off2 = page.cdp.on(answer(false, second));
+  assert.equal(await page.evaluate("confirm('Again?')"), false, 'only the listener still attached answered');
+  off2();
+  assert.deepEqual(first, ['Replace your progress?'], 'the removed listener did not see the second dialog');
+  assert.deepEqual(second, ['Again?']);
+  const { product } = await page.cdp.browserSend('Browser.getVersion');
+  assert.match(product, /Chrome/, 'browserSend reaches the browser, not the page');
+});
+
 test('background and return: the page sees real visibilitychange events, hidden then visible', async (t) => {
   const page = await launchPage(DRIVER, { acceptance: true });
   t.after(() => page.close());
