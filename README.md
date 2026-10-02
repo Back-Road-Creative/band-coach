@@ -1058,20 +1058,18 @@ transposing the whole harmonica preserves the blow/draw gap inside every hole.
 
 ## On-screen keyboard
 
-Once the keyboard mod unlocks the octave below middle C ("The octave below", level 8, and every
-level after — including "Hands together", level 13) or a captured melody dips below it, the
-on-screen piano stops drawing one 15-white-key strip and draws two: a labelled left-hand row (the
-octave below middle C, e.g. "Left hand · C3–B3") stacked above a labelled right-hand row (middle C
-up, e.g. "Right hand · C4–C5"). Each row is capped at 8 white keys, which is what actually fixes
+The on-screen piano always draws two octaves from level 1, so a beginner sees both hands' zones
+from the start: a labelled left-hand row (the octave below middle C, "Left hand · C3–B3") stacked
+above a labelled right-hand row (middle C up, "Right hand · C4 · middle C – C5"). This is drawing
+and orientation only: which notes are judged, the levels ("The octave below" is still level 8,
+"Hands together" still levels 13-17) and the hand gates are unchanged, so early levels simply
+highlight notes in the right-hand row. Each row is capped at 8 white keys, which is what actually fixes
 the problem: 15 white keys across a phone-width canvas measured at ~21px per key, under the 24px
 WCAG 2.5.8 (2.2 AA) tap-target floor and well under the 40px the keyboard rows aim for. Capping
 each row at 8 white keys, drawn across 96% of the canvas width, keeps every keyboard white key at
 40px or more on the 340px phone canvas and on any canvas at least ~334px wide (40×8/0.96), and at
 24px or more on any canvas at least ~200px wide (24×8/0.96), by layout rather than by a separate
-size check bolted on afterwards. This applies to the keyboard (kbd) rows only; the mallet-percussion
-keyboard still draws its 15 white keys in one row. The layout depends only on
-which octaves are unlocked, never on the current task or its target note, so neither row ever moves
-mid-phrase.
+size check bolted on afterwards.
 
 During a "hands together" task, the right-hand and left-hand target notes are marked with a
 letter ("R"/"L") drawn on the key itself, not only the usual accent colour — colour alone cannot
