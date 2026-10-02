@@ -124,3 +124,66 @@ export async function midiReject(page) {
 export async function midiMakeUnavailable(page) {
   await page.evaluate('window.__midiMakeUnavailable()');
 }
+
+// Opt-in: FAKE_MIDI_INIT plus permission that comes from the BROWSER.
+//
+// The base stub above replaces requestMIDIAccess wholesale, so Browser.setPermission
+// / page.grant / page.deny never reach it and its __midiReject() rejects with a plain
+// Error (name "Error"), which the app reads as "could not reach MIDI", never as a
+// denial. This addendum asks the browser instead. Probe verdict (Mode B), observed on
+// Chrome/153.0.8010.12 (full Chrome, file:// page, fresh profile; probe-midi*.log):
+//   page.deny(['midi'])          -> navigator.permissions.query = "denied"; the real
+//                                   requestMIDIAccess() rejects DOMException NotAllowedError
+//   page.grant(['midi'])         -> query = "granted"; the real call STILL rejects
+//                                   NotAllowedError (and with sysex granted it reaches
+//                                   InvalidStateError "Platform dependent initialization
+//                                   failed": no MIDI backend), so the real call cannot resolve here
+//   neither                      -> query = "prompt"; the real call rejects NotAllowedError
+// So the real call cannot supply "granted". The stub therefore asks
+// navigator.permissions.query({ name: 'midi' }) at call time and reads the browser's own
+// answer: "denied" rejects with the same DOMException the browser gives, "granted"
+// returns what the base stub returns (the fake ports), "prompt" rejects with a
+// distinctive Error because a test must grant or deny first. No flag in the stub
+// stands in for permission.
+//
+// Extra page-side handles:
+//   window.__midiAsks                       -- how many times the app asked for MIDI access
+//   window.__midiRejectWith(name, message)  -- the NEXT granted ask rejects with a DOMException
+//                                              of that name (a platform failure, not permission)
+//   window.__midiSetPortState(id, state)    -- flip a port's state but keep it listed; fires onstatechange
+export const FAKE_MIDI_BROWSER_PERMISSION_INIT = FAKE_MIDI_INIT + `
+  (function () {
+    const baseStub = navigator.requestMIDIAccess;
+    window.__midiAsks = 0;
+    window.__midiRejectWithNext = null;
+    window.__midiRejectWith = function (name, message) { window.__midiRejectWithNext = { name: name, message: message }; };
+    window.__midiSetPortState = function (id, state) {
+      const input = window.__midiPorts.get(id);
+      if (!input) return;
+      input.state = state;
+      window.__midiAccessListeners.forEach(function (fn) { fn({ port: input }); });
+    };
+    Object.defineProperty(navigator, 'requestMIDIAccess', {
+      configurable: true,
+      value: function () {
+        window.__midiAsks += 1;
+        const self = this;
+        return navigator.permissions.query({ name: 'midi' }).then(function (p) {
+          if (p.state === 'denied') throw new DOMException('Permission to use Web MIDI API was not granted.', 'NotAllowedError');
+          if (p.state !== 'granted') throw new Error('fake-midi: the browser permission for MIDI is still "' + p.state + '"; the test must page.grant or page.deny it first');
+          const injected = window.__midiRejectWithNext;
+          if (injected) { window.__midiRejectWithNext = null; throw new DOMException(injected.message, injected.name); }
+          return baseStub.call(self);
+        });
+      },
+    });
+  })();
+`;
+
+export async function midiRejectWith(page, name, message) {
+  await page.evaluate(`window.__midiRejectWith(${JSON.stringify(name)}, ${JSON.stringify(message)})`);
+}
+
+export async function midiSetPortState(page, id, state) {
+  await page.evaluate(`window.__midiSetPortState(${JSON.stringify(id)}, ${JSON.stringify(state)})`);
+}
