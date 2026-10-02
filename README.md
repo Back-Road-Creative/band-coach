@@ -89,8 +89,14 @@ away from the tab, letting the window lose focus, or unplugging mid-note release
 Proof that a keyboard works is earned per device, not kept once earned: swap a proven keyboard for
 one that has never sent a note and the status line goes back to "found", not "is working", until
 that device actually says something. In three fallback states — this browser has no Web MIDI API,
-MIDI was blocked, or MIDI works but nothing is plugged in — the status line also says screen keys
-and computer keys still work as practice, not as proof a real keyboard works. A song practice
+MIDI was refused or could not start, or MIDI works but nothing is plugged in — the status line also
+says screen keys and computer keys still work as practice, not as proof a real keyboard works.
+Chrome 124 and later shows a small "Use your MIDI devices" box under the address bar every time the
+app asks. Answering Block, or closing the box, shows "Chrome asked to use your MIDI devices and the
+answer was no" and turns the button into "Try MIDI again", which asks again. If Chrome stops
+asking, click the icon left of the address bar (site settings) and set MIDI devices to Allow. A
+browser with no MIDI support on this computer says it "could not reach MIDI"; "No MIDI device is
+plugged in" is a separate message meaning MIDI works but no keyboard is connected. A song practice
 attempt's learning
 record carries which route actually played it: "midi" only when every judged note was a real MIDI
 note-on, "computer-key" or "mic" when every judged note came from that one route instead, "mixed"
@@ -1470,7 +1476,7 @@ release.
 - **Firefox (desktop):** untested here. Firefox has supported Web MIDI since version 108
   (December 2022), but unlike Chrome it does not use an inline permission dialog: the first
   `requestMIDIAccess()` call asks you to install a generated Site Permission Add-On. If you decline
-  it, the app shows "MIDI was blocked here." (`src/app.js:1304`). Nobody has confirmed that flow, or
+  it, the app shows a MIDI-refused message (which one depends on the error Firefox returns; unverified; see `connectMidi()` in `src/app.js`). Nobody has confirmed that flow, or
   the microphone path, end-to-end in Firefox.
 - **Safari (desktop and iOS):** untested, and Web MIDI is not available — the app detects the
   missing API and says so, falling back to on-screen keys, computer-keyboard keys and the

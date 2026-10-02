@@ -2462,12 +2462,18 @@ import { register as registerPathway } from './ui/pathway.js';
           // A kit whose e-kit IS found never reaches here, so this can never
           // fight real MIDI note-ons for the same tap.
           if (!inputs.length && MODS[mod] && MODS[mod].input === 'mic+midi' && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) openMic().then(ioRefresh).catch(() => ioState('off', 'No MIDI device found, and the microphone was blocked. Allow it, or plug in a kit.'));
-          else if (!inputs.length) ioState('off', 'No MIDI device found. Plug it in and it will be picked up. Screen and computer keys still work as practice, not proof a real keyboard works.');
+          else if (!inputs.length) ioState('off', 'No MIDI device is plugged in. Plug it in and it will be picked up. Screen and computer keys still work as practice, not proof a real keyboard works.');
           else if (!midiOn) ioState('off', 'Another program may be using this keyboard. Close it and press Connect again.');
         });
       };
       wire(); a.onstatechange = wire;
-    }).catch(() => ioState('off', 'MIDI was blocked here. Open the standalone copy in Chrome. Screen and computer keys still work as practice, not proof a real keyboard works.'));
+    }).catch(e => {
+      // Chrome 124+ asks on every requestMIDIAccess(): a dismissed/blocked prompt is NotAllowedError, so say that and keep Connect there to ask again. SecurityError is the embedded/iframe case, the only one the standalone copy fixes. Anything else (InvalidStateError: no MIDI backend) is not a permission problem.
+      const n = e && e.name, tail = ' Screen and computer keys still work as practice, not proof a real keyboard works.';
+      if (n === 'NotAllowedError') { const b = $('ioBtn'); b.hidden = false; b.disabled = false; b.textContent = 'Try MIDI again'; ioState('off', 'Chrome asked to use your MIDI devices and the answer was no (or the box was closed). Click Try MIDI again to ask again; if Chrome no longer asks, click the icon left of the address bar and allow MIDI.' + tail); }
+      else if (n === 'SecurityError') ioState('off', 'MIDI was blocked here. Open the standalone copy in Chrome.' + tail);
+      else ioState('off', 'This browser could not reach MIDI on this computer.' + tail);
+    });
   }
   $('ioBtn').addEventListener('click', () => {
     ensureAudio();
