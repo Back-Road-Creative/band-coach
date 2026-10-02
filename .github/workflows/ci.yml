@@ -7,10 +7,16 @@ name: ci
 # concurrency group below could not collapse them -- the two runs simply raced
 # for the same shared box and lost to the then 10-minute job timeout.
 #
-# The job timeout is a budget over the MEASURED suite, not a target: `npm test`
-# took 8m21s-9m36s on ubuntu-latest for passing runs on 2026-09-28, and three
-# PR runs launched together were cancelled at 10m06s with nothing failing.
-# tests/unit/ci-workflow-no-duplicate-run.test.mjs pins the headroom.
+# The job timeout is a budget over the MEASURED suite, not a target: ten
+# passing runs on 2026-10-02 took 12.9-15.0 min on ubuntu-latest (14.7, 15.0,
+# 14.3, 14.8, 14.9, 14.8, 14.9, 14.7, 12.9, 14.8), and the acceptance lane runs inside both
+# gate runs, so the budget is 30 min. Earlier, three PR runs launched together
+# were cancelled at 10m06s with nothing failing.
+# tests/unit/ci-workflow-no-duplicate-run.test.mjs and ci-workflow-artifacts-weekly.test.mjs
+# pin the headroom. A failed or cancelled run uploads dist/test-artifacts/ so its
+# screenshots and logs survive. The weekly run on a fresh browser is a separate
+# file (weekly-current-browser.yml): bin/autoland.py counts every ci.yml run on a
+# commit whatever its event, so a scheduled run here would feed the merge barrier.
 on:
   push:
     branches: [main]
@@ -26,7 +32,7 @@ concurrency:
 jobs:
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -34,6 +40,8 @@ jobs:
           node-version: 22
       - name: locate Chrome
         run: echo "CHROME_BIN=$(which google-chrome)" >> "$GITHUB_ENV"
+      - name: record Chrome version
+        run: '"$CHROME_BIN" --version >> "$GITHUB_STEP_SUMMARY"'
       - run: npm ci
       # Cheap and decisive first (about 5 s): a size-budget failure must not wait
       # behind the browser suite. `npm test` re-runs it as posttest.
@@ -43,3 +51,11 @@ jobs:
       - run: npm test
         env:
           CI: true
+      - name: keep failure evidence
+        if: failure() || cancelled()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-artifacts-${{ github.run_id }}-${{ github.run_attempt }}
+          path: dist/test-artifacts/
+          if-no-files-found: ignore
+          retention-days: 7

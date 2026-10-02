@@ -1,0 +1,51 @@
+name: weekly-current-browser
+
+# The same steps as ci.yml's test job, run once a week on whatever Chrome
+# ubuntu-latest ships by then, so a browser update that breaks the app shows up
+# without waiting for the next PR. Deliberately a separate file: bin/autoland.py
+# counts every ci.yml run on a commit whatever its event, so a `schedule` trigger
+# inside ci.yml would feed the merge barrier.
+# tests/unit/ci-workflow-artifacts-weekly.test.mjs pins that the steps below stay
+# identical to ci.yml's.
+on:
+  schedule:
+    - cron: '17 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: weekly-current-browser
+  cancel-in-progress: false
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: locate Chrome
+        run: echo "CHROME_BIN=$(which google-chrome)" >> "$GITHUB_ENV"
+      - name: record Chrome version
+        run: '"$CHROME_BIN" --version >> "$GITHUB_STEP_SUMMARY"'
+      - run: npm ci
+      # Cheap and decisive first (about 5 s): a size-budget failure must not wait
+      # behind the browser suite. `npm test` re-runs it as posttest.
+      - run: npm run gate
+        env:
+          CI: true
+      - run: npm test
+        env:
+          CI: true
+      - name: keep failure evidence
+        if: failure() || cancelled()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-artifacts-${{ github.run_id }}-${{ github.run_attempt }}
+          path: dist/test-artifacts/
+          if-no-files-found: ignore
+          retention-days: 7
