@@ -1872,15 +1872,18 @@ import { register as registerPathway } from './ui/pathway.js';
   // rests, ties, triplet brackets, dots and the time signature, for the rhythm-vocabulary bars
   // The bar on a percussion staff (top), the kit from above (bottom): the bar's drums outlined, filled
   // while the count-in runs, the piece just hit flashing; after judging, a mark under each note.
+  // what each drawn piece is called on the kit (a beginner reads the name; the key letter is only a hint)
+  const KIT_DRAW_NAMES = { kick: ['Kick'], snare: ['Snare'], 'hihat-closed': ['Hi-hat', 'closed'], 'hihat-pedal': ['Hi-hat', 'pedal'], 'hihat-open': ['Hi-hat', 'open'], 'tom-floor': ['Floor tom'], 'tom-mid': ['Mid tom'], 'tom-high': ['High tom'], crash: ['Crash'], ride: ['Ride'] };
   function drawKit(W, H) {
-    const on = bar && task && task.kind === 'kit' && bar.staff, t = now(), pre = on && t < bar.playAt, want = {}, s = Math.min(H * 0.5, W * 0.5), box = { x: (W - s) / 2, y: H * 0.48, s: s };
+    const on = bar && task && task.kind === 'kit' && bar.staff, t = now(), pre = on && t < bar.playAt, want = {}, s = on ? Math.min(H * 0.6, W * 0.9) : Math.min(H * 0.92, W * 0.9), box = { x: (W - s) / 2, y: on ? H * 0.4 : (H - s) / 2, s: s };
     kitBox = box; if (on) { bar.kitBox = box; bar.onsets.forEach(o => o.pieces.forEach(p => { want[p] = 1; }));
       const sc = Math.min(W * 0.9 / 400, H * 0.42 / 130), x0 = (W - 400 * sc) / 2, y0 = H * 0.02;
       g.save(); g.translate(x0, y0); g.scale(sc, sc); g.strokeStyle = '#c9ced9'; g.fillStyle = '#e9edf6'; g.lineWidth = 1.5 / sc; drawPrimitives(g, bar.staff, {}); g.restore();
       bar.onsets.forEach((o, i) => { const x = x0 + (bar.noteX[i] || 0) * sc; if (o.flam) { g.fillStyle = '#93a0bd'; font(11 * sc, 700); g.textAlign = 'center'; g.fillText('flam', x, y0 + 10 * sc); } if (!bar.judged || !o.res) return; const bad = o.res.some(r => r.dt === undefined), off = Math.max(...o.res.map(r => Math.abs(r.dt || 0))); g.fillStyle = bad ? '#ff6b5e' : off > 0.05 ? '#f3c52f' : '#5be08a'; g.beginPath(); g.arc(x, y0 + 122 * sc, 5 * sc, 0, 7); g.fill(); }); }
     kitLayout().forEach(p => { const x = box.x + p.x * s, y = box.y + p.y * s, flash = kitFlash.piece === p.id && performance.now() - kitFlash.at < 160, lit = flash || (pre && want[p.id]);
       g.beginPath(); g.arc(x, y, p.r * s, 0, 7); g.fillStyle = flash ? '#f3c52f' : lit ? '#f08a4b' : p.shape === 'cymbal' ? '#2a3140' : '#1b2130'; g.fill(); g.strokeStyle = want[p.id] ? '#f08a4b' : '#93a0bd'; g.lineWidth = want[p.id] ? 3 : 1.5; g.stroke();
-      g.fillStyle = lit ? '#05070c' : '#e9edf6'; font(Math.max(11, s * 0.05), 700); g.textAlign = 'center'; g.fillText(KIT.find(k => k.id === p.id).key.toUpperCase(), x, y + s * 0.018); });
+      g.fillStyle = lit ? '#05070c' : '#e9edf6'; const nm = KIT_DRAW_NAMES[p.id], fs = Math.max(13, s * 0.042); font(fs, 700); g.textAlign = 'center'; g.fillText(nm[0], x, y - (nm[1] ? fs * 0.1 : -fs * 0.15)); if (nm[1]) { font(Math.max(11, fs * 0.8), 400); g.fillText(nm[1], x, y + fs * 0.95); }
+      font(Math.max(11, s * 0.032), 700); g.fillStyle = lit ? '#05070c' : '#f3c52f'; g.fillText(KIT.find(k => k.id === p.id).key.toUpperCase(), x, y + p.r * s - Math.max(4, s * 0.012)); });
   }
   function drawBar2(W, H) {
     if (!bar || !task) return; const x0 = W * 0.1, x1 = W * 0.94, y = H * 0.48, t = now(), stem = H * 0.26, nh = H * 0.045;
@@ -2568,7 +2571,7 @@ import { register as registerPathway } from './ui/pathway.js';
     if (pitchWorkletNode && MODS[m] && MODS[m].fmin && MODS[m].fmax) { lastWorkletRangeSent = { fmin: MODS[m].fmin, fmax: MODS[m].fmax }; pitchWorkletNode.port.postMessage({ type: 'range', fmin: MODS[m].fmin, fmax: MODS[m].fmax }); }
     if (pitchWorkletNode && actx) { const neededFrameSize = frameSizeForInstrument(instrumentById[m], actx.sampleRate); if (neededFrameSize !== lastWorkletFrameSize) { lastWorkletFrameSize = neededFrameSize; pitchWorkletNode.port.postMessage({ type: 'frameSize', frameSize: neededFrameSize }); } }
     document.querySelectorAll('#picker button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.mod === m)));
-    updateNavInstrumentLabel();
+    updateNavInstrumentLabel(); cv.classList.toggle('kit', !!(MODS[m] && MODS[m].kit));
     // U2: a returning learner whose saved mod is a variant (e.g.
     // 'ukulele-low-g') lands with that variant's family disclosure already
     // open and the variant itself pressed, mirroring the toolsGroup line
@@ -3032,6 +3035,7 @@ import { register as registerPathway } from './ui/pathway.js';
   if (__DEBUG_HOOK__) Object.assign(hook, { kbdOverview: () => kbdOverviewRect ? JSON.parse(JSON.stringify(kbdOverviewRect)) : null });
   if (__DEBUG_HOOK__) Object.assign(hook, { audioHeardTicks: () => audioHeardTicks });
   if (__DEBUG_HOOK__) Object.assign(hook, { rangeHeld: () => rangeTest && rangeTest.curMidi !== null ? { stage: rangeTest.stage, midi: rangeTest.curMidi, ms: performance.now() - rangeTest.curSince } : null });
+  if (__DEBUG_HOOK__) Object.assign(hook, { kitBox: () => kitBox });
   if (__DEBUG_HOOK__) Object.assign(hook, { micHits: () => drumMicHits.slice() });
   if (__DEBUG_HOOK__) window.__coach = hook;
 
