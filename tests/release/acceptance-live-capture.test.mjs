@@ -10,6 +10,9 @@
 // and a chord each get their own plain sentence. Known and not asserted: after a correct pass the
 // still-ringing string is judged against the NEXT item once that item starts (src/app.js sets
 // `released = true` when a task starts), so a stray "That was E, the note is A" can follow a pass.
+// That is a product defect, fixed by unit Q10d; the literal claims it breaks (T1 and T7: no "That
+// was" record in the window; T4: one pass and nothing else) are the test.todo entries below, which
+// Q10d turns into tests.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { withAcceptancePage, effectiveWaitMs } from '../helpers/browser.mjs';
@@ -20,6 +23,10 @@ import { name } from '../../src/core/note-names.js';
 // octave, so the test pins the item (id s6f0 and n60) and fails loudly if the curriculum moves.
 const GTR = { mod: 'gtr', midi: 40, letter: 'E', short: 'E (string 6)' }; // open low E string
 const MALLET = { mod: 'mallet-percussion', midi: 60, letter: 'C' };
+// What the app says when the item times out unplayed (src/app.js, failEl 'Time. ' + the string and
+// fret + 'It is shown now: play it to move on.'). It is not a judgment, and it is the only #feedback
+// text a silent or noisy room may produce, for the hard-coded item above (string 6, open).
+const TIMEOUT = 'Time. It is on string 6, open. It is shown now: play it to move on.';
 const AT = 3.5; // seconds into the loop that the event starts
 const SIMULATED = ['fake microphone playing a looped synthetic plucked-string WAV', 'text recorder on #feedback and #coach (observes only)'];
 
@@ -64,6 +71,12 @@ const isPass = (r) => isFeedback(r) && r.cls === 'ok';
 const isCorrection = (r) => isFeedback(r) && /^That was /.test(r.text);
 const waitUntilPageTime = async (page, t) => { while ((await nowMs(page)) < t) await sleep(50); };
 
+// Nothing was judged: no pass, no "That was", and every #feedback record is the item-timeout sentence.
+function assertOnlyTimeout(all, where) {
+  assert.deepEqual(all.filter((r) => isPass(r) || isCorrection(r)), [], `${where} was passed or corrected`);
+  assert.deepEqual(all.filter((r) => isFeedback(r) && r.text !== TIMEOUT), [], `${where}: #feedback said something other than the item timeout`);
+}
+
 const run = (t, wavName, plucks, wavOpts, item, fn) =>
   withAcceptancePage(t, { fakeAudioFile: writeLoopWav(wavName, plucks, wavOpts), initScript: FEEDBACK_RECORDER, simulated: SIMULATED }, async (page) => {
     await fn(page, await connectAndStart(page, item));
@@ -83,6 +96,11 @@ for (const [label, gain] of [['quiet', 0.12], ['loud', 1.0]]) {
     });
   });
 }
+
+// Known defect, not yet asserted (fixed by Q10d): src/app.js:1061@708aef7, present() sets released = true
+// at every task start, so after a correct pass the still-ringing note is judged against the next item
+// and a "That was <X>, the note is <Y>." record follows the pass about 1 to 3 s later.
+test.todo('T1 (literal) no "That was" record in the window after a correct pluck: red until Q10d fixes the after-pass re-fire (src/app.js:1061@708aef7, present() sets released = true at task start)');
 
 // T2: the wrong note on a guitar names both notes and counts FRETS, by the real distance and
 // pointing the way the target is (heard above the target means a lower fret).
@@ -112,6 +130,11 @@ test('T3 the same wrong note plucked three times in one loop is corrected each t
   });
 });
 
+// T4 (decaying note, decay 0.999: one pass, no "That was" record in the window; protecting mutation
+// src/audio/onset.js thresholdMult = 2.2 -> 0 and minFlux = 0.02 -> 0) is red at this unit's base for the
+// same defect, so it waits for Q10d.
+test.todo('T4 a decaying correct note is passed once and never corrected: red until Q10d fixes the after-pass re-fire (src/app.js:1061@708aef7, present() sets released = true at task start)');
+
 // T5: an empty room. One plain sentence, said once in two loops, and nothing judged.
 test('T5 a silent microphone is reported once, in plain words, and nothing is judged', async (t) => {
   await run(t, 't5', [], {}, GTR, async (page, started) => {
@@ -119,8 +142,7 @@ test('T5 a silent microphone is reported once, in plain words, and nothing is ju
     await waitUntilPageTime(page, started + 2 * LOOP_SECONDS * 1000 - 500);
     const all = await lines(page);
     assert.equal(all.filter((r) => r.el === 'coach' && r.text === MSG.silent).length, 1, 'said once over two loops');
-    const judged = all.filter((r) => isFeedback(r) && !/^Time\. /.test(r.text));
-    assert.deepEqual(judged, [], 'nothing was passed or corrected in a silent room');
+    assertOnlyTimeout(all, 'a silent room');
   });
 });
 
@@ -129,8 +151,7 @@ test('T6 room noise with no note is called too quiet to judge, and nothing is ju
   await run(t, 't6', [], { noiseFloorRms: 0.05 }, GTR, async (page, started) => {
     assert.ok(await firstRecord(page, (r) => r.el === 'coach' && r.text === MSG.quiet), 'the learner was never told the sound is too quiet to judge');
     await waitUntilPageTime(page, started + 9500);
-    const judged = (await lines(page)).filter((r) => isFeedback(r) && !/^Time\. /.test(r.text));
-    assert.deepEqual(judged, [], 'room noise was judged as a note');
+    assertOnlyTimeout(await lines(page), 'a noisy room');
   });
 });
 
@@ -142,6 +163,10 @@ test('T7 a clipped pluck of the target note is passed, never corrected first', a
     assert.ok(isPass(first), `a clipped pluck of the right note was not passed: ${first.cls} ${JSON.stringify(first.text)}`);
   });
 });
+
+// Known defect, not yet asserted (fixed by Q10d): the same re-fire as T1. After the pass the clipped
+// note, still ringing, is judged against the next item (src/app.js:1061@708aef7).
+test.todo('T7 (literal) no "That was" record at all after a clipped pluck of the target: red until Q10d fixes the after-pass re-fire (src/app.js:1061@708aef7, present() sets released = true at task start)');
 
 // T8: two notes at once (the target and the fifth above): told it is more than one note, and never
 // told about a note nobody played.
