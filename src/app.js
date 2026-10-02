@@ -414,6 +414,7 @@ import { register as registerPathway } from './ui/pathway.js';
   }
   const roomQuietOrNoisy = f => f < 0.003 ? 'Your room is quiet.' : 'There\'s a lot of background noise — move closer to the mic.';
   const ROOM_NO_READING = 'Could not get a reading from the microphone, so the standard settings are in use. Press "Check my microphone" to try again.';
+  const ROOM_ERROR = 'Something went wrong while listening to the microphone, so the standard settings are in use. Press "Check my microphone" to try again.'; // a throw inside listenRoom: kept apart from "no audio arrived" so the two can be told apart
   function storeRoomFloor(f) { DB.prefs.noiseFloor = f; DB.prefs.noiseFloorV = ROOM_CHECK_VERSION; applyGates(gatesFor(f)); save(); }
   // Connect's automatic check. Visible in #calibrateResult; on abstain nothing is stored (gates stay at the defaults, the next Connect tries again).
   async function checkRoomInBackground() {
@@ -431,7 +432,7 @@ import { register as registerPathway } from './ui/pathway.js';
     try { await openMic(); } catch (e) { say('The microphone was blocked, so it could not be checked.'); return; }
     const my = ++roomSeq, mine = ++manualSeq; // after openMic: the background check it may just have started is superseded
     say('Listening for 3 seconds — stay quiet…');
-    let r; try { r = await listenRoom(3000); } catch (e) { say(ROOM_NO_READING); return; }
+    let r; try { r = await listenRoom(3000); } catch (e) { if (mine === manualSeq) say(ROOM_ERROR); return; } // a stale check that threw must not overwrite a newer check's message
     if (mine !== manualSeq) return; // a newer manual check owns the message; never write 'interrupted' over it
     if (!r.fresh) { say('The check was interrupted because the microphone changed or stopped. Press "Check my microphone" to try again.'); return; }
     if (my !== roomSeq) return; // a newer manual check owns the message now

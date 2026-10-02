@@ -9,7 +9,7 @@
 // same whatever part of the loop the check lands on.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { HTML_PATH } from '../helpers/html-path.mjs';
@@ -28,8 +28,9 @@ const sine = (hz, rms, secs) => { const b = new Float32Array(Math.round(SR * sec
 function steadyNoise(rms, secs) { const r = lcg(7), b = new Float32Array(Math.round(SR * secs)); let s = 0; for (let i = 0; i < b.length; i++) { b[i] = r(); s += b[i] * b[i]; } const g = rms / Math.sqrt(s / b.length); return b.map((x) => x * g); }
 // Unpitched noise hits (drums) every 0.4 s.
 function noiseBursts(peak, secs) { const r = lcg(11), b = new Float32Array(Math.round(SR * secs)), n = Math.round(0.12 * SR); for (let at = 0; at + n < b.length; at += Math.round(0.4 * SR)) for (let i = 0; i < n; i++) b[at + i] = r() * Math.exp(-i / (n / 4)); return scaleToPeak(b, peak); }
-// A string plucked every 0.7 s, each ringing down before the next.
-function pluckTrain(peak, secs) { const b = new Float32Array(Math.round(SR * secs)), period = Math.round(0.7 * SR); for (let k = 0, at = 0; at < b.length; k++, at += period) { const p = pluck(110, SR, 0.7, { seed: 5 + k, decay: 0.98 }); b.set(p.subarray(0, Math.min(p.length, b.length - at)), at); } return scaleToPeak(b, peak); }
+// A string plucked every `period` s, each ringing down before the next. The default (0.7 s, slow ring-down) sits near the burst threshold of a 3 s window: a loaded box that samples late or stalls could tip it over (simulated: peak/floor 2.7 at worst against the rule's 3). `playing` is the sturdy one for scenarios that must read as playing: peak/floor 5.7 at worst under the same simulated load.
+function pluckTrain(peak, secs, period = 0.7, decay = 0.98) { const b = new Float32Array(Math.round(SR * secs)), step = Math.round(period * SR); for (let k = 0, at = 0; at < b.length; k++, at += step) { const p = pluck(110, SR, period, { seed: 5 + k, decay }); b.set(p.subarray(0, Math.min(p.length, b.length - at)), at); } return scaleToPeak(b, peak); }
+const playing = () => pluckTrain(0.005, 4, 1.0, 0.975);
 const quietRoom = () => pluck(110, SR, 6.0, { seed: 3, gain: 0.0003 }); // as mic-connect-calibrates
 
 const wav = (name, samples) => writePluckWav(join(mkdtempSync(join(tmpdir(), 'mic-room-')), name + '.wav'), samples, SR);
@@ -165,7 +166,8 @@ test('T6: a device change clears the stored floor and the new device gets its ow
 async function pressCheck(page) { await page.evaluate("document.getElementById('calibrateBtn').click()"); }
 
 test('T7: "Check my microphone" while playing stores nothing and asks for silence', async (t) => {
-  const page = await connect(t, pluckTrain(0.005, 4.2));
+  const page = await connect(t, playing());
+  await checkDone(page); // audio is flowing and the background check is over: the manual window is the only reader
   await pressCheck(page);
   assert.match(await resultText(page), /Listening for 3 seconds/);
   await manualDone(page);
@@ -186,6 +188,40 @@ test('T7c: a manual check on a slow-starting stream still hears the playing that
   assert.equal(await floorOf(page), null, 'a manual check that heard playing must store nothing');
   const msg = await resultText(page);
   assert.match(msg, /heard playing/i, msg);
+});
+
+// Makes the room check's own analyser read throw once. The page has other analyser readers, so the throw is armed only for a call made from inside listenRoom, found by the line numbers of that function in the built file (an interval callback has no name in a stack).
+const lineOf = (needle) => readFileSync(HTML_PATH, 'utf8').split('\n').findIndex((l) => l.includes(needle)) + 1;
+async function throwOnceInCheck(page) {
+  const lo = lineOf('async function listenRoom'), hi = lineOf('return { frames, fresh');
+  assert.ok(lo > 0 && hi > lo, 'listenRoom must be found in the built file');
+  await page.evaluate(`(() => { const orig = AnalyserNode.prototype.getFloatTimeDomainData; let armed = true; AnalyserNode.prototype.getFloatTimeDomainData = function (b) { if (armed && (new Error().stack.match(/:(\\d+):\\d+/g) || []).some((m) => { const n = Number(m.split(':')[1]); return n >= ${lo} && n <= ${hi}; })) { armed = false; throw new Error('probe: analyser read failed'); } return orig.call(this, b); }; })()`);
+}
+
+test('T7d: a check that fails while listening says so, apart from "no reading", and stores nothing', async (t) => {
+  const page = await connect(t, playing()); // abstains in the background check, so nothing is stored before the manual one
+  await checkDone(page); // the background check reads the same analyser: let it finish so the throw lands in the manual check
+  await throwOnceInCheck(page);
+  const before = await resultText(page);
+  await pressCheck(page);
+  await page.waitFor(`(t => t !== ${JSON.stringify(before)} && !/Listening for/.test(t))(document.getElementById('calibrateResult').textContent)`, 6000); // the check's own outcome, not the background check's text still on screen
+  const msg = await resultText(page);
+  assert.match(msg, /went wrong/i, msg);
+  assert.doesNotMatch(msg, /Could not get a reading/, 'an error while listening is not the same as no audio arriving: ' + msg);
+  assert.equal(await floorOf(page), null);
+});
+
+test('T7e: a stale check that failed never writes over a newer check\'s message', async (t) => {
+  const page = await connect(t, playing());
+  await checkDone(page);
+  await throwOnceInCheck(page);
+  // Both presses in one task: A starts first (and its first read throws), B supersedes it.
+  await page.evaluate("(() => { const b = document.getElementById('calibrateBtn'); b.click(); b.click(); })()");
+  await sleep(400);
+  const msg = await resultText(page);
+  assert.match(msg, /Listening for 3 seconds/, `the failed older check wrote "${msg}" over the check that is still running`);
+  await manualDone(page);
+  assert.match(await resultText(page), /heard playing/i, 'the newer check runs to its own outcome');
 });
 
 test('T7b: a manual check supersedes the background check, so nothing is written twice', async (t) => {

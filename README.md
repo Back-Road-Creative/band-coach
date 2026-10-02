@@ -76,7 +76,9 @@ hits, so a steady hum in a room is learned there, but it tells you it heard play
 try again in silence if you were playing, and saves nothing. Both checks wait up to 3 seconds for
 the microphone to start delivering sound before they listen; if none arrives (a silent or
 not-yet-started input, never a real quiet room) they say they could not get a reading, keep the
-standard settings and save nothing, rather than telling you the room is quiet. The room level
+standard settings and save nothing, rather than telling you the room is quiet. If something goes
+wrong while "Check my microphone" is listening, it says so in its own words (not "no reading") and
+saves nothing. The room level
 belongs to the microphone it was measured on: picking a different input forgets it and the new input
 gets its own check, and a check still running when you switch inputs or the microphone stops is
 thrown away ("Check my microphone" says it was interrupted). A room level saved by an older version
