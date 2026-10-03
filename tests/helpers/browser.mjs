@@ -480,6 +480,97 @@ export function effectiveWaitMs(requestedMs) {
   return Number.isFinite(n) && n > WAIT_FLOOR_MS ? n : WAIT_FLOOR_MS;
 }
 
+// A real tab switch is one Target.activateTarget, and on a starved box the
+// browser can lose it or answer late: DevTools says nothing, the page simply
+// never changes state (the release gate's A02 timed out on this once in about
+// 29 runs). So each direction re-sends the activation inside ONE budget, every
+// budgetMs/attempts, only after a read said "not reached", so a healthy switch
+// is still one activation and one read. The proof is unchanged: the page's own
+// trusted visibilitychange events; this only asks the browser again. A re-send
+// that was needed is said on stderr (a retry-only pass must not be silent), and
+// a switch that never happens throws what it wanted and how many activations it
+// sent. A rejected send (target gone, socket closed) is a crash, not a flake:
+// it propagates at once. `now` and `sleep` exist so a unit test can run on a
+// virtual clock; sleep may return a promise with .cancel().
+// Two: a re-send every budgetMs/2 (10000 ms at the 20000 ms floor). Measured on this loaded box
+// (1000 cycles, 2026-10-03) the slowest first-try switch took 3603 ms, and a slice must be at least
+// twice that so a slow-but-arriving activation is not answered with a second one; 4 (5000 ms) was not.
+const TAB_SWITCH_ATTEMPTS = 2;
+export function makeTabSwitcher({
+  send, pageTargetId, readState, budgetMs = effectiveWaitMs(WAIT_FLOOR_MS), attempts = TAB_SWITCH_ATTEMPTS, pollMs = 50,
+  now = Date.now, sleep = (ms) => { let t; const p = new Promise((r) => { t = setTimeout(r, ms); }); p.cancel = () => clearTimeout(t); return p; },
+  warn = console.warn,
+}) {
+  const TIMED_OUT = Symbol('timed out');
+  // The extra tab, held exactly while it is open.
+  let otherTargetId = null;
+  // What `p` settles with, or TIMED_OUT after ms (neither send nor read has a timeout of its own).
+  const within = async (p, ms) => {
+    Promise.resolve(p).catch(() => {});
+    if (ms <= 0) return TIMED_OUT;
+    const timer = sleep(ms);
+    try { return await Promise.race([p, timer.then(() => TIMED_OUT)]); } finally { timer.cancel?.(); }
+  };
+  const closeQuietly = (id) => Promise.resolve().then(() => send('Target.closeTarget', { targetId: id })).catch(() => {});
+  const gaveUp = (label, wanted, sent, start) => new Error(`${label}: wanted document.visibilityState === '${wanted}', not reached after ${sent} Target.activateTarget sent in ${now() - start}ms (budget ${budgetMs}ms)`);
+  async function reach(label, wanted, activateId, start) {
+    const deadline = start + budgetMs;
+    let sent = 0;
+    let last = start;
+    const activate = async () => {
+      sent++;
+      last = now();
+      if (await within(send('Target.activateTarget', { targetId: activateId }), deadline - now()) === TIMED_OUT) throw gaveUp(label, wanted, sent, start);
+    };
+    await activate();
+    for (;;) {
+      const left = deadline - now();
+      if (left <= 0) throw gaveUp(label, wanted, sent, start);
+      const seen = await within(readState(), left);
+      if (seen === TIMED_OUT) throw gaveUp(label, wanted, sent, start);
+      if (seen === wanted) break;
+      if (sent < attempts && now() - last >= budgetMs / attempts) { await activate(); continue; }
+      await sleep(Math.min(pollMs, deadline - now()));
+    }
+    if (sent > 1) warn(`tab switch: ${wanted} needed ${sent} activations (${now() - start}ms)`);
+  }
+  async function background() {
+    const start = now();
+    try {
+      if (otherTargetId) {
+        // A held tab is not proof: something else may have brought the page forward.
+        const seen = await within(readState(), budgetMs);
+        if (seen === TIMED_OUT) throw gaveUp('background', 'hidden', 0, start);
+        if (seen === 'hidden') return;
+      } else {
+        const created = send('Target.createTarget', { url: 'about:blank' });
+        const made = await within(created, budgetMs);
+        if (made === TIMED_OUT) {
+          created.then(({ targetId }) => closeQuietly(targetId), () => {});
+          throw gaveUp('background', 'hidden', 0, start);
+        }
+        otherTargetId = made.targetId;
+      }
+      await reach('background', 'hidden', otherTargetId, start);
+    } catch (err) {
+      const gone = otherTargetId;
+      otherTargetId = null;
+      if (gone) closeQuietly(gone);
+      throw err;
+    }
+  }
+  async function foreground() {
+    const start = now();
+    await reach('foreground', 'visible', pageTargetId, start);
+    if (otherTargetId) {
+      const gone = otherTargetId;
+      otherTargetId = null;
+      await within(closeQuietly(gone), Math.max(budgetMs - (now() - start), pollMs));
+    }
+  }
+  return { background, foreground };
+}
+
 // How long launchPage() waits for the page to finish booting. This is the
 // flake that bit most often — `the page never finished booting (no #cv in a
 // complete file:// document within 30s)` — and it is a different budget from
@@ -925,22 +1016,8 @@ async function launchPageOnce(htmlPath, options = {}) {
   // A second tab brought forward really hides this one; activating this one
   // again shows it. The proof is the page's own recorded visibilitychange
   // events (visibilityLog), never an event a test dispatched.
-  let otherTargetId = null;
-  async function background() {
-    if (otherTargetId) return;
-    ({ targetId: otherTargetId } = await browser.send('Target.createTarget', { url: 'about:blank' }));
-    await browser.send('Target.activateTarget', { targetId: otherTargetId });
-    await waitFor("document.visibilityState === 'hidden'");
-  }
-  async function foreground() {
-    await browser.send('Target.activateTarget', { targetId });
-    await waitFor("document.visibilityState === 'visible'");
-    if (otherTargetId) {
-      const gone = otherTargetId;
-      otherTargetId = null;
-      await browser.send('Target.closeTarget', { targetId: gone }).catch(() => {});
-    }
-  }
+  // A lost or late activation is re-sent inside one budget (makeTabSwitcher).
+  const { background, foreground } = makeTabSwitcher({ send: (m, p) => browser.send(m, p), pageTargetId: targetId, readState: () => evaluate('document.visibilityState') });
   function visibilityLog() {
     return evaluate('window.__bcVisibility || []');
   }
