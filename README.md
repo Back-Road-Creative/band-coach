@@ -1352,6 +1352,11 @@ song rhythm both draw only from the one-hand starter melodies (`starterMelodies`
 `src/song/starter/index.js`) -- a two-hand starter is never pulled apart into a monophonic phrase
 or tapped-back rhythm.
 
+Answers are always in words: a wrong answer and "Show me the answer" name the expected notes
+(with octave, e.g. `C4, B3`) and count rhythms in beats (`1, 2, 4`) -- never MIDI numbers or
+ticks. The note buttons here, and the Theory tonic and root lists, follow the Settings
+note-naming and sharps/flats choice like the rest of the app.
+
 ## Find your own singing range
 
 The Voice screen offers three fixed ranges (Lower/Middle/Higher voice) plus a fourth, "Find my

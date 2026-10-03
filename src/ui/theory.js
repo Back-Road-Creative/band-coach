@@ -3,6 +3,7 @@
 // instrument) and a Transpose tab (written vs concert pitch). Wiring note:
 // every fact comes from src/core/theory/* -- this file only builds DOM and
 // wires it to that pure layer plus panelApi (src/app.js).
+import { name as noteNameFor } from '../core/note-names.js';
 import { ALL_KEYS, findKey, signatureFor } from '../core/theory/keys.js';
 import { scale, scaleTypes, majorScale, naturalMinorScale, scaleOnInstrument } from '../core/theory/scales.js';
 import { chord, chordQualities, voicingsOnFretboard } from '../core/theory/chords.js';
@@ -222,9 +223,9 @@ export function register(panels) {
       const explorePanel = tabPanels.explore;
       const kindSelect = el('select', { id: 'theoryExploreKind' }, [option('key', 'Key'), option('scale', 'Scale'), option('chord', 'Chord')]);
       const keySelect = el('select', { id: 'theoryExploreKey' }, ALL_KEYS.map((k) => option(k.name, k.name + ' ' + k.mode)));
-      const tonicSelect = el('select', { id: 'theoryExploreTonic' }, CHROMATIC.map((n) => option(n, n)));
+      const tonicSelect = el('select', { id: 'theoryExploreTonic' }, CHROMATIC.map((n, i) => option(n, noteNameFor(i))));
       const scaleTypeSelect = el('select', { id: 'theoryExploreScaleType' }, scaleTypes().map((t) => option(t, t.replace(/_/g, ' '))));
-      const chordRootSelect = el('select', { id: 'theoryExploreChordRoot' }, CHROMATIC.map((n) => option(n, n)));
+      const chordRootSelect = el('select', { id: 'theoryExploreChordRoot' }, CHROMATIC.map((n, i) => option(n, noteNameFor(i))));
       const qualitySelect = el('select', { id: 'theoryExploreQuality' }, chordQualities().map((q) => option(q, q)));
       const playBtn = el('button', { type: 'button' }, [document.createTextNode('Hear it')]);
       const notesOut = el('p', { id: 'theoryExploreNotes' });
