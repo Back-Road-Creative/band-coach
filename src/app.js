@@ -420,7 +420,7 @@ import { register as registerPathway } from './ui/pathway.js';
   async function checkRoomInBackground() {
     const my = ++roomSeq, el = $('calibrateResult'), say = s => { if (el) el.textContent = s; };
     say('Checking the room — stay quiet for a moment…');
-    let r; try { r = await listenRoom(1500); } catch (e) { if (my === roomSeq) say(''); return; }
+    let r; try { r = await listenRoom(1500); } catch (e) { if (my === roomSeq) say(ROOM_ERROR); return; }
     if (my !== roomSeq) return; // a newer check owns the message now
     if (!r.fresh || DB.prefs.noiseFloor != null) { say(''); return; }
     const v = classifyRoomCheck(r.frames, { manual: false });
