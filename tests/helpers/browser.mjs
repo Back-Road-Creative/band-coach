@@ -3,9 +3,11 @@
 // node:os). No npm dependency — see site-headlessmode/scripts/preview-overflow.mjs
 // for the precedent this borrows its connection pattern from.
 import { spawn } from 'node:child_process';
-import { mkdtempSync, rmSync, existsSync, readdirSync, writeFileSync, mkdirSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { mkdtempSync, rmSync, existsSync, readdirSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { tmpdir, homedir, availableParallelism, loadavg } from 'node:os';
-import { join, dirname } from 'node:path';
+import { join, dirname, basename } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 // How many test FILES node:test may run at once — each file launches its own
 // Chromium, so this is really "how many browsers may boot at the same time".
@@ -74,6 +76,53 @@ function findBrowserBinary() {
     if (p) return p;
   }
   return null;
+}
+
+// The browser an acceptance launch uses: a FULL Chrome or Chromium, never the
+// headless shell, whose autoplay and permission behaviour is not a real
+// browser's. Order: CHROME_BIN, the Playwright full build (newest first),
+// google-chrome on PATH. The inputs are parameters so a unit test can hand it
+// a made-up install tree.
+export function findAcceptanceBrowser({
+  env = process.env,
+  playwrightRoot = join(homedir(), '.cache', 'ms-playwright'),
+  pathDirs = (process.env.PATH || '').split(':'),
+} = {}) {
+  const isShell = (p) => /headless[-_]shell/i.test(p);
+  if (env.CHROME_BIN && existsSync(env.CHROME_BIN)) {
+    if (isShell(env.CHROME_BIN)) {
+      throw new Error(
+        `CHROME_BIN points at a headless shell (${env.CHROME_BIN}). The acceptance lane needs a full Chrome or ` +
+          'Chromium, whose autoplay and permission behaviour is a real browser\'s. Point CHROME_BIN at google-chrome or a full chromium build.'
+      );
+    }
+    return env.CHROME_BIN;
+  }
+  if (existsSync(playwrightRoot)) {
+    const dirs = readdirSync(playwrightRoot).filter((d) => /^chromium-\d+$/.test(d)).sort((a, b) => Number(b.slice(9)) - Number(a.slice(9)));
+    for (const d of dirs) {
+      const bin = join(playwrightRoot, d, 'chrome-linux64', 'chrome');
+      if (existsSync(bin)) return bin;
+    }
+  }
+  for (const name of ['google-chrome', 'google-chrome-stable']) {
+    for (const dir of pathDirs) {
+      const p = join(dir, name);
+      if (dir && existsSync(p)) return p;
+    }
+  }
+  throw new Error(
+    'No full Chrome or Chromium found for the acceptance lane. Set CHROME_BIN to google-chrome or a full chromium build, ' +
+      'or install google-chrome, or the Playwright full build (npx playwright install chromium, which makes ' +
+      '~/.cache/ms-playwright/chromium-*). The headless shell (chromium_headless_shell-*) is deliberately not used: ' +
+      'its autoplay and permission behaviour is not a real browser\'s.'
+  );
+}
+
+// The file an acceptance test drives: the one a person downloads.
+// BAND_COACH_HTML points it at another build (a negative control).
+export function acceptanceHtmlPath(env = process.env) {
+  return env.BAND_COACH_HTML || fileURLToPath(new URL('../../dist/release/band-coach.html', import.meta.url));
 }
 
 // Talks JSON-RPC over one DevTools WebSocket connection.
@@ -182,18 +231,25 @@ function untrackGroup(pgid) {
 // seen on stderr, extracting the port that was actually bound (we always ask
 // for port 0 so parallel test files never collide). The group is registered
 // for exit cleanup from the moment it exists.
-export function spawnBrowser(bin, userDataDir, extraArgs = [], { launchTimeoutMs = 15000 } = {}) {
-  const args = [
+// The command-line flags of a launch. The default is permissive on purpose
+// (autoplay allowed, a mic prompt that answers itself) so a characterization
+// test never waits on a gesture. An acceptance launch drops exactly those two
+// and keeps the simulated devices: a fake mic is a device, not a permission.
+export function browserArgs(userDataDir, extraArgs = [], { acceptance = false } = {}) {
+  return [
     '--headless',
     '--remote-debugging-port=0',
     `--user-data-dir=${userDataDir}`,
     '--no-first-run',
-    '--autoplay-policy=no-user-gesture-required',
-    '--use-fake-ui-for-media-stream',
+    ...(acceptance ? [] : ['--autoplay-policy=no-user-gesture-required', '--use-fake-ui-for-media-stream']),
     '--use-fake-device-for-media-stream',
     ...extraArgs,
     'about:blank',
   ];
+}
+
+export function spawnBrowser(bin, userDataDir, extraArgs = [], { launchTimeoutMs = 15000, acceptance = false } = {}) {
+  const args = browserArgs(userDataDir, extraArgs, { acceptance });
   if (process.env.CI) args.splice(1, 0, '--no-sandbox');
   // Its own process group (detached), so cleanup can kill the renderer, GPU
   // and zygote processes too, not just the launched parent: those are
@@ -232,7 +288,7 @@ export function spawnBrowser(bin, userDataDir, extraArgs = [], { launchTimeoutMs
         settled = true;
         clearTimeout(timer);
         child.off('error', onErr);
-        resolve({ child, browserWsUrl: m[1] });
+        resolve({ child, browserWsUrl: m[1], args });
       }
     });
     child.once('exit', (code) => {
@@ -261,6 +317,11 @@ export function spawnBrowser(bin, userDataDir, extraArgs = [], { launchTimeoutMs
  * `options.initScript`, if given, is a JS source string installed with
  * `Page.addScriptToEvaluateOnNewDocument` so it runs before any of the
  * page's own script — e.g. to instrument a global before app code loads.
+ *
+ * `options.acceptance`, if true, launches the way a person's browser runs
+ * (see "Acceptance mode" at the end of this file); `options.simulated` lists
+ * extra simulated boundaries for the identity block. Callers that leave them
+ * out get exactly the launch they always had.
  *
  * Throws — never silently skips — if no browser binary can be found.
  */
@@ -346,8 +407,8 @@ export function launchPage(htmlPath, options = {}) {
 }
 
 async function launchPageOnce(htmlPath, options = {}) {
-  const { fakeAudioFile, initScript } = options;
-  const bin = findBrowserBinary();
+  const { fakeAudioFile, initScript, acceptance = false } = options;
+  const bin = acceptance ? findAcceptanceBrowser() : findBrowserBinary();
   if (!bin) {
     throw new Error(
       'No Chromium-family browser found. Set CHROME_BIN, or install one of: ' +
@@ -359,13 +420,13 @@ async function launchPageOnce(htmlPath, options = {}) {
   const extraArgs = fakeAudioFile ? [`--use-file-for-fake-audio-capture=${fakeAudioFile}`] : [];
   let spawned;
   try {
-    spawned = await spawnBrowser(bin, userDataDir, extraArgs);
+    spawned = await spawnBrowser(bin, userDataDir, extraArgs, { acceptance });
   } catch (e) {
     // spawnBrowser already killed the group; the profile dir is ours to remove.
     rmSync(userDataDir, { recursive: true, force: true });
     throw e;
   }
-  const { child, browserWsUrl } = spawned;
+  const { child, browserWsUrl, args: launchFlags } = spawned;
 
   // child.pid is the process GROUP id too, since spawnBrowser starts it
   // detached (group leader). Kills the whole group, not just this one
@@ -430,14 +491,34 @@ async function launchPageOnce(htmlPath, options = {}) {
   const consoleErrors = [];
   const exceptions = [];
   const requests = [];
+  // Only filled by an acceptance launch.
+  const consoleWarnings = [];
+  const logEntries = [];
+  const requestDetails = [];
+  const audioContexts = new Map();
 
   page.listeners.add((msg) => {
     if (msg.method === 'Runtime.consoleAPICalled' && msg.params.type === 'error') {
       consoleErrors.push(msg.params.args.map((a) => a.value ?? a.description ?? '').join(' '));
+    } else if (msg.method === 'Runtime.consoleAPICalled' && acceptance && msg.params.type === 'warning') {
+      consoleWarnings.push(msg.params.args.map((a) => a.value ?? a.description ?? '').join(' '));
     } else if (msg.method === 'Runtime.exceptionThrown') {
       exceptions.push(msg.params.exceptionDetails.text + ': ' + (msg.params.exceptionDetails.exception?.description || ''));
     } else if (msg.method === 'Network.requestWillBeSent') {
       requests.push(msg.params.request.url);
+      if (acceptance) requestDetails.push({ url: msg.params.request.url, type: msg.params.type, initiator: msg.params.initiator });
+    } else if (acceptance && msg.method === 'Log.entryAdded') {
+      const { source, level, text, url, lineNumber } = msg.params.entry;
+      logEntries.push({ source, level, text, url, lineNumber });
+    } else if (acceptance && (msg.method === 'WebAudio.contextCreated' || msg.method === 'WebAudio.contextChanged')) {
+      const c = msg.params.context;
+      const known = audioContexts.get(c.contextId) || { id: c.contextId, type: c.contextType, sampleRate: c.sampleRate, history: [] };
+      known.state = c.contextState;
+      known.history.push(c.contextState);
+      audioContexts.set(c.contextId, known);
+    } else if (acceptance && msg.method === 'WebAudio.contextWillBeDestroyed') {
+      const known = audioContexts.get(msg.params.contextId);
+      if (known) { known.state = 'destroyed'; known.history.push('destroyed'); }
     }
   });
 
@@ -445,6 +526,17 @@ async function launchPageOnce(htmlPath, options = {}) {
   await send('Network.enable');
   await send('Page.enable');
   await send('DOM.enable');
+  if (acceptance) {
+    // The browser's own log (the AudioContext warning is a Log entry, not a
+    // console call) and WebAudio, both before navigation so boot is covered.
+    await send('Log.enable');
+    await send('WebAudio.enable');
+    // The page's own visibilitychange events, with isTrusted, from the first
+    // moment of every document.
+    await send('Page.addScriptToEvaluateOnNewDocument', {
+      source: "window.__bcVisibility = []; document.addEventListener('visibilitychange', function (e) { window.__bcVisibility.push({ state: document.visibilityState, trusted: e.isTrusted }); }, true);",
+    });
+  }
   if (initScript) {
     await send('Page.addScriptToEvaluateOnNewDocument', { source: initScript });
   }
@@ -513,6 +605,18 @@ async function launchPageOnce(htmlPath, options = {}) {
   await send('Page.navigate', { url });
   await loaded;
   await waitForBoot();
+
+  // A release file has no debug hook (build/build.mjs strips it); with the
+  // hook present this is not the file a person downloads, so refuse.
+  if (acceptance) {
+    const hook = await send('Runtime.evaluate', { expression: 'typeof window.__coach', returnByValue: true });
+    if (hook.result.value !== 'undefined') {
+      throw new Error(
+        `acceptance run refused: window.__coach is ${hook.result.value} on ${htmlPath}. That is the dev build, which carries the ` +
+          'debug hook; the acceptance lane drives the release file (node build/build.mjs --release -> dist/release/band-coach.html).'
+      );
+    }
+  }
 
   // Reload and wait for the NEW page's load event. Polling for window.__coach
   // after evaluate('location.reload()') can see the OLD page before it
@@ -610,6 +714,122 @@ async function launchPageOnce(htmlPath, options = {}) {
     writeFileSync(outputPath, Buffer.from(data, 'base64'));
   }
 
+  // ---- Real input -------------------------------------------------------
+  // Pointer events from the browser's own input pipeline (Input domain): the
+  // page sees trusted events and a real user gesture, as for a person's mouse
+  // or finger. Nothing here calls .click() or dispatches an Event in the page.
+  async function click(x, y, { button = 'left', clickCount = 1 } = {}) {
+    await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y });
+    await send('Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button, buttons: 1, clickCount });
+    await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, button, buttons: 0, clickCount });
+  }
+  async function tap(x, y) {
+    await send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y }] });
+    await send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  }
+  // Press at `from`, move through `steps` points on the way, release at `to`.
+  async function drag(from, to, { steps = 8 } = {}) {
+    await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: from.x, y: from.y });
+    await send('Input.dispatchMouseEvent', { type: 'mousePressed', x: from.x, y: from.y, button: 'left', buttons: 1, clickCount: 1 });
+    for (let i = 1; i <= steps; i++) {
+      const x = from.x + ((to.x - from.x) * i) / steps;
+      const y = from.y + ((to.y - from.y) * i) / steps;
+      await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y, buttons: 1 });
+    }
+    await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: to.x, y: to.y, button: 'left', buttons: 0, clickCount: 1 });
+  }
+  // Where a person would aim at `selector`: the centre of its box. A control off
+  // screen is first scrolled into view by the driver (el.scrollIntoView() in the
+  // page, not wheel input); reading the box is observation, not input. Missing,
+  // hidden, disabled or covered controls are errors: a person could not click them.
+  async function centreOf(selector) {
+    const r = await evaluate(`(() => {
+      const el = document.querySelector(${JSON.stringify(selector)});
+      if (!el) return { error: 'no element matches ' + ${JSON.stringify(selector)} };
+      if (el.hidden || el.disabled) return { error: ${JSON.stringify(selector)} + ' is ' + (el.hidden ? 'hidden' : 'disabled') };
+      el.scrollIntoView({ block: 'center', inline: 'center' });
+      const b = el.getBoundingClientRect();
+      if (!b.width || !b.height) return { error: ${JSON.stringify(selector)} + ' has no size on screen' };
+      const x = b.left + b.width / 2, y = b.top + b.height / 2;
+      const hit = document.elementFromPoint(x, y);
+      if (!hit || !(el === hit || el.contains(hit))) return { error: ${JSON.stringify(selector)} + ' is covered at its centre by ' + (hit ? hit.tagName.toLowerCase() + (hit.id ? '#' + hit.id : '') : 'nothing') + ' (obscured)' };
+      return { x, y };
+    })()`);
+    if (r.error) throw new Error(`cannot click: ${r.error}`);
+    return r;
+  }
+  async function clickSelector(selector, opts) {
+    const { x, y } = await centreOf(selector);
+    await click(x, y, opts);
+  }
+  async function tapSelector(selector) {
+    const { x, y } = await centreOf(selector);
+    await tap(x, y);
+  }
+
+  // ---- Browser-level permissions ---------------------------------------
+  // Answered in the browser's permission store (Browser domain), where a
+  // person's Allow / Block lands, not by a launch flag. Not scoped to an
+  // origin: Chrome refuses one for a file:// page ("opaque origins"), and each
+  // launch has its own throwaway profile, so it only reaches this launch.
+  const GRANT_NAME = { microphone: 'audioCapture', camera: 'videoCapture', midi: 'midi', 'midi-sysex': 'midiSysex' };
+  const DESCRIPTOR = { microphone: { name: 'microphone' }, camera: { name: 'camera' }, midi: { name: 'midi' }, 'midi-sysex': { name: 'midi', sysex: true } };
+  function permissionNames(names) {
+    for (const n of names) if (!GRANT_NAME[n]) throw new Error(`unknown permission "${n}"; use one of ${Object.keys(GRANT_NAME).join(', ')}`);
+    return names;
+  }
+  async function grant(names) {
+    await browser.send('Browser.grantPermissions', { permissions: permissionNames(names).map((n) => GRANT_NAME[n]) });
+  }
+  async function deny(names) {
+    for (const n of permissionNames(names)) await browser.send('Browser.setPermission', { permission: DESCRIPTOR[n], setting: 'denied' });
+  }
+  async function resetPermissions() {
+    await browser.send('Browser.resetPermissions');
+  }
+
+  // ---- Background and return, for real -----------------------------------
+  // A second tab brought forward really hides this one; activating this one
+  // again shows it. The proof is the page's own recorded visibilitychange
+  // events (visibilityLog), never an event a test dispatched.
+  let otherTargetId = null;
+  async function background() {
+    if (otherTargetId) return;
+    ({ targetId: otherTargetId } = await browser.send('Target.createTarget', { url: 'about:blank' }));
+    await browser.send('Target.activateTarget', { targetId: otherTargetId });
+    await waitFor("document.visibilityState === 'hidden'");
+  }
+  async function foreground() {
+    await browser.send('Target.activateTarget', { targetId });
+    await waitFor("document.visibilityState === 'visible'");
+    if (otherTargetId) {
+      const gone = otherTargetId;
+      otherTargetId = null;
+      await browser.send('Target.closeTarget', { targetId: gone }).catch(() => {});
+    }
+  }
+  function visibilityLog() {
+    return evaluate('window.__bcVisibility || []');
+  }
+
+  // ---- Audio, observed from outside the page -----------------------------
+  // The WebAudio domain reports each AudioContext's state to the driver, so
+  // "sound started" needs no hook in the app. Empty unless acceptance.
+  const audio = {
+    contexts: () => [...audioContexts.values()].map((c) => ({ ...c, history: [...c.history] })),
+    running: () => [...audioContexts.values()].filter((c) => c.state === 'running').map((c) => ({ ...c, history: [...c.history] })),
+    async waitForRunning(timeoutMs = WAIT_FLOOR_MS) {
+      timeoutMs = effectiveWaitMs(timeoutMs);
+      const start = Date.now();
+      while (!audio.running().length) {
+        if (Date.now() - start > timeoutMs) {
+          throw new Error(`no AudioContext was running after ${timeoutMs}ms; WebAudio reported ${JSON.stringify(audio.contexts())}`);
+        }
+        await new Promise((r) => setTimeout(r, 50));
+      }
+    },
+  };
+
   async function waitFor(expression, timeoutMs = WAIT_FLOOR_MS) {
     timeoutMs = effectiveWaitMs(timeoutMs);
     const start = Date.now();
@@ -638,6 +858,22 @@ async function launchPageOnce(htmlPath, options = {}) {
     }
   }
 
+  let identity;
+  if (acceptance) {
+    const { product, userAgent } = await browser.send('Browser.getVersion');
+    const bytes = readFileSync(htmlPath);
+    identity = {
+      html: { path: htmlPath, sha256: createHash('sha256').update(bytes).digest('hex'), bytes: bytes.length },
+      browser: { product, userAgent, binary: bin },
+      flags: launchFlags,
+      simulated: [
+        'fake microphone device (--use-fake-device-for-media-stream)' +
+          (fakeAudioFile ? `, playing ${fakeAudioFile}` : ', playing its built-in test tone'),
+        ...(options.simulated || []),
+      ],
+    };
+  }
+
   return {
     evaluate,
     reload,
@@ -645,11 +881,39 @@ async function launchPageOnce(htmlPath, options = {}) {
     setFileInput,
     setViewport,
     press,
+    click,
+    tap,
+    drag,
+    clickSelector,
+    tapSelector,
+    grant,
+    deny,
+    resetPermissions,
+    background,
+    foreground,
+    visibilityLog,
+    audio,
+    // Raw DevTools access for a test that needs a domain this driver does not
+    // wrap: dialogs, downloads, network conditions, emulated media. send() goes
+    // to this page's session and browserSend() to the browser; on(fn) sees this
+    // page's events until the function it returns is called.
+    cdp: {
+      send,
+      browserSend: (method, params) => browser.send(method, params),
+      on(fn) {
+        page.listeners.add(fn);
+        return () => page.listeners.delete(fn);
+      },
+    },
     screenshot,
     close,
     consoleErrors,
+    consoleWarnings,
+    logEntries,
+    requestDetails,
     exceptions,
     requests,
+    identity,
     binary: bin,
     pid: child.pid,
     profileDir: userDataDir,
@@ -682,12 +946,18 @@ async function launchPageOnce(htmlPath, options = {}) {
 // so attempts cannot contaminate each other. Every attempt's description is
 // kept and reported together on failure, because "which attempts failed and
 // how" is the difference between diagnosing the runner and diagnosing the app.
+//
+// A discarded attempt is also written to stderr when it is discarded, so a run
+// that PASSES on its second try still shows it threw one away; otherwise a
+// measurement failing half the time reads like a healthy one. Done here, not
+// at the ~30 call sites; a first-attempt success prints nothing.
 export async function retryFlaky({ attempts = 3, attempt, accept, describe, what }) {
   const seen = [];
   for (let i = 0; i < attempts; i++) {
     const result = await attempt(i);
     if (accept(result)) return result;
     seen.push(`attempt ${i + 1}: ${describe ? describe(result) : JSON.stringify(result)}`);
+    console.warn(`retryFlaky: ${what} -- discarded ${seen[seen.length - 1]} (${i + 1} of ${attempts} attempts used)`);
   }
   const err = new Error(
     `${what} did not succeed in ${attempts} independent attempts -- ${seen.join('; ')}. ` +
@@ -745,4 +1015,72 @@ export async function withViewports(page, run) {
   const height = await page.evaluate('innerHeight');
   await run({ name: 'phone-200%-text', width, height, zoomed: true });
   await page.evaluate("document.documentElement.style.zoom = ''");
+}
+
+// ---- Acceptance mode: running a test, and keeping the evidence ----------
+//
+// launchPage(path, { acceptance: true }) is this driver run the way a person's
+// browser runs. The default launch allows autoplay, answers the mic prompt by
+// flag and keeps only console errors, so candidate e4b6fb5 passed every test and
+// failed its first hand run (docs/release-acceptance-record.md). An acceptance
+// launch uses a full Chrome, leaves autoplay and permissions to the browser
+// (page.grant / page.deny answer them), keeps warnings, the browser Log and
+// request initiators, watches AudioContexts through WebAudio, and refuses a
+// page with the debug hook. Only the fake mic DEVICE is simulated; the identity
+// block says so.
+
+const identityReported = new Set();
+
+// One line per fact, once per test file, in node --test's output.
+function reportIdentity(t, id) {
+  const key = t.filePath || '';
+  if (identityReported.has(key)) return;
+  identityReported.add(key);
+  const diag = (m) => (typeof t.diagnostic === 'function' ? t.diagnostic(m) : console.log(m));
+  diag(`acceptance html: ${id.html.path} sha256 ${id.html.sha256} (${id.html.bytes} bytes)`);
+  diag(`acceptance browser: ${id.browser.product} (${id.browser.binary})`);
+  diag(`acceptance flags: ${id.flags.join(' ')}`);
+  diag(`acceptance simulated: ${id.simulated.join('; ')}`);
+}
+
+const safeName = (x) => String(x).replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 80) || 'unnamed';
+
+// Writes what a person would have seen to <artifactRoot>/<test file>/<test name>/.
+async function writeFailureArtifacts(t, page, err, artifactRoot) {
+  const dir = join(artifactRoot, safeName(basename(t.filePath || 'unknown-test-file')), safeName(t.name || 'unnamed-test'));
+  mkdirSync(dir, { recursive: true });
+  let shot = 'screenshot.png written';
+  try {
+    await page.screenshot(join(dir, 'screenshot.png'));
+  } catch (e) {
+    shot = `no screenshot: ${e.message}`;
+  }
+  const json = (name, v) => writeFileSync(join(dir, name), JSON.stringify(v, null, 2) + '\n');
+  json('console.json', { errors: page.consoleErrors, warnings: page.consoleWarnings, exceptions: page.exceptions });
+  json('log.json', page.logEntries);
+  json('requests.json', page.requestDetails);
+  json('identity.json', page.identity);
+  writeFileSync(join(dir, 'error.txt'), `${err && err.stack ? err.stack : String(err)}\n\n${shot}\n`);
+  return dir;
+}
+
+// Runs `fn(page)` on a fresh acceptance page and always closes it; on failure
+// the evidence is written and the ORIGINAL error rethrown. `opts` are
+// launchPage's plus `htmlPath` and `artifactRoot` (default dist/test-artifacts).
+export async function withAcceptancePage(t, opts, fn) {
+  const { htmlPath = acceptanceHtmlPath(), artifactRoot = fileURLToPath(new URL('../../dist/test-artifacts', import.meta.url)), ...launchOpts } = opts || {};
+  const page = await launchPage(htmlPath, { ...launchOpts, acceptance: true });
+  try {
+    reportIdentity(t, page.identity);
+    return await fn(page);
+  } catch (err) {
+    try {
+      await writeFailureArtifacts(t, page, err, artifactRoot);
+    } catch (e2) {
+      console.warn(`acceptance: could not write failure artifacts: ${e2.message}`);
+    }
+    throw err;
+  } finally {
+    await page.close();
+  }
 }

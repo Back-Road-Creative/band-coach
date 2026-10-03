@@ -169,7 +169,7 @@ Needs Node 22+. `pretest` runs the build first, so tests always see a fresh `dis
 and `posttest` runs the release gate (`npm run gate`) so a plain `npm test` also proves the release
 file downloads cleanly. Tests use only Node built-ins plus `esbuild` (the one build-time dependency).
 
-Four kinds of tests live under `tests/`:
+Six kinds of tests live under `tests/`:
 
 - `tests/import.test.mjs` checks the built file stays one self-contained page.
 - `tests/build/*.test.mjs` check the build itself — one output file, one inlined script.
@@ -183,6 +183,20 @@ Four kinds of tests live under `tests/`:
   same way, plus a fake microphone, to prove the thing a learner actually downloads works: no
   network calls, no console errors, the debug hook is gone, the version is stamped, the file is
   under the 1.5 MB size budget, and a note played into the microphone is heard.
+- `tests/release/acceptance-*.test.mjs` (also run by `npm run gate`) use the release file the way a
+  person does, which the ordinary harness cannot: it allows autoplay, answers the microphone prompt
+  by flag and keeps only console errors, which is how candidate `e4b6fb5` passed every test and then
+  failed its first hand run on an AudioContext warning. An acceptance launch
+  (`launchPage(path, { acceptance: true })`, normally through `withAcceptancePage` in
+  `tests/helpers/browser.mjs`) runs a full Chrome or Chromium under normal autoplay and permission
+  policy, answers permissions with `page.grant` / `page.deny`, drives real mouse, touch and keyboard
+  input, backgrounds the tab for real with a second tab, and records console warnings, the browser
+  log, requests with their initiators and each AudioContext's state (read through the DevTools
+  WebAudio domain, so no debug hook). It refuses a page that still has `window.__coach`. Only the
+  fake microphone device is simulated; each file prints its html path, sha256 and size, the browser
+  version, the launch flags and what is simulated. A failing test writes a screenshot, the console
+  and log entries, the requests and that identity to `dist/test-artifacts/<test file>/<test name>/`.
+  It drives `dist/release/band-coach.html`, or the file in `BAND_COACH_HTML`.
 - `tests/build/pages.test.mjs` and `tests/build/pages-offline.test.mjs` check the "phone copy"
   PWA build (below): the file set, the manifest, the generated icons, the service worker's
   precache list, that it never changes the one-file release build, and — in headless Chromium
@@ -198,7 +212,13 @@ variable, a Playwright headless-shell install under
 `~/.cache/ms-playwright/chromium_headless_shell-*`, then `google-chrome`,
 `google-chrome-stable`, `chromium` or `chromium-browser` on `PATH`. Set
 `CHROME_BIN` to point at a specific binary if none of those are found; the
-tests fail loudly (never skip) when no browser turns up.
+tests fail loudly (never skip) when no browser turns up. The acceptance lane looks
+differently, because the headless shell is not a real browser's autoplay and permissions: `CHROME_BIN`,
+then a full Playwright build (`~/.cache/ms-playwright/chromium-*`), then `google-chrome` on `PATH`; it
+throws, naming what to install or set, rather than fall back to the shell.
+
+When `retryFlaky` discards an attempt and a later one passes, the run still prints a
+`retryFlaky: ... discarded attempt N` line to stderr, so a second-try pass is visible.
 
 `npm test` caps how many test files (and therefore how many Chromiums) run at
 once: a quiet box keeps node's own default (one less than the core count), but
