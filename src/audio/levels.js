@@ -68,6 +68,19 @@ export function releaseFloor(gatesArg) {
   return pitchGate * RELEASE_GATE_RATIO;
 }
 
+// Q10d-2: delivered time, not frames, of quiet before a ringing note counts as released. The worklet
+// posts a frame per 512-sample hop but the main thread gets them in bursts under load (frame gap median
+// 135 ms, max 470 ms at load 43), so three frames can span almost no time. Replay over the p1c/p1q
+// capture logs: this rule alone took the after-pass strays from 6/42 to 4/42 and from 35/42 to 27/42.
+// A frame whose rms is exactly 0 is a capture dropout, not quiet (openMic turns echo cancellation, noise
+// suppression and auto gain off, src/app.js:351, so with the browser's processing off a live mic's silence
+// carries a noise floor, not 0.0): it holds the clock, neither adding to it nor resetting it. A dropout's
+// length is unbounded, so no fixed time could outrun it; a p3 run delivered 10 zero frames in 1.6 ms of
+// wall time that counted 0.104 s. Known limit: an OS- or device-level noise gate (some Bluetooth headsets,
+// virtual or noise-cancelling inputs) can deliver exact zeros for real silence; on such a device a ringing
+// note is released only by an onset or a different note, never by quiet.
+export const QUIET_RELEASE_SEC = 0.1;
+
 // Maps an RMS value onto a 0..1 dB-scaled range for a level meter. Human
 // loudness perception (and mic clipping headroom) is logarithmic, so a
 // linear RMS-to-width mapping would make everything below "shouting" look
