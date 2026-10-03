@@ -1965,6 +1965,9 @@ import { register as registerPathway } from './ui/pathway.js';
   // to each instrument's existing drawing so today's display is unchanged
   // when the preference is left at 'names'. Never prints the letter name
   // unless the app's own reveal flag says so.
+  // True when the staff overlay is on for a fretted instrument, so draw()
+  // gives the staff its own top band (0..0.42H) and the fretboard the rest.
+  const staffBand = m => !!(MODS[m] && MODS[m].tuning) && NOTATE_MOD_IDS.indexOf(m) >= 0 && (DB.prefs.notate[m] || 'names') !== 'names';
   function drawNotation(e, W, H) {
     lastStaff = null;
     if (!e || e.info.kind !== 'note' || e.info.midi === null || e.info.midi === undefined) return;
@@ -1976,7 +1979,10 @@ import { register as registerPathway } from './ui/pathway.js';
     if (!out) return;
     const nameShown = notate === 'both' && DB.prefs.names && !!(e.reveal || e.failed);
     lastStaff = Object.assign({ nameShown: nameShown }, out);
-    const scale = H * 0.0075, x0 = W * 0.05, y0 = H * 0.06;
+    // A fretted instrument's fretboard is moved down out of the way (draw()),
+    // so its staff takes the top band: -20..115 staff units tall, never
+    // wider than the canvas. Everything else keeps the original origin.
+    const band = staffBand(mod), scale = band ? Math.min(H * 0.0027, W * 0.9 / 280) : H * 0.0075, x0 = W * 0.05, y0 = band ? H * 0.02 + 20 * scale : H * 0.06;
     g.save();
     g.translate(x0, y0); g.scale(scale, scale);
     g.strokeStyle = '#c9ced9'; g.fillStyle = '#e9edf6'; g.lineWidth = 1.5 / scale;
@@ -1985,7 +1991,7 @@ import { register as registerPathway } from './ui/pathway.js';
     g.restore();
     if (nameShown) {
       g.fillStyle = '#93a0bd'; font(H * 0.05, 600); g.textAlign = 'left';
-      g.fillText(nname(e.info.midi), x0, y0 + H * 0.34);
+      g.fillText(nname(e.info.midi), x0, band ? H * 0.4 : y0 + H * 0.34);
     }
   }
   function draw() {
@@ -2016,7 +2022,7 @@ import { register as registerPathway } from './ui/pathway.js';
       } else drawKeys(W * 0.02, H * 0.18, W * 0.96, H * 0.7, kr[0], kr[1], kOpts);
       drawKbdOverview(W * 0.02, H * 0.905, W * 0.96, H * 0.07, kr[0], kr[1]);
       if (e && e.info.kind === 'chord') { g.fillStyle = '#e9edf6'; font(H * 0.11); g.textAlign = 'center'; g.fillText(e.info.sym, W / 2, H * 0.13); } if (document.activeElement === cv) { const fi = kbdFocusInfo(); if (fi) { g.strokeStyle = '#ffd23f'; g.lineWidth = 4; g.strokeRect(fi.x + 2, fi.y + 2, fi.w - 4, fi.h - 4); } } }
-    else if (M.tuning) drawFret(M, e, W, H); else if (mod === 'voice') drawVoice(e, W, H); else if (M.staff) drawStaff(M, e, W, H); else if (mod === 'harp') drawHarp(e, W, H);
+    else if (M.tuning) { if (staffBand(mod)) { g.save(); g.translate(0, H * 0.42); drawFret(M, e, W, H * 0.58); g.restore(); } else drawFret(M, e, W, H); } else if (mod === 'voice') drawVoice(e, W, H); else if (M.staff) drawStaff(M, e, W, H); else if (mod === 'harp') drawHarp(e, W, H);
     else if (mod === 'mallet-percussion') { const rec = instrumentById['mallet-percussion'], tg = e && e.info.kind === 'note' && (e.reveal || e.failed) ? [e.info.midi] : []; drawKeys(W * 0.03, H * 0.18, W * 0.94, H * 0.7, rec.range.low, rec.range.high, { target: tg, good: [], names: DB.prefs.names }); }
     else if (M.kit) drawKit(W, H);
     else if (mod === 'ear') drawEar(W, H); else if (mod === 'rhy') { if (task && task.kind === 'bar2') drawBar2(W, H); else drawBar(W, H); }
