@@ -286,19 +286,7 @@ test('11. Practise this, on a clean recording, builds the lesson for that record
   await learnerPicks(t, FILE.clean, {}, async (r, page) => {
     const view = await practiseClick(r, page);
     assert.equal(view.title, 'clean', "Practise this opens this recording's own lesson");
-  });
-});
-
-// Measured after the fix (the button is disabled at the parent, so this path is
-// unreachable there): the lesson IS built for the song, but the Songs practice
-// section keeps its `hidden` attribute (it is created hidden, songs.js:651;
-// startPractice() and checkOpenRequest() never clear it; only openSong() does,
-// :1125), so a learner who clicks Practise this sees no lesson. That file is
-// outside this unit's Owns, so the assertion is a todo that reports (not fails)
-// until the section is shown; then drop the todo (and fold this into test 11).
-test('11c. the lesson is on screen after Practise this', { todo: 'practiceSection stays hidden after the review handoff (src/ui/songs.js startPractice)' }, async (t) => {
-  await learnerPicks(t, FILE.clean, {}, async (r, page) => {
-    assert.equal((await practiseClick(r, page)).shown, true, 'the practice lesson is visible to the learner');
+    assert.equal(view.shown, true, 'the practice lesson is on screen after Practise this');
   });
 });
 
