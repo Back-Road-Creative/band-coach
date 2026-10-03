@@ -64,7 +64,7 @@ function writeDecayWav(path, { freq = 440, sampleRate = 48000, toneSeconds = 0.6
 // learner -- and this test -- can read '#prompt b' to know what to play
 // without any debug hook.
 const LEVEL1_NOTE_TO_MIDI = { C: 60, D: 62, E: 64 };
-// src/app.js:1226 PCKEYS: the real computer-keyboard note entry a learner
+// src/core/pckeys.js PCKEYS_UPPER (looked up by the keydown listener, src/app.js:2541): the real computer-keyboard note entry a learner
 // without a MIDI device uses. Only the level-1 keys are needed here.
 const LEVEL1_MIDI_TO_PCKEY = { 60: 'a', 62: 's', 64: 'd' };
 
