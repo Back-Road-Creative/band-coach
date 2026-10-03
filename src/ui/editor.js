@@ -191,7 +191,7 @@ function mountEditor(hostEl, api) {
   const checkList = el('ul');
   const ackCheckbox = el('input', { type: 'checkbox', id: 'editorAck' });
   checkBox.append(
-    el('p', { text: "Before you practise or save, check these — the computer guessed and isn't sure:" }),
+    el('p', { text: "Before you practise or save, check these:" }),
     checkList,
     el('label', { for: 'editorAck' }, [ackCheckbox, document.createTextNode(" I've checked these")]),
   );

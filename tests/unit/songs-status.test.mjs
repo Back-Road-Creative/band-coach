@@ -13,6 +13,7 @@ import {
   statusFor,
   statusLabel,
   reviewGate,
+  plainImportWarning,
 } from '../../src/ui/songs/song-status.js';
 import { PANEL_DATA_MAX } from '../../src/ui/panels.js';
 
@@ -77,4 +78,29 @@ test('a ledger stays under the 256 KB panel limit', () => {
     ledger = markDraft(ledger, 'song-' + i, { needsCheck: 3, source: 'file', originalAudioKept: true });
   }
   assert.ok(JSON.stringify(ledger).length < PANEL_DATA_MAX);
+});
+
+test('a score import reads as things to check, and never claims a lost recording', () => {
+  assert.equal(statusLabel({ draft: true, needsCheck: 1, source: 'score', originalAudioKept: true }), 'Draft — 1 thing to check');
+  assert.equal(statusLabel({ draft: true, needsCheck: 2, source: 'score', originalAudioKept: true }), 'Draft — 2 things to check');
+});
+
+test('importer warnings are put in plain words, unknown ones pass through', () => {
+  assert.equal(
+    plainImportWarning('no Q: tempo found; defaulted to 120 bpm'),
+    "This file doesn't say how fast to play, so I used 120 beats per minute. Check the speed feels right.",
+  );
+  assert.equal(
+    plainImportWarning('no tempo found; defaulted to 120 bpm'),
+    "This file doesn't say how fast to play, so I used 120 beats per minute. Check the speed feels right.",
+  );
+  assert.equal(
+    plainImportWarning('part "Piano" has 3 voices; flattened into one'),
+    'The "Piano" part has 3 voices playing at once; I merged them into one line.',
+  );
+  assert.equal(
+    plainImportWarning('part "Piano" has 3 staves; hands not assigned'),
+    'The "Piano" part has 3 staves; I could not tell which notes belong to which hand.',
+  );
+  assert.equal(plainImportWarning('something else'), 'something else');
 });

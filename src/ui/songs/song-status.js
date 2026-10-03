@@ -70,12 +70,27 @@ export function statusLabel(entry) {
   let label;
   if (entry.draft) {
     const n = entry.needsCheck || 0;
-    label = n > 0 ? 'Draft — ' + n + ' note' + (n === 1 ? '' : 's') + ' to check' : 'Draft';
+    // A score import's open items are things like a missing tempo, not notes.
+    const unit = entry.source === 'score' ? 'thing' : 'note';
+    label = n > 0 ? 'Draft — ' + n + ' ' + unit + (n === 1 ? '' : 's') + ' to check' : 'Draft';
   } else {
     label = 'Checked';
   }
   if (entry.originalAudioKept === false) label += ' — Original recording not kept';
   return label;
+}
+
+// Importer warnings (src/song/import-abc.js, import-musicxml.js) are terse
+// developer strings; the learner sees these plain-words versions instead.
+// Anything unrecognised passes through unchanged, never dropped.
+export function plainImportWarning(w) {
+  const s = String(w);
+  if (/^no (Q: )?tempo found; defaulted to 120 bpm$/.test(s)) return "This file doesn't say how fast to play, so I used 120 beats per minute. Check the speed feels right.";
+  let m = /^part "(.*)" has (\d+) voices; flattened into one$/.exec(s);
+  if (m) return 'The "' + m[1] + '" part has ' + m[2] + ' voices playing at once; I merged them into one line.';
+  m = /^part "(.*)" has (\d+) staves; hands not assigned$/.exec(s);
+  if (m) return 'The "' + m[1] + '" part has ' + m[2] + ' staves; I could not tell which notes belong to which hand.';
+  return s;
 }
 
 // A copy of learn.js's practiceGate rule (learn.js:90-94): a song with any
