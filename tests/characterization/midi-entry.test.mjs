@@ -16,8 +16,6 @@ import { FAKE_MIDI_INIT, FAKE_MIDI_BROWSER_PERMISSION_INIT, midiSetPortState, mi
 
 const htmlPath = HTML_PATH;
 
-const NO_DEVICE_TEXT = 'No MIDI device is plugged in. Plug it in and it will be picked up. Screen and computer keys still work as practice, not proof a real keyboard works.';
-
 async function connectMidi(page) {
   await page.evaluate("document.getElementById('ioBtn').click()");
 }
@@ -94,7 +92,7 @@ test('NEW: a disconnected port is not counted even though the input map still li
   await page.waitFor("/No MIDI device|Another program/.test(document.getElementById('ioText').textContent)");
   assert.equal(await page.evaluate("document.getElementById('ioBtn').hidden"), false);
   // A disconnected port is no device at all, not "another program has it".
-  assert.equal(await page.evaluate("document.getElementById('ioText').textContent"), NO_DEVICE_TEXT);
+  assert.equal(await page.evaluate("document.getElementById('ioText').textContent"), 'No MIDI device is plugged in. Plug it in and it will be picked up. Screen and computer keys still work as practice, not proof a real keyboard works.');
 });
 
 test('NEW: status names the device and says "found" before any byte, then "is working" after the first byte', async (t) => {
@@ -513,5 +511,5 @@ test('NEW: control: a drum kit with no MIDI port at all opens the microphone onc
 test('NEW: control: a keyboard whose only MIDI port reads disconnected opens no microphone and says no device', async (t) => {
   const page = await kitOpens(t, 'kbd', 'disconnected');
   assert.equal(await page.evaluate('window.__gumCount'), 0);
-  assert.equal(await page.evaluate("document.getElementById('ioText').textContent"), NO_DEVICE_TEXT);
+  assert.equal(await page.evaluate("document.getElementById('ioText').textContent"), 'No MIDI device is plugged in. Plug it in and it will be picked up. Screen and computer keys still work as practice, not proof a real keyboard works.');
 });
