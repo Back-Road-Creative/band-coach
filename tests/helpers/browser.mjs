@@ -964,7 +964,9 @@ async function launchPageOnce(htmlPath, options = {}) {
     }
     await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: to.x, y: to.y, button: 'left', buttons: 0, clickCount: 1 });
   }
-  // Where a person would aim at `selector`: the centre of its box. A control off
+  // Where a person would aim at `selector`: the centre of its box, or for an
+  // inline label that wraps, the centre of the first line box whose words are
+  // really there (the middle of a wrapped box can be empty). A control off
   // screen is first scrolled into view by the driver (el.scrollIntoView() in the
   // page, not wheel input); reading the box is observation, not input. Missing,
   // hidden, disabled or covered controls are errors: a person could not click them.
@@ -976,9 +978,17 @@ async function launchPageOnce(htmlPath, options = {}) {
       el.scrollIntoView({ block: 'center', inline: 'center' });
       const b = el.getBoundingClientRect();
       if (!b.width || !b.height) return { error: ${JSON.stringify(selector)} + ' has no size on screen' };
+      const mine = (h) => h && (el === h || el.contains(h));
+      const lines = [...el.getClientRects()].filter((q) => q.width && q.height);
+      if (lines.length > 1) {
+        for (const q of lines) {
+          const lx = q.left + q.width / 2, ly = q.top + q.height / 2;
+          if (mine(document.elementFromPoint(lx, ly))) return { x: lx, y: ly };
+        }
+      }
       const x = b.left + b.width / 2, y = b.top + b.height / 2;
       const hit = document.elementFromPoint(x, y);
-      if (!hit || !(el === hit || el.contains(hit))) return { error: ${JSON.stringify(selector)} + ' is covered at its centre by ' + (hit ? hit.tagName.toLowerCase() + (hit.id ? '#' + hit.id : '') : 'nothing') + ' (obscured)' };
+      if (!mine(hit)) return { error: ${JSON.stringify(selector)} + ' is covered at its centre by ' + (hit ? hit.tagName.toLowerCase() + (hit.id ? '#' + hit.id : '') : 'nothing') + ' (obscured)' };
       return { x, y };
     })()`);
     if (r.error) throw new Error(`cannot click: ${r.error}`);

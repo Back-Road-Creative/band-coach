@@ -173,6 +173,22 @@ test('real input: clickSelector clicks the centre of the element and refuses wha
   assert.equal(far.target, 'far', 'a control below the fold is scrolled into view first (by the driver in the page, not by wheel input)');
 });
 
+test('real input: clickSelector aims at the first line of a label that wraps, not the empty middle of its box', async (t) => {
+  // #wrap starts near the end of one line and wraps to a short second line, so
+  // the centre of its bounding box lands on the surrounding text. A person aims
+  // at the words; CI fonts wrapped the songsPolyphonic label exactly like this.
+  const page = await launchPage(DRIVER, { acceptance: true });
+  t.after(() => page.close());
+  const boxes = await page.evaluate(`[...document.getElementById('wrap').getClientRects()].map((r) => [r.left, r.right, r.top, r.bottom])`);
+  assert.equal(boxes.length, 2, `the fixture label wraps onto two lines: ${JSON.stringify(boxes)}`);
+  await page.clickSelector('#wrap');
+  const c = (await page.evaluate('window.__events.splice(0)')).find((e) => e.type === 'click');
+  assert.equal(c && c.target, 'wrap', 'the click lands on the label');
+  const [l, r, top, bottom] = await page.evaluate(`(() => { const q = document.getElementById('wrap').getClientRects()[0]; return [q.left, q.right, q.top, q.bottom]; })()`);
+  assert.ok(c.x >= l && c.x <= r && c.y >= top && c.y <= bottom, `inside the first line box ${JSON.stringify([l, r, top, bottom])}: ${c.x},${c.y}`);
+  await assert.rejects(() => page.clickSelector('#cover'), /covered|obscured/i, 'a covered control is still refused');
+});
+
 test('real input: tapSelector touches the centre of the element and refuses a covered one', async (t) => {
   const page = await launchPage(DRIVER, { acceptance: true });
   t.after(() => page.close());

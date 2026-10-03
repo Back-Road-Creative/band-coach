@@ -166,10 +166,13 @@ test('a recording with unresolved check items disables "Practise this" and "Edit
   await page.setFileInput('#songsFileInput', wavPath);
   await page.waitFor("document.querySelector('.panel-learn-result').hidden === false", 20000);
 
-  // Every transcription (mic or audio file) carries at least one check
-  // item (transcribe()'s own key-profile caveat), so "Practise this" is
-  // disabled with a plain-language reason next to it, and "Fix it up" is
-  // the way forward.
+  // This clip leaves a check item on its list (a confident recording has
+  // none: tests/release/acceptance-file-transcription.test.mjs). That is a
+  // property of this fixture's audio, not of every transcription, so a
+  // better read of it could empty the list and fail the assertions below;
+  // then give the fixture a guaranteed item. With an item, "Practise this"
+  // is disabled with a plain-language reason next to it, and "Fix it up"
+  // is the way forward.
   const practiseDisabled = await page.evaluate(
     "Array.from(document.querySelectorAll('.panel-learn-practise-btn')).find(b => b.textContent === 'Practise this').disabled"
   );

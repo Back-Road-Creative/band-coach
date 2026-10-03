@@ -17,10 +17,10 @@
 //   `Math.random`, no `Date.now()` — a caller passes frames it already
 //   captured, never reads the clock itself.
 //
-// `report.needsCheck` always lists the Krumhansl-Schmuckler profile numbers
-// as typed-from-memory (see detectKey below) and adds a line for every
-// stage whose confidence is low. A mandatory fix-it UI step should show
-// this list before letting the learner practise the transcribed song.
+// `report.needsCheck` adds a line for every stage whose confidence is low (and,
+// for a polyphonic read, one for the voice count); a clean, confident read
+// leaves it empty. A mandatory fix-it UI step should show this list before
+// letting the learner practise the transcribed song.
 
 import { songIdentity } from './ident.js';
 import { FFTProcessor } from '../audio/analysis/fft.js';
@@ -376,9 +376,9 @@ export function inferMetreAndBars(notes, bpm) {
 
 // ---- detectKey -----------------------------------------------------------
 
-// Krumhansl & Kessler (1982) key-profile weights, typed from memory — list
-// this under "needs a musician's check" in every caller's report rather
-// than trusting it silently.
+// Krumhansl & Kessler (1982) key-profile weights, typed from memory — check
+// them against the published paper. That is a note about the source of the
+// numbers, not about a recording, so it lives here and never in a report.
 const MAJOR_PROFILE = [6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88];
 const MINOR_PROFILE = [6.33, 2.68, 3.52, 5.38, 2.6, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17];
 
@@ -445,9 +445,6 @@ function emptySong(opts) {
     chords: [],
   };
 }
-
-const KEY_PROFILE_CAVEAT =
-  'Krumhansl-Schmuckler key-profile numbers (typed from memory) — verify against the published paper.';
 
 // ---- polyphonic wiring (B1-B4 behind opts.polyphonic) ---------------------
 //
@@ -544,7 +541,7 @@ function transcribePolyphonic(polyphonic, opts) {
   if (bt) { song.tempoMap = bt.tempoMap; song.swing = bt.swing; }
 
   const voiceCount = parts.length;
-  const needsCheck = [KEY_PROFILE_CAVEAT];
+  const needsCheck = [];
   if (tempo.confidence < 0.5) needsCheck.push('Tempo is uncertain — confirm the beat before practising to it.');
   if (metre.confidence < 0.3) needsCheck.push('Metre defaulted or low-confidence — check the bar lines.');
   if (key.confidence < 0.3) needsCheck.push('Key detection is low-confidence — check the key signature.');
@@ -573,7 +570,7 @@ export function transcribe(frames, opts = {}) {
         metre: { metre: { num: 4, den: 4 }, pickupTicks: 0, confidence: 0 },
         key: { tonic: 0, mode: 'major', confidence: 0 },
         notesCaptured: 0,
-        needsCheck: [KEY_PROFILE_CAVEAT, 'No notes were captured — nothing was transcribed.'],
+        needsCheck: ['No notes were captured — nothing was transcribed.'],
       },
     };
   }
@@ -603,7 +600,7 @@ export function transcribe(frames, opts = {}) {
   };
   if (bt) { song.tempoMap = bt.tempoMap; song.swing = bt.swing; }
 
-  const needsCheck = [KEY_PROFILE_CAVEAT];
+  const needsCheck = [];
   if (tempo.confidence < 0.5) needsCheck.push("Tempo is uncertain — confirm the beat before practising to it.");
   if (metre.confidence < 0.3) needsCheck.push('Metre defaulted or low-confidence — check the bar lines.');
   if (key.confidence < 0.3) needsCheck.push('Key detection is low-confidence — check the key signature.');
