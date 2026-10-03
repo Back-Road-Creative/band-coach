@@ -172,3 +172,15 @@ test('U9: every try over three notes scores the best in-order total, and keeps g
   }
   assert.ok(aligned > 0, 'some tries must need the alignment');
 });
+
+// Cost: a try that hits every note returns greedy's answer before the n-by-p
+// pitch table is built. Counted by reading how often the played events' pitch
+// is looked at (greedy reads each event about once; the table reads n*p), so
+// the check never depends on a clock.
+test('U10: a try that hits every note does not build the alignment table', () => {
+  let reads = 0;
+  const played = EXPECTED.map((midi, i) => ({ get midi() { reads++; return midi; }, atSec: i * 0.35 }));
+  const r = judgeAttempt(NOTES, played, UNTIMED);
+  assert.equal(r.hitCount, 7);
+  assert.ok(reads <= 2 * EXPECTED.length, 'pitch reads ' + reads);
+});

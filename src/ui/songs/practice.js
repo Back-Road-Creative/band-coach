@@ -92,8 +92,8 @@ function pieceWord(piece) {
 }
 
 // Group expected notes into chords: consecutive notes sharing the same
-// `start` tick are one chord (a single note is a chord of size 1, and takes
-// the exact old forward-only path so single-note judging never changes).
+// `start` tick are one chord (a single note is a chord of size 1; a step of
+// only single notes goes through judgeSingleNotes below).
 function groupIntoChords(notes) {
   const groups = [];
   for (const note of notes) {
@@ -200,8 +200,8 @@ function greedySingle(note, played, cursor, timed, onsetAt, policy, bpm, ticksPe
 // that happens to equal a later expected pitch (D D C D E E E for E D C D E E E:
 // the first E found is the fifth event) eats every note before it and the
 // learner is told they missed a D they played. So: run that search; when it
-// already hits every note, or as many as any order-keeping match can, keep its
-// result untouched. Otherwise redo the step on the longest in-order matching
+// already hits every note (checked first, so a clean try never pays for the
+// table), or as many as any order-keeping match can, keep its result untouched. Otherwise redo the step on the longest in-order matching
 // (suffix LCS, same judgePitch test): each note takes a played event that keeps
 // that best total, so only the notes the learner truly did not play are missed.
 // A timed step takes the event nearest the note's expected onset (so a D played
@@ -216,12 +216,13 @@ function judgeSingleNotes(notes, played, timed, onsetAt, policy, bpm, ticksPerQu
   const greedyHits = greedyMatches.filter((m) => m.ok).length;
   const n = notes.length;
   const p = played.length;
+  if (greedyHits === n) { matches.push(...greedyMatches); extraList.push(...greedyExtras); return; }
   const same = notes.map((note) => played.map((ev) => judgePitch({ heardMidi: ev.midi, targetMidi: note.midi, policy }).ok));
   const L = Array.from({ length: n + 1 }, () => new Array(p + 1).fill(0));
   for (let i = n - 1; i >= 0; i--) {
     for (let j = p - 1; j >= 0; j--) L[i][j] = same[i][j] ? 1 + L[i + 1][j + 1] : Math.max(L[i + 1][j], L[i][j + 1]);
   }
-  if (greedyHits === n || greedyHits === L[0][0]) {
+  if (greedyHits === L[0][0]) {
     matches.push(...greedyMatches);
     extraList.push(...greedyExtras);
     return;
