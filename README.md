@@ -58,12 +58,32 @@ the MIDI activity dot are the only things shown up front.
 
 If you have more than one input
 (e.g. an audio interface), pick it from the input list next to Connect. Connect also listens to
-your room for a moment the first time and sets the listening thresholds from it, and the practice
-screen shows a small level meter while a microphone instrument is listening, so you can see whether
-your playing is reaching the app. "Check my microphone" listens for 3 seconds of quiet and tunes the listening thresholds to your room and hardware
-instead of a one-size-fits-all level, including the level the pitch detector itself gates on; a
-small meter shows the live input level. An instrument plugged into only one channel of a
-2-channel interface is summed into the listening path rather than silenced.
+your room for about a second and a half the first time and sets the listening thresholds from it,
+and the practice screen shows a small level meter while a microphone instrument is listening, so
+you can see whether your playing is reaching the app. "Check my microphone" listens for 3 seconds
+of quiet and tunes the listening thresholds to your room and hardware instead of a
+one-size-fits-all level, including the level the pitch detector itself gates on; a small meter
+shows the live input level. An instrument plugged into only one channel of a 2-channel interface
+is summed into the listening path rather than silenced.
+
+Both checks say what they are doing and what they heard in the line beside the button ("Checking the
+room — stay quiet", then "Your room is quiet." or a background-noise warning). If you start playing
+while Connect's check is listening, it does not mistake your playing for the room: it says it heard
+sound, keeps the standard settings (nothing is saved) and points you to "Check my microphone"; the
+next Connect tries again. Steady pitched sound counts as playing for Connect's check, and so do
+repeated plucks, strums or drum hits. "Check my microphone" only turns you away for those repeated
+hits, so a steady hum in a room is learned there, but it tells you it heard playing and asks you to
+try again in silence if you were playing, and saves nothing. Both checks wait up to 3 seconds for
+the microphone to start delivering sound before they listen; if none arrives (a silent or
+not-yet-started input, never a real quiet room) they say they could not get a reading, keep the
+standard settings and save nothing, rather than telling you the room is quiet. If something goes
+wrong while "Check my microphone" is listening, it says so in its own words (not "no reading") and
+saves nothing. The room level
+belongs to the microphone it was measured on: picking a different input forgets it and the new input
+gets its own check, and a check still running when you switch inputs or the microphone stops is
+thrown away ("Check my microphone" says it was interrupted). A room level saved by an older version
+of the app may have learned playing, so it is discarded the next time the app starts, and the same
+goes for one inside a progress file you restore; the next Connect measures again.
 
 Switching away from the tab (or backgrounding the app on a phone) stops the microphone and
 suspends audio outright, rather than merely pausing the exercise on screen — the OS mic indicator
@@ -122,8 +142,7 @@ more than one route, "My progress" (below) does not count it as passed on your o
 worth having but not proof the skill transferred to a real keyboard. A keyboard drill or warm-up
 answer now records its route too, and one played on the computer keys or on-screen keys is the
 same story: practice, not counted as passed on your own. An on-screen click during a song is still
-not labelled with its route.
-same story: practice, not counted as passed on your own. A keyboard song is played on a MIDI keyboard or the
+not labelled with its route. A keyboard song is played on a MIDI keyboard or the
 computer keys; the on-screen keys are hidden while a song is open.
 
 ## Build it from source

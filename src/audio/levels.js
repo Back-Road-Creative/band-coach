@@ -17,7 +17,7 @@ export const DEFAULT_GATES = Object.freeze({ pitch: 0.004, note: 0.005, chord: 0
 // interface is treated as silent-enough that the default gates already
 // work; above MAX_FLOOR the room is noisy enough that we cap how far the
 // gates are allowed to rise, so real playing can still cross them.
-const MIN_FLOOR = 0.0015;
+export const MIN_FLOOR = 0.0015;
 const MAX_FLOOR = 0.03;
 // The gate sits this many times above the measured floor: enough margin
 // that ordinary noise-floor jitter doesn't cross it, small enough that a
@@ -79,4 +79,47 @@ export function meterLevel(rms) {
   if (!Number.isFinite(rms) || rms <= 0) return 0;
   const db = 20 * Math.log10(rms);
   return clamp((db - METER_MIN_DB) / (METER_MAX_DB - METER_MIN_DB), 0, 1);
+}
+
+// Room check (Connect's automatic check and the "Check my microphone" button).
+// A floor is only worth storing if the window really was the room: a floor
+// learned from someone already playing sits below the gates it then sets, so
+// real playing never crosses them. Stored floors carry this version so one
+// learned before the check could abstain is dropped on load (src/app.js sanitizeDB).
+export const ROOM_CHECK_VERSION = 2;
+
+// A frame below MIN_FLOOR is quiet whatever its pitch (a faint pitched hiss on
+// a very quiet interface is still the room). Of the louder frames, this share
+// being pitched means someone is playing, singing or humming.
+const PITCHED_SHARE = 0.25;
+// A peak this many times the floor the window would store means plucks, strums
+// or drum hits, not a steady room: the gates built from that floor would sit
+// under what was heard. The floor the window would store comes from ALL frames
+// (a window of silence with one hit has floor 0, so it is bursty too). It is
+// the reference, not the window's middle value: a quiet pluck train decays to a
+// low floor between hits while its middle value sits close to its peak
+// (measured 2.8x to 3.1x, on the line), and only the floor is what the gates use.
+const BURST_RATIO = 3;
+
+// `frames` is one measurement window: [{ rms, pitched }] per analysis frame.
+// Returns { floor } to store, or { abstain: 'sound' | 'unusable' }.
+//
+// The two checks ask different things on purpose. The automatic check runs
+// when the learner pressed Connect and may already be playing, so it refuses
+// anything that looks like playing: pitched content OR bursts. The manual
+// check runs after they pressed "Check my microphone" and were told to stay
+// quiet, so only bursts (plucks, strums, drum hits) prove they are playing
+// anyway; a steady pitched sound such as mains hum IS their room and is
+// learned there, though the automatic check refuses it.
+export function classifyRoomCheck(frames, { manual = false } = {}) {
+  const fs = (Array.isArray(frames) ? frames : []).filter((f) => f && Number.isFinite(f.rms) && f.rms >= 0);
+  if (!fs.length) return { abstain: 'unusable' };
+  const rms = fs.map((f) => f.rms), peak = Math.max(...rms), floor = noiseFloor(rms);
+  if (peak >= MIN_FLOOR && peak > BURST_RATIO * floor) return { abstain: 'sound' };
+  if (!manual) {
+    const loud = fs.filter((f) => f.rms >= MIN_FLOOR);
+    if (loud.length && loud.filter((f) => f.pitched).length / loud.length >= PITCHED_SHARE) return { abstain: 'sound' };
+  }
+  // A real microphone always reads a little above exactly 0 (its own electronic hiss), so a window whose floor comes out 0 is one where no audio reached the analyser (the stream had not started, or it died): there is nothing to store, and "your room is quiet" would be false.
+  return floor > 0 && Number.isFinite(floor) ? { floor: clamp(floor, 0, 1) } : { abstain: 'unusable' };
 }

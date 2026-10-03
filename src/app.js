@@ -22,7 +22,7 @@ import { t, setLocale, LOCALES } from './core/i18n.js';
 import { yin } from './audio/yin.js';
 import { createPitchNode } from './audio/pitch-worklet.js';
 //
-import { noiseFloor, gatesFor, meterLevel, releaseFloor } from './audio/levels.js';
+import { gatesFor, meterLevel, releaseFloor, classifyRoomCheck, ROOM_CHECK_VERSION, MIN_FLOOR } from './audio/levels.js';
 import { diagnoseInput } from './audio/input-diagnosis.js';
 import { createOnsetDetector } from './audio/onset.js';
 import { createDrumClassifier } from './audio/drum-classify.js';
@@ -345,6 +345,8 @@ import { register as registerPathway } from './ui/pathway.js';
   // lit until the tab closed. Sharing one in-flight promise across
   // concurrent callers means only one getUserMedia() call is ever made.
   let openMicPromise = null;
+  // micGen advances when the input device changes and when the mic is torn down; a room check that finishes for an older stream discards its result. roomSeq numbers room checks so only the newest one writes (a manual check supersedes the background one).
+  let micGen = 0, roomSeq = 0, manualSeq = 0;
   async function openMic() {
     ensureAudio(); if (micReady) return true;
     if (openMicPromise) return openMicPromise;
@@ -356,8 +358,8 @@ import { register as registerPathway } from './ui/pathway.js';
       catch (e) { if (!DB.prefs.inputDeviceId) throw e; st = await navigator.mediaDevices.getUserMedia({ audio: base }); }
       micStream = st; const src = actx.createMediaStreamSource(st); wireAnalysers(monoSum(src)); micReady = true;
       ensurePitchWorklet(); refreshMicDevices();
-      // First Connect with no stored floor: measure the room for ~1.5 s in the background so the gates follow this mic, not the fixed defaults.
-      if (DB.prefs.noiseFloor == null) measureNoiseFloor(1500).then(f => { if (DB.prefs.noiseFloor == null) { DB.prefs.noiseFloor = f; applyGates(gatesFor(f)); save(); } }).catch(() => {});
+      // First Connect (or first after a device change) with no stored floor: listen to the room for ~1.5 s so the gates follow this mic, not the fixed defaults. It abstains when it hears playing.
+      if (DB.prefs.noiseFloor == null) checkRoomInBackground();
       return true;
     })();
     try { return await openMicPromise; } finally { openMicPromise = null; }
@@ -375,7 +377,7 @@ import { register as registerPathway } from './ui/pathway.js';
   // called from both sites and needs to be idempotent either way.
   const teardown = createTeardown();
   let teardownRunCount = 0;
-  teardown.add('mic', () => { const pm = $('practiceMeter'); if (pm) pm.hidden = true; if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; micReady = false; } });
+  teardown.add('mic', () => { const pm = $('practiceMeter'); if (pm) pm.hidden = true; if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; micReady = false; micGen++; } });
   teardown.add('audioContext', () => { if (actx && actx.state === 'running') actx.suspend(); });
   // "Play it for me" (see midiOutPlay below): a hidden/closed tab must not leave a keyboard sounding.
   teardown.add('midiOut', () => midiOutStop());
@@ -392,29 +394,51 @@ import { register as registerPathway } from './ui/pathway.js';
     sel.value = micDevices.some(d => d.deviceId === wanted) ? wanted : '';
   }
   function meterUpdate(rms) { const pct = meterLevel(rms) * 100; ['micLevelFill', 'practiceLevelFill'].forEach(id => { const el = $(id); if (!el) return; el.style.width = pct + '%'; const box = el.closest('[role="progressbar"]'); if (box) box.setAttribute('aria-valuenow', String(Math.round(pct))); }); const pm = $('practiceMeter'); if (pm && pm.hidden && micReady) pm.hidden = false; }
-  // Samples the analyser's RMS for `ms` and returns the robust floor (null when the reading is unusable).
-  async function measureNoiseFloor(ms) {
-    const samples = [], t0 = performance.now();
-    await new Promise(resolve => {
+  // Samples the analyser every 50 ms for `ms`: each frame's RMS and whether yin hears a pitch in it (the pitch search is skipped below MIN_FLOOR). `fresh` is false when the input device changed or the mic was torn down meanwhile: the reading is then partly or wholly another stream's. The window opens at the first frame with any signal: a stream that has not started delivering yet reads exactly 0 (a real microphone never does), and a window of those is not the room. If nothing arrives within ROOM_AUDIO_WAIT_MS the result has no frames, which the classifier calls unusable.
+  const ROOM_AUDIO_WAIT_MS = 3000;
+  async function listenRoom(ms) {
+    const frames = [], gen = micGen, tWait = performance.now(); let t0 = null;
+    await new Promise((resolve, reject) => {
       const iv = setInterval(() => {
-        const buf = new Float32Array(anTime.fftSize); anTime.getFloatTimeDomainData(buf);
-        let s = 0; for (let i = 0; i < buf.length; i++) s += buf[i] * buf[i]; samples.push(Math.sqrt(s / buf.length));
+        try {
+          const buf = new Float32Array(anTime.fftSize); anTime.getFloatTimeDomainData(buf);
+          // RMS over the whole window; the pitch search only for audible frames and only on the newest 2048 samples (the full 4096 costs ~5 ms of main thread per 50 ms frame, this about a third of that).
+          let sq = 0; for (let i = 0; i < buf.length; i++) sq += buf[i] * buf[i]; const rms = Math.sqrt(sq / buf.length);
+          if (t0 === null) { if (rms > 0) t0 = performance.now(); else { if (performance.now() - tWait > ROOM_AUDIO_WAIT_MS) { clearInterval(iv); resolve(); } return; } }
+          const r = rms >= MIN_FLOOR ? yin(buf.subarray(buf.length - 2048), actx.sampleRate, 50, 1000, 0) : null; frames.push({ rms, pitched: !!(r && r.freq && r.clarity > 0.8) });
+        } catch (e) { clearInterval(iv); reject(e); return; }
         if (performance.now() - t0 > ms) { clearInterval(iv); resolve(); }
       }, 50);
     });
-    const floor = noiseFloor(samples);
-    return Number.isFinite(floor) && floor >= 0 ? clamp(floor, 0, 1) : null;
+    return { frames, fresh: gen === micGen };
+  }
+  const roomQuietOrNoisy = f => f < 0.003 ? 'Your room is quiet.' : 'There\'s a lot of background noise — move closer to the mic.';
+  const ROOM_NO_READING = 'Could not get a reading from the microphone, so the standard settings are in use. Press "Check my microphone" to try again.';
+  const ROOM_ERROR = 'Something went wrong while listening to the microphone, so the standard settings are in use. Press "Check my microphone" to try again.'; // a throw inside listenRoom: kept apart from "no audio arrived" so the two can be told apart
+  function storeRoomFloor(f) { DB.prefs.noiseFloor = f; DB.prefs.noiseFloorV = ROOM_CHECK_VERSION; applyGates(gatesFor(f)); save(); }
+  // Connect's automatic check. Visible in #calibrateResult; on abstain nothing is stored (gates stay at the defaults, the next Connect tries again).
+  async function checkRoomInBackground() {
+    const my = ++roomSeq, el = $('calibrateResult'), say = s => { if (el) el.textContent = s; };
+    say('Checking the room — stay quiet for a moment…');
+    let r; try { r = await listenRoom(1500); } catch (e) { if (my === roomSeq) say(''); return; }
+    if (my !== roomSeq) return; // a newer check owns the message now
+    if (!r.fresh || DB.prefs.noiseFloor != null) { say(''); return; }
+    const v = classifyRoomCheck(r.frames, { manual: false });
+    if ('floor' in v) { storeRoomFloor(v.floor); say(roomQuietOrNoisy(v.floor)); }
+    else say(v.abstain === 'unusable' ? ROOM_NO_READING : 'Heard sound while checking the room, so the standard settings are in use. For a custom check, press "Check my microphone" and stay quiet.');
   }
   async function calibrateNoiseFloor() {
-    const resultEl = $('calibrateResult');
-    try { await openMic(); } catch (e) { if (resultEl) resultEl.textContent = 'The microphone was blocked, so it could not be checked.'; return; }
-    if (resultEl) resultEl.textContent = 'Listening for 3 seconds — stay quiet…';
-    const floor = await measureNoiseFloor(3000);
-    DB.prefs.noiseFloor = floor;
-    applyGates(gatesFor(DB.prefs.noiseFloor)); save();
-    if (resultEl) resultEl.textContent = (DB.prefs.noiseFloor === null || DB.prefs.noiseFloor < 0.003)
-      ? 'Your room is quiet.'
-      : 'There\'s a lot of background noise — move closer to the mic.';
+    const resultEl = $('calibrateResult'), say = s => { if (resultEl) resultEl.textContent = s; };
+    try { await openMic(); } catch (e) { say('The microphone was blocked, so it could not be checked.'); return; }
+    const my = ++roomSeq, mine = ++manualSeq; // after openMic: the background check it may just have started is superseded
+    say('Listening for 3 seconds — stay quiet…');
+    let r; try { r = await listenRoom(3000); } catch (e) { if (mine === manualSeq) say(ROOM_ERROR); return; } // a stale check that threw must not overwrite a newer check's message
+    if (mine !== manualSeq) return; // a newer manual check owns the message; never write 'interrupted' over it
+    if (!r.fresh) { say('The check was interrupted because the microphone changed or stopped. Press "Check my microphone" to try again.'); return; }
+    if (my !== roomSeq) return; // a newer manual check owns the message now
+    const v = classifyRoomCheck(r.frames, { manual: true });
+    if ('floor' in v) { storeRoomFloor(v.floor); say(roomQuietOrNoisy(v.floor)); }
+    else say(v.abstain === 'unusable' ? ROOM_NO_READING : 'I heard playing during the check, so nothing was changed. Try again in silence.');
   }
   // VERIFIED DEFECT 4 (mic-gate-and-capture): the micDeviceSelect change
   // handler re-opened the mic and called wireAnalysers(src) again without
@@ -714,7 +738,7 @@ import { register as registerPathway } from './ui/pathway.js';
   }
   function sanitizeDB(v, defaultLatencyMs, modelNow) {
     const notate = {}; NOTATE_MOD_IDS.forEach(m => { notate[m] = 'names'; });
-    const d = { v: 1, mods: {}, sessions: [], events: [], prefs: { mod: 'kbd', wind: 'bb', voice: 'low', kbdHands: 'both', sessionMinutes: null, names: true, noiseFloor: null, inputDeviceId: null, notate: notate, theme: 'system', locale: 'en', noteNaming: { system: 'letters', accidentals: 'mixed' } } }; v = (v && typeof v === 'object') ? v : {};
+    const d = { v: 1, mods: {}, sessions: [], events: [], prefs: { mod: 'kbd', wind: 'bb', voice: 'low', kbdHands: 'both', sessionMinutes: null, names: true, noiseFloor: null, noiseFloorV: null, inputDeviceId: null, notate: notate, theme: 'system', locale: 'en', noteNaming: { system: 'letters', accidentals: 'mixed' } } }; v = (v && typeof v === 'object') ? v : {};
     MOD_IDS.forEach(m => { d.mods[m] = sanitizeModel(m, v.mods && v.mods[m], modelNow); });
     if (Array.isArray(v.sessions)) d.sessions = v.sessions.filter(x => x && typeof x.d === 'string' && MODS[x.mod]).slice(-60).map(x => {
       // source/songId (a panel-logged row, e.g. a finished or abandoned song
@@ -734,6 +758,8 @@ import { register as registerPathway } from './ui/pathway.js';
     if (Array.isArray(v.events)) d.events = boundEvents(repairEventClocks(v.events.filter(x => validateEvent(x).ok), modelNow), { skillMap: KBD_SONG_SKILL_MAP, skillMapInstrument: 'kbd' });
     const p = v.prefs || {}; if (MODS[p.mod]) d.prefs.mod = p.mod; if (WIND_KINDS[p.wind]) d.prefs.wind = p.wind; d.prefs.voiceRange = (p.voiceRange && typeof p.voiceRange === 'object' && Number.isFinite(p.voiceRange.low) && Number.isFinite(p.voiceRange.high) && p.voiceRange.low < p.voiceRange.high) ? { low: clamp(Math.round(p.voiceRange.low), 24, 96), high: clamp(Math.round(p.voiceRange.high), 24, 96) } : null; const VKp = Object.assign({}, VOICE_KINDS, d.prefs.voiceRange ? { mine: ['My range (found by test)', tonicFromRange(exerciseRangeFor(d.prefs.voiceRange)).tonic] } : {}); if (VKp[p.voice]) d.prefs.voice = p.voice; d.prefs.names = p.names !== false;
     d.prefs.noiseFloor = (typeof p.noiseFloor === 'number' && isFinite(p.noiseFloor) && p.noiseFloor >= 0) ? clamp(p.noiseFloor, 0, 1) : null;
+    // A floor stored before the room check could abstain (no marker, or an older one) may have learned playing: drop it, so the next Connect measures again. Progress-file imports run through this too.
+    d.prefs.noiseFloorV = p.noiseFloorV === ROOM_CHECK_VERSION ? ROOM_CHECK_VERSION : null; if (d.prefs.noiseFloorV === null) d.prefs.noiseFloor = null; if (d.prefs.noiseFloor === null) d.prefs.noiseFloorV = null;
     d.prefs.inputDeviceId = typeof p.inputDeviceId === 'string' && p.inputDeviceId ? p.inputDeviceId : null;
     // Theme J1: System/Light/Dark, an unrecognised or missing saved value
     // sanitises to 'system' so a corrupt/old backup never leaves the toggle
@@ -2527,7 +2553,8 @@ import { register as registerPathway } from './ui/pathway.js';
   // sheet or back OUT into the page.
   $('setupBtn').addEventListener('click', function () { const el = $('setupSheet'), open = el.hidden; el.hidden = !open; this.setAttribute('aria-expanded', String(open)); });
   if ($('micDeviceSelect')) $('micDeviceSelect').addEventListener('change', function () {
-    DB.prefs.inputDeviceId = this.value || null; save();
+    // The room floor belongs to the device that was measured: drop it (and its marker) so the new device gets its own check, and advance micGen so any measurement still running for the old stream is discarded.
+    DB.prefs.inputDeviceId = this.value || null; micGen++; DB.prefs.noiseFloor = null; DB.prefs.noiseFloorV = null; applyGates(gatesFor(null)); save();
     if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; micReady = false; }
     if (needsMic()) openMic().then(ioRefresh).catch(() => ioState('off', 'That microphone could not be opened.'));
   });
