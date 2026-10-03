@@ -168,3 +168,79 @@ test('U5 laneEnv points TEMP and TMP inside the run dir', () => {
   });
   assert.throws(() => paths.laneEnv('/home/dev/run-1'), /Windows/);
 });
+
+// ---- B2: the WSL side's exit code when the Windows side leaves no report, and
+// the files staged for Windows node.exe. A WSL interop failure ("UtilAcceptVsock:
+// accept4 failed 110") makes node.exe exit 1 having run nothing; that must not
+// read as a scenario result, so no report means exit 2 whatever node.exe said.
+import { mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync, chmodSync, existsSync, accessSync, constants } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+test('U8 laneExit: no report from the Windows side is exit 2 whatever node.exe exited with', () => {
+  for (const status of [0, 1, 2, 3, null, undefined]) assert.equal(lane.laneExit({ status, hasReport: false }), 2, `status ${status}`);
+});
+
+test('U8 laneExit: with a report, node.exe\'s own exit code stands (a signal or no code is 2)', () => {
+  for (const status of [0, 1, 2]) assert.equal(lane.laneExit({ status, hasReport: true }), status);
+  assert.equal(lane.laneExit({ status: null, hasReport: true }), 2);
+});
+
+// Runs the real WSL side against a stand-in node.exe that exits 1 and writes nothing, which is
+// what a WSL interop failure looks like from here. It needs a writable /mnt/<letter>/ directory,
+// and the lane never guesses a Windows user directory, so neither does this test: it runs only
+// when BAND_COACH_WIN_TEST_ROOT names one (for example
+// /mnt/c/Users/<you>/AppData/Local/Temp/band-coach-win-lane/unit) and says so when unset. CI and
+// `npm test` skip it; U8 laneExit above covers the same rule there.
+const TEST_ROOT = process.env.BAND_COACH_WIN_TEST_ROOT;
+let canMount = false;
+try {
+  if (TEST_ROOT) {
+    mkdirSync(TEST_ROOT, { recursive: true });
+    accessSync(TEST_ROOT, constants.W_OK);
+    canMount = true;
+  }
+} catch {}
+
+test('U8 runWsl: a node.exe that exits 1 and writes no report makes the lane exit 2', { skip: canMount ? false : 'BAND_COACH_WIN_TEST_ROOT is not set to a writable /mnt/<letter>/ directory' }, () => {
+  const root = mkdtempSync(join(TEST_ROOT, 'bc-lane-unit-'));
+  const bin = mkdtempSync(join(tmpdir(), 'bc-lane-unit-'));
+  try {
+    const fake = join(bin, 'node.exe');
+    writeFileSync(fake, '#!/bin/sh\nexit 1\n');
+    chmodSync(fake, 0o755);
+    const html = join(bin, 'band-coach.html');
+    writeFileSync(html, '<!doctype html>');
+    const reportTo = join(bin, 'report.json');
+    const errs = [];
+    const code = lane.runWsl({ winRoot: join(root, 'lane'), node: fake, html, report: reportTo, visible: false }, (m) => errs.push(m));
+    assert.equal(code, 2, `exit code (stderr: ${errs.join(' | ')})`);
+    const report = JSON.parse(readFileSync(reportTo, 'utf8'));
+    assert.equal(report.exit, 2);
+    assert.match(report.note, /no report/);
+    assert.equal(report.childStatus, 1);
+    assert.deepEqual(readdirSync(join(root, 'lane')), [], 'the run directory was removed');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+    rmSync(bin, { recursive: true, force: true });
+  }
+});
+
+test('U9 stageFiles: every relative import of a staged file is itself staged', () => {
+  const repo = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
+  const dir = join(repo, 'tests', 'acceptance', 'win');
+  const staged = lane.stageFiles(readdirSync(dir));
+  assert.ok(staged.includes('tests/helpers/browser.mjs'));
+  assert.ok(staged.includes('tests/acceptance/win/run.mjs'));
+  assert.ok(staged.includes('src/core/i18n.js'), 'W3 reads the app\'s own update strings');
+  const set = new Set(staged);
+  for (const rel of staged) {
+    assert.ok(existsSync(join(repo, rel)), `${rel} exists`);
+    const text = readFileSync(join(repo, rel), 'utf8');
+    for (const m of text.matchAll(/(?:^|\n)\s*import\s[^;]*?from\s+'(\.[^']+)'/g)) {
+      const target = join(dirname(rel), m[1]).replace(/\\/g, '/');
+      assert.ok(set.has(target), `${rel} imports ${m[1]}, which is not staged (${target})`);
+    }
+  }
+});
