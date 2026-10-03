@@ -237,3 +237,16 @@ test('control: the loud pluck with the microphone blocked is never judged', asyn
     assert.deepEqual(judged, [], 'a blocked microphone still produced a pass or a correction');
   });
 });
+
+// T5b: a learner in a quiet room who takes a few seconds to play is not told the mic is dead or too
+// quiet before they play, and a correct pluck leaves no such warning beside the pass.
+test('T5b no "not hearing anything" or "too quiet" line before a correct pluck, and none beside the pass', async (t) => {
+  await run(t, 't5b', [{ at: AT, midis: [GTR.midi], gain: 0.6 }], {}, GTR, async (page) => {
+    const pass = await firstRecord(page, isPass);
+    assert.ok(pass, 'the correct pluck was never passed');
+    const warned = (await lines(page)).filter((r) => r.el === 'coach' && (r.text === MSG.silent || r.text === MSG.quiet));
+    assert.deepEqual(warned.map((r) => r.text), [], 'a mic warning was shown before the learner could play');
+    const coach = await page.evaluate("document.getElementById('coach').textContent");
+    assert.ok(coach !== MSG.silent && coach !== MSG.quiet, 'a mic warning is still on screen beside the pass');
+  });
+});

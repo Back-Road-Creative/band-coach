@@ -65,6 +65,7 @@ of quiet and tunes the listening thresholds to your room and hardware instead of
 one-size-fits-all level, including the level the pitch detector itself gates on; a small meter
 shows the live input level. An instrument plugged into only one channel of a 2-channel interface
 is summed into the listening path rather than silenced.
+While you practise, the coach line says why nothing is being judged: "not hearing anything" or "too quiet to judge" only after about 4 seconds of listening (you may still be getting ready), and "a chord" as soon as it hears one. The moment a clean single note is heard, that warning comes down and the line it replaced comes back.
 
 Both checks say what they are doing and what they heard in the line beside the button ("Checking the
 room — stay quiet", then "Your room is quiet." or a background-noise warning). If you start playing

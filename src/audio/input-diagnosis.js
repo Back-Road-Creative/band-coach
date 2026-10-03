@@ -78,3 +78,20 @@ export function diagnoseInput(frames, { gates, clarityGate = 0.8, windowSec = 1.
 
   return { state: 'unclear', message: INPUT_DIAGNOSIS_MESSAGES.unclear };
 }
+
+// Seconds of listening before a 'silent' or 'too-quiet' verdict may be said. A learner who has just
+// pressed Start is still getting the instrument up, so a quiet room is not a fault yet. 'unclear' (a
+// chord) needs loud sound, so it is never held back.
+export const DIAGNOSIS_GRACE_SEC = 4;
+
+// Turns a verdict into what the coach line should do. `last` is the state a line was last decided for
+// (null at the start); `sinceSec` is how long this run of listening has lasted. Returns the new `last`,
+// the message to `say` (or null), and whether to `clear` a warning already on screen because clean
+// notes are now passing. Pure: the caller owns the DOM and the clock.
+export function stepDiagnosis(diag, last, { sinceSec, graceSec = DIAGNOSIS_GRACE_SEC } = {}) {
+  const none = { last, say: null, clear: false };
+  if (!diag || diag.state === 'insufficient' || diag.state === last) return none;
+  if ((diag.state === 'silent' || diag.state === 'too-quiet') && !(sinceSec >= graceSec)) return none;
+  if (!diag.message) return { last: diag.state, say: null, clear: last !== null && last !== 'ok' };
+  return { last: diag.state, say: diag.message, clear: false };
+}

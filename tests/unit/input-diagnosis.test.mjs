@@ -6,7 +6,7 @@
 // actually happening.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { diagnoseInput, INPUT_DIAGNOSIS_MESSAGES } from '../../src/audio/input-diagnosis.js';
+import { diagnoseInput, stepDiagnosis, DIAGNOSIS_GRACE_SEC, INPUT_DIAGNOSIS_MESSAGES } from '../../src/audio/input-diagnosis.js';
 
 const GATES = { pitch: 0.008 }; // a fixed test gate (DEFAULT_GATES.pitch is now 0.004; these cases pin the verdict order at 0.008)
 
@@ -163,4 +163,42 @@ test('a sustained share (>= 0.3) of frames over the gate that is never clear sti
   const n = Math.ceil(frames.length * 0.4);
   for (let i = frames.length - n; i < frames.length; i++) frames[i] = { ...frames[i], rms: 0.02, clarity: 0.5 };
   assert.equal(diagnoseInput(frames, { gates: GATES }).state, 'unclear');
+});
+
+// ---------- stepDiagnosis: what the coach line should do with a verdict ----------
+
+test('stepDiagnosis: a silent or too-quiet verdict inside the grace period says nothing and is not remembered', () => {
+  for (const state of ['silent', 'too-quiet']) {
+    const r = stepDiagnosis({ state, message: INPUT_DIAGNOSIS_MESSAGES[state] }, null, { sinceSec: 1.6 });
+    assert.deepEqual(r, { last: null, say: null, clear: false });
+  }
+});
+
+test('stepDiagnosis: a silent verdict after the grace period is said once', () => {
+  const diag = { state: 'silent', message: INPUT_DIAGNOSIS_MESSAGES.silent };
+  const first = stepDiagnosis(diag, null, { sinceSec: DIAGNOSIS_GRACE_SEC });
+  assert.deepEqual(first, { last: 'silent', say: INPUT_DIAGNOSIS_MESSAGES.silent, clear: false });
+  assert.deepEqual(stepDiagnosis(diag, 'silent', { sinceSec: 9 }), { last: 'silent', say: null, clear: false });
+});
+
+test('stepDiagnosis: a chord warning is not held back by the grace period', () => {
+  const r = stepDiagnosis({ state: 'unclear', message: INPUT_DIAGNOSIS_MESSAGES.unclear }, null, { sinceSec: 1.6 });
+  assert.equal(r.say, INPUT_DIAGNOSIS_MESSAGES.unclear);
+});
+
+test('stepDiagnosis: ok after a warning clears it; ok with no warning showing does nothing', () => {
+  for (const last of ['silent', 'too-quiet', 'unclear']) {
+    assert.deepEqual(stepDiagnosis({ state: 'ok', message: null }, last, { sinceSec: 9 }), { last: 'ok', say: null, clear: true });
+  }
+  assert.deepEqual(stepDiagnosis({ state: 'ok', message: null }, null, { sinceSec: 9 }), { last: 'ok', say: null, clear: false });
+  assert.deepEqual(stepDiagnosis({ state: 'ok', message: null }, 'ok', { sinceSec: 9 }), { last: 'ok', say: null, clear: false });
+});
+
+test('stepDiagnosis: insufficient changes nothing', () => {
+  assert.deepEqual(stepDiagnosis({ state: 'insufficient', message: null }, 'unclear', { sinceSec: 9 }), { last: 'unclear', say: null, clear: false });
+});
+
+test('stepDiagnosis: a warning that comes back after ok is said again', () => {
+  const r = stepDiagnosis({ state: 'unclear', message: INPUT_DIAGNOSIS_MESSAGES.unclear }, 'ok', { sinceSec: 9 });
+  assert.equal(r.say, INPUT_DIAGNOSIS_MESSAGES.unclear);
 });

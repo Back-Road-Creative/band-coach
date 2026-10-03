@@ -23,7 +23,7 @@ import { yin } from './audio/yin.js';
 import { createPitchNode } from './audio/pitch-worklet.js';
 //
 import { gatesFor, meterLevel, releaseFloor, classifyRoomCheck, ROOM_CHECK_VERSION, MIN_FLOOR, QUIET_RELEASE_SEC } from './audio/levels.js';
-import { diagnoseInput } from './audio/input-diagnosis.js';
+import { diagnoseInput, stepDiagnosis } from './audio/input-diagnosis.js';
 import { createOnsetDetector } from './audio/onset.js';
 import { createDrumClassifier } from './audio/drum-classify.js';
 //
@@ -1080,7 +1080,7 @@ import { register as registerPathway } from './ui/pathway.js';
   // of silent / too-quiet / unclear-chord is actually happening, instead of
   // saying nothing at all. diagLastState tracks the last state a message was
   // shown for so a held state doesn't re-say the same line every frame.
-  let diagInputFrames = [], diagLastState = null;
+  let diagInputFrames = [], diagLastState = null, diagSince = null, diagShown = null, diagBefore = ''; // diagSince: when this run of listening began; diagShown/diagBefore: the warning on the coach line and the line it replaced
   const DIAG_WINDOW_SEC = 1.5;
 
   function playRef(t) {
@@ -1426,8 +1426,12 @@ import { register as registerPathway } from './ui/pathway.js';
       // below, so the diagnosis must use the same threshold or it could call
       // "too-quiet" a signal onPitch itself would already have judged.
       const diag = diagnoseInput(diagInputFrames, { gates: { pitch: gates.note } });
-      if (diag.state !== 'insufficient' && diag.state !== diagLastState) { diagLastState = diag.state; if (diag.message) coach(diag.message); }
-    } else { diagInputFrames = []; diagLastState = null; }
+      // stepDiagnosis() holds back a silent/too-quiet verdict for the first moments of listening, and says when clean notes should take a warning down; the line it replaced is put back.
+      if (diagSince === null) diagSince = now();
+      const step = stepDiagnosis(diag, diagLastState, { sinceSec: now() - diagSince }); diagLastState = step.last;
+      if (step.say) { if ($('coach').textContent !== diagShown) diagBefore = $('coach').textContent; diagShown = step.say; coach(step.say); }
+      else if (step.clear && diagShown && $('coach').textContent === diagShown) { coach(diagBefore); diagShown = null; }
+    } else { diagInputFrames = []; diagLastState = null; diagSince = null; diagShown = null; }
     if (M.input === 'pluck') {
       // F8: an onset detector (src/audio/onset.js) catches a re-pluck of the
       // SAME note on a still-ringing string, which the RMS-drop/pitch-change
@@ -2127,6 +2131,7 @@ import { register as registerPathway } from './ui/pathway.js';
     // writing) -- the suggestion is teaching content no player has checked,
     // so it is never claimed reviewed just because it appears in the plan.
     if (mod === 'kbd' && sessionPlan.some(b => b.kind === 'song')) { const entry = songFor(S.level); if (entry && !isReviewCurrent(itemReview(entry.id, contentRev(entry)))) { const s = starterSongs.find(x => x.id === entry.songId); msg += ' ' + (s ? s.title : entry.songId) + ': ' + t('review.unreviewed'); } }
+    diagInputFrames = []; diagLastState = null; diagSince = null; diagShown = null; // a new sitting starts the mic diagnosis afresh
     playing = true; paused = false; $('playBtn').textContent = 'Pause'; $('endBtn').hidden = false; coach(msg); showAll(); wakeLock.acquire();
   }
   // logSession(): a panel (e.g. a song lesson) logs its own practice as a
