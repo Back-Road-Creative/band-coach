@@ -6,7 +6,9 @@
 // Each case runs at two frame spacings (STEP 16 ms and 140 ms; the burst frames are always 4 ms apart),
 // through the real onPitch via window.__coach.pitchFrame(frame, dt). G3, G4, G5a and G6b are green at
 // the parent and at head (controls: real silence still releases, a fresh pluck and a different note
-// still fire); G1, G6a and G7 are red at the parent.
+// still fire); G1, G6a, G7 and G8 are red at the parent. G8a/G8b pin the two resets of the quiet clock
+// (a pitched frame, and a wobble frame at or above the release floor): without either, short dropouts
+// spread across one ring add up to a release mid-ring.
 // Not here: a recovery-onset rule (an onset quieter than the last 0.3 s is a dip's recovery, not a
 // pluck). The F8 probe measured a real same-note re-pluck's onset frame at 0.98 of the ring's loudest
 // frame, so that rule would drop a real re-pluck; it is left to JP (see the PR body).
@@ -131,6 +133,28 @@ for (const [id, STEP] of STEPS) {
     assert.equal(j.done, true, 'real silence did not release the note');
     assert.equal(j.cls, 'ok');
   });
+
+  // Two bursts of six quiet frames (5 counted gaps = 0.08 s each, under QUIET_RELEASE_SEC) split by one frame
+  // that must reset the clock; added up (11 gaps = 0.176 s) they would release the note mid-ring.
+  const splitQuiet = (name, mid) => test(`${name} (step ${id})`, async (t) => {
+    const { page, loud } = await begin(t);
+    const m1 = await pass(page, loud);
+    await nextTask(page);
+    assert.notEqual(await target(page), m1, 'the next item is a different note');
+    await feedAll(page, rep(6, () => frame(m1, loud)), STEP);
+    await feedAll(page, rep(6, quiet), 0.016);
+    await feedAll(page, [await mid(page, m1, loud)], STEP);
+    await feedAll(page, rep(6, quiet), 0.016);
+    await feedAll(page, three(m1, loud), STEP); // no onset
+    notJudged(await judged(page), name);
+  });
+  splitQuiet('G8a a pitched frame between two short quiet bursts resets the clock', async (page, m1, loud) => frame(m1, loud));
+  splitQuiet('G8b a wobble frame at the release floor between two short quiet bursts resets the clock', async (page) => {
+    const g = await read(page, 'window.__coach.gates()');
+    const w = (levels.releaseFloor(g) + g.note) / 2;
+    assert.ok(levels.releaseFloor(g) < w && w < g.note, 'G8b: the wobble level sits between the release floor and the note gate');
+    return { rms: w, freq: 0, clarity: 0, onset: false };
+  });
 }
 
 test('G7 the release constant and the premises of the cases above', () => {
@@ -138,5 +162,6 @@ test('G7 the release constant and the premises of the cases above', () => {
   assert.ok(Number.isFinite(levels.QUIET_RELEASE_SEC) && levels.QUIET_RELEASE_SEC > 0);
   assert.ok(9 * BURST_DT < levels.QUIET_RELEASE_SEC, 'G1: the burst must be shorter than the release time');
   assert.ok(4 * 0.14 >= levels.QUIET_RELEASE_SEC, 'G3/G6b: real silence must be at least the release time');
+  assert.ok(5 * 0.016 < levels.QUIET_RELEASE_SEC && levels.QUIET_RELEASE_SEC <= 11 * 0.016, 'G8: one burst of five 16 ms gaps is under the release time, two together are not');
   assert.ok(0.14 >= levels.QUIET_RELEASE_SEC, 'G6a: one long frame would release at once if the first quiet frame counted');
 });
