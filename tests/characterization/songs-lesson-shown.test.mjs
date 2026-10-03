@@ -48,7 +48,8 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 // play), agoMs before the seed; the page turns agoMs into `at` from its own clock.
 const wholeRow = (id, songId, agoMs) => ({ v: 1, id, agoMs, instrument: 'kbd', skill: 'whole:null', source: 'song', songId, assistance: 'none', dims: { pitch: 'ok', onset: 'ok' }, unassessed: ['hold', 'tune'], activeMs: 1000, input: 'midi' });
 
-// The pathway panel's "song", "check", "recheck" or "transfer" step, as kbd-pathway-panel.test.mjs seeds it.
+// The pathway panel's "song" or "check" step, seeded as kbd-pathway-panel.test.mjs does; the "recheck" and
+// "transfer" steps come from extraRows (wholeRow rows), not from kbd-pathway-panel.test.mjs.
 async function seedPathway(page, withSession, extraRows = []) {
   await page.evaluate(`(function () {
     const db = window.__coach.db();
