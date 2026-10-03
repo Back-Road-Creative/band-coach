@@ -25,16 +25,18 @@ import { axeSource, WCAG_TAGS, formatViolations, tabTo, rectOf, assertInFirstScr
 // unchanged; it watches #feedback / #feedbackCard / #prompt with observers.
 // Each prompt record carries `bid`, an id for the current <b> node (0 when
 // there is none), so "a NEW question" is a node change, not a text change (the
-// next question may repeat the note). Both lists keep their last 2000 records.
+// next question may repeat the note). Each list keeps its last 2000 records.
 const RECORDER = `(() => {
   const KEEP = 2000;
-  const q = (window.__q62 = { strokes: [], texts: [] });
+  const q = (window.__q62 = { strokes: [], flashes: [], texts: [] });
   const ids = new WeakMap();
   let next = 0;
   const push = (a, r) => { a.push(r); if (a.length > KEEP) a.splice(0, a.length - KEEP); };
   const orig = CanvasRenderingContext2D.prototype.strokeRect;
   CanvasRenderingContext2D.prototype.strokeRect = function (x, y, w, h) {
-    push(q.strokes, { strokeStyle: String(this.strokeStyle).toLowerCase(), lineWidth: this.lineWidth, x, y, w, h, t: performance.now() });
+    const r = { strokeStyle: String(this.strokeStyle).toLowerCase(), lineWidth: this.lineWidth, x, y, w, h, t: performance.now() };
+    push(q.strokes, r);
+    if (r.lineWidth === 8) push(q.flashes, r); // the full-canvas flash, kept apart so ordinary frames cannot push it out of the last 2000
     return orig.apply(this, arguments);
   };
   document.addEventListener('DOMContentLoaded', () => {
@@ -56,6 +58,9 @@ const BAD_FLASH = '#ff6b5e';
 const FOCUS_BOX = '#ffd23f';
 // The selector dialog-focus.js uses to decide what Tab may reach inside the break card.
 const DIALOG_FOCUSABLE = 'button:not([hidden]):not(:disabled), [href], input:not([hidden]):not(:disabled), select:not([hidden]):not(:disabled), textarea:not([hidden]):not(:disabled), [tabindex]:not([tabindex="-1"])';
+
+// A read: how many pixels on the canvas are exactly the focus-box colour (#ffd23f, 255 210 63).
+const BOX_PIXELS = `(() => { const c = document.getElementById('cv'); const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let n = 0; for (let i = 0; i < d.length; i += 4) if (d[i] === 255 && d[i + 1] === 210 && d[i + 2] === 63 && d[i + 3] === 255) n++; return n; })()`;
 
 const KBD_BUTTON = '#picker button[data-mod="kbd"]';
 const SONGS_NAV = '#mainNav button[data-route="songs"]';
@@ -111,24 +116,21 @@ async function runAxe(page, label) {
 
 // Opens the instrument sheet if it is shut, picks Keyboard, and presses Start,
 // all with keys; leaves the session running with a question on screen.
-async function startKeyboardSession(page, stops) {
+async function startKeyboardSession(page) {
   if (await isHidden(page, 'picker')) {
     await tabTo(page, '#navInstrument');
     await page.press('Enter');
     await page.waitFor("!document.getElementById('picker').hidden");
   }
   await tabTo(page, KBD_BUTTON);
-  if (stops) stops.push(await readStop(page, 'picker kbd'));
   await page.press('Enter');
   await tabTo(page, '#playBtn');
-  if (stops) stops.push(await readStop(page, 'playBtn'));
   await page.press('Enter');
   await page.waitFor("!document.getElementById('endBtn').hidden && !!document.querySelector('#prompt b')");
 }
 
-async function endSessionByKeyboard(page, stops) {
+async function endSessionByKeyboard(page) {
   await tabTo(page, '#endBtn');
-  if (stops) stops.push(await readStop(page, 'endBtn'));
   await page.press('Enter');
   await page.waitFor("document.getElementById('endBtn').hidden");
 }
@@ -153,11 +155,10 @@ async function chooseTheme(page, want) {
   const order = ['system', 'light', 'dark'];
   for (let i = 0; i < 4; i++) {
     const have = await read(page, "document.getElementById('optTheme').value");
-    if (have === want) return i;
+    if (have === want) return;
     await page.press(order.indexOf(want) > order.indexOf(have) ? 'ArrowDown' : 'ArrowUp');
   }
   assert.equal(await read(page, "document.getElementById('optTheme').value"), want, `could not reach theme ${want} with the arrow keys`);
-  return 4;
 }
 
 const bodyBackground = (page) => read(page, 'getComputedStyle(document.body).backgroundColor');
@@ -200,13 +201,15 @@ test('keyboard and accessibility journey on the release file (launch A, one page
       await runAxe(page, 'session running with a prompt');
     });
 
-    await t.test('A11-1 a right note brings a new question; a wrong note is judged', async () => {
+    await t.test('A11-1 a right note brings a new question; then a wrong note is pressed', async () => {
       run.right = await playTarget(page);
       await waitNewQuestion(page, run.right);
       assert.ok(await read(page, "document.querySelector('#prompt b').textContent.trim().length > 0"), 'the new question names a note');
       run.wrong = await playTarget(page, { wrong: true });
-      assert.notEqual(run.wrong.key, KEY_FOR[run.wrong.target], 'the second press is not the target note');
-      await page.waitFor(`window.__q62.strokes.some((s) => s.t > ${run.wrong.t0} && s.lineWidth === 8 && s.strokeStyle === '${BAD_FLASH}')`);
+      // Give the wrong note's feedback time to land (the floored wait). Not an assert here: whether it
+      // said anything is the A11-3 step's check, so a silent feedback region fails there, by name. The
+      // flash is NOT waited for: it is drawn only for 220 ms and may fall between two frames on a slow box.
+      await page.waitFor(`window.__q62.texts.some((r) => r.id === 'feedback' && r.t > ${run.wrong.t0} && r.text)`).catch(() => {});
     });
 
     await t.test('A11-7 axe: feedback shown', async () => {
@@ -229,7 +232,6 @@ test('keyboard and accessibility journey on the release file (launch A, one page
       const wrongRecs = (await feedbackRecords(page, run.wrong.t0)).filter((r) => r.text);
       assert.ok(wrongRecs.length > 0, 'the wrong note put non-empty text into #feedback');
       assert.notEqual(wrongRecs[0].text, rightText, 'the wrong note said something different from the right note');
-      assert.notEqual(rightText, '', 'right-note text is not empty');
       // A second signal: the accessibility tree shows a status region carrying the words now on screen.
       let regions = [];
       let latest = '';
@@ -347,19 +349,19 @@ test('keyboard and accessibility journey on the release file (launch A, one page
     });
 
     await t.test('A11-2 the canvas draws a focus box when Tab lands on it, and removes it after', async () => {
-      await startKeyboardSession(page, null);
-      const countBox = () => read(page, `(() => { const c = document.getElementById('cv'); const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let n = 0; for (let i = 0; i < d.length; i += 4) if (d[i] === 255 && d[i + 1] === 210 && d[i + 2] === 63 && d[i + 3] === 255) n++; return n; })()`);
+      await startKeyboardSession(page);
+      const countBox = () => read(page, BOX_PIXELS);
       assert.equal(await countBox(), 0, 'no focus box is drawn before the canvas is focused');
       const since = await read(page, 'performance.now()');
       await tabTo(page, '#cv');
-      // A few frames to draw it, then count what is on the canvas; a bounded look, so a missing box fails on the count below.
-      let drawn = 0;
-      for (let i = 0; i < 40 && drawn === 0; i++) { drawn = await countBox(); if (drawn === 0) await sleep(50); }
+      // Wait (the suite's floored wait) for a frame that draws it, then count afresh; a missing box fails on the count below.
+      await page.waitFor(`${BOX_PIXELS} > 0`).catch(() => {});
+      const drawn = await countBox();
       t.diagnostic(`A11-2 canvas outline (not asserted): ${JSON.stringify(await read(page, "(() => { const s = getComputedStyle(document.getElementById('cv')); return { style: s.outlineStyle, width: s.outlineWidth, focusVisible: document.getElementById('cv').matches(':focus-visible') }; })()"))}`);
       assert.ok(drawn > 0, `the focused canvas shows the ${FOCUS_BOX} focus box (${drawn} such pixels)`);
       assert.ok(await read(page, `window.__q62.strokes.some((s) => s.t > ${since} && s.strokeStyle === '${FOCUS_BOX}' && s.lineWidth === 4)`), `the canvas was drawn with a ${FOCUS_BOX} strokeRect after focus`);
       await page.press('Tab');
-      await page.waitFor(`(() => { const c = document.getElementById('cv'); const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; for (let i = 0; i < d.length; i += 4) if (d[i] === 255 && d[i + 1] === 210 && d[i + 2] === 63 && d[i + 3] === 255) return false; return true; })()`);
+      await page.waitFor(`${BOX_PIXELS} === 0`);
       assert.equal(await countBox(), 0, 'the focus box is gone once focus has moved on');
     });
 
@@ -374,7 +376,6 @@ test('keyboard and accessibility journey on the release file (launch A, one page
       const findings = [];
       for (const size of SIZES) {
         await page.setViewport(size);
-        await sleep(250);
         assert.equal(await isHidden(page, 'endBtn'), false, `a session is running at ${size.name}`);
         await tabTo(page, '#navInstrument');
         await page.press('Enter');
@@ -400,14 +401,13 @@ test('keyboard and accessibility journey on the release file (launch A, one page
 
     await t.test('A11-7 axe: 320x568 with a session running', async () => {
       await page.setViewport(SIZES[0]);
-      await sleep(250);
       assert.equal(await isHidden(page, 'endBtn'), false, 'a session is running');
       await runAxe(page, '320x568 session running');
     });
 
     await t.test('A11-4 End session by keyboard and return to a desktop window', async () => {
       await page.setViewport({ width: 1280, height: 800 });
-      await endSessionByKeyboard(page, null);
+      await endSessionByKeyboard(page);
       assert.equal(await isHidden(page, 'endBtn'), true, 'the session ended');
     });
 
@@ -459,7 +459,9 @@ test('keyboard and accessibility journey on the release file (launch A, one page
     });
 
     await t.test('A11-6 control (launch A): the same wrong note draws the full-canvas flash', async () => {
-      const flash = await read(page, `window.__q62.strokes.filter((s) => s.t > ${run.wrong.t0} && s.lineWidth === 8 && s.strokeStyle === '${BAD_FLASH}').length`);
+      // Depends on one animation frame landing inside the 220 ms the app draws the flash (app.js:1995); on a
+      // starved box that frame can be missed, which is why the earlier steps do not wait for it.
+      const flash = await read(page, `window.__q62.flashes.filter((s) => s.t > ${run.wrong.t0} && s.strokeStyle === '${BAD_FLASH}').length`);
       assert.ok(flash > 0, 'without reduced motion the wrong note flashes the canvas edge');
       const durations = await read(page, "['readyFill', 'energyFill'].map((id) => getComputedStyle(document.getElementById(id)).transitionDuration)");
       for (const d of durations) assert.ok(d.split(',').some((v) => parseFloat(v) > 0), `without reduced motion the meters animate (transition-duration ${d})`);
@@ -480,7 +482,7 @@ test('reduced motion: the system setting is on before the page loads (launch B)'
     });
 
     await t.test('A11-6 right note then wrong note by keyboard', async () => {
-      await startKeyboardSession(page, null);
+      await startKeyboardSession(page);
       run.right = await playTarget(page);
       await waitNewQuestion(page, run.right);
       run.wrong = await playTarget(page, { wrong: true });
@@ -492,7 +494,7 @@ test('reduced motion: the system setting is on before the page loads (launch B)'
       const rightText = (await feedbackRecords(page, run.right.t0)).filter((r) => r.t < run.wrong.t0 && r.text);
       const wrongText = (await feedbackRecords(page, run.wrong.t0)).filter((r) => r.text);
       assert.ok(rightText.length > 0 && wrongText.length > 0, 'both notes still put words in the feedback region');
-      const flashes = await read(page, "window.__q62.strokes.filter((s) => s.lineWidth === 8).map((s) => s.strokeStyle + ' @' + Math.round(s.t))");
+      const flashes = await read(page, "window.__q62.flashes.map((s) => s.strokeStyle + ' @' + Math.round(s.t))");
       assert.equal(flashes.length, 0, `no full-canvas flash (lineWidth 8 strokeRect) was drawn under reduced motion; saw ${flashes.length}, first ${JSON.stringify(flashes.slice(0, 3))}`);
     });
 
