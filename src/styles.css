@@ -551,6 +551,7 @@
     .main > .side > #feedbackCard { order: -1; }
     .main:has(#endBtn:not([hidden])) > .side > #feedbackCard[hidden] { display: block !important; visibility: hidden; }
     @media (max-width: 360px) { #feedback { min-height: 4.4em; } }
+    /* 16 / 7 applies to every #cv instrument except the kit (keyboard, tuner, ...), not just the keyboard; it shortens the keys about 15% (Q6-1 F1). */
     #cv:not(.kit) { aspect-ratio: 16 / 7; }
   }
   @media (orientation: landscape) and (max-height: 500px) {
@@ -562,6 +563,7 @@
     .main:has(#endBtn:not([hidden])) > .side > #feedbackCard[hidden] { display: block !important; visibility: hidden; }
     .stage { padding: 6px; gap: 4px; }
     .card { padding: 6px 12px; }
+    #feedback { min-height: 4.4em; } /* beside Start the card is narrow: the longest line (wrong octave) takes 3 lines, and a 3rd line must not push the canvas down */
     #prompt { min-height: 1em; line-height: 1; }
     #cv { max-height: 45vh; }
     #cv.kit { max-height: 53vh; }

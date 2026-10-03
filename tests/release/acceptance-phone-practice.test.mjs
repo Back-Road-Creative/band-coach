@@ -3,7 +3,8 @@
 // nothing but a real finger aimed at where they are DRAWN can tell. The release file, launched the way a
 // person's browser runs it (withAcceptancePage); the learner acts only through tap(), click(), press() and a
 // mouse wheel. page.evaluate only OBSERVES: rects, computed style, CSSOM, canvas pixels, the feedback line.
-// Never window.__coach (the release build has none).
+// Never window.__coach (the release build has none). Where the taps are judged key by key (T5, T6) is the other
+// file, acceptance-phone-practice-taps.test.mjs, so that each file keeps its own 120 s budget.
 //
 // What it asserts, per size and instrument (the four sizes are CSS px @ device scale factor):
 //   T1  every drawn key and kit piece passes the 24 CSS px target rule, as axe-core applies it (target-size, minSize
@@ -18,16 +19,14 @@
 //   T3  the README names each size with the policy phrase of that size (no browser).
 //   T4  no sideways scroll, and the canvas does not move when the feedback card appears (a shift would move every
 //       drawn target under the finger).
-//   T5  real taps: every white key, every black key (centre and the two points just outside its edges), every kit piece (its centre and its inside east and south edges, idle), aimed at
-//       where it is drawn, at the position the policy says; the key or piece that lights is the one aimed at.
-//   T6  negative control: taps on the gaps, label strips and empty space light nothing.
+//   T5, T6 (real taps on every key and kit piece; taps on the gaps light nothing): acceptance-phone-practice-taps.test.mjs.
 //   T7  desktop unchanged: at 1280x800 and 1024x640 the @media conditions that match are the pre-change list.
 //   T8  a floor or fit miss CSS cannot fix is a `todo` subtest naming the unit that must fix it (below).
 //
 // The geometry comes from tests/helpers/instrument-geometry.mjs (the draw formulas written out again) and is checked
 // against what the canvas really drew BEFORE any tap, so a bug in it fails as "GEOMETRY HELPER DISAGREES WITH
 // CANVAS" and stops that size, never as a hit-test failure. The pixel sampler, judges and agreement checks are a
-// trimmed copy of acceptance-drawn-instruments.test.mjs (nothing there is exported).
+// trimmed copy of acceptance-drawn-instruments.test.mjs (nothing there is exported), also copied into the taps file.
 //
 // Probed on the real build before writing (these shaped the test):
 // - page.tap() at mobile: true delivers one pointerdown with pointerType "touch"; a CDP mouseWheel event scrolls the
@@ -47,8 +46,6 @@ import {
   keyboardProbePoints,
   keyboardSamplePoints,
   kitRects,
-  kitProbePoints,
-  kitEmptyPoint,
   kitSamplePoints,
   targetSizes,
   spacingOk,
@@ -68,7 +65,7 @@ const readmeClause = (s) => `${s.name}: keyboard ${POLICY_TEXT[s.keyboard]}, dru
 // Misses CSS cannot fix: key `${size} ${what}`, value the todo text (which names the src unit that must fix it).
 // Written in full as their own subtests: the real floor is asserted, never skipped, never lowered.
 const F_TODO = {
-  '320x568 keyboard targets': 'Q6-1 F1: 320x568 black keys 21.0x20.1 and 24.0x20.1 (needs src unit phone-keyboard-black-keys)',
+  '320x568 keyboard targets': 'Q6-1 F1: 320x568 black keys 21.0x20.1 and 24.0x20.1, 20.1 tall because this unit\'s 16 / 7 canvas rule (src/styles.css, phone query) shortens every non-kit canvas; the parent\'s 16 / 8.2 gave 23.2, also under 24 (needs src unit phone-keyboard-black-keys)',
   '320x568 kit bar targets': 'Q6-1 F2: 320x568 kit in a bar, hihat-open 17.0x17.0 and hihat-closed 19.1x19.1 (needs src unit phone-kit-small-pieces)',
   '320x568 kit fit': 'Q6-1 F3: 320x568 kit in a session, the playing surface, feedback, objective and End session span 703 px of a 568 px window (needs src unit phone-kit-session-height)',
 };
@@ -87,13 +84,7 @@ const KIT_LETTERS = { kick: 'F', snare: 'J', 'hihat-closed': 'D', 'hihat-pedal':
 const KIT_SHAPE = { kick: 'drum', snare: 'drum', 'hihat-closed': 'cymbal', 'hihat-pedal': 'drum', 'hihat-open': 'cymbal', 'tom-floor': 'drum', 'tom-mid': 'drum', 'tom-high': 'drum', crash: 'cymbal', ride: 'cymbal' };
 const HEX = { white: '#e9edf6', black: '#10131c', pressed: '#9fb4d8', good: '#5be08a', flash: '#f3c52f', cymbal: '#2a3140', drum: '#1b2130', wanted: '#f08a4b' };
 const rgb = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
-const KEY_COLOURS = { pressed: rgb(HEX.pressed), good: rgb(HEX.good) };
-const COLOUR_NAME = { pressed: `pressed (${HEX.pressed})`, good: `passed (${HEX.good})` };
-const KEY_BUSY = [rgb(HEX.pressed), rgb(HEX.good)];
-const KIT_COLOURS = { flash: rgb(HEX.flash) };
-const KIT_BUSY = [rgb(HEX.flash)];
-
-// ---- Page side: a text recorder and a pixel sampler (observation only) --------
+// ---- Page side: a text recorder and a pixel reader (observation only) --------
 const PAGE_SCRIPT = `(function () {
   var proto = CanvasRenderingContext2D.prototype, fillText = proto.fillText, clearRect = proto.clearRect;
   window.__q61Text = [];
@@ -102,58 +93,15 @@ const PAGE_SCRIPT = `(function () {
     if (this.canvas && this.canvas.id === 'cv') { var m = this.getTransform(); window.__q61Text.push({ text: String(text), x: m.a * x + m.c * y + m.e, y: m.b * x + m.d * y + m.f, align: this.textAlign }); }
     return fillText.apply(this, arguments);
   };
-  var inputs = [];
-  var note = function () { inputs.push(performance.now()); };
-  window.addEventListener('pointerdown', note, true);
-  window.addEventListener('keydown', note, true);
   var frame = function () { return new Promise(function (r) { requestAnimationFrame(function () { r(performance.now()); }); }); };
-  var snap = function () { var c = document.getElementById('cv'); return c.getContext('2d').getImageData(0, 0, c.width, c.height); };
-  var read = function (img, p) { var i = (Math.floor(p.y) * img.width + Math.floor(p.x)) * 4; return [img.data[i], img.data[i + 1], img.data[i + 2]]; };
-  var near = function (a, b) { return Math.abs(a[0] - b[0]) <= 2 && Math.abs(a[1] - b[1]) <= 2 && Math.abs(a[2] - b[2]) <= 2; };
-  var count = function (img, g, c) { var n = 0; for (var i = 0; i < g.pts.length; i++) if (near(read(img, g.pts[i]), c)) n++; return n; };
   window.__q61 = {
     texts: async function () { await frame(); await frame(); return window.__q61Text.slice(); },
-    px: async function (pts) { await frame(); await frame(); var img = snap(); return pts.map(function (p) { return read(img, p); }); },
-    // Wait for quiet, then start recording; the recording's promise is left on window.__q61Sample for a second
-    // evaluate to await after the action. A group lit when recording starts that is not in quietIds is credited only
-    // once it has gone out and lit again (the PREVIOUS tap's light is never credited to this one); one that stays lit
-    // the whole recording comes back as "masked": a hit on it could not be seen.
-    start: async function (spec) {
-      var t0 = performance.now(), quiet = false, img;
-      var isBusy = function (img, g) { return spec.busy.some(function (c) { return count(img, g, c) >= g.need; }); };
-      var watched = spec.groups.filter(function (g) { return !spec.quietIds || spec.quietIds.indexOf(g.id) >= 0; });
-      for (;;) {
-        await frame(); img = snap();
-        if (!watched.some(function (g) { return isBusy(img, g); })) { quiet = true; break; }
-        if (performance.now() - t0 > spec.quietMs) break;
-      }
-      var waited = performance.now() - t0;
-      if (!quiet) return { quiet: false, waited: waited };
-      var armed = {};
-      spec.groups.forEach(function (g) { armed[g.id] = !isBusy(img, g); });
-      var base = inputs.length;
-      window.__q61Sample = (async function () {
-        var seen = {}, begin = performance.now(), after = 0, last = begin, gap = 0;
-        for (;;) {
-          var at = await frame(); img = snap(); gap = Math.max(gap, at - last); last = at;
-          var inputAt = inputs.length > base ? inputs[base] : null;
-          for (var gi = 0; gi < spec.groups.length; gi++) {
-            var g = spec.groups[gi];
-            if (!armed[g.id]) { if (!isBusy(img, g)) armed[g.id] = true; continue; }
-            for (var name in spec.colours) if (count(img, g, spec.colours[name]) >= g.need) { seen[g.id] = seen[g.id] || {}; if (seen[g.id][name] === undefined) seen[g.id][name] = at; }
-          }
-          if (inputAt !== null && at > inputAt) after++;
-          if ((inputAt !== null && after >= 3 && at - begin >= 30) || at - begin >= 700) return { seen: seen, inputAt: inputAt, inputs: inputs.length - base, frames: after, maxGap: gap, masked: spec.groups.filter(function (g) { return !armed[g.id]; }).map(function (g) { return g.id; }) };
-        }
-      })();
-      return { quiet: true, waited: waited };
-    },
+    px: async function (pts) { await frame(); await frame(); var c = document.getElementById('cv'), img = c.getContext('2d').getImageData(0, 0, c.width, c.height); return pts.map(function (p) { var i = (Math.floor(p.y) * img.width + Math.floor(p.x)) * 4; return [img.data[i], img.data[i + 1], img.data[i + 2]]; }); },
   };
 })();`;
 
 // ---- Driving and observing ----------------------------------------------------
 const raf = (page) => page.evaluate('new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))');
-const feedback = (page) => page.evaluate("document.getElementById('feedback').textContent.trim()");
 const setTheme = async (page, value) => { await page.cdp.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value }] }); await raf(page); };
 
 // A person's scroll: a mouse wheel over the page, by the distance asked for (documented in the README's policy).
@@ -176,13 +124,6 @@ async function readTarget(page) {
   return LEVEL1_TARGET[t];
 }
 
-async function observe(page, groups, colours, busy, action, quietIds) {
-  const q = await page.evaluate(`window.__q61.start(${JSON.stringify({ groups, colours, busy, quietMs: 400, quietIds })})`);
-  if (!q.quiet) throw new Error(`the previous input was still lit after ${Math.round(q.waited)} ms, so this one cannot be told apart from it`);
-  await action();
-  return page.evaluate('window.__q61Sample');
-}
-
 // The canvas's box on screen, read once the app has caught its drawing buffer up with it.
 async function settledMetrics(page) {
   for (let i = 0; i < 40; i++) {
@@ -192,101 +133,6 @@ async function settledMetrics(page) {
     await raf(page);
   }
   throw new Error('the canvas drawing buffer never matched its box on screen');
-}
-
-// ... and a refusal if a person could not reach all of it where the page is now scrolled to.
-async function reachable(page) {
-  const m = await settledMetrics(page);
-  const inside = m.left >= 0 && m.top >= 0 && m.left + m.cssWidth <= m.innerWidth && m.top + m.cssHeight <= m.innerHeight;
-  assert.ok(inside, `the canvas is not fully on screen: left ${m.left.toFixed(1)}, top ${m.top.toFixed(1)}, ${m.cssWidth}x${m.cssHeight} in a ${m.innerWidth}x${m.innerHeight} window`);
-  return m;
-}
-
-const keyGroups = (rects) => rects.keys.map((k) => { const pts = keyboardSamplePoints(k); return { id: k.midi, pts, need: pts.length }; });
-const kitGroups = (all) => all.map((p) => ({ id: p.id, pts: kitSamplePoints(p), need: 5 }));
-const aimVia = (page, m, pt) => { const c = toClient(pt, m); return () => page.tap(c.x, c.y); };
-
-function missText(clicked, target) {
-  const st = clicked - target, n = Math.abs(st);
-  const where = n === 12 ? `Right note, wrong octave: go one octave ${st > 0 ? 'down' : 'up'}.` : `Go ${n} key${n > 1 ? 's' : ''} to the ${st > 0 ? 'left' : 'right'}.`;
-  return `That was ${nm(clicked)}, the note is ${nm(target)}. ${where}`;
-}
-const passText = (target, afterMiss) => (afterMiss ? new RegExp(`^That is the one\\. ${nm(target)}\\.$`) : new RegExp(`^${nm(target)}: yes, in [0-9.]+ s\\.$`));
-const afterMissLine = (before) => before.startsWith('That was ');
-const stallNote = (res, pulse) => (res.maxGap > pulse * 0.6 ? `; the page went ${Math.round(res.maxGap)} ms between two frames while it was watched, so a ${pulse} ms light could have been missed` : '');
-
-function keyboardFailure(where, expect, passed, res) {
-  const want = passed ? 'good' : 'pressed', mine = res.seen[expect] || {};
-  const lit = Object.keys(res.seen).map(Number).filter((k) => res.seen[k].pressed !== undefined || res.seen[k].good !== undefined);
-  const others = lit.filter((k) => k !== expect);
-  const colour = lit.includes(expect) && mine[want] === undefined ? `${lbl(expect)} lit ${Object.keys(mine).map((c) => COLOUR_NAME[c]).join(' and ')}, not ${COLOUR_NAME[want]}` : '';
-  const right = lit.includes(expect) && mine[want] !== undefined;
-  const got = [others.length ? others.map(lbl).join(' and ') : '', colour].filter(Boolean).join(' and ');
-  const masked = res.masked.map(lbl);
-  return `${where}: expected ${lbl(expect)} got ${got ? got + (right ? ', as well as the right key' : '') : 'nothing lit'}${masked.length ? `; ${masked.join(' and ')} ${masked.length > 1 ? 'were' : 'was'} still lit from the previous input, so a hit on ${masked.length > 1 ? 'them' : 'it'} could not be seen` : ''}${stallNote(res, 220)}`;
-}
-
-// One keyboard tap and everything the learner would notice. `expect` is the MIDI number that must be delivered,
-// or null for "nothing may play here".
-async function keyboardInput(page, ctx, { act, expect, what }) {
-  const target = await readTarget(page);
-  const before = await feedback(page);
-  const afterMiss = afterMissLine(before);
-  await page.evaluate("window.__q61Asked = document.querySelector('#prompt b')");
-  const m = await reachable(page);
-  const rects = keyboardRects(m);
-  const res = await observe(page, keyGroups(rects), KEY_COLOURS, KEY_BUSY, act(m, rects), expect === null ? undefined : [expect]);
-  const text = await feedback(page);
-  const where = `${ctx} (${what})`;
-  assert.ok(res.inputs >= 1, `${where}: the page received no input at all`);
-  const lit = Object.keys(res.seen).map(Number).filter((k) => res.seen[k].pressed !== undefined || res.seen[k].good !== undefined);
-  if (expect === null) {
-    assert.deepEqual(lit, [], `NOTHING MAY PLAY HERE: ${where} lit key ${lit.map(lbl).join(' and ')}`);
-    assert.equal(text, before, `NOTHING MAY PLAY HERE: ${where} changed the feedback line to "${text}"`);
-    return;
-  }
-  const passed = expect === target;
-  const seen = res.seen[expect] || {};
-  const evidence = passed ? seen.good !== undefined : seen.pressed !== undefined;
-  // The next question comes 0.7 s after a right answer; input in between is lit but not judged, so wait for the new
-  // question (a new <b> in the prompt) BEFORE judging or throwing.
-  const nextQuestion = (ms) => page.waitFor("document.querySelector('#prompt b') !== null && document.querySelector('#prompt b') !== window.__q61Asked", ms);
-  if (!evidence || lit.some((k) => k !== expect)) {
-    if (passed) await nextQuestion(3000).catch(() => {});
-    throw new Error(keyboardFailure(where, expect, passed, res));
-  }
-  if (passed) {
-    await nextQuestion(6000);
-    assert.match(text, passText(target, afterMiss), `${where}: the feedback for the right note${afterMiss ? ' after a miss' : ' first time'}: got "${text}"`);
-  } else {
-    const wanted = missText(expect, target);
-    assert.equal(text, wanted, `${where}: the feedback for a wrong note: got "${text}", wanted "${wanted}"`);
-  }
-}
-
-async function kitInput(page, ctx, { act, expect, what }) {
-  const m = await reachable(page);
-  const all = kitRects(m);
-  const res = await observe(page, kitGroups(all), KIT_COLOURS, KIT_BUSY, act(m, all), expect === null ? undefined : [expect]);
-  const where = `${ctx} (${what})`;
-  assert.ok(res.inputs >= 1, `${where}: the page received no input at all`);
-  const lit = Object.keys(res.seen).filter((id) => res.seen[id].flash !== undefined);
-  if (expect === null) assert.deepEqual(lit, [], `NOTHING MAY PLAY HERE: ${where} flashed ${lit.join(' and ')}`);
-  else assert.deepEqual(lit, [expect], `${where}: expected ${expect} got ${lit.length ? lit.join(' and ') : 'nothing flashed'}${stallNote(res, 160)}`);
-  if (expect !== null) await page.audio.waitForRunning();
-}
-
-// Run every input, keep going after a miss (a failure's light is let go out first), report them all together.
-async function collect(page, items, run) {
-  const failures = [];
-  for (const it of items) {
-    try { await run(it); } catch (e) {
-      if (String(e.message).includes(DISAGREE)) throw e;
-      failures.push(e.message);
-      await page.evaluate('new Promise((r) => setTimeout(r, 400))');
-    }
-  }
-  assert.equal(failures.length, 0, `${failures.length} of ${items.length} input(s) failed:\n- ${failures.join('\n- ')}`);
 }
 
 // ---- Helper agrees with the canvas ---------------------------------------------
@@ -378,8 +224,14 @@ async function endSession(page, size, instr) {
 
 // ---- T2: what must be on one screen ---------------------------------------------
 const viewIds = (size) => ['cv', 'feedback', 'endBtn', ...(size.vp.width <= 600 ? ['coach'] : [])];
-async function viewState(page, size) {
-  return page.evaluate(`(() => { const o = { scrollY, innerWidth, innerHeight, rects: {} }; for (const id of ${JSON.stringify(viewIds(size))}) { const b = document.getElementById(id).getBoundingClientRect(); if (b.width > 0 && b.height > 0) o.rects[id] = { top: b.top, bottom: b.bottom, left: b.left, right: b.right }; } return o; })()`);
+// A member of the set that has no box, or cannot be seen, goes in `missing` (never quietly dropped from the fit):
+// the fit of a set with its feedback line or End session hidden proves nothing. #feedback is allowed to be
+// see-through before the first feedback (its slot is kept on purpose); `shown` asks for it to be seen.
+async function viewState(page, size, shown) {
+  return page.evaluate(`(() => { const o = { scrollY, innerWidth, innerHeight, rects: {}, missing: [], feedbackText: document.getElementById('feedback').textContent.trim() };
+    for (const id of ${JSON.stringify(viewIds(size))}) { const e = document.getElementById(id), b = e.getBoundingClientRect(), strict = ${!!shown} || id !== 'feedback';
+      if (b.width > 0 && b.height > 0 && e.checkVisibility(strict ? { visibilityProperty: true, opacityProperty: true } : {})) o.rects[id] = { top: b.top, bottom: b.bottom, left: b.left, right: b.right }; else o.missing.push(id); }
+    return o; })()`);
 }
 const spanOf = (v) => { const rs = Object.values(v.rects); return { top: Math.min(...rs.map((r) => r.top + v.scrollY)), bottom: Math.max(...rs.map((r) => r.bottom + v.scrollY)) }; };
 const noScroll = (v) => Object.values(v.rects).every((r) => r.top + v.scrollY >= 0 && r.bottom + v.scrollY <= v.innerHeight && r.left >= 0 && r.right <= v.innerWidth);
@@ -395,9 +247,11 @@ async function goToView(page, size, instr) {
 }
 
 // Asserts the exact policy for this size and instrument, both ways, and leaves the page at the policy position.
-async function checkFit(page, size, instr, ctx) {
+async function checkFit(page, size, instr, ctx, shown) {
   const policy = size[instr];
-  const v0 = await viewState(page, size);
+  const v0 = await viewState(page, size, shown);
+  assert.deepEqual(v0.missing, [], `${ctx}: ${v0.missing.map((id) => '#' + id).join(' and ')} ${v0.missing.length > 1 ? 'have' : 'has'} no box on screen or cannot be seen while a session runs (hidden, collapsed or see-through), so the set cannot be checked`);
+  if (shown) assert.notEqual(v0.feedbackText, '', `${ctx}: the feedback line is empty, so there is no feedback to fit`);
   const { top, bottom } = spanOf(v0), span = bottom - top;
   const where = `${ctx}: window ${v0.innerWidth}x${v0.innerHeight}, ${rectText(v0)}, scrolled to ${v0.scrollY.toFixed(0)}`;
   if (policy === NO_SCROLL) {
@@ -407,7 +261,7 @@ async function checkFit(page, size, instr, ctx) {
   }
   assert.ok(!noScroll(v0), `ONE_SCROLL expected but the set already fits on the first screen, so the README's "one scroll" is wrong: ${where}`);
   assert.ok(span <= v0.innerHeight + 0.5, `ONE_SCROLL expected but the set spans ${span.toFixed(1)} px, more than the ${v0.innerHeight} px window: ${where}`);
-  const v1 = onScreen(v0) ? v0 : (await wheelTo(page, Math.floor(top)), await viewState(page, size));
+  const v1 = onScreen(v0) ? v0 : (await wheelTo(page, Math.floor(top)), await viewState(page, size, shown));
   assert.ok(onScreen(v1), `after one scroll the set is still not all on screen: ${rectText(v1)}, scrolled to ${v1.scrollY.toFixed(0)}, window ${v1.innerWidth}x${v1.innerHeight}`);
 }
 
@@ -452,40 +306,6 @@ async function checkButtons(page, ctx, ids) {
   }
 }
 
-// ---- T5/T6 ---------------------------------------------------------------------------
-const keyAt = (rects, midi) => rects.keys.find((k) => k.midi === midi);
-const BLACK_POINTS = [0, 3, 4];
-async function keyboardTaps(page, ctx) {
-  const m = await reachable(page);
-  const rects = keyboardRects(m);
-  const plan = [];
-  for (const k of rects.keys.filter((x) => !x.black)) plan.push({ midi: k.midi, i: 0, expect: k.midi, label: 'lower body' });
-  // BLACK_POINTS: the centre and the two points just outside the edges (the wall-time cut); round-robin over the black keys (every key's first point, then every key's second) so the next tap on the same key comes after its light is out
-  for (const i of BLACK_POINTS) for (const k of rects.keys.filter((x) => x.black)) { const p = keyboardProbePoints(k)[i]; plan.push({ midi: k.midi, i, expect: p.midi, label: p.label }); }
-  await collect(page, plan, (e) => keyboardInput(page, ctx, { expect: e.expect, what: `tap ${lbl(e.midi)} ${e.label}`, act: (mm, r) => aimVia(page, mm, keyboardProbePoints(keyAt(r, e.midi))[e.i]) }));
-}
-async function keyboardNothing(page, ctx) {
-  const regions = keyboardRects(await reachable(page)).noHit.filter((r) => r.name !== 'overview strip');
-  await collect(page, regions, (region) => keyboardInput(page, `${ctx} ${region.name}`, { expect: null, what: 'tap in the middle', act: (m, rects) => { const r = rects.noHit.find((x) => x.name === region.name).rect; return aimVia(page, m, { x: r.x + r.w / 2, y: r.y + r.h / 2 }); } }));
-}
-// The wall-time cut for the kit: the centre and the inside east and south edges (both axes), not all four inside edges.
-const KIT_TAP_POINTS = ['centre', 'inside east edge', 'inside south edge'];
-async function kitTaps(page, ctx) {
-  const m = await reachable(page);
-  const all = kitRects(m);
-  const plan = all.flatMap((piece) => kitProbePoints(piece, all).map((pt, i) => ({ piece, pt, i }))).filter((e) => KIT_TAP_POINTS.includes(e.pt.label));
-  // round-robin (every piece's first point, then every piece's second), so the next tap on a piece comes after its 160 ms flash is over
-  await collect(page, plan.sort((a, b) => a.i - b.i), (e) => kitInput(page, `${ctx} ${e.piece.id}`, { expect: e.pt.id, what: `tap ${e.pt.label}`, act: (mm, a) => aimVia(page, mm, kitProbePoints(a.find((p) => p.id === e.piece.id), a)[e.i]) }));
-}
-async function kitNothing(page, ctx) {
-  const m = await reachable(page);
-  const all = kitRects(m);
-  assert.ok(kitEmptyPoint(m).room > 5, `${ctx}: the empty-space point is at least 5 px clear of every piece`);
-  const plan = [{ label: 'empty space', at: (mm) => kitEmptyPoint(mm) }];
-  for (const piece of all) kitProbePoints(piece, all).forEach((pt, i) => { if (pt.id === null) plan.push({ label: `${piece.id} ${pt.label}`, at: (mm, a) => kitProbePoints(a.find((p) => p.id === piece.id), a)[i] }); });
-  await collect(page, plan, (e) => kitInput(page, `${ctx}`, { expect: null, what: `tap ${e.label}`, act: (mm, a) => aimVia(page, mm, e.at(mm, a)) }));
-}
-
 // ---- One size ---------------------------------------------------------------------------
 // A todo subtest runs in full; its failure is reported as a todo, never as a pass and never skipped.
 const subOpts = (key) => (F_TODO[key] ? { todo: F_TODO[key] } : {});
@@ -522,25 +342,24 @@ async function runSize(t, page, size) {
       await setTheme(page, 'light');
     }, 'keyboard fit');
     let before;
-    await sub(st, 'T5 first tap (a wrong key) shows the feedback card', async () => {
+    await sub(st, 'a wrong key shows the feedback card', async () => {
       before = await cvBox(page);
       const target = await readTarget(page);
-      const wrong = [48, 50, 52].find((n) => n !== target);
-      await keyboardInput(page, `${at} first tap`, { expect: wrong, what: `tap ${lbl(wrong)} lower body`, act: (mm, r) => aimVia(page, mm, keyboardProbePoints(keyAt(r, wrong))[0]) });
-      assert.notEqual(await feedback(page), '', `${at}: the feedback line is empty after a wrong key`);
+      const wrong = target - 12, m = await settledMetrics(page); // the right note an octave low: the longest feedback line there is ("... Right note, wrong octave: go one octave up.")
+      const c = toClient(keyboardProbePoints(keyboardRects(m).keys.find((k) => k.midi === wrong))[0], m);
+      await page.tap(c.x, c.y);
+      await page.waitFor("document.getElementById('feedback').textContent.trim() !== ''", 5000);
     });
     await sub(st, 'T2/T2c/T4 keyboard with the feedback showing, both themes', async () => {
       for (const theme of ['light', 'dark']) {
         await setTheme(page, theme);
-        await checkFit(page, size, 'keyboard', `${at} keyboard, ${theme}, feedback showing`);
         await checkObjective(page, `${at} keyboard, ${theme}`);
+        await checkFit(page, size, 'keyboard', `${at} keyboard, ${theme}, feedback showing`, true);
         await checkNoSideways(page, `${at} keyboard, ${theme}`);
         assert.deepEqual(await cvBox(page), before, `${at} keyboard, ${theme}: the canvas moved when the feedback card appeared (a drawn target would move under the finger)`);
       }
       await setTheme(page, 'light');
     }, 'keyboard fit');
-    await sub(st, 'T5 keyboard taps at the policy position', () => keyboardTaps(page, `${at} keyboard`));
-    await sub(st, 'T6 keyboard gaps and label strips do nothing', () => keyboardNothing(page, `${at} keyboard`));
     await endSession(page, size, 'keyboard');
 
     // --- drum kit, idle ---
@@ -548,24 +367,17 @@ async function runSize(t, page, size) {
     await wheelTo(page, 0);
     await sub(st, 'kit idle: the helper agrees with the canvas', async () => { await checkKitGeometry(page, `${at} kit`, size.vp, false); }, 'kit agree');
     await sub(st, 'T1 kit targets, both themes', (x) => checkTargets(page, x, `${at} kit`, 'kit', false), 'kit targets');
-    await sub(st, 'T5 kit taps (canvas scrolled into view)', async () => {
-      const m = await settledMetrics(page);
-      await wheelTo(page, Math.max(0, (await page.evaluate('scrollY')) + m.top + m.cssHeight / 2 - m.innerHeight / 2));
-      await kitTaps(page, `${at} kit`);
-    });
-    await sub(st, 'T6 kit empty space and outside edges do nothing', () => kitNothing(page, `${at} kit`));
 
     // --- drum kit, in a bar ---
-    await wheelTo(page, 0);
     await startSession(page);
     await sub(st, 'kit in a bar: the helper agrees with the canvas', async () => { await checkKitGeometry(page, `${at} kit in a bar`, size.vp, true); }, 'kit bar agree');
     await sub(st, 'T1 kit targets in a bar, both themes', (x) => checkTargets(page, x, `${at} kit in a bar`, 'kit', true), 'kit bar targets');
-    // The in-bar taps (each piece's centre, flashes when tapped) are the first cut for the 120 s wall time; the in-bar layout is covered by T1 after its agreement check.
+    // Taps on the in-bar pieces are cut for wall time (the second step of the cut order); the in-bar layout is covered by T1 after its agreement check.
     await page.waitFor("document.getElementById('feedback').textContent.trim() !== ''", 20000);
     await sub(st, 'T2 kit fit with the feedback showing, both themes', async () => {
       for (const theme of ['light', 'dark']) {
         await setTheme(page, theme);
-        await checkFit(page, size, 'kit', `${at} kit, ${theme}, feedback showing`);
+        await checkFit(page, size, 'kit', `${at} kit, ${theme}, feedback showing`, true);
       }
       await setTheme(page, 'light');
     }, 'kit fit');
@@ -608,7 +420,12 @@ test('T3 README: the phone bullet names each size with its scroll policy', () =>
   const readme = readFileSync(new URL('../../README.md', import.meta.url), 'utf8');
   const bullet = readme.split(/\n(?=- )/).map((b) => b.replace(/\s+/g, ' ')).find((b) => SIZES.every((s) => b.includes(s.name)) && b.includes('emulated'));
   assert.ok(bullet, 'the README has no bullet that names all four phone sizes and says they are emulated');
-  for (const s of SIZES) assert.ok(bullet.includes(readmeClause(s)), `the README bullet does not say "${readmeClause(s)}"`);
+  for (const s of SIZES) {
+    assert.ok(bullet.includes(readmeClause(s)), `the README bullet does not say "${readmeClause(s)}"`);
+    // a policy a todo row says is not met yet is marked so right next to its clause; one that is met is not
+    const marked = bullet.includes(`${readmeClause(s)} (not yet met`);
+    assert.equal(marked, Boolean(F_TODO[`${s.name} kit fit`]), `the README bullet ${marked ? 'marks' : 'does not mark'} "${readmeClause(s)}" as not yet met, but the file ${F_TODO[`${s.name} kit fit`] ? 'has' : 'has no'} todo row for its kit fit`);
+  }
 });
 
 test('A06 phone sizes: a learner sees and plays the keyboard and kit, and sees what the app says', async (t) => {
