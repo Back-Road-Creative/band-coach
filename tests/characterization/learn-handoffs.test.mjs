@@ -163,16 +163,19 @@ test('a recording with unresolved check items disables "Practise this" and "Edit
   await page.evaluate("window.__coach.setMod('kbd')");
   // P3-6: Learn this is retired -- same file door, now in Songs' Add a song.
   await openAddSongSection(page);
+  await page.evaluate("document.getElementById('songsPolyphonic').click()");
+  assert.equal(await page.evaluate("document.getElementById('songsPolyphonic').checked"), true, 'the polyphonic box is ticked');
   await page.setFileInput('#songsFileInput', wavPath);
   await page.waitFor("document.querySelector('.panel-learn-result').hidden === false", 20000);
+  const checkLines = await page.evaluate("Array.from(document.querySelectorAll('.panel-learn-result ul.panel-learn-checklist li')).map((li) => li.textContent)");
+  assert.ok(checkLines.some((line) => /I heard \d+ voices?/.test(line)), 'the review lists the voice-count item the polyphonic read always adds: ' + JSON.stringify(checkLines));
 
-  // This clip leaves a check item on its list (a confident recording has
-  // none: tests/release/acceptance-file-transcription.test.mjs). That is a
-  // property of this fixture's audio, not of every transcription, so a
-  // better read of it could empty the list and fail the assertions below;
-  // then give the fixture a guaranteed item. With an item, "Practise this"
-  // is disabled with a plain-language reason next to it, and "Fix it up"
-  // is the way forward.
+  // The "More than one note at a time" box guarantees a check item: the
+  // polyphonic read always lists how many voices it heard, whatever the clip
+  // sounds like (a confident single-line recording has none:
+  // tests/release/acceptance-file-transcription.test.mjs). With an item,
+  // "Practise this" is disabled with a plain-language reason next to it, and
+  // "Fix it up" is the way forward.
   const practiseDisabled = await page.evaluate(
     "Array.from(document.querySelectorAll('.panel-learn-practise-btn')).find(b => b.textContent === 'Practise this').disabled"
   );
