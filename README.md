@@ -1530,20 +1530,20 @@ release.
   missing API and says so, falling back to on-screen keys, computer-keyboard keys and the
   microphone rather than failing silently (`src/app.js:1289`). That fallback has not been confirmed
   by hand in Safari.
-- **Phone-sized windows, emulated only** (`tests/release/acceptance-phone-practice.test.mjs`: headless
-  Chromium set to a phone's width, pixel density and touch input, not a phone): the drawn keyboard and
-  drum kit are tapped at 320x568, 390x844, 844x390 and 640x400 and measured. Every key and kit piece
-  is held to 24 CSS pixels (axe-core's own target-size rule, which lets a smaller target pass if its
-  centre is 12 px from every other target and 24 px from other small ones); 44 px is a goal, measured
-  and not required. While a session runs, the playing surface, the feedback line and End session
-  (with the objective, on a narrow window) are on one screen at: 320x568: keyboard one scroll
-  position, drum kit one scroll position (not yet met, see below); 390x844: keyboard no scrolling
-  after Start, drum kit one scroll position; 844x390: keyboard one scroll position, drum kit one
-  scroll position; 640x400: keyboard one scroll position, drum kit one scroll position. Misses the
-  layout cannot fix are recorded in that file as `todo` rows and need a change to the drawing code:
-  at 320x568 the black keys are 20 px tall, the drum kit's hi-hat pieces are under 24 px in a bar,
-  and the drum kit's session screen is taller than the window, so that one case is not yet met.
-  This says nothing about a real phone: do not tell a learner it works on theirs.
+- **Phone-sized windows, emulated only** (`tests/release/acceptance-phone-practice.test.mjs` for
+  sizes and fit, `tests/release/acceptance-phone-practice-taps.test.mjs` for the taps: headless
+  Chromium set to a phone's width, pixel density and touch input, not a phone): the drawn keyboard
+  and drum kit are tapped at 320x568, 390x844, 844x390 and 640x400 and measured. Every key and kit
+  piece is held to 24 CSS pixels (axe-core's own target-size rule, which lets a smaller target pass
+  if its centre is 12 px from every other target and 24 px from other small ones); 44 px is a goal,
+  measured and not required. While a session runs, the playing surface, the feedback line and End
+  session (with the objective, on a narrow window) are on one screen at: 320x568: keyboard one
+  scroll position, drum kit one scroll position; 390x844: keyboard no scrolling after Start, drum
+  kit one scroll position; 844x390: keyboard one scroll position, drum kit one scroll position;
+  640x400: keyboard one scroll position, drum kit one scroll position. Misses the layout cannot fix
+  are recorded in the sizes file as `todo` rows and need a change to the drawing code: at 320x568 the
+  black keys are 20 px tall and the drum kit's hi-hat pieces are under 24 px in a bar. This says
+  nothing about a real phone: do not tell a learner it works on theirs.
 - **iPhone/iPad (the "Phone copy" edition):** unmeasured — see "Phone copy" above. Do not tell a
   learner it works on their phone.
 - **Real MIDI keyboards, real electronic drum kits, real instruments through a real microphone:**

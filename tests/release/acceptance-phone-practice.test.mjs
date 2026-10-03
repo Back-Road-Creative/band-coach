@@ -67,7 +67,6 @@ const readmeClause = (s) => `${s.name}: keyboard ${POLICY_TEXT[s.keyboard]}, dru
 const F_TODO = {
   '320x568 keyboard targets': 'Q6-1 F1: 320x568 black keys 21.0x20.1 and 24.0x20.1, 20.1 tall because this unit\'s 16 / 7 canvas rule (src/styles.css, phone query) shortens every non-kit canvas; the parent\'s 16 / 8.2 gave 23.2, also under 24 (needs src unit phone-keyboard-black-keys)',
   '320x568 kit bar targets': 'Q6-1 F2: 320x568 kit in a bar, hihat-open 17.0x17.0 and hihat-closed 19.1x19.1 (needs src unit phone-kit-small-pieces)',
-  '320x568 kit fit': 'Q6-1 F3: 320x568 kit in a session, the playing surface, feedback, objective and End session span 703 px of a 568 px window (needs src unit phone-kit-session-height)',
 };
 
 // ---- Measured at the parent (4669ef5, the build before these CSS rules) --------

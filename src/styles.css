@@ -550,7 +550,18 @@
     #prompt { min-height: 1em; line-height: 1; }
     .main > .side > #feedbackCard { order: -1; }
     .main:has(#endBtn:not([hidden])) > .side > #feedbackCard[hidden] { display: block !important; visibility: hidden; }
-    @media (max-width: 360px) { #feedback { min-height: 4.4em; } }
+    @media (max-width: 360px) {
+      #feedback { min-height: 4.4em; }
+      /* 320x568 drum kit in a session: the whole set (End session down to the canvas) must span no more than the window (F3), so text sizes and gaps shrink here only; #coach keeps its 14px. */
+      #prompt { font-size: 24px; }
+      #levelName { font-size: 20px; }
+      #hint { font-size: 13px; line-height: 1.2; }
+      #coach { line-height: 1.25; }
+      .eyebrow { font-size: 11px; line-height: 1.1; }
+      .card { padding: 4px 10px; }
+      .main { gap: 3px; }
+      .stage { gap: 2px; }
+    }
     /* 16 / 7 applies to every #cv instrument except the kit (keyboard, tuner, ...), not just the keyboard; it shortens the keys about 15% (Q6-1 F1). */
     #cv:not(.kit) { aspect-ratio: 16 / 7; }
   }
