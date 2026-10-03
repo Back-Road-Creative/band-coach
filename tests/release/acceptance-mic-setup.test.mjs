@@ -19,16 +19,18 @@
 //   P4  After page.deny(['microphone']) with a stream already open, Chrome left
 //       the stream alone: #ioText stayed 'Listening through your microphone.'
 //       and the dot stayed on for the 4 s watched, while
-//       navigator.permissions.query said 'denied'. The app has no listener for
-//       a track that ends, so a person who revokes the microphone while
-//       connected is still told it is listening if Chrome ever does end the
-//       track. This driver cannot end a track, so nothing here pins that.
+//       navigator.permissions.query said 'denied'. What the app does when a
+//       track ends is pinned in tests/characterization/mic-track-ended.test.mjs
+//       by dispatching 'ended' on a captured track (this driver cannot unplug
+//       a microphone). Still needs hardware: whether Chrome fires 'ended' for
+//       an unplugged USB microphone, and for a permission revoked mid-stream.
+//       'mute' is not handled.
 //   P5  After a blocked Connect, 'Check my microphone', then Allow and a
 //       reconnect, #calibrateResult kept 'The microphone was blocked, so it
 //       could not be checked.' beside 'Listening through your microphone.'.
-//       The text is written only by calibrateNoiseFloor and nothing clears it
-//       on a successful reconnect (a stored floor starts no check). T7 pins it
-//       as a todo until a src unit fixes it.
+//       A successful reconnect now clears that text and nothing else: T7 pins
+//       the clear and T7b, the same journey with no block, pins that a room
+//       result is left alone. Nothing left for hardware.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { withAcceptancePage, effectiveWaitMs } from '../helpers/browser.mjs';
@@ -278,7 +280,7 @@ test('T6 microphone blocked after connecting, then allowed: Connect listens agai
   });
 });
 
-test('T7 microphone allowed again after a blocked check: the old "blocked" message does not stay', { todo: 'src defect: #calibrateResult keeps the blocked text after a reconnect (see the P5 note at the top of this file: the observed text was \'The microphone was blocked, so it could not be checked.\')' }, async (t) => {
+test('T7 microphone allowed again after a blocked check: the old "blocked" message does not stay', async (t) => {
   await learner(t, 'quiet', async (page) => {
     await connectedThenBlocked(page);
     await page.clickSelector('#calibrateBtn');
@@ -288,5 +290,19 @@ test('T7 microphone allowed again after a blocked check: the old "blocked" messa
     await page.waitFor("document.getElementById('ioBtn').hidden");
     await assertListening(page, 'listening after Allow');
     assert.doesNotMatch(await page.evaluate("document.getElementById('calibrateResult').textContent"), /blocked/, 'the stale blocked message is gone');
+  });
+});
+
+test('T7b control: connected again with no block, the room result stays', async (t) => {
+  await learner(t, 'quiet', async (page) => {
+    await connect(page);
+    await until(page, 'the first room result', resultText(QUIET, 0));
+    await page.background();
+    await page.foreground();
+    await assertNotListening(page, 'after the tab returns the app does not claim to be listening');
+    await page.clickSelector('#ioBtn');
+    await page.waitFor("document.getElementById('ioBtn').hidden");
+    await assertListening(page, 'listening again');
+    assert.equal(await page.evaluate("document.getElementById('calibrateResult').textContent"), QUIET, 'the room result is not cleared by a plain reconnect');
   });
 });
