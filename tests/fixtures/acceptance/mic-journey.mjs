@@ -16,6 +16,8 @@
 //       'Fake Audio Input 2') play the SAME file: the same 0.014 / 0.000 series
 //       on each via getUserMedia({deviceId: {exact}}). Their device ids are
 //       hashes, so a test reads the id from the select, never hard-codes it.
+//   P6  The old quiet fixture (pluck only) read exactly 0.0 from 5.1 s to its
+//       loop point, so a check starting there is rightly 'unusable'; see quietRoom.
 //   P3  See the header of the test file (the real-key route for the select).
 //   P4  and P5: see the header of the test file.
 import { mkdtempSync } from 'node:fs';
@@ -35,7 +37,8 @@ const scaleToPeak = (buf, target) => { const g = target / peakRms(buf); return b
 // The quiet room of mic-connect-calibrates and mic-room-check, 8.4 s long. Its
 // peak is far under MIN_FLOOR 0.0015, so the burst test never fires and the
 // room check stores a floor.
-export const quietRoom = () => pluck(110, SR, SECONDS, { seed: 3, gain: 0.0003 });
+// The pluck alone decays to exact digital zero inside the 16-bit WAV (probe P6: 0.0 RMS from 5.1 s to the loop point at 8.4 s, read by the app's own analyser), and the app rightly calls a window of exact zeros "no audio arrived" (a real microphone always hisses a little). A 0.00004 RMS seeded hiss (about 2 LSB, far under MIN_FLOOR) keeps every window nonzero, as a real room is; before it T3's second press, 3 to 4 s after the stream began, sometimes ran its window into that silent stretch and CI saw ROOM_NO_READING instead of "quiet".
+export const quietRoom = () => pluck(110, SR, SECONDS, { seed: 3, gain: 0.0003, noiseFloorRms: 0.00004 });
 
 // Someone playing as soon as they press Connect: a 110 Hz string plucked every
 // 0.7 s (the first at sample 0), 12 plucks, each dying away well before the
