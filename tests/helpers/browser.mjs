@@ -2,12 +2,12 @@
 // Node 22 built-ins (global WebSocket + fetch, node:child_process, node:fs,
 // node:os). No npm dependency — see site-headlessmode/scripts/preview-overflow.mjs
 // for the precedent this borrows its connection pattern from.
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdtempSync, rmSync, existsSync, readdirSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { tmpdir, homedir, availableParallelism, loadavg } from 'node:os';
-import { join, dirname, basename } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join, dirname, basename, win32 as winPath } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 // How many test FILES node:test may run at once — each file launches its own
 // Chromium, so this is really "how many browsers may boot at the same time".
@@ -58,8 +58,30 @@ function findPlaywrightHeadlessShell() {
   return null;
 }
 
+// WINDOWS LANE. A person hand-tests the downloaded band-coach.html on Windows,
+// and WSL's NAT networking means a Linux-side driver cannot reach a Windows
+// Chrome's DevTools port, so the same driver also runs under Windows node.exe
+// (launched from WSL) and drives Windows Chrome over Windows loopback. Everything
+// platform-specific is here and takes `platform` as a parameter so a unit test
+// can pin it on Linux (tests/unit/browser-win32.test.mjs). On linux every
+// function below does exactly what it did before the lane existed. What differs
+// on win32, and why:
+//  - the browser is found in Program Files / LOCALAPPDATA / PATH (`;`-separated,
+//    drive letters contain ':'), Chrome only, no Playwright cache;
+//  - Chrome is spawned with `--headless=new`, extensions off and no default
+//    browser check, stdio ignored, and its port is read from the
+//    DevToolsActivePort file in the profile (a stderr line is not relied on);
+//  - there are no process groups, so the tree is killed with taskkill /T /F;
+//  - Chrome holds profile files briefly after it dies, so removal retries;
+//  - a `D:\x.html` path becomes a proper file:///D:/x.html URL.
+// The pieces a real Windows run has to confirm are listed in the Q9 unit spec.
+export function pathEntries(env = process.env, platform = process.platform) {
+  if (platform === 'win32') return (env.PATH || env.Path || '').split(';');
+  return (process.env.PATH || '').split(':');
+}
+
 function onPath(name) {
-  const dirs = (process.env.PATH || '').split(':');
+  const dirs = pathEntries();
   for (const dir of dirs) {
     const p = join(dir, name);
     if (existsSync(p)) return p;
@@ -86,10 +108,12 @@ function findBrowserBinary() {
 export function findAcceptanceBrowser({
   env = process.env,
   playwrightRoot = join(homedir(), '.cache', 'ms-playwright'),
-  pathDirs = (process.env.PATH || '').split(':'),
+  platform = process.platform,
+  pathDirs = pathEntries(env, platform),
+  exists = existsSync,
 } = {}) {
   const isShell = (p) => /headless[-_]shell/i.test(p);
-  if (env.CHROME_BIN && existsSync(env.CHROME_BIN)) {
+  if (env.CHROME_BIN && exists(env.CHROME_BIN)) {
     if (isShell(env.CHROME_BIN)) {
       throw new Error(
         `CHROME_BIN points at a headless shell (${env.CHROME_BIN}). The acceptance lane needs a full Chrome or ` +
@@ -97,6 +121,21 @@ export function findAcceptanceBrowser({
       );
     }
     return env.CHROME_BIN;
+  }
+  if (platform === 'win32') {
+    const rel = winPath.join('Google', 'Chrome', 'Application', 'chrome.exe');
+    for (const base of [env.ProgramFiles, env['ProgramFiles(x86)'], env.LOCALAPPDATA]) {
+      const p = base && winPath.join(base, rel);
+      if (p && exists(p)) return p;
+    }
+    for (const dir of pathDirs) {
+      const p = dir && winPath.join(dir, 'chrome.exe');
+      if (p && exists(p)) return p;
+    }
+    throw new Error(
+      'No Chrome found for the acceptance lane on Windows. Set CHROME_BIN to chrome.exe, or install Google Chrome ' +
+        '(expected at C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe). Only Chrome is used here, not Edge.'
+    );
   }
   if (existsSync(playwrightRoot)) {
     const dirs = readdirSync(playwrightRoot).filter((d) => /^chromium-\d+$/.test(d)).sort((a, b) => Number(b.slice(9)) - Number(a.slice(9)));
@@ -108,7 +147,7 @@ export function findAcceptanceBrowser({
   for (const name of ['google-chrome', 'google-chrome-stable']) {
     for (const dir of pathDirs) {
       const p = join(dir, name);
-      if (dir && existsSync(p)) return p;
+      if (dir && exists(p)) return p;
     }
   }
   throw new Error(
@@ -126,7 +165,7 @@ export function acceptanceHtmlPath(env = process.env) {
 }
 
 // Talks JSON-RPC over one DevTools WebSocket connection.
-class DevtoolsClient {
+export class DevtoolsClient {
   constructor(ws) {
     this.ws = ws;
     this.nextId = 0;
@@ -134,6 +173,10 @@ class DevtoolsClient {
     this.listeners = new Set();
     ws.addEventListener('message', (event) => {
       const msg = JSON.parse(event.data);
+      // A page session shares this socket and counts ids from 1 as well: a
+      // session-tagged reply must not settle a browser request with the same
+      // id, and a session-tagged event is the page's, not ours.
+      if (msg.sessionId !== undefined) return;
       if (msg.id !== undefined && this.pending.has(msg.id)) {
         const { resolve, reject } = this.pending.get(msg.id);
         this.pending.delete(msg.id);
@@ -185,19 +228,34 @@ export const LAUNCH_TIMEOUT_CODE = 'LAUNCH_TIMEOUT';
 const liveGroups = new Map();
 let exitHooksInstalled = false;
 
-function killGroupNow(pgid) {
+// Kills a launched browser and everything it started. linux: the pid is the
+// process group id (the launch is detached), so kill the group. win32: no
+// groups, so taskkill takes the tree (/T) by force (/F). Never throws: the
+// process may already be gone.
+export function killTree(pid, { platform = process.platform, kill = process.kill, run = spawnSync } = {}) {
   try {
-    process.kill(-pgid, 'SIGKILL');
+    if (platform === 'win32') run('taskkill.exe', ['/PID', String(pid), '/T', '/F'], { stdio: 'ignore' });
+    else kill(-pid, 'SIGKILL');
   } catch (e) {
     // already gone
   }
+}
+
+function killGroupNow(pgid) {
+  killTree(pgid);
+}
+
+// Removing a profile directory: on Windows Chrome holds files for a moment
+// after it dies, so retry. (Assumption, checked by the real Windows run.)
+export function profileRmOptions(platform = process.platform) {
+  return platform === 'win32' ? { recursive: true, force: true, maxRetries: 10, retryDelay: 200 } : { recursive: true, force: true };
 }
 
 function killLiveGroups() {
   for (const [pgid, profileDir] of liveGroups) {
     killGroupNow(pgid);
     try {
-      rmSync(profileDir, { recursive: true, force: true });
+      rmSync(profileDir, profileRmOptions());
     } catch (e) {
       // best-effort cleanup
     }
@@ -235,9 +293,15 @@ function untrackGroup(pgid) {
 // (autoplay allowed, a mic prompt that answers itself) so a characterization
 // test never waits on a gesture. An acceptance launch drops exactly those two
 // and keeps the simulated devices: a fake mic is a device, not a permission.
-export function browserArgs(userDataDir, extraArgs = [], { acceptance = false } = {}) {
+// `headed` leaves the headless flag out; `windowPosition` ('x,y') places a
+// headed window. On win32 the probe's flags apply: --headless=new, extensions
+// off, no default-browser check.
+export function browserArgs(userDataDir, extraArgs = [], { acceptance = false, headed = false, windowPosition, platform = process.platform } = {}) {
+  const win = platform === 'win32';
   return [
-    '--headless',
+    ...(headed ? [] : [win ? '--headless=new' : '--headless']),
+    ...(headed && windowPosition ? [`--window-position=${windowPosition}`] : []),
+    ...(win ? ['--disable-extensions', '--no-default-browser-check'] : []),
     '--remote-debugging-port=0',
     `--user-data-dir=${userDataDir}`,
     '--no-first-run',
@@ -248,14 +312,37 @@ export function browserArgs(userDataDir, extraArgs = [], { acceptance = false } 
   ];
 }
 
-export function spawnBrowser(bin, userDataDir, extraArgs = [], { launchTimeoutMs = 15000, acceptance = false } = {}) {
-  const args = browserArgs(userDataDir, extraArgs, { acceptance });
+// How the browser is spawned. linux: its own process group (detached) with
+// stderr piped, to read the DevTools line. win32: not detached (no groups;
+// taskkill /T takes the tree) and stdio ignored, as the probe did; the port
+// comes from the DevToolsActivePort file instead.
+export function spawnOptions(platform = process.platform) {
+  return platform === 'win32' ? { stdio: 'ignore', detached: false } : { stdio: ['ignore', 'ignore', 'pipe'], detached: true };
+}
+
+// The content of Chrome's DevToolsActivePort file: the port, then the browser
+// websocket path (`/devtools/browser/<guid>`, e.g. the Q9 probe's
+// 55628 + /devtools/browser/0b7b1575-5413-4b1a-8f43-b1141519f2b4). Chrome
+// writes no trailing newline, so a second line is trusted only when the whole
+// GUID is there: a cut-off one stays null and the poll keeps waiting.
+const BROWSER_PATH = /^\/devtools\/browser\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+export function readDevtoolsActivePort(text) {
+  const lines = String(text).split(/\r?\n/);
+  if (lines.length < 2 || !/^\d+$/.test(lines[0]) || !BROWSER_PATH.test(lines[1])) return null;
+  return { port: Number(lines[0]), path: lines[1] };
+}
+
+// `platform` only selects the launch shape; kill and exit hooks use the real one.
+// `pollMs` is how often the win32 port file is read; only a test with a fake browser changes it.
+export function spawnBrowser(bin, userDataDir, extraArgs = [], { launchTimeoutMs = 15000, acceptance = false, headed = false, windowPosition, platform = process.platform, pollMs = 50 } = {}) {
+  const win = platform === 'win32';
+  const args = browserArgs(userDataDir, extraArgs, { acceptance, headed, windowPosition, platform });
   if (process.env.CI) args.splice(1, 0, '--no-sandbox');
   // Its own process group (detached), so cleanup can kill the renderer, GPU
   // and zygote processes too, not just the launched parent: those are
   // separate processes that a plain child.kill() never touches, and they
   // survive as orphans (101 observed piled up on the box before this fix).
-  const child = spawn(bin, args, { stdio: ['ignore', 'ignore', 'pipe'], detached: true });
+  const child = spawn(bin, args, spawnOptions(platform));
   if (child.pid) trackGroup(child.pid, userDataDir);
   return new Promise((resolve, reject) => {
     let buf = '';
@@ -267,41 +354,83 @@ export function spawnBrowser(bin, userDataDir, extraArgs = [], { launchTimeoutMs
     // handler must never reach back and kill the browser a caller now owns.
     let settled = false;
     let timer;
+    let poll;
     const fail = (err) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
+      clearInterval(poll);
       if (child.pid) {
         killGroupNow(child.pid);
         untrackGroup(child.pid);
       }
-      child.stderr.destroy();
+      if (child.stderr) child.stderr.destroy();
       err.child = child;
       reject(err);
     };
     const onErr = (err) => fail(err);
     child.once('error', onErr);
-    child.stderr.on('data', (chunk) => {
-      buf += chunk.toString();
-      const m = buf.match(/DevTools listening on (ws:\/\/[^\s]+)/);
-      if (m && !settled) {
+    if (win) {
+      const readPort = () => {
+        try {
+          return readDevtoolsActivePort(readFileSync(join(userDataDir, 'DevToolsActivePort'), 'utf8'));
+        } catch (e) {
+          return null; // not written yet
+        }
+      };
+      poll = setInterval(() => {
+        if (settled) return;
+        // No child-exited check here: Node sets the exit code and emits 'exit' in one step, and
+        // that handler settles the launch (as a failure) before any later tick, so a browser that
+        // has exited can never reach the resolve below, whatever its port file holds.
+        const found = readPort();
+        if (!found) return;
         settled = true;
         clearTimeout(timer);
+        clearInterval(poll);
         child.off('error', onErr);
-        resolve({ child, browserWsUrl: m[1], args });
-      }
-    });
-    child.once('exit', (code) => {
-      if (!buf.includes('DevTools listening')) {
-        fail(new Error(`browser exited (code ${code}) before DevTools was ready. stderr:\n${buf}`));
-      }
-    });
+        resolve({ child, browserWsUrl: `ws://127.0.0.1:${found.port}${found.path}`, args });
+      }, pollMs);
+      child.once('exit', (code) => {
+        if (settled) return;
+        // One last read: the file may have landed between the last poll and the exit.
+        const last = readPort();
+        fail(new Error(`browser exited (code ${code}) before DevTools was ready. ` + (last ? `It had written a complete DevToolsActivePort file (port ${last.port}) before it exited.` : 'It had not written a complete DevToolsActivePort file.')));
+      });
+    } else {
+      child.stderr.on('data', (chunk) => {
+        buf += chunk.toString();
+        const m = buf.match(/DevTools listening on (ws:\/\/[^\s]+)/);
+        if (m && !settled) {
+          settled = true;
+          clearTimeout(timer);
+          child.off('error', onErr);
+          resolve({ child, browserWsUrl: m[1], args });
+        }
+      });
+      child.once('exit', (code) => {
+        if (!buf.includes('DevTools listening')) {
+          fail(new Error(`browser exited (code ${code}) before DevTools was ready. stderr:\n${buf}`));
+        }
+      });
+    }
     timer = setTimeout(() => {
-      const err = new Error('timed out waiting for DevTools listening line');
+      const err = new Error(win ? `timed out waiting for the DevToolsActivePort file in ${userDataDir}` : 'timed out waiting for DevTools listening line');
       err.code = LAUNCH_TIMEOUT_CODE;
       fail(err);
     }, launchTimeoutMs).unref();
   });
+}
+
+// The URL a page is opened at and the file the identity block reads. A
+// `file:` URL passes through. A Windows path becomes a real file URL
+// (`D:\x.html` -> `file:///D:/x.html`). Anything else keeps the exact
+// `'file://' + path` the driver always used (pathToFileURL would percent-encode
+// it, which is a change on Linux).
+export function htmlTarget(htmlPath, { windows = process.platform === 'win32' } = {}) {
+  if (/^file:/i.test(htmlPath)) return { url: htmlPath, file: fileURLToPath(htmlPath, { windows }) };
+  if (windows) return { url: pathToFileURL(htmlPath, { windows: true }).href, file: htmlPath };
+  return { url: 'file://' + htmlPath, file: htmlPath };
 }
 
 /**
@@ -322,6 +451,10 @@ export function spawnBrowser(bin, userDataDir, extraArgs = [], { launchTimeoutMs
  * (see "Acceptance mode" at the end of this file); `options.simulated` lists
  * extra simulated boundaries for the identity block. Callers that leave them
  * out get exactly the launch they always had.
+ *
+ * `options.headed` opens a visible window (no headless flag) and
+ * `options.windowPosition` ('x,y') places it; `htmlPath` may be a Windows path
+ * or a `file:` URL (see "WINDOWS LANE" above).
  *
  * Throws — never silently skips — if no browser binary can be found.
  */
@@ -407,7 +540,7 @@ export function launchPage(htmlPath, options = {}) {
 }
 
 async function launchPageOnce(htmlPath, options = {}) {
-  const { fakeAudioFile, initScript, acceptance = false } = options;
+  const { fakeAudioFile, initScript, acceptance = false, headed = false, windowPosition } = options;
   const bin = acceptance ? findAcceptanceBrowser() : findBrowserBinary();
   if (!bin) {
     throw new Error(
@@ -420,10 +553,10 @@ async function launchPageOnce(htmlPath, options = {}) {
   const extraArgs = fakeAudioFile ? [`--use-file-for-fake-audio-capture=${fakeAudioFile}`] : [];
   let spawned;
   try {
-    spawned = await spawnBrowser(bin, userDataDir, extraArgs, { acceptance });
+    spawned = await spawnBrowser(bin, userDataDir, extraArgs, { acceptance, headed, windowPosition });
   } catch (e) {
     // spawnBrowser already killed the group; the profile dir is ours to remove.
-    rmSync(userDataDir, { recursive: true, force: true });
+    rmSync(userDataDir, profileRmOptions());
     throw e;
   }
   const { child, browserWsUrl, args: launchFlags } = spawned;
@@ -447,7 +580,7 @@ async function launchPageOnce(htmlPath, options = {}) {
   } catch (e) {
     killGroup();
     try {
-      rmSync(userDataDir, { recursive: true, force: true });
+      rmSync(userDataDir, profileRmOptions());
     } catch (e2) {
       // best-effort cleanup
     }
@@ -572,7 +705,7 @@ async function launchPageOnce(htmlPath, options = {}) {
     });
   }
 
-  const url = 'file://' + htmlPath;
+  const { url, file: htmlFile } = htmlTarget(htmlPath);
 
   // Poll for the page actually BEING our document AND having finished boot,
   // rather than sleeping and hoping. Three things went wrong before: under
@@ -852,7 +985,7 @@ async function launchPageOnce(htmlPath, options = {}) {
     browserWs.close();
     killGroup();
     try {
-      rmSync(userDataDir, { recursive: true, force: true });
+      rmSync(userDataDir, profileRmOptions());
     } catch (e) {
       // best-effort cleanup
     }
@@ -861,7 +994,7 @@ async function launchPageOnce(htmlPath, options = {}) {
   let identity;
   if (acceptance) {
     const { product, userAgent } = await browser.send('Browser.getVersion');
-    const bytes = readFileSync(htmlPath);
+    const bytes = readFileSync(htmlFile);
     identity = {
       html: { path: htmlPath, sha256: createHash('sha256').update(bytes).digest('hex'), bytes: bytes.length },
       browser: { product, userAgent, binary: bin },
