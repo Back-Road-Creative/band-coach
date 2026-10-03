@@ -16,7 +16,7 @@
 // Exit 0: every registered scenario PASSED in a full run. Exit 1: something
 // FAILED, was only OBSERVED or was BLOCKED, or the run was partial (--only), or
 // no scenario ran. Exit 2: the lane could not run at all (bad arguments, no
-// Chrome, wrong file). PASS is the only result that counts.
+// Chrome, wrong file, or the Windows side left no report). PASS is the only result that counts.
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -33,7 +33,13 @@ const OFFSCREEN = '-32000,-32000';
 const NODE_EXE = '/mnt/c/Program Files/nodejs/node.exe';
 
 // The scenarios, in run order. Each file exports { id, run(page, ctx), verdict }.
-export const registry = [{ id: 'W1', file: 'w1-clean-open.win.mjs' }];
+export const registry = [
+  { id: 'W1', file: 'w1-clean-open.win.mjs' },
+  { id: 'W2', file: 'w2-progress-reload.win.mjs' },
+  { id: 'W3', file: 'w3-update-check.win.mjs' },
+  { id: 'W4', file: 'w4-audio-gesture.win.mjs' },
+  { id: 'W5', file: 'w5-midi-outcome.win.mjs' },
+];
 
 const VALUE_FLAGS = { '--win-root': 'winRoot', '--html': 'html', '--sha256': 'sha256', '--expect-version': 'expectVersion', '--only': 'only', '--chrome': 'chrome', '--node': 'node', '--report': 'report', '--run-dir': 'runDir' };
 
@@ -73,6 +79,20 @@ export function planLane({ found, results, registry: reg, only }) {
   if (only) return 1;
   const byId = new Map(results.map((r) => [r.id, r]));
   return reg.every((r) => byId.get(r.id)?.status === 'PASS') && results.every((r) => r.status === 'PASS') ? 0 : 1;
+}
+
+// The exit code of the WSL side. The Windows side always writes a report, so a run
+// with none never reached its scenarios (a WSL interop failure such as
+// "UtilAcceptVsock: accept4 failed 110" exits node.exe with 1 having run nothing):
+// that is exit 2 whatever node.exe's own status was, never a scenario result.
+export function laneExit({ status, hasReport }) {
+  return hasReport && typeof status === 'number' ? status : 2;
+}
+
+// What is copied into the run directory, relative to the repository: the driver, every
+// file in tests/acceptance/win, and the app's own text table W3 matches its verdict on.
+export function stageFiles(winFiles) {
+  return ['tests/helpers/browser.mjs', 'src/core/i18n.js', ...winFiles.filter((f) => f.endsWith('.mjs')).map((f) => `tests/acceptance/win/${f}`)];
 }
 
 // A byte copy by read and write: copyFileSync fails with EPERM on the /mnt/<letter>/ drives.
@@ -174,8 +194,7 @@ export function runWsl(args, err = console.error) {
   let code = 2;
   try {
     const runWin = winPathOf(runDir);
-    const stage = ['tests/helpers/browser.mjs', ...readdirSync(here).filter((f) => f.endsWith('.mjs')).map((f) => `tests/acceptance/win/${f}`)];
-    for (const rel of stage) {
+    for (const rel of stageFiles(readdirSync(here))) {
       mkdirSync(dirname(join(runDir, rel)), { recursive: true });
       copyBytes(join(repoRoot, rel), join(runDir, rel));
     }
@@ -188,10 +207,11 @@ export function runWsl(args, err = console.error) {
     for (const [flag, key] of [['--expect-version', 'expectVersion'], ['--only', 'only'], ['--chrome', 'chrome']]) if (args[key]) argv.push(flag, args[key]);
     if (args.visible) argv.push('--visible');
     const child = spawnSync(args.node, argv, { stdio: 'inherit', cwd: runDir, timeout: 15 * 60 * 1000 });
-    code = typeof child.status === 'number' ? child.status : 2;
+    const hasReport = existsSync(join(runDir, 'report.json'));
+    code = laneExit({ status: child.status, hasReport });
     const reportTo = args.report || join(repoRoot, 'dist', 'windows-lane-report.json');
     mkdirSync(dirname(reportTo), { recursive: true });
-    if (existsSync(join(runDir, 'report.json'))) copyBytes(join(runDir, 'report.json'), reportTo);
+    if (hasReport) copyBytes(join(runDir, 'report.json'), reportTo);
     else writeFileSync(reportTo, JSON.stringify({ lane: 'windows', exit: code, note: 'the Windows side wrote no report', childStatus: child.status, childSignal: child.signal, childError: child.error && child.error.message }, null, 2) + '\n');
     console.log(`report: ${reportTo}`);
   } finally {

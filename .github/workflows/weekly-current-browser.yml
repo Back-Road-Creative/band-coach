@@ -1,40 +1,23 @@
-name: ci
+name: weekly-current-browser
 
-# A PR branch is proven by its `pull_request` run; `main` is proven by its own
-# push run, which is what the autoland barrier reads on the integration head.
-# Triggering push on every branch as well ran the whole suite TWICE per push,
-# and because a push and a pull_request carry different `github.ref` the
-# concurrency group below could not collapse them -- the two runs simply raced
-# for the same shared box and lost to the then 10-minute job timeout.
-#
-# The job timeout is a budget over the MEASURED suite, not a target: ten
-# passing runs on 2026-10-02 took 12.9-15.0 min on ubuntu-latest (14.7, 15.0,
-# 14.3, 14.8, 14.9, 14.8, 14.9, 14.7, 12.9, 14.8). Those runs ran the whole
-# release lane twice (every tests/release/ file, acceptance-* included, once as
-# a first gate step and again as posttest), so the budget is 30 min. The first
-# step now runs only gate.test.mjs and the full lane runs once, as posttest; the
-# new duration is measured on a run, not claimed here.
-# Earlier, three PR runs launched together were cancelled at 10m06s with
-# nothing failing. tests/unit/ci-workflow-no-duplicate-run.test.mjs and
-# ci-workflow-artifacts-weekly.test.mjs pin the headroom. A failed or
-# cancelled run uploads dist/test-artifacts/ so its screenshots and logs
-# survive. build/ci-summary.mjs turns the two step logs into a READY / NOT
-# READY verdict and a run-summary artifact (retries, skips and cancellations
-# in the release lane are visible, not hidden behind a green job). The weekly
-# run on a fresh browser is a separate file (weekly-current-browser.yml):
-# bin/autoland.py counts every ci.yml run on a commit whatever its event, so
-# a scheduled run here would feed the merge barrier.
+# The same steps as ci.yml's test job, run once a week on whatever Chrome
+# ubuntu-latest ships by then, so a browser update that breaks the app shows up
+# without waiting for the next PR. Deliberately a separate file: bin/autoland.py
+# counts every ci.yml run on a commit whatever its event, so a `schedule` trigger
+# inside ci.yml would feed the merge barrier.
+# tests/unit/ci-workflow-artifacts-weekly.test.mjs pins that the steps below stay
+# identical to ci.yml's.
 on:
-  push:
-    branches: [main]
-  pull_request:
+  schedule:
+    - cron: '17 6 * * 1'
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  group: weekly-current-browser
+  cancel-in-progress: false
 
 jobs:
   test:

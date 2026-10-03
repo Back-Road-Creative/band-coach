@@ -357,6 +357,10 @@ import { register as registerPathway } from './ui/pathway.js';
       try { st = await navigator.mediaDevices.getUserMedia({ audio: wanted }); }
       catch (e) { if (!DB.prefs.inputDeviceId) throw e; st = await navigator.mediaDevices.getUserMedia({ audio: base }); }
       micStream = st; const src = actx.createMediaStreamSource(st); wireAnalysers(monoSum(src)); micReady = true;
+      // A successful Connect clears the 'blocked' sentence calibrateNoiseFloor wrote (its catch below: keep the two texts identical), so it does not sit beside 'Listening through your microphone.'. Any other result text is left alone.
+      { const cr = $('calibrateResult'); if (cr && cr.textContent === 'The microphone was blocked, so it could not be checked.') cr.textContent = ''; }
+      // A track that ends (device unplugged, permission revoked) leaves the mic as the teardown 'mic' stopper does, then the status and Connect button follow. Only the CURRENT stream counts: a switched-away stream ending later must not close its replacement. micGen++ makes a room check still running for it discard its result.
+      st.getAudioTracks().forEach(tr => tr.addEventListener('ended', () => { if (micStream !== st) return; const pm = $('practiceMeter'); if (pm) pm.hidden = true; st.getTracks().forEach(t => t.stop()); micStream = null; micReady = false; micGen++; ioRefresh(); }));
       ensurePitchWorklet(); refreshMicDevices();
       // First Connect (or first after a device change) with no stored floor: listen to the room for ~1.5 s so the gates follow this mic, not the fixed defaults. It abstains when it hears playing.
       if (DB.prefs.noiseFloor == null) checkRoomInBackground();
@@ -420,7 +424,7 @@ import { register as registerPathway } from './ui/pathway.js';
   async function checkRoomInBackground() {
     const my = ++roomSeq, el = $('calibrateResult'), say = s => { if (el) el.textContent = s; };
     say('Checking the room — stay quiet for a moment…');
-    let r; try { r = await listenRoom(1500); } catch (e) { if (my === roomSeq) say(''); return; }
+    let r; try { r = await listenRoom(1500); } catch (e) { if (my === roomSeq) say(ROOM_ERROR); return; }
     if (my !== roomSeq) return; // a newer check owns the message now
     if (!r.fresh || DB.prefs.noiseFloor != null) { say(''); return; }
     const v = classifyRoomCheck(r.frames, { manual: false });
@@ -827,6 +831,7 @@ import { register as registerPathway } from './ui/pathway.js';
     const result = safeSet(localStorage, KEY, candidate);
     if (result.ok) { lastStored = candidate; if (saveFailedShown) { saveFailedShown = false; $('settingsSay').textContent = ''; $('mainSay').textContent = ''; } }
     else { saveFailedShown = true; $('settingsSay').textContent = t('storage.saveFailed'); $('mainSay').textContent = t('storage.saveFailed'); }
+    return result.ok;
   }
   function save() { if (saveTimer) return; saveTimer = setTimeout(() => { saveTimer = null; writeDB(); }, 1200); }
   // Closing or reloading within the 1200ms debounce window used to lose
@@ -1084,7 +1089,7 @@ import { register as registerPathway } from './ui/pathway.js';
     else if (MODS[mod].staff && $('optRef') && $('optRef').checked) t.els.forEach((el, k) => tone(el.info.midi, at + k * 0.8, 0.75));
   }
   function present() {
-    const t = task, M = MODS[mod], e = cur(); t.t0 = now(); if (e) e.t0 = now(); held = []; holdFor = 0; holdCents = []; wrongFor = 0; released = true;
+    const t = task, M = MODS[mod], e = cur(); t.t0 = now(); if (e) e.t0 = now(); held = []; holdFor = 0; holdCents = []; wrongFor = 0; if (!(heard && heard.rms >= releaseFloor(gates))) released = true;
     $('choices').hidden = t.kind !== 'ear'; $('replayBtn').hidden = !(t.kind === 'ear' || mod === 'voice'); $('showMeBtn').hidden = t.kind === 'ear' || t.kind === 'bar' || t.kind === 'bar2' || t.kind === 'kit';
     let p = '', h = '';
     if (t.kind === 'ear') { p = e.info.kind === 'interval' ? 'Which <b>interval</b>?' : 'Which <b>chord</b>?'; h = 'Listen, then choose. Number keys work too.'; const box = $('choices'); box.innerHTML = ''; t.choices.forEach((id, k) => { const b = document.createElement('button'); b.type = 'button'; b.id = 'ch-' + id; b.textContent = (k + 1) + '. ' + inf(id).label; b.addEventListener('click', () => { b.blur(); answer(id); }); box.appendChild(b); }); playRef(t); }
@@ -2769,9 +2774,7 @@ import { register as registerPathway } from './ui/pathway.js';
     const priorLatencyMs = DB && DB.latencyMs;
     modelNow = Date.now(); DB = sanitizeDB(result.db, undefined, modelNow); DB.latencyMs = num(priorLatencyMs, DB.latencyMs, 0, 300); if (!Array.isArray(DB.custom)) DB.custom = [];
     $('optNames').checked = DB.prefs.names; $('optTheme').value = DB.prefs.theme; applyTheme(DB.prefs.theme); $('optLocale').value = DB.prefs.locale; applyLocale(DB.prefs.locale); setNoteNaming(DB.prefs.noteNaming); $('optNoteSystem').value = DB.prefs.noteNaming.system; $('optAccidentals').value = DB.prefs.noteNaming.accidentals; setMod(DB.prefs.mod);
-    writeDB();
-    let stored; try { stored = localStorage.getItem(KEY); } catch (e) {}
-    if (stored !== lastStored) { const error = 'Your restored progress could not be saved on this device (storage may be full).'; coach(error); return { ok: false, error }; }
+    if (!writeDB()) { const error = 'Your restored progress could not be saved on this device (storage may be full).'; coach(error); return { ok: false, error }; }
     coach(t('backup.restored'));
     return result;
   }
@@ -3016,7 +3019,7 @@ import { register as registerPathway } from './ui/pathway.js';
   // Debug-hook slots: replace ONLY your own line with
   //   if (__DEBUG_HOOK__) Object.assign(hook, { … });
   if (__DEBUG_HOOK__) Object.assign(hook, { errors: getErrors });
-  //
+  if (__DEBUG_HOOK__) Object.assign(hook, { pitchFrame: (fr, dt) => onPitch(fr, dt) });
   if (__DEBUG_HOOK__) Object.assign(hook, { testPluck: testPluck, pitchWorkletActive: () => !!pitchWorkletNode });
   if (__DEBUG_HOOK__) Object.assign(hook, { testDrumHit: testDrumHit });
   //

@@ -292,3 +292,43 @@ test('T9b: an old backup\'s floor is dropped when its progress file is imported'
   await page.evaluate(`window.__coach.importProgress(${JSON.stringify(envelope({ noiseFloor: 0.01, noiseFloorV: 2 }))})`);
   assert.equal(await floorOf(page), 0.01);
 });
+
+// Connect's background check when its own read fails, and drum hits over a faint bed.
+const ROOM_ERROR_TEXT = 'Something went wrong while listening to the microphone, so the standard settings are in use. Press "Check my microphone" to try again.';
+// The bed sits under MIN_FLOOR (levels.js) and far under a third of the hits' peak (BURST_RATIO 3), so the hits still read as bursts.
+const withBed = (buf, rms) => { const bed = steadyNoise(rms, buf.length / SR); return buf.map((x, i) => x + bed[i]); };
+// Like `connect`, but the one-shot analyser throw is armed before Connect, so it lands in the background check. With `rival`, a manual check starts the moment the background one says it is checking (a microtask of the same task, before the first 50 ms tick), superseding it.
+async function connectArmed(t, samples, { rival = false } = {}) {
+  const page = await launchPage(HTML_PATH, { fakeAudioFile: wav('room', samples) });
+  t.after(() => page.close());
+  await throwOnceInCheck(page);
+  if (rival) await page.evaluate("(() => { const el = document.getElementById('calibrateResult'); const mo = new MutationObserver(() => { if (/Checking the room/.test(el.textContent)) { mo.disconnect(); document.getElementById('calibrateBtn').click(); } }); mo.observe(el, { childList: true, characterData: true, subtree: true }); })()");
+  await page.evaluate("document.querySelector('#picker button[data-mod=\"gtr\"]').click()");
+  await page.evaluate("document.getElementById('setupBtn').click()");
+  await page.evaluate("document.getElementById('ioBtn').click()");
+  await page.waitFor('window.__coach.micOpen()', 8000);
+  return page;
+}
+
+test('T7f: a failure in the background check shows the error and stores nothing', async (t) => {
+  const page = await connectArmed(t, quietRoom()); // a quiet room that would store a floor (T6), so a build that swallows the throw and carries on is caught
+  await Promise.all([sleep(2600), checkDone(page)]); // checkDone alone resolves at once: the result starts empty
+  assert.equal(await resultText(page), ROOM_ERROR_TEXT, 'a check that failed says so, apart from a blank or "no reading"');
+  assert.ok(await resultVisible(page), 'the check result must be visible in the open setup sheet');
+  assert.equal(await floorOf(page), null);
+  assert.deepEqual(await page.evaluate('window.__coach.gates()'), DEFAULT_GATES);
+});
+
+test('T7g: a background check that failed never writes over the newer check that superseded it', async (t) => {
+  const page = await connectArmed(t, quietRoom(), { rival: true });
+  await sleep(400);
+  const msg = await resultText(page);
+  assert.match(msg, /Listening for 3 seconds/, `the failed background check wrote "${msg}" over the check that is still running`);
+  await manualDone(page);
+  assert.match(await resultText(page), /room is quiet/, 'the newer check runs to its own outcome');
+});
+
+test('T2d: drum hits over a faint steady bed are not learned as the bed', async (t) => {
+  const page = await connect(t, withBed(noiseBursts(0.01, 4), 0.0005));
+  await assertAutoAbstained(page, 'drum hits over a bed at RMS 0.0005');
+});

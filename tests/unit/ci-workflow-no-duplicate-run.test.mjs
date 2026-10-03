@@ -87,14 +87,31 @@ test('the job timeout leaves headroom over the measured suite duration', () => {
 
 // The release size budget is the cheap, decisive check: on 2026-09-28 it failed
 // only AFTER the 7m47s browser suite (the gate step itself takes about 5 s), so
-// the author waited for the whole suite to learn about a size overrun. The gate
-// runs first, once. `npm test` still runs it again as `posttest`, which is the
-// local guarantee; CI needs no separate trailing gate step.
-test('ci runs the release gate exactly once, before the browser suite', () => {
-  const text = workflow();
-  const gates = [...text.matchAll(/^\s*-\s*run:\s*npm run gate\s*$/gm)];
-  assert.equal(gates.length, 1, 'exactly one `npm run gate` step; npm test already runs it as posttest');
-  const tests = [...text.matchAll(/^\s*-\s*run:\s*npm test\s*$/gm)];
-  assert.equal(tests.length, 1, 'exactly one `npm test` step');
-  assert.ok(gates[0].index < tests[0].index, 'the gate step must precede the npm test step so a size-budget failure surfaces in seconds, not after the suite');
+// the author waited for the whole suite to learn about a size overrun. The first
+// test step therefore builds the release and runs ONLY tests/release/gate.test.mjs
+// (the size budget and the smoke checks). The full release lane, acceptance-*
+// included, then runs once, as `npm test`'s posttest. The first version of this
+// pin counted an `npm run gate` step; that step ran every release file, so the
+// lane ran twice per job. The claim changed with the workflow, it was not loosened.
+test('ci runs the full release lane exactly once: gate.test.mjs first, then npm test with its posttest', () => {
+  const stripped = workflow().split('\n').filter((l) => !/^\s*#/.test(l)).join('\n');
+  assert.doesNotMatch(stripped, /npm run gate/, 'no step runs `npm run gate`; npm test already runs it as posttest');
+  assert.doesNotMatch(stripped, /tests\/release\/\*\.test\.mjs/, 'no step globs the whole release lane; the posttest owns that');
+  const lines = stripped.split('\n');
+  // Both commands must sit in the step with `id: gate` (6-space `- ` item up to the next one), not just somewhere in the file.
+  const start = lines.findIndex((l) => /^ {6}- id: gate\s*$/.test(l));
+  assert.ok(start >= 0, 'ci.yml needs a step with `id: gate`');
+  let end = lines.findIndex((l, i) => i > start && /^ {6}- /.test(l));
+  if (end < 0) end = lines.length;
+  const gateStep = lines.slice(start, end);
+  const buildAt = start + gateStep.findIndex((l) => l.includes('node build/build.mjs --release'));
+  const gateAt = start + gateStep.findIndex((l) => l.includes('node --test tests/release/gate.test.mjs'));
+  assert.ok(buildAt >= start, 'the `id: gate` step builds the release first');
+  assert.ok(gateAt >= buildAt, 'the `id: gate` step runs gate.test.mjs after building');
+  const suites = lines.map((l, i) => [l, i]).filter(([l]) => /^\s*(?:-\s*)?(?:run:\s*)?npm test\b/.test(l));
+  assert.equal(suites.length, 1, 'exactly one command starting with `npm test`');
+  assert.ok(gateAt < suites[0][1], 'gate.test.mjs must run before the browser suite so a size-budget failure surfaces in seconds');
+  const pkg = JSON.parse(readFileSync(fileURLToPath(new URL('../../package.json', import.meta.url)), 'utf8'));
+  assert.equal(pkg.scripts.posttest, 'npm run gate', 'npm test must still run the gate as posttest, or the lane would not run at all');
+  assert.ok(pkg.scripts.gate.includes('tests/release/*.test.mjs'), 'the gate script runs every release file');
 });
