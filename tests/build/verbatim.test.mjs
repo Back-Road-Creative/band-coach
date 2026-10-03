@@ -8,25 +8,32 @@
 // test, which is exactly the kind of fragile, environment-dependent
 // assertion this suite avoids.
 //
-import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, existsSync, readdirSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { test, after } from 'node:test';
+import { readFileSync, existsSync, readdirSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { build } from '../../build/build.mjs';
-import { HTML_PATH } from '../helpers/html-path.mjs';
 
-const distDir = fileURLToPath(new URL('../../dist/', import.meta.url));
+// Builds into its own directory, never the real `dist/`: a dev build rmSync's
+// its outDir and test files run concurrently, so a build into `dist/` deletes
+// the file other files are reading (see dist-isolation.test.mjs).
+const OWN_DIR = mkdtempSync(join(tmpdir(), 'band-coach-verbatim-'));
+after(() => rmSync(OWN_DIR, { recursive: true, force: true }));
 
-test('build produces exactly one file in dist/', async () => {
-  await build();
-  assert.ok(existsSync(HTML_PATH), 'dist/band-coach.html should exist after build');
-  const entries = readdirSync(distDir);
+test('build produces exactly one file in its output dir', async () => {
+  // A stray release/ from an earlier `--release` run must not survive a dev build.
+  mkdirSync(join(OWN_DIR, 'release'), { recursive: true });
+  writeFileSync(join(OWN_DIR, 'release', 'band-coach.html'), 'stale');
+  const built = await build({ outDir: OWN_DIR });
+  assert.equal(built, join(OWN_DIR, 'band-coach.html'));
+  assert.ok(existsSync(built), 'band-coach.html should exist after build');
+  const entries = readdirSync(OWN_DIR);
   assert.deepEqual(entries, ['band-coach.html'], 'build should emit exactly one file');
 });
 
 test('the built page is one inlined document with no external refs', async () => {
-  await build();
-  const html = readFileSync(HTML_PATH, 'utf8');
+  const html = readFileSync(await build({ outDir: OWN_DIR }), 'utf8');
 
   assert.equal((html.match(/<script\b/g) || []).length, 1, 'exactly one <script');
   assert.doesNotMatch(html, /<script[^>]*\bsrc=/i, 'no src= on the script tag');
