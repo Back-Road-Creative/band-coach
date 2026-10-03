@@ -275,8 +275,13 @@ function mountEditor(hostEl, api) {
   });
 
   bpmInput.addEventListener('change', () => {
-    const v = Number(bpmInput.value);
-    if (v > 0) applyOp((s) => setBpm(s, v));
+    // The field's own min/max (20-300) only mark a typed value invalid; hold it there and say so. A blank or non-number goes back to the song's real tempo.
+    const typed = Number(bpmInput.value);
+    if (bpmInput.value.trim() === '' || !Number.isFinite(typed)) { syncFormFields(); return; }
+    const v = Math.min(300, Math.max(20, typed));
+    if (v !== typed) tell('Tempo can be 20 to 300 beats a minute, so it was set to ' + v + '.');
+    applyOp((s) => setBpm(s, v));
+    syncFormFields();
   });
   const applyMetre = () => {
     const num = Math.max(1, Math.round(Number(metreNum.value) || 4));
@@ -330,6 +335,7 @@ function mountEditor(hostEl, api) {
     activePartIndex = 0;
     acknowledged = report.acknowledged;
     titleInput.value = song.title;
+    syncFormFields();
     renderCheckList();
     recordStatus.textContent = 'Loaded "' + song.title + '" for editing.';
     setControlsEnabled(acknowledged);
@@ -504,8 +510,9 @@ function mountEditor(hostEl, api) {
   canvas.addEventListener('click', (ev) => {
     if (!song) return;
     const rect = canvas.getBoundingClientRect();
-    const x = ev.clientX - rect.left;
-    const y = ev.clientY - rect.top;
+    // hitboxes are in drawing pixels; the canvas may be shown at another size
+    const x = (ev.clientX - rect.left) * (canvas.width / (rect.width || canvas.width));
+    const y = (ev.clientY - rect.top) * (canvas.height / (rect.height || canvas.height));
     const box = hitTest(hitboxes, x, y, 6);
     if (box) {
       activePartIndex = typeof box.partIndex === 'number' ? box.partIndex : activePartIndex;
@@ -636,6 +643,7 @@ function mountEditor(hostEl, api) {
     activePartIndex = 0;
     acknowledged = restored.meta.acknowledged;
     titleInput.value = song.title;
+    syncFormFields();
     renderCheckList();
     ackCheckbox.checked = acknowledged;
     recordStatus.textContent = 'Restored your unsaved changes to "' + song.title + '".';
