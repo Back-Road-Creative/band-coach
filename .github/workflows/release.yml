@@ -11,7 +11,16 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # This job runs the same two release-lane runs as ci.yml (here: the suite,
+    # whose posttest runs the gate, then the gate again; ci.yml runs the gate
+    # first), so its budget must stay at or above ci.yml's;
+    # tests/unit/release-workflow-budget-evidence.test.mjs pins that, so a
+    # later rise in ci.yml must be followed here. Ten passing
+    # ci.yml runs of this work on 2026-10-02 took 12.9-15.0 min on
+    # ubuntu-latest. The ~4m55s recorded for v1.8.0 and v1.9.0 in
+    # release-consistency.yml predates the suite's growth; no tag has run since,
+    # so no duration is claimed for this workflow.
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -26,10 +35,16 @@ jobs:
             echo "Tag $GITHUB_REF_NAME does not match package.json version $pkg_version" >&2
             exit 1
           fi
+      - name: record Chrome version
+        run: '"$CHROME_BIN" --version >> "$GITHUB_STEP_SUMMARY"'
       - run: npm ci
       - run: npm test
         env:
           CI: true
+      # This step rebuilds the release file and tests it, so the file published
+      # next is the gate's whether or not the suite ran its posttest. Publish
+      # must follow it directly. Do not delete it without a replacement that
+      # proves the same.
       - run: npm run gate
         env:
           CI: true
@@ -62,3 +77,11 @@ jobs:
             -f event_type=product-release \
             -F 'client_payload[product]=band-coach' \
             -F "client_payload[tag]=$TAG"
+      - name: keep failure evidence
+        if: failure() || cancelled()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-artifacts-${{ github.run_id }}-${{ github.run_attempt }}
+          path: dist/test-artifacts/
+          if-no-files-found: ignore
+          retention-days: 14
