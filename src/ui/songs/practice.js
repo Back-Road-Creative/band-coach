@@ -201,9 +201,10 @@ function greedySingle(note, played, cursor, timed, onsetAt, policy, bpm, ticksPe
 // the first E found is the fifth event) eats every note before it and the
 // learner is told they missed a D they played. So: run that search; when it
 // already hits every note (checked first, so a clean try never pays for the
-// table), or as many as any order-keeping match can, keep its result untouched. Otherwise redo the step on the longest in-order matching
-// (suffix LCS, same judgePitch test): each note takes a played event that keeps
-// that best total, so only the notes the learner truly did not play are missed.
+// table), or as many as any order-keeping match can, keep its result
+// untouched. Otherwise redo the step on the longest in-order matching (suffix
+// LCS, same judgePitch test): each note takes a played event that keeps that
+// best total, so only the notes the learner truly did not play are missed.
 // A timed step takes the event nearest the note's expected onset (so a D played
 // on the beat is not matched to an earlier D and called early); an untimed
 // step takes the earliest. Events skipped over are extras, with the mic exempt
