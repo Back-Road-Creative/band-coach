@@ -166,8 +166,9 @@ test('a recording with unresolved check items disables "Practise this" and "Edit
   await page.setFileInput('#songsFileInput', wavPath);
   await page.waitFor("document.querySelector('.panel-learn-result').hidden === false", 20000);
 
-  // Every transcription (mic or audio file) carries at least one check
-  // item (transcribe()'s own key-profile caveat), so "Practise this" is
+  // This three-tone clip is not a confident read, so a low-confidence
+  // check item stays on its list (a confident recording has none:
+  // tests/release/acceptance-file-transcription.test.mjs), and "Practise this" is
   // disabled with a plain-language reason next to it, and "Fix it up" is
   // the way forward.
   const practiseDisabled = await page.evaluate(

@@ -65,7 +65,7 @@ test('the label reads in plain words', () => {
 test('the review gate blocks a song with open checks', () => {
   const blocked = reviewGate(['flagged note']);
   assert.equal(blocked.allowed, false);
-  assert.match(blocked.reason, /1 flagged note/);
+  assert.match(blocked.reason, /1 thing to check/);
   const clear = reviewGate([]);
   assert.equal(clear.allowed, true);
   assert.equal(clear.reason, null);

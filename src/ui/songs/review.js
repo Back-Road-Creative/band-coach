@@ -19,7 +19,7 @@ import { el } from '../dom.js';
 export function practiceGate(warnings) {
   const list = Array.isArray(warnings) ? warnings : [];
   if (!list.length) return { allowed: true, reason: null };
-  return { allowed: false, reason: 'Fix up the ' + list.length + ' flagged note' + (list.length === 1 ? '' : 's') + ' first, then practise.' };
+  return { allowed: false, reason: 'Fix up the ' + list.length + ' thing' + (list.length === 1 ? '' : 's') + ' to check first, then practise.' };
 }
 
 // Opening another panel from a review screen: the caller only ever has its
