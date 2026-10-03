@@ -4,7 +4,7 @@
 // click or key press, the keyboard is the declared fake (FAKE_MIDI_INIT).
 // page.evaluate reads the screen (text, button boxes; a button is scrolled into
 // view first, as the driver does) and makes three declared calls into the launch
-// script RIG_INIT below: arm it before a click, wait for the app to listen, and
+// script RIG_INIT (tests/helpers/profile-seed.mjs, shared with A08): arm it before a click, wait for the app to listen, and
 // hand it the notes the fake keyboard plays (it sends the same note-on/off bytes
 // midiNoteOn/midiNoteOff send, from inside the page, on the app's own audio
 // clock). It writes nothing to the app's DOM or saved state.
@@ -14,6 +14,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { withAcceptancePage } from '../helpers/browser.mjs';
 import { FAKE_MIDI_INIT, midiAddPort } from '../helpers/fake-midi.mjs';
+import { RIG_INIT, RIG_LABEL, clickByText, LAG_OK_MS, ATTEMPTS } from '../helpers/profile-seed.mjs';
 
 const golden = JSON.parse(readFileSync(new URL('../fixtures/golden/mary-had-a-little-lamb.json', import.meta.url), 'utf8'));
 const ANCHOR = 64; // E4, the first note of the song
@@ -27,52 +28,12 @@ const LATE = /^[A-G]#?\d was late by (\d+) ms — aim for the beat\.$/;
 const NICE = /^Nice\. 7 of 7 notes\./;
 const EARLY_SHIFT = 240, LATE_SHIFT = 200; // ms, notes 2-7 only; each under half a beat (300), so every note keeps its own onset
 const BAND_MS = 90; // the reported error must sit this close to the shift
-const LAG_OK_MS = 60; // the rig's own delivery must be this close to the plan, or the try says nothing about the app
-const ATTEMPTS = 3; // tries when the RIG reports it could not deliver the plan on time (never when the app answers wrongly)
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const REC = 'button:has(+ .panel-songs-count)'; // the Your turn / Stop and check button (no id)
 const read = (page, sel) => page.evaluate(`(() => { const e = document.querySelector(${JSON.stringify(sel)}); return e ? e.textContent.trim() : null; })()`);
 const msg = (page) => read(page, '.panel-songs-msg');
 const exact = (shiftMs = 0) => MIDIS.map((midi, i) => ({ midi, atMs: BEATS[i] * BEAT_MS + (i ? shiftMs : 0) }));
-
-// The declared launch script (listed in options.simulated). It changes nothing the app does: it only keeps a handle to
-// the app's own AudioContext and plays the fake keyboard's notes against THAT clock. Sent from the test process, or on a
-// wall-clock timer, a note rides a CDP round trip or a timer a busy machine delays by 200-300 ms, and the app judges notes
-// by its audio clock. __bcArm runs before the real click on Your turn and notes the audio time of that click; __bcPlay
-// waits until the app is listening (the count label reads 'Notes heard'), then sends each note when the audio clock says
-// so, and reports how late the rig itself was.
-const RIG_INIT = `(function () {
-  var Orig = window.AudioContext, made = [];
-  if (!Orig) return;
-  window.AudioContext = class extends Orig { constructor() { super(...arguments); made.push(this); } };
-  var ctx = function () { var c = made[made.length - 1]; if (!c) throw new Error('the app has not made an AudioContext'); return c; };
-  window.__bcArm = function () { var c = ctx(); window.__bcClickAt = null; document.addEventListener('click', function () { window.__bcClickAt = c.currentTime; }, { capture: true, once: true }); };
-  window.__bcListening = function () { var root = document.querySelector('.panel-songs-practice'); return new Promise(function (resolve, reject) {
-    var done = function () { return /^Notes heard/.test((root.querySelector('.panel-songs-count') || {}).textContent || ''); };
-    var to = setTimeout(function () { reject(new Error('the count-in never ended')); }, 30000);
-    if (done()) { clearTimeout(to); return resolve(); }
-    var mo = new MutationObserver(function () { if (done()) { clearTimeout(to); mo.disconnect(); resolve(); } });
-    mo.observe(root, { subtree: true, childList: true, characterData: true }); }); };
-  // plays: [{ midi, atMs }] from the first beat; leadSec: click to first beat (null: the first beat is the moment listening begins).
-  window.__bcPlay = function (plays, leadSec) { return window.__bcListening().then(function () { return new Promise(function (resolve) {
-    var c = ctx(), origin = leadSec == null ? c.currentTime : window.__bcClickAt + leadSec, evs = [], i = 0, worst = 0;
-    plays.forEach(function (p, k) { evs.push({ t: p.atMs, b: [0x90, p.midi, 100] }); evs.push({ t: Math.min(p.atMs + 120, plays[k + 1] ? plays[k + 1].atMs - 30 : Infinity), b: [0x80, p.midi, 0] }); });
-    evs.sort(function (a, b) { return a.t - b.t; });
-    var tick = function () { var now = (c.currentTime - origin) * 1000;
-      while (i < evs.length && evs[i].t <= now) { worst = Math.max(worst, now - evs[i].t); window.__midiSend('p1', evs[i].b); i++; }
-      if (i < evs.length) setTimeout(tick, 2); else resolve({ worstLagMs: Math.round(worst) }); };
-    tick(); }); }); };
-})();`;
-const SIMULATED = ['fake MIDI keyboard (FAKE_MIDI_INIT)', 'AudioContext handle kept by a launch script (RIG_INIT): plays the fake keyboard on the app\'s own audio clock, changes nothing else'];
-
-// Where a person would aim at the button with this text inside `scope`: the centre of its box (scrolled into view, and not covered).
-async function clickByText(page, scope, text) {
-  const at = await page.evaluate(`(() => { const b = [...document.querySelectorAll(${JSON.stringify(scope)})].find((x) => x.textContent.trim() === ${JSON.stringify(text)}); if (!b) return null;
-    b.scrollIntoView({ block: 'center' }); const r = b.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2, hit = document.elementFromPoint(x, y);
-    return hit && (b === hit || b.contains(hit)) ? { x, y } : null; })()`);
-  assert.ok(at, `a "${text}" button is on screen and not covered`);
-  await page.click(at.x, at.y);
-}
+const SIMULATED = ['fake MIDI keyboard (FAKE_MIDI_INIT)', RIG_LABEL];
 const clickButton = (page, text) => clickByText(page, '.panel-songs-practice button', text);
 const hasButton = (page, text) => page.evaluate(`[...document.querySelectorAll('.panel-songs-practice button')].some((x) => x.textContent.trim() === ${JSON.stringify(text)})`);
 const mode = (page, m) => page.clickSelector(`.panel-songs-mode button[data-mode="${m}"]`);
