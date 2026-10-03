@@ -5,9 +5,9 @@
 // starter and opened that, not the copy the learner had just made. A starter's id
 // is now reserved (src/song/library.js), so the copy has its own id and those
 // lookups open it. Every step is a real click on the dev build; window.__coach is
-// used for setup (the instrument) only. The waits are neutral (a lesson heading
-// that is a new element, a row that exists), so a regression is an assertion on
-// what the learner sees, not a timeout.
+// used for setup (the instrument) and panel-open waits only. The waits are
+// neutral (a lesson heading that is a new element, a row that exists), so a
+// regression is an assertion on what the learner sees, not a timeout.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { HTML_PATH } from '../helpers/html-path.mjs';
