@@ -10,10 +10,18 @@
 // and a chord each get their own plain sentence. Known and not asserted: after a correct pass a
 // still-ringing string can be judged against the NEXT item, so a stray "That was E, the note is A"
 // can follow a pass. Unit Q10d fixed the first cause (src/app.js present() no longer re-arms a note
-// that is still ringing at a task start). Two causes remain, a false onset after a clarity dropout
-// and a release after a mid-ring silent gap; the test.todo entries below name them. The literal
-// claims they break (T1 and T7: no "That was" record in the window; T4: one pass and nothing else)
-// stay todos until JP decides those two.
+// that is still ringing at a task start) and unit Q10d-2 the second (the quiet rule now releases a
+// ringing note after 0.1 s of delivered quiet, not after three frames). Remaining: a false onset after
+// a clarity dropout (src/app.js:1404) and the quiet-at-present branch (src/app.js:1062); the test.todo
+// entries below name them. Live-capture strays out of 42 runs (clipped 20, loud 10, decay999 6, quiet
+// 6), before then after Q10d-2, in seven back-to-back pairs, one run each, none retried: 5 then 2 (load 21
+// to 45), 3 then 1 (load 5 to 30), 1 then 1 (load 13 to 26), 18 then 19 (load 36 to 54), 17 then 11 (load 29
+// to 35), 4 then 14 (load 26 to 39) and 12 then 10 (load 14 to 23): 1 to 19 of 42 across load 5 to 54. The
+// strays of the last three pairs were false onsets, plus quiet-rule strays in the parent runs only (5, 1
+// and 1; none at head). The rate follows the machine's load more than the change, and the change does not
+// touch the onset path.
+// The literal claims they break (T1 and T7: no "That was" record in the window; T4: one pass and
+// nothing else) stay todos: the rate moves with machine load, so no literal claim is deterministic.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { withAcceptancePage, effectiveWaitMs } from '../helpers/browser.mjs';
@@ -97,13 +105,15 @@ for (const [label, gain] of [['quiet', 0.12], ['loud', 1.0]]) {
   });
 }
 
-// Q10d fixed the present() re-arm (src/app.js:1061). Two residual causes still let a ring fire against
-// the next item in live capture, so these stay todos: (a) a false onset on a clipped or long ring right
-// after a clarity dropout (src/audio/onset.js; the pluck branch's `if (fr.onset) { released = true;
-// stableN = 0; }`, src/app.js:1403), seen in p1c-clipped-4, -11, -19 and p1c-decay999-4; (b) a release
-// after a mid-ring silent gap (the quiet rule, src/app.js:1405), seen in p1c-loud-2 and -8. Rates with
-// the fix: clipped 3/20, loud 2/10, decay999 1/6, quiet 0/6 (before it: 7 of 11 runs). JP decides both.
-test.todo('T1 (literal) no "That was" record in the window after a correct pluck: not yet green, see the two residual causes above (false onset after a dropout, src/app.js:1403; release after a silent gap, src/app.js:1405)');
+// Q10d fixed the present() re-arm (src/app.js:1062) and Q10d-2 the quiet rule (a ringing note is released
+// by 0.1 s of delivered quiet, src/app.js:1406). Residual causes still let a ring fire against the next
+// item in live capture, so these stay todos: (a) a false onset on a clipped or long ring right after a
+// clarity dropout (src/audio/onset.js; the pluck branch's `if (fr.onset) { released = true; stableN = 0; }`,
+// src/app.js:1404), the commonest cause in the p3 runs; (b) the quiet-at-present branch (src/app.js:1062),
+// seen in the p1q replay at about 2 of 42. p3 rates (clipped 20, loud 10, decay999 6, quiet 6), before
+// then after Q10d-2: 5/42 then 2/42, 3/42 then 1/42, 1/41 then 1/42, 18/42 then 19/42, 17/42 then 11/42,
+// 4/42 then 14/42, 12/42 then 10/42, at load 5 to 54. JP decides.
+test.todo('T1 (literal) no "That was" record in the window after a correct pluck: not yet green, see the residual causes above (false onset after a dropout, src/app.js:1404; quiet at a task start, src/app.js:1062)');
 
 // T2: the wrong note on a guitar names both notes and counts FRETS, by the real distance and
 // pointing the way the target is (heard above the target means a lower fret).
@@ -136,10 +146,12 @@ test('T3 the same wrong note plucked three times in one loop is corrected each t
 // T4 (decaying note, decay 0.999: one pass, no "That was" record in the window; protecting mutation
 // src/audio/onset.js thresholdMult = 2.2 -> 0 and minFlux = 0.02 -> 0) is not yet green with the
 // present() fix alone.
-// Q10d fixed the present() re-arm (src/app.js:1061); two residual causes remain (a: false onset after a
-// clarity dropout, src/audio/onset.js and src/app.js:1403, p1c-decay999-4; b: release after a mid-ring
-// silent gap, src/app.js:1405, p1c-loud-2 and -8). decay999 strays in 1 of 6 runs with the fix. JP decides.
-test.todo('T4 a decaying correct note is passed once and never corrected: not yet green, see the two residual causes above (false onset after a dropout, src/app.js:1403; release after a silent gap, src/app.js:1405)');
+// Q10d fixed the present() re-arm (src/app.js:1062) and Q10d-2 the quiet rule (src/app.js:1406); residual
+// causes remain (a: false onset after a clarity dropout, src/audio/onset.js and src/app.js:1404; b: quiet
+// at a task start, src/app.js:1062). the decay999 case strayed in 1 of 6 in p1c (load not recorded) and, in the last three p3
+// pairs, in 2 then 3, 0 then 0 and 1 then 0 of 6 (before then after Q10d-2), so the claim is load-dependent,
+// not deterministic. JP decides.
+test.todo('T4 a decaying correct note is passed once and never corrected: not yet green, see the residual causes above (false onset after a dropout, src/app.js:1404; quiet at a task start, src/app.js:1062)');
 
 // T5: an empty room. One plain sentence, said once in two loops, and nothing judged.
 test('T5 a silent microphone is reported once, in plain words, and nothing is judged', async (t) => {
@@ -171,10 +183,12 @@ test('T7 a clipped pluck of the target note is passed, never corrected first', a
 });
 
 // The same after-pass re-fire as T1, on the clipped note.
-// Q10d fixed the present() re-arm (src/app.js:1061); two residual causes remain (a: false onset after a
-// clarity dropout, src/audio/onset.js and src/app.js:1403, p1c-clipped-4, -11, -19; b: release after a
-// mid-ring silent gap, src/app.js:1405, p1c-loud-2 and -8). Clipped strays in 3 of 20 runs. JP decides.
-test.todo('T7 (literal) no "That was" record at all after a clipped pluck of the target: not yet green, see the two residual causes above (false onset after a dropout, src/app.js:1403; release after a silent gap, src/app.js:1405)');
+// Q10d fixed the present() re-arm (src/app.js:1062) and Q10d-2 the quiet rule (src/app.js:1406); the
+// residual cause is a false onset after a clarity dropout (src/audio/onset.js and src/app.js:1404), plus
+// the quiet-at-present branch (src/app.js:1062). p3 strays out of all 42 runs, before then after Q10d-2:
+// 5 then 2, 3 then 1, 1 then 1, 18 then 19, 17 then 11, 4 then 14, 12 then 10, at load 5 to 54 (see the
+// header). JP decides.
+test.todo('T7 (literal) no "That was" record at all after a clipped pluck of the target: not yet green, see the residual causes above (false onset after a dropout, src/app.js:1404; quiet at a task start, src/app.js:1062)');
 
 // T8: two notes at once (the target and the fifth above): told it is more than one note, and never
 // told about a note nobody played.
