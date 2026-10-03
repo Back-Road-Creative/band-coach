@@ -177,3 +177,54 @@ export function kitEmptyPoint(m, opts) {
 export function kitSamplePoints(piece) {
   return Array.from({ length: 8 }, (_, k) => ({ x: piece.cx + 0.7 * piece.r * Math.cos((k * Math.PI) / 4), y: piece.cy + 0.7 * piece.r * Math.sin((k * Math.PI) / 4) }));
 }
+
+// ---- Phone-size target sizes (CSS px) --------------------------------------
+// Everything above is in CANVAS pixels; a person's finger is judged in CSS
+// pixels, and the canvas is scaled by its CSS box (m.cssWidth / m.width), never
+// by devicePixelRatio (the app caps that at 2, src/app.js size()).
+export function cssRect(rect, m) {
+  const sx = m.cssWidth / m.width, sy = m.cssHeight / m.height;
+  return { x: rect.x * sx, y: rect.y * sy, w: rect.w * sx, h: rect.h * sy };
+}
+
+// Every key and kit piece as a target: id, kind, CSS width x height (a kit
+// piece's box is its diameter), centre, and the area that answers a tap (a white
+// key's area leaves out the black keys over it; a piece's is its circle).
+// { kind: 'keyboard' | 'kit', inBar } picks the instrument and the kit's layout.
+export function targetSizes(m, { kind = 'keyboard', inBar = false } = {}) {
+  if (kind === 'kit') {
+    const s = m.cssWidth / m.width;
+    return kitRects(m, { inBar }).map((p) => ({ id: p.id, kind: 'piece', w: 2 * p.r * s, h: 2 * p.r * s, cx: p.cx * s, cy: p.cy * (m.cssHeight / m.height), area: { circle: { cx: p.cx * s, cy: p.cy * (m.cssHeight / m.height), r: p.r * s } } }));
+  }
+  const keys = keyboardRects(m).keys.map((k) => ({ k, r: cssRect(k.rect, m) }));
+  return keys.map(({ k, r }) => {
+    const base = { id: String(k.midi), kind: k.black ? 'black' : 'white', row: k.row, w: r.w, h: r.h, cx: r.x + r.w / 2, cy: r.y + r.h / 2 };
+    if (k.black) return { ...base, area: { rects: [r] } };
+    // the white key minus the black keys of its row that sit over it: the part below them, and the strips beside them
+    const over = keys.filter((o) => o.k.black && o.k.row === k.row && o.r.x < r.x + r.w && o.r.x + o.r.w > r.x).sort((a, b) => a.r.x - b.r.x);
+    if (!over.length) return { ...base, area: { rects: [r] } };
+    const bh = Math.max(...over.map((o) => o.r.h)), rects = [{ x: r.x, y: r.y + bh, w: r.w, h: r.h - bh }];
+    let x = r.x;
+    for (const o of over) { if (o.r.x > x) rects.push({ x, y: r.y, w: o.r.x - x, h: bh }); x = Math.max(x, o.r.x + o.r.w); }
+    if (x < r.x + r.w) rects.push({ x, y: r.y, w: r.x + r.w - x, h: bh });
+    return { ...base, area: { rects } };
+  });
+}
+
+const dist = (px, py, a) => (a.circle ? Math.max(0, Math.hypot(px - a.circle.cx, py - a.circle.cy) - a.circle.r) : Math.min(...a.rects.map((q) => Math.hypot(Math.max(q.x - px, 0, px - q.x - q.w), Math.max(q.y - py, 0, py - q.y - q.h)))));
+
+// The 24 CSS px target rule, axe-core's own (target-size, minSize 24 and
+// target-offset, minOffset 24): a target passes if its box is at least 24 x 24;
+// otherwise its centre must be at least 12 from every other target's tap area
+// and at least 24 from the centre of every other target that is under 24 too.
+// Returns { ok, floor, why }; floor is the plain 24 x 24 test.
+export function spacingOk(target, neighbours) {
+  const floor = target.w >= 24 && target.h >= 24;
+  if (floor) return { ok: true, floor, why: '' };
+  const others = neighbours.filter((n) => n.id !== target.id || n.kind !== target.kind);
+  const near = others.map((n) => ({ n, d: dist(target.cx, target.cy, n.area) })).sort((a, b) => a.d - b.d)[0];
+  if (near && near.d < 12) return { ok: false, floor, why: `under 24 px and its centre is ${near.d.toFixed(1)} px from ${near.n.id}'s tap area (12 needed)` };
+  const small = others.filter((n) => n.w < 24 || n.h < 24).map((n) => ({ n, d: Math.hypot(target.cx - n.cx, target.cy - n.cy) })).sort((a, b) => a.d - b.d)[0];
+  if (small && small.d < 24) return { ok: false, floor, why: `under 24 px and its centre is ${small.d.toFixed(1)} px from the centre of ${small.n.id}, also under 24 (24 needed)` };
+  return { ok: true, floor, why: '' };
+}
