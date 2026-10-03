@@ -166,7 +166,7 @@ test('A01: first visit on computer keys -- choose, start, play, pause, play, end
     const endedAt = Date.now();
     await page.waitFor("/^Session /.test(document.getElementById('coach').textContent)");
     const done = await text(page, 'coach');
-    assert.match(done, /^Session done: \d+ min, (\d+)% right/, `session line: ${done}`);
+    assert.match(done, /^Session done: \d+(?:\.\d)? min, (\d+)% right/, `session line: ${done}`);
     assert.doesNotMatch(done, /Too short to log/);
     t.diagnostic(`A01 start line: ${coach}`);
     t.diagnostic(`A01 targets shown: ${JSON.stringify(await page.evaluate('window.__q3bTargets'))}; session line: ${done}`);
@@ -195,7 +195,7 @@ test('A01: first visit on computer keys -- choose, start, play, pause, play, end
     await page.waitFor("/session/.test(document.getElementById('historySummary').textContent)");
     assert.match(await text(page, 'historySummary'), /^1 session logged\./);
     const retention = await text(page, 'historyRetention');
-    assert.match(retention, /Passed with help: 0/, retention);
+    assert.match(retention, /Tries with help: 0/, retention);
     assert.match(retention, /Passed on your own: 0/, 'computer-key passes are never "on your own"');
 
     // Storage, observation only.

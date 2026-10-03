@@ -181,7 +181,7 @@ export function registerHistory(panels) {
         const ev = summarizeEvents(db.events || [], { skillMap: KBD_SONG_SKILL_MAP, skillMapInstrument: 'kbd' });
         const checkedCount = ev.withHelp + ev.independent + ev.introduced;
         el.querySelector('#historyRetention').innerHTML = checkedCount
-          ? `<p>Passed with help: ${ev.withHelp} · Passed on your own: ${ev.independent} · Retained on a later check: ${ev.retained} · Applied in a song: ${ev.applied}</p>`
+          ? `<p>Tries with help: ${ev.withHelp} · Passed on your own: ${ev.independent} · Retained on a later check: ${ev.retained} · Applied in a song: ${ev.applied}</p>`
           : '<p>No checks recorded yet — nothing here is counted as retained.</p>';
 
         const l = ledger(db.sessions, { now, goalMin: store.goalMin });
@@ -237,7 +237,7 @@ export function registerHistory(panels) {
 
       copyBtn.addEventListener('click', () => {
         const store = sanitizeHistoryStore(api.store('history').get());
-        const { text } = toTeacherSummary(api.db(), { now: Date.now(), learnerName: store.learnerName || undefined });
+        const { text } = toTeacherSummary(api.db(), { now: Date.now(), learnerName: store.learnerName || undefined, instrument: api.instrument });
         const showSelected = () => {
           copyText.value = text;
           copyText.hidden = false;

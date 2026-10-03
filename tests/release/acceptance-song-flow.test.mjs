@@ -132,7 +132,7 @@ test('A07: a Learn pass with help, then Check on a MIDI keyboard: every wrong wa
     // Progress: every Learn try counts as help, every Check pass as on your own; the keyboard-letters try and every failure add nothing to the second.
     await page.clickSelector('#mainNav button[data-route="progress"]');
     await page.waitFor("document.getElementById('historyRetention') && document.getElementById('historyRetention').textContent !== ''");
-    assert.match(await read(page, '#historyRetention'), new RegExp(`^Passed with help: ${tally.learnRows} · Passed on your own: ${tally.checkPasses} · Retained on a later check: 0`));
+    assert.match(await read(page, '#historyRetention'), new RegExp(`^Tries with help: ${tally.learnRows} · Passed on your own: ${tally.checkPasses} · Retained on a later check: 0`));
   });
 });
 

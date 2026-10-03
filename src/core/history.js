@@ -75,10 +75,13 @@ function streaks(dayKeys, nowKey) {
     best = Math.max(best, run);
     prev = k;
   });
-  // current streak: consecutive days ending exactly at "today" (nowKey).
+  // current streak: consecutive days ending today, or yesterday while today is
+  // still silent (same grace day as the goal streak in ledger()).
   let current = 0;
-  if (days.has(nowKey)) {
-    let cursor = parseDay(nowKey);
+  const yKey = dayKey(new Date(parseDay(nowKey).getTime() - DAY_MS));
+  const anchor = days.has(nowKey) ? nowKey : days.has(yKey) ? yKey : null;
+  if (anchor) {
+    let cursor = parseDay(anchor);
     while (days.has(dayKey(cursor))) {
       current++;
       cursor = new Date(cursor.getTime() - DAY_MS);
@@ -138,7 +141,7 @@ export function summarize(log, { now } = {}) {
   const earlierAcc = mean(sessions.slice(-2 * N, -N).map((s) => clamp(s.acc, 0, 1)));
   let direction = 'flat';
   const delta = recentAcc - earlierAcc;
-  if (sessions.length >= 2) {
+  if (sessions.length > N) { // no earlier window yet (<= N sessions): nothing to compare, stay flat
     if (delta > 0.03) direction = 'up';
     else if (delta < -0.03) direction = 'down';
   }
@@ -315,11 +318,16 @@ const HONEST_LIMITS = 'This report is judged by microphone: accuracy tracks the 
  * file the learner chooses to hand a parent or teacher). Returns both a
  * plain-text and a minimal HTML rendering of the same content.
  */
-export function toTeacherSummary(db, { now, learnerName } = {}) {
+export function toTeacherSummary(db, { now, learnerName, instrument } = {}) {
   const d = db && typeof db === 'object' ? db : {};
   const s = summarize(d.sessions, { now });
   const name = learnerName && String(learnerName).trim() ? String(learnerName).trim() : 'This learner';
   const mods = d.mods && typeof d.mods === 'object' ? d.mods : {};
+  // `instrument(id)` (optional) maps a mod id to { name, input } so the report says "Keyboard", not "kbd".
+  const info = (id) => (typeof instrument === 'function' && instrument(id)) || null;
+  const label = (id) => (info(id) && info(id).name) || id;
+  // The string/fret caveat only applies to microphone-judged instruments; unknown ids keep it.
+  const needsLimits = !s.perInstrument.length || s.perInstrument.some((m) => !info(m.mod) || !['midi', 'tap', 'answer'].includes(info(m.mod).input));
 
   const lines = [];
   lines.push(`${name}'s Band Coach progress report`);
@@ -331,25 +339,25 @@ export function toTeacherSummary(db, { now, learnerName } = {}) {
   if (s.perInstrument.length) {
     s.perInstrument.forEach((m) => {
       const levelFromModel = mods[m.mod] && typeof mods[m.mod].level === 'number' ? mods[m.mod].level : m.maxLevel;
-      lines.push(`  - ${m.mod}: ${m.minutes} min across ${m.sessions} session${m.sessions === 1 ? '' : 's'}, ${Math.round(m.avgAccuracy * 100)}% average accuracy, level ${levelFromModel}`);
+      lines.push(`  - ${label(m.mod)}: ${m.minutes} min across ${m.sessions} session${m.sessions === 1 ? '' : 's'}, ${Math.round(m.avgAccuracy * 100)}% average accuracy, level ${levelFromModel}`);
     });
   } else {
     lines.push('  (no sessions logged yet)');
   }
   lines.push('');
-  if (s.strongest) lines.push(`Strongest: ${s.strongest.mod} (${Math.round(s.strongest.avgAccuracy * 100)}% average accuracy).`);
+  if (s.strongest) lines.push(`Strongest: ${label(s.strongest.mod)} (${Math.round(s.strongest.avgAccuracy * 100)}% average accuracy).`);
   if (s.needsWork && (!s.strongest || s.needsWork.mod !== s.strongest.mod)) {
-    lines.push(`Needs work: ${s.needsWork.mod} (${Math.round(s.needsWork.avgAccuracy * 100)}% average accuracy).`);
+    lines.push(`Needs work: ${label(s.needsWork.mod)} (${Math.round(s.needsWork.avgAccuracy * 100)}% average accuracy).`);
   }
   lines.push('');
-  lines.push(HONEST_LIMITS);
+  if (needsLimits) lines.push(HONEST_LIMITS);
   const text = lines.join('\n');
 
   const rows = s.perInstrument.length
     ? s.perInstrument
         .map((m) => {
           const levelFromModel = mods[m.mod] && typeof mods[m.mod].level === 'number' ? mods[m.mod].level : m.maxLevel;
-          return `<tr><td>${escapeHtml(m.mod)}</td><td>${m.minutes}</td><td>${m.sessions}</td><td>${Math.round(m.avgAccuracy * 100)}%</td><td>${levelFromModel}</td></tr>`;
+          return `<tr><td>${escapeHtml(label(m.mod))}</td><td>${m.minutes}</td><td>${m.sessions}</td><td>${Math.round(m.avgAccuracy * 100)}%</td><td>${levelFromModel}</td></tr>`;
         })
         .join('')
     : '<tr><td colspan="5">No sessions logged yet.</td></tr>';
@@ -360,11 +368,11 @@ export function toTeacherSummary(db, { now, learnerName } = {}) {
     '<table border="1" cellpadding="4"><thead><tr><th>Instrument</th><th>Minutes</th><th>Sessions</th><th>Avg accuracy</th><th>Level</th></tr></thead><tbody>',
     rows,
     '</tbody></table>',
-    s.strongest ? `<p>Strongest: ${escapeHtml(s.strongest.mod)} (${Math.round(s.strongest.avgAccuracy * 100)}% average accuracy).</p>` : '',
+    s.strongest ? `<p>Strongest: ${escapeHtml(label(s.strongest.mod))} (${Math.round(s.strongest.avgAccuracy * 100)}% average accuracy).</p>` : '',
     s.needsWork && (!s.strongest || s.needsWork.mod !== s.strongest.mod)
-      ? `<p>Needs work: ${escapeHtml(s.needsWork.mod)} (${Math.round(s.needsWork.avgAccuracy * 100)}% average accuracy).</p>`
+      ? `<p>Needs work: ${escapeHtml(label(s.needsWork.mod))} (${Math.round(s.needsWork.avgAccuracy * 100)}% average accuracy).</p>`
       : '',
-    `<p><em>${escapeHtml(HONEST_LIMITS)}</em></p>`,
+    needsLimits ? `<p><em>${escapeHtml(HONEST_LIMITS)}</em></p>` : '',
     '</body></html>',
   ].join('');
 
