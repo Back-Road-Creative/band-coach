@@ -55,6 +55,9 @@ function world({ limit = BUDGET * 10 } = {}) {
       schedule();
     });
   };
+  // A reply that never comes. The pending timer keeps the virtual clock running, so a driver with no deadline
+  // of its own ends in the stand-in's ten-budget error (an assertion failure), never in an emptied event loop.
+  const hang = () => new Promise((_, rej) => { w.sleep(limit + 1).catch(rej); });
   w.now = () => clock;
   w.sleep = (ms) => {
     let t;
@@ -75,7 +78,7 @@ function world({ limit = BUDGET * 10 } = {}) {
     if (method === 'Target.activateTarget') {
       const id = params.targetId;
       if (w.rules.rejectActivate) throw new Error(w.rules.rejectActivate);
-      if (w.rules.hangActivate) return new Promise(() => {});
+      if (w.rules.hangActivate) return hang();
       const n = (w.acts[id] = (w.acts[id] || 0) + 1);
       if (w.rules.never || w.rules.dead.has(id) || n <= (w.rules.lose[id] || 0)) return {};
       w.sleep(w.rules.delayMs).then(() => {
@@ -93,7 +96,7 @@ function world({ limit = BUDGET * 10 } = {}) {
   };
   w.read = async () => {
     w.log.push({ m: 'read', v: w.page, at: clock });
-    if (w.rules.hangRead) return new Promise(() => {});
+    if (w.rules.hangRead) return hang();
     return w.page;
   };
   w.switcher = (extra = {}) => driver.makeTabSwitcher({
