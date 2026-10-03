@@ -1542,8 +1542,8 @@ release.
   kit one scroll position; 844x390: keyboard one scroll position, drum kit one scroll position;
   640x400: keyboard one scroll position, drum kit one scroll position. Misses the layout cannot fix
   are recorded in the sizes file as `todo` rows and need a change to the drawing code: at 320x568 the
-  black keys are 20 px tall and the drum kit's hi-hat pieces are under 24 px in a bar. This says
-  nothing about a real phone: do not tell a learner it works on theirs.
+  black keys are 20 px tall and the drum kit's hi-hat pieces are under 24 px in a bar. Real phones
+  are untested: do not tell a learner it works on theirs.
 - **iPhone/iPad (the "Phone copy" edition):** unmeasured — see "Phone copy" above. Do not tell a
   learner it works on their phone.
 - **Real MIDI keyboards, real electronic drum kits, real instruments through a real microphone:**
