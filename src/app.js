@@ -2856,7 +2856,7 @@ import { register as registerPathway } from './ui/pathway.js';
   // below; everything it needs from the app goes through panelApi.
   const panels = createPanels();
   const panelApi = {
-    db: () => DB, save: save, mod: () => mod, setMod: m => { closePanel(); setMod(m); }, instrument: id => instrumentById[id || mod],
+    db: () => DB, save: save, mod: () => mod, setMod: m => { closePanel(); setMod(m); }, instrument: id => { const r = instrumentById[id || mod]; if (!r || r.id !== 'wind') return r; const k = WIND_KINDS[DB.prefs.wind || 'bb']; return Object.assign({}, r, { transposition: k[2] === 'bass' ? 0 : k[1] }); }, // wind: the learner's B flat/E flat/F choice, not the shared concert baseline
     audio: () => { ensureAudio(); return actx; }, openMic: openMic, analysers: () => ({ time: anTime, freq: anFreq }), gates: () => gates,
     tone: tone, click: click, now: now, say: say, coach: coach, recordError: recordError, close: () => closePanel(),
     drum: (piece, at) => drumHit(piece, at),

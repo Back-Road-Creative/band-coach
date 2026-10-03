@@ -347,7 +347,7 @@ export function register(panels) {
       // ================= Transpose tab =================
       const transposePanel = tabPanels.transpose;
       const transKeySelect = el('select', { id: 'theoryTransposeKey' }, ALL_KEYS.filter((k) => k.mode === 'major').map((k) => option(k.name, k.name + ' major')));
-      const transInstSelect = el('select', { id: 'theoryTransposeInstrument' }, INSTRUMENTS.map((r) => option(r.id, r.name)));
+      const transInstSelect = el('select', { id: 'theoryTransposeInstrument' }, INSTRUMENTS.filter((r) => r.id !== 'wind').map((r) => option(r.id, r.name))); // generic wind has seven transpositions; the named wind instruments are listed
       const writtenOut = el('p', { id: 'theoryTransposeWritten' });
       const concertOut = el('p', { id: 'theoryTransposeConcert' });
       const explainOut = el('p', { id: 'theoryTransposeExplain' });

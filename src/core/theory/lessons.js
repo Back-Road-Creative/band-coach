@@ -61,13 +61,19 @@ function keySignatureQuestion(rng, instrument) { // level 1: name the key from i
   };
 }
 
+// The internal quality key as a written chord symbol: Ab7, Gm7b5, Cmaj, Dm.
+function chordSymbol(root, quality) {
+  return root + (quality === 'min' ? 'm' : quality);
+}
+
 function buildChordQuestion(rng, instrument) { // level 2: build a chord
   const roots = MAJOR_KEYS.map(k => k.letter + k.accidental);
   const root = pick(rng, roots);
   const quality = pick(rng, chordQualities());
   const correct = chord(root, quality);
   const correctText = correct.notes.map(spellingToString).join(' ');
-  const distractorQualities = chordQualities().filter(q => q !== quality);
+  // A wrong answer with a triple flat/sharp (Cb dim7 = Bbbb) is not real-world spelling, so it is never offered.
+  const distractorQualities = chordQualities().filter(q => q !== quality && !/bbb|###/.test(chord(root, q).notes.map(spellingToString).join(' ')));
   const distractors = [];
   while (distractors.length < 3 && distractorQualities.length) {
     const i = Math.floor(rng() * distractorQualities.length) % distractorQualities.length;
@@ -77,10 +83,10 @@ function buildChordQuestion(rng, instrument) { // level 2: build a chord
   const choices = shuffledChoices(rng, correctText, distractors, Math.min(4, distractors.length + 1));
   return {
     id: 'theory-build-chord',
-    prompt: 'Which notes make up ' + root + ' ' + quality + '?',
+    prompt: 'Which notes make up ' + chordSymbol(root, quality) + '?',
     choices,
     answer: correctText,
-    explain: root + ' ' + quality + ' is ' + correctText + '.',
+    explain: chordSymbol(root, quality) + ' is ' + correctText + '.',
   };
 }
 
@@ -125,12 +131,15 @@ function scaleMembershipQuestion(rng, instrument) { // level 5: which notes are 
   const built = scale({ letter: key.letter, accidental: key.accidental }, 'major');
   const inScale = pick(rng, built.degrees);
   const inScaleText = spellingToString(inScale);
-  const outsidePcs = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].filter(pc => !built.degrees.some(d => d.pc === pc));
-  const distractors = outsidePcs.slice(0, 3).map(pc => {
-    const near = built.degrees.reduce((a, b) => (Math.abs(a.pc - pc) < Math.abs(b.pc - pc) ? a : b));
-    return near.letter + (pc > near.pc ? '#' : 'b');
-  });
-  const choices = shuffledChoices(rng, inScaleText, distractors, Math.min(4, distractors.length + 1));
+  // Wrong choices are real spellings whose pitch class is NOT in the key (so
+  // Eb is never offered as wrong in Ab major); odd spellings like E# stay out.
+  const NAT_PC = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
+  const distractors = [];
+  Object.keys(NAT_PC).forEach(l => ['', 'b', '#'].forEach(a => {
+    const pc = (NAT_PC[l] + (a === '#' ? 1 : a === 'b' ? 11 : 0)) % 12;
+    if (!built.degrees.some(d => d.pc === pc) && !['Cb', 'Fb', 'E#', 'B#'].includes(l + a)) distractors.push(l + a);
+  }));
+  const choices = shuffledChoices(rng, inScaleText, distractors, 4);
   return {
     id: 'theory-scale-membership',
     prompt: 'Which of these notes is in ' + key.name + ' major, on ' + instrumentLabel(instrument) + '?',
