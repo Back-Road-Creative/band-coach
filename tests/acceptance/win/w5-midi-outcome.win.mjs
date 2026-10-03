@@ -1,7 +1,8 @@
 // W5, Windows lane: acceptance A03 on real hardware (does Connect handle the
-// outcome the browser gives it?). The MIDI permission is answered the way a
-// person's Allow would (page.grant, recorded in the report), then Set up input
-// and Connect are clicked for real. Whatever the machine has -- a keyboard
+// outcome the browser gives it?). The lane answers Chrome's MIDI question with
+// Allow through Browser.grantPermissions (page.grant, recorded in the report;
+// midi and midi-sysex are both granted, see below), then Set up input and
+// Connect are clicked for real. Whatever the machine has -- a keyboard
 // found, one already working, none plugged in, one busy -- must come out as the
 // app's own plain sentence. A "could not reach MIDI" after an Allow, an
 // exception, or a status that never changes is not a pass. The one case the lane
