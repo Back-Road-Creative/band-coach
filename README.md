@@ -88,8 +88,9 @@ goes for one inside a progress file you restore; the next Connect measures again
 Switching away from the tab (or backgrounding the app on a phone) stops the microphone and
 suspends audio outright, rather than merely pausing the exercise on screen — the OS mic indicator
 goes off, exactly as if you had closed the tab. Coming back does not reopen the mic on its own:
-press Connect again (or resume through a drill that needs it) and the status line and mic indicator
-catch up. The app's own clock does come back on its own, though — the moment the tab is visible
+press Connect again and the status line and mic indicator catch up. If you resume a drill that
+needs the mic before doing that, the coach says the mic was released and to press Connect (it does
+not run the drill deaf and blame your microphone). The app's own clock does come back on its own, though — the moment the tab is visible
 again (or, on a phone, the moment the OS restores it from its back/forward cache), suspended audio
 resumes so a lesson already in progress keeps ticking rather than freezing solid until some other
 click happens to wake it.
