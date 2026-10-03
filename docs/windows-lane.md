@@ -20,8 +20,12 @@ From the repository, inside WSL, with the release file built
 
 ```
 node tests/acceptance/win/run.mjs \
-  --win-root /mnt/c/Users/<you>/AppData/Local/Temp/band-coach-win-lane
+  --win-root /mnt/d/band-coach-win-lane --expect-version <package.json version>
 ```
+
+Pick a root your WSL user can write: the Windows profile's
+`/mnt/c/Users/<you>/AppData/Local/Temp` can refuse a WSL user with `EACCES` (seen
+2026-10-03), while a data drive such as `/mnt/d` worked. Without `--expect-version`, W3 ends OBSERVED and the lane exits 1.
 
 `--win-root` is required: a folder under `/mnt/<drive letter>/` where the lane may create
 `run-*` directories. For each run it copies the driver, the scenarios and the release file
