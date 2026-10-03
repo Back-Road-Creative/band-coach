@@ -1371,7 +1371,11 @@ import { register as registerPathway } from './ui/pathway.js';
   function onNoteOff(midi, source) {
     if (!playing || !task || task.done) return; const e = cur(); if (!e || !e.pair || e.pair.phase !== 'check') return;
     const ex = e.info.ex, stage = handsStageFromId(e.id);
-    if (stage === 'position') return; // untimed: onNote's note-on grades level 17 alone, no release timing needed
+    if (stage === 'position') {
+      // untimed: onNote's note-on grades level 17 alone; the one release that matters is the left hand lifting after the shift, which fails and restarts the exercise (a later re-press must not pass it)
+      if (e.pair.moved && midi === ex.lh.midi && !noteState.isHeld(midi)) { failEl('The left hand let go of ' + nname(ex.lh.midi) + ' during the move. Keep it down while your right hand moves up, then start again from the first position.', e.id + '>l'); e.pair.moved = false; e.pair.phase = 'learn'; refreshPrompt(); }
+      return;
+    }
     if (stage === 'timed') {
       if (!(midi in e.pair.on)) return;
       e.pair.off[midi] = performance.now();
