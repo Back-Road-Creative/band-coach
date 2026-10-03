@@ -47,7 +47,11 @@ judged) or BLOCKED (a step could not be done, named in the text). Only PASS coun
 - **1**: something FAILED, was OBSERVED or BLOCKED, the run was partial (`--only`), or nothing ran.
 - **2**: the lane could not run: bad arguments, `--win-root` missing or not under
   `/mnt/<letter>/`, no `node.exe`, Chrome not found, the file's sha256 is not the one given,
-  an unknown `--only` scenario, or Chrome could not be started (the result is BLOCKED with the driver's error).
+  an unknown `--only` scenario, Chrome could not be started (the result is BLOCKED with the driver's error),
+  or the Windows side wrote no report at all. The last one is exit 2 whatever exit status `node.exe` gave:
+  a WSL interop failure (for example `UtilAcceptVsock: accept4 failed 110`) can make `node.exe` exit 1 having
+  run nothing, and that must not read as a scenario result. Run it again; the written report says
+  "the Windows side wrote no report".
 
 The report (JSON) holds each result with what was observed, the browser and launch flags,
 the sha256 and size of the file opened, and the wall time.
@@ -59,7 +63,10 @@ the sha256 and size of the file opened, and the wall time.
 | 1, open the file (and acceptance finding 6, red console errors on a real machine) | W1 `w1-clean-open.win.mjs` | Fresh profile, extensions off, release file only: no console error or warning, no browser log entry, no exception, exactly one request (the file itself), no debug hook, and the sha256 is the one given. |
 | 2, MIDI keyboard | none | **Not automated.** "found" to "working" needs key presses on a real keyboard, and the box has no virtual MIDI driver. Do it by hand. |
 | 3, microphone instrument; 4, tuner | none | Not automated by this lane. |
-| 5, progress survives a reload; 6, check for updates | not yet | Later change. |
+| 5, progress survives a reload | W2 `w2-progress-reload.win.mjs` | Fresh profile. A real click on Start, then the computer-key row for the nine notes the screen asks for, then End session. What is stored (`bandcoach.v1`, reported as a length and checksum) and what is shown (the "last keyboard session" line and the progress bar) must both have changed, and both must be the same after a reload. The reload is the browser's own `Page.reload` over the DevTools connection, not the F5 key (DevTools key events do not trigger a reload). |
+| 6, check for updates | W3 `w3-update-check.win.mjs` | Real clicks on Settings, then "Check for updates", with the network on. PASS needs "You're running the latest version (x.y.z)" with the version given by `--expect-version`; without it the result is OBSERVED (exit 1). "Behind", "Couldn't reach the update server", "development build" and a check still on "Checking…" after 30 s are FAIL. The offline case is **not covered**. |
+| acceptance A02, sound only on a gesture | W4 `w4-audio-gesture.win.mjs` | After the load settle no AudioContext is running and no "AudioContext was not allowed to start" message exists; a real click on Start then makes exactly one run, the button says Pause, still no warning or exception. |
+| acceptance A03, Connect handles the MIDI outcome (not README check 2) | W5 `w5-midi-outcome.win.mjs` | The lane answers Chrome's MIDI question with Allow (`Browser.grantPermissions`, midi and midi-sysex) and clicks Set up input, then Connect. Any outcome the app words plainly (keyboard found or working, none plugged in, another program using it) is PASS and the report names which one. An error text after the Allow, an exception, or a MIDI output picked is FAIL; a status that never changes in 30 s is BLOCKED. If the app says the answer was no, the same request is made from the page: success there makes it FAIL, a refusal there is BLOCKED (the lane could not get Chrome to honour its Allow). **No MIDI is sent**: the lane never touches the output select or "Play it for me". It needs real MIDI hardware to say anything about a found keyboard. |
 
 A clean W1 says "not reproduced in a clean profile, extensions off". That is one clean
 profile on one machine, not proof that finding 6 is fixed.
@@ -71,6 +78,8 @@ profile on one machine, not proof that finding 6 is fixed.
 - Real input only: scenarios click and press keys through the driver and only read the page
   with `evaluate`. They never use `window.__coach` (the release file has none; the driver
   refuses a file that does).
+- The scenarios read the app's own update messages from `src/core/i18n.js` instead of copying them, so the
+  lane copies that one file into the run directory too.
 - One browser launch per scenario. Closing a launch ends the Chrome process tree
   (`taskkill /T /F`); on the first real Windows runs the profile folder was still there after `close()`, so it
   is removed with the run directory instead, which the lane does after every run.
