@@ -9,14 +9,19 @@ name: ci
 #
 # The job timeout is a budget over the MEASURED suite, not a target: ten
 # passing runs on 2026-10-02 took 12.9-15.0 min on ubuntu-latest (14.7, 15.0,
-# 14.3, 14.8, 14.9, 14.8, 14.9, 14.7, 12.9, 14.8). Every tests/release/ file,
-# acceptance-* included, runs in both gate runs, so the budget is 30 min.
+# 14.3, 14.8, 14.9, 14.8, 14.9, 14.7, 12.9, 14.8). Those runs ran the whole
+# release lane twice (every tests/release/ file, acceptance-* included, once as
+# a first gate step and again as posttest), so the budget is 30 min. The first
+# step now runs only gate.test.mjs and the full lane runs once, as posttest; the
+# new duration is measured on a run, not claimed here.
 # Earlier, three PR runs launched together were cancelled at 10m06s with
 # nothing failing. tests/unit/ci-workflow-no-duplicate-run.test.mjs and
 # ci-workflow-artifacts-weekly.test.mjs pin the headroom. A failed or
 # cancelled run uploads dist/test-artifacts/ so its screenshots and logs
-# survive. The weekly run on a fresh browser is a separate file
-# (weekly-current-browser.yml): bin/autoland.py counts every ci.yml run on a
+# survive. build/ci-summary.mjs turns the two step logs into a READY / NOT READY
+# verdict and a run-summary artifact (retries, skips and cancellations in the
+# release lane are visible, not hidden behind a green job). The weekly run on a
+# fresh browser is a separate file (weekly-current-browser.yml): bin/autoland.py counts every ci.yml run on a
 # commit whatever its event, so a scheduled run here would feed the merge
 # barrier.
 on:
@@ -40,19 +45,55 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      # One commit, one candidate: the release footer's date is the commit's, not
+      # the wall clock (build/build.mjs reads SOURCE_DATE_EPOCH). On a pull_request
+      # run the checked-out commit is GitHub's merge commit.
+      - name: pin the build date to the commit
+        run: echo "SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)" >> "$GITHUB_ENV"
       - name: locate Chrome
         run: echo "CHROME_BIN=$(which google-chrome)" >> "$GITHUB_ENV"
       - name: record Chrome version
         run: '"$CHROME_BIN" --version >> "$GITHUB_STEP_SUMMARY"'
       - run: npm ci
-      # Cheap and decisive first (about 5 s): a size-budget failure must not wait
-      # behind the browser suite. `npm test` re-runs it as posttest.
-      - run: npm run gate
+      # Cheap and decisive first (about 5 s): the size budget and the smoke checks
+      # must not wait behind the browser suite. Only gate.test.mjs runs here; the
+      # whole release lane runs once, as the suite step's posttest. Each of the two
+      # steps keeps its exact exit code and log in $RUNNER_TEMP (outside dist/,
+      # which pretest's dev build deletes) for build/ci-summary.mjs.
+      - id: gate
+        name: release size budget and smoke checks
+        shell: bash
         env:
           CI: true
-      - run: npm test
+        run: |
+          set +e
+          { node build/build.mjs --release && node --test tests/release/gate.test.mjs; } 2>&1 | tee "$RUNNER_TEMP/gate.log"
+          rc=${PIPESTATUS[0]}; echo "$rc" > "$RUNNER_TEMP/gate.rc"; exit "$rc"
+      - id: suite
+        name: browser suite, then the full release lane
+        shell: bash
         env:
           CI: true
+        run: |
+          set +e
+          npm test 2>&1 | tee "$RUNNER_TEMP/suite.log"
+          rc=${PIPESTATUS[0]}; echo "$rc" > "$RUNNER_TEMP/suite.rc"; exit "$rc"
+      # NOT READY (a retry, skip, cancel or passing todo in the release lane, or no
+      # release block at all) fails this step even when the suite step went green.
+      - name: summarise the run
+        if: always()
+        env:
+          GATE_OUTCOME: ${{ steps.gate.outcome }}
+          SUITE_OUTCOME: ${{ steps.suite.outcome }}
+        run: node build/ci-summary.mjs
+      - name: keep the run summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: run-summary-${{ github.run_id }}-${{ github.run_attempt }}
+          path: dist/test-artifacts/run-summary.json
+          if-no-files-found: error
+          retention-days: 7
       - name: keep failure evidence
         if: failure() || cancelled()
         uses: actions/upload-artifact@v4

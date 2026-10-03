@@ -108,3 +108,67 @@ test('the weekly workflow runs exactly ci.yml\'s test-job steps', () => {
   assert.ok(a.length > 200, 'ci steps were not extracted');
   assert.equal(b, a, 'the weekly steps must be identical to ci.yml\'s so the weekly run proves what a PR run proves');
 });
+
+// The run summary (build/ci-summary.mjs) and the two exact exit codes it reads.
+// Steps are compared as normalised text, like the pins above, with comment lines
+// removed so a step's code is what is asserted, not the prose above the next one.
+const codeSteps = () => stepList(ci().split('\n').filter((l) => !/^\s*#/.test(l)).join('\n'));
+const find = (list, re, what) => {
+  const s = list.find((x) => re.test(x));
+  assert.ok(s, `ci.yml needs ${what}`);
+  return s;
+};
+const uploads = (list) => list.filter((s) => /\buses: actions\/upload-artifact@v4\b/.test(s));
+
+test('the build date is pinned to the commit before the first build', () => {
+  const list = codeSteps();
+  const at = list.findIndex((s) => s.includes('git log -1 --format=%ct') && s.includes('>> "$GITHUB_ENV"') && s.includes('SOURCE_DATE_EPOCH='));
+  assert.ok(at >= 0, 'a step must export SOURCE_DATE_EPOCH=$(git log -1 --format=%ct) to $GITHUB_ENV');
+  const build = list.findIndex((s) => s.includes('build/build.mjs'));
+  assert.ok(build > at, 'the epoch must be exported before the first step that builds, or the candidate hash moves with the wall clock');
+});
+
+test('the gate and suite steps keep their own exit code and log outside dist/', () => {
+  const list = codeSteps();
+  for (const name of ['gate', 'suite']) {
+    const s = find(list, new RegExp(`^id: ${name}\\b`), `a step with \`id: ${name}\``);
+    assert.match(s, /\bshell: bash\b/, `${name}: shell: bash, so PIPESTATUS exists`);
+    assert.match(s, /\$\{PIPESTATUS\[0\]\}/, `${name}: the exit code is the command's, not tee's`);
+    assert.ok(s.includes(`tee "$RUNNER_TEMP/${name}.log"`), `${name}: the log is teed to $RUNNER_TEMP/${name}.log`);
+    assert.ok(s.includes(`> "$RUNNER_TEMP/${name}.rc"`), `${name}: the exit code is written to $RUNNER_TEMP/${name}.rc`);
+    assert.match(s, /exit "\$rc"/, `${name}: the step exits with that code`);
+    assert.doesNotMatch(s, /dist\/[^ ]*\.(?:log|rc)\b/, `${name}: pretest's dev build deletes dist/, so nothing is kept there`);
+  }
+});
+
+test('the run summary is computed after the suite, always, from both outcomes', () => {
+  const list = codeSteps();
+  const at = list.findIndex((s) => s.includes('build/ci-summary.mjs'));
+  assert.ok(at >= 0, 'a step must run build/ci-summary.mjs');
+  const s = list[at];
+  assert.match(s, /\bif: always\(\)/, 'the summary runs when the suite failed too');
+  assert.ok(s.includes('steps.gate.outcome') && s.includes('steps.suite.outcome'), 'it reads both step outcomes');
+  const suite = list.findIndex((x) => /^id: suite\b/.test(x));
+  assert.ok(suite >= 0 && at > suite, 'the summary must come after the suite step');
+  const firstUpload = list.findIndex((x) => /\buses: actions\/upload-artifact@v4\b/.test(x));
+  assert.ok(at < firstUpload, 'the summary must come before both uploads, or it uploads nothing');
+});
+
+test('the run summary is uploaded on every run, named by run and attempt', () => {
+  const s = find(uploads(codeSteps()), /path: dist\/test-artifacts\/run-summary\.json\b/, 'an upload of dist/test-artifacts/run-summary.json');
+  assert.match(s, /\bif: always\(\)/, 'upload on success as well as failure');
+  const name = /with: name: (.+?) path:/.exec(s);
+  assert.ok(name && /github\.run_id/.test(name[1]) && /github\.run_attempt/.test(name[1]), 'the name carries run id and attempt');
+  assert.match(s, /if-no-files-found: error/, 'a missing summary means the step did not run, which is worth a red mark');
+  const days = /retention-days: (\d+)/.exec(s);
+  assert.ok(days && Number(days[1]) >= 1 && Number(days[1]) <= 14, 'short retention (1-14)');
+});
+
+test('the failure upload is still last, and there are exactly two uploads', () => {
+  const list = codeSteps();
+  const ups = uploads(list);
+  assert.equal(ups.length, 2, 'the run summary and the failure evidence, nothing else');
+  assert.equal(list[list.length - 1], ups[1], 'the failure upload stays the last step');
+  assert.match(ups[1], /if: failure\(\) \|\| cancelled\(\)/);
+  assert.ok(list.indexOf(ups[0]) < list.indexOf(ups[1]));
+});
