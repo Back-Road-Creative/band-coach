@@ -38,7 +38,7 @@ const clickButton = (page, text) => clickByText(page, '.panel-songs-practice but
 const hasButton = (page, text) => page.evaluate(`[...document.querySelectorAll('.panel-songs-practice button')].some((x) => x.textContent.trim() === ${JSON.stringify(text)})`);
 const mode = (page, m) => page.clickSelector(`.panel-songs-mode button[data-mode="${m}"]`);
 
-// Observations the todo tests below judge once the flow has run (this file's tests run in order).
+// Observations the F1 and F3 tests below judge once the flow has run (this file's tests run in order).
 const seen = {};
 
 // Press Your turn, wait out the count-in, play `plays` (each { midi, atMs } on the fake keyboard, or { key, atMs } typed), press Stop and check.
@@ -92,11 +92,7 @@ test('A07: a Learn pass with help, then Check on a MIDI keyboard: every wrong wa
     await page.waitFor("document.querySelector('#songsPracticeHeading')");
     assert.match(await read(page, '#songsPracticeHeading'), /Mary/, 'the hand-off at level 3 is Mary');
     seen.practiceHiddenAfterHandoff = await page.evaluate("document.querySelector('.panel-songs-practice').hidden");
-    // Finding F3: the hand-off leaves the lesson hidden, so the learner opens the song from the library list.
-    if (seen.practiceHiddenAfterHandoff) {
-      await page.clickSelector('details.panel-songs-library summary');
-      await clickByText(page, 'li.panel-songs-row button', 'Mary Had a Little Lamb');
-    }
+    assert.equal(seen.practiceHiddenAfterHandoff, false, 'F3: the hand-off shows the lesson');
     await page.waitFor("!document.querySelector('.panel-songs-practice').hidden");
 
     // a. Learn and help: the app plays it for you; the exact try passes; other modes offer no demo.
@@ -125,7 +121,7 @@ test('A07: a Learn pass with help, then Check on a MIDI keyboard: every wrong wa
     const m = MIDIS;
     assert.equal((await playTry(page, slow([...m.slice(0, 4), m[3], ...m.slice(4, 6)]))).message, 'An extra D4 crept in — just the written notes.', 'c1: a wrong note in the middle');
     seen.firstNoteWrong = (await playTry(page, slow([m[1], ...m.slice(1)]))).message;
-    assert.match(seen.firstNoteWrong, /^(Missed|An extra) /, 'c2: the app says something about it'); // what exactly: finding F1 below
+    assert.equal(seen.firstNoteWrong, 'An extra D4 crept in — just the written notes.', 'c2: the wrong first note is named as the extra D4, not a missed D4');
     assert.equal((await playTry(page, slow(m.slice(0, 5)))).message, 'Missed the E4 — 5 of 7 notes.', 'd: two notes missing');
     assert.equal((await playTry(page, slow([...m.slice(0, 3), 65, ...m.slice(3)]))).message, 'An extra F4 crept in — just the written notes.', 'e: one extra note');
 
@@ -140,10 +136,10 @@ test('A07: a Learn pass with help, then Check on a MIDI keyboard: every wrong wa
   });
 });
 
-test.todo('Q4b-2 F1: playing the wrong first note must not be reported as a missed note', () => {
-  assert.doesNotMatch(seen.firstNoteWrong, /^Missed the D4/, `reported: ${seen.firstNoteWrong}`);
+test('Q4b-2 F1: playing the wrong first note is named as the extra note, not as a missed note', () => {
+  assert.equal(seen.firstNoteWrong, 'An extra D4 crept in — just the written notes.', `reported: ${seen.firstNoteWrong}`);
 });
 
-test.todo('Q4b-2 F3: taking the keyboard hand-off must open the song lesson, not leave it hidden', () => {
+test('Q4b-2 F3: taking the keyboard hand-off opens the song lesson instead of leaving it hidden', () => {
   assert.equal(seen.practiceHiddenAfterHandoff, false);
 });
