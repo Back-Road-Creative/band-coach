@@ -13,8 +13,13 @@ export const id = 'W3';
 const ANSWER_MS = 30000;
 
 export async function run(page, ctx) {
-  await page.clickSelector('[data-route="settings"]');
-  await page.waitFor("document.getElementById('updateCheckBtn') && document.getElementById('updateCheckBtn').getBoundingClientRect().width > 0", 10000);
+  // Settings that never shows the button after a real click on it is the finding, not a lane limit: report it, do not throw.
+  try {
+    await page.clickSelector('[data-route="settings"]');
+    await page.waitFor("document.getElementById('updateCheckBtn') && document.getElementById('updateCheckBtn').getBoundingClientRect().width > 0", 10000);
+  } catch (e) {
+    return { stuck: e.message, exceptions: [...page.exceptions], requests: [...page.requests], offline: 'not covered' };
+  }
   await page.clickSelector('#updateCheckBtn');
   const checking = JSON.stringify(en['update.checking']);
   let timedOut = false;
@@ -42,6 +47,7 @@ export function w3Verdict(o) {
   const text = o.text || '';
   const bad = (why) => ({ status: 'FAIL', text: `W3 ${why}`, findings: [why] });
   if (o.exceptions && o.exceptions.length) return bad(`an uncaught exception during the check: ${o.exceptions.join('; ')}`);
+  if (o.stuck) return bad(`Settings did not show "Check for updates" after a click on Settings (${o.stuck})`);
   const upToDate = pattern(en['update.upToDate'], '$').exec(text);
   if (upToDate) {
     const v = upToDate[1];

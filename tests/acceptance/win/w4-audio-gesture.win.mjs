@@ -18,9 +18,14 @@ export async function run(page) {
   const load = { running: page.audio.running().length, warnings: warningsOf(page) };
   const labelBefore = await label(page);
   await page.clickSelector('#playBtn');
-  await page.audio.waitForRunning();
-  await page.waitFor("document.getElementById('playBtn').textContent.trim() === 'Pause'", 10000);
+  // A click that starts no sound, or a button that never says Pause, is the finding: these waits
+  // must not leave run() as a throw (the lane reports a throw as BLOCKED, a lane limit), so a
+  // timeout is recorded and the state is read anyway for the verdict to judge.
+  const afterWait = [];
+  try { await page.audio.waitForRunning(); } catch (e) { afterWait.push(e.message); }
+  try { await page.waitFor("document.getElementById('playBtn').textContent.trim() === 'Pause'", 10000); } catch (e) { afterWait.push(e.message); }
   return {
+    afterWait,
     load,
     labelBefore,
     after: { running: page.audio.running().length, warnings: warningsOf(page) },
@@ -38,7 +43,7 @@ export function w4Verdict(o) {
   for (const w of o.after.warnings) findings.push(`after the click: ${w}`);
   if (o.labelAfter !== 'Pause') findings.push(`the button says "${o.labelAfter}" after the click, expected "Pause"`);
   for (const x of o.exceptions) findings.push(`uncaught exception: ${x}`);
-  if (findings.length) return { status: 'FAIL', text: `W4 found ${findings.length} problem(s): ${findings.join('; ')}`, findings };
+  if (findings.length) return { status: 'FAIL', text: `W4 found ${findings.length} problem(s): ${findings.join('; ')}${(o.afterWait || []).length ? ` (the waits after the click said: ${o.afterWait.join(' | ')})` : ''}`, findings };
   return { status: 'PASS', text: 'no sound and no AudioContext warning on load; a real click on Start made exactly one AudioContext run, the button says Pause, still no warning or exception', findings };
 }
 

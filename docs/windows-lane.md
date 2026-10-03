@@ -9,7 +9,9 @@ cannot reach (see "What it covers").
 It is **outside `npm test`, `npm run gate` and CI**. Its scenario files are named
 `*.win.mjs` so no test glob picks them up, and it needs a Windows machine with Chrome
 and Windows `node.exe`. Only its pure decisions are tested in `npm test`
-(`tests/unit/win-lane-*.test.mjs`, no browser launched).
+(`tests/unit/win-lane-*.test.mjs`, no browser launched). One of them (the stand-in `node.exe` test for the missing-report rule) writes under a Windows
+directory, so it runs only when `BAND_COACH_WIN_TEST_ROOT` names one, for example
+`/mnt/c/Users/<you>/AppData/Local/Temp/band-coach-win-lane/unit`; otherwise it is skipped with that reason.
 
 ## Run it
 
@@ -42,6 +44,12 @@ profile lives inside the run directory too.
 
 Each scenario ends PASS, FAIL (with the finding), OBSERVED (something was seen but not
 judged) or BLOCKED (a step could not be done, named in the text). Only PASS counts.
+
+A product that does not answer a real click is FAIL, not BLOCKED: W3, W4 and W5 record a timed-out
+step after a click (Settings never showing "Check for updates", no sound after Start, a button that
+never says Pause, no Set up input sheet) in the observation and read the page anyway, so the verdict
+names the finding. BLOCKED is kept for what the lane itself could not do (Chrome would not start, or
+refused its MIDI Allow, or the exercise asked for something W2 has no key for).
 
 - **0**: every registered scenario PASSED in a full run.
 - **1**: something FAILED, was OBSERVED or BLOCKED, the run was partial (`--only`), or nothing ran.

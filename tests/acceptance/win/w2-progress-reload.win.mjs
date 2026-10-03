@@ -17,8 +17,23 @@ const ANSWERS = 9; // a session is logged only from 8 judged answers
 const read = (page) =>
   page.evaluate(`({ stored: (function () { const v = localStorage.getItem('bandcoach.v1'); if (v === null) return null; let h = 5381; for (let i = 0; i < v.length; i++) h = ((h * 33) ^ v.charCodeAt(i)) >>> 0; return v.length + ' chars, checksum ' + h; })(), shown: document.getElementById('sessLine').textContent.trim(), ready: document.getElementById('readyBar').getAttribute('aria-valuenow') })`);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+// The app saves a debounced 1200 ms after the session ends (src/app.js save()). Rather than sleep a guessed
+// margin, read the stored JSON until two reads at least a save-delay apart match, then judge it.
+const SAVE_GAP_MS = 1300;
+async function storedSettled(page, gapMs) {
+  let prev = await page.evaluate("localStorage.getItem('bandcoach.v1')");
+  for (let i = 0; i < 6; i++) {
+    await sleep(gapMs);
+    const cur = await page.evaluate("localStorage.getItem('bandcoach.v1')");
+    if (cur === prev) return;
+    prev = cur;
+  }
+}
 
-export async function run(page) {
+// ctx.paceMs and ctx.settleMs exist so a unit test can drive this with a stand-in page; the lane leaves them unset.
+export async function run(page, ctx = {}) {
+  const pace = ctx.paceMs ?? 900;
+  const gap = ctx.settleMs ?? SAVE_GAP_MS;
   const before = await read(page);
   await page.clickSelector('#playBtn');
   let done = 0;
@@ -29,18 +44,18 @@ export async function run(page) {
     if (!note) {
       seen.push(prompt);
       if (seen.length > 20) return { blocked: `the exercise asked for something this scenario has no key for: "${prompt}"` };
-      await sleep(500);
+      await sleep(Math.min(500, pace));
       continue;
     }
     await page.press(KEY_FOR[note[1]]);
     done++;
-    await sleep(900);
+    await sleep(pace);
   }
   if (done < ANSWERS) return { blocked: `only ${done} of ${ANSWERS} answers could be played; the prompts seen were: ${seen.join(' | ') || 'none'}` };
   await page.clickSelector('#endBtn');
   try {
     await page.waitFor("localStorage.getItem('bandcoach.v1') !== null && document.getElementById('sessLine').textContent.indexOf('last ') >= 0", 10000);
-    await sleep(1500); // the app saves a moment after the session ends
+    await storedSettled(page, gap);
   } catch {}
   const played = await read(page);
   await page.reload();
