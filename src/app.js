@@ -357,6 +357,10 @@ import { register as registerPathway } from './ui/pathway.js';
       try { st = await navigator.mediaDevices.getUserMedia({ audio: wanted }); }
       catch (e) { if (!DB.prefs.inputDeviceId) throw e; st = await navigator.mediaDevices.getUserMedia({ audio: base }); }
       micStream = st; const src = actx.createMediaStreamSource(st); wireAnalysers(monoSum(src)); micReady = true;
+      // A successful Connect clears the 'blocked' sentence calibrateNoiseFloor wrote (its catch below: keep the two texts identical), so it does not sit beside 'Listening through your microphone.'. Any other result text is left alone.
+      { const cr = $('calibrateResult'); if (cr && cr.textContent === 'The microphone was blocked, so it could not be checked.') cr.textContent = ''; }
+      // A track that ends (device unplugged, permission revoked) leaves the mic as the teardown 'mic' stopper does, then the status and Connect button follow. Only the CURRENT stream counts: a switched-away stream ending later must not close its replacement. micGen++ makes a room check still running for it discard its result.
+      st.getAudioTracks().forEach(tr => tr.addEventListener('ended', () => { if (micStream !== st) return; const pm = $('practiceMeter'); if (pm) pm.hidden = true; st.getTracks().forEach(t => t.stop()); micStream = null; micReady = false; micGen++; ioRefresh(); }));
       ensurePitchWorklet(); refreshMicDevices();
       // First Connect (or first after a device change) with no stored floor: listen to the room for ~1.5 s so the gates follow this mic, not the fixed defaults. It abstains when it hears playing.
       if (DB.prefs.noiseFloor == null) checkRoomInBackground();
