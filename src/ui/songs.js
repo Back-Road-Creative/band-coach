@@ -686,6 +686,18 @@ function mountSongsPanel(hostEl, api) {
     if (typeof api.say === 'function') api.say(text, kind);
   }
 
+  // A judged try's verdict is also kept on the practice so the lesson itself can show it next to
+  // Your turn: #panelSay (api.say's mirror) sits above the panel, which the scroll to the song heading
+  // pushes off-screen, and importMsg lives in the hidden Add-a-song section.
+  function sayVerdict(text, kind) {
+    say(text, kind);
+    practice.lastVerdict = { text, kind };
+  }
+
+  function renderVerdict() {
+    if (practice.lastVerdict) practiceSection.appendChild(el('p', { class: 'panel-songs-verdict', 'data-state': practice.lastVerdict.kind, text: practice.lastVerdict.text }));
+  }
+
   async function refreshList() {
     listUl.innerHTML = '';
     starterSongs.forEach((song) => listUl.appendChild(songRow(song, null)));
@@ -1673,6 +1685,7 @@ function mountSongsPanel(hostEl, api) {
     // The last judged try's bar-by-bar result (advance() below), kept on
     // screen until the learner starts another try (startRecording() clears
     // it) so they can read it while deciding what to do next.
+    renderVerdict();
     if (practice.lastHeat) {
       practiceSection.appendChild(renderBarStrip(practice.lastHeat, practice.lastHeatBars));
     }
@@ -1760,6 +1773,7 @@ function mountSongsPanel(hostEl, api) {
     }));
     countEl = el('p', { class: 'panel-songs-count', text: countLabel() });
     practiceSection.appendChild(countEl);
+    renderVerdict();
     if (practice.lastHeat) {
       practiceSection.appendChild(renderBarStrip(practice.lastHeat, practice.lastHeatBars));
     }
@@ -2019,6 +2033,7 @@ function mountSongsPanel(hostEl, api) {
     practice.lastHeatBars = null;
     practice.lastAssessed = null;
     practice.lastCheckVerdict = null;
+    practice.lastVerdict = null;
 
     // Real listening only begins once the count-in ends (below); this is the
     // rest of the old startRecording() body, unchanged, just deferred.
@@ -2163,7 +2178,7 @@ function mountSongsPanel(hostEl, api) {
     // a miss keeps it -- try again, same isolated notes.
   function advanceRepair(passed, result, elapsedMs) {
     const repairStep = practice.repair.step;
-    say(passed ? 'Good. Back to the phrase.' : (firstCorrection(result, repairStep.passRule) || 'Not quite yet — try that again.'), passed ? 'ok' : 'no');
+    sayVerdict(passed ? 'Good. Back to the phrase.' : (firstCorrection(result, repairStep.passRule) || 'Not quite yet — try that again.'), passed ? 'ok' : 'no');
     if (result) {
       practice.lastHeat = barHeat(practice.song, result.matches);
       practice.lastHeatBars = repairStep.bars;
@@ -2238,7 +2253,7 @@ function mountSongsPanel(hostEl, api) {
     // -- instead of the generic retry prompt, so the learner knows the
     // ONE thing to work on next.
     const correction = !passed && result ? firstCorrection(result, step.passRule) : null;
-    say(passed
+    sayVerdict(passed
       ? 'Nice. ' + (result ? result.hitCount + ' of ' + result.judgedCount + ' notes.' : '')
       : correction || 'Not quite yet — try that again.', passed ? 'ok' : 'no');
     if (result) {
@@ -2322,6 +2337,7 @@ function mountSongsPanel(hostEl, api) {
       practice.lastHeatBars = null;
       practice.lastAssessed = null;
       practice.lastCheckVerdict = null;
+    practice.lastVerdict = null;
     }
     finishStep(step, passed, opts);
   }
