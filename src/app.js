@@ -2481,13 +2481,18 @@ import { register as registerPathway } from './ui/pathway.js';
       const wire = () => {
         midiOutRefresh(a);
         const inputs = []; a.inputs.forEach(i => inputs.push(i));
-        // A port this app had open that onstatechange no longer lists at all
-        // (unplugged, or Windows handed its note port back to a DAW): null
-        // its onmidimessage -- a stale MIDIInput otherwise keeps a listener
-        // wired to a port the status strip no longer names -- and release
-        // whatever notes noteState says it was holding, exactly as if it had
-        // sent every one of them a note-off on its way out.
-        midiPortInputs.forEach(i => { if (inputs.indexOf(i) === -1) { i.onmidimessage = null; releaseNotes(i); } });
+        // A port this app had open that is gone: onstatechange no longer lists
+        // it at all (unplugged, or Windows handed its note port back to a DAW),
+        // or still lists it but reads anything other than 'connected'. Null its
+        // onmidimessage -- a stale MIDIInput otherwise keeps a listener wired
+        // to a port the status strip no longer names -- release whatever notes
+        // noteState says it was holding, exactly as if it had sent every one of
+        // them a note-off on its way out, and forget it ever delivered a byte
+        // so a replug has to be heard again before the status says "working".
+        // The listener loop below re-attaches to every LISTED port in this same
+        // call, so for a listed disconnected port the null is overwritten: the
+        // release and the midiHeard delete are what act there.
+        midiPortInputs.forEach(i => { if (inputs.indexOf(i) === -1 || i.state !== 'connected') { i.onmidimessage = null; releaseNotes(i); midiHeard.delete(i); } });
         // Listen to EVERY input, whatever open() goes on to report. Web MIDI
         // opens a port implicitly when onmidimessage is assigned, so this is
         // how the app heard keyboards before open() was introduced, and a port
@@ -2509,8 +2514,8 @@ import { register as registerPathway } from './ui/pathway.js';
           // only, see listenDrums()) rather than leaving Connect a dead end.
           // A kit whose e-kit IS found never reaches here, so this can never
           // fight real MIDI note-ons for the same tap.
-          if (!inputs.length && MODS[mod] && MODS[mod].input === 'mic+midi' && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) openMic().then(ioRefresh).catch(() => ioState('off', 'No MIDI device found, and the microphone was blocked. Allow it, or plug in a kit.'));
-          else if (!inputs.length) ioState('off', 'No MIDI device is plugged in. Plug it in and it will be picked up. Screen and computer keys still work as practice, not proof a real keyboard works.');
+          if (!connected.length && MODS[mod] && MODS[mod].input === 'mic+midi' && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) openMic().then(ioRefresh).catch(() => ioState('off', 'No MIDI device found, and the microphone was blocked. Allow it, or plug in a kit.'));
+          else if (!connected.length) ioState('off', 'No MIDI device is plugged in. Plug it in and it will be picked up. Screen and computer keys still work as practice, not proof a real keyboard works.');
           else if (!midiOn) ioState('off', 'Another program may be using this keyboard. Close it and press Connect again.');
         });
       };

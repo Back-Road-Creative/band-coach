@@ -237,12 +237,10 @@ test('control for the test above: with no unplug, the right hand held and then t
   });
 });
 
-// F1 (src/app.js wire(), the release at `inputs.indexOf(i) === -1`): a port that stays listed but
-// reads "disconnected" is never released, so its held note makes the next single note grade as
-// "both hands". Red on the unchanged app (t6-base.log); the fix is a separate unit, so this ships
-// as todo: the gate stays green and the failure stays visible. Whether a real Chrome keeps an
-// unplugged port listed needs hardware (the Windows lane).
-test('a keyboard that stays listed but reads "disconnected" while a note is held: that note is let go too', { todo: 'F1: a listed port that flips to disconnected keeps its held note, so the next note grades as both hands' }, async (t) => {
+// F1 (src/app.js wire()): a port that stays listed but reads "disconnected" is let go like an
+// unplugged one, so the note it was holding does not make the next single note grade as "both
+// hands". Whether a real Chrome keeps an unplugged port listed still needs hardware (Q9).
+test('a keyboard that stays listed but reads "disconnected" while a note is held: that note is let go too', async (t) => {
   await withAcceptancePage(t, { initScript: FAKE_MIDI_BROWSER_PERMISSION_INIT + LEVEL_13_SEED, simulated: [PORTS, SEEDED, 'port p1 stays in the MIDI port list but its state flips to disconnected and back'] }, async (page) => {
     const ex = await startBothHandsExercise(page);
     await midiNoteOn(page, 'p1', ex.rh.midi);
