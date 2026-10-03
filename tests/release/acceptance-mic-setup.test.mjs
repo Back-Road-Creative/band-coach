@@ -172,7 +172,7 @@ test('T3 Check my microphone pressed twice in a quiet room: the first, older che
     assert.deepEqual(early, [], 'the first check ended inside the second one and wrote nothing');
     await holdUntil(page, b.t + 6000);
     const after = (await recorder(page)).filter((e) => e.kind === 'result' && e.text === QUIET && e.t > b.t);
-    assert.equal(after.length, 1, `the second check says the room is quiet once: ${JSON.stringify(after)}`);
+    assert.equal(after.length, 1, `the second check says the room is quiet once: ${JSON.stringify(after)}. Recorder: ${JSON.stringify((await recorder(page)).filter((e) => e.kind !== 'dot'))}`);
     assert.ok(after[0].t - b.t >= 2800, `after its own 3 s window: ${Math.round(after[0].t - b.t)} ms`);
     const stored = await until(page, 'a floor stored by the second check', `${FLOOR} && e.t > ${after[0].t} && e.v === 2`, 5000);
     assert.ok(Number.isFinite(stored.floor));
