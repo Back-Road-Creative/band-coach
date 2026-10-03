@@ -22,6 +22,7 @@ export const en = {
   'backup.restored': 'Backup restored.',
   'backup.readError': 'That file could not be read.',
   'backup.confirmRestore': 'Restore this backup? It will replace your current progress.',
+  'reset.confirm': 'Reset {name}? This clears your level and progress on it for good. Save a backup first if you might want it back.',
   'reset.progressCleared': '{name} progress cleared. Back to level 1.',
   // Keyboard mod's help panel text. States BOTH computer-key rows in plain
   // words -- a w s e d f t g y h u j k play C4 up to C5, z x c v b n m play
@@ -203,6 +204,7 @@ export const es = {
   'backup.restored': 'Copia de seguridad restaurada.',
   'backup.readError': 'No se pudo leer ese archivo.',
   'backup.confirmRestore': '¿Restaurar esta copia de seguridad? Reemplazará tu progreso actual.',
+  'reset.confirm': '¿Reiniciar {name}? Esto borra tu nivel y tu progreso de forma definitiva. Guarda antes una copia de seguridad si quizá la quieras recuperar.',
   'reset.progressCleared': 'Progreso de {name} borrado. Vuelves al nivel 1.',
   'hint.staffNote': 'Lee {label} en el pentagrama y tócalo. Mantenlo firme.',
   'kbd.help': 'Teclado: conecta un teclado MIDI y pulsa Conectar, o haz clic en las teclas de la pantalla, o usa las teclas del ordenador como práctica en pantalla (no es un teclado real): a w s e d f t g y h u j k tocan de Do4 a Do5, y z x c v b n m tocan de Do3 a Si3 (solo notas naturales, sin sostenidos en esa fila). Las teclas nuevas se iluminan las dos primeras veces; después las encuentras tú solo. Manos juntas: un teclado MIDI real, o dos manos en las teclas del ordenador (una en cada fila), comprueba ambas notas y las califica con exactitud; un micrófono solo oye una nota a la vez, así que esa calificación es aproximada.',

@@ -24,7 +24,7 @@ saved and imported tunes; Progress takes you straight to your practice history. 
 one you're already on does nothing, so it's always safe to press. Instrument is the one place to
 change what you're playing: it names your current instrument (or invites you to choose one the
 first time) and opens the full instrument list as a sheet; picking one closes the sheet again.
-Settings gathers everything you rarely touch — theme, note naming, backups, reset, update checks
+Settings gathers everything you rarely touch — theme, note naming, backups, reset (it asks before clearing an instrument's progress), update checks
 and the "How this works" explainer — in one plain screen, away from the controls you use every
 practice session.
 
