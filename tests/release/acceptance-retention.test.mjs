@@ -5,13 +5,13 @@
 // the declared fake. Everything else is a click or a MIDI note. page.evaluate reads
 // the screen (text, button boxes; a button is scrolled into view first, as the
 // driver does) and makes three declared calls into the launch script RIG_INIT
-// below, which sends the fake keyboard's note-on/off bytes from inside the page
+// (also in profile-seed.mjs, shared with A07), which sends the fake keyboard's note-on/off bytes from inside the page
 // on the app's own audio clock. It writes nothing to the app's DOM or saved state.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { withAcceptancePage } from '../helpers/browser.mjs';
 import { FAKE_MIDI_INIT, midiAddPort } from '../helpers/fake-midi.mjs';
-import { HOUR, seedS1, seedS2, seedS3, seedS4, profileScheduleInit } from '../helpers/profile-seed.mjs';
+import { HOUR, RIG_INIT, RIG_LABEL, clickByText, LAG_OK_MS, ATTEMPTS, seedS1, seedS2, seedS3, seedS4, profileScheduleInit } from '../helpers/profile-seed.mjs';
 
 // Hours after the first whole-song check: before the day is up, past it, and well past it (each at
 // least an hour from a limit, so the seconds a run really takes cannot cross one).
@@ -29,49 +29,10 @@ const MIDIS = [64, 62, 60, 62, 64, 64, 64];
 const BEAT_MS = 600;
 const LEAD_S = 0.15 + 4 * (BEAT_MS / 1000); // click on Your turn to the first beat: the app's 0.15 s head start, then 4 count-in beats
 const NICE = /^Nice\. 7 of 7 notes\./;
-const LAG_OK_MS = 60; // the rig's own delivery must be this close to the plan, or the try says nothing about the app
-const ATTEMPTS = 3; // tries when the RIG reports it could not deliver the plan on time (never when the app answers wrongly)
-// The declared launch script (listed in options.simulated). It changes nothing the app does: it only keeps a handle to
-// the app's own AudioContext and plays the fake keyboard's notes against THAT clock. Sent from the test process, or on a
-// wall-clock timer, a note rides a CDP round trip or a timer a busy machine delays by 200-300 ms, and the app judges notes
-// by its audio clock. __bcArm runs before the real click on Your turn and notes the audio time of that click; __bcPlay
-// waits until the app is listening (the count label reads 'Notes heard'), then sends each note when the audio clock says
-// so, and reports how late the rig itself was.
-const RIG_INIT = `(function () {
-  var Orig = window.AudioContext, made = [];
-  if (!Orig) return;
-  window.AudioContext = class extends Orig { constructor() { super(...arguments); made.push(this); } };
-  var ctx = function () { var c = made[made.length - 1]; if (!c) throw new Error('the app has not made an AudioContext'); return c; };
-  window.__bcArm = function () { var c = ctx(); window.__bcClickAt = null; document.addEventListener('click', function () { window.__bcClickAt = c.currentTime; }, { capture: true, once: true }); };
-  window.__bcListening = function () { var root = document.querySelector('.panel-songs-practice'); return new Promise(function (resolve, reject) {
-    var done = function () { return /^Notes heard/.test((root.querySelector('.panel-songs-count') || {}).textContent || ''); };
-    var to = setTimeout(function () { reject(new Error('the count-in never ended')); }, 30000);
-    if (done()) { clearTimeout(to); return resolve(); }
-    var mo = new MutationObserver(function () { if (done()) { clearTimeout(to); mo.disconnect(); resolve(); } });
-    mo.observe(root, { subtree: true, childList: true, characterData: true }); }); };
-  // plays: [{ midi, atMs }] from the first beat; leadSec: click to first beat (null: the first beat is the moment listening begins).
-  window.__bcPlay = function (plays, leadSec) { return window.__bcListening().then(function () { return new Promise(function (resolve) {
-    var c = ctx(), origin = leadSec == null ? c.currentTime : window.__bcClickAt + leadSec, evs = [], i = 0, worst = 0;
-    plays.forEach(function (p, k) { evs.push({ t: p.atMs, b: [0x90, p.midi, 100] }); evs.push({ t: Math.min(p.atMs + 120, plays[k + 1] ? plays[k + 1].atMs - 30 : Infinity), b: [0x80, p.midi, 0] }); });
-    evs.sort(function (a, b) { return a.t - b.t; });
-    var tick = function () { var now = (c.currentTime - origin) * 1000;
-      while (i < evs.length && evs[i].t <= now) { worst = Math.max(worst, now - evs[i].t); window.__midiSend('p1', evs[i].b); i++; }
-      if (i < evs.length) setTimeout(tick, 2); else resolve({ worstLagMs: Math.round(worst) }); };
-    tick(); }); }); };
-})();`;
-const SIMULATED = ['fake MIDI keyboard (FAKE_MIDI_INIT)', 'AudioContext handle kept by a launch script (RIG_INIT): plays the fake keyboard on the app\'s own audio clock, changes nothing else', 'seeded profile and virtual clock per visit (profile-seed.mjs schedule)'];
+const SIMULATED = ['fake MIDI keyboard (FAKE_MIDI_INIT)', RIG_LABEL, 'seeded profile and virtual clock per visit (profile-seed.mjs schedule)'];
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const REC = 'button:has(+ .panel-songs-count)';
 const read = (page, sel) => page.evaluate(`(() => { const e = document.querySelector(${JSON.stringify(sel)}); return e ? e.textContent.trim() : null; })()`);
-
-// Where a person would aim at the button with this text inside `scope`: the centre of its box (scrolled into view, and not covered).
-async function clickByText(page, scope, text) {
-  const at = await page.evaluate(`(() => { const b = [...document.querySelectorAll(${JSON.stringify(scope)})].find((x) => x.textContent.trim() === ${JSON.stringify(text)}); if (!b) return null;
-    b.scrollIntoView({ block: 'center' }); const r = b.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2, hit = document.elementFromPoint(x, y);
-    return hit && (b === hit || b.contains(hit)) ? { x, y } : null; })()`);
-  assert.ok(at, `a "${text}" button is on screen and not covered`);
-  await page.click(at.x, at.y);
-}
 const clickButton = (page, text) => clickByText(page, '.panel-songs-practice button', text);
 // The Keyboard screen the way a returning learner gets it: two steps up to level 3, and the keyboard plugged in.
 async function skipAhead(page) { await page.clickSelector('#harderBtn'); await page.clickSelector('#harderBtn'); }
