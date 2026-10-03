@@ -13,6 +13,7 @@
 // No DOM, no globals, no randomness, no clock reads here: `now` is always caller-supplied.
 
 import { normalizeSong, songDurationTicks, ticksToSeconds } from './model.js';
+import { starterIds } from './starter/index.js';
 
 const SONG_PREFIX = 'song:';
 const META_PREFIX = 'meta:';
@@ -66,6 +67,8 @@ export function createLibrary(store) {
     },
 
     // Validates and stores `song`. If `song.id` clashes with a stored song,
+    // or is a starter tune's id (those are shipped, never stored, so a copy
+    // saved under one would hide behind the starter in every lookup by id),
     // a new id is assigned (song-2, song-3, ...) and the assigned id is
     // returned. `now` (a timestamp, e.g. Date.now() from the caller) is
     // required since this module never reads the clock itself.
@@ -89,6 +92,7 @@ export function createLibrary(store) {
       }
       let id = normalized.id;
       let n = 2;
+      while (starterIds.has(id)) { id = normalized.id + '-' + n; n++; }
       for (;;) {
         const stored = id === normalized.id ? normalized : { ...normalized, id };
         try {

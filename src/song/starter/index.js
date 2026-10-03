@@ -223,6 +223,7 @@ export function build(def) {
 }
 
 export const starterSongs = starterSongDefs.map(build);
+export const starterIds = new Set(starterSongs.map((s) => s.id)); // reserved: library.add() never stores a copy under one
 
 // True when any note in any part of `song` carries an explicit left-hand
 // tag -- i.e. the song was built from a def with an `lh` string above. The
