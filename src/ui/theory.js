@@ -14,6 +14,7 @@ import { drawPrimitives } from '../notation/draw-canvas.js';
 import { byId as instrumentsById, INSTRUMENTS } from '../instruments/index.js';
 import { sanitizeLessonState, recordAnswer } from './theory/lesson-state.js';
 import { keyboardDiagramKeys } from './theory/keyboard-diagram.js';
+import { EXPLORE_ROOTS, chordSymbol, qualityWords } from './theory/chord-label.js';
 import { ascendingMidis, chordMidis } from './theory/scale-run.js';
 
 // Last-rendered lesson question, exposed to the debug hook (w-theory slot in
@@ -24,7 +25,6 @@ export function currentLessonQuestion() {
   return lastLessonQuestion;
 }
 
-const CHROMATIC = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 const VOICING_INSTRUMENTS = [
   { id: 'gtr', label: 'Guitar' },
   { id: 'bass', label: 'Bass' },
@@ -48,12 +48,12 @@ function option(value, label) {
   return el('option', { value }, [document.createTextNode(label)]);
 }
 
-function drawStaff(canvas, midis, keyName) {
+function drawStaff(canvas, midis, keyName, spellings) {
   if (!canvas) return;
   const width = canvas.width;
   const { primitives } = layoutMeasure({
     clef: 'treble', key: keyName || 'C', time: [4, 4],
-    notes: midis.map((midi) => ({ midi, dur: 1 })),
+    notes: midis.map((midi, i) => ({ midi, dur: 1, spell: spellings && spellings[i] })),
     width,
   });
   const ctx = canvas.getContext('2d');
@@ -62,6 +62,7 @@ function drawStaff(canvas, midis, keyName) {
   ctx.fillStyle = '#e9edf6';
   ctx.lineWidth = 1;
   drawPrimitives(ctx, primitives, null);
+  canvas.__lastAccidentals = primitives.filter((p) => p.type === 'accidental').map((p) => p.accidental).join('');
   canvas.__lastPrimitiveCount = primitives.length; // read by tests, harmless in the release build
 }
 
@@ -222,10 +223,10 @@ export function register(panels) {
       const explorePanel = tabPanels.explore;
       const kindSelect = el('select', { id: 'theoryExploreKind' }, [option('key', 'Key'), option('scale', 'Scale'), option('chord', 'Chord')]);
       const keySelect = el('select', { id: 'theoryExploreKey' }, ALL_KEYS.map((k) => option(k.name, k.name + ' ' + k.mode)));
-      const tonicSelect = el('select', { id: 'theoryExploreTonic' }, CHROMATIC.map((n) => option(n, n)));
+      const tonicSelect = el('select', { id: 'theoryExploreTonic' }, EXPLORE_ROOTS.map((n) => option(n, n)));
       const scaleTypeSelect = el('select', { id: 'theoryExploreScaleType' }, scaleTypes().map((t) => option(t, t.replace(/_/g, ' '))));
-      const chordRootSelect = el('select', { id: 'theoryExploreChordRoot' }, CHROMATIC.map((n) => option(n, n)));
-      const qualitySelect = el('select', { id: 'theoryExploreQuality' }, chordQualities().map((q) => option(q, q)));
+      const chordRootSelect = el('select', { id: 'theoryExploreChordRoot' }, EXPLORE_ROOTS.map((n) => option(n, n)));
+      const qualitySelect = el('select', { id: 'theoryExploreQuality' }, chordQualities().map((q) => option(q, qualityWords(q))));
       const playBtn = el('button', { type: 'button' }, [document.createTextNode('Hear it')]);
       const notesOut = el('p', { id: 'theoryExploreNotes' });
       const sigOut = el('p', { id: 'theoryExploreSignature' });
@@ -256,7 +257,7 @@ export function register(panels) {
       function updateExploreFieldVisibility() {
         const kind = kindSelect.value;
         keyField.hidden = kind !== 'key';
-        tonicField.hidden = kind === 'key';
+        tonicField.hidden = kind !== 'scale';
         scaleTypeField.hidden = kind !== 'scale';
         chordRootField.hidden = kind !== 'chord';
         qualityField.hidden = kind !== 'chord';
@@ -298,9 +299,9 @@ export function register(panels) {
           const rootPc = parseSpelling(root).pc;
           const rootMidi = 60 + rootPc;
           const midis = chordMidis(rootMidi, rootPc, built.pitchClasses);
-          sigOut.textContent = root + ' ' + quality + '.';
+          sigOut.textContent = chordSymbol(root, quality) + ' (' + root + ' ' + qualityWords(quality) + ' chord).';
           notesOut.textContent = built.notes.map(spellingToString).join(' ');
-          drawStaff(staffCanvas, midis, 'C');
+          drawStaff(staffCanvas, midis, 'C', built.notes); // built.notes is in the same order as midis, so the staff spells what the text says
           VOICING_INSTRUMENTS.forEach((v) => renderVoicingGroup(instrumentView, v.id, v.label, built));
           currentExplore = { chord: midis };
         }

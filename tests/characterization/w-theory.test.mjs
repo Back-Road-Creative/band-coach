@@ -129,3 +129,23 @@ test('theory panel has no console errors or network requests', async (t) => {
   assert.deepEqual(page.consoleErrors, []);
   assert.deepEqual(page.exceptions, []);
 });
+
+test('Explore chord mode hides the scale Tonic, names chords plainly and spells flats', async (t) => {
+  const page = await launchPage(HTML_PATH);
+  t.after(() => page.close());
+  await page.evaluate("document.querySelector('#picker .picker-tools button[data-panel=\"theory\"]').click()");
+  await page.evaluate("document.querySelector('.panel-theory [data-tab=\"explore\"]').click()");
+  const set = (id, v) => page.evaluate(`(() => { const e = document.getElementById('${id}'); e.value = '${v}'; e.dispatchEvent(new Event('change')); })()`);
+  await set('theoryExploreKind', 'chord');
+  assert.equal(await page.evaluate("document.getElementById('theoryExploreTonic').closest('label').hidden"), true, 'Tonic does nothing for a chord');
+  await set('theoryExploreChordRoot', 'Bb');
+  await set('theoryExploreQuality', 'maj');
+  assert.equal(await page.evaluate("document.getElementById('theoryExploreNotes').textContent"), 'Bb D F');
+  assert.match(await page.evaluate("document.getElementById('theoryExploreSignature').textContent"), /^Bb /);
+  await set('theoryExploreChordRoot', 'C');
+  await set('theoryExploreQuality', 'min');
+  assert.match(await page.evaluate("document.getElementById('theoryExploreSignature').textContent"), /^Cm /);
+  assert.equal(await page.evaluate("document.getElementById('theoryExploreStaff').__lastAccidentals"), 'b', 'C minor draws Eb as a flat');
+  await set('theoryExploreKind', 'scale');
+  assert.equal(await page.evaluate("document.getElementById('theoryExploreTonic').closest('label').hidden"), false);
+});
