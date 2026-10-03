@@ -12,7 +12,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { HTML_PATH } from '../helpers/html-path.mjs';
 import { launchPage } from '../helpers/browser.mjs';
-import { FAKE_MIDI_INIT, midiAddPort, midiRemovePort, midiSend, midiNoteOn, midiNoteOff, midiSetOpenResult, midiReject, midiMakeUnavailable } from '../helpers/fake-midi.mjs';
+import { FAKE_MIDI_INIT, FAKE_MIDI_BROWSER_PERMISSION_INIT, midiSetPortState, midiAddPort, midiRemovePort, midiSend, midiNoteOn, midiNoteOff, midiSetOpenResult, midiReject, midiMakeUnavailable } from '../helpers/fake-midi.mjs';
 
 const htmlPath = HTML_PATH;
 
@@ -88,8 +88,11 @@ test('NEW: a disconnected port is not counted even though the input map still li
   await page.evaluate("window.__coach.setMod('kbd')");
   await midiAddPort(page, 'p1', 'Ghost Keys', 'disconnected');
   await connectMidi(page);
-  await page.waitFor("document.getElementById('ioText').textContent.length > 0");
+  // Not "ioText is non-empty": setMod's ioRefresh fills it before Connect. Wait for the sentence Connect settles on.
+  await page.waitFor("/No MIDI device|Another program/.test(document.getElementById('ioText').textContent)");
   assert.equal(await page.evaluate("document.getElementById('ioBtn').hidden"), false);
+  // A disconnected port is no device at all, not "another program has it".
+  assert.equal(await page.evaluate("document.getElementById('ioText').textContent"), 'No MIDI device is plugged in. Plug it in and it will be picked up. Screen and computer keys still work as practice, not proof a real keyboard works.');
 });
 
 test('NEW: status names the device and says "found" before any byte, then "is working" after the first byte', async (t) => {
@@ -441,4 +444,72 @@ test('NEW: MIDI available but nothing plugged in says screen/computer keys are p
   const text = await page.evaluate("document.getElementById('ioText').textContent");
   assert.match(text, /No MIDI device is plugged in/i);
   assert.match(text, /practice, not proof/i);
+});
+
+// A port that stays in the list but reads "disconnected" is gone to the learner, so a replug has to be heard again before the status says "working".
+test('NEW: a keyboard that reads disconnected and then connected again says "found" until a new note arrives', async (t) => {
+  const page = await launchPage(htmlPath, { initScript: FAKE_MIDI_BROWSER_PERMISSION_INIT });
+  t.after(() => page.close());
+
+  await page.grant(['midi']);
+  await page.evaluate("window.__coach.setMod('kbd')");
+  await midiAddPort(page, 'p1', 'Test Keys');
+  await connectMidi(page);
+  await page.waitFor("document.getElementById('ioBtn').hidden === true");
+  await midiSend(page, 'p1', [0x90, 60, 100]);
+  await page.waitFor("/Test Keys is working\\./.test(document.getElementById('ioText').textContent)");
+  await midiSetPortState(page, 'p1', 'disconnected');
+  await page.waitFor("document.getElementById('ioBtn').hidden === false");
+  await midiSetPortState(page, 'p1', 'connected');
+  await page.waitFor("document.getElementById('ioBtn').hidden === true");
+  const text = await page.evaluate("document.getElementById('ioText').textContent");
+  assert.match(text, /Test Keys found\. Press any key on it\./);
+  assert.doesNotMatch(text, /is working/, 'the note heard before the unplug is not proof the replugged keyboard works');
+  await midiSend(page, 'p1', [0x90, 62, 100]);
+  await page.waitFor("/Test Keys is working\\./.test(document.getElementById('ioText').textContent)");
+});
+
+// A drum kit tries its e-kit first and falls back to the microphone when no MIDI input is there. A port that only reads
+// "disconnected" is not there, so the kit falls back; a keyboard has no microphone to fall back to.
+const COUNT_GUM = `
+  window.__gumCount = 0;
+  (function () {
+    const orig = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+    navigator.mediaDevices.getUserMedia = function (...args) { window.__gumCount++; return orig(...args); };
+  })();
+`;
+const SETTLED = "window.__gumCount >= 1 || /No MIDI device|Another program/.test(document.getElementById('ioText').textContent)";
+const MIC_SETTLED = "/Screen keys and computer keys work/.test(document.getElementById('ioText').textContent)";
+async function kitOpens(t, mod, portState) {
+  const page = await launchPage(htmlPath, { initScript: FAKE_MIDI_INIT + COUNT_GUM });
+  t.after(() => page.close());
+  await page.evaluate(`window.__coach.setMod('${mod}')`);
+  if (portState) await midiAddPort(page, 'p1', 'Ghost Kit', portState);
+  await connectMidi(page);
+  await page.waitFor(SETTLED);
+  return page;
+}
+const ioNow = (page) => page.evaluate("({ text: document.getElementById('ioText').textContent, hidden: document.getElementById('ioBtn').hidden })");
+
+test('NEW: a drum kit whose only MIDI port reads disconnected falls back to the microphone, as with no port', async (t) => {
+  const page = await kitOpens(t, 'drum-kit', 'disconnected');
+  assert.equal(await page.evaluate('window.__gumCount'), 1, 'the microphone was opened once');
+  assert.doesNotMatch(await page.evaluate("document.getElementById('ioText').textContent"), /Another program/);
+  const control = await kitOpens(t, 'drum-kit', null);
+  // The microphone's open lands after the "no device" sentence, and ioRefresh then settles both on the same line.
+  await page.waitFor(MIC_SETTLED);
+  await control.waitFor(MIC_SETTLED);
+  assert.deepEqual(await ioNow(page), await ioNow(control), 'same settled state as a kit with no port at all');
+});
+
+test('NEW: control: a drum kit with no MIDI port at all opens the microphone once', async (t) => {
+  const page = await kitOpens(t, 'drum-kit', null);
+  assert.equal(await page.evaluate('window.__gumCount'), 1);
+  assert.doesNotMatch(await page.evaluate("document.getElementById('ioText').textContent"), /Another program/);
+});
+
+test('NEW: control: a keyboard whose only MIDI port reads disconnected opens no microphone and says no device', async (t) => {
+  const page = await kitOpens(t, 'kbd', 'disconnected');
+  assert.equal(await page.evaluate('window.__gumCount'), 0);
+  assert.equal(await page.evaluate("document.getElementById('ioText').textContent"), 'No MIDI device is plugged in. Plug it in and it will be picked up. Screen and computer keys still work as practice, not proof a real keyboard works.');
 });
