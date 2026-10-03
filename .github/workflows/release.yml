@@ -11,10 +11,11 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
-    # This job runs the same two release-lane runs as ci.yml (the suite, whose
-    # posttest runs the gate, then the gate again), so its budget must stay at
-    # or above ci.yml's; tests/unit/release-workflow-budget-evidence.test.mjs
-    # pins that, so a later rise in ci.yml must be followed here. Ten passing
+    # This job runs the same two release-lane runs as ci.yml (here: the suite,
+    # whose posttest runs the gate, then the gate again; ci.yml runs the gate
+    # first), so its budget must stay at or above ci.yml's;
+    # tests/unit/release-workflow-budget-evidence.test.mjs pins that, so a
+    # later rise in ci.yml must be followed here. Ten passing
     # ci.yml runs of this work on 2026-10-02 took 12.9-15.0 min on
     # ubuntu-latest. The ~4m55s recorded for v1.8.0 and v1.9.0 in
     # release-consistency.yml predates the suite's growth; no tag has run since,
