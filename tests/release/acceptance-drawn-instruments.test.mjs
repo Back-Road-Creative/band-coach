@@ -82,9 +82,9 @@ const WHITE_NAMES = { 48: 'C3', 50: 'D', 52: 'E', 53: 'F', 55: 'G', 57: 'A', 59:
 // The help text (kbd.help): a-k play C4 up to C5, sharps included; z-m play C3 up to B3, naturals.
 const COMPUTER_KEYS = { a: 60, w: 61, s: 62, e: 63, d: 64, f: 65, t: 66, g: 67, y: 68, h: 69, u: 70, j: 71, k: 72, z: 48, x: 50, c: 52, v: 53, b: 55, n: 57, m: 59 };
 const LEVEL1_TARGET = { C: 60, D: 62, E: 64 };
-// Drawn kit shapes (drawKit fills). The letter on each piece is read from the canvas, not listed:
-// test 9 presses whatever letter is drawn there, so a letter the app changes is not the helper's fault.
-// The key letter drawn on each piece (the spec's own literals, from src/instruments/drum-kit.js:33-42@708aef7: the help text there names them).
+// Drawn kit shapes (drawKit fills). Test 1 checks the key letter drawn on each piece against the literal KIT_LETTERS below
+// (the spec's own letters, from the PIECES list in src/instruments/drum-kit.js:33-42@708aef7), so a changed letter fails test 1 first.
+// Test 9 presses the letter it reads off the canvas, so it proves the pressed key reaches the piece drawn with that letter.
 const KIT_LETTERS = { kick: 'F', snare: 'J', 'hihat-closed': 'D', 'hihat-pedal': 'C', 'hihat-open': 'E', 'tom-floor': 'K', 'tom-mid': 'I', 'tom-high': 'U', crash: 'R', ride: 'O' };
 const KIT_SHAPE = { kick: 'drum', snare: 'drum', 'hihat-closed': 'cymbal', 'hihat-pedal': 'drum', 'hihat-open': 'cymbal', 'tom-floor': 'drum', 'tom-mid': 'drum', 'tom-high': 'drum', crash: 'cymbal', ride: 'cymbal' };
 const HEX = { white: '#e9edf6', black: '#10131c', pressed: '#9fb4d8', good: '#5be08a', flash: '#f3c52f', cymbal: '#2a3140', drum: '#1b2130' };
