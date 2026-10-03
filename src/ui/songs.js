@@ -2552,7 +2552,7 @@ function mountSongsPanel(hostEl, api) {
     // the moment it lands when there is nothing to check, a Draft when
     // there is, same as a transcribed recording just above.
     if (warnings && warnings.length) setSongStatus(markDraft, storedId, { needsCheck: warnings.length, source: 'score', originalAudioKept: true });
-    else setSongStatus(markChecked, storedId);
+    else setSongStatus(markChecked, storedId, { source: 'score', originalAudioKept: true });
     renderAddReview({ ...song, id: storedId }, warnings || [], null);
     await refreshList();
   }

@@ -104,3 +104,15 @@ test('importer warnings are put in plain words, unknown ones pass through', () =
   );
   assert.equal(plainImportWarning('something else'), 'something else');
 });
+
+test('a clean score import is recorded as Checked without a lost-recording note', () => {
+  const ledger = markChecked({}, 's', { source: 'score', originalAudioKept: true });
+  assert.equal(statusLabel(ledger.s), 'Checked');
+});
+
+test('a Guitar Pro multi-voice warning is put in plain words', () => {
+  assert.equal(
+    plainImportWarning('track "Lead" has 2 voices in one bar; flattened into one'),
+    'The "Lead" track has 2 voices playing at once; I merged them into one line.',
+  );
+});

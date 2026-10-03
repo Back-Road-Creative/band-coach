@@ -338,3 +338,33 @@ test('there is no separate Learn this screen any more', async (t) => {
   const playalongHasTipBtn = await page.evaluate("document.querySelector('#paLearnTipBtn') === null");
   assert.equal(playalongHasTipBtn, true, 'Play Along no longer offers an Open Learn this button');
 });
+
+// importNotationFile's own wiring: a tempo-less ABC reads as a score Draft in
+// plain words, a clean ABC as Checked -- neither claims a lost recording.
+test('a score import row and message read in plain words, never as a lost recording', async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'band-coach-add-song-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const noTempo = join(dir, 'notempo.abc');
+  writeFileSync(noTempo, 'X:1\nT:No Tempo Tune\nM:4/4\nL:1/8\nK:C\nCDEFGABc|\n', 'utf8');
+  const clean = join(dir, 'clean.abc');
+  writeFileSync(clean, ABC, 'utf8');
+
+  const page = await launchPage(htmlPath);
+  t.after(() => page.close());
+
+  await page.evaluate("window.__coach.setMod('kbd')");
+  await openAddSongSection(page);
+  await page.setFileInput('#songsFileInput', noTempo);
+  await page.waitFor("document.querySelector('.panel-learn-result').hidden === false", 20000);
+  const msg = await page.evaluate("document.querySelector('.panel-songs-msg').textContent");
+  assert.match(msg, /doesn't say how fast/);
+  assert.doesNotMatch(msg, /no Q: tempo found/);
+  const rows = await page.evaluate("Array.from(document.querySelectorAll('.panel-songs-status')).map(e => e.textContent)");
+  assert.ok(rows.some((r) => r === 'Draft — 1 thing to check'), 'warned import row: ' + JSON.stringify(rows));
+
+  await openAddSongSection(page);
+  await page.setFileInput('#songsFileInput', clean);
+  await page.waitFor("Array.from(document.querySelectorAll('.panel-songs-status')).some(e => e.textContent === 'Checked')", 20000);
+  const all = await page.evaluate("Array.from(document.querySelectorAll('.panel-songs-status')).map(e => e.textContent)");
+  assert.ok(all.every((r) => !/Original recording not kept/.test(r)), 'no score row claims a lost recording: ' + JSON.stringify(all));
+});

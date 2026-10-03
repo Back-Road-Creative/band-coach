@@ -48,10 +48,12 @@ export function markDraft(ledger, songId, { needsCheck = 0, source = '', origina
 }
 
 // Marks a song reviewed: clears the draft flag and the open-checks count,
-// keeping its source/originalAudioKept fields.
-export function markChecked(ledger, songId) {
+// keeping its source/originalAudioKept fields. `defaults` ({ source,
+// originalAudioKept }) fills them in for a song with no ledger entry yet
+// (a clean score import, which never passed through markDraft).
+export function markChecked(ledger, songId, defaults) {
   const out = { ...(ledger || {}) };
-  const prev = out[songId] || { source: '', originalAudioKept: false };
+  const prev = out[songId] || { source: '', originalAudioKept: false, ...(defaults || {}) };
   out[songId] = { ...prev, draft: false, needsCheck: 0 };
   return out;
 }
@@ -88,6 +90,8 @@ export function plainImportWarning(w) {
   if (/^no (Q: )?tempo found; defaulted to 120 bpm$/.test(s)) return "This file doesn't say how fast to play, so I used 120 beats per minute. Check the speed feels right.";
   let m = /^part "(.*)" has (\d+) voices; flattened into one$/.exec(s);
   if (m) return 'The "' + m[1] + '" part has ' + m[2] + ' voices playing at once; I merged them into one line.';
+  m = /^track "(.*)" has (\d+) voices in one bar; flattened into one$/.exec(s);
+  if (m) return 'The "' + m[1] + '" track has ' + m[2] + ' voices playing at once; I merged them into one line.';
   m = /^part "(.*)" has (\d+) staves; hands not assigned$/.exec(s);
   if (m) return 'The "' + m[1] + '" part has ' + m[2] + ' staves; I could not tell which notes belong to which hand.';
   return s;
