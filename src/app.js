@@ -22,7 +22,7 @@ import { t, setLocale, LOCALES } from './core/i18n.js';
 import { yin } from './audio/yin.js';
 import { createPitchNode } from './audio/pitch-worklet.js';
 //
-import { gatesFor, meterLevel, releaseFloor, classifyRoomCheck, ROOM_CHECK_VERSION, MIN_FLOOR } from './audio/levels.js';
+import { gatesFor, meterLevel, releaseFloor, classifyRoomCheck, ROOM_CHECK_VERSION, MIN_FLOOR, QUIET_RELEASE_SEC } from './audio/levels.js';
 import { diagnoseInput } from './audio/input-diagnosis.js';
 import { createOnsetDetector } from './audio/onset.js';
 import { createDrumClassifier } from './audio/drum-classify.js';
@@ -1071,6 +1071,8 @@ import { register as registerPathway } from './ui/pathway.js';
   const coach = t => { $('coach').textContent = t; if (!$('settingsView').hidden) $('settingsSay').textContent = t; };
   const cur = () => task && task.els[task.idx];
   let pressed = {}, heard = null, held = [], holdFor = 0, holdCents = [], wrongFor = 0, lastFired = -1, stableN = 0, stableMidi = -1, released = true, flashBad = -1e12, flashGood = -1e12;
+  // Q10d-2: delivered quiet time (dt, not frames) toward releasing a ringing pluck; the first quiet frame starts the clock.
+  let quietFor = 0, quietSeen = false;
   // Field report: a strummed chord on a single-note item clears no gate the
   // app judges (see src/audio/input-diagnosis.js), so onPitch's early
   // returns below used to leave the learner with no note, no message, no
@@ -1433,8 +1435,8 @@ import { register as registerPathway } from './ui/pathway.js';
       // release check below can never see on its own.
       if (fr.onset) { released = true; stableN = 0; }
       if (e.info.kind === 'chord') { if (fr.rms < gates.chord || !fr.chroma) { holdFor = 0; return; } const j = judgeChord({ chroma: fr.chroma, targetPcs: e.info.pcs }); e.score = j.score; if (j.ok) { holdFor += dt; if (holdFor > 0.18) passEl(undefined, e.info.label + ': that rings true.'); } else holdFor = 0; if (fr.rms > 0.02) lastInputAt = now(); return; }
-      if (fr.rms < gates.note || !fr.freq) { if (++stableN > 2 && fr.rms < releaseFloor(gates)) released = true; stableMidi = -1; return; }
-      const m = Math.round(fr.midi); if (m === stableMidi) stableN++; else { stableMidi = m; stableN = 1; }
+      if (fr.rms < gates.note || !fr.freq) { stableN++; if (fr.rms < releaseFloor(gates)) { if (quietSeen) quietFor += dt; quietSeen = true; if (quietFor >= QUIET_RELEASE_SEC) released = true; } else { quietSeen = false; quietFor = 0; } stableMidi = -1; return; }
+      quietSeen = false; quietFor = 0; const m = Math.round(fr.midi); if (m === stableMidi) stableN++; else { stableMidi = m; stableN = 1; }
       if (stableN === 3 && (released || m !== lastFired)) { lastFired = m; released = false; onNote(m, false, 'mic'); }
       return;
     }
