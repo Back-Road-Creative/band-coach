@@ -1,11 +1,15 @@
 // Fingering charts for keyed Boehm-system woodwinds (flute, clarinet, oboe,
 // saxophone). UNLIKE brass.js's valve/slide arithmetic, a keyed woodwind's
 // fingering does not fall out of a formula, so these are typed data tables,
-// same approach as recorder-whistle.js. NEEDS A MUSICIAN'S CHECK: every
-// `keys` string below is a good-faith standard beginner fingering written
-// from general knowledge, not verified note-by-note against a fingering
-// chart or a player. Flag especially: every sharp/flat (chromatic, non-white
-// -key) note on all four tables — these are where real charts use "fork"
+// same approach as recorder-whistle.js. Conventions: Boehm flute, Boehm-system
+// Bb clarinet, conservatory-system oboe, standard (Selmer-style) saxophone;
+// fingers are numbered 1-3 index to ring per hand. The natural-note rows
+// pinned in tests/unit/computed-instruments-keyed-woodwind.test.mjs match
+// ordinary beginner charts; NEEDS A MUSICIAN'S CHECK: the rest (all
+// sharps/flats, flute F-Ab and C5, oboe F4) are good-faith, unverified.
+// Oboe and sax have no thumb hole (the thumb works the octave key), so their
+// rows never list a thumb finger. Flag especially: every sharp/flat (chromatic,
+// non-white-key) note on all four tables — these are where real charts use "fork"
 // or alternate fingerings that a from-memory description is most likely to
 // get wrong — and the oboe's top three notes (C5, C#5, D5), which cross the
 // octave-key break and use the half-hole technique (`halfHole: true`); D5
@@ -40,11 +44,11 @@ export const FLUTE_NOTES = buildTable([
   { midi: 64, keys: 'left hand: thumb, 1 2 3; right hand: 1 2' },
   { midi: 65, keys: 'left hand: thumb, 1 2 3; right hand: 1' },
   { midi: 66, keys: 'left hand: thumb, 1 2; right hand: 1 2 3' },
-  { midi: 67, keys: 'left hand: thumb, 1 2; right hand: 1' },
+  { midi: 67, keys: 'left hand: thumb, 1 2 3; right hand: none' },
   { midi: 68, keys: 'left hand: thumb, 1 2; right hand: none, Eb key' },
-  { midi: 69, keys: 'left hand: thumb, 1; right hand: none' },
+  { midi: 69, keys: 'left hand: thumb, 1 2; right hand: none' },
   { midi: 70, keys: 'left hand: thumb, 1; right hand: 2 3' },
-  { midi: 71, keys: 'left hand: thumb; right hand: none' },
+  { midi: 71, keys: 'left hand: thumb, 1; right hand: none' },
   { midi: 72, keys: 'left hand: thumb, 1; right hand: none' }
 ]);
 
@@ -52,19 +56,19 @@ export const FLUTE_NOTES = buildTable([
 // G3-G4 (55-67), the chalumeau (lowest) register — below the break, so no
 // register key.
 export const CLARINET_NOTES = buildTable([
-  { midi: 55, keys: 'left hand: thumb, 1 2 3; right hand: 1 2 3, right pinky low E key' },
+  { midi: 55, keys: 'left hand: thumb, 1 2 3; right hand: 1 2 3' },
   { midi: 56, keys: 'left hand: thumb, 1 2 3; right hand: 1 2 3, right pinky low Eb/D# key' },
-  { midi: 57, keys: 'left hand: thumb, 1 2 3; right hand: 1 2 3' },
+  { midi: 57, keys: 'left hand: thumb, 1 2 3; right hand: 1 2' },
   { midi: 58, keys: 'left hand: thumb, 1 2 3; right hand: 1 2, right pinky side Bb key' },
-  { midi: 59, keys: 'left hand: thumb, 1 2 3; right hand: 1 2' },
-  { midi: 60, keys: 'left hand: thumb, 1 2 3; right hand: 1' },
+  { midi: 59, keys: 'left hand: thumb, 1 2 3; right hand: 1' },
+  { midi: 60, keys: 'left hand: thumb, 1 2 3; right hand: none' },
   { midi: 61, keys: 'left hand: thumb, 1 2 3; right hand: side key' },
-  { midi: 62, keys: 'left hand: thumb, 1 2; right hand: 1 2' },
+  { midi: 62, keys: 'left hand: thumb, 1 2; right hand: none' },
   { midi: 63, keys: 'left hand: thumb, 1 2; right hand: 1, side key' },
-  { midi: 64, keys: 'left hand: thumb, 1 2; right hand: none' },
-  { midi: 65, keys: 'left hand: thumb, 1; right hand: 1 2' },
+  { midi: 64, keys: 'left hand: thumb, 1; right hand: none' },
+  { midi: 65, keys: 'left hand: thumb; right hand: none' },
   { midi: 66, keys: 'left hand: thumb, 1; right hand: 1, side key' },
-  { midi: 67, keys: 'left hand: thumb, 1; right hand: none' }
+  { midi: 67, keys: 'left hand: none, thumb hole open; right hand: none' }
 ]);
 
 // Oboe, written = concert pitch (transposition 0, matches oboe.js), D4-D5
@@ -73,16 +77,16 @@ export const CLARINET_NOTES = buildTable([
 // sliver open), flagged `halfHole: true` — least confident of this whole
 // file, see the top comment.
 export const OBOE_NOTES = buildTable([
-  { midi: 62, keys: 'left hand: thumb, 1 2 3; right hand: 1 2 3, right pinky low C and Eb keys' },
-  { midi: 63, keys: 'left hand: thumb, 1 2 3; right hand: 1 2 3, right pinky Eb key' },
-  { midi: 64, keys: 'left hand: thumb, 1 2 3; right hand: 1 2 3' },
-  { midi: 65, keys: 'left hand: thumb, 1 2 3; right hand: 1 2, F key' },
-  { midi: 66, keys: 'left hand: thumb, 1 2 3; right hand: 1 2' },
-  { midi: 67, keys: 'left hand: thumb, 1 2 3; right hand: 1' },
-  { midi: 68, keys: 'left hand: thumb, 1 2 3; right hand: side Ab key' },
-  { midi: 69, keys: 'left hand: thumb, 1 2 3; right hand: none' },
-  { midi: 70, keys: 'left hand: thumb, 1 2, Bb key; right hand: none' },
-  { midi: 71, keys: 'left hand: thumb, 1 2; right hand: none' },
+  { midi: 62, keys: 'left hand: 1 2 3; right hand: 1 2 3' },
+  { midi: 63, keys: 'left hand: 1 2 3; right hand: 1 2 3, right pinky Eb key' },
+  { midi: 64, keys: 'left hand: 1 2 3; right hand: 1 2' },
+  { midi: 65, keys: 'left hand: 1 2 3; right hand: 1 2, F key' },
+  { midi: 66, keys: 'left hand: 1 2 3; right hand: 1 2' },
+  { midi: 67, keys: 'left hand: 1 2 3; right hand: none' },
+  { midi: 68, keys: 'left hand: 1 2 3; right hand: side Ab key' },
+  { midi: 69, keys: 'left hand: 1 2; right hand: none' },
+  { midi: 70, keys: 'left hand: 1 2, Bb key; right hand: none' },
+  { midi: 71, keys: 'left hand: 1; right hand: none' },
   { midi: 72, keys: 'left hand: thumb, half-hole on 1, octave key; right hand: none', halfHole: true },
   { midi: 73, keys: 'left hand: thumb, half-hole on 1, octave key; right hand: side key', halfHole: true },
   { midi: 74, keys: 'left hand: thumb, half-hole on 1, octave key; right hand: 1 2 3', halfHole: true }
@@ -95,16 +99,16 @@ export const OBOE_NOTES = buildTable([
 // for 55-57, so keyedFingeringFor returns null for them like any
 // out-of-range pitch.
 export const SAX_NOTES = buildTable([
-  { midi: 58, keys: 'left hand: thumb, 1 2 3, bis/side Bb key; right hand: 1 2 3, low Bb key' },
-  { midi: 59, keys: 'left hand: thumb, 1 2 3; right hand: 1 2 3, low B key' },
-  { midi: 60, keys: 'left hand: thumb, 1 2 3; right hand: 1 2 3' },
-  { midi: 61, keys: 'left hand: thumb, 1 2 3; right hand: 1 2' },
-  { midi: 62, keys: 'left hand: thumb, 1 2 3; right hand: 1' },
-  { midi: 63, keys: 'left hand: thumb, 1 2 3; right hand: side Eb key' },
-  { midi: 64, keys: 'left hand: thumb, 1 2; right hand: none' },
-  { midi: 65, keys: 'left hand: thumb, 1; right hand: none' },
-  { midi: 66, keys: 'left hand: thumb, 1, side F# key; right hand: none' },
-  { midi: 67, keys: 'left hand: thumb; right hand: none' }
+  { midi: 58, keys: 'left hand: 1 2 3, pinky low Bb key; right hand: 1 2 3' },
+  { midi: 59, keys: 'left hand: 1 2 3, pinky low B key; right hand: 1 2 3' },
+  { midi: 60, keys: 'left hand: 1 2 3; right hand: 1 2 3, pinky low C key' },
+  { midi: 61, keys: 'left hand: 1 2 3, pinky low C# key; right hand: 1 2 3' },
+  { midi: 62, keys: 'left hand: 1 2 3; right hand: 1 2 3' },
+  { midi: 63, keys: 'left hand: 1 2 3; right hand: side Eb key' },
+  { midi: 64, keys: 'left hand: 1 2 3; right hand: 1 2' },
+  { midi: 65, keys: 'left hand: 1 2 3; right hand: 1' },
+  { midi: 66, keys: 'left hand: 1, side F# key; right hand: none' },
+  { midi: 67, keys: 'left hand: 1 2 3; right hand: none' }
 ]);
 
 export function keyedFingeringFor(midi, chart) {
