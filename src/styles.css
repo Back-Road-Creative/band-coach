@@ -532,6 +532,40 @@
      down on every load. */
   #mainSay { color: var(--bad); font-size: 14px; margin: 0 0 8px; }
   #mainSay:empty { display: none; margin: 0; }
+  /* Q6-1: the playing surface, the feedback line and End session on one phone screen.
+     Placed after every base rule they override (same specificity, so source order decides).
+     Compaction only: tighter padding and gaps, a shorter canvas, and a visual order that puts
+     the feedback card above the stage (DOM and Tab order unchanged). The card's slot is kept
+     while a session runs, so the first feedback never moves the canvas under a finger. */
+  @media (max-width: 600px) {
+    body { padding-block: 8px 24px; }
+    .wrap { gap: 6px; }
+    header { gap: 4px 12px; }
+    .sub { margin-top: 2px; }
+    .main { gap: 6px; }
+    .stage { padding: 6px; gap: 4px; }
+    .card { padding: 6px 12px; }
+    .meterbox { margin-block: 4px; }
+    #levelName { margin-top: 0; }
+    #prompt { min-height: 1em; line-height: 1; }
+    .main > .side > #feedbackCard { order: -1; }
+    .main:has(#endBtn:not([hidden])) > .side > #feedbackCard[hidden] { display: block !important; visibility: hidden; }
+    @media (max-width: 360px) { #feedback { min-height: 4.4em; } }
+    #cv:not(.kit) { aspect-ratio: 16 / 7; }
+  }
+  @media (orientation: landscape) and (max-height: 500px) {
+    .main { grid-template-columns: max-content minmax(0, 1fr); gap: 6px; }
+    .main > *, .main > .side > * { grid-column: 1 / -1; }
+    .main > .side { display: contents; }
+    .main > .side > .row:first-child { order: -1; grid-column: 1; }
+    .main > .side > #feedbackCard { order: -1; grid-column: 2; }
+    .main:has(#endBtn:not([hidden])) > .side > #feedbackCard[hidden] { display: block !important; visibility: hidden; }
+    .stage { padding: 6px; gap: 4px; }
+    .card { padding: 6px 12px; }
+    #prompt { min-height: 1em; line-height: 1; }
+    #cv { max-height: 45vh; }
+    #cv.kit { max-height: 53vh; }
+  }
   @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
   .visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
   #verFooter { color: var(--muted); font-size: 12px; text-align: center; padding-top: 4px; }
