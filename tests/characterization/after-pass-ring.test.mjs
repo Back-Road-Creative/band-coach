@@ -4,9 +4,10 @@
 // same midi fire again against the new target: "That was E, the note is A" with nothing
 // new played. These tests drive the real onPitch through the dev hook window.__coach.
 // pitchFrame(frame, dt), the same frames the microphone chain delivers; no mic is connected,
-// so only the frames below reach the judge. The re-pluck legs (F2, F3, F4, F5) are the
-// negative controls: a real onset, a different note, a first pluck and a quiet restart
-// still fire, so the green of F1/F1b/F6 is not "nothing is ever judged".
+// so only the frames below reach the judge. F3, F4 and F5 are green at the parent and at head
+// and are the negative controls (a different note, a first pluck and a quiet restart still fire);
+// F2's re-pluck leg is the vacuity guard (a real onset is heard), so the green of F1/F1b/F6 is
+// not "nothing is ever judged". F1, F1b, F2's ring leg, F3b and F6 are red at the parent.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { HTML_PATH } from '../helpers/html-path.mjs';
@@ -85,7 +86,19 @@ test('F2 the same note on two tasks in a row needs a fresh pluck', async (t) => 
   assert.equal(j.cls, 'ok');
 });
 
-test('F3 a different note still fires at once', async (t) => {
+test('F3 a different note fires at once, with no onset', async (t) => {
+  const { page, loud } = await begin(t);
+  const m1 = await pass(page, loud);
+  await nextTask(page);
+  const m2 = await target(page);
+  assert.notEqual(m2, m1);
+  await feedAll(page, three(m2, loud)); // no ring, no onset: a different note needs none
+  const j = await judged(page);
+  assert.equal(j.done, true);
+  assert.equal(j.cls, 'ok');
+});
+
+test('F3b after an unjudged ring, a different note still fires', async (t) => {
   const { page, loud } = await begin(t);
   const m1 = await pass(page, loud);
   await nextTask(page);
