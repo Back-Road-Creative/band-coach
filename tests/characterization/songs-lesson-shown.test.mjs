@@ -5,6 +5,7 @@
 // review's cards and button) skip openSong() and go through startPractice(),
 // which must un-hide it too, or the learner sees a song title and no lesson.
 // window.__coach is used for setup only; every hand-off is a real click.
+// The pathway panel's song, check, recheck and transfer actions are all covered.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
@@ -42,12 +43,18 @@ async function seedKbdHandoff(page) {
   await page.evaluate("window.__coach.setMod('kbd')");
 }
 
-// The pathway panel's "song" or "check" step, as kbd-pathway-panel.test.mjs seeds it.
-async function seedPathway(page, withSession) {
+const DAY_MS = 24 * 60 * 60 * 1000;
+// A qualifying whole-song row (the shape src/ui/songs.js writes for an independent
+// play), agoMs before the seed; the page turns agoMs into `at` from its own clock.
+const wholeRow = (id, songId, agoMs) => ({ v: 1, id, agoMs, instrument: 'kbd', skill: 'whole:null', source: 'song', songId, assistance: 'none', dims: { pitch: 'ok', onset: 'ok' }, unassessed: ['hold', 'tune'], activeMs: 1000, input: 'midi' });
+
+// The pathway panel's "song", "check", "recheck" or "transfer" step, as kbd-pathway-panel.test.mjs seeds it.
+async function seedPathway(page, withSession, extraRows = []) {
   await page.evaluate(`(function () {
     const db = window.__coach.db();
     db.mods.kbd.level = 2;
     db.events = (db.events || []).concat([{ v: 1, id: 'seed-midi', at: Date.now() - 60000, instrument: 'kbd', skill: 'C4', source: 'drill', assistance: 'shown', dims: { pitch: 'ok' }, unassessed: [], activeMs: 0, input: 'midi' }]);
+    ${extraRows.length ? `db.events = db.events.concat(${JSON.stringify(extraRows)}.map((r) => { const { agoMs, ...e } = r; return { ...e, at: Date.now() - agoMs }; }));` : ''}
     ${withSession ? "db.sessions = (db.sessions || []).concat([{ d: '2020-01-01', mod: 'kbd', min: 5, acc: 1, a1: 1, a2: 1, from: 2, to: 2, breaks: 0, source: 'song', songId: 'hot-cross-buns' }]);" : ''}
     window.localStorage.setItem('bandcoach.v1', JSON.stringify(db));
   })()`);
@@ -132,6 +139,51 @@ test('pathway panel, check step: the action shows the lesson in Check mode', asy
   await page.waitFor("document.querySelector('.panel-songs-mode button[data-mode=\"check\"]')");
   assert.equal(await page.evaluate("document.querySelector('.panel-songs-mode button[data-mode=\"check\"]').getAttribute('aria-pressed')"), 'true', 'Check mode is the pressed mode');
   await assertLessonShown(page, 'pathway check-song');
+  assert.deepEqual(page.exceptions, []);
+});
+
+// What the panel's current step and notes say before the action is pressed (reads only).
+const pathwayRead = (page) => page.evaluate(`(() => {
+  const q = (s) => document.querySelector(s);
+  const cur = document.querySelectorAll('.pathway-steps li[aria-current="step"]');
+  return { current: cur.length === 1 ? cur[0].dataset.step : 'count:' + cur.length, wait: !!q('.pathway-wait'), retained: !!q('.pathway-retained'), transfer: !!q('.pathway-transfer'), action: q('#pathwayAction').textContent };
+})()`);
+const checkModePressed = async (page) => {
+  await page.waitFor("document.querySelector('.panel-songs-mode button[data-mode=\"check\"]')");
+  assert.equal(await page.evaluate("document.querySelector('.panel-songs-mode button[data-mode=\"check\"]').getAttribute('aria-pressed')"), 'true', 'Check mode is the pressed mode');
+};
+
+test('pathway panel, recheck step: the action shows the lesson in Check mode', async (t) => {
+  const page = await launchPage(htmlPath);
+  t.after(() => page.close());
+  await seedPathway(page, false, [wholeRow('seed-check', 'hot-cross-buns', DAY_MS + 60000)]);
+  const s = await pathwayRead(page);
+  assert.equal(s.current, 'return', 'recheck seed: the current step is return');
+  assert.equal(s.wait, false, 'recheck seed: no wait note');
+  assert.equal(s.retained, false, 'recheck seed: no retained note (a recheck, not a transfer offer)');
+  assert.equal(s.transfer, false, 'recheck seed: no transfer note');
+  assert.equal(s.action, 'Check Hot Cross Buns in Songs', 'recheck seed: the action names the song');
+  await page.evaluate("document.getElementById('pathwayAction').click()");
+  await page.waitFor(headingIs('Hot Cross Buns'));
+  await checkModePressed(page);
+  await assertLessonShown(page, 'pathway recheck');
+  assert.deepEqual(page.exceptions, []);
+});
+
+test('pathway panel, transfer step: the action shows the transfer song\'s lesson in Check mode', async (t) => {
+  const page = await launchPage(htmlPath);
+  t.after(() => page.close());
+  await seedPathway(page, false, [wholeRow('seed-check', 'hot-cross-buns', 2 * DAY_MS), wholeRow('seed-retained', 'hot-cross-buns', 60000)]);
+  const s = await pathwayRead(page);
+  assert.equal(s.current, 'return', 'transfer seed: the current step is return');
+  assert.equal(s.retained, true, 'transfer seed: the retained note is shown');
+  assert.equal(s.transfer, true, 'transfer seed: the transfer note is shown');
+  assert.equal(s.wait, false, 'transfer seed: no wait note');
+  assert.equal(s.action, 'Check Au clair de la lune in Songs', 'transfer seed: the action names the transfer song');
+  await page.evaluate("document.getElementById('pathwayAction').click()");
+  await page.waitFor(headingIs('Au clair de la lune'));
+  await checkModePressed(page);
+  await assertLessonShown(page, 'pathway transfer');
   assert.deepEqual(page.exceptions, []);
 });
 
