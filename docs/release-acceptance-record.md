@@ -22,9 +22,14 @@ later content or code change gets its own record; it never inherits an earlier s
 3. **Automated checks.** The CI `test` check on the commit (`npm test`, which runs the full
    suite and then the release gate). Record the pass line from the CI log or a local run.
 4. **Manual runs.** README "Before announcing a release: a five-minute human check", step by
-   step, on the downloaded file, naming the machine, browser version and hardware. Then the
+   step, on the release build the candidate's "Candidate artifact" row names (its staged copy
+   before a release, the downloaded file after one), naming the machine, browser version and
+   hardware. Then the
    D2/E9 ledger below: each "human on device" cell is filled in by the person who did it, with
-   the device model, or left as **open**.
+   the device model, or left as **open**. A step the README marks as covered by the Windows lane
+   ([windows-lane.md](windows-lane.md)) is skipped by hand only when the candidate's "Windows
+   lane" row names a passing run on the same sha256 as the candidate artifact: the lane's JSON
+   report, the sha256 it checked, and each scenario's verdict.
 5. **Reviewer and date.** The person signing, and when. An unsigned record is a draft.
 
 ## Candidate: main after the September 2026 refactor waves
@@ -55,11 +60,58 @@ later content or code change gets its own record; it never inherits an earlier s
 | Mic and MIDI together | They are independent inputs. MIDI is the keyboard pathway's proof source; the microphone judges guitar, bass and voice. Nothing uses both at once. |
 | Reviewer / date | JP, 2026-10-01, hand run; record written by the session that reproduced the findings. **Not accepted.** Re-run the five-minute check on a build that carries the five fix PRs above before any tag. |
 
+## Correction, 2026-10-03: four statements in the `e4b6fb5` record
+
+The `e4b6fb5` section above is kept as it stood at `4f0f210`. Four statements in it are wrong:
+
+- **Finding 5's range.** It says the on-screen keyboard "is one octave (MIDI 48 to 72) at every
+  level". At `e4b6fb5` the keyboard drew MIDI 60 to 72, one octave, unless the level's notes went
+  below middle C (MIDI 60) or "Practise my captured melody" was on; then it drew MIDI 48 to 72,
+  which is two octaves (`kbdRange`, `src/app.js:1764` at `e4b6fb5`). The fix, #374 (`c1e6eb7`),
+  always draws MIDI 48 to 72 (`src/app.js:1778` at `4f0f210`).
+- **Finding 5's PR title.** It quotes the fix as "two octaves with hand zones from level 1". The
+  merged title of #374 (`c1e6eb7`) is "draw two octaves with left- and right-hand zones from
+  level 1".
+- **Finding 4's PR.** It names a PR "draw the kit full height with the piece names". The PR that
+  fixed it is #375 (`1c3bca3`), "draw the kit full width with named pieces and key badges".
+- **"The five fix PRs above".** There are six: #372, #373, #371, #375 and #374 fix findings 1 to
+  5, and #376 fixes finding 7. Finding 6 has no fix PR: it did not reproduce in full Chromium
+  (#377).
+
+## Candidate: `09f7c35` integrated readiness candidate, 2026-10-03
+
+| Field | Value |
+|---|---|
+| Commit | `09f7c35` (main after the wave-2 PRs #378 to #409 merged; the suite ran on the same tree plus #408's one test file, src, build and package files identical). |
+| Last published release | `v1.9.0`, tagged 2026-09-24; this candidate is not tagged yet |
+| Candidate artifact | `npm run build -- --release` at `09f7c35`: `dist/release/band-coach.html` sha256 `3f5b88175da1a70858aa64d9ef31ae78c936d3ea69239a1bb29449201484a234`, 639,584 bytes, copied to `D:\band-coach.html` for the hand run. Two release builds (the tested tree and this commit) gave the same bytes. Pages and the Store package wrap this same file. |
+| Platforms | As README 'Browser and device support': headless Chromium in CI on every commit; windowed Chrome on Windows only through the Windows lane below and the hand check; Firefox and Safari untested; phone sizes emulated only, real phones untested. |
+| Inputs | As README 'Browser and device support': computer keys, on-screen keys, a stubbed MIDI keyboard and a fake microphone in CI; real MIDI keyboards, e-kits and instruments through a real microphone are untested beyond the hardware of the last hand run. |
+| Content | As README 'Beginner pathway status': every instrument is ready with a curriculum; every row's content review is provisional (no reviewer yet); keyed-woodwind, recorder, whistle and drum-kit charts are unchecked. |
+| Dependencies | npm ci clean; npm audit found 0 vulnerabilities (.data/worktrees/bc-logs/finale/ci.log, .data/worktrees/bc-logs/finale/audit.log) |
+| Automated checks | npm test: 3410 tests, 3409 pass, 0 fail, 1 skipped (.data/worktrees/bc-logs/finale/test.log). npm run gate: 192 tests, 186 pass, 0 fail, 6 todo (.data/worktrees/bc-logs/finale/gate.log). Both on tree 4790ec7, which is this commit plus #408's test file. |
+| Windows lane | Report `.data/worktrees/bc-logs/finale/winlane.json`, sha256 `3f5b88175da1a70858aa64d9ef31ae78c936d3ea69239a1bb29449201484a234`: W1 PASS, W2 PASS, W3 PASS, W4 PASS, W5 PASS. |
+| Manual runs | **Pending.** README "Before announcing a release: a five-minute human check", steps 2, 3, 4 and 7, on `D:\band-coach.html`, naming the machine, browser version and hardware, and the time the whole check took. Step 6 is covered by the Windows lane row above; its version line, and step 8 (the phone copy), are checked by hand once the release tag has deployed, naming the Pages URL and the sha256 of the `band-coach.html` it serves. |
+| Unresolved limitations | Step time estimates are untimed. The lane's W5 used one USB MIDI interface and does not cover README check 2 (notes from a real keyboard). The offline update check is not covered. In local runs at a load average above 20, the tab-hide step of acceptance-mic-setup (T6, T7b) has timed out; open. |
+| Reviewer / date | _unsigned_ |
+
+### Findings from the `e4b6fb5` hand run: fix and retest
+
+| Finding | Fix | Retest at `09f7c35` |
+|---|---|---|
+| 1 | #372 (`6ed2a38`), never create the AudioContext from a tab return or bfcache restore | PASS: `acceptance-audio-gesture` (its header names finding 1), npm run gate at the commit |
+| 2 | #373 (`9b8a101`), say what Chrome asked for when MIDI is refused, and let the learner retry | PASS: `midi-denied-retry` (added by #373) and `acceptance-midi`, npm test and gate at the commit |
+| 3 | #371 (`5616661`), gate at the room's own floor so a quiet guitar is judged, not called a chord | PASS: `input-diagnosis`, `levels` and `mic-device` (changed by #371) and `acceptance-live-capture`, npm test and gate at the commit |
+| 4 | #375 (`1c3bca3`), draw the kit full width with named pieces and key badges | PASS: `drum-kit-draw` and `computed-instruments-drum-kit` (added or changed by #375), npm test at the commit |
+| 5 | #374 (`c1e6eb7`), draw two octaves with left- and right-hand zones from level 1 | PASS: `kbd-two-octaves` (added by #374), npm test at the commit |
+| 6 | None: not reproduced in full Chromium (#377) | PASS: Windows lane W1 in a clean profile, extensions off, no console error or warning (report in the Windows lane row) |
+| 7 | #376 (`eb3d78e`), a fresh profile's first session is invited to play, not told nothing is due | PASS: `session-plan-coach-line` and `curriculum` (added to by #376) and `acceptance-first-visit`, npm test and gate at the commit |
+
 ## D2 / E9 evidence ledger
 
 What the automated suite proves for each interaction, device and accessibility dimension, and
 what still needs a person on a real device. "Automated" names the test files that pin the
-behaviour in headless Chromium at the commit above; it is never a claim about a real phone,
+behaviour in headless Chromium at `2f37dec`; it is never a claim about a real phone,
 screen reader or browser. An axe pass is not a "screen-reader-clean" claim.
 
 ### D2 interaction and device matrix
@@ -100,6 +152,6 @@ screen reader or browser. An axe pass is not a "screen-reader-clean" claim.
 
 ### Release-blocking accessibility failures
 
-None recorded, because no manual pass has been done. The axe suite passes at the commit above.
+None recorded, because no manual pass has been done. The axe suite passes at `2f37dec`.
 A failure found by a manual pass is filed as an issue, fixed through a PR with a test, and this
 table's row is updated with the PR number.

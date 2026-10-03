@@ -1404,7 +1404,7 @@ iPhone grants and sustains microphone access the way this app expects is a separ
 question; the plan's later phase tests that on real phones. Until then, don't tell a learner it
 works on their phone — only that a phone copy exists to try.
 
-`.github/workflows/pages.yml` builds and deploys `dist/pages/` on every published GitHub release
+`.github/workflows/pages.yml` builds and deploys `dist/pages/` when a `v*` release tag is pushed
 (and by hand via "Run workflow"), using `actions/upload-pages-artifact` and
 `actions/deploy-pages`. **One manual step the repo owner has to click once, that this workflow
 cannot do for you:** Settings → Pages → Source: GitHub Actions.
@@ -1462,48 +1462,102 @@ download the actual release file (`dist/release/band-coach.html`, or the one att
 GitHub release) and run through this by hand. Each step names what failure looks like — do not
 mark a step passed just because nothing looked obviously wrong.
 
+Steps 1, 5 and 6 are also run by the Windows lane
+([docs/windows-lane.md](docs/windows-lane.md)), which opens the release file in a real
+(non-headless) Chrome on Windows with a fresh profile and extensions off. When the release record
+names a passing Windows-lane run on this exact file (the same sha256), skip those three; otherwise
+do them by hand. Steps 2, 3, 4, 7 and 8 need real hardware and a person every time.
+
 1. **Open the file (30s).** Double-click it. **Fail** if the page does not load, or the browser
-   console (F12) shows red errors.
-2. **MIDI keyboard, if you have one (1 min).** Plug it in, press "Connect MIDI". The status line
-   should change to "*device name* found. Press any key on it." — this only means the app opened
-   the port, not that it has heard anything yet. Press a key on the keyboard. **Pass** only once
-   the status line changes to "*device name* is working." and the small dot beside "Connect MIDI"
-   blinks on every key press. **Fail** if the status line stays on "found. Press any key on it."
-   after you have pressed several keys (the app opened the device but the keyboard's notes are not
-   reaching it), or if it says "Another program may be using this keyboard" and pressing keys
-   still produces no blink (close other apps and press Connect again). Open "MIDI details" and
-   confirm your keyboard is listed, with either "opened." or "open failed … but it is sending
-   messages anyway." — "open failed" with nothing arriving is a fail. No physical keyboard on hand? Note
-   that as untested for this release rather than skipping it silently.
-3. **Microphone instrument, e.g. guitar (1.5 min).** Pick guitar (or your instrument), press
-   "Connect microphone" and allow access, then press "Check my microphone" and stay quiet for the
-   3-second countdown. Play one note into the mic. **Pass** if the exercise reacts to the note
-   (advances, marks it, or otherwise visibly responds). **Fail** if the small input-level meter
-   never moves while you play (the mic is not picking up sound) or nothing on screen ever responds
-   to a clearly-played, in-tune note.
-4. **Tuner — the exact bug this checklist exists for (1 min).** Switch to Tuner, press Connect,
-   pick your instrument, and pluck one open string once (do not keep replaying it). Watch the
-   reading after the string starts to decay. **Pass** only if the needle/reading stays on screen
-   through the decay and the string turns green ("in tune") if it was in tune, without you having
-   to pluck it again to keep the reading alive. **Fail** if the reading disappears or resets to
-   "play a note" while the string is still ringing out.
+   console (F12) shows red errors. *Skip when the record has a passing Windows-lane run for
+   this file.*
+2. **MIDI keyboard, if you have one (3 min).** Pick "Keyboard", plug the keyboard in, press "Set up
+   input", then "Connect MIDI". The status line should change to "*device name* found. Press any
+   key on it." — this only means the app opened the port, not that it has heard anything yet. Press
+   a key on the keyboard. **Pass** only once the status line changes to "*device name* is working."
+   and the small dot beside the status line blinks on every key press. **Fail** if the status line
+   stays on "found. Press any key on it." after you have pressed several keys (the app opened the
+   device but the keyboard's notes are not reaching it), or if it says "Another program may be
+   using this keyboard" and pressing keys still produces no blink (close other apps and press
+   Connect again). Open "MIDI details" and confirm your keyboard is listed, with either "opened."
+   or "open failed … but it is sending messages anyway." — "open failed" with nothing arriving is a
+   fail. Then press "Start" and play the note the exercise asks for. **Fail** unless it is marked
+   right. Wait for the next exercise to appear, then play a wrong note. **Fail** unless it gets a
+   "That was …, the note is …" line naming the key you pressed. Next, note the level you are on and
+   press "Skip ahead" (or "Make it easier", if you are already past it) until the line names "Hands
+   together: matching rhythms". Press the two keys it asks for together and hold them: the app
+   answers "Good. Now in time: let go, then press both keys at the same moment and let go
+   together." That first press is practice and is not marked. Let go, then press both keys at the
+   same moment and let go of both together. **Fail** unless that press is marked right. On the next
+   pair, do the same practice press, then in the timed press let one hand go half a second early.
+   **Fail** unless it is marked wrong with a reason ending "Let go together." Press "Make it
+   easier" or "Skip ahead" until you are back at the level number you noted (a jump does not bring
+   back the progress you had on that level). Last, unplug the
+   keyboard: the status line should say "No MIDI device is plugged in." (if it says something else,
+   write that in the record). Plug it back in and, without reloading or pressing Connect, press a
+   few keys. **Fail** unless the dot blinks on every key press and the status line reads "*device
+   name* is working." No physical keyboard on hand? Note that as untested for this release rather
+   than skipping it silently.
+3. **Microphone instrument, e.g. guitar (2 min).** Pick guitar (or your instrument), press "Set up
+   input", then "Connect microphone", and allow access. Press "Check my microphone", count to two
+   in silence, then pluck a string once. **Fail** unless the line beside the button then says "I
+   heard playing during the check, so nothing was changed. Try again in silence." Press "Check my
+   microphone" again and stay quiet while the line beside the button says "Listening for 3 seconds
+   — stay quiet…". **Fail** if it then says "Could not get a reading from the microphone". Then,
+   with the exercise running, play the note it asks for softly, play a wrong note, pluck the right
+   note several times quickly, let a note ring out, and stay silent for ten seconds. **Pass** if
+   every pluck gets exactly one response on screen, the wrong note gets a "That was …, the note is
+   …" line naming what you played, and nothing responds while you are silent (the exercise moving
+   on after its time limit is fine). **Fail** if the small input-level meter never moves while you
+   play, a clearly played, in-tune note gets no response, a single pluck gets two responses as it
+   rings out, or something responds while you are silent. Write every false response and every
+   missed note in the release record.
+4. **Tuner — the exact bug this checklist exists for (1 min).** Switch to Tuner (the microphone
+   stays connected from step 3; if the status line does not say "Listening through your
+   microphone.", press "Set up input", then "Connect microphone"), pick your instrument, and pluck
+   one open string once (do not keep replaying it). Watch the reading after the string starts to
+   decay. **Pass** only if the needle/reading stays on screen through the decay and the string
+   turns green ("in tune") if it was in tune, without you having to pluck it again to keep the
+   reading alive. **Fail** if the reading disappears or resets to "play a note" while the string is
+   still ringing out.
 5. **Progress survives a reload (1 min).** Play a couple of exercises so something is recorded,
    reload the page (F5), and open the same instrument again. **Pass** if your recent result is
    still there. **Fail** if progress is back to zero. (Reminder: this only works from the exact
-   same file path/location each time — see "Backups" above.)
-6. **Check for updates (30s).** Open the Settings screen and press "Check for
-   updates". This is the only real network request the app ever makes, and it is made from a
-   `file://` page, so nothing
-   in the automated suite can stand in for it — the unit tests inject a fake fetch and the browser
-   tests run a dev build, which the button deliberately refuses to check. **Pass** if it answers
-   "You're running the latest version (*x.y.z*)." with the version you just released. **Fail** if
-   it says "Couldn't reach the update server." (the deployed `version.json` is missing or blocked
-   — the release-consistency workflow should have caught that, so check it), if it names a version
-   other than the one you released, or if it still says "Checking…" after a few seconds. If it
-   reports "This is a development build", you are testing the wrong file: use the one attached to
-   the GitHub release, not `dist/band-coach.html`.
+   same file path/location each time — see "Backups" above.) *Skip when the record has a
+   passing Windows-lane run for this file.*
+6. **Check for updates (30s).** Open the Settings screen and press "Check for updates". It is one
+   of two features that go online — the other is "Download model pack" — and each goes online only
+   when you press its button; the release file loads nothing else on its own. It is made from a
+   `file://` page, so nothing in the automated suite can stand in for it — the unit tests inject a
+   fake fetch and the browser tests run a dev build, which the button deliberately refuses to
+   check. **Pass** if it answers "You're running the latest version (*x.y.z*)." with the version
+   you just released. **Fail** if it says "Couldn't reach the update server." (the deployed
+   `version.json` is missing or blocked — the release-consistency workflow should have caught that,
+   so check it), if it names a version other than the one you released, or if it still says
+   "Checking…" after a few seconds. If it reports "This is a development build", you are testing
+   the wrong file: use the one attached to the GitHub release, not `dist/band-coach.html`.
+   The Windows lane, which runs outside that suite, presses it in the release file itself. *Skip
+   when the record has a passing Windows-lane run for this file.*
+7. **Drum kit, if you have one (1 min).** Pick "Drum kit" and connect the kit the way you really
+   play it: an electronic kit over MIDI (press "Set up input", then "Connect MIDI"), or acoustic
+   drums through the microphone (unplug every MIDI device first, the step-2 keyboard included, then
+   press "Set up input", then "Connect MIDI": with no MIDI device plugged in, it listens through
+   the microphone). Press "Start" and play the pieces the exercise asks for. **Pass** if every
+   drawn piece carries its name ("Kick", "Snare", "Hi-hat" and so on) and hits on the piece asked
+   for are marked right. **Fail** if a piece has no name or a correct hit is not marked. The
+   microphone can tell only kick, snare and hi-hat apart, so write which route you used in the
+   record: a pass on the computer keys or the microphone is not an electronic-kit pass.
+8. **Phone, if you have one (1 min).** Once this release's tag has deployed the phone copy (see
+   "Phone copy" above), open it on the phone, pick an instrument, press "Start" and play a few notes
+   on the screen. **Pass** if you can tap each key or pad the exercise asks for without hitting its
+   neighbour, read the labels without zooming, and stop with "Pause" or "End session" without
+   hunting for it. **Fail** if any of that needs zooming, scrolling sideways or a second try. Write
+   the phone model in the record.
 
-Total: under 5 minutes with a MIDI keyboard on hand, faster without one.
+Total, adding up the estimates above (none has been timed yet): about 10 minutes with
+every step by hand, about 8 minutes when a passing Windows-lane run on this file covers
+steps 1, 5 and 6, less for any hardware you don't have. Write the time you actually took in the
+record. The check keeps its original name; its steps have grown since.
 
 The result of that check, together with the commit and artifact hashes, the scope, the automated
 pass line and the open items, goes in [docs/release-acceptance-record.md](docs/release-acceptance-record.md):
@@ -1516,11 +1570,13 @@ release.
 
 - **Headless Chromium, via this repo's automated test suite** (`tests/characterization/`,
   `tests/release/gate.test.mjs`): tested continuously, every commit. This is what CI proves.
-- **A real, windowed Chrome or Edge browser:** untested by CI; the "five-minute human check" above
-  is the only thing that has ever exercised one on this app's actual release build, and only when
-  someone runs it. Chrome and Edge do provide Web MIDI (`navigator.requestMIDIAccess`), but a
-  browser providing the API is not the same as a given keyboard working — a real keyboard silently
-  delivering no notes in Chrome is precisely the failure that prompted this checklist. Run step 2.
+- **A real, windowed Chrome or Edge browser:** untested by CI. The Windows lane
+  ([docs/windows-lane.md](docs/windows-lane.md)), started by hand, outside CI, opens the release
+  file in a real (non-headless) Chrome on Windows for steps 1, 5 and 6 of the human check above;
+  Edge is still exercised only when someone runs the whole check in it. Chrome and Edge do provide
+  Web MIDI (`navigator.requestMIDIAccess`), but a browser providing the API is not the same as a
+  given keyboard working — a real keyboard silently delivering no notes in Chrome is precisely the
+  failure that prompted this checklist, and no lane can press its keys. Run step 2.
 - **Firefox (desktop):** untested here. Firefox has supported Web MIDI since version 108
   (December 2022), but unlike Chrome it does not use an inline permission dialog: the first
   `requestMIDIAccess()` call asks you to install a generated Site Permission Add-On. If you decline
