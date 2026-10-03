@@ -31,7 +31,7 @@ import { chroma, judgeChord } from './audio/chords.js';
 //
 import { makeGrid, scoreTake, tempoLadder } from './core/groove.js';
 import { stepTuner } from './core/tuner.js';
-//
+import { wrongNoteHint } from './core/wrong-note.js';
 import { shouldReveal, promptFor, hintFor as coreHintFor } from './core/reveal.js';
 import { gradeOutcome } from './core/grade-outcome.js';
 import { makeEvent, validateEvent, boundEvents } from './core/learning-events.js';
@@ -357,6 +357,10 @@ import { register as registerPathway } from './ui/pathway.js';
       try { st = await navigator.mediaDevices.getUserMedia({ audio: wanted }); }
       catch (e) { if (!DB.prefs.inputDeviceId) throw e; st = await navigator.mediaDevices.getUserMedia({ audio: base }); }
       micStream = st; const src = actx.createMediaStreamSource(st); wireAnalysers(monoSum(src)); micReady = true;
+      // A successful Connect clears the 'blocked' sentence calibrateNoiseFloor wrote (its catch below: keep the two texts identical), so it does not sit beside 'Listening through your microphone.'. Any other result text is left alone.
+      { const cr = $('calibrateResult'); if (cr && cr.textContent === 'The microphone was blocked, so it could not be checked.') cr.textContent = ''; }
+      // A track that ends (device unplugged, permission revoked) leaves the mic as the teardown 'mic' stopper does, then the status and Connect button follow. Only the CURRENT stream counts: a switched-away stream ending later must not close its replacement. micGen++ makes a room check still running for it discard its result.
+      st.getAudioTracks().forEach(tr => tr.addEventListener('ended', () => { if (micStream !== st) return; const pm = $('practiceMeter'); if (pm) pm.hidden = true; st.getTracks().forEach(t => t.stop()); micStream = null; micReady = false; micGen++; ioRefresh(); }));
       ensurePitchWorklet(); refreshMicDevices();
       // First Connect (or first after a device change) with no stored floor: listen to the room for ~1.5 s so the gates follow this mic, not the fixed defaults. It abstains when it hears playing.
       if (DB.prefs.noiseFloor == null) checkRoomInBackground();
@@ -420,7 +424,7 @@ import { register as registerPathway } from './ui/pathway.js';
   async function checkRoomInBackground() {
     const my = ++roomSeq, el = $('calibrateResult'), say = s => { if (el) el.textContent = s; };
     say('Checking the room — stay quiet for a moment…');
-    let r; try { r = await listenRoom(1500); } catch (e) { if (my === roomSeq) say(''); return; }
+    let r; try { r = await listenRoom(1500); } catch (e) { if (my === roomSeq) say(ROOM_ERROR); return; }
     if (my !== roomSeq) return; // a newer check owns the message now
     if (!r.fresh || DB.prefs.noiseFloor != null) { say(''); return; }
     const v = classifyRoomCheck(r.frames, { manual: false });
@@ -827,6 +831,7 @@ import { register as registerPathway } from './ui/pathway.js';
     const result = safeSet(localStorage, KEY, candidate);
     if (result.ok) { lastStored = candidate; if (saveFailedShown) { saveFailedShown = false; $('settingsSay').textContent = ''; $('mainSay').textContent = ''; } }
     else { saveFailedShown = true; $('settingsSay').textContent = t('storage.saveFailed'); $('mainSay').textContent = t('storage.saveFailed'); }
+    return result.ok;
   }
   function save() { if (saveTimer) return; saveTimer = setTimeout(() => { saveTimer = null; writeDB(); }, 1200); }
   // Closing or reloading within the 1200ms debounce window used to lose
@@ -1180,7 +1185,6 @@ import { register as registerPathway } from './ui/pathway.js';
     task.els.forEach(e => { credit(e.id, e.q || 0, from, task.warm, e.rt, gradeOutcome({ helped: !!e.helped, failed: !!e.failed, assistance: e.assistance || null, q: e.q || 0 })); logEvent(makeEvent({ instrument: mod, skill: e.id, source: task.warm ? 'warmup' : 'drill', assistance: e.helped ? 'shown' : (e.assistance || 'none'), dims: { pitch: e.q > 0 ? 'ok' : 'miss' }, unassessed: [], activeMs: Math.round((e.rt || 0) * 1000), bpmTarget: null, bpmActual: null, hands: e.info.kind === 'hands-together' ? handsModeFromId(e.id) : undefined, input: e.input }, { now: modelNow })); from = e.id; if (!(e.q > 0)) anyFail = true; });
     lastItem = from; nextTaskAt = now() + (anyFail ? 1.5 : 0.7); if (task.kind === 'ear') nextTaskAt = now() + (anyFail ? 2.6 : 1.1); save(); showAll();
   };
-  function dirWord(got, want) { let d = ((pc(want) - pc(got)) + 12) % 12; if (d > 6) d -= 12; return d > 0 ? 'higher' : 'lower'; }
   // a played note (MIDI key, screen key, or a plucked note the microphone
   // recognised); `source` is 'midi' for a real MIDI note-on, 'computer-key'
   // for the physical-keyboard keydown branch, 'screen' for a canvas tap or
@@ -1222,9 +1226,7 @@ import { register as registerPathway } from './ui/pathway.js';
     const policy = i.anywhere ? 'fold' : (OCTAVE_POLICY[mod] || 'fold');
     const judged = judgePitch({ heardMidi: midi, targetMidi: i.midi, policy });
     if (judged.ok) { passEl(undefined, undefined, undefined, source); return; }
-    let where = ''; if (policy === 'exact') { const st = midi - i.midi; where = Math.abs(st) === 12 ? 'Right note, wrong octave: go one octave ' + (st > 0 ? 'down' : 'up') + '.' : 'Go ' + Math.abs(st) + ' key' + (Math.abs(st) > 1 ? 's' : '') + ' to the ' + (st > 0 ? 'left' : 'right') + '.'; }
-    else if (i.string) { let df = ((pc(i.midi) - pc(midi)) + 12) % 12; if (df > 6) df -= 12; where = 'Go ' + Math.abs(df) + ' fret' + (Math.abs(df) > 1 ? 's' : '') + ' ' + (df > 0 ? 'higher' : 'lower') + '.'; }
-    else where = 'Go ' + dirWord(midi, i.midi) + '.';
+    const where = wrongNoteHint({ heardMidi: midi, targetMidi: i.midi, policy, fretted: !!i.string && !MODS[mod].fretless });
     failEl('That was ' + nname(midi) + ', the note is ' + nname(i.midi) + '. ' + where, e.id + '>' + nname(midi));
   }
   // onNote's hands-together branch, moved out as-is (same statements, same order).
@@ -2777,9 +2779,7 @@ import { register as registerPathway } from './ui/pathway.js';
     const priorLatencyMs = DB && DB.latencyMs;
     modelNow = Date.now(); DB = sanitizeDB(result.db, undefined, modelNow); DB.latencyMs = num(priorLatencyMs, DB.latencyMs, 0, 300); if (!Array.isArray(DB.custom)) DB.custom = [];
     $('optNames').checked = DB.prefs.names; $('optTheme').value = DB.prefs.theme; applyTheme(DB.prefs.theme); $('optLocale').value = DB.prefs.locale; applyLocale(DB.prefs.locale); setNoteNaming(DB.prefs.noteNaming); $('optNoteSystem').value = DB.prefs.noteNaming.system; $('optAccidentals').value = DB.prefs.noteNaming.accidentals; setMod(DB.prefs.mod);
-    writeDB();
-    let stored; try { stored = localStorage.getItem(KEY); } catch (e) {}
-    if (stored !== lastStored) { const error = 'Your restored progress could not be saved on this device (storage may be full).'; coach(error); return { ok: false, error }; }
+    if (!writeDB()) { const error = 'Your restored progress could not be saved on this device (storage may be full).'; coach(error); return { ok: false, error }; }
     coach(t('backup.restored'));
     return result;
   }
