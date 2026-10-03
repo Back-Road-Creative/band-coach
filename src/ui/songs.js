@@ -1161,6 +1161,7 @@ function mountSongsPanel(hostEl, api) {
   // again" button) skips the lookup outright.
   function startPractice(song, partId, instrumentOverride, opts = {}) {
     stopRecording();
+    practiceSection.hidden = false; // a hand-off skips openSong(), which is what un-hides it for a row click
     // A song lesson has three modes on one control (never saved -- every
     // new open starts in Learn): 'learn' (today's behaviour, assistance
     // 'shown'), 'rehearse' (same views, "Play it" hidden, still 'shown')
@@ -2582,9 +2583,12 @@ function mountSongsPanel(hostEl, api) {
 
   importInput.addEventListener('change', handleFile);
 
-  // A pending requestOpenSong() (src/ui/learn.js's "Practise this") --
-  // read once, on the very next show(), then cleared so it never re-fires
-  // the next time a learner opens Songs normally. A song this panel cannot
+  // A pending requestOpenSong() (src/app.js's keyboard hand-off and capture's
+  // "Make it a lesson", src/ui/pathway.js, src/ui/editor.js's "Practise this",
+  // src/ui/songs/review.js's makeHandoffs) -- read once, on the very next
+  // show(), then cleared so it never re-fires the next time a learner opens
+  // Songs normally. This path goes through startPractice(), which un-hides
+  // the lesson section (openSong() is skipped). A song this panel cannot
   // find (removed, or from a store that failed to open) is silently
   // skipped rather than shown as an error: the request has already served
   // its purpose of getting the learner here.

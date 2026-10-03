@@ -22,6 +22,11 @@ const TWO_NOTE_FRAMES = [];
 for (let i = 0; i < 20; i++) TWO_NOTE_FRAMES.push({ t: i * 0.025, midi: 60, rms: 0.2, confidence: 0.95 });
 for (let i = 0; i < 20; i++) TWO_NOTE_FRAMES.push({ t: 0.5 + i * 0.025, midi: 62, rms: 0.2, confidence: 0.95 });
 
+// One note (C4, midi 60): a take with fewer than two note starts has no beat to
+// measure, so its tempo is always reported as uncertain.
+const ONE_NOTE_FRAMES = [];
+for (let i = 0; i < 20; i++) ONE_NOTE_FRAMES.push({ t: i * 0.025, midi: 60, rms: 0.2, confidence: 0.95 });
+
 async function openEditor(page) {
   await page.evaluate("window.__coach.openPanel('editor')");
   await page.waitFor("window.__coach.panelOpen() === 'editor'");
@@ -63,10 +68,14 @@ test('Listen/Stop transcribes the captured frames and gates practise/save behind
   const page = await launchPage(HTML_PATH);
   t.after(() => page.close());
 
-  await recordFrames(page, TWO_NOTE_FRAMES);
+  await recordFrames(page, ONE_NOTE_FRAMES);
 
-  // needsCheck always includes the key-profile caveat (src/song/transcribe.js),
-  // so the check box must show and gate the controls.
+  // A one-note take always has an uncertain tempo (src/song/transcribe.js),
+  // so the check box must show and gate the controls whatever else a better
+  // read finds. The precondition names that item, so an empty list fails here
+  // and says why, instead of looking like a gating bug.
+  const checkLines = await page.evaluate("Array.from(document.querySelectorAll('#editorCheck li')).map((li) => li.textContent)");
+  assert.ok(checkLines.includes('Tempo is uncertain — confirm the beat before practising to it.'), 'the editor lists the uncertain-tempo item: ' + JSON.stringify(checkLines));
   assert.equal(await page.evaluate("document.getElementById('editorCheck').hidden"), false);
   assert.equal(await page.evaluate("document.getElementById('editorSaveBtn').disabled"), true, 'save stays disabled until acknowledged');
   assert.equal(await page.evaluate("document.getElementById('editorPlayBtn').disabled"), true, 'play stays disabled until acknowledged');
