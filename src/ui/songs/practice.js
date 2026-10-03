@@ -160,6 +160,92 @@ function judgeOnsets(chords, played, onsetAt, matches, extraList, bpm, ticksPerQ
   }));
 }
 
+// Single expected note at this tick: the original forward-only search
+// (no chord window) -- but anything skipped over on the way to the
+// match is, by construction, a non-match under this note's pitch (the
+// loop breaks on the FIRST match), so once the right note is found,
+// every played event between cursor and it is a wrong note struck
+// before the right one -- an extra, same as the chord path's unclaimed
+// window events. A totally missed note (foundAt === -1) leaves cursor
+// where it was, so nothing here is "unclaimed" yet -- a later step
+// may still match these same events. A mic-heard event (src/ui/songs.js
+// tags these `source: 'mic'`) is exempt -- a pitch tracker often emits
+// a short wrong-pitch blip or an octave jump right at a note's attack,
+// and mic pitch is already treated as approximate everywhere else, so a
+// guitar or voice learner's correctly played note should not fail a
+// maxExtras: 0 step on detection noise. Any exact input (MIDI, or an
+// event with no source at all) still counts.
+// Pushes this note's match (or miss) onto `matches`, its skipped events onto
+// `extraList`, and returns the new cursor.
+function greedySingle(note, played, cursor, timed, onsetAt, policy, bpm, ticksPerQuarter, clock, matches, extraList) {
+  const expectedAt = timed ? onsetAt(note.start) : null;
+  let foundAt = -1;
+  for (let i = cursor; i < played.length; i++) {
+    if (judgePitch({ heardMidi: played[i].midi, targetMidi: note.midi, policy }).ok) {
+      foundAt = i;
+      break;
+    }
+  }
+  if (foundAt === -1) {
+    matches.push(missedNote(note));
+    return cursor;
+  }
+  for (let i = cursor; i < foundAt; i++) { if (played[i].source !== 'mic') extraList.push(played[i]); }
+  matches.push(matchOneNote(note, played[foundAt], timed, expectedAt, bpm, ticksPerQuarter, onsetAt, clock));
+  return foundAt + 1;
+}
+
+// A step of single notes only (no chord, not an onset-only or drum step).
+// The forward-only search above takes the FIRST pitch match, so a wrong note
+// that happens to equal a later expected pitch (D D C D E E E for E D C D E E E:
+// the first E found is the fifth event) eats every note before it and the
+// learner is told they missed a D they played. So: run that search; when it
+// already hits every note, or as many as any order-keeping match can, keep its
+// result untouched. Otherwise redo the step on the longest in-order matching
+// (suffix LCS, same judgePitch test): each note takes a played event that keeps
+// that best total, so only the notes the learner truly did not play are missed.
+// A timed step takes the event nearest the note's expected onset (so a D played
+// on the beat is not matched to an earlier D and called early); an untimed
+// step takes the earliest. Events skipped over are extras, with the mic exempt
+// as in greedySingle.
+function judgeSingleNotes(notes, played, timed, onsetAt, policy, bpm, ticksPerQuarter, clock, matches, extraList) {
+  const greedyMatches = [];
+  const greedyExtras = [];
+  let cursor = 0;
+  for (const note of notes) cursor = greedySingle(note, played, cursor, timed, onsetAt, policy, bpm, ticksPerQuarter, clock, greedyMatches, greedyExtras);
+  const greedyHits = greedyMatches.filter((m) => m.ok).length;
+  const n = notes.length;
+  const p = played.length;
+  const same = notes.map((note) => played.map((ev) => judgePitch({ heardMidi: ev.midi, targetMidi: note.midi, policy }).ok));
+  const L = Array.from({ length: n + 1 }, () => new Array(p + 1).fill(0));
+  for (let i = n - 1; i >= 0; i--) {
+    for (let j = p - 1; j >= 0; j--) L[i][j] = same[i][j] ? 1 + L[i + 1][j + 1] : Math.max(L[i + 1][j], L[i][j + 1]);
+  }
+  if (greedyHits === n || greedyHits === L[0][0]) {
+    matches.push(...greedyMatches);
+    extraList.push(...greedyExtras);
+    return;
+  }
+  cursor = 0;
+  for (let i = 0; i < n; i++) {
+    const note = notes[i];
+    const expectedAt = timed ? onsetAt(note.start) : null;
+    let pick = -1;
+    for (let j = cursor; j < p; j++) {
+      if (!same[i][j] || 1 + L[i + 1][j + 1] !== L[i][cursor]) continue;
+      if (pick === -1 || (timed && Math.abs(played[j].atSec - expectedAt) < Math.abs(played[pick].atSec - expectedAt))) pick = j;
+      if (!timed) break;
+    }
+    if (pick === -1) {
+      matches.push(missedNote(note));
+      continue;
+    }
+    for (let j = cursor; j < pick; j++) { if (played[j].source !== 'mic') extraList.push(played[j]); }
+    matches.push(matchOneNote(note, played[pick], timed, expectedAt, bpm, ticksPerQuarter, onsetAt, clock));
+    cursor = pick + 1;
+  }
+}
+
 // expectedNotes: [{ start, dur, midi, velocity? }] in ticks (a step's
 // `notes`, already fitted to the instrument by buildLessonPlan/fitToInstrument).
 // playedEvents: [{ midi, atSec, durSec?, cents?, velocity? }], in the order
@@ -216,40 +302,14 @@ export function judgeAttempt(expectedNotes, playedEvents, opts = {}) {
   const onsetAt = (tick) => phraseSec(tick, originTick, bpm, ticksPerQuarter, clock);
   let cursor = 0;
   const onsetMatched = onsetsOnly || percussion;
+  const allSingle = !onsetMatched && groupIntoChords(notes).every((g) => g.length === 1);
   if (onsetMatched) judgeOnsets(groupIntoChords(notes), played, onsetAt, matches, extraList, bpm, ticksPerQuarter, policy, clock, percussion);
-  for (const chord of onsetMatched ? [] : groupIntoChords(notes)) {
+  if (allSingle) judgeSingleNotes(notes, played, timed, onsetAt, policy, bpm, ticksPerQuarter, clock, matches, extraList);
+  for (const chord of onsetMatched || allSingle ? [] : groupIntoChords(notes)) {
     if (chord.length === 1) {
-      // Single expected note at this tick: the original forward-only search
-      // (no chord window) -- but anything skipped over on the way to the
-      // match is, by construction, a non-match under this note's pitch (the
-      // loop breaks on the FIRST match), so once the right note is found,
-      // every played event between cursor and it is a wrong note struck
-      // before the right one -- an extra, same as the chord path's unclaimed
-      // window events. A totally missed note (foundAt === -1) leaves cursor
-      // where it was, so nothing here is "unclaimed" yet -- a later step
-      // may still match these same events. A mic-heard event (src/ui/songs.js
-      // tags these `source: 'mic'`) is exempt -- a pitch tracker often emits
-      // a short wrong-pitch blip or an octave jump right at a note's attack,
-      // and mic pitch is already treated as approximate everywhere else, so a
-      // guitar or voice learner's correctly played note should not fail a
-      // maxExtras: 0 step on detection noise. Any exact input (MIDI, or an
-      // event with no source at all) still counts.
-      const note = chord[0];
-      const expectedAt = timed ? onsetAt(note.start) : null;
-      let foundAt = -1;
-      for (let i = cursor; i < played.length; i++) {
-        if (judgePitch({ heardMidi: played[i].midi, targetMidi: note.midi, policy }).ok) {
-          foundAt = i;
-          break;
-        }
-      }
-      if (foundAt === -1) {
-        matches.push(missedNote(note));
-        continue;
-      }
-      for (let i = cursor; i < foundAt; i++) { if (played[i].source !== 'mic') extraList.push(played[i]); }
-      matches.push(matchOneNote(note, played[foundAt], timed, expectedAt, bpm, ticksPerQuarter, onsetAt, clock));
-      cursor = foundAt + 1;
+      // Single expected note inside a step that also holds a chord: the
+      // original forward-only search (greedySingle).
+      cursor = greedySingle(chord[0], played, cursor, timed, onsetAt, policy, bpm, ticksPerQuarter, clock, matches, extraList);
       continue;
     }
     // A chord: several expected notes share this tick. Find the first
