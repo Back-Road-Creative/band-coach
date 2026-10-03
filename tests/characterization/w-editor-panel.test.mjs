@@ -65,8 +65,10 @@ test('Listen/Stop transcribes the captured frames and gates practise/save behind
 
   await recordFrames(page, TWO_NOTE_FRAMES);
 
-  // Two notes are not a confident read, so needsCheck keeps a low-confidence
-  // item (src/song/transcribe.js), so the check box must show and gate the controls.
+  // These two notes leave an item in needsCheck (src/song/transcribe.js), so the
+  // check box must show and gate the controls. That is a property of this fixture,
+  // not of every transcription: if a better read empties the list, give the
+  // fixture a guaranteed item (a one-note set) rather than weakening the asserts.
   assert.equal(await page.evaluate("document.getElementById('editorCheck').hidden"), false);
   assert.equal(await page.evaluate("document.getElementById('editorSaveBtn').disabled"), true, 'save stays disabled until acknowledged');
   assert.equal(await page.evaluate("document.getElementById('editorPlayBtn').disabled"), true, 'play stays disabled until acknowledged');

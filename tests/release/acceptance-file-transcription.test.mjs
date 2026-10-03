@@ -232,6 +232,8 @@ test('6. noise: no notes on the strip and nothing to practise', async (t) => {
 test('7. clipping: characterised, and no pitch but the one played is stored', async (t) => {
   await learnerPicks(t, FILE.clipped, {}, ({ review, songs }) => {
     t.diagnostic(`clipped review: ${JSON.stringify(review)}`);
+    // A file that stored nothing would pass the per-note check below with no notes to check.
+    assert.ok(songs[0].notes.length >= 1, 'the clipped note is stored, not dropped');
     for (const m of midisOf(songs[0])) assert.equal(m, 69);
   });
 });
@@ -262,6 +264,10 @@ test('10. picking the same file again gives a second review and a second song', 
   await withAcceptancePage(t, {}, async (page) => {
     await openAddSong(page);
     await pickAndRead(t, page, FILE.clean);
+    // Both takes read the same, but a second review cannot be mistaken for the
+    // first: picking clears the review panel (songs.js handleFile), so the review
+    // pickAndRead finds after this pick was drawn for it. Mutation: skip the draw
+    // on the second import and pickAndRead times out with no review.
     const second = await pickAndRead(t, page, FILE.clean, { stored: 2 });
     assert.equal(second.songs.length, 2, 'two songs are stored');
     assert.deepEqual(midisOf(second.songs[1]), CLEAN_MIDIS);
@@ -276,18 +282,20 @@ const practiseClick = async ({ review }, page) => {
   return page.evaluate(`({ title: document.querySelector('.panel-songs-practice h3').textContent, shown: !document.querySelector('.panel-songs-practice').hidden && document.querySelector('.panel-songs-practice').offsetParent !== null })`);
 };
 
-test('11. a clean recording goes straight from the review to practising', async (t) => {
+test('11. Practise this, on a clean recording, builds the lesson for that recording', async (t) => {
   await learnerPicks(t, FILE.clean, {}, async (r, page) => {
     const view = await practiseClick(r, page);
     assert.equal(view.title, 'clean', "Practise this opens this recording's own lesson");
   });
 });
 
-// Measured at the parent and after the fix: the lesson IS built for the song, but
-// the Songs practice section keeps its `hidden` attribute (startPractice() never
-// clears it; only openSong() does, src/ui/songs.js:1125), so a learner who clicks
-// Practise this sees no lesson. That file is outside this unit's Owns, so the
-// assertion is a todo that reports (not fails) until the section is shown.
+// Measured after the fix (the button is disabled at the parent, so this path is
+// unreachable there): the lesson IS built for the song, but the Songs practice
+// section keeps its `hidden` attribute (it is created hidden, songs.js:651;
+// startPractice() and checkOpenRequest() never clear it; only openSong() does,
+// :1125), so a learner who clicks Practise this sees no lesson. That file is
+// outside this unit's Owns, so the assertion is a todo that reports (not fails)
+// until the section is shown; then drop the todo (and fold this into test 11).
 test('11c. the lesson is on screen after Practise this', { todo: 'practiceSection stays hidden after the review handoff (src/ui/songs.js startPractice)' }, async (t) => {
   await learnerPicks(t, FILE.clean, {}, async (r, page) => {
     assert.equal((await practiseClick(r, page)).shown, true, 'the practice lesson is visible to the learner');
