@@ -187,19 +187,24 @@ test('U8 laneExit: with a report, node.exe\'s own exit code stands (a signal or 
   assert.equal(lane.laneExit({ status: null, hasReport: true }), 2);
 });
 
-const PUBLIC = '/mnt/c/Users/Public';
-let canMount = false;
-try {
-  accessSync(PUBLIC, constants.W_OK);
-  canMount = true;
-} catch {}
-
 // Runs the real WSL side against a stand-in node.exe that exits 1 and writes nothing, which is
 // what a WSL interop failure looks like from here. It needs a writable /mnt/<letter>/ directory,
-// so it runs on a WSL machine and says so when it cannot (CI has no /mnt/c; U8 laneExit above
-// covers the same rule there).
-test('U8 runWsl: a node.exe that exits 1 and writes no report makes the lane exit 2', { skip: canMount ? false : 'no writable /mnt/c/Users/Public: not a WSL machine' }, () => {
-  const root = mkdtempSync(join(PUBLIC, 'bc-lane-unit-'));
+// and the lane never guesses a Windows user directory, so neither does this test: it runs only
+// when BAND_COACH_WIN_TEST_ROOT names one (for example
+// /mnt/c/Users/<you>/AppData/Local/Temp/band-coach-win-lane/unit) and says so when unset. CI and
+// `npm test` skip it; U8 laneExit above covers the same rule there.
+const TEST_ROOT = process.env.BAND_COACH_WIN_TEST_ROOT;
+let canMount = false;
+try {
+  if (TEST_ROOT) {
+    mkdirSync(TEST_ROOT, { recursive: true });
+    accessSync(TEST_ROOT, constants.W_OK);
+    canMount = true;
+  }
+} catch {}
+
+test('U8 runWsl: a node.exe that exits 1 and writes no report makes the lane exit 2', { skip: canMount ? false : 'BAND_COACH_WIN_TEST_ROOT is not set to a writable /mnt/<letter>/ directory' }, () => {
+  const root = mkdtempSync(join(TEST_ROOT, 'bc-lane-unit-'));
   const bin = mkdtempSync(join(tmpdir(), 'bc-lane-unit-'));
   try {
     const fake = join(bin, 'node.exe');

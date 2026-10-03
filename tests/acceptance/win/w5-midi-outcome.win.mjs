@@ -29,18 +29,27 @@ export async function run(page) {
   await page.grant(['midi', 'midi-sysex']);
   const before = await status(page);
   const stateAfterGrant = await midiState(page);
-  await page.clickSelector('#setupBtn');
-  await page.waitFor("!document.getElementById('setupSheet').hidden", 10000);
-  await page.clickSelector('#ioBtn');
+  // A Set up input click that never opens the sheet is the finding, not a lane limit: report it, do not throw.
+  let stuck;
   try {
-    await page.waitFor(`document.getElementById('ioText').textContent.trim() !== ${JSON.stringify(before)}`, ANSWER_MS);
-    // Real hardware can settle in two steps (found, then working): read it again after a moment.
-    await new Promise((r) => setTimeout(r, 1000));
-  } catch {}
+    await page.clickSelector('#setupBtn');
+    await page.waitFor("!document.getElementById('setupSheet').hidden", 10000);
+  } catch (e) {
+    stuck = e.message;
+  }
+  if (!stuck) {
+    await page.clickSelector('#ioBtn');
+    try {
+      await page.waitFor(`document.getElementById('ioText').textContent.trim() !== ${JSON.stringify(before)}`, ANSWER_MS);
+      // Real hardware can settle in two steps (found, then working): read it again after a moment.
+      await new Promise((r) => setTimeout(r, 1000));
+    } catch {}
+  }
   const after = await status(page);
   // Only when the app said "no": what the browser says to the same request made straight from the page.
   const direct = DENIED.test(after) ? await page.evaluate("Promise.race([navigator.requestMIDIAccess().then((a) => 'ok, inputs ' + a.inputs.size, (e) => e.name + ': ' + e.message), new Promise((r) => setTimeout(() => r('no answer in 10 s'), 10000))])") : undefined;
   return {
+    stuck,
     before,
     after,
     direct,
@@ -48,7 +57,7 @@ export async function run(page) {
     stateAfterConnect: await midiState(page),
     exceptions: [...page.exceptions],
     midiOutValue: await page.evaluate("document.getElementById('midiOutSelect').value"),
-    permission: 'answered with Allow by the lane (Browser.grantPermissions: midi and midiSysex), as a person would',
+    permission: 'answered with Allow by the lane (Browser.grantPermissions: midi and midiSysex both granted, because a plain midi grant was not honoured on Windows Chrome 154, measured 2026-10-03)',
     midiSent: false,
   };
 }
@@ -69,6 +78,7 @@ const DENIED = /^Chrome asked to use your MIDI devices and the answer was no/;
 export function w5Verdict(o) {
   const findings = [];
   for (const x of o.exceptions) findings.push(`uncaught exception: ${x}`);
+  if (o.stuck) findings.push(`Set up input did not open its sheet after a click (${o.stuck})`);
   if (o.midiOutValue !== '') findings.push(`#midiOutSelect is "${o.midiOutValue}", not empty: an output was picked, which this scenario never does`);
   if (REFUSED.some((re) => re.test(o.after))) findings.push(`after an Allow, Connect said: "${o.after}"`);
   if (findings.length) return { status: 'FAIL', text: `W5 found ${findings.length} problem(s): ${findings.join('; ')}`, findings };

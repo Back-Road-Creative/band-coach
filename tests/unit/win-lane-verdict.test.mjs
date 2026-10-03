@@ -240,3 +240,88 @@ test('W4 w4Verdict: sound before a click, a warning, no sound after the click, a
     assert.match(v.text, finding, name);
   }
 });
+
+// ---- Fix round 1: run() itself, driven with a stand-in page. A step after a
+// click that times out is the product's failure to answer, so it must reach the
+// verdict as a FAIL with the finding, never leave run() as a throw (which the
+// lane reports as BLOCKED, a lane limitation).
+const timeout = (what) => () => Promise.reject(new Error(`${what} timed out`));
+const quietPage = (over = {}) => ({ consoleErrors: [], consoleWarnings: [], logEntries: [], exceptions: [], requests: [], clickSelector: async () => {}, press: async () => {}, ...over });
+
+test('W4 run: a click on Start that starts no sound is a FAIL naming it, not a throw', async () => {
+  const w4 = await load('w4-audio-gesture.win.mjs');
+  const page = quietPage({
+    audio: { running: () => [], waitForRunning: timeout('waitForRunning') },
+    evaluate: async (expr) => (/playBtn/.test(expr) ? 'Start' : undefined),
+    waitFor: timeout('waitFor Pause'),
+  });
+  const v = w4.w4Verdict(await w4.run(page));
+  assert.equal(v.status, 'FAIL');
+  assert.match(v.text, /0 running AudioContext/);
+  assert.match(v.text, /says "Start"/);
+  assert.match(v.text, /waitForRunning timed out/);
+});
+
+test('W4 run: sound that starts but a button that never says Pause is a FAIL on the button alone', async () => {
+  const w4 = await load('w4-audio-gesture.win.mjs');
+  let clicked = false;
+  const page = quietPage({
+    audio: { running: () => (clicked ? [{}] : []), waitForRunning: async () => {} },
+    clickSelector: async () => { clicked = true; },
+    evaluate: async (expr) => (/playBtn/.test(expr) ? 'Start' : undefined),
+    waitFor: timeout('waitFor Pause'),
+  });
+  const v = w4.w4Verdict(await w4.run(page));
+  assert.equal(v.status, 'FAIL');
+  assert.match(v.text, /says "Start"/);
+  assert.doesNotMatch(v.text, /running AudioContext/);
+});
+
+test('W3 run: Settings that never shows Check for updates is a FAIL, not a throw', async () => {
+  const w3 = await load('w3-update-check.win.mjs');
+  const page = quietPage({ evaluate: async () => '', waitFor: timeout('waitFor updateCheckBtn') });
+  const v = w3.w3Verdict(await w3.run(page, { expectVersion: '1.9.0' }));
+  assert.equal(v.status, 'FAIL');
+  assert.match(v.text, /Settings/);
+  assert.match(v.text, /waitFor updateCheckBtn timed out/);
+});
+
+test('W5 run: Set up input that never opens its sheet is a FAIL, not a throw', async () => {
+  const w5 = await load('w5-midi-outcome.win.mjs');
+  const page = quietPage({ grant: async () => {}, evaluate: async (expr) => (/midiOutSelect/.test(expr) ? '' : /permissions/.test(expr) ? 'granted' : 'Screen and computer keys work.'), waitFor: timeout('waitFor setupSheet') });
+  const v = w5.w5Verdict(await w5.run(page));
+  assert.equal(v.status, 'FAIL');
+  assert.match(v.text, /Set up input/);
+  assert.match(v.text, /waitFor setupSheet timed out/);
+});
+
+test('W5 permission string says what was granted and why, not "as a person would"', async () => {
+  const w5 = await load('w5-midi-outcome.win.mjs');
+  const page = quietPage({ grant: async () => {}, evaluate: async (expr) => (/midiOutSelect/.test(expr) ? '' : /permissions/.test(expr) ? 'granted' : 'x'), waitFor: async () => {} });
+  const o = await w5.run(page);
+  assert.match(o.permission, /midi and midiSysex/);
+  assert.match(o.permission, /Chrome 154/);
+  assert.doesNotMatch(o.permission, /as a person/);
+});
+
+test('W2 run: it reads the stored value until two reads a save-delay apart agree, and only then reads what was played', async () => {
+  const w2 = await load('w2-progress-reload.win.mjs');
+  const log = [];
+  const raw = ['saved-late-1', 'saved-late-2', 'saved-late-2', 'saved-late-2'];
+  const page = quietPage({
+    evaluate: async (expr) => {
+      if (expr === "localStorage.getItem('bandcoach.v1')") { const v = raw.shift() ?? 'saved-late-2'; log.push(`raw:${v}`); return v; }
+      if (/sessLine/.test(expr)) { log.push('read'); return { stored: 'x', shown: 's', ready: '1' }; }
+      if (/getElementById\('prompt'\)/.test(expr)) return 'Play C';
+      return undefined;
+    },
+    waitFor: async () => {},
+    reload: async () => {},
+  });
+  await w2.run(page, { paceMs: 1, settleMs: 5 });
+  const afterEnd = log.slice(log.indexOf('read') + 1); // reads after "before": the End-session settle, then played, then afterReload
+  const rawReads = afterEnd.filter((l) => l.startsWith('raw:'));
+  assert.ok(rawReads.length >= 3, `kept reading until stable (${rawReads.join(', ')})`);
+  assert.deepEqual(rawReads.slice(-2), ['raw:saved-late-2', 'raw:saved-late-2']);
+  assert.ok(afterEnd.indexOf('read') > afterEnd.lastIndexOf(rawReads.at(-1)), 'played was read after the stored value settled');
+});
