@@ -87,7 +87,7 @@ function withDeadline(promise, ms, what) {
   return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
 
-// One scenario, one launch of a visible Chrome with a fresh profile.
+// One scenario, one launch of a headed Chrome (off-screen unless --visible) with a fresh profile.
 async function runScenario(entry, ctx) {
   const t0 = Date.now();
   const mod = await import(pathToFileURL(join(here, entry.file)).href);
