@@ -114,8 +114,9 @@ test('T2: control: the starter row still opens the starter, before and after a c
   await page.evaluate('document.querySelector(\'#mainNav button[data-route="practice"]\').click()');
   await page.waitFor("window.__coach.panelOpen() === null");
   await openSongsPanel(page);
-  // The library rows load after the starter rows; wait for the list to finish before reading it.
-  await page.waitFor(`Array.from(document.querySelectorAll('.panel-songs-row button')).some(b => b.textContent === ${JSON.stringify(COPY_TITLE)})`, 20000).catch(() => {});
+  // The library rows load after the starter rows: wait for any row beyond the starters (not for the
+  // copy's title, which the assertions below read), so a wrong title is an assertion, not a timeout.
+  await page.waitFor(`document.querySelectorAll('.panel-songs-row button').length > ${starterSongs.length}`);
   const rows = await rowTitles(page);
   assert.ok(rows.includes(TITLE), 'the starter row is still listed: ' + rows.join(' | '));
   assert.ok(rows.includes(COPY_TITLE), 'the copy has its own row: ' + rows.join(' | '));
