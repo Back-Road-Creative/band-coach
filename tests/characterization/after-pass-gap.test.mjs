@@ -7,11 +7,18 @@
 // through the real onPitch via window.__coach.pitchFrame(frame, dt). G3, G4, G5a and G6b are green at
 // the parent and at head (controls: real silence still releases, a fresh pluck and a different note
 // still fire); G1, G6a, G7 and G8 are red at the parent. G8a/G8b pin the two resets of the quiet clock
-// (a pitched frame, and a wobble frame at or above the release floor): without either, short dropouts
+// (a pitched frame, and a wobble frame at or above the release floor): without either, short quiet bursts
 // spread across one ring add up to a release mid-ring.
+// A frame with rms exactly 0 is a capture dropout, not quiet (a live mic with processing off never reads
+// 0.0, src/app.js:351): it holds the clock. G9 (10 zero frames delivered 11.6 ms apart add up to 0.104 s,
+// over the release time, yet the ring is not released) is red at 71e6d0d, where zeros counted as quiet;
+// G9b (non-zero quiet still releases) is its control; G9c pins "hold, not reset" (zeros between two
+// stretches of real quiet leave the clock where it was). Every case's "quiet" is therefore a small
+// non-zero rms (QUIET_RMS), below the release floor, never 0.
 // Not here: a recovery-onset rule (an onset quieter than the last 0.3 s is a dip's recovery, not a
-// pluck). The F8 probe measured a real same-note re-pluck's onset frame at 0.98 of the ring's loudest
-// frame, so that rule would drop a real re-pluck; it is left to JP (see the PR body).
+// pluck). The F8 probe measured a real same-note re-pluck's onset frame at 0.95 to 1.02 of the ring's
+// loudest frame across runs, below 1.0 in every set, so that rule would drop a real re-pluck; it is left
+// to JP (see the PR body).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { HTML_PATH } from '../helpers/html-path.mjs';
@@ -21,7 +28,10 @@ import * as levels from '../../src/audio/levels.js';
 const STEPS = [['16', 0.016], ['140', 0.14]];
 const BURST_DT = 0.004;
 const frame = (m, rms, extra) => ({ rms, freq: 440 * Math.pow(2, (m - 69) / 12), midi: m, clarity: 0.95, onset: false, ...extra });
-const quiet = () => ({ rms: 0, freq: 0, clarity: 0, onset: false });
+const QUIET_RMS = 0.001; // real quiet: non-zero and below the release floor (begin() asserts it); exact 0 is a dropout
+const quiet = () => ({ rms: QUIET_RMS, freq: 0, clarity: 0, onset: false });
+const dropout0 = () => ({ rms: 0, freq: 0, clarity: 0, onset: false });
+const HOP_DT = 512 / 44100; // what the worklet's 512-sample hop is worth in audio time
 const feed = async (page, fr, dt) => { await page.waitFor('!window.__coach.deaf()'); await page.evaluate(`window.__coach.pitchFrame(${JSON.stringify(fr)}, ${dt})`); };
 const feedAll = async (page, frs, dt) => { for (const fr of frs) await feed(page, fr, dt); };
 const rep = (n, fn) => Array.from({ length: n }, fn);
@@ -39,6 +49,7 @@ async function begin(t) {
   await read(page, 'window.__t0 = null; window.__coach.task().limit = 1e9; window.__first = window.__coach.cur().info');
   assert.notEqual(await read(page, 'window.__coach.cur().info.kind'), 'chord');
   const g = await read(page, 'window.__coach.gates()');
+  assert.ok(0 < QUIET_RMS && QUIET_RMS < levels.releaseFloor(g), 'the quiet level is non-zero and below the release floor');
   return { page, loud: g.note * 10 };
 }
 const target = (page) => read(page, 'window.__coach.cur().info.midi');
@@ -148,6 +159,42 @@ for (const [id, STEP] of STEPS) {
     await feedAll(page, three(m1, loud), STEP); // no onset
     notJudged(await judged(page), name);
   });
+  const sameNoteTail = async (page, m1, loud) => { await feedAll(page, three(m1, loud), STEP); return judged(page); }; // no onset
+  test(`G9 a capture dropout of exact-zero frames is not a release (step ${id})`, async (t) => {
+    const { page, loud } = await begin(t);
+    const m1 = await pass(page, loud);
+    await nextTask(page);
+    assert.notEqual(await target(page), m1, 'the next item is a different note');
+    await feedAll(page, rep(6, () => frame(m1, loud)), STEP);
+    await feedAll(page, rep(10, dropout0), HOP_DT); // 9 counted gaps = 0.1045 s, over the release time
+    notJudged(await sameNoteTail(page, m1, loud), 'G9');
+  });
+
+  test(`G9b real quiet (non-zero) of the same length still releases (step ${id})`, async (t) => {
+    const { page, loud } = await begin(t);
+    const m1 = await pass(page, loud);
+    await nextTask(page);
+    assert.notEqual(await target(page), m1, 'the next item is a different note');
+    await feedAll(page, rep(6, () => frame(m1, loud)), STEP);
+    await feedAll(page, rep(5, quiet), 0.03); // 4 counted gaps = 0.12 s
+    const j = await sameNoteTail(page, m1, loud);
+    assert.match(j.text, /That was/, 'the released note was not judged as a new one');
+  });
+
+  test(`G9c a dropout inside real quiet holds the clock, it does not reset it (step ${id})`, async (t) => {
+    const { page, loud } = await begin(t);
+    const m1 = await pass(page, loud);
+    await nextTask(page);
+    await sameAsFirst(page);
+    await feedAll(page, rep(6, () => frame(m1, loud)), STEP);
+    await feedAll(page, rep(7, quiet), 0.01); // 6 counted gaps = 0.06 s
+    await feedAll(page, rep(10, dropout0), HOP_DT); // held
+    await feedAll(page, rep(5, quiet), 0.01); // 5 more = 0.11 s in all, over the release time
+    const j = await sameNoteTail(page, m1, loud);
+    assert.equal(j.done, true, 'the zero frames reset the quiet clock');
+    assert.equal(j.cls, 'ok');
+  });
+
   splitQuiet('G8a a pitched frame between two short quiet bursts resets the clock', async (page, m1, loud) => frame(m1, loud));
   splitQuiet('G8b a wobble frame at the release floor between two short quiet bursts resets the clock', async (page) => {
     const g = await read(page, 'window.__coach.gates()');
@@ -164,4 +211,7 @@ test('G7 the release constant and the premises of the cases above', () => {
   assert.ok(4 * 0.14 >= levels.QUIET_RELEASE_SEC, 'G3/G6b: real silence must be at least the release time');
   assert.ok(5 * 0.016 < levels.QUIET_RELEASE_SEC && levels.QUIET_RELEASE_SEC <= 11 * 0.016, 'G8: one burst of five 16 ms gaps is under the release time, two together are not');
   assert.ok(0.14 >= levels.QUIET_RELEASE_SEC, 'G6a: one long frame would release at once if the first quiet frame counted');
+  assert.ok(9 * HOP_DT >= levels.QUIET_RELEASE_SEC, 'G9: the zero frames, if they counted, would release the note');
+  assert.ok(4 * 0.03 >= levels.QUIET_RELEASE_SEC, 'G9b: the non-zero quiet totals at least the release time');
+  assert.ok(6 * 0.01 < levels.QUIET_RELEASE_SEC && 6 * 0.01 + 5 * 0.01 >= levels.QUIET_RELEASE_SEC && 5 * 0.01 < levels.QUIET_RELEASE_SEC, 'G9c: each stretch of quiet is under the release time, both together reach it');
 });

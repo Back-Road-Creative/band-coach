@@ -14,7 +14,9 @@
 // ringing note after 0.1 s of delivered quiet, not after three frames). Remaining: a false onset after
 // a clarity dropout (src/app.js:1404) and the quiet-at-present branch (src/app.js:1062); the test.todo
 // entries below name them. Live-capture strays out of 42 runs (clipped 20, loud 10, decay999 6, quiet
-// 6), measured at load 31 to 21 before Q10d-2 and 21 to 45 after it: 5 then 2, every one an onset.
+// 6), before then after Q10d-2, in four back-to-back pairs: 5 then 2 (load 21 to 45), 3 then 1 (load 5 to
+// 30), 1 then 1 (load 13 to 26) and 18 then 19 (load 36 to 54). Most strays were false onsets; the
+// heaviest pair also had quiet-at-present ones. The rate follows the machine's load more than the change.
 // The literal claims they break (T1 and T7: no "That was" record in the window; T4: one pass and
 // nothing else) stay todos: the rate moves with machine load, so no literal claim is deterministic.
 import { test } from 'node:test';
@@ -104,9 +106,10 @@ for (const [label, gain] of [['quiet', 0.12], ['loud', 1.0]]) {
 // by 0.1 s of delivered quiet, src/app.js:1406). Residual causes still let a ring fire against the next
 // item in live capture, so these stay todos: (a) a false onset on a clipped or long ring right after a
 // clarity dropout (src/audio/onset.js; the pluck branch's `if (fr.onset) { released = true; stableN = 0; }`,
-// src/app.js:1404), the only cause seen in the p3 runs; (b) the quiet-at-present branch (src/app.js:1062),
-// seen in the p1q replay at about 2 of 42. p3 rates (clipped 20, loud 10, decay999 6, quiet 6): before
-// Q10d-2 5/42 (all clipped) at load 31 to 21, after 2/42 (all clipped) at load 21 to 45. JP decides.
+// src/app.js:1404), the commonest cause in the p3 runs; (b) the quiet-at-present branch (src/app.js:1062),
+// seen in the p1q replay at about 2 of 42. p3 rates (clipped 20, loud 10, decay999 6, quiet 6), before
+// then after Q10d-2: 5/42 then 2/42, 3/42 then 1/42, 1/41 then 1/42, 18/42 then 19/42, at load 5 to 54.
+// JP decides.
 test.todo('T1 (literal) no "That was" record in the window after a correct pluck: not yet green, see the residual causes above (false onset after a dropout, src/app.js:1404; quiet at a task start, src/app.js:1062)');
 
 // T2: the wrong note on a guitar names both notes and counts FRETS, by the real distance and
@@ -142,8 +145,8 @@ test('T3 the same wrong note plucked three times in one loop is corrected each t
 // present() fix alone.
 // Q10d fixed the present() re-arm (src/app.js:1062) and Q10d-2 the quiet rule (src/app.js:1406); residual
 // causes remain (a: false onset after a clarity dropout, src/audio/onset.js and src/app.js:1404; b: quiet
-// at a task start, src/app.js:1062). decay999 strayed in 0 of 6 p3 runs before and after Q10d-2 (1 of 6 in
-// p1c, whose load was not recorded), so the claim is load-dependent, not deterministic. JP decides.
+// at a task start, src/app.js:1062). the decay999 case strayed in 1 of 6 in p1c (load not recorded) and in 1 of 6
+// in the heaviest p3 pair, so the claim is load-dependent, not deterministic. JP decides.
 test.todo('T4 a decaying correct note is passed once and never corrected: not yet green, see the residual causes above (false onset after a dropout, src/app.js:1404; quiet at a task start, src/app.js:1062)');
 
 // T5: an empty room. One plain sentence, said once in two loops, and nothing judged.
@@ -178,8 +181,8 @@ test('T7 a clipped pluck of the target note is passed, never corrected first', a
 // The same after-pass re-fire as T1, on the clipped note.
 // Q10d fixed the present() re-arm (src/app.js:1062) and Q10d-2 the quiet rule (src/app.js:1406); the
 // residual cause is a false onset after a clarity dropout (src/audio/onset.js and src/app.js:1404), plus
-// the quiet-at-present branch (src/app.js:1062). Clipped strays in 5 of 20 p3 runs before Q10d-2 and 2 of
-// 20 after (load 31 to 21 and 21 to 45). JP decides.
+// the quiet-at-present branch (src/app.js:1062). p3 strays out of all 42 runs, before then after Q10d-2:
+// 5 then 2, 3 then 1, 1 then 1, 18 then 19, at load 5 to 54 (see the header). JP decides.
 test.todo('T7 (literal) no "That was" record at all after a clipped pluck of the target: not yet green, see the residual causes above (false onset after a dropout, src/app.js:1404; quiet at a task start, src/app.js:1062)');
 
 // T8: two notes at once (the target and the fifth above): told it is more than one note, and never
