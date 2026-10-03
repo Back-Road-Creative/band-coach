@@ -224,6 +224,9 @@ export function build(def) {
 
 export const starterSongs = starterSongDefs.map(build);
 
+// Every starter tune's id. A saved copy is never stored under one (library.add()).
+export const starterIds = new Set(starterSongs.map((s) => s.id));
+
 // True when any note in any part of `song` carries an explicit left-hand
 // tag -- i.e. the song was built from a def with an `lh` string above. The
 // single source of truth for "is this a two-hand piece", used by
