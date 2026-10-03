@@ -1,5 +1,5 @@
-// The Windows lane: README checks run in a real, visible Windows Chrome by the
-// same driver the release tests use, started from WSL because that is where the
+// The Windows lane: README checks run in a real, headed Windows Chrome (off-screen unless --visible)
+// by the same driver the release tests use, started from WSL because that is where the
 // repository is. It is NOT part of `npm test`, the gate or CI (docs/windows-lane.md).
 //
 // One file, two sides, told apart by the platform it runs on:

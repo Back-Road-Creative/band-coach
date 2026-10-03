@@ -2,9 +2,9 @@
 
 A person hand-tests the downloaded `band-coach.html` on Windows before a release
 (README, "Before announcing a release: a five-minute human check"). The Windows lane
-runs parts of that check in a real, visible Windows Chrome, started from WSL, and keeps
-the evidence. It does not replace the hand test for what it cannot reach (see
-"What it covers").
+runs parts of that check in a real, headed Windows Chrome (off-screen unless `--visible`),
+started from WSL, and keeps the evidence. It does not replace the hand test for what it
+cannot reach (see "What it covers").
 
 It is **outside `npm test`, `npm run gate` and CI**. Its scenario files are named
 `*.win.mjs` so no test glob picks them up, and it needs a Windows machine with Chrome
@@ -46,7 +46,8 @@ judged) or BLOCKED (a step could not be done, named in the text). Only PASS coun
 - **0**: every registered scenario PASSED in a full run.
 - **1**: something FAILED, was OBSERVED or BLOCKED, the run was partial (`--only`), or nothing ran.
 - **2**: the lane could not run: bad arguments, `--win-root` missing or not under
-  `/mnt/<letter>/`, no `node.exe`, Chrome not found, or the file's sha256 is not the one given.
+  `/mnt/<letter>/`, no `node.exe`, Chrome not found, the file's sha256 is not the one given,
+  an unknown `--only` scenario, or Chrome could not be started (the result is BLOCKED with the driver's error).
 
 The report (JSON) holds each result with what was observed, the browser and launch flags,
 the sha256 and size of the file opened, and the wall time.
