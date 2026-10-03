@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import { createLibrary, memoryStore, indexedDbStore } from '../../src/song/library.js';
 import { SCHEMA, TICKS_PER_QUARTER } from '../../src/song/model.js';
+import * as starter from '../../src/song/starter/index.js';
 
 function song(id, overrides = {}) {
   return {
@@ -285,4 +286,67 @@ test('createLibrary works end to end over indexedDbStore', async () => {
   assert.equal(list[0].addedAt, 42);
   await library.remove('a');
   assert.equal(await library.get('a'), null);
+});
+
+// ---- a starter tune's id is reserved: a saved copy never lands under it ----
+//
+// Starters are shipped, never stored (the Songs list draws them from
+// starterSongs). A stored song under a starter's id would sit next to the
+// shipped starter with the same id, and every starter-first lookup by id
+// (Practise this, Carry on) would open the starter instead of the copy.
+// The set here is built from starterSongs directly, not from library.js's
+// own export, so it is an independent check on what the library reserves.
+const starterIdSet = new Set(starter.starterSongs.map((s) => s.id));
+
+test('starter ids: the module exports the set of every starter song id', () => {
+  assert.ok(starter.starterSongs.length > 0);
+  assert.ok(starter.starterIds instanceof Set, 'starterIds is a Set');
+  assert.deepEqual([...starter.starterIds].sort(), [...starterIdSet].sort());
+});
+
+test('add: a song carrying a starter tune\'s id is stored under a different id, for every starter', async () => {
+  const library = createLibrary(memoryStore());
+  let ran = 0;
+  for (const s of starter.starterSongs) {
+    const r = await library.add(song(s.id), { now: 1 });
+    ran++;
+    assert.notEqual(r, s.id, 'starter "' + s.id + '": the copy must not be stored under the starter\'s id');
+    assert.ok(!starterIdSet.has(r), 'starter "' + s.id + '": "' + r + '" must not be another starter\'s id either');
+    assert.equal((await library.get(r)).id, r, 'the stored copy carries the id it was stored under');
+    assert.equal(await library.get(s.id), null, 'nothing is stored under the starter\'s id "' + s.id + '"');
+  }
+  assert.equal(ran, starter.starterSongs.length);
+});
+
+test('add: two copies of the same starter get two different non-starter ids, both retrievable', async () => {
+  const library = createLibrary(memoryStore());
+  const a = await library.add(song('hot-cross-buns', { title: 'first' }), { now: 1 });
+  const b = await library.add(song('hot-cross-buns', { title: 'second' }), { now: 2 });
+  assert.ok(!starterIdSet.has(a), 'the first copy\'s id "' + a + '" is not a starter id');
+  assert.ok(!starterIdSet.has(b), 'the second copy\'s id "' + b + '" is not a starter id');
+  assert.notEqual(a, b);
+  assert.equal((await library.get(a)).title, 'first');
+  assert.equal((await library.get(b)).title, 'second');
+});
+
+test('importAll: a song carrying a starter id is stored under another id; ordinary ids are kept', async () => {
+  const library = createLibrary(memoryStore());
+  const { ids } = await library.importAll([song('hot-cross-buns'), song('plain')]);
+  assert.equal(ids.length, 2);
+  assert.equal(ids[1], 'plain');
+  assert.ok(!starterIdSet.has(ids[0]), 'the starter-id song got "' + ids[0] + '", not a starter id');
+  const listed = (await library.list()).map((m) => m.id);
+  assert.equal(listed.length, 2);
+  assert.ok(listed.every((id) => !starterIdSet.has(id)), 'no stored song sits under a starter id: ' + listed.join(', '));
+});
+
+test('add: ids that are not starter ids are kept, and update keeps a copy\'s id (negative control)', async () => {
+  const library = createLibrary(memoryStore());
+  assert.equal(await library.add(song('plain'), { now: 1 }), 'plain');
+  assert.ok(!starterIdSet.has('hot-cross-buns-2'), 'the control id is not a starter id');
+  assert.equal(await library.add(song('hot-cross-buns-2'), { now: 1 }), 'hot-cross-buns-2');
+  const r = await library.add(song('hot-cross-buns'), { now: 1 });
+  await library.update(r, song('x', { title: 'edited' }), { now: 2 });
+  assert.equal((await library.get(r)).title, 'edited');
+  assert.equal((await library.get(r)).id, r);
 });

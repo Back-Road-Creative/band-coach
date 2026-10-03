@@ -151,9 +151,9 @@ test('capture "Make it a lesson" shows the lesson for the captured tune', async 
 test('editor "Practise this" shows the lesson for the song just saved', async (t) => {
   const page = await launchPage(htmlPath);
   t.after(() => page.close());
-  // A song of the learner's own (an ABC import), not a copy of a starter: a saved
-  // starter copy keeps the starter's id, which checkOpenRequest() resolves to the
-  // starter itself (see the note in the report), a separate matter from this test.
+  // A song of the learner's own (an ABC import), not a copy of a starter: this test is about
+  // the lesson being shown. A saved starter copy has its own id and "Practise this" opens it
+  // (tests/characterization/songs-starter-copy.test.mjs).
   await importAbc(t, page, ABC_CLEAN);
   await page.evaluate("document.querySelector('.panel-learn-fixitup-btn').click()");
   await page.waitFor("window.__coach.panelOpen() === 'editor'");
