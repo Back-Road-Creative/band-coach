@@ -1434,7 +1434,7 @@ import { register as registerPathway } from './ui/pathway.js';
       // release check below can never see on its own.
       if (fr.onset) { released = true; stableN = 0; }
       if (e.info.kind === 'chord') { if (fr.rms < gates.chord || !fr.chroma) { holdFor = 0; return; } const j = judgeChord({ chroma: fr.chroma, targetPcs: e.info.pcs }); e.score = j.score; if (j.ok) { holdFor += dt; if (holdFor > 0.18) passEl(undefined, e.info.label + ': that rings true.'); } else holdFor = 0; if (fr.rms > 0.02) lastInputAt = now(); return; }
-      if (fr.rms < gates.note || !fr.freq) { stableN++; if (fr.rms !== 0) { if (fr.rms < releaseFloor(gates)) { if (quietSeen) quietFor += dt; quietSeen = true; if (quietFor >= QUIET_RELEASE_SEC) released = true; } else { quietSeen = false; quietFor = 0; } } stableMidi = -1; return; } quietSeen = false; quietFor = 0; // an exact-0 rms frame is a capture dropout (a live mic with processing off never reads 0.0): it holds the quiet clock
+      if (fr.rms < gates.note || !fr.freq) { stableN++; if (fr.rms !== 0) { if (fr.rms < releaseFloor(gates)) { if (quietSeen) quietFor += dt; quietSeen = true; if (quietFor >= QUIET_RELEASE_SEC) released = true; } else { quietSeen = false; quietFor = 0; } } stableMidi = -1; return; } quietSeen = false; quietFor = 0; // an exact-0 rms frame is a capture dropout (with the browser's processing off, a live mic's silence is not 0.0; a device-level gate can still send zeros): it holds the quiet clock
       const m = Math.round(fr.midi); if (m === stableMidi) stableN++; else { stableMidi = m; stableN = 1; }
       if (stableN === 3 && (released || m !== lastFired)) { lastFired = m; released = false; onNote(m, false, 'mic'); }
       return;

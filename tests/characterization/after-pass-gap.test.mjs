@@ -9,9 +9,10 @@
 // still fire); G1, G6a, G7 and G8 are red at the parent. G8a/G8b pin the two resets of the quiet clock
 // (a pitched frame, and a wobble frame at or above the release floor): without either, short quiet bursts
 // spread across one ring add up to a release mid-ring.
-// A frame with rms exactly 0 is a capture dropout, not quiet (a live mic with processing off never reads
-// 0.0, src/app.js:351): it holds the clock. G9 (10 zero frames delivered 11.6 ms apart add up to 0.104 s,
-// over the release time, yet the ring is not released) is red at 71e6d0d, where zeros counted as quiet;
+// A frame with rms exactly 0 is a capture dropout, not quiet (with the browser's processing off a live
+// mic's silence is not 0.0, src/app.js:351): it holds the clock. G9 (10 zero frames delivered 11.6 ms
+// apart add up to 0.104 s, over the release time, yet the ring is not released) is red at 71e6d0d, where
+// zeros counted as quiet;
 // G9b (non-zero quiet still releases) is its control; G9c pins "hold, not reset" (zeros between two
 // stretches of real quiet leave the clock where it was). Every case's "quiet" is therefore a small
 // non-zero rms (QUIET_RMS), below the release floor, never 0.
