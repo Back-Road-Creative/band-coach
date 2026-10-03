@@ -9,12 +9,16 @@
 // learner actually downloads, `dist/release/band-coach.html`: minified JS,
 // the `window.__coach` debug hook compiled out entirely (via esbuild's
 // `define`, so the minifier can dead-code-eliminate it), and the version +
-// build date stamped into a meta tag and the page footer. The plain dev
-// build used by the test suite is unaffected by any of that.
+// build date stamped into a meta tag and the page footer. The build date is
+// the date of the commit being built (see `resolveBuildDate`), so two release
+// builds of one commit -- the staged file and the published one -- are one
+// file whatever day each ran. The plain dev build used by the test suite is
+// unaffected by any of that and never asks git.
 import { build as esbuildBuild } from 'esbuild';
-import { readFileSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, rmSync, realpathSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = dirname(here);
@@ -33,12 +37,62 @@ const JS_PLACEHOLDER = '/*__BAND_COACH_JS__*/';
 const VERSION_META_PLACEHOLDER = '<meta name="band-coach-version" content="">';
 const VERSION_FOOTER_PLACEHOLDER = '<footer id="verFooter" aria-hidden="true"></footer>';
 
-// UTC YYYY-MM-DD. Honours SOURCE_DATE_EPOCH (seconds since epoch) so tests
-// can pin the build date instead of depending on wall-clock time.
+// The release footer's UTC YYYY-MM-DD, resolved in this order:
+//   a. SOURCE_DATE_EPOCH (seconds since epoch) when set and non-empty, so a
+//      caller or a test can pin it;
+//   b. otherwise the committer time of HEAD (`%ct`, not the author time: a
+//      rebase or merge-forward keeps the author date but makes a new commit),
+//      only when `root` is itself the top of a git work tree, so a copy of this
+//      tree inside some other repo never takes that repo's date;
+//   c. otherwise the wall clock, with a reason the caller prints.
+// Never throws on a git problem; a non-numeric SOURCE_DATE_EPOCH still throws
+// the RangeError from toISOString, as it always has.
+// A guess, not a measurement: it only has to be longer than a healthy `git log -1`.
+const GIT_LOOKUP_TIMEOUT_MS = 10000;
+const isoDay = (ms) => new Date(ms).toISOString().slice(0, 10);
+
+export function resolveBuildDate({ env = process.env, root, run = spawnSync, now = Date.now }) {
+  const epochSeconds = env.SOURCE_DATE_EPOCH;
+  if (epochSeconds) return { date: isoDay(Number(epochSeconds) * 1000), source: 'SOURCE_DATE_EPOCH' };
+  const wall = (reason) => ({ date: isoDay(now()), source: 'wall-clock', reason });
+  // git honours GIT_DIR, GIT_WORK_TREE and friends over its own discovery, so none of them reach it.
+  const gitEnv = {};
+  for (const k of Object.keys(env)) if (!k.toUpperCase().startsWith('GIT_')) gitEnv[k] = env[k];
+  // Runs git; returns { out } on success or { why } (a one-line reason) on any failure.
+  const git = (args) => {
+    let r;
+    try {
+      r = run('git', args, { cwd: root, env: gitEnv, encoding: 'utf8', timeout: GIT_LOOKUP_TIMEOUT_MS });
+    } catch (err) {
+      return { why: 'git failed (' + (err && err.message) + ')' };
+    }
+    if (r.error) return { why: r.error.code === 'ENOENT' ? 'git is missing from this machine' : 'git failed (' + (r.error.code || r.error.message) + ')' };
+    if (r.status !== 0) {
+      const firstLine = String(r.stderr || '').split(/\r?\n/).find((l) => l.trim());
+      return { why: 'git failed (' + (r.status === null ? 'signal ' + r.signal : 'exit ' + r.status) + (firstLine ? ': ' + firstLine.trim() : '') + ')' };
+    }
+    return { out: String(r.stdout || '').trim() };
+  };
+  const top = git(['rev-parse', '--show-toplevel']);
+  if (top.why) return wall(top.why);
+  // `resolve('')` is the cwd, so an empty answer would pass the comparison below without git naming a toplevel.
+  if (!top.out) return wall('not the top of a git work tree (git named no toplevel)');
+  try {
+    const same = (a, b) => process.platform === 'win32' ? a.toLowerCase() === b.toLowerCase() : a === b;
+    if (!same(realpathSync(resolve(top.out)), realpathSync(resolve(root)))) return wall('not the top of a git work tree');
+  } catch (err) {
+    return wall('not the top of a git work tree (could not compare paths: ' + err.code + ')');
+  }
+  const log = git(['-c', 'log.showSignature=false', 'log', '-1', '--format=%ct']);
+  if (log.why) return wall(log.why);
+  if (!/^\d+$/.test(log.out)) return wall('git output was not a number');
+  return { date: isoDay(Number(log.out) * 1000), source: 'commit' };
+}
+
 function buildDate() {
-  const epochSeconds = process.env.SOURCE_DATE_EPOCH;
-  const ms = epochSeconds ? Number(epochSeconds) * 1000 : Date.now();
-  return new Date(ms).toISOString().slice(0, 10);
+  const r = resolveBuildDate({ root });
+  if (r.source === 'wall-clock') console.error('build date: fell back to the wall clock (' + r.reason + '); this build is not reproducible across days');
+  return r.date;
 }
 
 // `outDir` defaults to `dist/` — the real build output. It is a parameter
