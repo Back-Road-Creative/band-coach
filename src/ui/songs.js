@@ -686,11 +686,15 @@ function mountSongsPanel(hostEl, api) {
     if (typeof api.say === 'function') api.say(text, kind);
   }
 
+  // The library read is async and mount + show() each call this back to back, so
+  // the list is rebuilt only AFTER the read, in one synchronous block: an
+  // overlapping call can never leave a saved song appended twice.
   async function refreshList() {
-    listUl.innerHTML = '';
-    starterSongs.forEach((song) => listUl.appendChild(songRow(song, null)));
+    if (!listUl.firstChild) starterSongs.forEach((song) => listUl.appendChild(songRow(song, null)));
     let saved = [];
     try { saved = await library.list(); } catch (e) { saved = []; }
+    listUl.innerHTML = '';
+    starterSongs.forEach((song) => listUl.appendChild(songRow(song, null)));
     saved
       .slice()
       .sort((a, b) => a.title.localeCompare(b.title))
