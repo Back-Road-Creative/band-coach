@@ -495,6 +495,8 @@ export function effectiveWaitMs(requestedMs) {
 // Two: a re-send every budgetMs/2 (10000 ms at the 20000 ms floor). Measured on this loaded box
 // (1000 cycles, 2026-10-03) the slowest first-try switch took 3603 ms, and a slice must be at least
 // twice that so a slow-but-arriving activation is not answered with a second one; 4 (5000 ms) was not.
+// That 3603 ms came from Date.now and may be a wall-clock jump rather than a slow switch: a
+// failure in the same run read 20000 ms by Date.now against 16425 ms monotonic, about 3.6 s apart.
 const TAB_SWITCH_ATTEMPTS = 2;
 export function makeTabSwitcher({
   send, pageTargetId, readState, budgetMs = effectiveWaitMs(WAIT_FLOOR_MS), attempts = TAB_SWITCH_ATTEMPTS, pollMs = 50,
