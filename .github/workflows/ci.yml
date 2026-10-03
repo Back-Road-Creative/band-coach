@@ -18,12 +18,12 @@ name: ci
 # nothing failing. tests/unit/ci-workflow-no-duplicate-run.test.mjs and
 # ci-workflow-artifacts-weekly.test.mjs pin the headroom. A failed or
 # cancelled run uploads dist/test-artifacts/ so its screenshots and logs
-# survive. build/ci-summary.mjs turns the two step logs into a READY / NOT READY
-# verdict and a run-summary artifact (retries, skips and cancellations in the
-# release lane are visible, not hidden behind a green job). The weekly run on a
-# fresh browser is a separate file (weekly-current-browser.yml): bin/autoland.py counts every ci.yml run on a
-# commit whatever its event, so a scheduled run here would feed the merge
-# barrier.
+# survive. build/ci-summary.mjs turns the two step logs into a READY / NOT
+# READY verdict and a run-summary artifact (retries, skips and cancellations
+# in the release lane are visible, not hidden behind a green job). The weekly
+# run on a fresh browser is a separate file (weekly-current-browser.yml):
+# bin/autoland.py counts every ci.yml run on a commit whatever its event, so
+# a scheduled run here would feed the merge barrier.
 on:
   push:
     branches: [main]
@@ -78,8 +78,9 @@ jobs:
           set +e
           npm test 2>&1 | tee "$RUNNER_TEMP/suite.log"
           rc=${PIPESTATUS[0]}; echo "$rc" > "$RUNNER_TEMP/suite.rc"; exit "$rc"
-      # NOT READY (a retry, skip, cancel or passing todo in the release lane, or no
-      # release block at all) fails this step even when the suite step went green.
+      # NOT READY (a retry, skip, cancel or passing todo with a reason in the
+      # release lane, or no release block at all) fails this step even when the
+      # suite step went green.
       - name: summarise the run
         if: always()
         env:

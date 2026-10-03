@@ -98,10 +98,16 @@ test('ci runs the full release lane exactly once: gate.test.mjs first, then npm 
   assert.doesNotMatch(stripped, /npm run gate/, 'no step runs `npm run gate`; npm test already runs it as posttest');
   assert.doesNotMatch(stripped, /tests\/release\/\*\.test\.mjs/, 'no step globs the whole release lane; the posttest owns that');
   const lines = stripped.split('\n');
-  const buildAt = lines.findIndex((l) => l.includes('node build/build.mjs --release'));
-  const gateAt = lines.findIndex((l) => l.includes('node --test tests/release/gate.test.mjs'));
-  assert.ok(buildAt >= 0, 'the gate step builds the release first');
-  assert.ok(gateAt >= buildAt, 'the gate step runs gate.test.mjs after building');
+  // Both commands must sit in the step with `id: gate` (6-space `- ` item up to the next one), not just somewhere in the file.
+  const start = lines.findIndex((l) => /^ {6}- id: gate\s*$/.test(l));
+  assert.ok(start >= 0, 'ci.yml needs a step with `id: gate`');
+  let end = lines.findIndex((l, i) => i > start && /^ {6}- /.test(l));
+  if (end < 0) end = lines.length;
+  const gateStep = lines.slice(start, end);
+  const buildAt = start + gateStep.findIndex((l) => l.includes('node build/build.mjs --release'));
+  const gateAt = start + gateStep.findIndex((l) => l.includes('node --test tests/release/gate.test.mjs'));
+  assert.ok(buildAt >= start, 'the `id: gate` step builds the release first');
+  assert.ok(gateAt >= buildAt, 'the `id: gate` step runs gate.test.mjs after building');
   const suites = lines.map((l, i) => [l, i]).filter(([l]) => /^\s*(?:-\s*)?(?:run:\s*)?npm test\b/.test(l));
   assert.equal(suites.length, 1, 'exactly one command starting with `npm test`');
   assert.ok(gateAt < suites[0][1], 'gate.test.mjs must run before the browser suite so a size-budget failure surfaces in seconds');

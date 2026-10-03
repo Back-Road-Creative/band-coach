@@ -42,7 +42,7 @@ const unescape = (s) => s.replace(/\\([#\\])/g, '$1');
 // column-0 `> name@version script` line followed by a column-0 `> command`
 // line; column 0 matters because a failing test's indented YAML may quote a
 // nested run. A block is named by the nearest banner before it, or has none.
-export function splitBlocks(text) {
+function splitBlocks(text) {
   const lines = text.split('\n');
   const blocks = [];
   let banner = null;

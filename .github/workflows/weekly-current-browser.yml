@@ -61,8 +61,9 @@ jobs:
           set +e
           npm test 2>&1 | tee "$RUNNER_TEMP/suite.log"
           rc=${PIPESTATUS[0]}; echo "$rc" > "$RUNNER_TEMP/suite.rc"; exit "$rc"
-      # NOT READY (a retry, skip, cancel or passing todo in the release lane, or no
-      # release block at all) fails this step even when the suite step went green.
+      # NOT READY (a retry, skip, cancel or passing todo with a reason in the
+      # release lane, or no release block at all) fails this step even when the
+      # suite step went green.
       - name: summarise the run
         if: always()
         env:

@@ -7,11 +7,11 @@
 // the output, so the parser is held to what node 22 prints, not to what the
 // author remembers it printing. The two npm cases (C15, C15b) run a real npm in
 // a throwaway package.
-import { test, before } from 'node:test';
+import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { chmodSync, closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -28,6 +28,8 @@ const SCRIPT = fileURLToPath(new URL('../../build/ci-summary.mjs', import.meta.u
 // did, so stdout and stderr keep their order.
 const scratch = mkdtempSync(join(tmpdir(), 'ci-summary-'));
 let seq = 0;
+// Live logs, world dirs and the npm toy packages all live under `scratch`; leave nothing in the OS temp dir.
+after(() => rmSync(scratch, { recursive: true, force: true }));
 function live(file, extra = []) {
   const env = { ...process.env };
   delete env.NODE_TEST_CONTEXT;
