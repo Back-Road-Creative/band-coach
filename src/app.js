@@ -827,6 +827,7 @@ import { register as registerPathway } from './ui/pathway.js';
     const result = safeSet(localStorage, KEY, candidate);
     if (result.ok) { lastStored = candidate; if (saveFailedShown) { saveFailedShown = false; $('settingsSay').textContent = ''; $('mainSay').textContent = ''; } }
     else { saveFailedShown = true; $('settingsSay').textContent = t('storage.saveFailed'); $('mainSay').textContent = t('storage.saveFailed'); }
+    return result.ok;
   }
   function save() { if (saveTimer) return; saveTimer = setTimeout(() => { saveTimer = null; writeDB(); }, 1200); }
   // Closing or reloading within the 1200ms debounce window used to lose
@@ -2772,9 +2773,7 @@ import { register as registerPathway } from './ui/pathway.js';
     const priorLatencyMs = DB && DB.latencyMs;
     modelNow = Date.now(); DB = sanitizeDB(result.db, undefined, modelNow); DB.latencyMs = num(priorLatencyMs, DB.latencyMs, 0, 300); if (!Array.isArray(DB.custom)) DB.custom = [];
     $('optNames').checked = DB.prefs.names; $('optTheme').value = DB.prefs.theme; applyTheme(DB.prefs.theme); $('optLocale').value = DB.prefs.locale; applyLocale(DB.prefs.locale); setNoteNaming(DB.prefs.noteNaming); $('optNoteSystem').value = DB.prefs.noteNaming.system; $('optAccidentals').value = DB.prefs.noteNaming.accidentals; setMod(DB.prefs.mod);
-    writeDB();
-    let stored; try { stored = localStorage.getItem(KEY); } catch (e) {}
-    if (stored !== lastStored) { const error = 'Your restored progress could not be saved on this device (storage may be full).'; coach(error); return { ok: false, error }; }
+    if (!writeDB()) { const error = 'Your restored progress could not be saved on this device (storage may be full).'; coach(error); return { ok: false, error }; }
     coach(t('backup.restored'));
     return result;
   }
