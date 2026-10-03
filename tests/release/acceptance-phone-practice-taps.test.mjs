@@ -61,7 +61,7 @@ const PAGE_SCRIPT = `(function () {
     if (this.canvas && this.canvas.id === 'cv') { var m = this.getTransform(); window.__q61Text.push({ text: String(text), x: m.a * x + m.c * y + m.e, y: m.b * x + m.d * y + m.f, align: this.textAlign }); }
     return fillText.apply(this, arguments);
   };
-  var inputs = [];
+  var inputs = [], actedAt = null;
   var note = function () { inputs.push(performance.now()); };
   window.addEventListener('pointerdown', note, true);
   window.addEventListener('keydown', note, true);
@@ -77,6 +77,8 @@ const PAGE_SCRIPT = `(function () {
     // evaluate to await after the action. A group lit when recording starts that is not in quietIds is credited only
     // once it has gone out and lit again (the PREVIOUS tap's light is never credited to this one); one that stays lit
     // the whole recording comes back as "masked": a hit on it could not be seen.
+    // The 700 ms wait for a tap's input runs from when the driver says the tap was sent (acted), not from when recording began: a slow driver on a loaded box must not read as a tap the page never got.
+    acted: function () { actedAt = performance.now(); },
     start: async function (spec) {
       var t0 = performance.now(), quiet = false, img;
       var isBusy = function (img, g) { return spec.busy.some(function (c) { return count(img, g, c) >= g.need; }); };
@@ -91,6 +93,7 @@ const PAGE_SCRIPT = `(function () {
       var armed = {};
       spec.groups.forEach(function (g) { armed[g.id] = !isBusy(img, g); });
       var base = inputs.length;
+      actedAt = null;
       window.__q61Sample = (async function () {
         var seen = {}, begin = performance.now(), after = 0, last = begin, gap = 0;
         for (;;) {
@@ -102,7 +105,7 @@ const PAGE_SCRIPT = `(function () {
             for (var name in spec.colours) if (count(img, g, spec.colours[name]) >= g.need) { seen[g.id] = seen[g.id] || {}; if (seen[g.id][name] === undefined) seen[g.id][name] = at; }
           }
           if (inputAt !== null && at > inputAt) after++;
-          if ((inputAt !== null && after >= 3 && at - begin >= 30) || at - begin >= 700) return { seen: seen, inputAt: inputAt, inputs: inputs.length - base, frames: after, maxGap: gap, masked: spec.groups.filter(function (g) { return !armed[g.id]; }).map(function (g) { return g.id; }) };
+          if ((inputAt !== null && after >= 3 && at - begin >= 30) || (actedAt !== null && at - actedAt >= 700) || at - begin >= 30000) return { seen: seen, inputAt: inputAt, inputs: inputs.length - base, frames: after, maxGap: gap, masked: spec.groups.filter(function (g) { return !armed[g.id]; }).map(function (g) { return g.id; }) };
         }
       })();
       return { quiet: true, waited: waited };
@@ -138,6 +141,7 @@ async function observe(page, groups, colours, busy, action, quietIds) {
   const q = await page.evaluate(`window.__q61.start(${JSON.stringify({ groups, colours, busy, quietMs: 400, quietIds })})`);
   if (!q.quiet) throw new Error(`the previous input was still lit after ${Math.round(q.waited)} ms, so this one cannot be told apart from it`);
   await action();
+  await page.evaluate('window.__q61.acted()');
   return page.evaluate('window.__q61Sample');
 }
 
