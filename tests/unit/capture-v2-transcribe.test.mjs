@@ -342,7 +342,7 @@ test('transcribe ties note recovery, tempo, metre and key together with a report
   assert.equal(song.parts[0].notes.length, pattern.length);
   song.parts[0].notes.forEach((n) => assert.ok(n.dur > 0));
   assert.ok(report.needsCheck.length >= 1);
-  assert.ok(report.needsCheck.some((s) => /Krumhansl/.test(s)));
+  assert.ok(!report.needsCheck.some((s) => /Krumhansl/.test(s)), "the key-profile provenance note does not reach the learner");
   assert.equal(report.notesCaptured, pattern.length);
   const errPct = Math.abs(report.tempo.bpm - bpm) / bpm;
   assert.ok(errPct <= 0.05, `expected recovered bpm near ${bpm}, got ${report.tempo.bpm}`);
