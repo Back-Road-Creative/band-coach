@@ -75,6 +75,8 @@ export function resolveBuildDate({ env = process.env, root, run = spawnSync, now
   };
   const top = git(['rev-parse', '--show-toplevel']);
   if (top.why) return wall(top.why);
+  // `resolve('')` is the cwd, so an empty answer would pass the comparison below without git naming a toplevel.
+  if (!top.out) return wall('not the top of a git work tree (git named no toplevel)');
   try {
     const same = (a, b) => process.platform === 'win32' ? a.toLowerCase() === b.toLowerCase() : a === b;
     if (!same(realpathSync(resolve(top.out)), realpathSync(resolve(root)))) return wall('not the top of a git work tree');

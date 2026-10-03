@@ -4,7 +4,7 @@
 // SOURCE_DATE_EPOCH still wins when set. A tree that is not the top of a git
 // work tree, or a git that fails, falls back to the wall clock with one stderr
 // line and never fails the build.
-import { test } from 'node:test';
+import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { cpSync, mkdtempSync, mkdirSync, realpathSync, readFileSync, rmSync, symlinkSync, writeFileSync, chmodSync, existsSync } from 'node:fs';
@@ -29,6 +29,7 @@ function cleanEnv() {
 }
 
 const hooks = tmp('bc-date-hooks-');
+after(() => rmSync(hooks, { recursive: true, force: true }));
 function git(cwd, args, extraEnv = {}) {
   const r = spawnSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'commit.gpgsign=false', '-c', 'core.hooksPath=' + hooks, ...args], {
     cwd, encoding: 'utf8', env: { ...cleanEnv(), ...extraEnv },
@@ -265,4 +266,12 @@ test('F9. git is not handed any GIT_ variable, whatever its case', async (t) => 
     assert.deepEqual(Object.keys(c.opts.env).filter((k) => k.toUpperCase().startsWith('GIT_')), []);
     assert.equal(c.opts.env.PATH, '/bin');
   }
+});
+
+test('F10. an empty toplevel answer is not mistaken for the cwd', async (t) => {
+  // resolve('') is the cwd, so with root = cwd an empty `rev-parse` answer would otherwise pass the toplevel check.
+  const r = (await resolver())({ env: {}, root: process.cwd(), now, run: fakeRun('\n', { status: 0, stdout: '981158400\n' }) });
+  assert.equal(r.source, 'wall-clock');
+  assert.match(r.reason, /not the top of a git work tree/);
+  assert.equal(r.date, today);
 });
