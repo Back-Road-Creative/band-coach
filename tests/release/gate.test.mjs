@@ -154,12 +154,17 @@ test('release build: the tuner readout survives a decaying note through the sile
   t.after(() => page.close());
 
   // Tuner tool, ukulele tuning: its 4th string is A4 (440 Hz, midi 69) —
-  // the same note the fake microphone plays.
-  await page.evaluate("document.querySelector('#picker button[data-mod=\"tuner\"]').click()");
-  await page.evaluate(
-    "(() => { const s = document.getElementById('optTune'); s.value = 'uke'; s.dispatchEvent(new Event('change')); })()"
-  );
-  await page.evaluate("document.getElementById('ioBtn').click()");
+  // the same note the fake microphone plays. Every control is operated as a
+  // person does: a real click on its centre (the driver refuses a covered or
+  // hidden control), the tuning chosen by keys on the focused list (click it,
+  // type its first letter, Enter), then "Set up input" and Connect.
+  await page.clickSelector('#picker button[data-mod="tuner"]');
+  await page.clickSelector('#optTune');
+  await page.press('u', { text: 'u' });
+  await page.press('Enter');
+  await page.waitFor("document.getElementById('optTune').value === 'uke'");
+  await page.clickSelector('#setupBtn');
+  await page.clickSelector('#ioBtn');
   await page.waitFor("document.getElementById('ioBtn').hidden === true");
 
   const currentFrameShowsA = () => page.evaluate("window.__bcCanvasText.indexOf('A') !== -1");
@@ -196,12 +201,13 @@ test('release build: a real MIDI note-on through the Connect button is graded du
   const page = await launchPage(RELEASE_HTML, { initScript: FAKE_MIDI_INIT });
   t.after(() => page.close());
 
-  await page.evaluate("document.querySelector('#picker button[data-mod=\"kbd\"]').click()");
+  await page.clickSelector('#picker button[data-mod="kbd"]');
   await midiAddPort(page, 'p1', 'Test Keys');
-  await page.evaluate("document.getElementById('ioBtn').click()");
+  await page.clickSelector('#setupBtn');
+  await page.clickSelector('#ioBtn');
   await page.waitFor("document.getElementById('ioBtn').hidden === true");
 
-  await page.evaluate("document.getElementById('playBtn').click()");
+  await page.clickSelector('#playBtn');
   const targetMidi = await readLevel1TargetMidi(page);
 
   await midiNoteOn(page, 'p1', targetMidi);
@@ -212,18 +218,19 @@ test('release build: a real key press with no debug hook plays and grades a note
   const page = await launchPage(RELEASE_HTML);
   t.after(() => page.close());
 
-  await page.evaluate("document.querySelector('#picker button[data-mod=\"kbd\"]').click()");
-  await page.evaluate("document.getElementById('playBtn').click()");
+  await page.clickSelector('#picker button[data-mod="kbd"]');
+  await page.clickSelector('#playBtn');
   const targetMidi = await readLevel1TargetMidi(page);
   const key = LEVEL1_MIDI_TO_PCKEY[targetMidi];
   assert.ok(key, `no computer-key mapping for target midi ${targetMidi}`);
 
-  // A real KeyboardEvent dispatched at the document, exactly the entry point
-  // src/app.js:1226-1232 listens on for a learner with no MIDI device and no
-  // pointer precision for the on-screen keys -- never window.__coach.note().
-  await page.evaluate(
-    `document.dispatchEvent(new KeyboardEvent('keydown', { key: ${JSON.stringify(key)}, bubbles: true }))`
-  );
+  // A trusted key event from the browser's own input pipeline (CDP
+  // Input.dispatchKeyEvent, isTrusted === true, delivered to the focused
+  // element and up to the document), exactly the entry point the document
+  // keydown listener (src/app.js:2536-2542) reads for a learner with no MIDI
+  // device and no pointer precision for the on-screen keys -- never
+  // window.__coach.note().
+  await page.press(key, { text: key });
   await page.waitFor("document.getElementById('feedback').className === 'ok'");
   const feedbackText = await page.evaluate("document.getElementById('feedback').textContent");
   assert.ok(feedbackText.length > 0, 'the feedback area should show something a learner can read after a correct key press');
