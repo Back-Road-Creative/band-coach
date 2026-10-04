@@ -1878,7 +1878,7 @@ import { register as registerPathway } from './ui/pathway.js';
   // staff, same as a staff mod with real `written`/`clef` data (the 'w' ids
   // this trio and MODS.wind use).
   function drawStaff(M, e, W, H) {
-    const clef = e ? e.info.clef : 'treble', sp = H * 0.075, yb = H * 0.62, x0 = W * 0.08, x1 = W * 0.6, bottomStep = clef === 'bass' ? 18 : 30;
+    const clef = (e && e.info.clef) || 'treble', sp = H * 0.075, yb = H * 0.62, x0 = W * 0.08, x1 = W * 0.6, bottomStep = clef === 'bass' ? 18 : 30;
     g.strokeStyle = '#c9ced9'; g.lineWidth = 2; for (let l = 0; l < 5; l++) { g.beginPath(); g.moveTo(x0, yb - l * sp); g.lineTo(x1, yb - l * sp); g.stroke(); }
     g.fillStyle = '#e9edf6'; g.textAlign = 'left'; g.save(); g.translate(x0 + sp * 1.2, yb); g.scale(sp / 10, sp / 10); g.strokeStyle = '#e9edf6'; g.lineWidth = 2; g.stroke(new Path2D(CLEF_PATHS[clef])); g.restore(); // vector clef: a Unicode music symbol is an empty box on a device with no music font
     const els = task ? task.els : []; els.forEach((el, k) => { const m = el.info.written !== undefined ? el.info.written : el.info.midi + (M.writtenOffset || 0), nm = NAMES[pc(m)], letter = 'CDEFGAB'.indexOf(nm[0]), oct = Math.floor(m / 12) - 1, step = oct * 7 + letter, y = yb - (step - bottomStep) * sp / 2, x = x0 + (x1 - x0) * (0.32 + 0.6 * (k + 0.5) / els.length), isCur = k === task.idx;

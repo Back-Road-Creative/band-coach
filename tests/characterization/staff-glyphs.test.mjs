@@ -28,3 +28,17 @@ test('clarinet practice staff: clef is a vector path and the G3 label clears its
   assert.notEqual(gap, null, 'the G3 label has a notehead at its x');
   assert.ok(gap >= 0, 'label top is ' + (-gap) + 'px inside the notehead');
 });
+
+for (const mod of ['recorder-descant', 'tin-whistle']) test(mod + ' practice staff keeps the treble clef after Start (task info has no clef field)', async (t) => {
+  const page = await launchPage(HTML_PATH, { initScript: SPY });
+  t.after(() => page.close());
+  await page.evaluate("window.__coach.setMod('" + mod + "')");
+  await page.evaluate('window.__paths.length = 0');
+  await page.evaluate("document.getElementById('playBtn').click()");
+  await page.waitFor('window.__texts.length > 0');
+  await page.evaluate('window.__paths.length = 0');
+  await page.waitFor('window.__paths.length > 3');
+  const paths = await page.evaluate('window.__paths');
+  assert.ok(paths.every(p => typeof p === 'string'), 'no empty Path2D(undefined) is drawn');
+  assert.ok(paths.includes(CLEF_PATHS.treble), 'the treble clef is drawn from CLEF_PATHS after Start');
+});
