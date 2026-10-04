@@ -48,12 +48,10 @@ export function markDraft(ledger, songId, { needsCheck = 0, source = '', origina
 }
 
 // Marks a song reviewed: clears the draft flag and the open-checks count,
-// keeping its source/originalAudioKept fields. `defaults` ({ source,
-// originalAudioKept }) fills them in for a song with no ledger entry yet
-// (a clean score import, which never passed through markDraft).
-export function markChecked(ledger, songId, defaults) {
+// keeping its source/originalAudioKept fields.
+export function markChecked(ledger, songId) {
   const out = { ...(ledger || {}) };
-  const prev = out[songId] || { source: '', originalAudioKept: false, ...(defaults || {}) };
+  const prev = out[songId] || { source: '', originalAudioKept: false };
   out[songId] = { ...prev, draft: false, needsCheck: 0 };
   return out;
 }
@@ -72,13 +70,14 @@ export function statusLabel(entry) {
   let label;
   if (entry.draft) {
     const n = entry.needsCheck || 0;
-    // A score import's open items are things like a missing tempo, not notes.
-    const unit = entry.source === 'score' ? 'thing' : 'note';
+    // A notation import's open items are importer warnings (a missing tempo...), not notes.
+    const unit = entry.source === 'notation' ? 'thing' : 'note';
     label = n > 0 ? 'Draft — ' + n + ' ' + unit + (n === 1 ? '' : 's') + ' to check' : 'Draft';
   } else {
     label = 'Checked';
   }
-  if (entry.originalAudioKept === false) label += ' — Original recording not kept';
+  // A notation import (source 'notation') never had a recording to keep, so it gets no caveat.
+  if (entry.originalAudioKept === false && entry.source !== 'notation') label += ' — Original recording not kept';
   return label;
 }
 
