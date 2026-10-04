@@ -3032,6 +3032,8 @@ import { register as registerPathway } from './ui/pathway.js';
   // Debug-hook slots: replace ONLY your own line with
   //   if (__DEBUG_HOOK__) Object.assign(hook, { … });
   if (__DEBUG_HOOK__) Object.assign(hook, { errors: getErrors });
+  // startWithoutMic(): a session on the frames a test injects, with no live mic (Start opens one first; the fake device's tone would mix in).
+  if (__DEBUG_HOOK__) Object.assign(hook, { startWithoutMic: startSession });
   if (__DEBUG_HOOK__) Object.assign(hook, { pitchFrame: (fr, dt) => onPitch(fr, dt) });
   if (__DEBUG_HOOK__) Object.assign(hook, { testPluck: testPluck, pitchWorkletActive: () => !!pitchWorkletNode });
   if (__DEBUG_HOOK__) Object.assign(hook, { testDrumHit: testDrumHit });
