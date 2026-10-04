@@ -2127,6 +2127,8 @@ import { register as registerPathway } from './ui/pathway.js';
     // writing) -- the suggestion is teaching content no player has checked,
     // so it is never claimed reviewed just because it appears in the plan.
     if (mod === 'kbd' && sessionPlan.some(b => b.kind === 'song')) { const entry = songFor(S.level); if (entry && !isReviewCurrent(itemReview(entry.id, contentRev(entry)))) { const s = starterSongs.find(x => x.id === entry.songId); msg += ' ' + (s ? s.title : entry.songId) + ': ' + t('review.unreviewed'); } }
+    // Start is a choice of the instrument on screen: shut the sheet and own the label, so the exercise is on screen.
+    pickerAsSheet = true; setInstrumentSheetOpen(false); updateNavInstrumentLabel();
     playing = true; paused = false; $('playBtn').textContent = 'Pause'; $('endBtn').hidden = false; coach(msg); showAll(); wakeLock.acquire();
   }
   // logSession(): a panel (e.g. a song lesson) logs its own practice as a
