@@ -1,6 +1,7 @@
   /* Dark stage is the committed default, kept whenever the system prefers
      dark or no light rule below fires. */
   :root {
+    color-scheme: dark; /* native form controls (number spinners, scrollbars) follow the theme */
     --ground: #0a0d14; --panel: #121726; --panel-2: #1a2033; --line: #2a3350;
     --text: #e9edf6; --muted: #93a0bd; --accent: #2f93ee; --accent-ink: #2f93ee; --good: #5be08a; --warn: #f3c52f; --bad: #ff6b5e;
     /* P7-5: ink for text/icons painted directly on --good/--warn/--bad/--muted
@@ -30,6 +31,7 @@
      these exact numbers, so a future edit only needs to land in one block. */
   @media (prefers-color-scheme: light) {
     :root:not([data-theme="dark"]) {
+      color-scheme: light;
       --ground: #f5f7fb; --panel: #ffffff; --panel-2: #e7ebf3; --line: #c7cfde;
       --text: #101728; --muted: #4a5570; --accent: #1667c1; --accent-ink: #1667c1; --good: #1a7a44; --warn: #8a6100; --bad: #b3261e;
       --press-muted: #aeb8cc;
@@ -39,6 +41,7 @@
     }
   }
   :root[data-theme="light"] {
+    color-scheme: light;
     --ground: #f5f7fb; --panel: #ffffff; --panel-2: #e7ebf3; --line: #c7cfde;
     --text: #101728; --muted: #4a5570; --accent: #1667c1; --accent-ink: #1667c1; --good: #1a7a44; --warn: #8a6100; --bad: #b3261e;
     --press-muted: #aeb8cc;
@@ -362,7 +365,7 @@
   .panel-history h2 { font: 700 26px var(--display); margin: 0; }
   .panel-history h3 { font: 700 16px var(--display); color: var(--muted); margin: 6px 0 0; }
   .panel-history label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 4px; }
-  .panel-history input[type="text"], .panel-history select, .panel-history textarea { width: 100%; font: 500 15px var(--body); color: var(--text); background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; }
+  .panel-history input[type="text"], .panel-history input[type="number"], #challengeTitleInput, .panel-history select, .panel-history textarea { width: 100%; font: 500 15px var(--body); color: var(--text); background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; }
   .panel-history ul { list-style: none; margin: 4px 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
   .panel-history ul li { display: flex; gap: 6px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; font-size: 13px; }
   .history-instrument { border: 1px solid var(--line); border-radius: 8px; padding: 10px; margin-top: 8px; }
@@ -583,6 +586,20 @@
     }
     /* 16 / 7 applies to every #cv instrument except the kit (keyboard, tuner, ...), not just the keyboard; it shortens the keys about 15% (Q6-1 F1). */
     #cv:not(.kit) { aspect-ratio: 16 / 7; }
+    /* A fretted or microphone instrument (its stage shows "How to play this") puts the prompt and the whole drawing on the first screen at 390x844, with the setup sheet open or shut. Its extra rows (How to play this, the input level) move below the drawing; the hint, the setup sheet, the level card and the drawing take a little less room. Visual order only; DOM and Tab order unchanged. Keyboard and kit never match :has() here, so their fit is untouched. */
+    .main:has(#howPeekHost:not([hidden])) .stage > #howPeekHost, .main:has(#howPeekHost:not([hidden])) .stage > #practiceMeter { order: 1; margin: 0; }
+    .main:has(#howPeekHost:not([hidden])) .stage > .stage-tools { order: 2; }
+    .main:has(#howPeekHost:not([hidden])) .stage > #hint { font-size: 13px; line-height: 1.2; min-height: 0; }
+    .main:has(#howPeekHost:not([hidden])) .stage > #cv { aspect-ratio: 16 / 6; }
+    .main:has(#howPeekHost:not([hidden])) .stage > #prompt { font-size: 32px; }
+    .main:has(#howPeekHost:not([hidden])) #levelName { font-size: 20px; }
+    .main:has(#howPeekHost:not([hidden])) #coach { font-size: 13px; line-height: 1.25; min-height: 0; }
+    .main:has(#howPeekHost:not([hidden])) #feedbackCard > .eyebrow { display: none; }
+    body:has(#howPeekHost:not([hidden])) .setup-sheet { padding: 6px 10px; gap: 6px 10px; margin-top: 0; }
+    body:has(#howPeekHost:not([hidden])) .setup-sheet label[for="micDeviceSelect"] { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); }
+    body:has(#howPeekHost:not([hidden])) .setup-sheet .setup-pair:has(> #micDeviceSelect) { flex: 1 1 0; min-width: 0; }
+    body:has(#howPeekHost:not([hidden])) .setup-sheet #micDeviceSelect { flex: 1 1 0; min-width: 0; }
+    body:has(#howPeekHost:not([hidden])) #calibrateResult { flex: 1 1 100%; line-height: 1.2; }
     /* Show = Staff on the keyboard needs room for the grand staff above keys that stay at the 24px tap floor. */
     #cv.staffkbd { aspect-ratio: 16 / 10; }
   }

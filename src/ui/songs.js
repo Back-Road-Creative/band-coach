@@ -70,7 +70,7 @@ import { renderReview, makeHandoffs } from './songs/review.js';
 import { requestOpenInEditor } from './editor.js';
 import { el } from './dom.js';
 import { renderPlayItOnCards, requestOpenSong, OPEN_REQUEST_STORE_ID } from './songs/open-request.js';
-import { sanitizeStatusLedger, markDraft, markChecked, statusFor, statusLabel } from './songs/song-status.js';
+import { sanitizeStatusLedger, markDraft, markChecked, statusFor, statusLabel, plainImportWarning } from './songs/song-status.js';
 import { layoutSong } from './editor/layout-song.js';
 import { drawPrimitives } from '../notation/draw-canvas.js';
 import { drawSVGRows } from '../notation/draw-svg.js';
@@ -2601,8 +2601,9 @@ function mountSongsPanel(hostEl, api) {
     // when it actually changed (a same-titled song already in the library) --
     // nothing else here reads song.id afterward, so there is no other place
     // to reconcile.
-    const idNote = storedId !== song.id ? ' (saved as "' + storedId + '" -- a song with that id was already saved)' : '';
-    if (warnings && warnings.length) say('Added "' + song.title + '". ' + warnings.join(' ') + idNote, 'ok');
+    const idNote = storedId !== song.id ? ' (saved as "' + storedId + '", because "' + song.id + '" was already in your songs)' : '';
+    warnings = (warnings || []).map(plainImportWarning);
+    if (warnings.length) say('Added "' + song.title + '". ' + warnings.join(' ') + idNote, 'ok');
     else say('Added "' + song.title + '" to your songs.' + idNote, 'ok');
     // E6c: what changed to fit the KEYBOARD specifically -- a single-song
     // notation import only (never the audio/band-pack/challenge branches

@@ -496,7 +496,7 @@ sure" — never colour alone; a song with no unsure notes says so in one line in
 nothing. A song saved this way is a **Draft** until its check items are resolved — every song row
 shows its status ("Draft — N notes to check", or "Checked") next to its title, and since Songs
 cannot keep the original recording (only its notes), a Draft or Checked row from a recording also
-says so plainly. Stopping never leaves a half-finished song behind: a "Cancel" button shows while
+says so plainly (a score file never had a recording, so its row does not say this, whether it is a Draft or Checked, and its open items read "things to check" with the importer's warnings, including a Guitar Pro track's merged voices, put in plain words). Stopping never leaves a half-finished song behind: a "Cancel" button shows while
 a picked audio file is being decoded and transcribed ("Stopped. Nothing was saved."), and leaving
 Songs outright mid-recording or mid-analysis stops the mic/meter and discards whatever was in
 flight the same way, saying so plainly on the next visit ("Your last recording was stopped before
@@ -728,6 +728,12 @@ into extra rows rather than letting fret numbers run past its fixed-width
 canvas.
 
 Keyboard, guitar, bass, ukulele and voice each have a per-instrument "Show"
+preference (note names, staff, or both) that draws this staff as an overlay
+alongside the existing display; it defaults to "Note names (today)", so
+nothing changes unless a learner switches it. If "Show note names" is turned off in Settings, that
+control says so ("Note names (off in Settings)", "Staff (names off in Settings)") instead of
+claiming names are shown. The hands-together prompt uses the note names picked in Settings. A
+Theme or Language change takes effect at once (accent colour, model-pack status), no reload. Wind and brass keeps its own
 preference (note names, staff, or both) that draws this staff alongside the existing display (the staff takes a band along the top of the canvas and the instrument -- fretboard, voice lanes or keys -- shrinks to fit below it, so the two never overlap; on the keyboard the canvas grows taller in Staff mode and the band is capped so every key stays at the 24 CSS px tap floor); it defaults to "Note names (today)", so
 nothing changes unless a learner switches it. Wind and brass keeps its own
 hand-drawn staff (task-row layout, live tuning gauge, hold timer) rather
@@ -1627,7 +1633,11 @@ release.
   session (with the objective, on a narrow window) are on one screen at: 320x568: keyboard one
   scroll position, drum kit one scroll position; 390x844: keyboard no scrolling after Start, drum
   kit one scroll position; 844x390: keyboard one scroll position, drum kit one scroll position;
-  640x400: keyboard one scroll position, drum kit one scroll position. Misses the layout cannot fix
+  640x400: keyboard one scroll position, drum kit one scroll position. A fretted or microphone
+  instrument (guitar) is held to the same screen at 390x844 only, in
+  `tests/release/acceptance-phone-fit-mic-fretted.test.mjs`: after Start, the prompt and the whole
+  drawing are on the first screen with no scrolling, with "Set up input" open or shut ("How to play
+  this" and the input level move below the drawing; the other sizes are not measured for it). Misses the layout cannot fix
   are recorded in the sizes file as `todo` rows and need a change to the drawing code: at 320x568 the
   black keys are 20 px tall and the drum kit's hi-hat pieces are under 24 px in a bar. Real phones
   are untested: do not tell a learner it works on theirs.

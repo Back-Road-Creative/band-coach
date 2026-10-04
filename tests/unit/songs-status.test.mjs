@@ -13,6 +13,7 @@ import {
   statusFor,
   statusLabel,
   reviewGate,
+  plainImportWarning,
 } from '../../src/ui/songs/song-status.js';
 import { PANEL_DATA_MAX } from '../../src/ui/panels.js';
 
@@ -79,9 +80,46 @@ test('a ledger stays under the 256 KB panel limit', () => {
   assert.ok(JSON.stringify(ledger).length < PANEL_DATA_MAX);
 });
 
+test('a notation import reads as things to check, and never claims a lost recording', () => {
+  assert.equal(statusLabel({ draft: true, needsCheck: 1, source: 'notation', originalAudioKept: false }), 'Draft — 1 thing to check');
+  assert.equal(statusLabel({ draft: true, needsCheck: 2, source: 'notation', originalAudioKept: false }), 'Draft — 2 things to check');
+});
+
+test('importer warnings are put in plain words, unknown ones pass through', () => {
+  assert.equal(
+    plainImportWarning('no Q: tempo found; defaulted to 120 bpm'),
+    "This file doesn't say how fast to play, so I used 120 beats per minute. Check the speed feels right.",
+  );
+  assert.equal(
+    plainImportWarning('no tempo found; defaulted to 120 bpm'),
+    "This file doesn't say how fast to play, so I used 120 beats per minute. Check the speed feels right.",
+  );
+  assert.equal(
+    plainImportWarning('part "Piano" has 3 voices; flattened into one'),
+    'The "Piano" part has 3 voices playing at once; I merged them into one line.',
+  );
+  assert.equal(
+    plainImportWarning('part "Piano" has 3 staves; hands not assigned'),
+    'The "Piano" part has 3 staves; I could not tell which notes belong to which hand.',
+  );
+  assert.equal(plainImportWarning('something else'), 'something else');
+});
+
+test('a clean notation import is recorded as Checked without a lost-recording note', () => {
+  const ledger = markChecked(markDraft({}, 's', { source: 'notation' }), 's');
+  assert.equal(statusLabel(ledger.s), 'Checked');
+});
+
+test('a Guitar Pro multi-voice warning is put in plain words', () => {
+  assert.equal(
+    plainImportWarning('track "Lead" has 2 voices in one bar; flattened into one'),
+    'The "Lead" track has 2 voices playing at once; I merged them into one line.',
+  );
+});
+
 test('a notation import never had a recording, so the label does not say one was not kept', () => {
   assert.equal(statusLabel({ draft: false, needsCheck: 0, source: 'notation', originalAudioKept: false }), 'Checked');
-  assert.equal(statusLabel({ draft: true, needsCheck: 1, source: 'notation', originalAudioKept: false }), 'Draft — 1 note to check');
+  assert.equal(statusLabel({ draft: true, needsCheck: 1, source: 'notation', originalAudioKept: false }), 'Draft — 1 thing to check');
   const clean = sanitizeStatusLedger(markDraft({}, 'a-1', { source: 'notation' }));
   assert.equal(clean['a-1'].source, 'notation');
 });

@@ -130,6 +130,34 @@ test('theory panel has no console errors or network requests', async (t) => {
   assert.deepEqual(page.exceptions, []);
 });
 
+test('Level 4 on the Wind and brass trainer grades for the saved B flat choice, and Transpose does not call wind non-transposing', async (t) => {
+  const page = await launchPage(HTML_PATH, { initScript: "localStorage.setItem('bandcoach.v1', JSON.stringify({ v: 1, prefs: { mod: 'wind', wind: 'bb' }, panels: { theory: { level: 4, seed: 7, streak: 0 } } }))" });
+  t.after(() => page.close());
+  await page.evaluate("document.querySelector('#picker .picker-tools button[data-panel=\"theory\"]').click()");
+  await page.waitFor("document.querySelectorAll('.panel-theory-choice').length > 0");
+  const q = await page.evaluate('window.__coach.theoryCurrentQuestion()');
+  const m = /concert-pitch ([A-G][#b]?)(\d)\?$/.exec(q.prompt);
+  const midi = (+m[2] + 1) * 12 + { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 }[m[1][0]] + (m[1][1] === '#' ? 1 : m[1][1] === 'b' ? -1 : 0);
+  // A B flat player writes a major second above concert pitch.
+  const NAMES = { 0: ['C'], 1: ['C#', 'Db'], 2: ['D'], 3: ['D#', 'Eb'], 4: ['E'], 5: ['F'], 6: ['F#', 'Gb'], 7: ['G'], 8: ['G#', 'Ab'], 9: ['A'], 10: ['A#', 'Bb'], 11: ['B'] };
+  const written = NAMES[(midi + 2) % 12].map(n => n + (Math.floor((midi + 2) / 12) - 1));
+  assert.ok(written.includes(q.answer), q.prompt + ' answer ' + q.answer);
+  await page.evaluate("document.querySelector('.panel-theory [data-tab=\"transpose\"]').click()");
+  const ids = await page.evaluate("Array.from(document.getElementById('theoryTransposeInstrument').options).map(o => o.value)");
+  assert.ok(!ids.includes('wind'));
+});
+
+test('the saved B flat choice is theory-only: the Songs arrangement for the Wind and brass trainer stays concert', async (t) => {
+  const page = await launchPage(HTML_PATH, { initScript: "localStorage.setItem('bandcoach.v1', JSON.stringify({ v: 1, prefs: { mod: 'wind', wind: 'bb' } }))" });
+  t.after(() => page.close());
+  await page.evaluate("window.__coach.openPanel('songs')");
+  await page.waitFor("document.querySelectorAll('.panel-songs-row button').length > 0");
+  await page.evaluate("Array.from(document.querySelectorAll('.panel-songs-row button')).find(b => b.textContent === 'Hot Cross Buns').click()");
+  await page.waitFor("document.getElementById('songsPracticeHeading') !== null");
+  const text = await page.evaluate("(document.querySelector('.panel-songs-arrangement') || { textContent: '' }).textContent");
+  assert.ok(!/higher than it sounds/.test(text), text);
+});
+
 test('Explore chord mode hides the scale Tonic, names chords plainly and spells flats', async (t) => {
   const page = await launchPage(HTML_PATH);
   t.after(() => page.close());

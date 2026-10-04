@@ -119,11 +119,7 @@ test('saving a draft with no checks left marks it Checked', async (t) => {
   await page.waitFor(
     "(() => { var b = Array.from(document.querySelectorAll('.panel-songs-row button')).find(x => x.textContent === 'Edit Notes Test'); return !!(b && b.parentElement.querySelector('.panel-songs-status')); })()"
   );
-  // statusLabel() (src/ui/songs/song-status.js) always appends "Original
-  // recording not kept" when the ledger entry says so -- a notation import
-  // never had audio to keep in the first place, so that honest caveat rides
-  // along even once the song reads Checked; only the leading word matters
-  // here.
+  // Only the leading word matters here.
   const statusText = await page.evaluate(
     "Array.from(document.querySelectorAll('.panel-songs-row button')).find(b => b.textContent === 'Edit Notes Test').parentElement.querySelector('.panel-songs-status').textContent"
   );
