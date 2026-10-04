@@ -557,7 +557,7 @@ Opening the editor screen (via a song's own **Edit notes**) shows its own row: *
 notes**, **Play along**, **Export**, **Share**, **Save a copy** — Edit notes opens *any* song,
 starter tunes included, straight in "Record a tune": saving a starter's edits makes "My copy of
 &lt;title&gt;" in your own songs, never touching the shipped starter itself. Leaving the editor —
-for Settings, the instrument sheet or Songs — and coming back keeps whatever was unsaved; a plain
+for Settings, the instrument sheet or Songs — and coming back through **Edit notes** on the same song keeps whatever was unsaved (a different song starts fresh); a plain
 status line reads "Not saved yet" until you press Save, then "Saved". Once something is saved,
 **Practise this** and **Back to songs** appear, and the song's own status in Songs updates right
 away (**Checked** once no check items are left). Edit notes and Play along count as Songs in the
@@ -1376,6 +1376,11 @@ chord inversions, in-tune-or-not intonation discrimination, and sing-it-back. So
 song rhythm both draw only from the one-hand starter melodies (`starterMelodies`,
 `src/song/starter/index.js`) -- a two-hand starter is never pulled apart into a monophonic phrase
 or tapped-back rhythm.
+
+Answers are always in words: a wrong answer and "Show me the answer" name the expected notes
+(with octave, e.g. `C4, B3`) and count rhythms in beats (`1, 2, 4`) -- never MIDI numbers or
+ticks. The note buttons here, and the Theory tonic and root lists, follow the Settings
+note-naming and sharps/flats choice like the rest of the app.
 
 ## Find your own singing range
 

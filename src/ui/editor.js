@@ -249,7 +249,10 @@ function mountEditor(hostEl, api) {
   const splitBtn = btn('Split note in half', () => {
     if (selected === null) return;
     const note = song.parts[activePartIndex].notes[selected];
+    const at = selected;
     applyOp((s) => splitNote(s, activePartIndex, selected, Math.max(1, Math.round(note.dur / 2))));
+    // keep the FIRST half selected, so "Merge with next" puts the two halves back together instead of reaching for the following note
+    if (selected !== at && song.parts[activePartIndex].notes[at + 1]) { selected = at; render(); }
   });
   const mergeBtn = btn('Merge with next', () => {
     if (selected === null) return;
@@ -270,18 +273,27 @@ function mountEditor(hostEl, api) {
   const octaveUpBtn = btn('Whole song up an octave', () => applyOp((s) => octaveShiftPart(s, activePartIndex, 1)));
   const octaveDownBtn = btn('Whole song down an octave', () => applyOp((s) => octaveShiftPart(s, activePartIndex, -1)));
   const pickupBtn = btn('Shift barline (pickup)', () => {
-    const ticks = Number(pickupInput.value) || 0;
+    // a pickup is at most one bar: anything longer only pushes the tune off into empty space
+    const bar = Math.round(480 * 4 * song.metre.num / song.metre.den);
+    const ticks = Math.min(bar, Number(pickupInput.value) || 0);
+    pickupInput.value = String(ticks);
     applyOp((s) => shiftBarline(s, ticks));
   });
 
   bpmInput.addEventListener('change', () => {
-    const v = Number(bpmInput.value);
-    if (v > 0) applyOp((s) => setBpm(s, v));
+    // The field's own min/max (20-300) only mark a typed value invalid; hold it there and say so. A blank or non-number goes back to the song's real tempo.
+    const typed = Number(bpmInput.value);
+    if (bpmInput.value.trim() === '' || !Number.isFinite(typed)) { syncFormFields(); return; }
+    const v = Math.min(300, Math.max(20, typed));
+    if (v !== typed) tell('Tempo can be 20 to 300 beats a minute, so it was set to ' + v + '.');
+    applyOp((s) => setBpm(s, v));
+    syncFormFields();
   });
   const applyMetre = () => {
-    const num = Math.max(1, Math.round(Number(metreNum.value) || 4));
+    const num = Math.min(32, Math.max(1, Math.round(Number(metreNum.value) || 4)));
     const den = Number(metreDen.value) || 4;
     applyOp((s) => setMetre(s, { num, den }));
+    syncFormFields();
   };
   metreNum.addEventListener('change', applyMetre);
   metreDen.addEventListener('change', applyMetre);
@@ -330,6 +342,7 @@ function mountEditor(hostEl, api) {
     activePartIndex = 0;
     acknowledged = report.acknowledged;
     titleInput.value = song.title;
+    syncFormFields();
     renderCheckList();
     recordStatus.textContent = 'Loaded "' + song.title + '" for editing.';
     setControlsEnabled(acknowledged);
@@ -504,8 +517,9 @@ function mountEditor(hostEl, api) {
   canvas.addEventListener('click', (ev) => {
     if (!song) return;
     const rect = canvas.getBoundingClientRect();
-    const x = ev.clientX - rect.left;
-    const y = ev.clientY - rect.top;
+    // hitboxes are in drawing pixels; the canvas may be shown at another size
+    const x = (ev.clientX - rect.left) * (canvas.width / (rect.width || canvas.width));
+    const y = (ev.clientY - rect.top) * (canvas.height / (rect.height || canvas.height));
     const box = hitTest(hitboxes, x, y, 6);
     if (box) {
       activePartIndex = typeof box.partIndex === 'number' ? box.partIndex : activePartIndex;
@@ -637,6 +651,7 @@ function mountEditor(hostEl, api) {
     activePartIndex = 0;
     acknowledged = restored.meta.acknowledged;
     titleInput.value = song.title;
+    syncFormFields();
     renderCheckList();
     ackCheckbox.checked = acknowledged;
     recordStatus.textContent = 'Restored your unsaved changes to "' + song.title + '".';
@@ -648,7 +663,15 @@ function mountEditor(hostEl, api) {
   return {
     show() {
       const req = api.store(EDITOR_OPEN_REQUEST_STORE_ID).get();
-      if (req && (req.songId || req.starterId)) {
+      // Edit notes on the song that was being edited when the learner left gives the unsaved work back; any other song replaces it.
+      const stashed = restoreWorking(api.store(EDITOR_WORKING_STORE_ID).get());
+      const wanted = req && (req.songId || req.starterId);
+      if (wanted && stashed && (stashed.meta.loadedId || stashed.song.id) === wanted) {
+        api.store(EDITOR_OPEN_REQUEST_STORE_ID).set(null);
+        api.store(EDITOR_WORKING_STORE_ID).set(null);
+        applyRestoredWorking(stashed);
+      } else if (wanted) {
+        api.store(EDITOR_WORKING_STORE_ID).set(null);
         checkOpenRequest();
       } else {
         const restored = restoreWorking(api.store(EDITOR_WORKING_STORE_ID).get());

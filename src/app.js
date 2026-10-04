@@ -1099,7 +1099,7 @@ import { register as registerPathway } from './ui/pathway.js';
     else if (t.kind === 'bar') { p = 'Read it, then <b>tap it</b>'; h = 'Four clicks to get ready, then tap the bar in time.'; startBar(); }
     else if (t.kind === 'bar2') { p = 'Read it, then <b>tap it</b>'; h = 'Listen for the count-in, then tap the bar (or bars) in time.'; startBar2(); }
     else if (t.kind === 'kit') { p = 'Read it, then <b>play it</b>'; h = (t.kit.bar.tip ? t.kit.bar.tip + ' ' : '') + 'Listen for the count-in, then play the bar on the drums it shows.'; startKitBar(); }
-    else if (t.kind === 'groove') { p = 'Get ready — <b>play it in time</b>'; h = 'Four clicks to count in, then play each note on the beat.'; startGroove(); }
+    else if (t.kind === 'groove') { p = 'Play ' + t.els.map(el => promptFor(el.info, el.reveal)).join(' → ') + ' — <b>in time</b>'; h = 'Four clicks to count in, then play each note on the beat.'; startGroove(); }
     else { const verb = mod === 'voice' ? 'Sing' : 'Play'; p = verb + ' ' + t.els.map((el, k) => (k === t.idx ? '<b>' : '') + promptFor(el.info, el.reveal) + (k === t.idx ? '</b>' : '')).join(' → '); if (t.kind === 'hold') p = (mod === 'voice' ? 'Hold ' : 'Hold ') + '<b>' + e.info.label + '</b> for two seconds'; h = hintFor(e); playRef(t); }
     $('prompt').innerHTML = p; $('hint').textContent = (t.warm ? 'Warm-up, does not count. ' : '') + h; updateDesc(); updateHowPeek();
   }
@@ -1134,7 +1134,7 @@ import { register as registerPathway } from './ui/pathway.js';
   function refreshPrompt() { if (!task || task.kind === 'ear' || task.kind === 'bar' || task.kind === 'hold') return; const verb = mod === 'voice' ? 'Sing' : 'Play'; $('prompt').innerHTML = verb + ' ' + task.els.map((el, k) => (k === task.idx ? '<b>' : '') + promptFor(el.info, el.reveal) + (k === task.idx ? '</b>' : '')).join(' → '); const e = cur(); if (e) $('hint').textContent = (task.warm ? 'Warm-up, does not count. ' : '') + hintFor(e); updateDesc(); updateHowPeek(); }
   // text mirror of the canvas for the visually-hidden #cvDesc element (unit 7.7 item 1):
   // revealed mirrors the current element's own reveal/failed flag, never invents one.
-  function updateDesc() { const el = $('cvDesc'); if (!el) return; const e = cur(); const revealed = task && task.kind === 'ear' ? !!task.revealed : !!(e && (e.reveal || e.failed)); el.textContent = task && task.kind === 'kit' ? 'Drum kit, ' + task.kit.name + ': ' + task.kit.bar.hits.map(h => (h.flam ? 'a flam on ' : '') + h.pieces.map(kitName).join(' with ')).join(', then ') + '. Play it after the count-in.' : describeTask(task, { revealed: revealed, fretless: !!MODS[mod].fretless }); }
+  function updateDesc() { const el = $('cvDesc'); if (!el) return; if (task && task.kind === 'groove') { el.textContent = 'Play in time: ' + task.els.map(x => promptFor(x.info, x.reveal)).join(', ') + '. Four clicks to count in, then play each note on the beat.'; return; } const e = cur(); const revealed = task && task.kind === 'ear' ? !!task.revealed : !!(e && (e.reveal || e.failed)); el.textContent = task && task.kind === 'kit' ? 'Drum kit, ' + task.kit.name + ': ' + task.kit.bar.hits.map(h => (h.flam ? 'a flam on ' : '') + h.pieces.map(kitName).join(' with ')).join(', then ') + '. Play it after the count-in.' : describeTask(task, { revealed: revealed, fretless: !!MODS[mod].fretless }); }
   // "How to play this" peek (C1a): the SAME Fingerings-panel diagram Songs'
   // own inline expander shows for a lesson step (renderHowInline, src/ui/
   // fingerings.js), dropped beside the active note here instead. Never
@@ -1866,7 +1866,7 @@ import { register as registerPathway } from './ui/pathway.js';
   function liveCents(target, exact) { if (!heard || !heard.freq) return null; let c = (heard.midi - target) * 100; if (!exact) c = ((c + 600) % 1200 + 1200) % 1200 - 600; return c; }
   function drawVoice(e, W, H) {
     const VKd = Object.assign({}, VOICE_KINDS, DB.prefs.voiceRange ? { mine: ['My range (found by test)', tonicFromRange(exerciseRangeFor(DB.prefs.voiceRange)).tonic] } : {}), base = (VKd[DB.prefs.voice] || VKd.low)[1], rows = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], y = d => H * 0.9 - (H * 0.8) * d / 12;
-    rows.forEach(d => { const dia = SOLFA[d] !== undefined, tgt = e && e.info.degree === d; g.fillStyle = tgt ? accent() + '55' : dia ? '#ffffff0d' : '#00000000'; g.fillRect(W * 0.16, y(d) - H * 0.03, W * 0.8, H * 0.06); if (dia || tgt) { g.fillStyle = tgt ? accent() : '#93a0bd'; font(H * 0.055, tgt ? 700 : 600); g.textAlign = 'right'; g.fillText((SOLFA[d] || '') + (DB.prefs.names ? ' ' + nname(base + d) : ''), W * 0.15, y(d) + H * 0.02); } });
+    rows.forEach(d => { const dia = SOLFA[d] !== undefined, tgt = e && e.info.degree === d; g.fillStyle = tgt ? accent() + '55' : dia ? '#ffffff0d' : '#00000000'; g.fillRect(W * 0.16, y(d) - H * 0.03, W * 0.8, H * 0.06); if (dia || tgt) { g.fillStyle = tgt ? accent() : '#93a0bd'; font(H * 0.055, tgt ? 700 : 600); g.textAlign = 'right'; g.fillText((SOLFA[d] || '') + (DB.prefs.names ? ' ' + nname(base + d) : ''), W * 0.15, y(d) + H * 0.02, W * 0.14); } });
     if (heard && heard.freq) { let dd = heard.midi - base; dd = ((dd % 12) + 12) % 12; if (e && e.info.degree === 12 && dd < 1) dd += 12; g.fillStyle = '#e9edf6'; g.beginPath(); g.arc(W * 0.56, y(dd), H * 0.03, 0, 7); g.fill(); g.strokeStyle = '#e9edf6'; g.lineWidth = 2; g.beginPath(); g.moveTo(W * 0.16, y(dd)); g.lineTo(W * 0.96, y(dd)); g.stroke(); }
     if (e) { const need = task.kind === 'hold' ? 2 : 0.5; g.fillStyle = '#5be08a'; g.fillRect(W * 0.16, H * 0.965, W * 0.8 * c01(holdFor / need), H * 0.02); }
     // "Find my range" runs entirely through this per-frame draw call (its
@@ -2003,11 +2003,12 @@ import { register as registerPathway } from './ui/pathway.js';
       g.fillText(nname(e.info.midi), x0, band ? H * (staffBandH(mod, H) - 0.02) : y0 + H * 0.34);
     }
   }
+  let kbdTargetDbg = []; // last keyboard target list drawn (debug hook only)
   function draw() {
     cv.classList.toggle('staffkbd', staffBand('kbd') && mod === 'kbd'); size(); const W = cv.width, H = cv.height; g.clearRect(0, 0, W, H); rowRects = []; keyRects = []; kbdOverviewRect = null;
     if (TOOLS[mod]) { if (mod === 'tuner') drawTuner(W, H); else drawCapture(W, H); return; }
     const M = MODS[mod], e = playing && task && !task.done ? cur() : null, showE = e || (task && task.done ? task.els[task.els.length - 1] : null);
-    if (mod === 'kbd') { const kr = kbdRange(), sb = staffBand('kbd'), oy = sb ? H * staffBandH('kbd', H) : 0, Hk = sb ? H * (1 - staffBandH('kbd', H)) : H; const tg = []; let rhMidi = null, lhMidi = null; if (e) { if (e.info.kind === 'chord') { if (e.reveal || e.failed) e.info.pcs.forEach(x => tg.push(60 + x)); } else if (e.info.kind === 'hands-together') { if (e.reveal || e.failed) { tg.push(e.info.ex.rh.midi, e.info.ex.lh.midi); rhMidi = e.info.ex.rh.midi; lhMidi = e.info.ex.lh.midi; } } else if (e.reveal || e.failed) tg.push(e.info.midi); } const good = performance.now() - flashGood < 300 && task ? task.els.slice(0, task.idx).map(x => x.info.midi).filter(x => x) : []; const kOpts = { target: tg, good: good, names: DB.prefs.names, rhMidi: rhMidi, lhMidi: lhMidi };
+    if (mod === 'kbd') { const kr = kbdRange(), sb = staffBand('kbd'), oy = sb ? H * staffBandH('kbd', H) : 0, Hk = sb ? H * (1 - staffBandH('kbd', H)) : H; const tg = []; let rhMidi = null, lhMidi = null; if (e && !(task.kind === 'groove')) { if (e.info.kind === 'chord') { if (e.reveal || e.failed) e.info.pcs.forEach(x => tg.push(60 + x)); } else if (e.info.kind === 'hands-together') { if (e.reveal || e.failed) { tg.push(e.info.ex.rh.midi, e.info.ex.lh.midi); rhMidi = e.info.ex.rh.midi; lhMidi = e.info.ex.lh.midi; } } else if (e.reveal || e.failed) tg.push(e.info.midi); } if (task && task.kind === 'groove' && !task.done) task.els.forEach(x => { if (x.info.midi && (x.reveal || x.failed)) tg.push(x.info.midi); }); kbdTargetDbg = tg; const good = performance.now() - flashGood < 300 && task ? task.els.slice(0, task.idx).map(x => x.info.midi).filter(x => x) : []; const kOpts = { target: tg, good: good, names: DB.prefs.names, rhMidi: rhMidi, lhMidi: lhMidi };
       if (kr[0] === 48) {
         // item B2 (Wave kbd): once the octave below is unlocked (level 8+, or
         // a custom captured melody below middle C) a single 15-white-key strip
@@ -2037,7 +2038,7 @@ import { register as registerPathway } from './ui/pathway.js';
     else if (mod === 'ear') drawEar(W, H); else if (mod === 'rhy') { if (task && task.kind === 'bar2') drawBar2(W, H); else drawBar(W, H); }
     if (NOTATE_MOD_IDS.indexOf(mod) >= 0) drawNotation(e, W, H); else lastStaff = null;
     if (!reducedMotion && performance.now() - flashBad < 220) { g.strokeStyle = '#ff6b5e'; g.lineWidth = 8; g.strokeRect(4, 4, W - 8, H - 8); g.fillStyle = '#ff6b5e'; font(H * 0.06, 700); g.textAlign = 'left'; g.fillText('✗', 14, H * 0.09); } else if (!reducedMotion && performance.now() - flashGood < 220) { g.strokeStyle = '#5be08a'; g.lineWidth = 8; g.strokeRect(4, 4, W - 8, H - 8); g.fillStyle = '#5be08a'; font(H * 0.06, 700); g.textAlign = 'left'; g.fillText('✓', 14, H * 0.09); }
-    if (!playing) { g.fillStyle = '#93a0bd'; font(H * 0.08); g.textAlign = 'right'; g.fillText(sess ? 'PAUSED' : 'PRESS START', W * 0.97, H * 0.1); }
+    if (!playing && !(rangeTest && mod === 'voice')) { g.fillStyle = '#93a0bd'; font(H * 0.08); g.textAlign = 'right'; g.fillText(sess ? 'PAUSED' : 'PRESS START', W * 0.97, H * 0.1); }
   }
 
   // ---------- tools: tuner and melody capture ----------
@@ -2259,24 +2260,26 @@ import { register as registerPathway } from './ui/pathway.js';
   // per-stage IQR trim is what guards against one bad frame, so this code
   // does not try to filter samples itself.
   let rangeTest = null;
+  // The coach line a mod shows before Start; Cancel puts it back so a stopped test never leaves its "Sing your..." instruction behind.
+  const idleCoachLine = () => S.judged ? 'Welcome back. You are on level ' + S.level + ': ' + D().name + '. Press Start.' : 'Press Start. Level 1: ' + D().name + '.';
   function handleRangeTest(action, fr) {
     if (action === 'start') { rangeTest = { stage: 'low', samples: [], curMidi: null, curSince: 0 }; coach('Sing your lowest comfortable note and hold it, then press "Got it -- now the highest".'); return; }
     if (!rangeTest) return;
     if (action === 'tick') { if (!fr || !fr.freq) return; const m = Math.round(fr.midi), t = performance.now(); if (rangeTest.curMidi === null) { rangeTest.curMidi = m; rangeTest.curSince = t; } else if (m !== rangeTest.curMidi) { rangeTest.samples.push({ midi: rangeTest.curMidi, ms: t - rangeTest.curSince, stage: rangeTest.stage }); rangeTest.curMidi = m; rangeTest.curSince = t; } return; }
     if (action === 'flush') { if (rangeTest.curMidi !== null) rangeTest.samples.push({ midi: rangeTest.curMidi, ms: performance.now() - rangeTest.curSince, stage: rangeTest.stage }); rangeTest.curMidi = null; return; }
     if (action === 'next') { handleRangeTest('flush'); rangeTest.stage = 'high'; coach('Now sing your highest comfortable note and hold it, then press "Got it -- done".'); return; }
-    if (action === 'cancel') { rangeTest = null; return; }
+    if (action === 'cancel') { rangeTest = null; coach(idleCoachLine()); return; }
     if (action === 'finish') { handleRangeTest('flush'); const range = estimateRange(rangeTest.samples); rangeTest = null; if (!range) { coach("I didn't catch a held note either time -- make sure the mic is connected, sing clearly and hold each note for at least half a second, then try again."); return; } const clamped = { low: clamp(range.low, 24, 96), high: clamp(range.high, 24, 96) }; DB.prefs.voiceRange = clamped; DB.prefs.voice = 'mine'; task = null; save(); const t = tonicFromRange(exerciseRangeFor(clamped)), hint = classify(clamped); coach(hint.wording + (t.stretch ? ' That is a little under an octave, so the exercises will stretch a bit past what you just sang.' : ' Exercises are set from your range now.')); return; }
   }
   function renderOpts() {
-    const box = $('modOpts'); box.innerHTML = ''; const sel = (id, label, opts, val, on) => { const l = document.createElement('label'); l.htmlFor = id; l.textContent = label + ' '; const s = document.createElement('select'); s.id = id; Object.keys(opts).forEach(k => { const o = document.createElement('option'); o.value = k; o.textContent = opts[k][0]; s.appendChild(o); }); s.value = val; s.addEventListener('change', () => on(s.value)); l.appendChild(s); box.appendChild(l); };
+    const box = $('modOpts'); box.innerHTML = ''; const sel = (id, label, opts, val, on) => { const l = document.createElement('label'); l.htmlFor = id; l.textContent = label + ' '; const s = document.createElement('select'); s.id = id; (Array.isArray(opts) ? opts : Object.keys(opts).map(k => [k, opts[k]])).forEach(([k, v]) => { const o = document.createElement('option'); o.value = k; o.textContent = v[0]; s.appendChild(o); }); s.value = val; s.addEventListener('change', () => on(s.value)); l.appendChild(s); box.appendChild(l); };
     const btn = (id, text, on, primary) => { const b = document.createElement('button'); b.type = 'button'; b.id = id; b.className = 'small' + (primary ? ' primary' : ''); b.textContent = text; b.addEventListener('click', () => { b.blur(); on(); }); box.appendChild(b); return b; };
     const chk = (id, text, val, on) => { const l = document.createElement('label'); l.htmlFor = id; const c = document.createElement('input'); c.type = 'checkbox'; c.id = id; c.checked = val; c.addEventListener('change', () => on(c.checked)); l.appendChild(c); l.appendChild(document.createTextNode(' ' + text)); box.appendChild(l); };
     const noteWithReview = (id, text, reviewId, reviewKey, revValue) => { const note = document.createElement('span'); note.id = id; note.className = 'small'; note.textContent = text; box.appendChild(note); if (!isReviewCurrent(itemReview(reviewKey, contentRev(revValue)))) { const review = document.createElement('span'); review.id = reviewId; review.setAttribute('role', 'note'); review.className = 'small'; review.textContent = t('review.unreviewed'); box.appendChild(review); } };
     // Session length E7c: 5/10/15 minutes or no limit, per DB.prefs.sessionMinutes
     // -- a change takes effect at the next Start, never a running session's
     // sess.target, so it cannot fire a surprise break or cancel one mid-session.
-    if (!TOOLS[mod]) sel('optSessionMinutes', 'Session length', { none: ['No limit'], '5': ['5 minutes'], '10': ['10 minutes'], '15': ['15 minutes'] }, DB.prefs.sessionMinutes ? String(DB.prefs.sessionMinutes) : 'none', v => { DB.prefs.sessionMinutes = v === 'none' ? null : +v; save(); });
+    if (!TOOLS[mod]) sel('optSessionMinutes', 'Session length', [['none', ['No limit']], ['5', ['5 minutes']], ['10', ['10 minutes']], ['15', ['15 minutes']]] /* pairs: integer-like object keys would sort first */, DB.prefs.sessionMinutes ? String(DB.prefs.sessionMinutes) : 'none', v => { DB.prefs.sessionMinutes = v === 'none' ? null : +v; save(); });
     if (NOTATE_MOD_IDS.indexOf(mod) >= 0) sel('optNotate', 'Show', { names: ['Note names (today)'], staff: ['Staff'], both: ['Staff and names'] }, DB.prefs.notate[mod], v => { DB.prefs.notate[mod] = v; save(); });
     if (mod === 'wind') { sel('optWind', 'My instrument', WIND_KINDS, DB.prefs.wind, v => { DB.prefs.wind = v; task = null; save(); }); chk('optRef', 'Play me the note first', false, () => {}); }
     if (mod === 'voice') sel('optVoice', 'My range', Object.assign({}, VOICE_KINDS, DB.prefs.voiceRange ? { mine: ['My range (found by test)', tonicFromRange(exerciseRangeFor(DB.prefs.voiceRange)).tonic] } : {}), DB.prefs.voice, v => { DB.prefs.voice = v; task = null; save(); });
@@ -2676,7 +2679,7 @@ import { register as registerPathway } from './ui/pathway.js';
     // glitch, and purely redundant with the picker button already showing
     // pressed. The canvas's own "PRESS START" and the picker's pressed state
     // are enough; #prompt stays empty until a real exercise names one.
-    $('prompt').textContent = ''; $('hint').textContent = ''; $('choices').hidden = true; say(''); if (MODS[m]) coach(S.judged ? 'Welcome back. You are on level ' + S.level + ': ' + D().name + '. Press Start.' : 'Press Start. Level 1: ' + D().name + '.');
+    $('prompt').textContent = ''; $('hint').textContent = ''; $('choices').hidden = true; say(''); if (MODS[m]) coach(idleCoachLine());
     renderOpts(); ioRefresh(); showAll(); save();
   }
   // Two visual tiers inside the one #picker container (kept as a single id
@@ -3083,6 +3086,7 @@ import { register as registerPathway } from './ui/pathway.js';
   if (__DEBUG_HOOK__) Object.assign(hook, { judgeChord: judgeChord, chroma: chroma });
   if (__DEBUG_HOOK__) Object.assign(hook, { groove: () => groove, grooveLast: () => grooveLast, grooveBpm: () => S.grooveBpm, grooveOn: v => { grooveOn = !!v; task = null; groove = null; }, grooveInject: (midi, atAudioTime) => { const fire = () => { if (audioNow() >= atAudioTime) onNote(midi, true); else setTimeout(fire, 4); }; fire(); } });
   //
+  if (__DEBUG_HOOK__) Object.assign(hook, { kbdTarget: () => kbdTargetDbg });
   if (__DEBUG_HOOK__) Object.assign(hook, { showMe: () => $('showMeBtn').click() });
   //
   if (__DEBUG_HOOK__) Object.assign(hook, { midi: () => ({ on: midiOn, ports: midiPorts, log: midiLog.slice(), held: Array.from(realMidiHeld) }), heldNotes: () => noteState.heldPitches() });
