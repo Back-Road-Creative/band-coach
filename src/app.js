@@ -31,7 +31,7 @@ import { chroma, judgeChord } from './audio/chords.js';
 //
 import { makeGrid, scoreTake, tempoLadder } from './core/groove.js';
 import { stepTuner } from './core/tuner.js';
-import { wrongNoteHint } from './core/wrong-note.js';
+import { wrongNoteHint, writtenMidi } from './core/wrong-note.js';
 import { shouldReveal, promptFor, hintFor as coreHintFor } from './core/reveal.js';
 import { gradeOutcome } from './core/grade-outcome.js';
 import { makeEvent, validateEvent, boundEvents } from './core/learning-events.js';
@@ -1229,7 +1229,7 @@ import { register as registerPathway } from './ui/pathway.js';
     const judged = judgePitch({ heardMidi: midi, targetMidi: i.midi, policy });
     if (judged.ok) { passEl(undefined, undefined, undefined, source); return; }
     const where = wrongNoteHint({ heardMidi: midi, targetMidi: i.midi, policy, fretted: !!i.string && !MODS[mod].fretless });
-    failEl('That was ' + nname(midi) + ', the note is ' + nname(i.midi) + '. ' + where, e.id + '>' + nname(midi));
+    const wn = (x) => i.written === undefined ? nname(x) : nname(writtenMidi(i, x)); failEl('That was ' + wn(midi) + ', the note is ' + wn(i.midi) + '. ' + where, e.id + '>' + wn(midi)); // transposing winds: both names in the written key the prompt uses
   }
   // onNote's hands-together branch, moved out as-is (same statements, same order).
   function onHandsTogetherNote(e, i, midi, exact, source) {
@@ -1449,7 +1449,7 @@ import { register as registerPathway } from './ui/pathway.js';
       const octavePolicy = OCTAVE_POLICY[mod] || 'fold'; const octaveOk = octavePolicy !== 'exact' || judgePitch({ heardMidi: Math.round(fr.midi), targetMidi: Math.round(e.info.midi), policy: octavePolicy }).reason !== 'right-pitch-class-wrong-octave';
       let cents = (fr.midi - e.info.midi) * 100; const sameName = pc(fr.midi) === pc(e.info.midi); if (octavePolicy !== 'exact') cents = ((cents + 600) % 1200 + 1200) % 1200 - 600; fr.cents = cents; const tol = 45, need = task.kind === 'hold' ? 2 : 0.5;
       if (octaveOk && Math.abs(cents) <= tol) { holdFor += dt; holdCents.push(cents); wrongFor = 0; if (holdFor >= need) { const mc = mean(holdCents.map(Math.abs)), bias = mean(holdCents), q = clamp(1 - mc / 90, 0.6, 1); passEl(q, e.info.short + ': held it, ' + (Math.abs(bias) < 8 ? 'dead centre' : Math.round(Math.abs(bias)) + ' cents ' + (bias > 0 ? 'sharp' : 'flat')) + '.'); } }
-      else { holdFor = 0; holdCents = []; wrongFor += dt; if (wrongFor > 0.9) { wrongFor = 0; const near = octaveOk && Math.abs(cents) < 100; failEl(octavePolicy === 'exact' && sameName && !octaveOk ? 'Right note name, wrong octave. You want ' + e.info.label + ', which is ' + (cents > 0 ? 'lower' : 'higher') + ' on the instrument.' : near ? 'Close: you are ' + Math.round(Math.abs(cents)) + ' cents ' + (cents > 0 ? 'sharp. Relax it down.' : 'flat. Lift it up.') : 'You are on ' + nname(fr.midi) + ', the note is ' + nname(e.info.midi) + '. Go ' + (cents > 0 ? 'lower' : 'higher') + '.', near ? null : e.id + '>' + nname(fr.midi)); } }
+      else { holdFor = 0; holdCents = []; wrongFor += dt; if (wrongFor > 0.9) { wrongFor = 0; const near = octaveOk && Math.abs(cents) < 100; const wn = (x) => e.info.written === undefined ? nname(x) : nname(writtenMidi(e.info, x)); failEl(octavePolicy === 'exact' && sameName && !octaveOk ? 'Right note name, wrong octave. You want ' + e.info.label + ', which is ' + (cents > 0 ? 'lower' : 'higher') + ' on the instrument.' : near ? 'Close: you are ' + Math.round(Math.abs(cents)) + ' cents ' + (cents > 0 ? 'sharp. Relax it down.' : 'flat. Lift it up.') : 'You are on ' + wn(fr.midi) + ', the note is ' + wn(e.info.midi) + '. Go ' + (cents > 0 ? 'lower' : 'higher') + '.', near ? null : e.id + '>' + wn(fr.midi)); } }
     }
   }
 
