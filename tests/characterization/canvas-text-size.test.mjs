@@ -50,7 +50,7 @@ test('tuner labels are readable on a phone and a tuned row label stays inside it
   await page.waitFor('window.__ct.some(x => /in tune|\u2713/.test(x.s) && /^String/.test(x.s))', effectiveWaitMs(15000));
   const d = await page.evaluate(`(() => { const W = document.getElementById('cv').width, H = document.getElementById('cv').height, rows = window.__ct.filter(x => /^String/.test(x.s)), play = window.__ct.find(x => x.s === '♪'), hold = window.__ct.find(x => /to confirm|tuned, holding/.test(x.s)), verdict = window.__ct.find(x => /cents|in tune$/.test(x.s) && x.align === 'center'); return { W, H, rows, playX: play && play.x, hold, verdict }; })()`);
   // the reference-tone button starts at (play centre - playW/2); the row text must end before it
-  const playW = Math.min(d.W * 0.05, d.H * 0.5 / 6 - 8), btnLeft = d.playX - playW / 2;
+  const playW = Math.min(Math.max(d.W * 0.05, 22 * k), d.H * 0.8 / 6 - 8), btnLeft = d.playX - playW / 2;
   for (const r of d.rows) assert.ok(r.x + r.w <= btnLeft, `"${r.s}" ends at ${r.x + r.w}, under the button at ${btnLeft}`);
   const small = d.rows.filter(r => r.px / k < 9);
   assert.equal(small.length, 0, 'row labels are at least 9 CSS px: ' + JSON.stringify(small.map(r => [r.s, r.px / k])));
@@ -69,4 +69,28 @@ test('a long tuner verdict stays inside the canvas at a narrow desktop size', as
   await page.waitFor('window.__ct.some(x => /cents (sharp|flat)/.test(x.s))', effectiveWaitMs(15000));
   const v = await page.evaluate(`(() => { const e = window.__ct.find(x => /cents (sharp|flat)/.test(x.s)); return { x: e.x, w: e.w, W: document.getElementById('cv').width }; })()`);
   assert.ok(v.x - v.w / 2 >= 0 && v.x + v.w / 2 <= v.W, `verdict spans ${v.x - v.w / 2}..${v.x + v.w / 2} of ${v.W}`);
+});
+
+// A finger needs a real target: on a phone each string's reference-note button
+// used to be ~4.5 CSS px tall (and the row beside it ~8.5), so it could not be hit.
+test('the tuner reference-note buttons are big enough to tap on a phone', async (t) => {
+  const page = await launchPage(HTML_PATH, { initScript: SPY + `window.__tones = 0; (function () { var o = AudioBufferSourceNode.prototype.start; AudioBufferSourceNode.prototype.start = function () { window.__tones++; return o.apply(this, arguments); }; })();` });
+  t.after(() => page.close());
+  await page.setViewport(PHONE);
+  await page.evaluate("document.querySelector('#picker button[data-mod=\"tuner\"]').click()");
+  await page.waitFor('window.__ct.some(x => x.s === "♪")');
+  await page.evaluate("document.getElementById('cv').scrollIntoView({ block: 'center' })");
+  const g = await page.evaluate(`(() => { const c = document.getElementById('cv'), b = c.getBoundingClientRect(), p = window.__ct.find(x => x.s === '♪'); return { l: b.left, t: b.top, h: b.height, s: b.width / c.width, px: p.x, py: p.y }; })()`);
+  const cx = g.l + g.px * g.s;
+  const count = async () => page.evaluate('window.__tones');
+  // down the button column: six rows must each offer at least 18 CSS px of target
+  const b0 = await count();
+  for (let y = g.t; y < g.t + g.h; y += 1) await page.tap(cx, y);
+  const vertical = (await count()) - b0;
+  assert.ok(vertical >= 6 * 18, `button column gives ${vertical} tapping px over six rows, want >= 108`);
+  // across the first button's row: at least 18 CSS px wide
+  const b1 = await count(), ry = g.t + g.py * g.s - 4;
+  for (let x = cx - 40; x < cx + 40; x += 1) await page.tap(x, ry);
+  const horizontal = (await count()) - b1;
+  assert.ok(horizontal >= 18, `button is ${horizontal} tapping px wide, want >= 18`);
 });
