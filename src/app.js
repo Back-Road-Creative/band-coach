@@ -19,6 +19,7 @@ import { loadPack, packStatus, createIndexedDBStore, packManifestUrl, DEFAULT_MO
 import { checkForUpdate, FALLBACK_DOWNLOAD_URL } from './core/update-check.js';
 import { setNoteNaming, sanitizeNoteNaming, name as noteNameFor } from './core/note-names.js';
 import { t, en, setLocale, LOCALES } from './core/i18n.js';
+import { CLEF_PATHS } from './notation/glyphs.js';
 import { yin } from './audio/yin.js';
 import { createPitchNode } from './audio/pitch-worklet.js';
 //
@@ -1882,13 +1883,13 @@ import { register as registerPathway } from './ui/pathway.js';
   // staff, same as a staff mod with real `written`/`clef` data (the 'w' ids
   // this trio and MODS.wind use).
   function drawStaff(M, e, W, H) {
-    const clef = e ? e.info.clef : 'treble', sp = H * 0.075, yb = H * 0.62, x0 = W * 0.08, x1 = W * 0.6, bottomStep = clef === 'bass' ? 18 : 30;
+    const clef = (e && e.info.clef) || 'treble', sp = H * 0.075, yb = H * 0.62, x0 = W * 0.08, x1 = W * 0.6, bottomStep = clef === 'bass' ? 18 : 30;
     g.strokeStyle = '#c9ced9'; g.lineWidth = 2; for (let l = 0; l < 5; l++) { g.beginPath(); g.moveTo(x0, yb - l * sp); g.lineTo(x1, yb - l * sp); g.stroke(); }
-    g.fillStyle = '#e9edf6'; g.textAlign = 'left'; g.font = Math.round(sp * (clef === 'bass' ? 3.4 : 5.2)) + 'px "Segoe UI Symbol", "Noto Music", "Apple Symbols", serif'; g.fillText(clef === 'bass' ? '𝄢' : '𝄞', x0 + 6, clef === 'bass' ? yb - sp * 0.9 : yb + sp * 0.9);
+    g.fillStyle = '#e9edf6'; g.textAlign = 'left'; g.save(); g.translate(x0 + sp * 1.2, yb); g.scale(sp / 10, sp / 10); g.strokeStyle = '#e9edf6'; g.lineWidth = 2; g.stroke(new Path2D(CLEF_PATHS[clef])); g.restore(); // vector clef: a Unicode music symbol is an empty box on a device with no music font
     const els = task ? task.els : []; els.forEach((el, k) => { const m = el.info.written !== undefined ? el.info.written : el.info.midi + (M.writtenOffset || 0), nm = NAMES[pc(m)], letter = 'CDEFGAB'.indexOf(nm[0]), oct = Math.floor(m / 12) - 1, step = oct * 7 + letter, y = yb - (step - bottomStep) * sp / 2, x = x0 + (x1 - x0) * (0.32 + 0.6 * (k + 0.5) / els.length), isCur = k === task.idx;
       g.strokeStyle = '#c9ced9'; for (let s2 = bottomStep - 2; s2 >= step; s2 -= 2) { g.beginPath(); g.moveTo(x - sp * 0.95, yb - (s2 - bottomStep) * sp / 2); g.lineTo(x + sp * 0.95, yb - (s2 - bottomStep) * sp / 2); g.stroke(); } for (let s3 = bottomStep + 10; s3 <= step; s3 += 2) { g.beginPath(); g.moveTo(x - sp * 0.95, yb - (s3 - bottomStep) * sp / 2); g.lineTo(x + sp * 0.95, yb - (s3 - bottomStep) * sp / 2); g.stroke(); }
       g.fillStyle = k < task.idx ? '#5be08a' : isCur ? accent() : '#e9edf6'; g.beginPath(); g.ellipse(x, y, sp * 0.62, sp * 0.45, -0.35, 0, 7); g.fill(); g.strokeStyle = g.fillStyle; g.lineWidth = 3; g.beginPath(); if (step < bottomStep + 4) { g.moveTo(x + sp * 0.58, y); g.lineTo(x + sp * 0.58, y - sp * 3.2); } else { g.moveTo(x - sp * 0.58, y); g.lineTo(x - sp * 0.58, y + sp * 3.2); } g.stroke();
-      if (nm.length > 1) { font(sp * 1.5, 600); g.textAlign = 'right'; g.fillText(nm[1], x - sp * 0.85, y + sp * 0.45); } if (DB.prefs.names) { font(sp * 0.9, 600); g.textAlign = 'center'; g.fillStyle = '#93a0bd'; g.fillText(nname(m, true), x, yb + sp * 3.2); } });
+      if (nm.length > 1) { font(sp * 1.5, 600); g.textAlign = 'right'; g.fillText(nm[1], x - sp * 0.85, y + sp * 0.45); } if (DB.prefs.names) { font(sp * 0.9, 600); g.textAlign = 'center'; g.fillStyle = '#93a0bd'; g.fillText(nname(m, true), x, Math.min(H * 0.985, Math.max(yb + sp * 3.2, y + sp * 1.5))); } }); // label baseline drops below a low notehead (G3 on clarinet/horn) instead of sitting on it
     if (e) { const c = liveCents(e.info.midi, false); gauge(W * 0.66, H * 0.42, W * 0.3, c, c === null ? 'play a note' : Math.abs(c) < 10 ? 'in tune' : Math.round(Math.abs(c)) + ' cents ' + (c > 0 ? 'sharp' : 'flat')); const need = task.kind === 'hold' ? 2 : 0.5; g.fillStyle = '#5be08a'; g.fillRect(W * 0.66, H * 0.3, W * 0.3 * c01(holdFor / need), H * 0.025); }
   }
   function drawHarp(e, W, H) {
