@@ -84,3 +84,24 @@ test('level 2 prompts read like chord symbols and offer no triple accidentals as
     for (const c of wrong) assert.doesNotMatch(c, /bbb|###/, q.prompt + ' ' + c);
   }
 });
+
+// Review fixes: the chord to build is never a triple-accidental spelling, and
+// level 4 names the note (not a MIDI number) and is never a same-note question.
+test('level 2 never asks for a chord whose answer has a triple accidental', () => {
+  for (let seed = 0; seed < 3000; seed++) {
+    const q = make(2, seed, byId.gtr);
+    assert.doesNotMatch(q.answer, /bbb|###/, q.prompt + ' ' + q.answer);
+  }
+});
+
+test('level 4 names the concert note and is not trivial on a concert-pitch instrument', () => {
+  for (const id of ['gtr', 'flute', 'wind', 'trumpet-bb']) {
+    for (let seed = 0; seed < 30; seed++) {
+      const q = make(4, seed, byId[id]);
+      assert.doesNotMatch(q.prompt, /MIDI|\d{2}\?/, q.prompt);
+      assert.match(q.prompt, /concert-pitch [A-G][#b]?\d\?$/, q.prompt);
+      const concert = q.prompt.match(/concert-pitch ([A-G][#b]?\d)\?$/)[1];
+      if (!byId[id].transposition) assert.notEqual(q.answer, concert, id + ' ' + q.prompt);
+    }
+  }
+});
