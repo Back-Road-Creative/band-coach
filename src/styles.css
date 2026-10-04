@@ -494,6 +494,8 @@
   .practice-meter[hidden] { display: none; }
   #calibrateResult { font-size: 13px; color: var(--muted); }
   .setup-sheet { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 14px; margin-top: -4px; }
+  /* A label and its select wrap as one unit, so on a phone a label never ends a row away from its own select. */
+  .setup-pair { display: inline-flex; align-items: center; gap: 10px; max-width: 100%; } .setup-pair:has(> select[hidden]) { display: none; } .setup-pair select { min-width: 0; }
   #coach { font-weight: 500; min-height: 2.9em; }
   #sessLine { font-size: 14px; color: var(--muted); font-variant-numeric: tabular-nums; }
   #feedback { min-height: 2.9em; font-weight: 600; }
@@ -622,3 +624,4 @@
     body.printing-song .songs-print-sheet { display: block; position: absolute; top: 0; left: 0; width: 100%; color: #000; background: #fff; }
   }
   .panel-songs-rate { color: var(--muted); font-size: 13px; margin: 0; }
+.midi-details pre { white-space: pre-wrap; overflow-wrap: anywhere; max-width: 100%; }

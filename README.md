@@ -96,7 +96,8 @@ click happens to wake it.
 
 Press "Connect MIDI" to use a keyboard. The status line only says a device is connected once the
 page has actually opened it, so "Keystation found. Press any key on it." means the keyboard is
-wired up but the app has not heard a note yet, and "Keystation is working." means it has. If it
+wired up but the app has not heard a note yet, and "Keystation is working." means it has. With two keyboards each is judged on its own: "Alpha
+is working. Beta found. Press any key on it." means only Alpha has been heard. If it
 instead says another program may be using the keyboard, close whatever else has it open (another
 tab, a DAW) and press Connect again — though it is worth pressing a key first, because the app
 listens to every port whether or not it managed to open it, and a note actually arriving is taken
