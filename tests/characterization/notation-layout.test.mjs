@@ -43,3 +43,36 @@ for (const mod of ['gtr', 'uke', 'bass']) {
     assert.ok(inBands <= { gtr: 6, uke: 4, bass: 4 }[mod], `only the strings cross the fretboard (found ${inBands} light lines in it)`);
   });
 }
+
+// Voice lanes and keyboard keys get the same treatment: the staff owns the top
+// 42% (55% for the keyboard's grand staff) of the canvas, the instrument is drawn below it, so no staff line, clef
+// or time signature lands on the lane / hand labels or the keys.
+const SCAN2 = `(function () {
+  var c = document.getElementById('cv'), img = c.getContext('2d').getImageData(0, 0, c.width, c.height), W = c.width, H = c.height, d = img.data;
+  var lines = [], keyTop = -1;
+  for (var y = 0; y < H; y++) {
+    var run = 0, best = 0, key = 0;
+    for (var x = 0; x < W; x++) { var i = (y * W + x) * 4; if (d[i + 3] > 60 && d[i] > 150 && d[i + 1] > 150 && d[i + 2] > 160) { run++; if (run > best) best = run; } else run = 0; if (Math.abs(d[i] - 233) < 4 && Math.abs(d[i + 1] - 237) < 4 && Math.abs(d[i + 2] - 246) < 4) key++; }
+    if (best > W * 0.25 && y < H * 0.9) lines.push(y); // below 0.9H is the keyboard overview strip's outline
+    if (keyTop < 0 && key > W * 0.3) keyTop = y;
+  }
+  return { lines: lines, keyTop: keyTop, W: W, H: H };
+})()`;
+
+for (const mod of ['voice', 'kbd']) {
+  test(`${mod}: the staff sits above the instrument, not across it`, async (t) => {
+    const page = await launchPage(HTML_PATH);
+    t.after(() => page.close());
+    await page.evaluate(`window.__coach.setMod('${mod}')`);
+    await page.evaluate("document.getElementById('playBtn').click()");
+    await page.waitFor('window.__coach.task()');
+    await page.evaluate("window.__coach.setNotate('staff')");
+    await page.waitFor('window.__coach.lastStaff() !== null', 5000);
+    await page.evaluate('new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())))');
+    const s = await page.evaluate(SCAN2), band = mod === 'kbd' ? 0.55 : 0.42; // the staff band (the keyboard's grand staff is taller)
+    const bands = s.lines.filter((y, i) => i === 0 || y - s.lines[i - 1] > 2).length;
+    assert.ok(bands >= 5, `the five staff lines are drawn (found ${bands}): ${JSON.stringify(s)}`);
+    assert.ok(Math.max(...s.lines) < s.H * band, `every staff line is in the top band: ${JSON.stringify(s)}`);
+    if (mod === 'kbd') assert.ok(s.keyTop >= s.H * band, `the keys start below the staff band (keys at ${s.keyTop}, H ${s.H})`);
+  });
+}
