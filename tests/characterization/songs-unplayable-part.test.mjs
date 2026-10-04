@@ -20,6 +20,11 @@ test('a card whose notes all skip does not claim the piece was played or mark it
   assert.doesNotMatch(text, /Nicely done/, 'no false success screen');
   assert.match(text, /cannot be played|can't be played|none of/i, 'says why nothing can be practised');
   assert.match(text, /Back to songs/, 'still offers a way out');
-  const passed = await page.evaluate("JSON.stringify(Object.keys(JSON.parse(localStorage.getItem('bandcoach.songs-progress') || '{}')))").catch(() => '[]');
-  assert.doesNotMatch(passed, /mary/i, 'song not marked passed');
+  // Real store: api.store('songs-progress') lives in DB.panels, keyed by song id.
+  const passed = await page.evaluate("JSON.stringify((window.__coach.db().panels || {})['songs-progress'] || {})");
+  assert.deepEqual(JSON.parse(passed), {}, 'song not marked passed in the progress store');
+  await page.evaluate("Array.from(document.querySelectorAll('.panel-songs-practice button')).find(b => b.textContent === 'Back to songs').click()");
+  const rows = await page.evaluate("Array.from(document.querySelectorAll('.panel-songs-row button')).map(b => b.textContent).join('|')");
+  assert.match(rows, /Mary Had a Little Lamb(\||$)/, 'Mary row present and has no (passed) suffix');
+  assert.doesNotMatch(rows, /\(passed\)/, 'no song shows a passed mark');
 });
