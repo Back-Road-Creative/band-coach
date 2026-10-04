@@ -1,7 +1,7 @@
 // Turns a measure of notes into plain drawing primitives (no beaming and no
 // tab in this module — see tab.js for tab, and the module doc for beaming).
 
-import { spellMidi } from './spell.js';
+import { spellMidi, spellAs } from './spell.js';
 import { staffPosition, ledgerLines, needsAccidental } from './staff.js';
 import { keyAccidentals } from './spell.js';
 
@@ -156,7 +156,8 @@ export function layoutMeasure({ clef, key, time, notes, width, barBeats }) {
     }
 
     const s = grand ? (note.midi >= 60 ? 'treble' : 'bass') : clef;
-    const spelled = spellMidi(note.midi, key);
+    // note.spell (single sharp/flat only -- no double-accidental glyphs) keeps a caller's own spelling.
+    const spelled = note.spell && note.spell.accidental.length < 2 ? spellAs(note.midi, note.spell.letter, note.spell.accidental) : spellMidi(note.midi, key);
     const position = staffPosition(spelled, s);
     const y = positionToY(staffBottomY[s], position);
 

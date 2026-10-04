@@ -101,3 +101,19 @@ test('C and C| meter shorthands', () => {
   const { song: songCut } = importAbc('X:1\nT:T\nM:C|\nK:C\nC\n');
   assert.deepEqual(songCut.metre, { num: 2, den: 2 });
 });
+
+test('stray 0x01/0x02 bytes in the file are dropped, never read as the reader\'s own markers', { timeout: 10000 }, () => {
+  // The reader splices \x01/\x02 into the body as voice/field markers; a lone
+  // one from the user's file used to loop forever (indexOf -1 -> restart).
+  for (const junk of ['\x01', '\x02', '\x00\x01', 'X:1\nT:Bin\nK:C\nC\x01DE|\n', 'X:1\nK:C\nC\x02D|\n']) {
+    const { song } = importAbc(junk);
+    assert.equal(song.schema, 'song/1');
+  }
+  assert.equal(importAbc('X:1\nT:Bin\nM:4/4\nL:1/4\nK:C\nC\x01DE|\n').song.parts[0].notes.length, 3);
+});
+
+test('text with no K: line is flagged as maybe not ABC', () => {
+  const { warnings } = importAbc('this is not abc at all');
+  assert.ok(warnings.some((w) => /no K:/.test(w)));
+  assert.ok(!importAbc('X:1\nK:C\nCDE|\n').warnings.some((w) => /no K:/.test(w)));
+});
