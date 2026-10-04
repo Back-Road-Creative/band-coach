@@ -1692,8 +1692,8 @@ function mountSongsPanel(hostEl, api) {
     const arrangementLine = arrangementText(practice.arrangement);
     if (arrangementLine) practiceSection.appendChild(el('p', { class: 'panel-songs-arrangement', text: arrangementLine }));
     const { plan, stepIndex } = practice;
-    if (!plan.steps.length) {
-      // Every note skipped on this instrument: nothing to play, so say so -- never the "played it" end screen or a passed mark.
+    if (!plan.steps.length && plan.fit && plan.fit.unplayable.length) {
+      // Every note skipped on this instrument: nothing to play, so say so -- never the "played it" end screen or a passed mark. (A part with no notes at all still finishes at once, as before.)
       practiceSection.appendChild(el('p', { text: 'None of this part\'s notes can be played on ' + practice.instrument.name + ', so there is nothing to practise here. Pick another instrument from "Play it on…".' }));
       practiceSection.appendChild(renderPlayItOn(practice.song, practice.partId, practice.instrumentId)); // the way out the message promises
       practiceSection.appendChild(el('button', { type: 'button', text: 'Back to songs', onclick: () => { practice = null; currentPractice = null; practiceSection.hidden = true; libraryDetails.open = true; } }));
