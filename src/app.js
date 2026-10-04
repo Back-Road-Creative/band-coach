@@ -1168,6 +1168,7 @@ import { register as registerPathway } from './ui/pathway.js';
     const e = cur(); e.rt = now() - e.t0; e.q = e.failed ? 0 : timeQ(e.rt, task.limit) * (extraQ === undefined ? 1 : extraQ); if (assistance) e.assistance = assistance; if (typeof input === 'string') e.input = input; flashGood = performance.now(); lastInputAt = now();
     if (!e.failed && !e.helped) say(msg || (inf(e.id).short + ': yes, in ' + e.rt.toFixed(1) + ' s.'), 'ok'); else say('That is the one. ' + inf(e.id).short + (e.info.string ? ' lives on string ' + e.info.string + (e.info.fret ? ', fret ' + e.info.fret : ', open') : '') + '.', '');
     task.idx++; held = []; holdFor = 0; holdCents = []; wrongFor = 0;
+    if (diagShown && $('coach').textContent === diagShown) { coach(diagBefore); } diagInputFrames = []; diagLastState = null; diagSince = null; diagShown = null; // a pass starts the listening afresh: no warning left beside it
     if (task.idx >= task.els.length) finishTask(); else { cur().t0 = now(); refreshPrompt(); }
   }
   function failEl(msg, confKey) { const e = cur(); if (!e) return; if (!e.failed) { e.failed = true; e.reveal = true; } if (confKey) S.conf[confKey] = (S.conf[confKey] || 0) + 1; flashBad = performance.now(); say(msg, 'no'); updateDesc(); }
@@ -1427,7 +1428,7 @@ import { register as registerPathway } from './ui/pathway.js';
       // "too-quiet" a signal onPitch itself would already have judged.
       const diag = diagnoseInput(diagInputFrames, { gates: { pitch: gates.note } });
       // stepDiagnosis() holds back a silent/too-quiet verdict for the first moments of listening, and says when clean notes should take a warning down; the line it replaced is put back.
-      if (diagSince === null) diagSince = now();
+      if (diagSince === null || diag.state === 'ok') diagSince = now(); // the quiet-room grace counts from the last clean note, so a note that has just rung out is not called silence
       const step = stepDiagnosis(diag, diagLastState, { sinceSec: now() - diagSince }); diagLastState = step.last;
       if (step.say) { if ($('coach').textContent !== diagShown) diagBefore = $('coach').textContent; diagShown = step.say; coach(step.say); }
       else if (step.clear && diagShown && $('coach').textContent === diagShown) { coach(diagBefore); diagShown = null; }
