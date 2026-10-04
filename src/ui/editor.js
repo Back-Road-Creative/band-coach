@@ -568,7 +568,8 @@ function mountEditor(hostEl, api) {
       part.notes.forEach((n) => {
         const at = t0 + ticksToSeconds(n.start, song.bpm);
         const dur = Math.max(0.05, ticksToSeconds(n.dur, song.bpm));
-        api.tone(n.midi, at, dur, 0.22);
+        if (n.piece && typeof api.drum === 'function') api.drum(n.piece, at); // a drum note sounds as a drum, not a pitch
+        else api.tone(n.midi, at, dur, 0.22);
         totalEndTicks = Math.max(totalEndTicks, n.start + n.dur);
       });
     });
