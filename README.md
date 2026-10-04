@@ -56,6 +56,11 @@ Press "Set up input" to open Connect, the input list, "Check my microphone" and 
 they stay tucked away until you need them, so the status line (whether the app is hearing you) and
 the MIDI activity dot are the only things shown up front.
 
+Pressing Start on a microphone instrument asks the browser for the microphone first and begins once
+it is allowed; if it is blocked, the coach says so and tells you to use "Set up input", then "Connect
+microphone" (no exercise runs that cannot hear you). Switching to an instrument that does not listen
+(Keyboard, Ear training) closes the microphone again.
+
 If you have more than one input
 (e.g. an audio interface), pick it from the input list next to Connect. Connect also listens to
 your room for about a second and a half the first time and sets the listening thresholds from it,
@@ -450,7 +455,7 @@ disabled until any unresolved check items are fixed) lives in `src/ui/songs/revi
 ## Capture a melody
 
 The "Capture a melody" tool (`TOOLS.capture` in `src/app.js`) is the fast, no-file path from a sound
-to something practisable: press Connect, then Listen, and play, sing, hum or whistle a tune, or hold the
+to something practisable: press "Set up input", then "Connect microphone", then Listen, and play, sing, hum or whistle a tune, or hold the
 microphone up to a recording of one instrument playing one note at a time. Like the rest of this
 app's pitch tracking it is monophonic and hears one note at a time — it cannot pull a separate part
 out of a full band recording. Once notes are captured, two buttons turn them into practice: "Make

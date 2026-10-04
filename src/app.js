@@ -567,8 +567,8 @@ import { register as registerPathway } from './ui/pathway.js';
     ] };
   MOD_IDS.push('harp');
   const TOOLS = {
-    tuner: { name: 'Tuner', tag: 'tool', color: '#93a0bd', help: 'Tuner: press Connect, pick your instrument, and play one open string at a time. The needle shows how far off you are; the string turns green when it has been in tune for a moment. Click a string to hear the note it should be.' },
-    capture: { name: 'Capture a melody', tag: 'tool', color: '#93a0bd', help: 'Capture: press Connect, then Listen, and play, sing, hum or whistle a tune, or hold the microphone to a recording of one instrument playing one note at a time. It writes down the notes it hears, and you can turn them into a lesson on any instrument here. It hears one note at a time: it cannot pull separate parts out of a full band recording.' }
+    tuner: { name: 'Tuner', tag: 'tool', color: '#93a0bd', help: 'Tuner: press Set up input, then Connect microphone, pick your instrument, and play one open string at a time. The needle shows how far off you are; the string turns green when it has been in tune for a moment. Click a string to hear the note it should be.' },
+    capture: { name: 'Capture a melody', tag: 'tool', color: '#93a0bd', help: 'Capture: press Set up input, then Connect microphone, then Listen, and play, sing, hum or whistle a tune, or hold the microphone to a recording of one instrument playing one note at a time. It writes down the notes it hears, and you can turn them into a lesson on any instrument here. It hears one note at a time: it cannot pull separate parts out of a full band recording.' }
   };
   // 'ear' and 'rhy' are the two pseudo-mods declared above alongside MODS
   // (see the comment at MODS.ear/MODS.rhy) -- they run through the same
@@ -2068,7 +2068,7 @@ import { register as registerPathway } from './ui/pathway.js';
     const tg = TUNINGS[tunerKind][1], n = tg.length, st = tunerState || {}; rowRects = []; playRects = [];
     const activeIdx = tunerLock !== null ? tunerLock : st.selIdx;
     if (n) tg.forEach((m, i) => { const y = H * 0.1 + i * (H * 0.5 / n), h = H * 0.5 / n - 8, ok = tuned[tunerKind + i], sel = i === activeIdx && st.phase && st.phase !== 'idle'; const playW = Math.min(W * 0.05, h); const rowW = W * 0.32 - playW - 10; rr(W * 0.05, y, W * 0.32, h, 8); g.fillStyle = ok ? '#5be08a' : sel ? '#2a3350' : '#121726'; g.fill(); g.fillStyle = ok ? '#04130a' : '#e9edf6'; font(Math.min(H * 0.08, H * 0.34 / n)); g.textAlign = 'left'; g.fillText('String ' + (n - i) + '   ' + nname(m, true) + (ok ? '   in tune' : '') + (tunerLock === i ? '   LOCKED' : ''), W * 0.07, y + h * 0.62); g.fillStyle = '#93a0bd44'; rr(W * 0.05 + rowW + 8, y + 4, playW, h - 8, 6); g.fill(); g.fillStyle = '#e9edf6'; g.textAlign = 'center'; font(Math.min(H * 0.06, H * 0.28 / n)); g.fillText('♪', W * 0.05 + rowW + 8 + playW / 2, y + h * 0.6); rowRects.push({ x: W * 0.05, y: y, w: rowW, h: h, m: m, idx: i }); playRects.push({ x: W * 0.05 + rowW + 8, y: y + 4, w: playW, h: h - 8, m: m }); });
-    if (st.phase === 'idle' || st.midi === null || !micReady) { gauge(W * 0.45, H * 0.62, W * 0.5, null, !micReady ? 'press Connect first' : tunerLock !== null && n ? 'locked: play ' + nname(tg[tunerLock], true) : 'play one string'); return; }
+    if (st.phase === 'idle' || st.midi === null || !micReady) { gauge(W * 0.45, H * 0.62, W * 0.5, null, !micReady ? 'press Set up input, then Connect microphone' : tunerLock !== null && n ? 'locked: play ' + nname(tg[tunerLock], true) : 'play one string'); return; }
     const target = st.targetMidi, c = st.cents, offScale = Math.abs(c) > 50;
     const label = (Math.abs(c) <= 5 ? 'in tune' : Math.round(Math.abs(c)) + ' cents ' + (c > 0 ? 'sharp, loosen it' : 'flat, tighten it')) + (offScale ? ' (off scale)' : '');
     // Age (ms since the last confident reading) fades the readout instead of
@@ -2084,7 +2084,7 @@ import { register as registerPathway } from './ui/pathway.js';
   }
   function drawCapture(W, H) {
     const ns = cap.notes; g.fillStyle = '#93a0bd'; font(H * 0.06, 600); g.textAlign = 'left';
-    if (!ns.length && !cap.on) { g.fillText(micReady ? 'Press Listen, then play or sing a tune, one note at a time.' : 'Press Connect, then Listen.', W * 0.05, H * 0.5); return; }
+    if (!ns.length && !cap.on) { g.fillText(micReady ? 'Press Listen, then play or sing a tune, one note at a time.' : 'Press Set up input, then Connect microphone, then Listen.', W * 0.05, H * 0.5); return; }
     let lo = 127, hi = 0; ns.forEach(x => { lo = Math.min(lo, x.m); hi = Math.max(hi, x.m); }); if (!ns.length) { lo = 55; hi = 72; } lo -= 2; hi += 2; const T = Math.max(6, ns.length ? ns[ns.length - 1].t + ns[ns.length - 1].d : 0, cap.on ? now() - cap.start : 0), X = t => W * 0.08 + (W * 0.9) * t / T, Y = m => H * 0.9 - (H * 0.78) * (m - lo) / (hi - lo);
     for (let m = lo; m <= hi; m++) if (pc(m) === 0) { g.strokeStyle = '#252d47'; g.beginPath(); g.moveTo(W * 0.08, Y(m)); g.lineTo(W * 0.98, Y(m)); g.stroke(); g.fillText(nname(m, true), W * 0.01, Y(m) + 6); }
     ns.forEach(x => { rr(X(x.t), Y(x.m) - H * 0.02, Math.max(6, X(x.t + x.d) - X(x.t)), H * 0.04, 4); g.fillStyle = '#35c9c0'; g.fill(); if (DB.prefs.names && ns.length < 60) { g.fillStyle = '#e9edf6'; font(H * 0.04, 600); g.fillText(nname(x.m), X(x.t), Y(x.m) - H * 0.03); } });
@@ -2504,6 +2504,13 @@ import { register as registerPathway } from './ui/pathway.js';
     parser.feed(d).forEach(evt => { if (evt.type === 'on') { noteState.noteOn(input, evt.channel, evt.note); realMidiHeld.add(evt.note); onNote(evt.note, true, 'midi'); } else { noteState.noteOff(input, evt.channel, evt.note); if (!noteState.isHeld(evt.note)) realMidiHeld.delete(evt.note); onNoteOff(evt.note, 'midi'); } });
   }
   function connectMic() { openMic().then(ioRefresh).catch(() => ioState('off', 'The microphone was blocked. Allow it in the browser, or open the standalone copy in Chrome.')); }
+  // Start on a mic instrument asks for the mic FIRST (the browser's own prompt), then begins: an exercise that cannot hear only ever says "Time." and "You stepped away". Blocked or unavailable: say so and do not start.
+  function startAfterMic() {
+    if (!needsMic() || micReady) { startSession(); return; }
+    const m = mod, blocked = () => { const msg = 'The microphone was blocked, so I could not start. Press "Set up input", then "Connect microphone", and allow it in your browser.'; ioState('off', msg); if (mod === m) coach(msg); };
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { const msg = 'This browser cannot open a microphone here. Open the standalone copy in Chrome.'; ioState('off', msg); coach(msg); return; }
+    ensureAudio(); openMic().then(() => { ioRefresh(); if (!sess && mod === m) startSession(); }).catch(blocked);
+  }
   function connectMidi() {
     navigator.requestMIDIAccess().then(a => {
       const wire = () => {
@@ -2611,7 +2618,7 @@ import { register as registerPathway } from './ui/pathway.js';
   $('tapPad').addEventListener('pointerdown', ev => { ev.preventDefault(); ensureAudio(); onTap(ev); });
   $('replayBtn').addEventListener('click', function () { this.blur(); if (task && !task.done) { playRef(task); lastInputAt = now(); } });
   $('showMeBtn').addEventListener('click', function () { this.blur(); const e = cur(); if (!task || task.done || !e) return; if (!e.failed && !e.helped) { e.helped = true; e.reveal = true; } say('Shown. This one is help, not a test: no credit and no penalty.', ''); refreshPrompt(); });
-  $('playBtn').addEventListener('click', function () { this.blur(); if (!sess) startSession(); else if (paused) resume(); else takeBreak('user'); });
+  $('playBtn').addEventListener('click', function () { this.blur(); if (!sess) startAfterMic(); else if (paused) resume(); else takeBreak('user'); });
   $('endBtn').addEventListener('click', function () { this.blur(); endSession(); }); $('endBtn2').addEventListener('click', endSession); $('backBtn').addEventListener('click', resume);
   $('snoozeBtn').addEventListener('click', () => { sess.snoozeUntil = Date.now() + 5 * 60000; sess.tiredFor = 0; S.ready = Math.min(S.ready, 0.6); pauseInfo = { at: Date.now(), secs: 0 }; resume(); coach('Five more minutes, then I will ask again. I have eased off the pace meanwhile.'); });
   document.addEventListener('visibilitychange', () => { if (document.hidden && playing) takeBreak('hidden'); if (document.hidden) { flushSave(); releaseNotes(); runTeardown('hidden'); } else { refreshModelClock(); resumeAudio(); ioRefresh(); } wakeLock.handleVisibilityChange(document); });
@@ -2652,7 +2659,7 @@ import { register as registerPathway } from './ui/pathway.js';
   $('optNoteSystem').addEventListener('change', applyNoteNaming); $('optAccidentals').addEventListener('change', applyNoteNaming);
 
   function setMod(m) {
-    if (sess) endSession(); mod = m; if (MODS[m]) { S = DB.mods[m]; DB.prefs.mod = m; } customOn = false; grooveOn = false; groove = null; task = null; bar = null; heard = null; cap.on = false; tunerState = null; tunerLock = null; diagInputFrames = []; diagLastState = null;
+    if (sess) endSession(); mod = m; if (micStream && !(TOOLS[m] || (MODS[m] && /^(pluck|sustain|mic)/.test(MODS[m].input)))) { const pm = $('practiceMeter'); if (pm) pm.hidden = true; micStream.getTracks().forEach(t => t.stop()); micStream = null; micReady = false; micGen++; } if (MODS[m]) { S = DB.mods[m]; DB.prefs.mod = m; } customOn = false; grooveOn = false; groove = null; task = null; bar = null; heard = null; cap.on = false; tunerState = null; tunerLock = null; diagInputFrames = []; diagLastState = null;
     if (pitchWorkletNode && MODS[m] && MODS[m].fmin && MODS[m].fmax) { lastWorkletRangeSent = { fmin: MODS[m].fmin, fmax: MODS[m].fmax }; pitchWorkletNode.port.postMessage({ type: 'range', fmin: MODS[m].fmin, fmax: MODS[m].fmax }); }
     if (pitchWorkletNode && actx) { const neededFrameSize = frameSizeForInstrument(instrumentById[m], actx.sampleRate); if (neededFrameSize !== lastWorkletFrameSize) { lastWorkletFrameSize = neededFrameSize; pitchWorkletNode.port.postMessage({ type: 'frameSize', frameSize: neededFrameSize }); } }
     document.querySelectorAll('#picker button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.mod === m)));
@@ -3056,6 +3063,8 @@ import { register as registerPathway } from './ui/pathway.js';
   // Debug-hook slots: replace ONLY your own line with
   //   if (__DEBUG_HOOK__) Object.assign(hook, { … });
   if (__DEBUG_HOOK__) Object.assign(hook, { errors: getErrors });
+  // startWithoutMic(): a session on the frames a test injects, with no live mic (Start opens one first; the fake device's tone would mix in).
+  if (__DEBUG_HOOK__) Object.assign(hook, { startWithoutMic: startSession });
   if (__DEBUG_HOOK__) Object.assign(hook, { pitchFrame: (fr, dt) => onPitch(fr, dt) });
   if (__DEBUG_HOOK__) Object.assign(hook, { testPluck: testPluck, pitchWorkletActive: () => !!pitchWorkletNode });
   if (__DEBUG_HOOK__) Object.assign(hook, { testDrumHit: testDrumHit });
