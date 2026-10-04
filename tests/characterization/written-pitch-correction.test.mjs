@@ -16,10 +16,11 @@ async function wrongNote(t, mod, heard) {
   await page.evaluate("document.getElementById('playBtn').click()");
   await page.waitFor('window.__coach.task() && window.__coach.cur()');
   await page.evaluate('window.__coach.task().limit = 1e9');
-  await page.waitFor('!window.__coach.deaf()');
   const info = await page.evaluate('window.__coach.cur().info');
-  for (let k = 0; k < 3; k++) await page.evaluate(`window.__coach.pitchFrame(${JSON.stringify(frame(heard(info)))}, 0.5)`);
-  await page.waitFor("document.getElementById('feedback').className === 'no'");
+  // The listen check and the three frames run in ONE synchronous call: with a round trip per frame,
+  // a slow runner let the app go deaf (its own sound playing) between frames and drop them, so the
+  // correction never came. A call that lands while deaf sends nothing and is retried.
+  await page.waitFor(`(() => { if (window.__coach.deaf()) return false; for (let k = 0; k < 3; k++) window.__coach.pitchFrame(${JSON.stringify(frame(heard(info)))}, 0.5); return document.getElementById('feedback').className === 'no'; })()`);
   return { info, text: await page.evaluate("document.getElementById('feedback').textContent") };
 }
 
