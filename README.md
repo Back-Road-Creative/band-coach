@@ -719,8 +719,7 @@ into extra rows rather than letting fret numbers run past its fixed-width
 canvas.
 
 Keyboard, guitar, bass, ukulele and voice each have a per-instrument "Show"
-preference (note names, staff, or both) that draws this staff as an overlay
-alongside the existing display; it defaults to "Note names (today)", so
+preference (note names, staff, or both) that draws this staff alongside the existing display (the staff takes a band along the top of the canvas and the instrument -- fretboard, voice lanes or keys -- shrinks to fit below it, so the two never overlap; on the keyboard the canvas grows taller in Staff mode and the band is capped so every key stays at the 24 CSS px tap floor); it defaults to "Note names (today)", so
 nothing changes unless a learner switches it. Wind and brass keeps its own
 hand-drawn staff (task-row layout, live tuning gauge, hold timer) rather
 than being swapped onto the engine, since the two are not equivalent.

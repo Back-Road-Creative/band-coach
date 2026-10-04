@@ -1970,6 +1970,12 @@ import { register as registerPathway } from './ui/pathway.js';
   // to each instrument's existing drawing so today's display is unchanged
   // when the preference is left at 'names'. Never prints the letter name
   // unless the app's own reveal flag says so.
+  // True when the staff overlay is on for any wired instrument, so draw()
+  // gives the staff its own top band (0..0.42H) and the instrument the rest.
+  // The keyboard's grand staff is twice as tall, so it gets 0.55H, the rest 0.42H.
+  // The keyboard's band also leaves its keys >= 24 CSS px tall (the tap floor): 90 CSS px of key area, since the two rows are 0.27 of it.
+  const staffBandH = (m, H) => m === 'kbd' ? Math.min(0.55, 1 - 90 * (cv.width / (cv.getBoundingClientRect().width || cv.width)) / H) : 0.42;
+  const staffBand = m => NOTATE_MOD_IDS.indexOf(m) >= 0 && (DB.prefs.notate[m] || 'names') !== 'names';
   function drawNotation(e, W, H) {
     lastStaff = null;
     if (!e || e.info.kind !== 'note' || e.info.midi === null || e.info.midi === undefined) return;
@@ -1981,7 +1987,10 @@ import { register as registerPathway } from './ui/pathway.js';
     if (!out) return;
     const nameShown = notate === 'both' && DB.prefs.names && !!(e.reveal || e.failed);
     lastStaff = Object.assign({ nameShown: nameShown }, out);
-    const scale = H * 0.0075, x0 = W * 0.05, y0 = H * 0.06;
+    // The instrument's own drawing is moved down out of the way (draw()),
+    // so its staff takes the top band: -20..115 staff units tall, never
+    // wider than the canvas. Everything else keeps the original origin.
+    const band = staffBand(mod), scale = band ? Math.min(H * (mod === 'kbd' ? 0.0023 : 0.0027), W * 0.9 / 280) : H * 0.0075, x0 = W * 0.05, y0 = band ? H * 0.02 + 20 * scale : H * 0.06;
     g.save();
     g.translate(x0, y0); g.scale(scale, scale);
     g.strokeStyle = '#c9ced9'; g.fillStyle = '#e9edf6'; g.lineWidth = 1.5 / scale;
@@ -1990,14 +1999,14 @@ import { register as registerPathway } from './ui/pathway.js';
     g.restore();
     if (nameShown) {
       g.fillStyle = '#93a0bd'; font(H * 0.05, 600); g.textAlign = 'left';
-      g.fillText(nname(e.info.midi), x0, y0 + H * 0.34);
+      g.fillText(nname(e.info.midi), x0, band ? H * (staffBandH(mod, H) - 0.02) : y0 + H * 0.34);
     }
   }
   function draw() {
-    size(); const W = cv.width, H = cv.height; g.clearRect(0, 0, W, H); rowRects = []; keyRects = []; kbdOverviewRect = null;
+    cv.classList.toggle('staffkbd', staffBand('kbd') && mod === 'kbd'); size(); const W = cv.width, H = cv.height; g.clearRect(0, 0, W, H); rowRects = []; keyRects = []; kbdOverviewRect = null;
     if (TOOLS[mod]) { if (mod === 'tuner') drawTuner(W, H); else drawCapture(W, H); return; }
     const M = MODS[mod], e = playing && task && !task.done ? cur() : null, showE = e || (task && task.done ? task.els[task.els.length - 1] : null);
-    if (mod === 'kbd') { const kr = kbdRange(); const tg = []; let rhMidi = null, lhMidi = null; if (e) { if (e.info.kind === 'chord') { if (e.reveal || e.failed) e.info.pcs.forEach(x => tg.push(60 + x)); } else if (e.info.kind === 'hands-together') { if (e.reveal || e.failed) { tg.push(e.info.ex.rh.midi, e.info.ex.lh.midi); rhMidi = e.info.ex.rh.midi; lhMidi = e.info.ex.lh.midi; } } else if (e.reveal || e.failed) tg.push(e.info.midi); } const good = performance.now() - flashGood < 300 && task ? task.els.slice(0, task.idx).map(x => x.info.midi).filter(x => x) : []; const kOpts = { target: tg, good: good, names: DB.prefs.names, rhMidi: rhMidi, lhMidi: lhMidi };
+    if (mod === 'kbd') { const kr = kbdRange(), sb = staffBand('kbd'), oy = sb ? H * staffBandH('kbd', H) : 0, Hk = sb ? H * (1 - staffBandH('kbd', H)) : H; const tg = []; let rhMidi = null, lhMidi = null; if (e) { if (e.info.kind === 'chord') { if (e.reveal || e.failed) e.info.pcs.forEach(x => tg.push(60 + x)); } else if (e.info.kind === 'hands-together') { if (e.reveal || e.failed) { tg.push(e.info.ex.rh.midi, e.info.ex.lh.midi); rhMidi = e.info.ex.rh.midi; lhMidi = e.info.ex.lh.midi; } } else if (e.reveal || e.failed) tg.push(e.info.midi); } const good = performance.now() - flashGood < 300 && task ? task.els.slice(0, task.idx).map(x => x.info.midi).filter(x => x) : []; const kOpts = { target: tg, good: good, names: DB.prefs.names, rhMidi: rhMidi, lhMidi: lhMidi };
       if (kr[0] === 48) {
         // item B2 (Wave kbd): once the octave below is unlocked (level 8+, or
         // a custom captured melody below middle C) a single 15-white-key strip
@@ -2011,17 +2020,17 @@ import { register as registerPathway } from './ui/pathway.js';
         // neither row ever moves mid-phrase. item D2 (Wave kbd): a phone
         // canvas still left the narrowest key just under a 40px floor at
         // W*0.03/W*0.94 -- W*0.02/W*0.96 clears it (340*0.96/8 = 40.8px).
-        const x0 = W * 0.02, rowW = W * 0.96, labelH = H * 0.07, gap = H * 0.02, rowH = (H * 0.7 - 2 * labelH - gap) / 2;
+        const x0 = W * 0.02, rowW = W * 0.96, labelH = Hk * 0.07, gap = Hk * 0.02, rowH = (Hk * 0.7 - 2 * labelH - gap) / 2;
         const label = (text, ly) => { g.fillStyle = '#93a0bd'; font(labelH * 0.55, 600); g.textAlign = 'left'; g.fillText(text, x0, ly + labelH * 0.72); };
-        const y0 = H * 0.18, y1 = y0 + labelH, y2 = y1 + rowH + gap, y3 = y2 + labelH;
+        const y0 = oy + Hk * 0.18, y1 = y0 + labelH, y2 = y1 + rowH + gap, y3 = y2 + labelH;
         label('Left hand · ' + nname(48, true) + '–' + nname(59, true), y0);
         drawKeys(x0, y1, rowW, rowH, 48, 59, Object.assign({}, kOpts, { row: 0, hand: 'lh' }));
         label('Right hand · ' + nname(60, true) + ' · middle C – ' + nname(72, true), y2);
         drawKeys(x0, y3, rowW, rowH, 60, 72, Object.assign({}, kOpts, { row: 1, hand: 'rh' }));
-      } else drawKeys(W * 0.02, H * 0.18, W * 0.96, H * 0.7, kr[0], kr[1], kOpts);
-      drawKbdOverview(W * 0.02, H * 0.905, W * 0.96, H * 0.07, kr[0], kr[1]);
-      if (e && e.info.kind === 'chord') { g.fillStyle = '#e9edf6'; font(H * 0.11); g.textAlign = 'center'; g.fillText(e.info.sym, W / 2, H * 0.13); } if (document.activeElement === cv) { const fi = kbdFocusInfo(); if (fi) { g.strokeStyle = '#ffd23f'; g.lineWidth = 4; g.strokeRect(fi.x + 2, fi.y + 2, fi.w - 4, fi.h - 4); } } }
-    else if (M.tuning) drawFret(M, e, W, H); else if (mod === 'voice') drawVoice(e, W, H); else if (M.staff) drawStaff(M, e, W, H); else if (mod === 'harp') drawHarp(e, W, H);
+      } else drawKeys(W * 0.02, oy + Hk * 0.18, W * 0.96, Hk * 0.7, kr[0], kr[1], kOpts);
+      drawKbdOverview(W * 0.02, oy + Hk * 0.905, W * 0.96, Hk * 0.07, kr[0], kr[1]);
+      if (e && e.info.kind === 'chord') { g.fillStyle = '#e9edf6'; font(Hk * 0.11); g.textAlign = 'center'; g.fillText(e.info.sym, W / 2, oy + Hk * 0.13); } if (document.activeElement === cv) { const fi = kbdFocusInfo(); if (fi) { g.strokeStyle = '#ffd23f'; g.lineWidth = 4; g.strokeRect(fi.x + 2, fi.y + 2, fi.w - 4, fi.h - 4); } } }
+    else if (M.tuning) { if (staffBand(mod)) { g.save(); g.translate(0, H * 0.42); drawFret(M, e, W, H * 0.58); g.restore(); } else drawFret(M, e, W, H); } else if (mod === 'voice') { if (staffBand(mod)) { g.save(); g.translate(0, H * 0.42); drawVoice(e, W, H * 0.58); g.restore(); } else drawVoice(e, W, H); } else if (M.staff) drawStaff(M, e, W, H); else if (mod === 'harp') drawHarp(e, W, H);
     else if (mod === 'mallet-percussion') { const rec = instrumentById['mallet-percussion'], tg = e && e.info.kind === 'note' && (e.reveal || e.failed) ? [e.info.midi] : []; drawKeys(W * 0.03, H * 0.18, W * 0.94, H * 0.7, rec.range.low, rec.range.high, { target: tg, good: [], names: DB.prefs.names }); }
     else if (M.kit) drawKit(W, H);
     else if (mod === 'ear') drawEar(W, H); else if (mod === 'rhy') { if (task && task.kind === 'bar2') drawBar2(W, H); else drawBar(W, H); }
