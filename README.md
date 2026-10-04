@@ -88,8 +88,9 @@ goes for one inside a progress file you restore; the next Connect measures again
 Switching away from the tab (or backgrounding the app on a phone) stops the microphone and
 suspends audio outright, rather than merely pausing the exercise on screen — the OS mic indicator
 goes off, exactly as if you had closed the tab. Coming back does not reopen the mic on its own:
-press Connect again (or resume through a drill that needs it) and the status line and mic indicator
-catch up. The app's own clock does come back on its own, though — the moment the tab is visible
+press Connect again and the status line and mic indicator catch up. If you resume a drill that
+needs the mic before doing that, the coach says the mic was released and to press Connect (it does
+not run the drill deaf and blame your microphone). The app's own clock does come back on its own, though — the moment the tab is visible
 again (or, on a phone, the moment the OS restores it from its back/forward cache), suspended audio
 resumes so a lesson already in progress keeps ticking rather than freezing solid until some other
 click happens to wake it.
@@ -718,8 +719,7 @@ into extra rows rather than letting fret numbers run past its fixed-width
 canvas.
 
 Keyboard, guitar, bass, ukulele and voice each have a per-instrument "Show"
-preference (note names, staff, or both) that draws this staff as an overlay
-alongside the existing display; it defaults to "Note names (today)", so
+preference (note names, staff, or both) that draws this staff alongside the existing display (the staff takes a band along the top of the canvas and the instrument -- fretboard, voice lanes or keys -- shrinks to fit below it, so the two never overlap; on the keyboard the canvas grows taller in Staff mode and the band is capped so every key stays at the 24 CSS px tap floor); it defaults to "Note names (today)", so
 nothing changes unless a learner switches it. Wind and brass keeps its own
 hand-drawn staff (task-row layout, live tuning gauge, hold timer) rather
 than being swapped onto the engine, since the two are not equivalent.
@@ -1039,7 +1039,7 @@ held, CHECK asks for a fresh bass note-on followed by a short three-note melody 
 (`heldBassMelody()` in `src/core/hands-together.js` — the right hand's own note, its neighbouring
 pair's note, then the right hand's own note again, e.g. C-D-C; the top pair, G, has no pair above
 it to borrow from, so it plays G-F-G instead) while the bass keeps sounding. A melody note played while the bass has already
-been let go, or the bass being released before the last melody note-on, fails with a plain-language
+been let go (whatever its pitch), or the bass being released before the last melody note-on, fails with a plain-language
 reason naming the left hand and the hold; a melody note that is not the next one expected fails
 naming the expected note instead. The exercise passes on the bass note-off, once it comes after the
 last melody note-on (`gradeHeldBass()`). This grading needs real note-on/note-off events, so — the
@@ -1082,7 +1082,7 @@ same finger shape there. There is no LEARN/CHECK split and no millisecond tolera
 grader, `gradePositionChange()`, covers both the pre-shift and post-shift chord, telling them apart
 by whether the shift has already happened once this attempt. Playing the old position again after
 the shift is a scored fail naming it ("that is the old position"), not a silent no-op and not a
-second pass. A "before you start" line names the starting position and the shift before the
+second pass. Lifting the left hand after the shift (MIDI or computer keys) is a scored fail naming the left hand, and restarts the exercise from the first position, so pressing it down again cannot pass it. A "before you start" line names the starting position and the shift before the
 exercise begins, the same as level 13's own prep line. This grading runs on a real MIDI keyboard or
 the computer keys, and — because there is no hold to lose and no release timing at stake — a screen
 tap (or the on-screen focus cursor's Enter/Space) is graded exactly the same way as a computer key,
@@ -1309,6 +1309,10 @@ multiple of 12), not the sounding pitch the mic actually hears, so a song's
 notes land where the learner's printed part says, not just where a real
 instrument could reach; `src/song/arrange/transposing.js` computes a part's
 written notes and written key signature for display.
+
+A wrong-note correction on a transposing wind (microphone sustain or MIDI) names both the note
+heard and the target in that same written key (`writtenMidi` in `src/core/wrong-note.js` maps the
+sounding pitch back), so it never says "the note is B♭" under a prompt that reads "Play C4".
 
 `src/song/feasibility.js`'s `feasibility(song, partId, instrument)` turns
 `fitToInstrument`'s own result into a plain-language badge -- "Fits as

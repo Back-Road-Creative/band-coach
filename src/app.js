@@ -32,7 +32,7 @@ import { chroma, judgeChord } from './audio/chords.js';
 //
 import { makeGrid, scoreTake, tempoLadder } from './core/groove.js';
 import { stepTuner } from './core/tuner.js';
-import { wrongNoteHint } from './core/wrong-note.js';
+import { wrongNoteHint, writtenMidi } from './core/wrong-note.js';
 import { shouldReveal, promptFor, hintFor as coreHintFor } from './core/reveal.js';
 import { gradeOutcome } from './core/grade-outcome.js';
 import { makeEvent, validateEvent, boundEvents } from './core/learning-events.js';
@@ -133,7 +133,7 @@ import { register as registerPathway } from './ui/pathway.js';
   const CELLS = { q: { b: 1, on: [0], say: 'quarter note' }, ee: { b: 1, on: [0, 0.5], say: 'two eighths' }, h: { b: 2, on: [0], say: 'half note' }, qr: { b: 1, on: [], say: 'quarter rest' }, ssss: { b: 1, on: [0, 0.25, 0.5, 0.75], say: 'four sixteenths' }, dqe: { b: 2, on: [0, 1.5], say: 'dotted quarter, eighth' }, ree: { b: 1, on: [0.5], say: 'eighth rest, eighth' }, ess: { b: 1, on: [0, 0.5, 0.75], say: 'eighth, two sixteenths' }, sse: { b: 1, on: [0, 0.25, 0.5], say: 'two sixteenths, eighth' }, eqe: { b: 2, on: [0, 0.5, 1.5], say: 'eighth, quarter, eighth' } };
 
   // ---------- audio ----------
-  let actx = null, micStream = null, anTime = null, anFreq = null, micReady = false, testNodes = [];
+  let actx = null, micStream = null, anTime = null, anFreq = null, micReady = false, micHideReleased = false, testNodes = [];
   let gates = gatesFor(null), micDevices = [];
   // Counts ticks of the pitch-analysis setInterval (below) where the buffer
   // it read actually carried signal, not silence or a freshly-connected
@@ -194,6 +194,7 @@ import { register as registerPathway } from './ui/pathway.js';
       node.port.onmessage = ev => {
         lastWorkletMessageAt = now(); // watchdog liveness signal below -- updated regardless of `mod`, so the watchdog reflects the worklet actually running, not whether its output happens to be used right now
         const d = ev.data, M = MODS[mod]; if (!M || !(M.input === 'pluck' || M.input === 'sustain')) return;
+        if (!micReady) return; // the mic was released (tab hidden, device unplugged): the source still streams zeros, which diagnoseInput would call a muted mic
         const fr = { rms: d.rms, freq: d.freq && d.clarity > 0.8 ? d.freq : 0, onset: d.onset, clarity: d.clarity }; if (fr.freq) fr.midi = fmidi(fr.freq);
         if (task && cur() && cur().info.kind === 'chord') { const db = new Float32Array(anFreq.frequencyBinCount); anFreq.getFloatFrequencyData(db); fr.chroma = chroma(db, actx.sampleRate); }
         meterUpdate(fr.rms);
@@ -357,7 +358,7 @@ import { register as registerPathway } from './ui/pathway.js';
       let st;
       try { st = await navigator.mediaDevices.getUserMedia({ audio: wanted }); }
       catch (e) { if (!DB.prefs.inputDeviceId) throw e; st = await navigator.mediaDevices.getUserMedia({ audio: base }); }
-      micStream = st; const src = actx.createMediaStreamSource(st); wireAnalysers(monoSum(src)); micReady = true;
+      micStream = st; micHideReleased = false; const src = actx.createMediaStreamSource(st); wireAnalysers(monoSum(src)); micReady = true;
       // A successful Connect clears the 'blocked' sentence calibrateNoiseFloor wrote (its catch below: keep the two texts identical), so it does not sit beside 'Listening through your microphone.'. Any other result text is left alone.
       { const cr = $('calibrateResult'); if (cr && cr.textContent === 'The microphone was blocked, so it could not be checked.') cr.textContent = ''; }
       // A track that ends (device unplugged, permission revoked) leaves the mic as the teardown 'mic' stopper does, then the status and Connect button follow. Only the CURRENT stream counts: a switched-away stream ending later must not close its replacement. micGen++ makes a room check still running for it discard its result.
@@ -382,7 +383,7 @@ import { register as registerPathway } from './ui/pathway.js';
   // called from both sites and needs to be idempotent either way.
   const teardown = createTeardown();
   let teardownRunCount = 0;
-  teardown.add('mic', () => { const pm = $('practiceMeter'); if (pm) pm.hidden = true; if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; micReady = false; micGen++; } });
+  teardown.add('mic', (reason) => { const pm = $('practiceMeter'); if (pm) pm.hidden = true; if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; micReady = false; micGen++; if (reason === 'hidden') micHideReleased = true; } }); // micHideReleased: only a hide that really released an open mic lets resume() say so
   teardown.add('audioContext', () => { if (actx && actx.state === 'running') actx.suspend(); });
   // "Play it for me" (see midiOutPlay below): a hidden/closed tab must not leave a keyboard sounding.
   teardown.add('midiOut', () => midiOutStop());
@@ -1229,7 +1230,7 @@ import { register as registerPathway } from './ui/pathway.js';
     const judged = judgePitch({ heardMidi: midi, targetMidi: i.midi, policy });
     if (judged.ok) { passEl(undefined, undefined, undefined, source); return; }
     const where = wrongNoteHint({ heardMidi: midi, targetMidi: i.midi, policy, fretted: !!i.string && !MODS[mod].fretless });
-    failEl('That was ' + nname(midi) + ', the note is ' + nname(i.midi) + '. ' + where, e.id + '>' + nname(midi));
+    const wn = (x) => i.written === undefined ? nname(x) : nname(writtenMidi(i, x)); failEl('That was ' + wn(midi) + ', the note is ' + wn(i.midi) + '. ' + where, e.id + '>' + wn(midi)); // transposing winds: both names in the written key the prompt uses
   }
   // onNote's hands-together branch, moved out as-is (same statements, same order).
   function onHandsTogetherNote(e, i, midi, exact, source) {
@@ -1372,7 +1373,11 @@ import { register as registerPathway } from './ui/pathway.js';
   function onNoteOff(midi, source) {
     if (!playing || !task || task.done) return; const e = cur(); if (!e || !e.pair || e.pair.phase !== 'check') return;
     const ex = e.info.ex, stage = handsStageFromId(e.id);
-    if (stage === 'position') return; // untimed: onNote's note-on grades level 17 alone, no release timing needed
+    if (stage === 'position') {
+      // untimed: onNote's note-on grades level 17 alone; the one release that matters is the left hand lifting after the shift, which fails and restarts the exercise (a later re-press must not pass it)
+      if (e.pair.moved && midi === ex.lh.midi && !noteState.isHeld(midi)) { failEl('The left hand let go of ' + nname(ex.lh.midi) + ' during the move. Keep it down while your right hand moves up, then start again from the first position.', e.id + '>l'); e.pair.moved = false; e.pair.phase = 'learn'; refreshPrompt(); }
+      return;
+    }
     if (stage === 'timed') {
       if (!(midi in e.pair.on)) return;
       e.pair.off[midi] = performance.now();
@@ -1445,7 +1450,7 @@ import { register as registerPathway } from './ui/pathway.js';
       const octavePolicy = OCTAVE_POLICY[mod] || 'fold'; const octaveOk = octavePolicy !== 'exact' || judgePitch({ heardMidi: Math.round(fr.midi), targetMidi: Math.round(e.info.midi), policy: octavePolicy }).reason !== 'right-pitch-class-wrong-octave';
       let cents = (fr.midi - e.info.midi) * 100; const sameName = pc(fr.midi) === pc(e.info.midi); if (octavePolicy !== 'exact') cents = ((cents + 600) % 1200 + 1200) % 1200 - 600; fr.cents = cents; const tol = 45, need = task.kind === 'hold' ? 2 : 0.5;
       if (octaveOk && Math.abs(cents) <= tol) { holdFor += dt; holdCents.push(cents); wrongFor = 0; if (holdFor >= need) { const mc = mean(holdCents.map(Math.abs)), bias = mean(holdCents), q = clamp(1 - mc / 90, 0.6, 1); passEl(q, e.info.short + ': held it, ' + (Math.abs(bias) < 8 ? 'dead centre' : Math.round(Math.abs(bias)) + ' cents ' + (bias > 0 ? 'sharp' : 'flat')) + '.'); } }
-      else { holdFor = 0; holdCents = []; wrongFor += dt; if (wrongFor > 0.9) { wrongFor = 0; const near = octaveOk && Math.abs(cents) < 100; failEl(octavePolicy === 'exact' && sameName && !octaveOk ? 'Right note name, wrong octave. You want ' + e.info.label + ', which is ' + (cents > 0 ? 'lower' : 'higher') + ' on the instrument.' : near ? 'Close: you are ' + Math.round(Math.abs(cents)) + ' cents ' + (cents > 0 ? 'sharp. Relax it down.' : 'flat. Lift it up.') : 'You are on ' + nname(fr.midi) + ', the note is ' + nname(e.info.midi) + '. Go ' + (cents > 0 ? 'lower' : 'higher') + '.', near ? null : e.id + '>' + nname(fr.midi)); } }
+      else { holdFor = 0; holdCents = []; wrongFor += dt; if (wrongFor > 0.9) { wrongFor = 0; const near = octaveOk && Math.abs(cents) < 100; const wn = (x) => e.info.written === undefined ? nname(x) : nname(writtenMidi(e.info, x)); failEl(octavePolicy === 'exact' && sameName && !octaveOk ? 'Right note name, wrong octave. You want ' + e.info.label + ', which is ' + (cents > 0 ? 'lower' : 'higher') + ' on the instrument.' : near ? 'Close: you are ' + Math.round(Math.abs(cents)) + ' cents ' + (cents > 0 ? 'sharp. Relax it down.' : 'flat. Lift it up.') : 'You are on ' + wn(fr.midi) + ', the note is ' + wn(e.info.midi) + '. Go ' + (cents > 0 ? 'lower' : 'higher') + '.', near ? null : e.id + '>' + wn(fr.midi)); } }
     }
   }
 
@@ -1966,6 +1971,12 @@ import { register as registerPathway } from './ui/pathway.js';
   // to each instrument's existing drawing so today's display is unchanged
   // when the preference is left at 'names'. Never prints the letter name
   // unless the app's own reveal flag says so.
+  // True when the staff overlay is on for any wired instrument, so draw()
+  // gives the staff its own top band (0..0.42H) and the instrument the rest.
+  // The keyboard's grand staff is twice as tall, so it gets 0.55H, the rest 0.42H.
+  // The keyboard's band also leaves its keys >= 24 CSS px tall (the tap floor): 90 CSS px of key area, since the two rows are 0.27 of it.
+  const staffBandH = (m, H) => m === 'kbd' ? Math.min(0.55, 1 - 90 * (cv.width / (cv.getBoundingClientRect().width || cv.width)) / H) : 0.42;
+  const staffBand = m => NOTATE_MOD_IDS.indexOf(m) >= 0 && (DB.prefs.notate[m] || 'names') !== 'names';
   function drawNotation(e, W, H) {
     lastStaff = null;
     if (!e || e.info.kind !== 'note' || e.info.midi === null || e.info.midi === undefined) return;
@@ -1977,7 +1988,10 @@ import { register as registerPathway } from './ui/pathway.js';
     if (!out) return;
     const nameShown = notate === 'both' && DB.prefs.names && !!(e.reveal || e.failed);
     lastStaff = Object.assign({ nameShown: nameShown }, out);
-    const scale = H * 0.0075, x0 = W * 0.05, y0 = H * 0.06;
+    // The instrument's own drawing is moved down out of the way (draw()),
+    // so its staff takes the top band: -20..115 staff units tall, never
+    // wider than the canvas. Everything else keeps the original origin.
+    const band = staffBand(mod), scale = band ? Math.min(H * (mod === 'kbd' ? 0.0023 : 0.0027), W * 0.9 / 280) : H * 0.0075, x0 = W * 0.05, y0 = band ? H * 0.02 + 20 * scale : H * 0.06;
     g.save();
     g.translate(x0, y0); g.scale(scale, scale);
     g.strokeStyle = '#c9ced9'; g.fillStyle = '#e9edf6'; g.lineWidth = 1.5 / scale;
@@ -1986,14 +2000,14 @@ import { register as registerPathway } from './ui/pathway.js';
     g.restore();
     if (nameShown) {
       g.fillStyle = '#93a0bd'; font(H * 0.05, 600); g.textAlign = 'left';
-      g.fillText(nname(e.info.midi), x0, y0 + H * 0.34);
+      g.fillText(nname(e.info.midi), x0, band ? H * (staffBandH(mod, H) - 0.02) : y0 + H * 0.34);
     }
   }
   function draw() {
-    size(); const W = cv.width, H = cv.height; g.clearRect(0, 0, W, H); rowRects = []; keyRects = []; kbdOverviewRect = null;
+    cv.classList.toggle('staffkbd', staffBand('kbd') && mod === 'kbd'); size(); const W = cv.width, H = cv.height; g.clearRect(0, 0, W, H); rowRects = []; keyRects = []; kbdOverviewRect = null;
     if (TOOLS[mod]) { if (mod === 'tuner') drawTuner(W, H); else drawCapture(W, H); return; }
     const M = MODS[mod], e = playing && task && !task.done ? cur() : null, showE = e || (task && task.done ? task.els[task.els.length - 1] : null);
-    if (mod === 'kbd') { const kr = kbdRange(); const tg = []; let rhMidi = null, lhMidi = null; if (e) { if (e.info.kind === 'chord') { if (e.reveal || e.failed) e.info.pcs.forEach(x => tg.push(60 + x)); } else if (e.info.kind === 'hands-together') { if (e.reveal || e.failed) { tg.push(e.info.ex.rh.midi, e.info.ex.lh.midi); rhMidi = e.info.ex.rh.midi; lhMidi = e.info.ex.lh.midi; } } else if (e.reveal || e.failed) tg.push(e.info.midi); } const good = performance.now() - flashGood < 300 && task ? task.els.slice(0, task.idx).map(x => x.info.midi).filter(x => x) : []; const kOpts = { target: tg, good: good, names: DB.prefs.names, rhMidi: rhMidi, lhMidi: lhMidi };
+    if (mod === 'kbd') { const kr = kbdRange(), sb = staffBand('kbd'), oy = sb ? H * staffBandH('kbd', H) : 0, Hk = sb ? H * (1 - staffBandH('kbd', H)) : H; const tg = []; let rhMidi = null, lhMidi = null; if (e) { if (e.info.kind === 'chord') { if (e.reveal || e.failed) e.info.pcs.forEach(x => tg.push(60 + x)); } else if (e.info.kind === 'hands-together') { if (e.reveal || e.failed) { tg.push(e.info.ex.rh.midi, e.info.ex.lh.midi); rhMidi = e.info.ex.rh.midi; lhMidi = e.info.ex.lh.midi; } } else if (e.reveal || e.failed) tg.push(e.info.midi); } const good = performance.now() - flashGood < 300 && task ? task.els.slice(0, task.idx).map(x => x.info.midi).filter(x => x) : []; const kOpts = { target: tg, good: good, names: DB.prefs.names, rhMidi: rhMidi, lhMidi: lhMidi };
       if (kr[0] === 48) {
         // item B2 (Wave kbd): once the octave below is unlocked (level 8+, or
         // a custom captured melody below middle C) a single 15-white-key strip
@@ -2007,17 +2021,17 @@ import { register as registerPathway } from './ui/pathway.js';
         // neither row ever moves mid-phrase. item D2 (Wave kbd): a phone
         // canvas still left the narrowest key just under a 40px floor at
         // W*0.03/W*0.94 -- W*0.02/W*0.96 clears it (340*0.96/8 = 40.8px).
-        const x0 = W * 0.02, rowW = W * 0.96, labelH = H * 0.07, gap = H * 0.02, rowH = (H * 0.7 - 2 * labelH - gap) / 2;
+        const x0 = W * 0.02, rowW = W * 0.96, labelH = Hk * 0.07, gap = Hk * 0.02, rowH = (Hk * 0.7 - 2 * labelH - gap) / 2;
         const label = (text, ly) => { g.fillStyle = '#93a0bd'; font(labelH * 0.55, 600); g.textAlign = 'left'; g.fillText(text, x0, ly + labelH * 0.72); };
-        const y0 = H * 0.18, y1 = y0 + labelH, y2 = y1 + rowH + gap, y3 = y2 + labelH;
+        const y0 = oy + Hk * 0.18, y1 = y0 + labelH, y2 = y1 + rowH + gap, y3 = y2 + labelH;
         label('Left hand · ' + nname(48, true) + '–' + nname(59, true), y0);
         drawKeys(x0, y1, rowW, rowH, 48, 59, Object.assign({}, kOpts, { row: 0, hand: 'lh' }));
         label('Right hand · ' + nname(60, true) + ' · middle C – ' + nname(72, true), y2);
         drawKeys(x0, y3, rowW, rowH, 60, 72, Object.assign({}, kOpts, { row: 1, hand: 'rh' }));
-      } else drawKeys(W * 0.02, H * 0.18, W * 0.96, H * 0.7, kr[0], kr[1], kOpts);
-      drawKbdOverview(W * 0.02, H * 0.905, W * 0.96, H * 0.07, kr[0], kr[1]);
-      if (e && e.info.kind === 'chord') { g.fillStyle = '#e9edf6'; font(H * 0.11); g.textAlign = 'center'; g.fillText(e.info.sym, W / 2, H * 0.13); } if (document.activeElement === cv) { const fi = kbdFocusInfo(); if (fi) { g.strokeStyle = '#ffd23f'; g.lineWidth = 4; g.strokeRect(fi.x + 2, fi.y + 2, fi.w - 4, fi.h - 4); } } }
-    else if (M.tuning) drawFret(M, e, W, H); else if (mod === 'voice') drawVoice(e, W, H); else if (M.staff) drawStaff(M, e, W, H); else if (mod === 'harp') drawHarp(e, W, H);
+      } else drawKeys(W * 0.02, oy + Hk * 0.18, W * 0.96, Hk * 0.7, kr[0], kr[1], kOpts);
+      drawKbdOverview(W * 0.02, oy + Hk * 0.905, W * 0.96, Hk * 0.07, kr[0], kr[1]);
+      if (e && e.info.kind === 'chord') { g.fillStyle = '#e9edf6'; font(Hk * 0.11); g.textAlign = 'center'; g.fillText(e.info.sym, W / 2, oy + Hk * 0.13); } if (document.activeElement === cv) { const fi = kbdFocusInfo(); if (fi) { g.strokeStyle = '#ffd23f'; g.lineWidth = 4; g.strokeRect(fi.x + 2, fi.y + 2, fi.w - 4, fi.h - 4); } } }
+    else if (M.tuning) { if (staffBand(mod)) { g.save(); g.translate(0, H * 0.42); drawFret(M, e, W, H * 0.58); g.restore(); } else drawFret(M, e, W, H); } else if (mod === 'voice') { if (staffBand(mod)) { g.save(); g.translate(0, H * 0.42); drawVoice(e, W, H * 0.58); g.restore(); } else drawVoice(e, W, H); } else if (M.staff) drawStaff(M, e, W, H); else if (mod === 'harp') drawHarp(e, W, H);
     else if (mod === 'mallet-percussion') { const rec = instrumentById['mallet-percussion'], tg = e && e.info.kind === 'note' && (e.reveal || e.failed) ? [e.info.midi] : []; drawKeys(W * 0.03, H * 0.18, W * 0.94, H * 0.7, rec.range.low, rec.range.high, { target: tg, good: [], names: DB.prefs.names }); }
     else if (M.kit) drawKit(W, H);
     else if (mod === 'ear') drawEar(W, H); else if (mod === 'rhy') { if (task && task.kind === 'bar2') drawBar2(W, H); else drawBar(W, H); }
@@ -2183,6 +2197,7 @@ import { register as registerPathway } from './ui/pathway.js';
   function resume() {
     const gone = pauseInfo ? (Date.now() - pauseInfo.at) / 1000 : 0; paused = false; playing = true; breakTrap.deactivate(); $('breakCard').hidden = true; $('playBtn').textContent = 'Pause'; ensureAudio(); task = null; lastInputAt = now();
     if (gone >= 90) { sess.breaks++; sess.sinceBreak = 0; sess.w30 = []; sess.best30 = 0; sess.rts = []; sess.bestRt = null; sess.tiredFor = 0; sess.failRun = 0; sess.warm = 3; coach('Welcome back after ' + (Math.round(gone / 6) / 10) + ' minutes. That counts as a real break, so your energy is reset. Three easy ones to warm back up.'); } else coach('Resuming level ' + S.level + '.');
+    if (MODS[mod] && (MODS[mod].input === 'pluck' || MODS[mod].input === 'sustain') && !micReady && micHideReleased) coach($('coach').textContent + ' Your microphone was released while the page was hidden. Press Connect microphone to let me hear you again.'); // README: hiding the tab releases the mic; coming back does not reopen it
     pauseInfo = null; showAll();
   }
 
