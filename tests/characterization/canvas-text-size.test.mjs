@@ -39,10 +39,15 @@ test('tuner labels are readable on a phone and a tuned row label stays inside it
   await page.setViewport(PHONE);
   await page.evaluate("document.querySelector('#picker button[data-mod=\"tuner\"]').click()");
   const k = await page.evaluate(KPX);
-  await page.waitFor('window.__ct.some(x => x.s === "play one string" || x.s === "press Connect first")');
+  // the long gauge message may wrap onto two lines: every word is drawn, each line at the floor
+  const GAUGE = 'press Set up input, then Connect microphone';
+  const gaugeParts = `window.__ct.filter(x => x.s.length > 4 && ${JSON.stringify(GAUGE)}.includes(x.s))`;
+  await page.waitFor(`window.__ct.some(x => x.s === "play one string") || ${gaugeParts}.map(x => x.s).join(' ') === ${JSON.stringify(GAUGE)}`);
   const css = (s) => page.evaluate(`(() => { const e = window.__ct.filter(x => x.s === ${JSON.stringify(s)}); return e.length ? Math.min(...e.map(x => x.px)) / (${KPX}) : null; })()`);
   assert.ok(await css('flat') >= 10.5, 'flat/sharp are at least 10.5 CSS px, got ' + await css('flat'));
-  assert.ok(await css('press Connect first') >= 12, 'the gauge message is at least 12 CSS px, got ' + await css('press Connect first'));
+  const gpx = await page.evaluate(`(() => { const e = ${gaugeParts}; return { text: e.map(x => x.s).join(' '), px: Math.min(...e.map(x => x.px)) / (${KPX}) }; })()`);
+  assert.equal(gpx.text, GAUGE, 'every word of the gauge message is drawn');
+  assert.ok(gpx.px >= 12, 'the gauge message is at least 12 CSS px, got ' + gpx.px);
 
   await page.evaluate("document.getElementById('ioBtn').click()");
   await page.waitFor("document.getElementById('ioBtn').hidden === true", effectiveWaitMs(5000));
