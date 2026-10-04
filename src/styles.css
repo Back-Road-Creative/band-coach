@@ -586,6 +586,8 @@
     }
     /* 16 / 7 applies to every #cv instrument except the kit (keyboard, tuner, ...), not just the keyboard; it shortens the keys about 15% (Q6-1 F1). */
     #cv:not(.kit) { aspect-ratio: 16 / 7; }
+    /* the tuner is a tool, not a one-screen session, and 16 / 7 is only ~150px tall on a phone: six string rows would be ~8px text, so give it more height */
+    #cv.tuner { aspect-ratio: 16 / 11; }
     /* A fretted or microphone instrument (its stage shows "How to play this") puts the prompt and the whole drawing on the first screen at 390x844, with the setup sheet open or shut. Its extra rows (How to play this, the input level) move below the drawing; the hint, the setup sheet, the level card and the drawing take a little less room. Visual order only; DOM and Tab order unchanged. Keyboard and kit never match :has() here, so their fit is untouched. */
     .main:has(#howPeekHost:not([hidden])) .stage > #howPeekHost, .main:has(#howPeekHost:not([hidden])) .stage > #practiceMeter { order: 1; margin: 0; }
     .main:has(#howPeekHost:not([hidden])) .stage > .stage-tools { order: 2; }
