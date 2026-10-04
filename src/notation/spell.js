@@ -76,3 +76,11 @@ export function spellMidi(midi, key) {
   const accidental = spelled.length > 1 ? spelled[1] : '';
   return { letter, accidental, octave: letterOctave(midi, letter, accidental) };
 }
+
+// spellAs(midi, letter, accidental) -> { letter, accidental, octave }
+// For a caller that already knows the spelling (a chord's own notes): keeps
+// it instead of re-deriving one from a key, so C minor draws Eb, not D#.
+export function spellAs(midi, letter, accidental) {
+  const accVal = { '#': 1, b: -1, '': 0 };
+  return { letter, accidental, octave: Math.floor((midi - (LETTER_BASE_PC[letter] + accVal[accidental])) / 12) - 1 };
+}

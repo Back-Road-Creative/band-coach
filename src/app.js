@@ -18,7 +18,7 @@ import { resolveAppVersion, DEV_VERSION } from './core/version.js';
 import { loadPack, packStatus, createIndexedDBStore, packManifestUrl, DEFAULT_MODEL_PACK } from './core/model-pack.js';
 import { checkForUpdate, FALLBACK_DOWNLOAD_URL } from './core/update-check.js';
 import { setNoteNaming, sanitizeNoteNaming, name as noteNameFor } from './core/note-names.js';
-import { t, setLocale, LOCALES } from './core/i18n.js';
+import { t, en, setLocale, LOCALES } from './core/i18n.js';
 import { yin } from './audio/yin.js';
 import { createPitchNode } from './audio/pitch-worklet.js';
 //
@@ -1132,7 +1132,7 @@ import { register as registerPathway } from './ui/pathway.js';
   function refreshPrompt() { if (!task || task.kind === 'ear' || task.kind === 'bar' || task.kind === 'hold') return; const verb = mod === 'voice' ? 'Sing' : 'Play'; $('prompt').innerHTML = verb + ' ' + task.els.map((el, k) => (k === task.idx ? '<b>' : '') + promptFor(el.info, el.reveal) + (k === task.idx ? '</b>' : '')).join(' → '); const e = cur(); if (e) $('hint').textContent = (task.warm ? 'Warm-up, does not count. ' : '') + hintFor(e); updateDesc(); updateHowPeek(); }
   // text mirror of the canvas for the visually-hidden #cvDesc element (unit 7.7 item 1):
   // revealed mirrors the current element's own reveal/failed flag, never invents one.
-  function updateDesc() { const el = $('cvDesc'); if (!el) return; const e = cur(); const revealed = task && task.kind === 'ear' ? !!task.revealed : !!(e && (e.reveal || e.failed)); el.textContent = task && task.kind === 'kit' ? 'Drum kit, ' + task.kit.name + ': ' + task.kit.bar.hits.map(h => (h.flam ? 'a flam on ' : '') + h.pieces.map(kitName).join(' with ')).join(', then ') + '. Play it after the count-in.' : describeTask(task, { revealed: revealed }); }
+  function updateDesc() { const el = $('cvDesc'); if (!el) return; const e = cur(); const revealed = task && task.kind === 'ear' ? !!task.revealed : !!(e && (e.reveal || e.failed)); el.textContent = task && task.kind === 'kit' ? 'Drum kit, ' + task.kit.name + ': ' + task.kit.bar.hits.map(h => (h.flam ? 'a flam on ' : '') + h.pieces.map(kitName).join(' with ')).join(', then ') + '. Play it after the count-in.' : describeTask(task, { revealed: revealed, fretless: !!MODS[mod].fretless }); }
   // "How to play this" peek (C1a): the SAME Fingerings-panel diagram Songs'
   // own inline expander shows for a lesson step (renderHowInline, src/ui/
   // fingerings.js), dropped beside the active note here instead. Never
@@ -2040,8 +2040,11 @@ import { register as registerPathway } from './ui/pathway.js';
     if (mod === 'capture' && cap.on) {
       const t = now(), m = fr.freq ? Math.round(fr.midi) : -1;
       if (m === cap.curM) cap.curN++; else { if (cap.curM >= 0 && cap.curN >= 2 && cap.notes.length < 300) cap.notes.push({ m: cap.curM, t: cap.t0 - cap.start, d: t - cap.t0 }); cap.curM = m; cap.curN = 1; cap.t0 = t; }
+      capCount();
     }
   }
+  // The 'N notes.' label beside the Practise-on menu, kept live while listening (counts the note being held).
+  function capCount() { const l = $('capTo') && $('capTo').parentElement; if (l && l.firstChild) l.firstChild.textContent = (cap.notes.length + (cap.on && cap.curM >= 0 && cap.curN >= 2 ? 1 : 0)) + ' notes. Practise on '; }
   function capStop() { if (cap.on && cap.curM >= 0 && cap.curN >= 2) cap.notes.push({ m: cap.curM, t: cap.t0 - cap.start, d: now() - cap.t0 }); cap.on = false; cap.curM = -1; const merged = []; cap.notes.forEach(n => { const l = merged[merged.length - 1]; if (l && l.m === n.m && n.t - (l.t + l.d) < 0.12) l.d = n.t + n.d - l.t; else if (n.d >= 0.09) merged.push(n); }); cap.notes = merged; renderOpts(); }
   // A tap on the row's name area toggles LOCK to that string (tap again to
   // unlock); a tap on the separate note-icon target plays the reference
@@ -2100,7 +2103,7 @@ import { register as registerPathway } from './ui/pathway.js';
     // 0 meaning no limit) sets today's target before the tired check below,
     // so tiredPattern()'s 15-minute cap only tightens it, never loosens it.
     sess.target = DB.prefs.sessionMinutes || 0;
-    let msg = 'Level ' + S.level + ': ' + D().name + '.'; if (tiredPattern()) { sess.target = sess.target ? Math.min(sess.target, 15) : 15; msg = 'Your last three sessions each ended weaker than they started, which is what tired practice looks like. Today is capped at ' + sess.target + ' minutes. ' + msg; } else if (todayMinutes() >= 45) msg = 'You already have ' + Math.round(todayMinutes()) + ' minutes in today. Keep this one short. ' + msg;
+    let msg = customOn ? 'Your captured melody: ' + DB.custom.length + ' notes, four at a time. Warm-up, does not count.' : 'Level ' + S.level + ': ' + D().name + '.'; if (tiredPattern()) { sess.target = sess.target ? Math.min(sess.target, 15) : 15; msg = 'Your last three sessions each ended weaker than they started, which is what tired practice looks like. Today is capped at ' + sess.target + ' minutes. ' + msg; } else if (todayMinutes() >= 45) msg = 'You already have ' + Math.round(todayMinutes()) + ' minutes in today. Keep this one short. ' + msg;
     if (S.judged > 5 && !customOn) { sess.warm = 4; msg += ' First a short warm-up through what you know; it does not count.'; }
     // A returning keyboard learner (a prior kbd session logged on an earlier
     // day) is told, once per page load, which keyboard-path step comes next
@@ -2120,13 +2123,13 @@ import { register as registerPathway } from './ui/pathway.js';
     planProgress = { review: 0, weak: 0, apply: 0, check: 0 };
     // `seen`: has this learner any item record at this level yet? A fresh
     // profile's empty plan is a first sitting, not a day off (curriculum.js).
-    msg += ' ' + describePlan(sessionPlan, id => inf(id).short, { seen: activeItems(mod, S.level).some(id => !!S.item[id]) });
-    const why = describeWhy(sessionPlan, id => inf(id).short); if (why) msg += ' ' + why;
+    if (!customOn) msg += ' ' + describePlan(sessionPlan, id => inf(id).short, { seen: activeItems(mod, S.level).some(id => !!S.item[id]) });
+    const why = describeWhy(sessionPlan, id => inf(id).short); if (why && !customOn) msg += ' ' + why;
     // The song block's own unreviewed label, matching the same test the
     // hand-off button's own note uses (renderOpts, app.js:2109 as of this
     // writing) -- the suggestion is teaching content no player has checked,
     // so it is never claimed reviewed just because it appears in the plan.
-    if (mod === 'kbd' && sessionPlan.some(b => b.kind === 'song')) { const entry = songFor(S.level); if (entry && !isReviewCurrent(itemReview(entry.id, contentRev(entry)))) { const s = starterSongs.find(x => x.id === entry.songId); msg += ' ' + (s ? s.title : entry.songId) + ': ' + t('review.unreviewed'); } }
+    if (!customOn && mod === 'kbd' && sessionPlan.some(b => b.kind === 'song')) { const entry = songFor(S.level); if (entry && !isReviewCurrent(itemReview(entry.id, contentRev(entry)))) { const s = starterSongs.find(x => x.id === entry.songId); msg += ' ' + (s ? s.title : entry.songId) + ': ' + t('review.unreviewed'); } }
     playing = true; paused = false; $('playBtn').textContent = 'Pause'; $('endBtn').hidden = false; coach(msg); showAll(); wakeLock.acquire();
   }
   // logSession(): a panel (e.g. a song lesson) logs its own practice as a
@@ -2157,7 +2160,7 @@ import { register as registerPathway } from './ui/pathway.js';
     if (sess.judged >= 8) { DB.sessions.push({ d: today(), mod: mod, min: Math.round(min * 10) / 10, acc: sess.ok / sess.judged, a1: mean(sess.first), a2: mean(sess.last), from: sess.from, to: S.level, breaks: sess.breaks }); DB.sessions = DB.sessions.slice(-60);
       let up = null, low = null, lowR = 1; Object.keys(S.item).forEach(id => { const cur = S.item[id], r1 = retrievability(cur, modelNow), r0 = retrievability(sess.m0[id] || cur, modelNow), g0 = r1 - r0; if (up === null || g0 > up.g) up = { id: id, g: g0 }; if (cur.reps >= 3 && (low === null || r1 < lowR)) { low = id; lowR = r1; } });
       line = 'Session done: ' + Math.round(min) + ' min, ' + Math.round(100 * sess.ok / sess.judged) + '% right, best streak ' + sess.bestStreak + ', level ' + sess.from + ' to ' + S.level + '.' + (up && up.g > 0.05 ? ' Most improved: ' + inf(up.id).short + '.' : '') + (low ? ' Next time starts with extra ' + inf(low).short + '.' : ''); }
-    if (sess.judged >= 1 && Date.now() - lastBackupAt > 7 * 86400000) showBackupNudge('You have been practising a while. Save a backup, just in case.');
+    if (sess.judged >= 8 && Date.now() - lastBackupAt > 7 * 86400000) showBackupNudge('You have been practising a while. Save a backup, just in case.');
     sess = null; playing = false; paused = false; task = null; bar = null; breakTrap.deactivate(); $('breakCard').hidden = true; $('playBtn').textContent = 'Start'; $('endBtn').hidden = true; $('choices').hidden = true; $('prompt').textContent = ''; $('hint').textContent = ''; coach(line); save(); showAll(); wakeLock.release();
   }
   const BREAKS = {
@@ -2205,7 +2208,7 @@ import { register as registerPathway } from './ui/pathway.js';
     const tool = !!TOOLS[mod], accentRaw = (MODS[mod] || TOOLS[mod]).color === '#e9edf6' ? '#9fb4d8' : (MODS[mod] || TOOLS[mod]).color;
     document.documentElement.style.setProperty('--accent', accentRaw); document.documentElement.style.setProperty('--accent-ink', accentInkFor(accentRaw)); document.documentElement.style.setProperty('--accent-display', accentDisplayFor(accentRaw));
     $('helpText').innerHTML = ''; const st = document.createElement('strong'); st.textContent = 'How this one works: '; $('helpText').appendChild(st); $('helpText').appendChild(document.createTextNode((MODS[mod] || TOOLS[mod]).help));
-    document.querySelectorAll('.side .card, .side .stats, #playBtn, #resetBtn').forEach(el => { el.style.display = tool ? 'none' : ''; }); $('tapPad').hidden = mod !== 'rhy'; $('timeFill').parentElement.style.visibility = tool || mod === 'rhy' || (MODS[mod] && MODS[mod].kit) ? 'hidden' : 'visible';
+    document.querySelectorAll('.side .card, .side .stats, #playBtn, #resetBtn').forEach(el => { el.style.display = tool && !(mod === 'capture' && el.id === 'feedbackCard') ? 'none' : ''; }); $('tapPad').hidden = mod !== 'rhy'; $('timeFill').parentElement.style.visibility = tool || mod === 'rhy' || (MODS[mod] && MODS[mod].kit) ? 'hidden' : 'visible'; // capture's own messages ('Nothing captured yet.') need the feedback card; .hidden still hides it while empty
     if (tool) { $('prompt').textContent = ''; $('hint').textContent = mod === 'tuner' ? 'One open string at a time.' : 'One note at a time.'; $('choices').hidden = true; $('replayBtn').hidden = true; $('showMeBtn').hidden = true; $('howPeekHost').hidden = true; return; }
     const d = D(); $('levelNum').textContent = 'Level ' + S.level; $('levelName').textContent = customOn ? 'Your captured melody' : d.name; $('limitOut').textContent = d.task === 'bar' || mod === 'rhy' || MODS[mod].kit ? (d.bpm || 72) + ' bpm' : (d.limit || 8) + ' s per answer';
     const pct = Math.round(S.ready * 100); $('readyFill').style.width = pct + '%'; $('readyFill').style.background = S.ready < 0.25 ? 'var(--bad)' : S.ready < 0.6 ? 'var(--warn)' : 'var(--good)'; $('readyBar').setAttribute('aria-valuenow', pct);
@@ -2335,7 +2338,7 @@ import { register as registerPathway } from './ui/pathway.js';
     // is suggested at all.
     if (mod === 'kbd') btn('kbdPathwayBtn', t('pathway.open'), () => openPanel('pathway'));
     if (mod === 'rhy') btn('calBtn', calRun ? 'Listening for 8 taps…' : 'Calibrate timing (' + Math.round(DB.latencyMs || 0) + ' ms)', startCalibrate, false);
-    if (mod === 'capture') { btn('capGo', cap.on ? 'Stop' : 'Listen', () => { if (cap.on) capStop(); else { ensureAudio(); cap.on = true; cap.notes = []; cap.start = now(); cap.curM = -1; renderOpts(); } }, true); btn('capPlay', 'Play it back', () => { ensureAudio(); const t0 = now() + 0.1; cap.notes.forEach(n => tone(n.m, t0 + n.t - (cap.notes[0] ? cap.notes[0].t : 0), Math.max(0.2, n.d))); }); const lessons = {}; MOD_IDS.filter(m => hasMasteryScheme(m)).forEach(m => { lessons[m] = [MODS[m].name]; }); sel('capTo', cap.notes.length + ' notes. Practise on', lessons, 'kbd', () => {});
+    if (mod === 'capture') { btn('capGo', cap.on ? 'Stop' : 'Listen', () => { if (cap.on) capStop(); else { if (!micReady) { say('Connect your microphone first (open "Set up input", press Connect), then press Listen.', 'no'); return; } ensureAudio(); cap.on = true; cap.notes = []; cap.savedId = null; cap.start = now(); cap.curM = -1; say(''); renderOpts(); } }, true); btn('capPlay', 'Play it back', () => { if (!cap.notes.length) { say('Nothing captured yet.', 'no'); return; } ensureAudio(); const t0 = now() + 0.1; cap.notes.forEach(n => tone(n.m, t0 + n.t - (cap.notes[0] ? cap.notes[0].t : 0), Math.max(0.2, n.d))); }); const lessons = {}; MOD_IDS.filter(m => hasMasteryScheme(m)).forEach(m => { lessons[m] = [MODS[m].name]; }); sel('capTo', cap.notes.length + ' notes. Practise on', lessons, 'kbd', () => {});
       // 'Make it a lesson': the captured tune becomes a draft Song (src/song/
       // capture.js), added to the same library the Songs panel reads, then
       // opened there -- requestOpenSong() + openPanel() is the same
@@ -2345,8 +2348,9 @@ import { register as registerPathway } from './ui/pathway.js';
       btn('capUse', 'Make it a lesson', async () => {
         if (!cap.notes.length) { say('Nothing captured yet.', 'no'); return; }
         try {
+          // One capture is saved once: pressing again re-opens that song instead of adding an identically titled copy.
           const song = captureToSong(cap.notes, { now: Date.now() });
-          const id = await backupLibrary().add(song, { now: Date.now() });
+          const id = cap.savedId || await backupLibrary().add(song, { now: Date.now() }); cap.savedId = id;
           // The 'Practise on' select (capTo) is the only place this tool
           // asks which instrument the captured tune is for -- Songs' own
           // checkOpenRequest() otherwise falls back to api.mod(), which at
@@ -2768,19 +2772,19 @@ import { register as registerPathway } from './ui/pathway.js';
   }
   async function doImportProgress(text) {
     const result = importProgressFile(text);
-    if (!result.ok) { coach(result.error); return result; }
+    if (!result.ok) { coach(t(result.errorId)); return result; }
     // The songs go first because that is the store that can fail (e.g.
     // IndexedDB unavailable): if it does, nothing about the live profile
     // has changed yet, so there is nothing to roll back. Only once the
     // songs are safely in does this replace DB, prefs, theme and mod.
     if (Array.isArray(result.songs) && result.songs.length) {
       try { await backupLibrary().importAll(result.songs); }
-      catch (e) { const error = 'Nothing was changed: the saved songs in this backup could not be stored on this device.'; coach(error); return { ok: false, error }; }
+      catch (e) { const error = en['backup.err.songsNotStored']; coach(t('backup.err.songsNotStored')); return { ok: false, error }; }
     }
     const priorLatencyMs = DB && DB.latencyMs;
     modelNow = Date.now(); DB = sanitizeDB(result.db, undefined, modelNow); DB.latencyMs = num(priorLatencyMs, DB.latencyMs, 0, 300); if (!Array.isArray(DB.custom)) DB.custom = [];
     $('optNames').checked = DB.prefs.names; $('optTheme').value = DB.prefs.theme; applyTheme(DB.prefs.theme); $('optLocale').value = DB.prefs.locale; applyLocale(DB.prefs.locale); setNoteNaming(DB.prefs.noteNaming); $('optNoteSystem').value = DB.prefs.noteNaming.system; $('optAccidentals').value = DB.prefs.noteNaming.accidentals; setMod(DB.prefs.mod);
-    if (!writeDB()) { const error = 'Your restored progress could not be saved on this device (storage may be full).'; coach(error); return { ok: false, error }; }
+    if (!writeDB()) { const error = en['backup.err.notSaved']; coach(t('backup.err.notSaved')); return { ok: false, error }; }
     coach(t('backup.restored'));
     return result;
   }
@@ -2788,9 +2792,9 @@ import { register as registerPathway } from './ui/pathway.js';
   $('backupRestoreInput').addEventListener('change', function () {
     const file = this.files && this.files[0]; this.value = '';
     if (!file) return;
-    if (!confirm(t('backup.confirmRestore'))) return;
     const reader = new FileReader();
-    reader.onload = () => doImportProgress(String(reader.result));
+    // Check the file before asking: a file that is not a backup is refused with the reason, and the "replace your progress" confirm is only raised for one that can be restored.
+    reader.onload = () => { const text = String(reader.result), check = importProgressFile(text); if (!check.ok) { coach(t(check.errorId)); return; } if (confirm(t('backup.confirmRestore'))) doImportProgress(text); };
     reader.onerror = () => coach(t('backup.readError'));
     reader.readAsText(file);
   });
