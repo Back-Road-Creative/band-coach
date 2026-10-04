@@ -2657,7 +2657,7 @@ import { register as registerPathway } from './ui/pathway.js';
   window.addEventListener('blur', () => releaseNotes());
   function jump(dl) { const nl = Math.max(1, S.level + dl); if (nl === S.level) return; S.level = nl; S.ready = 0.3; task = null; coach((dl < 0 ? 'Moved down' : 'Skipped ahead') + ' to level ' + S.level + ': ' + D().name + '.'); save(); if (mod === 'kbd') renderOpts(); showAll(); }
   $('easierBtn').addEventListener('click', function () { this.blur(); jump(-1); }); $('harderBtn').addEventListener('click', function () { this.blur(); jump(1); });
-  $('resetBtn').addEventListener('click', function () { this.blur(); if (sess) endSession(); DB.mods[mod] = S = freshModel(); recent = []; streak = 0; coach(t('reset.progressCleared', { name: MODS[mod].name })); save(); showAll(); });
+  $('resetBtn').addEventListener('click', function () { this.blur(); if (!confirm(t('reset.confirm', { name: MODS[mod].name }))) return; if (sess) endSession(); DB.mods[mod] = S = freshModel(); recent = []; streak = 0; coach(t('reset.progressCleared', { name: MODS[mod].name })); save(); showAll(); });
   $('optNames').addEventListener('change', function () { DB.prefs.names = this.checked; save(); });
   // Theme J1: 'system' removes the attribute so styles.css's own
   // prefers-color-scheme media query decides; 'light'/'dark' pin it,
