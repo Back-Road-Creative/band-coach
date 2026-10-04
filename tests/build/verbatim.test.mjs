@@ -49,3 +49,14 @@ test('the built page is one inlined document with no external refs', async () =>
   const headIdx = html.indexOf('</head>');
   assert.ok(titleIdx !== -1 && headIdx !== -1 && titleIdx < headIdx, '</title> appears before </head>');
 });
+
+// styles.css is pasted into the page as-is, so its notes-to-developers would ride into every
+// download. The built <style> carries the rules only; every rule still reaches the page.
+test('the built page carries the stylesheet rules without its comments', async () => {
+  const html = readFileSync(await build({ outDir: OWN_DIR }), 'utf8');
+  const style = html.slice(html.indexOf('<style'), html.indexOf('</style>'));
+  assert.doesNotMatch(style, /\/\*[\s\S]*?\*\//, 'no CSS comment in the built <style>');
+  const srcRules = readFileSync(join(import.meta.dirname, '..', '..', 'src', 'styles.css'), 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '').match(/[^{}]+\{/g).map((s) => s.trim());
+  for (const sel of srcRules) assert.ok(style.includes(sel), `the rule "${sel}" reaches the page`);
+});
