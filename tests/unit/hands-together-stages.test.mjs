@@ -83,6 +83,13 @@ test('gradeHeldBass: a wrong melody note fails, naming the expected note', () =>
   assert.match(r.reason, /not the next melody note/i);
 });
 
+test('gradeHeldBass: a wrong melody note played with the bass already up still gets the hold reason', () => {
+  const r = gradeHeldBass(ex1, { notes: [{ midi: 62, ms: 1000, bassHeld: false }] });
+  assert.equal(r.state, 'fail');
+  assert.match(r.reason, /left hand/i);
+  assert.doesNotMatch(r.reason, /not the next melody note/i);
+});
+
 test('gradeHeldBass: the bass released before the melody finished fails with the hold reason', () => {
   const r = gradeHeldBass(ex1, {
     bassOff: 1050,
