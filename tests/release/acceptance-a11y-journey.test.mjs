@@ -308,7 +308,7 @@ test('keyboard and accessibility journey on the release file (launch A, one page
       assert.equal(await read(page, "document.activeElement === document.querySelector('#mainNav button[data-route=\"songs\"]')"), true, `focus is on the Songs button (it is on ${await read(page, "document.activeElement.tagName + '#' + document.activeElement.id")})`);
     });
 
-    await t.test('A11-1b the screen is not blank after Escape', { todo: 'Q6-2 F1: Escape on an open panel leaves #mainArea hidden (blank screen)' }, async () => {
+    await t.test('A11-1b the screen is not blank after Escape', async () => {
       const main = await read(page, "(() => { const m = document.getElementById('mainArea'), r = m.getBoundingClientRect(); return { hidden: m.hidden, width: r.width, height: r.height, panelHidden: document.getElementById('panelHost').hidden }; })()");
       assert.equal(main.hidden, false, `#mainArea is shown again (hidden=${main.hidden}, panelHost hidden=${main.panelHidden})`);
       assert.ok(main.width > 0 && main.height > 0, `#mainArea has a size on screen (${main.width}x${main.height})`);

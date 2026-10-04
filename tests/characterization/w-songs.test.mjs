@@ -293,7 +293,13 @@ function buildZip(files) {
 test('a real .gp (Guitar Pro) file picked through the file input reaches the Guitar Pro importer, not the MusicXML one', async (t) => {
   const dir = mkdtempSync(join(tmpdir(), 'band-coach-songs-gp-'));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
-  const gpif = '<?xml version="1.0" encoding="UTF-8"?><GPIF><Score><Title>Uploaded GP Tune</Title></Score></GPIF>';
+  const gpif = '<?xml version="1.0" encoding="UTF-8"?><GPIF><Score><Title>Uploaded GP Tune</Title></Score>'
+    // one track, one bar, one quarter note: the test is about importer routing, and an empty score is refused
+    + '<MasterTrack><Tracks>0</Tracks></MasterTrack><Tracks><Track id="0"><Name>Guitar</Name><Staves><Staff><Properties><Property name="Tuning"><Pitches>64 59 55 50 45 40</Pitches></Property></Properties></Staff></Staves></Track></Tracks>'
+    + '<MasterBars><MasterBar><Time>4/4</Time><Bars>0</Bars></MasterBar></MasterBars><Bars><Bar id="0"><Voices>0 -1 -1 -1</Voices></Bar></Bars><Voices><Voice id="0"><Beats>0</Beats></Voice></Voices>'
+    + '<Beats><Beat id="0"><Rhythm ref="0"/><Notes>0</Notes></Beat></Beats>'
+    + '<Notes><Note id="0"><Properties><Property name="String"><String>0</String></Property><Property name="Fret"><Fret>0</Fret></Property></Properties></Note></Notes>'
+    + '<Rhythms><Rhythm id="0"><NoteValue>Quarter</NoteValue></Rhythm></Rhythms></GPIF>';
   const gpPath = join(dir, 'uploaded.gp');
   writeFileSync(gpPath, buildZip([{ name: 'Content/score.gpif', data: Buffer.from(gpif, 'utf8') }]));
 

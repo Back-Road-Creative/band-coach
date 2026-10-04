@@ -49,3 +49,25 @@ test('a shortened variant summary still names every variant for hover and screen
     await page.close();
   }
 });
+
+// text-overflow only draws its "..." on a block container. The summary was
+// display:flex (for the 24px tap target), so the clipped label stopped
+// mid-letter with no sign that more variants were listed.
+test('a clipped variant summary ends in an ellipsis and keeps a 24px tap target', async () => {
+  const page = await launchPage(HTML_PATH);
+  try {
+    const rows = JSON.parse(await page.evaluate(`JSON.stringify([...document.querySelectorAll('#picker .variant-toggle > summary')].map(s => {
+      const cs = getComputedStyle(s);
+      return { text: s.textContent, display: cs.display, textOverflow: cs.textOverflow, clipped: s.scrollWidth > s.clientWidth, h: s.getBoundingClientRect().height };
+    }))`));
+    assert.ok(rows.length > 0, 'no variant summaries rendered');
+    assert.ok(rows.some(r => r.clipped), 'expected at least one summary to be clipped');
+    for (const r of rows) {
+      assert.equal(r.textOverflow, 'ellipsis', `${r.text}: text-overflow`);
+      assert.ok(!/flex|grid/.test(r.display), `${r.text}: display ${r.display} stops text-overflow drawing the ellipsis`);
+      assert.ok(r.h >= 24, `${r.text}: tap target ${r.h}px is under 24px`);
+    }
+  } finally {
+    await page.close();
+  }
+});

@@ -241,5 +241,8 @@ test('the dictation keys follow the Settings note-naming choice', async (t) => {
   await page.evaluate("window.__coach.openPanel('theory')");
   await page.waitFor("document.getElementById('theoryExploreTonic')");
   const tonics = await page.evaluate("Array.from(document.querySelectorAll('#theoryExploreTonic option')).map(o => o.textContent).slice(0, 4)");
-  assert.deepEqual(tonics, ['Do', 'Re♭', 'Re', 'Mi♭']);
+  // The root list spells both C# and Db, so each keeps its own sign in the chosen system.
+  assert.deepEqual(tonics, ['Do', 'Do♯', 'Re♭', 'Re']);
+  const roots = await page.evaluate("Array.from(document.querySelectorAll('#theoryExploreChordRoot option')).map(o => o.textContent)");
+  assert.ok(roots.includes('Si♭') && !roots.includes('Bb'), roots.join(' '));
 });

@@ -89,37 +89,38 @@ function byteLength(text) {
 
 /**
  * Parses and validates a backup file's text. Returns `{ ok: true, db }` or
- * `{ ok: false, error }` — a plain-English, non-technical message either way.
+ * `{ ok: false, error, errorId }` — a plain-English, non-technical message either way
+ * (`errorId` is the i18n key of the same message, so the app can show it translated).
  * The returned `db` is migrated but NOT sanitised; the caller must still run
  * it through sanitizeDB.
  */
 export function importProgress(text) {
   if (typeof text !== 'string') {
-    return { ok: false, error: 'That file could not be read.' };
+    return { ok: false, error: 'That file could not be read.', errorId: 'backup.err.unreadable' };
   }
   if (byteLength(text) > MAX_IMPORT_BYTES) {
-    return { ok: false, error: 'That backup file is too large to be a Band Coach backup.' };
+    return { ok: false, error: 'That backup file is too large to be a Band Coach backup.', errorId: 'backup.err.tooLarge' };
   }
   let parsed;
   try {
     parsed = JSON.parse(text);
   } catch (e) {
-    return { ok: false, error: 'That does not look like a Band Coach backup file.' };
+    return { ok: false, error: 'That does not look like a Band Coach backup file.', errorId: 'backup.err.notBackup' };
   }
   if (!parsed || typeof parsed !== 'object' || parsed.format !== PROGRESS_FORMAT) {
-    return { ok: false, error: 'That does not look like a Band Coach backup file.' };
+    return { ok: false, error: 'That does not look like a Band Coach backup file.', errorId: 'backup.err.notBackup' };
   }
   if (!Number.isInteger(parsed.formatVersion) || parsed.formatVersion > PROGRESS_FORMAT_VERSION) {
-    return { ok: false, error: 'This backup was made by a newer Band Coach. Update the app to restore it.' };
+    return { ok: false, error: 'This backup was made by a newer Band Coach. Update the app to restore it.', errorId: 'backup.err.tooNew' };
   }
   if (!isPlainObject(parsed.db)) {
-    return { ok: false, error: 'That backup file has no saved progress in it, so nothing was changed.' };
+    return { ok: false, error: 'That backup file has no saved progress in it, so nothing was changed.', errorId: 'backup.err.noProgress' };
   }
   if (Number.isInteger(parsed.db.v) && parsed.db.v > CURRENT_DB_VERSION) {
-    return { ok: false, error: 'This backup was made by a newer Band Coach. Update the app to restore it.' };
+    return { ok: false, error: 'This backup was made by a newer Band Coach. Update the app to restore it.', errorId: 'backup.err.tooNew' };
   }
   if (Array.isArray(parsed.songs) && !parsed.songs.every(isPlainObject)) {
-    return { ok: false, error: 'That backup file has a damaged song in it, so nothing was changed.' };
+    return { ok: false, error: 'That backup file has a damaged song in it, so nothing was changed.', errorId: 'backup.err.damagedSong' };
   }
   const migrated = migrateEnvelope(parsed);
   return { ok: true, db: migrate(migrated.db), songs: Array.isArray(migrated.songs) ? migrated.songs : [] };
