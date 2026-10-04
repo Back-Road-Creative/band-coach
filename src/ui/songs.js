@@ -1196,6 +1196,9 @@ function mountSongsPanel(hostEl, api) {
     // 'learn', same as no mode at all.
     const mode = opts.mode === 'rehearse' || opts.mode === 'check' ? opts.mode : 'learn';
     const assistance = mode === 'check' ? 'none' : 'shown';
+    // No instrument named (review's "Practise this") and a percussion part: practise it on the drum kit, not whatever pitched instrument is on the main screen (every note would be skipped).
+    const partRec = song.parts.find((p) => p.id === partId);
+    if (!instrumentOverride && partRec && partRec.role === 'percussion' && api.instrument('drum-kit')) instrumentOverride = api.instrument('drum-kit');
     const instrumentId = instrumentOverride ? instrumentOverride.id : api.mod();
     const instrument = instrumentOverride || api.instrument(instrumentId);
     if (!instrument) {
@@ -1715,6 +1718,13 @@ function mountSongsPanel(hostEl, api) {
     const arrangementLine = arrangementText(practice.arrangement);
     if (arrangementLine) practiceSection.appendChild(el('p', { class: 'panel-songs-arrangement', text: arrangementLine }));
     const { plan, stepIndex } = practice;
+    if (!plan.steps.length && plan.fit && plan.fit.unplayable.length) {
+      // Every note skipped on this instrument: nothing to play, so say so -- never the "played it" end screen or a passed mark. (A part with no notes at all still finishes at once, as before.)
+      practiceSection.appendChild(el('p', { text: 'None of this part\'s notes can be played on ' + practice.instrument.name + ', so there is nothing to practise here. Pick another instrument from "Play it on…".' }));
+      practiceSection.appendChild(renderPlayItOn(practice.song, practice.partId, practice.instrumentId)); // the way out the message promises
+      practiceSection.appendChild(el('button', { type: 'button', text: 'Back to songs', onclick: () => { practice = null; currentPractice = null; practiceSection.hidden = true; libraryDetails.open = true; } }));
+      return;
+    }
     if (stepIndex >= plan.steps.length) {
       renderPracticeEnd();
       return;
