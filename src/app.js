@@ -2402,7 +2402,6 @@ import { register as registerPathway } from './ui/pathway.js';
   // drops a pitch from realMidiHeld once noteState confirms no OTHER port
   // still holds it, same rule handleMidiMessage's own note-off follows.
   function releaseNotes(port) { noteState.releaseAll(port).forEach(p => { if (!noteState.isHeld(p)) realMidiHeld.delete(p); }); }
-  function midiNames() { return midiPorts.filter((p, i) => midiWorks(i)).map(p => p.name); }
   // Per-port wording: "working" is earned by bytes from THAT port, so a keyboard that has only opened stays "found" even when another one has played.
   function midiStatus() {
     const live = midiPorts.map((p, i) => ({ name: p.name, heard: midiHeard.has(midiPortInputs[i]), works: midiWorks(i) })).filter(p => p.works), join = a => a.join(' and '), heard = live.filter(p => p.heard).map(p => p.name), quiet = live.filter(p => !p.heard).map(p => p.name);
