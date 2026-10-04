@@ -4,6 +4,7 @@
 
 import { makeRng, intRange, pickFrom } from './rng.js';
 import { NOTE_NAMES } from './theory.js';
+import { name } from '../note-names.js';
 
 const TRIAD_QUALITIES = { major: [0, 4, 7], minor: [0, 3, 7], diminished: [0, 3, 6], augmented: [0, 4, 8] };
 const SEVENTH_QUALITIES = {
@@ -52,7 +53,7 @@ export function make(level, seed) {
     play: [{ t: 0, dur: 1.6, midi }],
     choices: cfg.names.slice(0, cfg.maxInversion + 1),
     answer: cfg.names[inversion],
-    explain: `${NOTE_NAMES[tonicPc]} ${qualityName}, ${cfg.names[inversion]}: sounding ${midi.join(', ')}.`,
+    explain: `${NOTE_NAMES[tonicPc]} ${qualityName}, ${cfg.names[inversion]}: sounding ${midi.map((m) => name(m, true)).join(', ')}.`,
   };
 }
 
