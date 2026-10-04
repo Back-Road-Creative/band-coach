@@ -341,7 +341,7 @@ recorded; only the judged result is. The record keeps the most recent 500 attemp
 skill, the first time it was played right (from a drill, and from anywhere) and, for each song
 played on that skill, the play that first counted as applied (per-skill records are kept first when
 space runs short), so it never grows without limit. The "My progress" panel turns that record into
-one plain line — how many attempts were passed with help, passed independently, retained on a
+one plain line — how many tries were made with help (passed or not), passed independently, retained on a
 later check (not just repeated in the same sitting), and applied in a song rather than a drill — or,
 with nothing recorded yet, says so plainly instead of claiming anything is retained. A given song
 only counts toward "applied" once per skill, no matter how many times it is replayed — practising
