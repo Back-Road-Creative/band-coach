@@ -63,3 +63,62 @@ test('the theory staff canvas is shown in the shape it was drawn in', async (t) 
   const m = await page.evaluate("(function(){ var c = document.getElementById('theoryExploreStaff'), r = c.getBoundingClientRect(); return { aw: c.width, ah: c.height, cw: r.width, ch: r.height }; })()");
   assert.ok(Math.abs(m.cw / m.ch - m.aw / m.ah) < 0.05, 'displayed ' + m.cw + 'x' + m.ch + ' vs drawn ' + m.aw + 'x' + m.ah);
 });
+
+test('unsaved edits come back when the learner returns through Edit notes on the same song', async (t) => {
+  const page = await launchPage(HTML_PATH);
+  t.after(() => page.close());
+  await openEditor(page, 'Hot Cross Buns');
+  await page.evaluate("(function(){ var e = document.getElementById('editorTitle'); e.value = 'My Edited Copy'; e.dispatchEvent(new Event('input', { bubbles: true })); })()");
+  await type(page, 'editorBpm', '77');
+  await page.evaluate("document.querySelector('button[data-route=\"settings\"]').click()");
+  await page.waitFor("document.getElementById('settingsView').hidden === false");
+  await openEditor(page, 'Hot Cross Buns');
+  await page.waitFor("document.getElementById('editorTitle').value === 'My Edited Copy'");
+  assert.equal((await fields(page)).bpm, '77');
+  assert.match(await page.evaluate("document.querySelector('.editor-status').textContent"), /Restored your unsaved changes/);
+});
+
+test('Edit notes on a different song starts that song fresh', async (t) => {
+  const page = await launchPage(HTML_PATH);
+  t.after(() => page.close());
+  await openEditor(page, 'Hot Cross Buns');
+  await type(page, 'editorBpm', '77');
+  await page.evaluate("document.querySelector('button[data-route=\"settings\"]').click()");
+  await page.waitFor("document.getElementById('settingsView').hidden === false");
+  await openEditor(page, 'Mary Had a Little Lamb');
+  await page.waitFor("document.getElementById('editorTitle').value === 'My copy of Mary Had a Little Lamb'");
+  assert.notEqual((await fields(page)).bpm, '77');
+});
+
+test('Merge with next after Split puts the note back, and a failure reads as one', async (t) => {
+  const page = await launchPage(HTML_PATH);
+  t.after(() => page.close());
+  await openEditor(page, 'Mary Had a Little Lamb');
+  const before = await page.evaluate("JSON.stringify(window.__coach.editorSong().parts[0].notes.slice(0, 2).map(n => [n.start, n.dur, n.midi]))");
+  const count = await page.evaluate("window.__coach.editorSong().parts[0].notes.length");
+  await page.evaluate("document.getElementById('editorCanvas').dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }))");
+  const click = (label) => page.evaluate(`Array.from(document.querySelectorAll('.editor-toolbar button')).find(b => b.textContent === ${JSON.stringify(label)}).click()`);
+  await click('Split note in half');
+  assert.equal(await page.evaluate("window.__coach.editorSong().parts[0].notes.length"), count + 1);
+  await click('Merge with next');
+  assert.equal(await page.evaluate("window.__coach.editorSong().parts[0].notes.length"), count, 'the halves are one note again');
+  assert.equal(await page.evaluate("JSON.stringify(window.__coach.editorSong().parts[0].notes.slice(0, 2).map(n => [n.start, n.dur, n.midi]))"), before);
+  // a merge that cannot work (different pitches) is drawn as a problem, not in the success colour
+  await click('Merge with next');
+  const colours = await page.evaluate("(function(){ var s = document.querySelector('.editor-say'); var p = document.createElement('p'); p.className = 'editor-say'; s.parentNode.appendChild(p); var good = getComputedStyle(p).color; p.remove(); return { cls: s.className, now: getComputedStyle(s).color, good: good }; })()");
+  assert.match(colours.cls, /\bno\b/);
+  assert.notEqual(colours.now, colours.good);
+});
+
+test('Beats/bar and Pickup are held to sensible bounds', async (t) => {
+  const page = await launchPage(HTML_PATH);
+  t.after(() => page.close());
+  await openEditor(page, 'Hot Cross Buns');
+  await type(page, 'editorMetreNum', '100');
+  assert.equal((await page.evaluate("window.__coach.editorSong().metre")).num, 32);
+  assert.equal((await fields(page)).num, '32');
+  await type(page, 'editorMetreNum', '4');
+  await type(page, 'editorPickup', '99999');
+  await page.evaluate("Array.from(document.querySelectorAll('.editor-toolbar button')).find(b => b.textContent.startsWith('Shift barline')).click()");
+  assert.ok((await page.evaluate("window.__coach.editorSong().parts[0].notes[0].start")) <= 1920, 'pickup is at most one bar');
+});

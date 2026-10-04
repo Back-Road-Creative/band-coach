@@ -292,6 +292,7 @@
   .panel-editor .editor-check { background: var(--panel-2); border: 1px solid var(--warn); border-radius: 8px; padding: 12px; }
   .panel-editor .editor-check ul { margin: 6px 0; padding-left: 20px; }
   .panel-editor .editor-say { color: var(--good); min-height: 1.2em; }
+  .panel-editor .editor-say.no { color: var(--bad); }
   .panel-editor .editor-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
   .panel-editor .editor-toolbar input[type="number"] { width: 6ch; font: 600 15px var(--body); color: var(--text); background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; }
   .panel-editor .editor-toolbar label { color: var(--muted); font-size: 13px; }
