@@ -49,5 +49,7 @@ export function playbackPlanFor(song) {
     midi: n.midi,
     at: ticksToSeconds(n.start, bpm),
     dur: Math.max(0.05, ticksToSeconds(n.dur, bpm)),
+    // a percussion note's kit piece (a drum hit, not a pitch); absent on pitched notes
+    ...(n.piece ? { piece: n.piece } : {}),
   }));
 }

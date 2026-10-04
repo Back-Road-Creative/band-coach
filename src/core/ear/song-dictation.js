@@ -9,6 +9,7 @@ import { makeRng, intRange } from './rng.js';
 import { checkSequence } from './theory.js';
 import { barsOf, notesInBar, ticksToSeconds } from '../../song/model.js';
 import { starterMelodies } from '../../song/starter/index.js';
+import { name } from '../note-names.js';
 
 export const LEVEL_COUNT = 5;
 export const LEVEL_NAMES = ['1 bar', '1 bar', '2 bars', '2 bars', '3 bars'];
@@ -57,7 +58,7 @@ export function make(level, seed, { songs = starterMelodies } = {}) {
     play,
     choices: [],
     answer: midi,
-    explain: `From "${song.title}". Notes: ${midi.join(', ')}.`,
+    explain: `From "${song.title}". Notes: ${midi.map((m) => name(m, true)).join(', ')}.`,
   };
 }
 

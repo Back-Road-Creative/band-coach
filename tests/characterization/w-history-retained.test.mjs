@@ -42,7 +42,7 @@ test('Progress shows passed-with-help/passed-on-your-own/retained/applied counts
   assert.equal(await page.evaluate('window.__coach.panelOpen()'), 'history');
 
   const text = await page.evaluate("document.getElementById('historyRetention').textContent");
-  assert.match(text, /Passed with help:\s*1/);
+  assert.match(text, /Tries with help:\s*1/);
   assert.match(text, /Passed on your own:\s*3/);
   assert.match(text, /Retained on a later check:\s*1/);
   assert.match(text, /Applied in a song:\s*1/);

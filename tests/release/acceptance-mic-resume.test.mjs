@@ -40,13 +40,16 @@ test('resuming after a tab hide says the mic was released and never blames the l
   });
 });
 
-// A learner who never pressed Connect, pauses and resumes: the mic was never
-// open and the page was never hidden, so the coach must not claim either.
-test('pause and resume with no mic ever connected does not claim the page was hidden', async (t) => {
+// A learner who never pressed Connect presses Start (which asks for the mic
+// itself, so a session on a mic instrument always has one), pauses and
+// resumes: the page was never hidden, so the coach must not claim the mic was
+// released or the page hidden.
+test('pause and resume without Connect and without hiding the page does not claim the mic was released', async (t) => {
   await withAcceptancePage(t, {}, async (page) => {
+    await page.grant(['microphone']);
     await page.clickSelector('#picker button[data-mod="gtr"]');
-    await page.clickSelector('#setupBtn');
     await page.clickSelector('#playBtn');
+    await page.waitFor("document.getElementById('playBtn').textContent.trim() === 'Pause'");
     await sleep(1000);
     await page.clickSelector('#playBtn');
     await page.waitFor("!document.getElementById('breakCard').hidden");

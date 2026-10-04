@@ -7,6 +7,9 @@ import { makeRng, pickFrom } from './rng.js';
 import { checkSequence } from './theory.js';
 import { TICKS_PER_QUARTER } from '../../song/model.js';
 
+// Onset ticks as beat numbers a learner can count along with (tick 0 = beat 1).
+export function beatsText(onsets) { return onsets.map((t) => Number((t / TICKS_PER_QUARTER + 1).toFixed(2))).join(', '); }
+
 const BAR_TICKS = TICKS_PER_QUARTER * 4; // 4/4
 
 function vocabularyForLevel(level) {
@@ -56,7 +59,7 @@ export function make(level, seed) {
     play,
     choices: [],
     answer: onsets,
-    explain: `Onsets in ticks (${TICKS_PER_QUARTER}/quarter): ${onsets.join(', ')}.`,
+    explain: `Taps on beats: ${beatsText(onsets)}.`,
   };
 }
 

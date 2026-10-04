@@ -176,3 +176,51 @@ test('an invalid challenge file is reported in plain words, not a crash', async 
   const msg = await page.evaluate("document.querySelector('.panel-songs-msg').textContent");
   assert.match(msg, /schema|challenge/i);
 });
+
+test('a failed import reads as a failure (not the success colour) and an imported challenge is scrolled into view', async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'band-coach-challenge-vis-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const badPath = join(dir, 'bad.json');
+  writeFileSync(badPath, 'this is not json');
+  const goodPath = join(dir, 'term1.json');
+  writeFileSync(goodPath, challengeJson());
+
+  const page = await launchPage(htmlPath);
+  t.after(() => page.close());
+  await page.evaluate("window.__coach.openPanel('songs')");
+  await page.waitFor("document.querySelectorAll('.panel-songs-row button').length > 0");
+
+  const colour = "getComputedStyle(document.querySelector('.panel-songs-msg')).color";
+  await page.setFileInput('#songsFileInput', badPath);
+  await page.waitFor("document.querySelector('.panel-songs-msg').textContent.includes('could not be read')");
+  const bad = await page.evaluate(colour);
+  assert.equal(await page.evaluate("document.querySelector('.panel-songs-msg').dataset.state"), 'no');
+
+  await page.setFileInput('#songsFileInput', goodPath);
+  await page.waitFor("document.querySelector('.panel-songs-msg').textContent.includes('Term 1 tunes')");
+  const good = await page.evaluate(colour);
+  assert.notEqual(bad, good, 'the failure message must not share the success colour');
+
+  // The challenge list sits under the whole library; the import must bring it on screen.
+  await page.waitFor("(() => { const r = document.querySelector('.panel-songs-challenge').getBoundingClientRect(); return r.top < innerHeight && r.bottom > 0; })()", 5000);
+});
+
+test('importing a challenge while a song is open re-opens the library and shows the list', async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'band-coach-challenge-open-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const goodPath = join(dir, 'term1.json');
+  writeFileSync(goodPath, challengeJson());
+
+  const page = await launchPage(htmlPath);
+  t.after(() => page.close());
+  await page.evaluate("window.__coach.openPanel('songs')");
+  await page.waitFor("document.querySelectorAll('.panel-songs-row button').length > 0");
+  // Opening a song folds the library away (the lesson takes the panel).
+  await page.clickSelector('.panel-songs-row button');
+  await page.waitFor("document.querySelector('.panel-songs-library').open === false");
+
+  await page.setFileInput('#songsFileInput', goodPath);
+  await page.waitFor("document.querySelector('.panel-songs-msg').textContent.includes('Term 1 tunes')");
+  await page.waitFor("document.querySelector('.panel-songs-library').open === true", 5000);
+  await page.waitFor("(() => { const r = document.querySelector('.panel-songs-challenge').getBoundingClientRect(); return r.height > 0 && r.top < innerHeight && r.bottom > 0; })()", 5000);
+});

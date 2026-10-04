@@ -55,11 +55,39 @@ test('summarize: current streak counts consecutive days back from today, breakin
   assert.equal(s.bestStreak, 3);
 });
 
-test('summarize: a missed day today still finds the most recent streak ending yesterday as current only if today has no session', () => {
-  const log = [sess(1), sess(2), sess(3)]; // nothing today
+test('summarize: today still silent keeps yesterday\'s run alive (same grace day as the goal streak)', () => {
+  const log = [sess(1), sess(2), sess(3)]; // nothing today yet
   const s = summarize(log, { now: NOW });
-  assert.equal(s.currentStreak, 0); // streak is defined as "still going", and today is silent
+  assert.equal(s.currentStreak, 3);
   assert.equal(s.bestStreak, 3);
+});
+
+test('summarize: a run that ended two days ago is over', () => {
+  const s = summarize([sess(2), sess(3)], { now: NOW });
+  assert.equal(s.currentStreak, 0);
+  assert.equal(s.bestStreak, 2);
+});
+
+test('summarize: a short history has no earlier window, so the trend is flat, not up', () => {
+  [[1, 0.81], [0.95, 0.8, 0.6, 0.4], [0.99, 0.9, 0.8, 0.6, 0.4, 0.2, 0.1]].forEach((accs) => {
+    const log = accs.map((acc, i) => sess(accs.length - 1 - i, { acc }));
+    assert.equal(summarize(log, { now: NOW }).accuracyTrend.direction, 'flat', JSON.stringify(accs));
+  });
+});
+
+test('summarize: with an earlier window present the trend still reads down', () => {
+  const log = [...Array(7).fill(0.9), ...Array(7).fill(0.4)].map((acc, i) => sess(13 - i, { acc }));
+  assert.equal(summarize(log, { now: NOW }).accuracyTrend.direction, 'down');
+});
+
+test('toTeacherSummary: names instruments and only adds the string/fret caveat when a mic instrument was practised', () => {
+  const inst = (id) => ({ kbd: { name: 'Keyboard', input: 'midi' }, gtr: { name: 'Guitar', input: 'pluck' } })[id];
+  const kbdOnly = toTeacherSummary({ sessions: [sess(0)], mods: {} }, { now: NOW, instrument: inst });
+  assert.ok(kbdOnly.text.includes('- Keyboard:') && !/- kbd:/.test(kbdOnly.text));
+  assert.ok(kbdOnly.text.includes('Strongest: Keyboard'));
+  assert.ok(!/microphone|string and fret/i.test(kbdOnly.text) && !/microphone/i.test(kbdOnly.html));
+  const both = toTeacherSummary({ sessions: [sess(0), sess(1, { mod: 'gtr', acc: 0.3 })], mods: {} }, { now: NOW, instrument: inst });
+  assert.ok(both.text.includes('Needs work: Guitar') && /string and fret/.test(both.text));
 });
 
 test('summarize: streaks survive a month boundary', () => {
@@ -144,4 +172,14 @@ test('toTeacherSummary: works on an empty db without throwing', () => {
   const out = toTeacherSummary({ sessions: [], mods: {} }, { now: NOW, learnerName: 'Rowan' });
   assert.ok(out.text.length > 0);
   assert.ok(out.html.length > 0);
+});
+
+test('ledgerShade: a day short of the goal is never fully shaded, even when it is the busiest day', async () => {
+  const { ledgerShade } = await import('../../src/core/history.js');
+  assert.equal(ledgerShade(4.6, 15, 4.6) < 100, true);
+  assert.equal(ledgerShade(10, 15, 10), 67);
+  assert.equal(ledgerShade(15, 15, 15), 100);
+  assert.equal(ledgerShade(20, 15, 20), 100);
+  assert.equal(ledgerShade(10, 15, 20), 50);
+  assert.equal(ledgerShade(0, 15, 0), 0);
 });

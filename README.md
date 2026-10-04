@@ -24,7 +24,7 @@ saved and imported tunes; Progress takes you straight to your practice history. 
 one you're already on does nothing, so it's always safe to press. Instrument is the one place to
 change what you're playing: it names your current instrument (or invites you to choose one the
 first time) and opens the full instrument list as a sheet; picking one closes the sheet again.
-Settings gathers everything you rarely touch — theme, note naming, backups, reset, update checks
+Settings gathers everything you rarely touch — theme, note naming, backups, reset (it asks before clearing an instrument's progress), update checks
 and the "How this works" explainer — in one plain screen, away from the controls you use every
 practice session.
 
@@ -56,6 +56,11 @@ Press "Set up input" to open Connect, the input list, "Check my microphone" and 
 they stay tucked away until you need them, so the status line (whether the app is hearing you) and
 the MIDI activity dot are the only things shown up front.
 
+Pressing Start on a microphone instrument asks the browser for the microphone first and begins once
+it is allowed; if it is blocked, the coach says so and tells you to use "Set up input", then "Connect
+microphone" (no exercise runs that cannot hear you). Switching to an instrument that does not listen
+(Keyboard, Ear training) closes the microphone again.
+
 If you have more than one input
 (e.g. an audio interface), pick it from the input list next to Connect. Connect also listens to
 your room for about a second and a half the first time and sets the listening thresholds from it,
@@ -65,6 +70,7 @@ of quiet and tunes the listening thresholds to your room and hardware instead of
 one-size-fits-all level, including the level the pitch detector itself gates on; a small meter
 shows the live input level. An instrument plugged into only one channel of a 2-channel interface
 is summed into the listening path rather than silenced.
+While you practise, the coach line says why nothing is being judged: "not hearing anything" or "too quiet to judge" only after about 4 seconds of quiet, counted from the start or from your last clean note (you may still be getting ready, or a note may still be ringing out), and "a chord" as soon as it hears one. In a room the check measured as quiet, an unplayed mic is simply waiting for you, so those two lines are not shown until a sound loud enough to judge arrives and is still not a clean note. The moment a clean single note is heard, that warning comes down and the line it replaced comes back.
 
 Both checks say what they are doing and what they heard in the line beside the button ("Checking the
 room — stay quiet", then "Your room is quiet." or a background-noise warning). If you start playing
@@ -97,7 +103,8 @@ click happens to wake it.
 
 Press "Connect MIDI" to use a keyboard. The status line only says a device is connected once the
 page has actually opened it, so "Keystation found. Press any key on it." means the keyboard is
-wired up but the app has not heard a note yet, and "Keystation is working." means it has. If it
+wired up but the app has not heard a note yet, and "Keystation is working." means it has. With two keyboards each is judged on its own: "Alpha
+is working. Beta found. Press any key on it." means only Alpha has been heard. If it
 instead says another program may be using the keyboard, close whatever else has it open (another
 tab, a DAW) and press Connect again — though it is worth pressing a key first, because the app
 listens to every port whether or not it managed to open it, and a note actually arriving is taken
@@ -335,7 +342,7 @@ recorded; only the judged result is. The record keeps the most recent 500 attemp
 skill, the first time it was played right (from a drill, and from anywhere) and, for each song
 played on that skill, the play that first counted as applied (per-skill records are kept first when
 space runs short), so it never grows without limit. The "My progress" panel turns that record into
-one plain line — how many attempts were passed with help, passed independently, retained on a
+one plain line — how many tries were made with help (passed or not), passed independently, retained on a
 later check (not just repeated in the same sitting), and applied in a song rather than a drill — or,
 with nothing recorded yet, says so plainly instead of claiming anything is retained. A given song
 only counts toward "applied" once per skill, no matter how many times it is replayed — practising
@@ -449,7 +456,7 @@ disabled until any unresolved check items are fixed) lives in `src/ui/songs/revi
 ## Capture a melody
 
 The "Capture a melody" tool (`TOOLS.capture` in `src/app.js`) is the fast, no-file path from a sound
-to something practisable: press Connect, then Listen, and play, sing, hum or whistle a tune, or hold the
+to something practisable: press "Set up input", then "Connect microphone", then Listen, and play, sing, hum or whistle a tune, or hold the
 microphone up to a recording of one instrument playing one note at a time. Like the rest of this
 app's pitch tracking it is monophonic and hears one note at a time — it cannot pull a separate part
 out of a full band recording. Once notes are captured, two buttons turn them into practice: "Make
@@ -505,7 +512,8 @@ Share downloads a `.bandpack` of that one song alone, and Print sends just that 
 plain paper, black on white, with nothing else on the page. A teacher challenge's title field,
 "Export as a challenge", "Share with your band" and any read-only band-pack part assignments live
 under their own **Assignments** heading below the song list, separate from a single open song's
-own actions.
+own actions. Importing a challenge re-opens the library if a lesson had folded it and scrolls that list into view, and a failed import's message is
+drawn in the error colour, not the success green.
 
 Reopening a song, in Learn or Rehearse, carries on from the step you left off on, at the same
 practice speed, with a plain "Picking up where you left off." line — a **"Carry on:
@@ -550,7 +558,7 @@ Opening the editor screen (via a song's own **Edit notes**) shows its own row: *
 notes**, **Play along**, **Export**, **Share**, **Save a copy** — Edit notes opens *any* song,
 starter tunes included, straight in "Record a tune": saving a starter's edits makes "My copy of
 &lt;title&gt;" in your own songs, never touching the shipped starter itself. Leaving the editor —
-for Settings, the instrument sheet or Songs — and coming back keeps whatever was unsaved; a plain
+for Settings, the instrument sheet or Songs — and coming back through **Edit notes** on the same song keeps whatever was unsaved (a different song starts fresh); a plain
 status line reads "Not saved yet" until you press Save, then "Saved". Once something is saved,
 **Practise this** and **Back to songs** appear, and the song's own status in Songs updates right
 away (**Checked** once no check items are left). Edit notes and Play along count as Songs in the
@@ -591,7 +599,7 @@ call involved. Between the step title and "Play it", each step also shows its ow
 a keyboard reads a grand staff, a B flat clarinet reads its part a tone higher than it sounds, with
 a plain-language text alternative on the canvas for a screen reader. Each phrase
 step also shows a plain-word Easy/Medium/Hard difficulty (`src/song/phrase-difficulty.js`), and
-after a judged try the panel draws a small bar-by-bar strip (`src/song/bar-heat.js`) naming which
+after a judged try the panel states the verdict ("Missed the D4", "Nice. 7 of 7 notes.") right under Your turn, where it is on screen, and draws a small bar-by-bar strip (`src/song/bar-heat.js`) naming which
 bars went well and which need another pass, plus a plain-word list (`src/ui/songs/assessed.js`)
 saying what each dimension — notes, timing, holding notes, in tune — showed, or, for one this step
 never grades (a clapped rhythm's pitch, a keyboard's fixed pitch and length), Not assessed and why.
@@ -607,7 +615,8 @@ assignments read-only, one line per song ("Song title: Alex plays Melody, Sam pl
 with your band" bundles a learner's own saved library into a downloadable `.bandpack` with no
 assignments, the same file-exchange pattern as a challenge — no account, no server, no network
 call. A MIDI file's drum track (channel 10) imports as a drum-kit part; the trainer reads it on
-the percussion staff. Each phrase's tempo-ladder rungs run their own "Riff Repeater" loop
+the percussion staff; Review's "Play notes" sounds it as drums and "Practise this" opens it on the drum kit. A part with no
+playable note on the chosen instrument says so instead of passing. Each phrase's tempo-ladder rungs run their own "Riff Repeater" loop
 (`src/ui/songs/loop-backing.js`, wiring `src/audio/stretch/loop.js`'s difficulty ladder into the
 lesson): a missed attempt steps the synthesized backing's speed down, a fully clean attempt steps
 it back up, and the panel always shows the current rate in plain words ("Playing at 90% speed",
@@ -1310,6 +1319,10 @@ notes land where the learner's printed part says, not just where a real
 instrument could reach; `src/song/arrange/transposing.js` computes a part's
 written notes and written key signature for display.
 
+A wrong-note correction on a transposing wind (microphone sustain or MIDI) names both the note
+heard and the target in that same written key (`writtenMidi` in `src/core/wrong-note.js` maps the
+sounding pitch back), so it never says "the note is B♭" under a prompt that reads "Play C4".
+
 `src/song/feasibility.js`'s `feasibility(song, partId, instrument)` turns
 `fitToInstrument`'s own result into a plain-language badge -- "Fits as
 written", "Transposed to G", "3 notes skipped" -- never a guessed score.
@@ -1364,6 +1377,11 @@ chord inversions, in-tune-or-not intonation discrimination, and sing-it-back. So
 song rhythm both draw only from the one-hand starter melodies (`starterMelodies`,
 `src/song/starter/index.js`) -- a two-hand starter is never pulled apart into a monophonic phrase
 or tapped-back rhythm.
+
+Answers are always in words: a wrong answer and "Show me the answer" name the expected notes
+(with octave, e.g. `C4, B3`) and count rhythms in beats (`1, 2, 4`) -- never MIDI numbers or
+ticks. The note buttons here, and the Theory tonic and root lists, follow the Settings
+note-naming and sharps/flats choice like the rest of the app.
 
 ## Find your own singing range
 
