@@ -20,3 +20,10 @@ export function wrongNoteHint({ heardMidi, targetMidi, policy, fretted }) {
   if (n > 12) return 'Go ' + (gap > 0 ? 'higher' : 'lower') + '.';
   return 'Go ' + n + ' fret' + (n > 1 ? 's' : '') + ' ' + (gap > 0 ? 'higher' : 'lower') + '.';
 }
+
+// A transposing wind item carries `written` (what the prompt and staff show) beside `midi` (what
+// sounds). Corrections name notes the way the page does, so this maps a heard SOUNDING pitch to
+// the written one; an item with no `written` (concert pitch, bass clef) is returned unchanged.
+export function writtenMidi(info, heardMidi) {
+  return typeof info.written === 'number' ? heardMidi - (info.midi - info.written) : heardMidi;
+}
