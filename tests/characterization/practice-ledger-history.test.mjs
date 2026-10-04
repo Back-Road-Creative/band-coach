@@ -77,3 +77,29 @@ test('the goal is remembered across a reload via DB.panels.history', async (t) =
   await page.evaluate('window.__coach.openPanel("history")');
   assert.equal(await page.evaluate("document.getElementById('historyGoalInput').value"), '30');
 });
+
+test('a new profile hides the empty "Look at items for" picker; practice brings it back', async (t) => {
+  const page = await launchPage(HTML_PATH);
+  t.after(() => page.close());
+  await page.evaluate('window.__coach.openPanel("history")');
+  assert.equal(await page.evaluate("document.getElementById('historyModSelect').closest('[hidden]') !== null || document.getElementById('historyModSelect').hidden"), true, 'no options, so no picker');
+  await seed(page);
+  await page.evaluate('window.__coach.openPanel("history")');
+  assert.equal(await page.evaluate("document.getElementById('historyModSelect').hidden"), false);
+});
+
+test('the calendar names its weekdays and says what the outline means', async (t) => {
+  const page = await launchPage(HTML_PATH);
+  t.after(() => page.close());
+  await seed(page);
+  await page.evaluate('window.__coach.openPanel("history")');
+  const heads = await page.evaluate("Array.from(document.querySelectorAll('.ledger-weekday')).map((e) => e.textContent)");
+  assert.equal(heads.length, 7);
+  const first = await page.evaluate("document.querySelector('.ledger-cell').title.slice(0, 10)");
+  const wd = new Date(+first.slice(0, 4), +first.slice(5, 7) - 1, +first.slice(8, 10)).getDay();
+  assert.equal(heads[0], ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][wd]);
+  assert.match(await page.evaluate("document.getElementById('historyCalendar').textContent"), /outline/i);
+  // the goal-met outline must not be the fill colour, or a full-shade cell hides it
+  const same = await page.evaluate("(() => { const c = document.querySelector('.ledger-cell-met'); const s = getComputedStyle(c); return s.outlineColor === s.backgroundColor; })()");
+  assert.equal(same, false);
+});

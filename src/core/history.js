@@ -187,6 +187,12 @@ export function sparkline(values, width) {
 // that older sessions once existed and were pushed out; see ledger() below.
 export const SESSION_LOG_CAP = 60;
 
+/** Calendar cell shade, 0-100: minutes against the larger of the daily goal and
+ * the busiest day, so a short day is never solid just because it was the busiest. */
+export function ledgerShade(minutes, goalMin, busiest) {
+  return Math.round((minutes / Math.max(1, goalMin, busiest)) * 100);
+}
+
 /**
  * A calendar of the last `weeks` weeks (default 8), one cell per day,
  * ending today: minutes practised, session count, the level change (sum of

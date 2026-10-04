@@ -4,7 +4,7 @@
 // (aggregating sessions, downsampling a trend into a sparkline, wording the
 // teacher report, ranking items by how well they will be remembered) lives
 // in src/core/history.js and src/core/srs.js — this module is the DOM glue.
-import { summarize, sparkline, toTeacherSummary, ledger, weeklyReport } from '../core/history.js';
+import { summarize, sparkline, toTeacherSummary, ledger, ledgerShade, weeklyReport } from '../core/history.js';
 import { summarizeEvents } from '../core/learning-events.js';
 import { KBD_SONG_SKILL_MAP } from '../instruments/kbd-songs.js';
 import { due } from '../core/srs.js';
@@ -55,7 +55,7 @@ function calendarHtml(l) {
   const maxMinutes = Math.max(1, ...l.days.map((d) => (d.notKept ? 0 : d.minutes)));
   const cells = l.days
     .map((d) => {
-      const shade = d.notKept ? 0 : Math.round((d.minutes / maxMinutes) * 100);
+      const shade = d.notKept ? 0 : ledgerShade(d.minutes, l.goalMin, maxMinutes);
       const cls = 'ledger-cell' + (d.notKept ? ' ledger-cell-unknown' : d.metGoal ? ' ledger-cell-met' : '');
       const label = d.notKept
         ? `${d.day}: earlier sessions not kept`
@@ -64,7 +64,11 @@ function calendarHtml(l) {
     })
     .join('');
   const banner = l.truncated ? '<p class="ledger-truncated-note">Earlier sessions in this window were not kept — the practice log only holds the most recent sessions, so the greyed days are unknown, not zero.</p>' : '';
-  return `${banner}<div class="ledger-grid" role="img" aria-label="Practice calendar, last ${l.weeks} weeks">${cells}</div>`;
+  // the grid starts on whatever weekday the window opens on, so name the columns from the first cell
+  const [y, m, dd] = l.days[0].day.split('-').map(Number);
+  const wd = new Date(y, m - 1, dd).getDay();
+  const heads = Array.from({ length: 7 }, (_, i) => `<span class="ledger-weekday">${['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][(wd + i) % 7]}</span>`).join('');
+  return `${banner}<div class="ledger-weekdays" aria-hidden="true">${heads}</div><div class="ledger-grid" role="img" aria-label="Practice calendar, last ${l.weeks} weeks">${cells}</div><p class="ledger-legend">Newest day is the last square. A dark outline means that day reached your ${l.goalMin}-minute goal; a darker fill means more minutes.</p>`;
 }
 
 /** Renders a weeklyReport() result (src/core/history.js) into the printable
@@ -213,6 +217,8 @@ export function registerHistory(panels) {
           Object.keys(db.mods || {}).filter((m) => practicedItems(db.mods[m]).length),
         )));
         const current = modSelect.value && modIds.indexOf(modSelect.value) >= 0 ? modSelect.value : (modIds.indexOf(api.mod()) >= 0 ? api.mod() : modIds[0]);
+        modSelect.hidden = !modIds.length; // nothing practised: no instrument to pick, so no empty box
+        el.querySelector('label[for="historyModSelect"]').hidden = !modIds.length;
         modSelect.innerHTML = modIds.map((m) => `<option value="${esc(m)}">${esc((api.instrument(m) || {}).name || m)}</option>`).join('');
         if (current) modSelect.value = current;
         if (current) renderItemsFor(current, db, now); else el.querySelector('#historyItems').innerHTML = '<p>Nothing practised yet.</p>';

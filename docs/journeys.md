@@ -270,7 +270,7 @@ decision this unit's scope does not cover.
 
 ## Known gaps
 
-- **F1 — closed.** Progress now also renders a "Passed with help / Passed on your own / Retained
+- **F1 — closed.** Progress now also renders a "Tries with help / Passed on your own / Retained
   on a later check / Applied in a song" line (`src/ui/history.js`'s `#historyRetention`, built from
   `summarizeEvents()` in `src/core/learning-events.js`), with a plain "No checks recorded yet" line
   when there is nothing to count. Proof: `node --test tests/characterization/w-history-retained.test.mjs`.

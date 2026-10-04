@@ -173,3 +173,13 @@ test('toTeacherSummary: works on an empty db without throwing', () => {
   assert.ok(out.text.length > 0);
   assert.ok(out.html.length > 0);
 });
+
+test('ledgerShade: a day short of the goal is never fully shaded, even when it is the busiest day', async () => {
+  const { ledgerShade } = await import('../../src/core/history.js');
+  assert.equal(ledgerShade(4.6, 15, 4.6) < 100, true);
+  assert.equal(ledgerShade(10, 15, 10), 67);
+  assert.equal(ledgerShade(15, 15, 15), 100);
+  assert.equal(ledgerShade(20, 15, 20), 100);
+  assert.equal(ledgerShade(10, 15, 20), 50);
+  assert.equal(ledgerShade(0, 15, 0), 0);
+});
