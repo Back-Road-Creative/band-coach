@@ -19,8 +19,10 @@ import {
   midiRejectWith,
   midiReject,
   midiSetPortState,
+  midiAddOutput,
   midiMakeUnavailable,
 } from '../helpers/fake-midi.mjs';
+import { VIEWPORTS } from '../helpers/browser.mjs';
 import { HANDS_TOGETHER_EXERCISES } from '../../src/core/hands-together.js';
 
 const PORTS = 'MIDI ports are stubbed (fake-midi.mjs): which keyboards exist, their open() result and their bytes; MIDI permission comes from the browser (page.grant / page.deny), read by the stub through navigator.permissions.query';
@@ -255,5 +257,56 @@ test('a keyboard that stays listed but reads "disconnected" while a note is held
     const fb = await readFeedback(page);
     assert.doesNotMatch(fb.cls, /\bok\b/, `left hand alone was graded as a pass: ${JSON.stringify(fb)}`);
     assert.doesNotMatch(fb.text, BOTH_HANDS_PASS, 'the right hand was let go when its keyboard left');
+  });
+});
+
+test('two keyboards: only the one that has been heard is called working', async (t) => {
+  await withAcceptancePage(t, { initScript: FAKE_MIDI_BROWSER_PERMISSION_INIT, simulated: [PORTS] }, async (page) => {
+    await page.grant(['midi']);
+    await midiAddPort(page, 'p1', 'Alpha Keys');
+    await midiAddPort(page, 'p2', 'Beta Keys');
+    await pickKeyboardAndConnect(page);
+    await waitStatus(page, /Alpha Keys and Beta Keys found\. Press any key on one\./);
+    await midiNoteOn(page, 'p1', 60);
+    await waitStatus(page, /Alpha Keys is working/);
+    const text = (await readIo(page)).text;
+    assert.match(text, /Beta Keys found\. Press any key on it\./, 'the silent keyboard is still only "found"');
+    assert.doesNotMatch(text, /Beta Keys( and [\w ]+)? (is|are) working/, 'no working claim for a keyboard never heard');
+    await midiNoteOn(page, 'p2', 62);
+    await waitStatus(page, /Alpha Keys and Beta Keys are working\./);
+  });
+});
+
+test('MIDI details: wraps on a phone, and drops old messages once every keyboard is unplugged', async (t) => {
+  await withAcceptancePage(t, { initScript: FAKE_MIDI_BROWSER_PERMISSION_INIT, simulated: [PORTS] }, async (page) => {
+    await page.setViewport(VIEWPORTS.phone);
+    await page.grant(['midi']);
+    await midiAddPort(page, 'p1', 'Yamaha P-125 Digital Piano USB MIDI Interface Port 1');
+    await pickKeyboardAndConnect(page);
+    await waitConnect(page, false);
+    await page.clickSelector('#midiDetailsBtn');
+    await midiNoteOn(page, 'p1', 60);
+    await page.waitFor("/Last messages heard/.test(document.getElementById('midiDetailsText').textContent)");
+    const m = await page.evaluate("({ pre: document.getElementById('midiDetailsText').scrollWidth - document.getElementById('midiDetailsText').clientWidth, doc: document.documentElement.scrollWidth - window.innerWidth })");
+    assert.ok(m.pre <= 0, `the details text fits its box (overflow ${m.pre}px)`);
+    assert.ok(m.doc <= 0, `the page does not scroll sideways (overflow ${m.doc}px)`);
+    await midiRemovePort(page, 'p1');
+    await page.waitFor("/No MIDI input has been seen yet/.test(document.getElementById('midiDetailsText').textContent)");
+    const details = await page.evaluate("document.getElementById('midiDetailsText').textContent");
+    assert.doesNotMatch(details, /Last messages heard/, 'old bytes are not shown beside "none seen"');
+  });
+});
+
+test('setup sheet on a phone: each label stays on the same row as its own select', async (t) => {
+  await withAcceptancePage(t, { initScript: FAKE_MIDI_BROWSER_PERMISSION_INIT, simulated: [PORTS] }, async (page) => {
+    await page.setViewport(VIEWPORTS.phone);
+    await page.grant(['midi']);
+    await midiAddPort(page, 'p1', 'Test Keys');
+    await midiAddOutput(page, 'o1', 'Test Synth');
+    await pickKeyboardAndConnect(page);
+    await waitConnect(page, false);
+    await page.waitFor("!document.getElementById('midiOutSelect').hidden");
+    const gaps = await page.evaluate("['micDeviceSelect', 'midiOutSelect'].map((id) => { const s = document.getElementById(id), l = document.querySelector('label[for=' + id + ']'); return Math.abs(l.getBoundingClientRect().top + l.getBoundingClientRect().height / 2 - (s.getBoundingClientRect().top + s.getBoundingClientRect().height / 2)); })");
+    gaps.forEach((g, i) => assert.ok(g < 12, `label ${i} sits level with its select (off by ${g}px)`));
   });
 });
