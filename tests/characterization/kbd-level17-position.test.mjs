@@ -133,6 +133,32 @@ test('level 17: playing the old position after the shift fails, naming the old p
   assert.deepEqual(page.exceptions, []);
 });
 
+test('level 17: lifting the left hand after the shift fails naming the left hand, and a later re-press cannot pass it', async (t) => {
+  const page = await launchPage(htmlPath, { initScript: FAKE_MIDI_INIT });
+  t.after(() => page.close());
+  await startTask(page, 17);
+
+  const info = await page.evaluate('window.__coach.cur().info');
+  const oldRh = info.ex.oldRh.midi, lh = info.ex.lh.midi, newRh = info.ex.rh.midi;
+  const idBefore = await page.evaluate('window.__coach.cur().id');
+
+  await playOldPosition(page, 'p1', oldRh, lh);
+  await sendOne(page, 'p1', lh, false); // left hand lifts during the move
+
+  await page.waitFor("document.getElementById('feedback').className === 'no'");
+  const msg = await page.evaluate("document.getElementById('feedback').textContent");
+  assert.match(msg, /left hand/i);
+  assert.match(msg, /hold|down/i);
+
+  // Re-pressing the left hand with the new right-hand key must not pass.
+  await sendOne(page, 'p1', lh, true);
+  await sendOne(page, 'p1', newRh, true);
+  const idAfter = await page.evaluate('window.__coach.cur().id');
+  assert.equal(idAfter, idBefore, 'a lifted left hand is not passed on by pressing it again');
+
+  assert.deepEqual(page.exceptions, []);
+});
+
 test('level 17: computer-key input passes the same way as MIDI', async (t) => {
   await retryFlaky({
     attempts: 3,

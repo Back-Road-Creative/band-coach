@@ -88,8 +88,9 @@ goes for one inside a progress file you restore; the next Connect measures again
 Switching away from the tab (or backgrounding the app on a phone) stops the microphone and
 suspends audio outright, rather than merely pausing the exercise on screen — the OS mic indicator
 goes off, exactly as if you had closed the tab. Coming back does not reopen the mic on its own:
-press Connect again (or resume through a drill that needs it) and the status line and mic indicator
-catch up. The app's own clock does come back on its own, though — the moment the tab is visible
+press Connect again and the status line and mic indicator catch up. If you resume a drill that
+needs the mic before doing that, the coach says the mic was released and to press Connect (it does
+not run the drill deaf and blame your microphone). The app's own clock does come back on its own, though — the moment the tab is visible
 again (or, on a phone, the moment the OS restores it from its back/forward cache), suspended audio
 resumes so a lesson already in progress keeps ticking rather than freezing solid until some other
 click happens to wake it.
@@ -298,8 +299,8 @@ restoring one brings both back — a restore replaces your progress and songs to
 songs in the backup cannot be stored on this device, nothing changes: your current progress and
 songs are left exactly as they were. An older backup made before songs were included still restores —
 it just has no songs to bring back. A backup file that is damaged or was written by a newer Band
-Coach is refused with a message explaining why, and your current progress is left untouched. A quiet reminder appears once you have actually practised a
-while without one — never on a fresh profile, since there is nothing yet to lose. The "My progress" panel also shows a practice calendar (minutes and
+Coach is refused with a message explaining why (in the language you chose), before any "replace your progress" question is asked, and your current progress is left untouched. A quiet reminder appears at the end of a session long enough to be logged (8 answers or more) when you have not saved a
+backup in the last week — never after a session too short to log, since there is nothing yet to lose. The "My progress" panel also shows a practice calendar (minutes and
 level changes, one cell per day, for the last 8 weeks) and a daily minutes goal with a streak — the
 practice log itself only keeps the most recent 60 sessions, so days older than that say "earlier
 sessions not kept" rather than a false zero. "Print this week's report" turns the last 7 days into a
@@ -459,7 +460,13 @@ opening straight into the Songs panel with the phrase-by-phrase lesson a whole i
 path: it keeps only the pitch of each note heard, in order, dropping how long each note was held
 and how far apart they came, and loads that note list (capped at 300 notes) as the "Practise my
 captured melody" custom drill on whichever instrument you pick, four notes at a time, the same
-repeat-until-clean chunking a built-in curriculum level uses.
+repeat-until-clean chunking a built-in curriculum level uses. Starting that drill keeps its own coach
+line (not the level plan, since a captured-melody drill is a warm-up that does not count).
+
+Listen needs a connected microphone: without one it does not start, and says to connect first. The
+"N notes" count updates while you play. Every message here ("Nothing captured yet.", a failed save)
+shows in the feedback card, which the Capture tool keeps visible. Pressing "Make it a lesson" again
+on the same capture re-opens the song it already saved instead of adding another copy.
 
 ## Songs
 
@@ -649,6 +656,13 @@ instead of a third run at the whole phrase; passing that one note returns to the
 where it left off. A repair try is logged as guided assistance, not independent evidence — it is
 a redo of a note the step already failed on, not a fresh, unaided attempt.
 
+A song you saved can be removed again: each of your own rows in the library has a "Remove" button
+that asks "Remove ... for good?" first (Yes, remove it / Keep it); removing it also clears its
+Draft/Checked label. The built-in starter tunes have no Remove button. A notation file with no
+notes in it (an empty or header-only `.abc`) is refused with a plain message instead of being
+saved, and a notation import is never labelled "Original recording not kept", since it never had
+a recording.
+
 The lesson follows the whole teaching loop (`src/core/teaching.js`: explain, demo, guided, check,
 repair, transfer), moving between its phases with `nextPhase()`. In Learn mode, pressing Next on a
 passage's Listen step opens a **Watch and listen** step: the app plays the passage slowly (55% of
@@ -706,8 +720,7 @@ into extra rows rather than letting fret numbers run past its fixed-width
 canvas.
 
 Keyboard, guitar, bass, ukulele and voice each have a per-instrument "Show"
-preference (note names, staff, or both) that draws this staff as an overlay
-alongside the existing display; it defaults to "Note names (today)", so
+preference (note names, staff, or both) that draws this staff alongside the existing display (the staff takes a band along the top of the canvas and the instrument -- fretboard, voice lanes or keys -- shrinks to fit below it, so the two never overlap; on the keyboard the canvas grows taller in Staff mode and the band is capped so every key stays at the 24 CSS px tap floor); it defaults to "Note names (today)", so
 nothing changes unless a learner switches it. Wind and brass keeps its own
 hand-drawn staff (task-row layout, live tuning gauge, hold timer) rather
 than being swapped onto the engine, since the two are not equivalent.
@@ -1027,7 +1040,7 @@ held, CHECK asks for a fresh bass note-on followed by a short three-note melody 
 (`heldBassMelody()` in `src/core/hands-together.js` — the right hand's own note, its neighbouring
 pair's note, then the right hand's own note again, e.g. C-D-C; the top pair, G, has no pair above
 it to borrow from, so it plays G-F-G instead) while the bass keeps sounding. A melody note played while the bass has already
-been let go, or the bass being released before the last melody note-on, fails with a plain-language
+been let go (whatever its pitch), or the bass being released before the last melody note-on, fails with a plain-language
 reason naming the left hand and the hold; a melody note that is not the next one expected fails
 naming the expected note instead. The exercise passes on the bass note-off, once it comes after the
 last melody note-on (`gradeHeldBass()`). This grading needs real note-on/note-off events, so — the
@@ -1070,7 +1083,7 @@ same finger shape there. There is no LEARN/CHECK split and no millisecond tolera
 grader, `gradePositionChange()`, covers both the pre-shift and post-shift chord, telling them apart
 by whether the shift has already happened once this attempt. Playing the old position again after
 the shift is a scored fail naming it ("that is the old position"), not a silent no-op and not a
-second pass. A "before you start" line names the starting position and the shift before the
+second pass. Lifting the left hand after the shift (MIDI or computer keys) is a scored fail naming the left hand, and restarts the exercise from the first position, so pressing it down again cannot pass it. A "before you start" line names the starting position and the shift before the
 exercise begins, the same as level 13's own prep line. This grading runs on a real MIDI keyboard or
 the computer keys, and — because there is no hold to lose and no release timing at stake — a screen
 tap (or the on-screen focus cursor's Enter/Space) is graded exactly the same way as a computer key,
@@ -1106,7 +1119,7 @@ higher- or lower-keyed harp is not silently mis-heard.
 
 Draw and blow bends — a reed pulled down in pitch with your breath — are new practice levels
 appended after the nine open-note levels, so an existing learner's saved level numbers do not
-shift. A bend is graded by its exact bent pitch, the same way an open note is graded by its own
+shift. A bend is graded by its exact bent pitch, and the on-screen prompt names the bend ("Draw 3 ↓2"), so what you are told to play is what is graded. An open note is graded by its own
 pitch. Bend availability (which holes bend, and how deep) does not change with key, since
 transposing the whole harmonica preserves the blow/draw gap inside every hole.
 
@@ -1297,6 +1310,10 @@ multiple of 12), not the sounding pitch the mic actually hears, so a song's
 notes land where the learner's printed part says, not just where a real
 instrument could reach; `src/song/arrange/transposing.js` computes a part's
 written notes and written key signature for display.
+
+A wrong-note correction on a transposing wind (microphone sustain or MIDI) names both the note
+heard and the target in that same written key (`writtenMidi` in `src/core/wrong-note.js` maps the
+sounding pitch back), so it never says "the note is B♭" under a prompt that reads "Play C4".
 
 `src/song/feasibility.js`'s `feasibility(song, partId, instrument)` turns
 `fitToInstrument`'s own result into a plain-language badge -- "Fits as

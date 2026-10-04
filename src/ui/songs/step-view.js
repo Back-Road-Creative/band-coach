@@ -265,11 +265,10 @@ const TAB_NOTES_PER_ROW = Math.floor((CANVAS_WIDTH - TAB_MARGIN_X - TAB_ROW_MARG
 // `line` primitive per string) plus one `fretNumber` primitive per placed
 // note -- NOT tab.js's layoutTab(), which picks its own frets from a raw
 // tuning and knows nothing of a saved capo or alternate tuning. Strings are
-// numbered 1 = highest (the standard tab-staff convention, the OPPOSITE of
-// fretboard.js's own stringIndex, which counts 0 = lowest, and of the
-// fingerings panel's "string N" in src/ui/fingerings/how.js, which is
-// stringIndex + 1 = 1 = lowest) -- P4-9's own convention, chosen to match
-// how a guitarist reads a tab on paper, not how.js's device-facing one. A bar
+// numbered 1 = highest (the standard tab-staff convention, and the same as the
+// fingerings panel's "string N" in src/ui/fingerings/how.js, the trainer and
+// the tuner; fretboard.js's own stringIndex counts 0 = lowest) -- P4-9's own
+// convention, chosen to match how a guitarist reads a tab on paper. A bar
 // with more than TAB_NOTES_PER_ROW notes wraps into extra rows (each its own
 // full set of string lines) rather than letting fret numbers run off the
 // fixed-width canvas (A6) -- renderStepView() already draws every row in
