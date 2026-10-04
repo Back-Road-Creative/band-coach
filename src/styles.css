@@ -213,6 +213,7 @@
   .panel-songs-export button, .panel-songs-export-btn { width: auto; }
   .panel-songs-intro { color: var(--muted); }
   .panel-songs-msg { min-height: 1.2em; color: var(--good); }
+  .panel-songs-msg[data-state="no"] { color: var(--bad); }
   .panel-songs-warn { color: var(--warn); }
   /* A9: margin/padding/gap trimmed from 12/12/8 -- with the library and the
      "Play it on…" row moved out of the way (src/ui/songs.js), this section's
@@ -273,6 +274,9 @@
   .panel-songs-mode, .panel-songs-hands { display: flex; flex-wrap: wrap; gap: 4px; }
   .panel-songs-mode button[aria-pressed="true"], .panel-songs-hands button[aria-pressed="true"] { border-color: var(--good); }
   .panel-songs-check-result { color: var(--muted); }
+  .panel-songs-verdict { margin: 4px 0; font-weight: 600; }
+  .panel-songs-verdict[data-state="ok"] { color: var(--good); }
+  .panel-songs-verdict[data-state="no"] { color: var(--bad); }
   /* how inline (C1b): the "How to play this" toggle/body under the step's
      own notation, tab or fingering line -- a scrollable body (the diagram
      itself can be wider than a phone) so it never forces page-level

@@ -511,7 +511,8 @@ Share downloads a `.bandpack` of that one song alone, and Print sends just that 
 plain paper, black on white, with nothing else on the page. A teacher challenge's title field,
 "Export as a challenge", "Share with your band" and any read-only band-pack part assignments live
 under their own **Assignments** heading below the song list, separate from a single open song's
-own actions.
+own actions. Importing a challenge re-opens the library if a lesson had folded it and scrolls that list into view, and a failed import's message is
+drawn in the error colour, not the success green.
 
 Reopening a song, in Learn or Rehearse, carries on from the step you left off on, at the same
 practice speed, with a plain "Picking up where you left off." line — a **"Carry on:
@@ -597,7 +598,7 @@ call involved. Between the step title and "Play it", each step also shows its ow
 a keyboard reads a grand staff, a B flat clarinet reads its part a tone higher than it sounds, with
 a plain-language text alternative on the canvas for a screen reader. Each phrase
 step also shows a plain-word Easy/Medium/Hard difficulty (`src/song/phrase-difficulty.js`), and
-after a judged try the panel draws a small bar-by-bar strip (`src/song/bar-heat.js`) naming which
+after a judged try the panel states the verdict ("Missed the D4", "Nice. 7 of 7 notes.") right under Your turn, where it is on screen, and draws a small bar-by-bar strip (`src/song/bar-heat.js`) naming which
 bars went well and which need another pass, plus a plain-word list (`src/ui/songs/assessed.js`)
 saying what each dimension — notes, timing, holding notes, in tune — showed, or, for one this step
 never grades (a clapped rhythm's pitch, a keyboard's fixed pitch and length), Not assessed and why.
