@@ -92,3 +92,39 @@ for (const [id, chart] of Object.entries(CHART_FOR_ID)) {
     }
   });
 }
+
+// Content pins: the well-known natural-note fingerings (Boehm flute, Boehm
+// Bb clarinet, conservatory oboe, standard saxophone) as printed in ordinary
+// beginner charts. Before this was pinned, most clarinet/oboe/sax rows (and
+// the flute's upper half) showed the fingering of a different note.
+// Fingerings not pinned here (every sharp/flat, flute F-Ab and C5, oboe F4 and
+// the half-hole notes) are still unchecked -- see keyed-woodwind.js.
+const PINS = {
+  flute: { 67: 'left hand: thumb, 1 2 3; right hand: none', 69: 'left hand: thumb, 1 2; right hand: none', 71: 'left hand: thumb, 1; right hand: none' },
+  clarinet: {
+    55: 'left hand: thumb, 1 2 3; right hand: 1 2 3', 57: 'left hand: thumb, 1 2 3; right hand: 1 2', 59: 'left hand: thumb, 1 2 3; right hand: 1',
+    60: 'left hand: thumb, 1 2 3; right hand: none', 62: 'left hand: thumb, 1 2; right hand: none', 64: 'left hand: thumb, 1; right hand: none',
+    65: 'left hand: thumb; right hand: none', 67: 'left hand: none, thumb hole open; right hand: none'
+  },
+  oboe: {
+    62: 'left hand: 1 2 3; right hand: 1 2 3', 64: 'left hand: 1 2 3; right hand: 1 2', 67: 'left hand: 1 2 3; right hand: none',
+    69: 'left hand: 1 2; right hand: none', 71: 'left hand: 1; right hand: none'
+  },
+  sax: {
+    62: 'left hand: 1 2 3; right hand: 1 2 3', 64: 'left hand: 1 2 3; right hand: 1 2', 65: 'left hand: 1 2 3; right hand: 1', 67: 'left hand: 1 2 3; right hand: none',
+    58: 'left hand: 1 2 3, pinky low Bb key; right hand: 1 2 3', 59: 'left hand: 1 2 3, pinky low B key; right hand: 1 2 3',
+    61: 'left hand: 1 2 3, pinky low C# key; right hand: 1 2 3'
+  }
+};
+for (const [chart, pins] of Object.entries(PINS)) {
+  test(chart + ': well-known fingerings match the standard beginner chart', () => {
+    for (const [midi, keys] of Object.entries(pins)) {
+      assert.equal(keyedFingeringFor(Number(midi), chart).keys, keys, chart + ' ' + keyedFingeringFor(Number(midi), chart).name);
+    }
+  });
+}
+
+test('oboe and sax charts never name a thumb hole (neither instrument has one)', () => {
+  // The oboe/sax thumb works the octave key; only the oboe half-hole rows mention it, as "octave key".
+  for (const e of [...OBOE_NOTES, ...SAX_NOTES].filter(e => !e.halfHole)) assert.doesNotMatch(e.keys, /thumb/, e.name);
+});

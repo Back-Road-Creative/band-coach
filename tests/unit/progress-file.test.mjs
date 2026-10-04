@@ -204,3 +204,22 @@ test('a pre-versioning db with no v field still imports through importProgress, 
   assert.equal(result.db.v, CURRENT_DB_VERSION);
   assert.deepEqual(result.db.mods, older.mods);
 });
+
+test('every refusal carries an errorId naming its translatable message', () => {
+  const env = (patch) => JSON.stringify({ format: 'band-coach-progress', formatVersion: 2, db: {}, ...patch });
+  const cases = [
+    [{ not: 'a string' }, 'backup.err.unreadable'],
+    ['x'.repeat(64 * 1024 * 1024 + 1), 'backup.err.tooLarge'],
+    ['not json {{{', 'backup.err.notBackup'],
+    [JSON.stringify({ format: 'other' }), 'backup.err.notBackup'],
+    [env({ formatVersion: 99 }), 'backup.err.tooNew'],
+    [env({ db: null }), 'backup.err.noProgress'],
+    [env({ db: { v: 999 } }), 'backup.err.tooNew'],
+    [env({ songs: [1] }), 'backup.err.damagedSong'],
+  ];
+  for (const [input, id] of cases) {
+    const r = importProgress(input);
+    assert.equal(r.ok, false);
+    assert.equal(r.errorId, id);
+  }
+});
