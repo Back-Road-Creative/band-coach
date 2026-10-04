@@ -149,3 +149,20 @@ test('Explore chord mode hides the scale Tonic, names chords plainly and spells 
   await set('theoryExploreKind', 'scale');
   assert.equal(await page.evaluate("document.getElementById('theoryExploreTonic').closest('label').hidden"), false);
 });
+
+test('Explore scale: C# natural minor keeps its 4-sharp signature and Db minor agrees with its text', async (t) => {
+  const page = await launchPage(HTML_PATH);
+  t.after(() => page.close());
+  await page.evaluate("document.querySelector('#picker .picker-tools button[data-panel=\"theory\"]').click()");
+  await page.evaluate("document.querySelector('.panel-theory [data-tab=\"explore\"]').click()");
+  const set = (id, v) => page.evaluate(`(() => { const e = document.getElementById('${id}'); e.value = '${v}'; e.dispatchEvent(new Event('change')); })()`);
+  await set('theoryExploreKind', 'scale');
+  await set('theoryExploreTonic', 'C#');
+  await set('theoryExploreScaleType', 'natural_minor');
+  assert.equal(await page.evaluate("document.getElementById('theoryExploreNotes').textContent"), 'C# D# E F# G# A B');
+  assert.equal(await page.evaluate("document.getElementById('theoryExploreStaff').__lastAccidentals"), '', 'every note is covered by the 4-sharp signature, so no per-note accidentals');
+  await set('theoryExploreTonic', 'Bb');
+  await set('theoryExploreScaleType', 'dorian');
+  const flats = await page.evaluate("document.getElementById('theoryExploreStaff').__lastAccidentals");
+  assert.ok(!flats.includes('#'), 'Bb dorian must not draw sharps, got: ' + flats);
+});

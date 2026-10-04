@@ -3,7 +3,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { layoutMeasure } from '../../src/notation/layout.js';
-import { chordSymbol, EXPLORE_ROOTS } from '../../src/ui/theory/chord-label.js';
+import { keyAccidentals } from '../../src/notation/spell.js';
+import { chordSymbol, EXPLORE_ROOTS, scaleKeyName } from '../../src/ui/theory/chord-label.js';
 
 const accs = (notes) => layoutMeasure({ clef: 'treble', key: 'C', time: [4, 4], notes, width: 320 })
   .primitives.filter((p) => p.type === 'accidental').map((p) => p.accidental);
@@ -29,4 +30,18 @@ test('chordSymbol names chords the usual way', () => {
 test('Explore roots offer flats where players expect them', () => {
   assert.ok(EXPLORE_ROOTS.includes('Bb') && EXPLORE_ROOTS.includes('Eb'));
   assert.ok(!EXPLORE_ROOTS.includes('A#') && !EXPLORE_ROOTS.includes('D#'));
+});
+
+test('Explore roots keep C# and G# so C#m and G#m are not forced into Db Fb Ab', () => {
+  assert.ok(EXPLORE_ROOTS.includes('C#') && EXPLORE_ROOTS.includes('G#'));
+});
+
+test('every diatonic Tonic gets a key signature the staff knows, or null (drawn from its own spelling)', () => {
+  for (const t of EXPLORE_ROOTS) for (const type of ['major', 'natural_minor']) {
+    const k = scaleKeyName(t, type);
+    assert.ok(k === null || k === 'C' || k === 'Am' || keyAccidentals(k).length > 0, t + ' ' + type);
+  }
+  assert.equal(scaleKeyName('C#', 'natural_minor'), 'C#m');
+  assert.equal(scaleKeyName('Db', 'natural_minor'), null);
+  assert.equal(scaleKeyName('C', 'dorian'), null);
 });

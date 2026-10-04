@@ -14,7 +14,7 @@ import { drawPrimitives } from '../notation/draw-canvas.js';
 import { byId as instrumentsById, INSTRUMENTS } from '../instruments/index.js';
 import { sanitizeLessonState, recordAnswer } from './theory/lesson-state.js';
 import { keyboardDiagramKeys } from './theory/keyboard-diagram.js';
-import { EXPLORE_ROOTS, chordSymbol, qualityWords } from './theory/chord-label.js';
+import { EXPLORE_ROOTS, scaleKeyName, chordSymbol, qualityWords } from './theory/chord-label.js';
 import { ascendingMidis, chordMidis } from './theory/scale-run.js';
 
 // Last-rendered lesson question, exposed to the debug hook (w-theory slot in
@@ -285,11 +285,10 @@ export function register(panels) {
           const built = scale(tonicName, type);
           const tonicMidi = 60 + parseSpelling(tonicName).pc;
           const midis = ascendingMidis(tonicMidi, type);
-          const isDiatonic = type === 'major' || type === 'natural_minor';
-          const keyName = isDiatonic ? tonicName + (type === 'natural_minor' ? 'm' : '') : 'C';
+          const keyName = scaleKeyName(tonicName, type); // null: no signature for this tonic, so spell from the text's own notes
           sigOut.textContent = tonicName + ' ' + type.replace(/_/g, ' ') + '.';
           notesOut.textContent = built.degrees.map(spellingToString).join(' ');
-          drawStaff(staffCanvas, midis, keyName);
+          drawStaff(staffCanvas, midis, keyName || 'C', keyName ? undefined : built.degrees.concat(built.degrees[0])); // degrees + the octave tonic, same order as midis
           renderScaleInstrumentView(built, midis.map((m) => ((m % 12) + 12) % 12));
           currentExplore = { melody: midis };
         } else {
