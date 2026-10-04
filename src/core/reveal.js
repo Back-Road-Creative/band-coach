@@ -26,7 +26,7 @@ export function promptFor(item, revealed) {
   if (!item) return '';
   const isHarmonica = item.hole !== undefined && item.dir !== undefined;
   if (isHarmonica) {
-    if (revealed) return (item.dir === 'b' ? 'Blow ' : 'Draw ') + item.hole;
+    if (revealed) return (item.dir === 'b' ? 'Blow ' : 'Draw ') + item.hole + (item.bend ? ' ↓' + item.bend : ''); // a bend level grades the bent pitch, so the prompt must name the bend
     return item.note || item.short || '';
   }
   if (item.label !== undefined) return item.label.split(':')[0];

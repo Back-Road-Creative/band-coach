@@ -98,6 +98,9 @@ class TokenReader {
 
 export function importAbc(rawText, options = {}) {
   if (typeof rawText !== 'string') throw new Error('importAbc: input must be a string');
+  // \x01/\x02 are this reader's own voice/field markers (below); a stray one from a binary or
+  // mis-encoded file would be read as an unclosed marker and loop forever, so none survive.
+  rawText = rawText.replace(/[\x01\x02]/g, '');
   const warnings = [];
   let title = null;
   let composer = null;
@@ -261,6 +264,7 @@ export function importAbc(rawText, options = {}) {
         return { id: `abc-${id}`, name: (voiceMeta[id] && voiceMeta[id].name) || id, notes: vs.notes };
       })
     : (() => { const vs = voiceState(DEFAULT_VOICE); vs.notes.sort((a, b) => a.start - b.start); return [{ id: 'abc-1', name: title || 'Tune', notes: vs.notes }]; })();
+  if (!sawKey) warnings.push('no K: key line found; this may not be an ABC tune');
   if (tempo === undefined) warnings.push('no Q: tempo found; defaulted to 120 bpm');
 
   const song = {

@@ -101,7 +101,7 @@
      the base 9px/15px so the extra row costs the least height it can --
      measured against journey-first-visit.test.mjs's #playBtn-in-first-
      screen contract, which this must not break. */
-  .main-nav { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .main-nav { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
   .main-nav button { flex: none; text-align: center; overflow: visible; text-overflow: clip; white-space: normal; overflow-wrap: break-word; padding: 6px 8px; font-size: 13px; line-height: 1.15; }
   .main-nav button[data-route="instrument"] { grid-column: 1 / 3; }
   .main-nav button[data-route="settings"] { grid-column: 3; }
@@ -150,10 +150,12 @@
   .picker-variant-group > .variant-toggle[open] { width: auto; }
   /* WCAG 2.5.8 (2.2 AA) needs a 24x24 CSS px tap target -- the 11px text
      alone rendered a box under 24px tall (axe's target-size rule flagged
-     every variant-toggle summary at first load). min-height plus a flex
-     row keeps the same 11px label, vertically centred, inside a taller box
-     instead of growing the text or the row's visual weight. */
-  .picker-variant-group > .variant-toggle > summary { cursor: pointer; list-style: none; font: 500 11px var(--body); color: var(--muted); display: flex; align-items: center; min-height: 24px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+     every variant-toggle summary at first load). A 24px line-height keeps
+     the same 11px label, vertically centred, inside a taller box instead of
+     growing the text or the row's visual weight. It stays a block (not
+     flex): text-overflow draws no ellipsis on a flex container, so the
+     shut label would stop mid-letter. */
+  .picker-variant-group > .variant-toggle > summary { cursor: pointer; list-style: none; font: 500 11px var(--body); color: var(--muted); display: block; line-height: 24px; min-height: 24px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .picker-variant-group > .variant-toggle > summary::-webkit-details-marker { display: none; }
   .picker-variant-group > .variant-toggle > summary::before { content: '\25b8  '; }
   .picker-variant-group > .variant-toggle[open] > summary::before { content: '\25be  '; }
@@ -205,6 +207,8 @@
   .add-song-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
   .panel-songs-list { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
   .panel-songs-row button { width: 100%; text-align: left; }
+  .panel-songs-remove-box { display: block; margin-top: 2px; }
+  .panel-songs-remove-box button { width: auto; }
   .panel-songs-export { display: flex; gap: 4px; margin-top: 2px; }
   .panel-songs-export button, .panel-songs-export-btn { width: auto; }
   .panel-songs-intro { color: var(--muted); }
@@ -507,8 +511,10 @@
   .weak li { display: flex; justify-content: space-between; gap: 10px; font-size: 14px; }
   .weak li span:last-child { font-variant-numeric: tabular-nums; color: var(--muted); }
   .weak .none { color: var(--muted); }
-  .opts { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; color: var(--muted); font-size: 14px; }
-  .opts label { display: flex; gap: 7px; align-items: center; cursor: pointer; }
+  .opts { min-width: 0; max-width: 100%; display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; color: var(--muted); font-size: 14px; }
+  /* wrap + shrink so a select never pushes the page sideways at ~200% page zoom (a ~195px layout) */
+  .opts label { display: flex; flex-wrap: wrap; gap: 7px; align-items: center; cursor: pointer; max-width: 100%; }
+  .opts select { max-width: 100%; }
   .opts input { accent-color: var(--accent); width: 16px; height: 16px; }
   .file-label { display: inline-flex; align-items: center; }
   .backup-nudge { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; justify-content: space-between; background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 8px 12px; font-size: 13px; color: var(--muted); }

@@ -2,7 +2,7 @@
 // training, theory, history, fingerings, play-along). Each feature lives in
 // its own src/ui/<id>.js and registers one panel; app.js owns the switching.
 //
-//   const panels = createPanels();
+//   const panels = createPanels({ onEscape? });
 //   panels.register({ id, name, tag, color, mount(el, api) -> { show?(), hide?(), destroy?() } });
 //   panels.list()          -> registered panels in registration order
 //   panels.open(id, el, api) mounts fresh into its own container under el, then calls show()
@@ -22,7 +22,11 @@
 // mounted panel open a sibling panel directly -- e.g. the Songs panel's
 // "Add a song" row opening Learn this/Record a tune/Play Along.
 
-export function createPanels() {
+export function createPanels(opts) {
+  // opts.onEscape: the owner's own close path (app.js closePanel, which also
+  // un-hides the main screen and refreshes the nav); without it Escape falls
+  // back to this module's own close().
+  const onEscapeClose = opts && typeof opts.onEscape === 'function' ? opts.onEscape : null;
   const defs = [], mounted = new Map();
   let open = null;
   return {
@@ -61,7 +65,7 @@ export function createPanels() {
         // and owns its own Escape via createFocusTrap). A plain-object el (no
         // ownerDocument, as in the unit tests above) has no container to
         // attach to, so this is a no-op there, same as the opener capture.
-        const onEscape = ev => { if (ev.key === 'Escape' && !ev.defaultPrevented) { ev.preventDefault(); this.close(); } };
+        const onEscape = ev => { if (ev.key === 'Escape' && !ev.defaultPrevented) { ev.preventDefault(); if (onEscapeClose) onEscapeClose(); else this.close(); } };
         if (container) container.addEventListener('keydown', onEscape);
         mounted.set(id, { inst: def.mount(container || el, api) || {}, container, opener });
       }
