@@ -140,3 +140,14 @@ test('describeTask: ear task for a chord quality', () => {
   const sentence = describeTask(task, { revealed: false });
   assert.equal(sentence, 'Ear training: listen, then choose the chord you heard from 2 options.');
 });
+
+test('describeTask: fretless instrument names semitones, never a fret', () => {
+  const info = { kind: 'note', midi: 70, string: 1, fret: 1, label: 'F: string 1, 1 semitone up', short: 'F (string 1)' };
+  const task = { kind: 'one', idx: 0, els: [el(info, { reveal: true })] };
+  assert.equal(describeTask(task, { revealed: true, fretless: true }), 'Fingerboard. Play this note: F — string 1, 1 semitone up.');
+  info.fret = 3;
+  assert.equal(describeTask(task, { revealed: true, fretless: true }), 'Fingerboard. Play this note: F — string 1, 3 semitones up.');
+  info.fret = 0;
+  assert.equal(describeTask(task, { revealed: true, fretless: true }), 'Fingerboard. Play this note: F — string 1, open.');
+  assert.equal(describeTask(task, { revealed: false, fretless: true }), 'Fingerboard. Find and play this note.');
+});

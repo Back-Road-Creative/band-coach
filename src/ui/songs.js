@@ -683,22 +683,65 @@ function mountSongsPanel(hostEl, api) {
 
   function say(text, kind) {
     importMsg.textContent = text;
+    importMsg.dataset.state = kind || 'ok'; // .panel-songs-msg[data-state="no"] is --bad, like the verdict line
     if (typeof api.say === 'function') api.say(text, kind);
   }
 
+  // A judged try's verdict is also kept on the practice so the lesson itself can show it next to
+  // Your turn: #panelSay (api.say's mirror) sits above the panel, which the scroll to the song heading
+  // pushes off-screen, and importMsg lives in the hidden Add-a-song section.
+  function sayVerdict(text, kind) {
+    say(text, kind);
+    practice.lastVerdict = { text, kind };
+  }
+
+  function renderVerdict() {
+    if (practice.lastVerdict) practiceSection.appendChild(el('p', { class: 'panel-songs-verdict', 'data-state': practice.lastVerdict.kind, text: practice.lastVerdict.text }));
+  }
+
+  // The library read is async and mount + show() each call this back to back, so
+  // the saved rows are swapped only AFTER the read, in one synchronous block: an
+  // overlapping call can never leave a saved song appended twice. The starter rows
+  // are built once and never replaced, so a row the learner has focused or pressed
+  // meanwhile stays in the page (and Escape still reaches the panel).
   async function refreshList() {
-    listUl.innerHTML = '';
-    starterSongs.forEach((song) => listUl.appendChild(songRow(song, null)));
+    if (!listUl.firstChild) starterSongs.forEach((song) => listUl.appendChild(songRow(song, null)));
     let saved = [];
     try { saved = await library.list(); } catch (e) { saved = []; }
+    listUl.querySelectorAll('li[data-saved]').forEach((li) => li.remove());
     saved
       .slice()
       .sort((a, b) => a.title.localeCompare(b.title))
-      .forEach((meta) => listUl.appendChild(songRow(meta, meta.id)));
+      .forEach((meta) => { const li = songRow(meta, meta.id); li.dataset.saved = ''; listUl.appendChild(li); });
     // "Share with your band" packs up the library's own saved songs (same
     // as "Export as a challenge"), so it stays disabled with nothing to pack.
     if (saved.length) shareBtn.removeAttribute('disabled');
     else shareBtn.setAttribute('disabled', 'disabled');
+  }
+
+  // Remove a saved song: a first tap only asks ("Remove ... for good?"), a second tap deletes the
+  // song, its Draft/Checked label and its Carry-on place; Keep puts the row back. Starter tunes
+  // are built in, so only library rows get one.
+  function removeControl(meta, libraryId) {
+    const box = el('span', { class: 'panel-songs-remove-box' });
+    function ask() {
+      box.innerHTML = '';
+      box.appendChild(el('span', { text: 'Remove "' + meta.title + '" for good? ' }));
+      const yes = el('button', { type: 'button', class: 'panel-songs-remove-yes', text: 'Yes, remove it', onclick: async () => {
+        try { await library.remove(libraryId); } catch (e) { say('The song could not be removed: ' + (e && e.message ? e.message : String(e)), 'no'); return; }
+        const ledger = songStatusLedger(); delete ledger[libraryId]; statusStore.set(ledger);
+        say('Removed "' + meta.title + '".', 'ok');
+        await refreshList(); renderCarryOn();
+      } });
+      const keep = el('button', { type: 'button', class: 'panel-songs-remove-keep', text: 'Keep it', onclick: idle });
+      box.appendChild(yes); box.appendChild(keep); keep.focus();
+    }
+    function idle() {
+      box.innerHTML = '';
+      box.appendChild(el('button', { type: 'button', class: 'panel-songs-remove', text: 'Remove', 'aria-label': 'Remove ' + meta.title, onclick: ask }));
+    }
+    idle();
+    return box;
   }
 
   function songRow(songOrMeta, libraryId) {
@@ -722,6 +765,7 @@ function mountSongsPanel(hostEl, api) {
     if (libraryId) {
       const label = statusLabel(statusFor(songStatusLedger(), libraryId));
       if (label) li.appendChild(el('span', { class: 'panel-songs-status', text: label }));
+      li.appendChild(removeControl(songOrMeta, libraryId));
     }
     // P3-8: no more per-row Save-as/export controls here -- MIDI/MusicXML/
     // ABC now live inside the open song's own Export action (songHeader,
@@ -1170,6 +1214,9 @@ function mountSongsPanel(hostEl, api) {
     // 'learn', same as no mode at all.
     const mode = opts.mode === 'rehearse' || opts.mode === 'check' ? opts.mode : 'learn';
     const assistance = mode === 'check' ? 'none' : 'shown';
+    // No instrument named (review's "Practise this") and a percussion part: practise it on the drum kit, not whatever pitched instrument is on the main screen (every note would be skipped).
+    const partRec = song.parts.find((p) => p.id === partId);
+    if (!instrumentOverride && partRec && partRec.role === 'percussion' && api.instrument('drum-kit')) instrumentOverride = api.instrument('drum-kit');
     const instrumentId = instrumentOverride ? instrumentOverride.id : api.mod();
     const instrument = instrumentOverride || api.instrument(instrumentId);
     if (!instrument) {
@@ -1673,6 +1720,7 @@ function mountSongsPanel(hostEl, api) {
     // The last judged try's bar-by-bar result (advance() below), kept on
     // screen until the learner starts another try (startRecording() clears
     // it) so they can read it while deciding what to do next.
+    renderVerdict();
     if (practice.lastHeat) {
       practiceSection.appendChild(renderBarStrip(practice.lastHeat, practice.lastHeatBars));
     }
@@ -1689,6 +1737,13 @@ function mountSongsPanel(hostEl, api) {
     const arrangementLine = arrangementText(practice.arrangement);
     if (arrangementLine) practiceSection.appendChild(el('p', { class: 'panel-songs-arrangement', text: arrangementLine }));
     const { plan, stepIndex } = practice;
+    if (!plan.steps.length && plan.fit && plan.fit.unplayable.length) {
+      // Every note skipped on this instrument: nothing to play, so say so -- never the "played it" end screen or a passed mark. (A part with no notes at all still finishes at once, as before.)
+      practiceSection.appendChild(el('p', { text: 'None of this part\'s notes can be played on ' + practice.instrument.name + ', so there is nothing to practise here. Pick another instrument from "Play it on…".' }));
+      practiceSection.appendChild(renderPlayItOn(practice.song, practice.partId, practice.instrumentId)); // the way out the message promises
+      practiceSection.appendChild(el('button', { type: 'button', text: 'Back to songs', onclick: () => { practice = null; currentPractice = null; practiceSection.hidden = true; libraryDetails.open = true; } }));
+      return;
+    }
     if (stepIndex >= plan.steps.length) {
       renderPracticeEnd();
       return;
@@ -1760,6 +1815,7 @@ function mountSongsPanel(hostEl, api) {
     }));
     countEl = el('p', { class: 'panel-songs-count', text: countLabel() });
     practiceSection.appendChild(countEl);
+    renderVerdict();
     if (practice.lastHeat) {
       practiceSection.appendChild(renderBarStrip(practice.lastHeat, practice.lastHeatBars));
     }
@@ -2019,6 +2075,7 @@ function mountSongsPanel(hostEl, api) {
     practice.lastHeatBars = null;
     practice.lastAssessed = null;
     practice.lastCheckVerdict = null;
+    practice.lastVerdict = null;
 
     // Real listening only begins once the count-in ends (below); this is the
     // rest of the old startRecording() body, unchanged, just deferred.
@@ -2163,7 +2220,7 @@ function mountSongsPanel(hostEl, api) {
     // a miss keeps it -- try again, same isolated notes.
   function advanceRepair(passed, result, elapsedMs) {
     const repairStep = practice.repair.step;
-    say(passed ? 'Good. Back to the phrase.' : (firstCorrection(result, repairStep.passRule) || 'Not quite yet — try that again.'), passed ? 'ok' : 'no');
+    sayVerdict(passed ? 'Good. Back to the phrase.' : (firstCorrection(result, repairStep.passRule) || 'Not quite yet — try that again.'), passed ? 'ok' : 'no');
     if (result) {
       practice.lastHeat = barHeat(practice.song, result.matches);
       practice.lastHeatBars = repairStep.bars;
@@ -2238,7 +2295,7 @@ function mountSongsPanel(hostEl, api) {
     // -- instead of the generic retry prompt, so the learner knows the
     // ONE thing to work on next.
     const correction = !passed && result ? firstCorrection(result, step.passRule) : null;
-    say(passed
+    sayVerdict(passed
       ? 'Nice. ' + (result ? result.hitCount + ' of ' + result.judgedCount + ' notes.' : '')
       : correction || 'Not quite yet — try that again.', passed ? 'ok' : 'no');
     if (result) {
@@ -2322,6 +2379,7 @@ function mountSongsPanel(hostEl, api) {
       practice.lastHeatBars = null;
       practice.lastAssessed = null;
       practice.lastCheckVerdict = null;
+    practice.lastVerdict = null;
     }
     finishStep(step, passed, opts);
   }
@@ -2502,6 +2560,9 @@ function mountSongsPanel(hostEl, api) {
     say('Added the "' + challenge.title + '" challenge (' + challenge.songs.length + ' song' + (challenge.songs.length === 1 ? '' : 's') + ').', 'ok');
     renderChallenge(challenge);
     await refreshList();
+    // The challenge list sits under the whole library, far below the message: bring it on screen (guarded like the song-heading scroll).
+    libraryDetails.open = true; // an open lesson folds the library; a collapsed <details> would hide the list
+    if (typeof challengeSection.scrollIntoView === 'function') challengeSection.scrollIntoView({ block: 'start' });
     return;
   }
 
@@ -2518,6 +2579,10 @@ function mountSongsPanel(hostEl, api) {
       ({ song, warnings } = importer(data, { fileName: file.name }));
     } catch (e) {
       say('That file could not be read: ' + (e && e.message ? e.message : String(e)), 'no');
+      return;
+    }
+    if (!song || !Array.isArray(song.parts) || !song.parts.some((p) => p.notes && p.notes.length)) {
+      say('That file has no notes in it, so nothing was added. Pick a tune file (an .abc, MIDI or MusicXML file).', 'no');
       return;
     }
     const { ok, errors } = validateSong(song);
@@ -2550,8 +2615,8 @@ function mountSongsPanel(hostEl, api) {
     // check item is the exception, e.g. a tempo-less ABC file) -- Checked
     // the moment it lands when there is nothing to check, a Draft when
     // there is, same as a transcribed recording just above.
-    if (warnings && warnings.length) setSongStatus(markDraft, storedId, { needsCheck: warnings.length, source: 'file', originalAudioKept: false });
-    else setSongStatus(markChecked, storedId);
+    if (warnings && warnings.length) setSongStatus(markDraft, storedId, { needsCheck: warnings.length, source: 'notation', originalAudioKept: false });
+    else setSongStatus((l, id) => markChecked(markDraft(l, id, { source: 'notation' }), id), storedId);
     renderAddReview({ ...song, id: storedId }, warnings || [], null);
     await refreshList();
   }

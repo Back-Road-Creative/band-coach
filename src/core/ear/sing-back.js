@@ -5,6 +5,7 @@
 
 import { makeRng, intRange } from './rng.js';
 import { NOTE_NAMES, MAJOR_STEPS, diatonicPhrase, checkSequence } from './theory.js';
+import { name } from '../note-names.js';
 
 export const LEVEL_COUNT = 5;
 export const LEVEL_NAMES = ['3-note phrase, steps', '4-note phrase, steps', '5-note phrase, small leaps', '5-note phrase, leaps', '6-note phrase, leaps'];
@@ -27,7 +28,7 @@ export function make(level, seed) {
     play,
     choices: [],
     answer: midi,
-    explain: `Key: ${NOTE_NAMES[tonicPc]} major. Notes: ${midi.join(', ')}.`,
+    explain: `Key: ${NOTE_NAMES[tonicPc]} major. Notes: ${midi.map((m) => name(m, true)).join(', ')}.`,
   };
 }
 

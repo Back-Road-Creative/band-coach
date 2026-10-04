@@ -302,8 +302,9 @@ export function gradeHeldBass(exercise, rec) {
   const notes = (rec && rec.notes) || [];
   for (let k = 0; k < notes.length && k < melody.length; k++) {
     const expected = melody[k], got = notes[k];
-    if (got.midi !== expected.midi) return { state: 'fail', reason: nameFor(got.midi, { octave: true }) + ' is not the next melody note. Play ' + nameFor(expected.midi, { octave: true }) + ' instead.' };
+    // Hold first: a melody note played with the bass already up is the left hand's fault whatever its pitch.
     if (!got.bassHeld) return { state: 'fail', reason: holdReason };
+    if (got.midi !== expected.midi) return { state: 'fail', reason: nameFor(got.midi, { octave: true }) + ' is not the next melody note. Play ' + nameFor(expected.midi, { octave: true }) + ' instead.' };
   }
   const bassOff = rec && rec.bassOff;
   if (notes.length < melody.length) {

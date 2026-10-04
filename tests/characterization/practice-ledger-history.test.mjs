@@ -77,3 +77,32 @@ test('the goal is remembered across a reload via DB.panels.history', async (t) =
   await page.evaluate('window.__coach.openPanel("history")');
   assert.equal(await page.evaluate("document.getElementById('historyGoalInput').value"), '30');
 });
+
+test('a new profile hides the empty "Look at items for" picker; practice brings it back', async (t) => {
+  const page = await launchPage(HTML_PATH);
+  t.after(() => page.close());
+  await page.evaluate('window.__coach.openPanel("history")');
+  assert.equal(await page.evaluate("document.getElementById('historyModSelect').closest('[hidden]') !== null || document.getElementById('historyModSelect').hidden"), true, 'no options, so no picker');
+  await seed(page);
+  await page.evaluate('window.__coach.openPanel("history")');
+  assert.equal(await page.evaluate("document.getElementById('historyModSelect').hidden"), false);
+});
+
+test('the calendar names its weekdays and says what the outline means', async (t) => {
+  const page = await launchPage(HTML_PATH);
+  t.after(() => page.close());
+  await seed(page);
+  await page.evaluate('window.__coach.openPanel("history")');
+  const heads = await page.evaluate("Array.from(document.querySelectorAll('.ledger-weekday')).map((e) => e.textContent)");
+  assert.equal(heads.length, 7);
+  const first = await page.evaluate("document.querySelector('.ledger-cell').title.slice(0, 10)");
+  const wd = new Date(+first.slice(0, 4), +first.slice(5, 7) - 1, +first.slice(8, 10)).getDay();
+  assert.equal(heads[0], ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][wd]);
+  const legend = await page.evaluate("document.getElementById('historyCalendar').textContent");
+  assert.match(legend, /outlined square/i);
+  assert.doesNotMatch(legend, /dark outline/i, 'the outline is light in the dark theme');
+  // the goal-met outline must be the text colour, not the accent: an accent outline vanishes into a full-shade fill (colour-mix reads back as color(srgb), so compare against probes, not the background)
+  const o = await page.evaluate("(() => { const c = document.querySelector('.ledger-cell-met'); const probe = (v) => { const e = document.createElement('i'); e.style.color = 'var(--' + v + ')'; c.parentNode.appendChild(e); const r = getComputedStyle(e).color; e.remove(); return r; }; return { out: getComputedStyle(c).outlineColor, text: probe('text'), accent: probe('accent') }; })()");
+  assert.notEqual(o.text, o.accent, 'probe colours must differ to prove anything');
+  assert.equal(o.out, o.text);
+});
