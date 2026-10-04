@@ -18,7 +18,7 @@ import { resolveAppVersion, DEV_VERSION } from './core/version.js';
 import { loadPack, packStatus, createIndexedDBStore, packManifestUrl, DEFAULT_MODEL_PACK } from './core/model-pack.js';
 import { checkForUpdate, FALLBACK_DOWNLOAD_URL } from './core/update-check.js';
 import { setNoteNaming, sanitizeNoteNaming, name as noteNameFor } from './core/note-names.js';
-import { t, setLocale, LOCALES } from './core/i18n.js';
+import { t, en, setLocale, LOCALES } from './core/i18n.js';
 import { yin } from './audio/yin.js';
 import { createPitchNode } from './audio/pitch-worklet.js';
 //
@@ -132,7 +132,7 @@ import { register as registerPathway } from './ui/pathway.js';
   const CELLS = { q: { b: 1, on: [0], say: 'quarter note' }, ee: { b: 1, on: [0, 0.5], say: 'two eighths' }, h: { b: 2, on: [0], say: 'half note' }, qr: { b: 1, on: [], say: 'quarter rest' }, ssss: { b: 1, on: [0, 0.25, 0.5, 0.75], say: 'four sixteenths' }, dqe: { b: 2, on: [0, 1.5], say: 'dotted quarter, eighth' }, ree: { b: 1, on: [0.5], say: 'eighth rest, eighth' }, ess: { b: 1, on: [0, 0.5, 0.75], say: 'eighth, two sixteenths' }, sse: { b: 1, on: [0, 0.25, 0.5], say: 'two sixteenths, eighth' }, eqe: { b: 2, on: [0, 0.5, 1.5], say: 'eighth, quarter, eighth' } };
 
   // ---------- audio ----------
-  let actx = null, micStream = null, anTime = null, anFreq = null, micReady = false, testNodes = [];
+  let actx = null, micStream = null, anTime = null, anFreq = null, micReady = false, micHideReleased = false, testNodes = [];
   let gates = gatesFor(null), micDevices = [];
   // Counts ticks of the pitch-analysis setInterval (below) where the buffer
   // it read actually carried signal, not silence or a freshly-connected
@@ -193,6 +193,7 @@ import { register as registerPathway } from './ui/pathway.js';
       node.port.onmessage = ev => {
         lastWorkletMessageAt = now(); // watchdog liveness signal below -- updated regardless of `mod`, so the watchdog reflects the worklet actually running, not whether its output happens to be used right now
         const d = ev.data, M = MODS[mod]; if (!M || !(M.input === 'pluck' || M.input === 'sustain')) return;
+        if (!micReady) return; // the mic was released (tab hidden, device unplugged): the source still streams zeros, which diagnoseInput would call a muted mic
         const fr = { rms: d.rms, freq: d.freq && d.clarity > 0.8 ? d.freq : 0, onset: d.onset, clarity: d.clarity }; if (fr.freq) fr.midi = fmidi(fr.freq);
         if (task && cur() && cur().info.kind === 'chord') { const db = new Float32Array(anFreq.frequencyBinCount); anFreq.getFloatFrequencyData(db); fr.chroma = chroma(db, actx.sampleRate); }
         meterUpdate(fr.rms);
@@ -356,7 +357,7 @@ import { register as registerPathway } from './ui/pathway.js';
       let st;
       try { st = await navigator.mediaDevices.getUserMedia({ audio: wanted }); }
       catch (e) { if (!DB.prefs.inputDeviceId) throw e; st = await navigator.mediaDevices.getUserMedia({ audio: base }); }
-      micStream = st; const src = actx.createMediaStreamSource(st); wireAnalysers(monoSum(src)); micReady = true;
+      micStream = st; micHideReleased = false; const src = actx.createMediaStreamSource(st); wireAnalysers(monoSum(src)); micReady = true;
       // A successful Connect clears the 'blocked' sentence calibrateNoiseFloor wrote (its catch below: keep the two texts identical), so it does not sit beside 'Listening through your microphone.'. Any other result text is left alone.
       { const cr = $('calibrateResult'); if (cr && cr.textContent === 'The microphone was blocked, so it could not be checked.') cr.textContent = ''; }
       // A track that ends (device unplugged, permission revoked) leaves the mic as the teardown 'mic' stopper does, then the status and Connect button follow. Only the CURRENT stream counts: a switched-away stream ending later must not close its replacement. micGen++ makes a room check still running for it discard its result.
@@ -381,7 +382,7 @@ import { register as registerPathway } from './ui/pathway.js';
   // called from both sites and needs to be idempotent either way.
   const teardown = createTeardown();
   let teardownRunCount = 0;
-  teardown.add('mic', () => { const pm = $('practiceMeter'); if (pm) pm.hidden = true; if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; micReady = false; micGen++; } });
+  teardown.add('mic', (reason) => { const pm = $('practiceMeter'); if (pm) pm.hidden = true; if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; micReady = false; micGen++; if (reason === 'hidden') micHideReleased = true; } }); // micHideReleased: only a hide that really released an open mic lets resume() say so
   teardown.add('audioContext', () => { if (actx && actx.state === 'running') actx.suspend(); });
   // "Play it for me" (see midiOutPlay below): a hidden/closed tab must not leave a keyboard sounding.
   teardown.add('midiOut', () => midiOutStop());
@@ -1132,7 +1133,7 @@ import { register as registerPathway } from './ui/pathway.js';
   function refreshPrompt() { if (!task || task.kind === 'ear' || task.kind === 'bar' || task.kind === 'hold') return; const verb = mod === 'voice' ? 'Sing' : 'Play'; $('prompt').innerHTML = verb + ' ' + task.els.map((el, k) => (k === task.idx ? '<b>' : '') + promptFor(el.info, el.reveal) + (k === task.idx ? '</b>' : '')).join(' → '); const e = cur(); if (e) $('hint').textContent = (task.warm ? 'Warm-up, does not count. ' : '') + hintFor(e); updateDesc(); updateHowPeek(); }
   // text mirror of the canvas for the visually-hidden #cvDesc element (unit 7.7 item 1):
   // revealed mirrors the current element's own reveal/failed flag, never invents one.
-  function updateDesc() { const el = $('cvDesc'); if (!el) return; const e = cur(); const revealed = task && task.kind === 'ear' ? !!task.revealed : !!(e && (e.reveal || e.failed)); el.textContent = task && task.kind === 'kit' ? 'Drum kit, ' + task.kit.name + ': ' + task.kit.bar.hits.map(h => (h.flam ? 'a flam on ' : '') + h.pieces.map(kitName).join(' with ')).join(', then ') + '. Play it after the count-in.' : describeTask(task, { revealed: revealed }); }
+  function updateDesc() { const el = $('cvDesc'); if (!el) return; const e = cur(); const revealed = task && task.kind === 'ear' ? !!task.revealed : !!(e && (e.reveal || e.failed)); el.textContent = task && task.kind === 'kit' ? 'Drum kit, ' + task.kit.name + ': ' + task.kit.bar.hits.map(h => (h.flam ? 'a flam on ' : '') + h.pieces.map(kitName).join(' with ')).join(', then ') + '. Play it after the count-in.' : describeTask(task, { revealed: revealed, fretless: !!MODS[mod].fretless }); }
   // "How to play this" peek (C1a): the SAME Fingerings-panel diagram Songs'
   // own inline expander shows for a lesson step (renderHowInline, src/ui/
   // fingerings.js), dropped beside the active note here instead. Never
@@ -1371,7 +1372,11 @@ import { register as registerPathway } from './ui/pathway.js';
   function onNoteOff(midi, source) {
     if (!playing || !task || task.done) return; const e = cur(); if (!e || !e.pair || e.pair.phase !== 'check') return;
     const ex = e.info.ex, stage = handsStageFromId(e.id);
-    if (stage === 'position') return; // untimed: onNote's note-on grades level 17 alone, no release timing needed
+    if (stage === 'position') {
+      // untimed: onNote's note-on grades level 17 alone; the one release that matters is the left hand lifting after the shift, which fails and restarts the exercise (a later re-press must not pass it)
+      if (e.pair.moved && midi === ex.lh.midi && !noteState.isHeld(midi)) { failEl('The left hand let go of ' + nname(ex.lh.midi) + ' during the move. Keep it down while your right hand moves up, then start again from the first position.', e.id + '>l'); e.pair.moved = false; e.pair.phase = 'learn'; refreshPrompt(); }
+      return;
+    }
     if (stage === 'timed') {
       if (!(midi in e.pair.on)) return;
       e.pair.off[midi] = performance.now();
@@ -1965,6 +1970,12 @@ import { register as registerPathway } from './ui/pathway.js';
   // to each instrument's existing drawing so today's display is unchanged
   // when the preference is left at 'names'. Never prints the letter name
   // unless the app's own reveal flag says so.
+  // True when the staff overlay is on for any wired instrument, so draw()
+  // gives the staff its own top band (0..0.42H) and the instrument the rest.
+  // The keyboard's grand staff is twice as tall, so it gets 0.55H, the rest 0.42H.
+  // The keyboard's band also leaves its keys >= 24 CSS px tall (the tap floor): 90 CSS px of key area, since the two rows are 0.27 of it.
+  const staffBandH = (m, H) => m === 'kbd' ? Math.min(0.55, 1 - 90 * (cv.width / (cv.getBoundingClientRect().width || cv.width)) / H) : 0.42;
+  const staffBand = m => NOTATE_MOD_IDS.indexOf(m) >= 0 && (DB.prefs.notate[m] || 'names') !== 'names';
   function drawNotation(e, W, H) {
     lastStaff = null;
     if (!e || e.info.kind !== 'note' || e.info.midi === null || e.info.midi === undefined) return;
@@ -1976,7 +1987,10 @@ import { register as registerPathway } from './ui/pathway.js';
     if (!out) return;
     const nameShown = notate === 'both' && DB.prefs.names && !!(e.reveal || e.failed);
     lastStaff = Object.assign({ nameShown: nameShown }, out);
-    const scale = H * 0.0075, x0 = W * 0.05, y0 = H * 0.06;
+    // The instrument's own drawing is moved down out of the way (draw()),
+    // so its staff takes the top band: -20..115 staff units tall, never
+    // wider than the canvas. Everything else keeps the original origin.
+    const band = staffBand(mod), scale = band ? Math.min(H * (mod === 'kbd' ? 0.0023 : 0.0027), W * 0.9 / 280) : H * 0.0075, x0 = W * 0.05, y0 = band ? H * 0.02 + 20 * scale : H * 0.06;
     g.save();
     g.translate(x0, y0); g.scale(scale, scale);
     g.strokeStyle = '#c9ced9'; g.fillStyle = '#e9edf6'; g.lineWidth = 1.5 / scale;
@@ -1985,14 +1999,14 @@ import { register as registerPathway } from './ui/pathway.js';
     g.restore();
     if (nameShown) {
       g.fillStyle = '#93a0bd'; font(H * 0.05, 600); g.textAlign = 'left';
-      g.fillText(nname(e.info.midi), x0, y0 + H * 0.34);
+      g.fillText(nname(e.info.midi), x0, band ? H * (staffBandH(mod, H) - 0.02) : y0 + H * 0.34);
     }
   }
   function draw() {
-    size(); const W = cv.width, H = cv.height; g.clearRect(0, 0, W, H); rowRects = []; keyRects = []; kbdOverviewRect = null;
+    cv.classList.toggle('staffkbd', staffBand('kbd') && mod === 'kbd'); size(); const W = cv.width, H = cv.height; g.clearRect(0, 0, W, H); rowRects = []; keyRects = []; kbdOverviewRect = null;
     if (TOOLS[mod]) { if (mod === 'tuner') drawTuner(W, H); else drawCapture(W, H); return; }
     const M = MODS[mod], e = playing && task && !task.done ? cur() : null, showE = e || (task && task.done ? task.els[task.els.length - 1] : null);
-    if (mod === 'kbd') { const kr = kbdRange(); const tg = []; let rhMidi = null, lhMidi = null; if (e) { if (e.info.kind === 'chord') { if (e.reveal || e.failed) e.info.pcs.forEach(x => tg.push(60 + x)); } else if (e.info.kind === 'hands-together') { if (e.reveal || e.failed) { tg.push(e.info.ex.rh.midi, e.info.ex.lh.midi); rhMidi = e.info.ex.rh.midi; lhMidi = e.info.ex.lh.midi; } } else if (e.reveal || e.failed) tg.push(e.info.midi); } const good = performance.now() - flashGood < 300 && task ? task.els.slice(0, task.idx).map(x => x.info.midi).filter(x => x) : []; const kOpts = { target: tg, good: good, names: DB.prefs.names, rhMidi: rhMidi, lhMidi: lhMidi };
+    if (mod === 'kbd') { const kr = kbdRange(), sb = staffBand('kbd'), oy = sb ? H * staffBandH('kbd', H) : 0, Hk = sb ? H * (1 - staffBandH('kbd', H)) : H; const tg = []; let rhMidi = null, lhMidi = null; if (e) { if (e.info.kind === 'chord') { if (e.reveal || e.failed) e.info.pcs.forEach(x => tg.push(60 + x)); } else if (e.info.kind === 'hands-together') { if (e.reveal || e.failed) { tg.push(e.info.ex.rh.midi, e.info.ex.lh.midi); rhMidi = e.info.ex.rh.midi; lhMidi = e.info.ex.lh.midi; } } else if (e.reveal || e.failed) tg.push(e.info.midi); } const good = performance.now() - flashGood < 300 && task ? task.els.slice(0, task.idx).map(x => x.info.midi).filter(x => x) : []; const kOpts = { target: tg, good: good, names: DB.prefs.names, rhMidi: rhMidi, lhMidi: lhMidi };
       if (kr[0] === 48) {
         // item B2 (Wave kbd): once the octave below is unlocked (level 8+, or
         // a custom captured melody below middle C) a single 15-white-key strip
@@ -2006,17 +2020,17 @@ import { register as registerPathway } from './ui/pathway.js';
         // neither row ever moves mid-phrase. item D2 (Wave kbd): a phone
         // canvas still left the narrowest key just under a 40px floor at
         // W*0.03/W*0.94 -- W*0.02/W*0.96 clears it (340*0.96/8 = 40.8px).
-        const x0 = W * 0.02, rowW = W * 0.96, labelH = H * 0.07, gap = H * 0.02, rowH = (H * 0.7 - 2 * labelH - gap) / 2;
+        const x0 = W * 0.02, rowW = W * 0.96, labelH = Hk * 0.07, gap = Hk * 0.02, rowH = (Hk * 0.7 - 2 * labelH - gap) / 2;
         const label = (text, ly) => { g.fillStyle = '#93a0bd'; font(labelH * 0.55, 600); g.textAlign = 'left'; g.fillText(text, x0, ly + labelH * 0.72); };
-        const y0 = H * 0.18, y1 = y0 + labelH, y2 = y1 + rowH + gap, y3 = y2 + labelH;
+        const y0 = oy + Hk * 0.18, y1 = y0 + labelH, y2 = y1 + rowH + gap, y3 = y2 + labelH;
         label('Left hand · ' + nname(48, true) + '–' + nname(59, true), y0);
         drawKeys(x0, y1, rowW, rowH, 48, 59, Object.assign({}, kOpts, { row: 0, hand: 'lh' }));
         label('Right hand · ' + nname(60, true) + ' · middle C – ' + nname(72, true), y2);
         drawKeys(x0, y3, rowW, rowH, 60, 72, Object.assign({}, kOpts, { row: 1, hand: 'rh' }));
-      } else drawKeys(W * 0.02, H * 0.18, W * 0.96, H * 0.7, kr[0], kr[1], kOpts);
-      drawKbdOverview(W * 0.02, H * 0.905, W * 0.96, H * 0.07, kr[0], kr[1]);
-      if (e && e.info.kind === 'chord') { g.fillStyle = '#e9edf6'; font(H * 0.11); g.textAlign = 'center'; g.fillText(e.info.sym, W / 2, H * 0.13); } if (document.activeElement === cv) { const fi = kbdFocusInfo(); if (fi) { g.strokeStyle = '#ffd23f'; g.lineWidth = 4; g.strokeRect(fi.x + 2, fi.y + 2, fi.w - 4, fi.h - 4); } } }
-    else if (M.tuning) drawFret(M, e, W, H); else if (mod === 'voice') drawVoice(e, W, H); else if (M.staff) drawStaff(M, e, W, H); else if (mod === 'harp') drawHarp(e, W, H);
+      } else drawKeys(W * 0.02, oy + Hk * 0.18, W * 0.96, Hk * 0.7, kr[0], kr[1], kOpts);
+      drawKbdOverview(W * 0.02, oy + Hk * 0.905, W * 0.96, Hk * 0.07, kr[0], kr[1]);
+      if (e && e.info.kind === 'chord') { g.fillStyle = '#e9edf6'; font(Hk * 0.11); g.textAlign = 'center'; g.fillText(e.info.sym, W / 2, oy + Hk * 0.13); } if (document.activeElement === cv) { const fi = kbdFocusInfo(); if (fi) { g.strokeStyle = '#ffd23f'; g.lineWidth = 4; g.strokeRect(fi.x + 2, fi.y + 2, fi.w - 4, fi.h - 4); } } }
+    else if (M.tuning) { if (staffBand(mod)) { g.save(); g.translate(0, H * 0.42); drawFret(M, e, W, H * 0.58); g.restore(); } else drawFret(M, e, W, H); } else if (mod === 'voice') { if (staffBand(mod)) { g.save(); g.translate(0, H * 0.42); drawVoice(e, W, H * 0.58); g.restore(); } else drawVoice(e, W, H); } else if (M.staff) drawStaff(M, e, W, H); else if (mod === 'harp') drawHarp(e, W, H);
     else if (mod === 'mallet-percussion') { const rec = instrumentById['mallet-percussion'], tg = e && e.info.kind === 'note' && (e.reveal || e.failed) ? [e.info.midi] : []; drawKeys(W * 0.03, H * 0.18, W * 0.94, H * 0.7, rec.range.low, rec.range.high, { target: tg, good: [], names: DB.prefs.names }); }
     else if (M.kit) drawKit(W, H);
     else if (mod === 'ear') drawEar(W, H); else if (mod === 'rhy') { if (task && task.kind === 'bar2') drawBar2(W, H); else drawBar(W, H); }
@@ -2040,8 +2054,11 @@ import { register as registerPathway } from './ui/pathway.js';
     if (mod === 'capture' && cap.on) {
       const t = now(), m = fr.freq ? Math.round(fr.midi) : -1;
       if (m === cap.curM) cap.curN++; else { if (cap.curM >= 0 && cap.curN >= 2 && cap.notes.length < 300) cap.notes.push({ m: cap.curM, t: cap.t0 - cap.start, d: t - cap.t0 }); cap.curM = m; cap.curN = 1; cap.t0 = t; }
+      capCount();
     }
   }
+  // The 'N notes.' label beside the Practise-on menu, kept live while listening (counts the note being held).
+  function capCount() { const l = $('capTo') && $('capTo').parentElement; if (l && l.firstChild) l.firstChild.textContent = (cap.notes.length + (cap.on && cap.curM >= 0 && cap.curN >= 2 ? 1 : 0)) + ' notes. Practise on '; }
   function capStop() { if (cap.on && cap.curM >= 0 && cap.curN >= 2) cap.notes.push({ m: cap.curM, t: cap.t0 - cap.start, d: now() - cap.t0 }); cap.on = false; cap.curM = -1; const merged = []; cap.notes.forEach(n => { const l = merged[merged.length - 1]; if (l && l.m === n.m && n.t - (l.t + l.d) < 0.12) l.d = n.t + n.d - l.t; else if (n.d >= 0.09) merged.push(n); }); cap.notes = merged; renderOpts(); }
   // A tap on the row's name area toggles LOCK to that string (tap again to
   // unlock); a tap on the separate note-icon target plays the reference
@@ -2100,7 +2117,7 @@ import { register as registerPathway } from './ui/pathway.js';
     // 0 meaning no limit) sets today's target before the tired check below,
     // so tiredPattern()'s 15-minute cap only tightens it, never loosens it.
     sess.target = DB.prefs.sessionMinutes || 0;
-    let msg = 'Level ' + S.level + ': ' + D().name + '.'; if (tiredPattern()) { sess.target = sess.target ? Math.min(sess.target, 15) : 15; msg = 'Your last three sessions each ended weaker than they started, which is what tired practice looks like. Today is capped at ' + sess.target + ' minutes. ' + msg; } else if (todayMinutes() >= 45) msg = 'You already have ' + Math.round(todayMinutes()) + ' minutes in today. Keep this one short. ' + msg;
+    let msg = customOn ? 'Your captured melody: ' + DB.custom.length + ' notes, four at a time. Warm-up, does not count.' : 'Level ' + S.level + ': ' + D().name + '.'; if (tiredPattern()) { sess.target = sess.target ? Math.min(sess.target, 15) : 15; msg = 'Your last three sessions each ended weaker than they started, which is what tired practice looks like. Today is capped at ' + sess.target + ' minutes. ' + msg; } else if (todayMinutes() >= 45) msg = 'You already have ' + Math.round(todayMinutes()) + ' minutes in today. Keep this one short. ' + msg;
     if (S.judged > 5 && !customOn) { sess.warm = 4; msg += ' First a short warm-up through what you know; it does not count.'; }
     // A returning keyboard learner (a prior kbd session logged on an earlier
     // day) is told, once per page load, which keyboard-path step comes next
@@ -2120,13 +2137,13 @@ import { register as registerPathway } from './ui/pathway.js';
     planProgress = { review: 0, weak: 0, apply: 0, check: 0 };
     // `seen`: has this learner any item record at this level yet? A fresh
     // profile's empty plan is a first sitting, not a day off (curriculum.js).
-    msg += ' ' + describePlan(sessionPlan, id => inf(id).short, { seen: activeItems(mod, S.level).some(id => !!S.item[id]) });
-    const why = describeWhy(sessionPlan, id => inf(id).short); if (why) msg += ' ' + why;
+    if (!customOn) msg += ' ' + describePlan(sessionPlan, id => inf(id).short, { seen: activeItems(mod, S.level).some(id => !!S.item[id]) });
+    const why = describeWhy(sessionPlan, id => inf(id).short); if (why && !customOn) msg += ' ' + why;
     // The song block's own unreviewed label, matching the same test the
     // hand-off button's own note uses (renderOpts, app.js:2109 as of this
     // writing) -- the suggestion is teaching content no player has checked,
     // so it is never claimed reviewed just because it appears in the plan.
-    if (mod === 'kbd' && sessionPlan.some(b => b.kind === 'song')) { const entry = songFor(S.level); if (entry && !isReviewCurrent(itemReview(entry.id, contentRev(entry)))) { const s = starterSongs.find(x => x.id === entry.songId); msg += ' ' + (s ? s.title : entry.songId) + ': ' + t('review.unreviewed'); } }
+    if (!customOn && mod === 'kbd' && sessionPlan.some(b => b.kind === 'song')) { const entry = songFor(S.level); if (entry && !isReviewCurrent(itemReview(entry.id, contentRev(entry)))) { const s = starterSongs.find(x => x.id === entry.songId); msg += ' ' + (s ? s.title : entry.songId) + ': ' + t('review.unreviewed'); } }
     playing = true; paused = false; $('playBtn').textContent = 'Pause'; $('endBtn').hidden = false; coach(msg); showAll(); wakeLock.acquire();
   }
   // logSession(): a panel (e.g. a song lesson) logs its own practice as a
@@ -2157,7 +2174,7 @@ import { register as registerPathway } from './ui/pathway.js';
     if (sess.judged >= 8) { DB.sessions.push({ d: today(), mod: mod, min: Math.round(min * 10) / 10, acc: sess.ok / sess.judged, a1: mean(sess.first), a2: mean(sess.last), from: sess.from, to: S.level, breaks: sess.breaks }); DB.sessions = DB.sessions.slice(-60);
       let up = null, low = null, lowR = 1; Object.keys(S.item).forEach(id => { const cur = S.item[id], r1 = retrievability(cur, modelNow), r0 = retrievability(sess.m0[id] || cur, modelNow), g0 = r1 - r0; if (up === null || g0 > up.g) up = { id: id, g: g0 }; if (cur.reps >= 3 && (low === null || r1 < lowR)) { low = id; lowR = r1; } });
       line = 'Session done: ' + Math.round(min) + ' min, ' + Math.round(100 * sess.ok / sess.judged) + '% right, best streak ' + sess.bestStreak + ', level ' + sess.from + ' to ' + S.level + '.' + (up && up.g > 0.05 ? ' Most improved: ' + inf(up.id).short + '.' : '') + (low ? ' Next time starts with extra ' + inf(low).short + '.' : ''); }
-    if (sess.judged >= 1 && Date.now() - lastBackupAt > 7 * 86400000) showBackupNudge('You have been practising a while. Save a backup, just in case.');
+    if (sess.judged >= 8 && Date.now() - lastBackupAt > 7 * 86400000) showBackupNudge('You have been practising a while. Save a backup, just in case.');
     sess = null; playing = false; paused = false; task = null; bar = null; breakTrap.deactivate(); $('breakCard').hidden = true; $('playBtn').textContent = 'Start'; $('endBtn').hidden = true; $('choices').hidden = true; $('prompt').textContent = ''; $('hint').textContent = ''; coach(line); save(); showAll(); wakeLock.release();
   }
   const BREAKS = {
@@ -2179,6 +2196,7 @@ import { register as registerPathway } from './ui/pathway.js';
   function resume() {
     const gone = pauseInfo ? (Date.now() - pauseInfo.at) / 1000 : 0; paused = false; playing = true; breakTrap.deactivate(); $('breakCard').hidden = true; $('playBtn').textContent = 'Pause'; ensureAudio(); task = null; lastInputAt = now();
     if (gone >= 90) { sess.breaks++; sess.sinceBreak = 0; sess.w30 = []; sess.best30 = 0; sess.rts = []; sess.bestRt = null; sess.tiredFor = 0; sess.failRun = 0; sess.warm = 3; coach('Welcome back after ' + (Math.round(gone / 6) / 10) + ' minutes. That counts as a real break, so your energy is reset. Three easy ones to warm back up.'); } else coach('Resuming level ' + S.level + '.');
+    if (MODS[mod] && (MODS[mod].input === 'pluck' || MODS[mod].input === 'sustain') && !micReady && micHideReleased) coach($('coach').textContent + ' Your microphone was released while the page was hidden. Press Connect microphone to let me hear you again.'); // README: hiding the tab releases the mic; coming back does not reopen it
     pauseInfo = null; showAll();
   }
 
@@ -2205,7 +2223,7 @@ import { register as registerPathway } from './ui/pathway.js';
     const tool = !!TOOLS[mod], accentRaw = (MODS[mod] || TOOLS[mod]).color === '#e9edf6' ? '#9fb4d8' : (MODS[mod] || TOOLS[mod]).color;
     document.documentElement.style.setProperty('--accent', accentRaw); document.documentElement.style.setProperty('--accent-ink', accentInkFor(accentRaw)); document.documentElement.style.setProperty('--accent-display', accentDisplayFor(accentRaw));
     $('helpText').innerHTML = ''; const st = document.createElement('strong'); st.textContent = 'How this one works: '; $('helpText').appendChild(st); $('helpText').appendChild(document.createTextNode((MODS[mod] || TOOLS[mod]).help));
-    document.querySelectorAll('.side .card, .side .stats, #playBtn, #resetBtn').forEach(el => { el.style.display = tool ? 'none' : ''; }); $('tapPad').hidden = mod !== 'rhy'; $('timeFill').parentElement.style.visibility = tool || mod === 'rhy' || (MODS[mod] && MODS[mod].kit) ? 'hidden' : 'visible';
+    document.querySelectorAll('.side .card, .side .stats, #playBtn, #resetBtn').forEach(el => { el.style.display = tool && !(mod === 'capture' && el.id === 'feedbackCard') ? 'none' : ''; }); $('tapPad').hidden = mod !== 'rhy'; $('timeFill').parentElement.style.visibility = tool || mod === 'rhy' || (MODS[mod] && MODS[mod].kit) ? 'hidden' : 'visible'; // capture's own messages ('Nothing captured yet.') need the feedback card; .hidden still hides it while empty
     if (tool) { $('prompt').textContent = ''; $('hint').textContent = mod === 'tuner' ? 'One open string at a time.' : 'One note at a time.'; $('choices').hidden = true; $('replayBtn').hidden = true; $('showMeBtn').hidden = true; $('howPeekHost').hidden = true; return; }
     const d = D(); $('levelNum').textContent = 'Level ' + S.level; $('levelName').textContent = customOn ? 'Your captured melody' : d.name; $('limitOut').textContent = d.task === 'bar' || mod === 'rhy' || MODS[mod].kit ? (d.bpm || 72) + ' bpm' : (d.limit || 8) + ' s per answer';
     const pct = Math.round(S.ready * 100); $('readyFill').style.width = pct + '%'; $('readyFill').style.background = S.ready < 0.25 ? 'var(--bad)' : S.ready < 0.6 ? 'var(--warn)' : 'var(--good)'; $('readyBar').setAttribute('aria-valuenow', pct);
@@ -2335,7 +2353,7 @@ import { register as registerPathway } from './ui/pathway.js';
     // is suggested at all.
     if (mod === 'kbd') btn('kbdPathwayBtn', t('pathway.open'), () => openPanel('pathway'));
     if (mod === 'rhy') btn('calBtn', calRun ? 'Listening for 8 taps…' : 'Calibrate timing (' + Math.round(DB.latencyMs || 0) + ' ms)', startCalibrate, false);
-    if (mod === 'capture') { btn('capGo', cap.on ? 'Stop' : 'Listen', () => { if (cap.on) capStop(); else { ensureAudio(); cap.on = true; cap.notes = []; cap.start = now(); cap.curM = -1; renderOpts(); } }, true); btn('capPlay', 'Play it back', () => { ensureAudio(); const t0 = now() + 0.1; cap.notes.forEach(n => tone(n.m, t0 + n.t - (cap.notes[0] ? cap.notes[0].t : 0), Math.max(0.2, n.d))); }); const lessons = {}; MOD_IDS.filter(m => hasMasteryScheme(m)).forEach(m => { lessons[m] = [MODS[m].name]; }); sel('capTo', cap.notes.length + ' notes. Practise on', lessons, 'kbd', () => {});
+    if (mod === 'capture') { btn('capGo', cap.on ? 'Stop' : 'Listen', () => { if (cap.on) capStop(); else { if (!micReady) { say('Connect your microphone first (open "Set up input", press Connect), then press Listen.', 'no'); return; } ensureAudio(); cap.on = true; cap.notes = []; cap.savedId = null; cap.start = now(); cap.curM = -1; say(''); renderOpts(); } }, true); btn('capPlay', 'Play it back', () => { if (!cap.notes.length) { say('Nothing captured yet.', 'no'); return; } ensureAudio(); const t0 = now() + 0.1; cap.notes.forEach(n => tone(n.m, t0 + n.t - (cap.notes[0] ? cap.notes[0].t : 0), Math.max(0.2, n.d))); }); const lessons = {}; MOD_IDS.filter(m => hasMasteryScheme(m)).forEach(m => { lessons[m] = [MODS[m].name]; }); sel('capTo', cap.notes.length + ' notes. Practise on', lessons, 'kbd', () => {});
       // 'Make it a lesson': the captured tune becomes a draft Song (src/song/
       // capture.js), added to the same library the Songs panel reads, then
       // opened there -- requestOpenSong() + openPanel() is the same
@@ -2345,8 +2363,9 @@ import { register as registerPathway } from './ui/pathway.js';
       btn('capUse', 'Make it a lesson', async () => {
         if (!cap.notes.length) { say('Nothing captured yet.', 'no'); return; }
         try {
+          // One capture is saved once: pressing again re-opens that song instead of adding an identically titled copy.
           const song = captureToSong(cap.notes, { now: Date.now() });
-          const id = await backupLibrary().add(song, { now: Date.now() });
+          const id = cap.savedId || await backupLibrary().add(song, { now: Date.now() }); cap.savedId = id;
           // The 'Practise on' select (capTo) is the only place this tool
           // asks which instrument the captured tune is for -- Songs' own
           // checkOpenRequest() otherwise falls back to api.mod(), which at
@@ -2658,14 +2677,14 @@ import { register as registerPathway } from './ui/pathway.js';
   // plain, always-visible group now, not a shut-by-default <details> -- once
   // the instrument sheet itself is open (setInstrumentSheetOpen), everything
   // inside it, tools included, is visible with no second disclosure to find.
-  function buildPickerButton(m, o) { const b = document.createElement('button'); b.type = 'button'; b.dataset.mod = m; b.style.setProperty('--c', o.color); b.setAttribute('aria-pressed', 'false'); b.appendChild(document.createTextNode(o.name)); const sm = document.createElement('small'); sm.textContent = o.tag; b.appendChild(sm); b.addEventListener('click', () => { b.blur(); closePanel(); pickerAsSheet = true; setMod(m); setInstrumentSheetOpen(false); }); return b; }
+  function buildPickerButton(m, o) { const b = document.createElement('button'); b.type = 'button'; b.dataset.mod = m; b.style.setProperty('--c', o.color); b.setAttribute('aria-pressed', 'false'); b.appendChild(document.createTextNode(o.name)); const sm = document.createElement('small'); sm.textContent = o.tag; b.appendChild(sm); b.addEventListener('click', () => { b.blur(); closePanel(); pickerAsSheet = true; setMod(m); setInstrumentSheetOpen(false); if (document.activeElement === document.body) focusNavInstrument(); }); return b; }
   // A panel tool button (Ear training / How to play it / Music theory)
   // shares buildPickerButton's look (--c colour dot, <small> tag line) but
   // opens a registered panel instead of selecting a mod, and shuts the
   // instrument sheet on click exactly like picking an instrument does --
   // both leave the learner looking at what they just chose, not an empty
   // sheet still hanging open behind it.
-  function buildPanelToolButton(p) { const b = document.createElement('button'); b.type = 'button'; b.dataset.panel = p.id; b.style.setProperty('--c', p.color || '#93a0bd'); b.setAttribute('aria-pressed', 'false'); b.appendChild(document.createTextNode(p.name)); const sm = document.createElement('small'); sm.textContent = p.tag || ''; b.appendChild(sm); b.addEventListener('click', () => { b.blur(); openPanel(p.id); setInstrumentSheetOpen(false); }); return b; }
+  function buildPanelToolButton(p) { const b = document.createElement('button'); b.type = 'button'; b.dataset.panel = p.id; b.style.setProperty('--c', p.color || '#93a0bd'); b.setAttribute('aria-pressed', 'false'); b.appendChild(document.createTextNode(p.name)); const sm = document.createElement('small'); sm.textContent = p.tag || ''; b.appendChild(sm); b.addEventListener('click', () => { b.blur(); openPanel(p.id); setInstrumentSheetOpen(false); focusPanelHeading(); }); return b; }
   // U2: children[parentId] lists the variant ids grouped under it, built
   // from VARIANT_PARENTS rather than a second hand-written map, so the two
   // stay impossible to drift apart.
@@ -2696,8 +2715,14 @@ import { register as registerPathway } from './ui/pathway.js';
     const box = $('picker'); if (box) box.hidden = !open;
     const btn = $('navInstrument'); if (btn) btn.setAttribute('aria-expanded', String(open));
   }
+  // Closing the sheet hides the button that had focus, which would drop focus to <body>: put it on the nav Instrument button (where the sheet opened from) instead.
+  function focusNavInstrument() { const b = $('navInstrument'); if (b) b.focus(); }
+  // A tool panel (Ear training / How to play it / Music theory) opened from the sheet announces itself the way the nav screens do (F2): focus lands on its heading.
+  function focusPanelHeading() { const h = $('panelHost').querySelector('h2'); if (h) { if (!h.hasAttribute('tabindex')) h.tabIndex = -1; h.focus(); } else focusNavInstrument(); }
   function buildPicker() {
     const box = $('picker'), instrumentIds = MOD_IDS.filter(m => TOOL_MOD_IDS.indexOf(m) < 0), toolIds = TOOL_MOD_IDS.concat(Object.keys(TOOLS)), children = variantChildrenByParent();
+    // Escape closes the sheet from anywhere inside it and puts focus back on the nav Instrument button (the other dismissible surfaces -- panels, the break card -- already do).
+    box.addEventListener('keydown', ev => { if (ev.key === 'Escape' && !ev.defaultPrevented && !box.hidden) { ev.preventDefault(); setInstrumentSheetOpen(false); focusNavInstrument(); } });
     // Each variant family renders as ONE top-level control (the parent
     // button, always visible and independently selectable -- e.g. "Ukulele"
     // still reaches mod 'uke') plus a quiet <details> disclosure beside it
@@ -2768,19 +2793,19 @@ import { register as registerPathway } from './ui/pathway.js';
   }
   async function doImportProgress(text) {
     const result = importProgressFile(text);
-    if (!result.ok) { coach(result.error); return result; }
+    if (!result.ok) { coach(t(result.errorId)); return result; }
     // The songs go first because that is the store that can fail (e.g.
     // IndexedDB unavailable): if it does, nothing about the live profile
     // has changed yet, so there is nothing to roll back. Only once the
     // songs are safely in does this replace DB, prefs, theme and mod.
     if (Array.isArray(result.songs) && result.songs.length) {
       try { await backupLibrary().importAll(result.songs); }
-      catch (e) { const error = 'Nothing was changed: the saved songs in this backup could not be stored on this device.'; coach(error); return { ok: false, error }; }
+      catch (e) { const error = en['backup.err.songsNotStored']; coach(t('backup.err.songsNotStored')); return { ok: false, error }; }
     }
     const priorLatencyMs = DB && DB.latencyMs;
     modelNow = Date.now(); DB = sanitizeDB(result.db, undefined, modelNow); DB.latencyMs = num(priorLatencyMs, DB.latencyMs, 0, 300); if (!Array.isArray(DB.custom)) DB.custom = [];
     $('optNames').checked = DB.prefs.names; $('optTheme').value = DB.prefs.theme; applyTheme(DB.prefs.theme); $('optLocale').value = DB.prefs.locale; applyLocale(DB.prefs.locale); setNoteNaming(DB.prefs.noteNaming); $('optNoteSystem').value = DB.prefs.noteNaming.system; $('optAccidentals').value = DB.prefs.noteNaming.accidentals; setMod(DB.prefs.mod);
-    if (!writeDB()) { const error = 'Your restored progress could not be saved on this device (storage may be full).'; coach(error); return { ok: false, error }; }
+    if (!writeDB()) { const error = en['backup.err.notSaved']; coach(t('backup.err.notSaved')); return { ok: false, error }; }
     coach(t('backup.restored'));
     return result;
   }
@@ -2788,9 +2813,9 @@ import { register as registerPathway } from './ui/pathway.js';
   $('backupRestoreInput').addEventListener('change', function () {
     const file = this.files && this.files[0]; this.value = '';
     if (!file) return;
-    if (!confirm(t('backup.confirmRestore'))) return;
     const reader = new FileReader();
-    reader.onload = () => doImportProgress(String(reader.result));
+    // Check the file before asking: a file that is not a backup is refused with the reason, and the "replace your progress" confirm is only raised for one that can be restored.
+    reader.onload = () => { const text = String(reader.result), check = importProgressFile(text); if (!check.ok) { coach(t(check.errorId)); return; } if (confirm(t('backup.confirmRestore'))) doImportProgress(text); };
     reader.onerror = () => coach(t('backup.readError'));
     reader.readAsText(file);
   });
@@ -2854,7 +2879,7 @@ import { register as registerPathway } from './ui/pathway.js';
   // ---------- feature panels (src/ui/panels.js): learn, songs, ear, theory, history, fingerings, play-along ----------
   // A panel unit registers ONE panel by replacing its own slot:panel line
   // below; everything it needs from the app goes through panelApi.
-  const panels = createPanels();
+  const panels = createPanels({ onEscape: () => { closePanel(); const nb = $('navInstrument'); if (document.activeElement === document.body && nb) nb.focus(); } });
   const panelApi = {
     db: () => DB, save: save, mod: () => mod, setMod: m => { closePanel(); setMod(m); }, instrument: id => instrumentById[id || mod],
     audio: () => { ensureAudio(); return actx; }, openMic: openMic, analysers: () => ({ time: anTime, freq: anFreq }), gates: () => gates,
