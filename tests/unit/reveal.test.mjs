@@ -117,3 +117,9 @@ test('hintFor: harmonica item revealed names hole and direction', () => {
 test('hintFor: item with no recognised kind returns empty string', () => {
   assert.equal(hintFor({ anywhere: true }, true), '');
 });
+
+test('promptFor: revealed harmonica bend names the bend, not just the hole', () => {
+  assert.equal(promptFor({ hole: 3, dir: 'd', bend: 2, note: 'A4', short: 'Draw 3 ↓2' }, true), 'Draw 3 ↓2');
+  assert.equal(promptFor({ hole: 2, dir: 'd', bend: 1, note: 'F#4' }, true), 'Draw 2 ↓1');
+  assert.equal(promptFor({ hole: 3, dir: 'd', bend: 2, note: 'A4' }, false), 'A4');
+});

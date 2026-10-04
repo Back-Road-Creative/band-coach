@@ -24,16 +24,19 @@ function staffPosition(label, clef) {
   return (SPACE_ORDINALS[(diff - 1) / 2] || (diff - 1) / 2) + ' space';
 }
 
-function describeNote(info, revealed) {
+function describeNote(info, revealed, fretless) {
   if (info.clef) {
     const staff = info.clef === 'bass' ? 'Bass staff' : 'Treble staff';
     const pos = staffPosition(info.label, info.clef);
     return revealed ? `${staff}. Play this note: ${info.label} — ${pos}.` : `${staff}. Find and play this note: ${pos}.`;
   }
   if (info.string !== undefined) {
-    if (!revealed) return 'Fretboard. Find and play this note.';
-    const where = info.fret ? `string ${info.string}, fret ${info.fret}` : `string ${info.string}, open`;
-    return `Fretboard. Play this note: ${info.label.split(':')[0]} — ${where}.`;
+    const board = fretless ? 'Fingerboard' : 'Fretboard';
+    if (!revealed) return `${board}. Find and play this note.`;
+    // fretless (bowed) instruments have no frets: say semitones up, like the visible hint
+    const pos = !info.fret ? 'open' : fretless ? `${info.fret} semitone${info.fret > 1 ? 's' : ''} up` : `fret ${info.fret}`;
+    const where = `string ${info.string}, ${pos}`;
+    return `${board}. Play this note: ${info.label.split(':')[0]} — ${where}.`;
   }
   if (info.anywhere) {
     return revealed ? `Play this note by name: ${info.short}.` : 'Find and play this note by name, anywhere on the instrument.';
@@ -48,8 +51,9 @@ function describeNote(info, revealed) {
 /**
  * @param {object|null} task the current exercise task, as built by
  *   buildLevelTask()/buildTask() in src/app.js
- * @param {{revealed?: boolean}} opts revealed must mirror the current
- *   element's own `e.reveal || e.failed` flag — never invent it here
+ * @param {{revealed?: boolean, fretless?: boolean}} opts revealed must mirror the current
+ *   element's own `e.reveal || e.failed` flag — never invent it here;
+ *   fretless is true for bowed strings (say semitones up, not a fret)
  * @returns {string} one plain sentence describing what the canvas shows
  */
 export function describeTask(task, opts = {}) {
@@ -82,7 +86,7 @@ export function describeTask(task, opts = {}) {
     if (revealed) sentence = `Sing this note: ${info.short}.`;
     else sentence = task.ref === 'target' ? 'Sing back the note you just heard, in any octave.' : 'Find this note by ear, counting up from Do.';
   } else {
-    sentence = describeNote(info, revealed);
+    sentence = describeNote(info, revealed, !!opts.fretless);
   }
 
   if (task.kind === 'hold') sentence += ' Hold it for two seconds.';

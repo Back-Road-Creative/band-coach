@@ -74,7 +74,8 @@ export function statusLabel(entry) {
   } else {
     label = 'Checked';
   }
-  if (entry.originalAudioKept === false) label += ' — Original recording not kept';
+  // A notation import (source 'notation') never had a recording to keep, so it gets no caveat.
+  if (entry.originalAudioKept === false && entry.source !== 'notation') label += ' — Original recording not kept';
   return label;
 }
 
