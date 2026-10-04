@@ -45,7 +45,7 @@ async function begin(t) {
   const page = await launchPage(HTML_PATH);
   t.after(() => page.close());
   await read(page, "window.__coach.setMod('gtr')");
-  await click(page, 'playBtn');
+  await read(page, 'window.__coach.startWithoutMic()');
   await page.waitFor('window.__coach.task()');
   await read(page, 'window.__t0 = null; window.__coach.task().limit = 1e9; window.__first = window.__coach.cur().info');
   assert.notEqual(await read(page, 'window.__coach.cur().info.kind'), 'chord');
