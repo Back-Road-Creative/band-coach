@@ -184,7 +184,9 @@ export async function build({ release = false, outDir = OUT_DIR } = {}) {
   // A literal "</script" inside the bundled JS would close the wrapping tag
   // early when the browser parses the built HTML file.
   const js = out.text.replace(/<\/script/gi, '<\\/script');
-  const css = readFileSync(SRC_CSS, 'utf8');
+  // The stylesheet's comments are notes for whoever edits it; they never reach the built page
+  // (about 15KB of every download). No string in styles.css contains "/*" (verbatim.test.mjs).
+  const css = readFileSync(SRC_CSS, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/\n\s*\n+/g, '\n');
   const shell = readFileSync(SRC_HTML, 'utf8');
 
   if (!shell.includes(CSS_PLACEHOLDER)) {
