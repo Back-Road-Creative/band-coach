@@ -48,3 +48,17 @@ test('End session clears the answer card, the time bar, the how-to peek and the 
     assert.notEqual(await text(page, 'sRt'), '0.0', 'no answers in view is not "0.0 sec"');
   });
 });
+
+test('Skip ahead after an answer clears the old answer card', async (t) => {
+  await withAcceptancePage(t, {}, async (page) => {
+    await page.clickSelector('#picker button[data-mod="kbd"]');
+    await page.clickSelector('#playBtn');
+    await page.waitFor("document.querySelector('#prompt b')");
+    const label = await text(page, 'prompt').then((p) => p.replace(/^Play /, ''));
+    await page.press(KEY_FOR[label], { text: KEY_FOR[label] });
+    await page.waitFor("document.getElementById('feedback').textContent.trim() !== ''");
+    await page.clickSelector('#harderBtn');
+    assert.equal(await text(page, 'feedback'), '', 'the old answer is not left under the new level');
+    assert.equal(await hidden(page, 'feedbackCard'), true);
+  });
+});
