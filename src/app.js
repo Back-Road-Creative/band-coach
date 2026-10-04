@@ -2421,14 +2421,20 @@ import { register as registerPathway } from './ui/pathway.js';
   // drops a pitch from realMidiHeld once noteState confirms no OTHER port
   // still holds it, same rule handleMidiMessage's own note-off follows.
   function releaseNotes(port) { noteState.releaseAll(port).forEach(p => { if (!noteState.isHeld(p)) realMidiHeld.delete(p); }); }
-  function midiNames() { return midiPorts.filter((p, i) => midiWorks(i)).map(p => p.name); }
+  // Per-port wording: "working" is earned by bytes from THAT port, so a keyboard that has only opened stays "found" even when another one has played.
+  function midiStatus() {
+    const live = midiPorts.map((p, i) => ({ name: p.name, heard: midiHeard.has(midiPortInputs[i]), works: midiWorks(i) })).filter(p => p.works), join = a => a.join(' and '), heard = live.filter(p => p.heard).map(p => p.name), quiet = live.filter(p => !p.heard).map(p => p.name);
+    const foundTxt = quiet.length ? join(quiet) + ' found. Press any key on ' + (live.length > 1 ? 'one' : 'it') + '.' : '';
+    if (!heard.length) return foundTxt;
+    return join(heard) + (heard.length > 1 ? ' are working.' : ' is working.') + (quiet.length ? ' ' + join(quiet) + ' found. Press any key on ' + (quiet.length > 1 ? 'one' : 'it') + '.' : '');
+  }
   function ioRefresh() {
     const b = $('ioBtn'), detailsBtn = $('midiDetailsBtn');
     if (needsMic()) { b.hidden = micReady; b.textContent = 'Connect microphone'; detailsBtn.hidden = true; ioState(micReady ? 'on' : '', micReady ? 'Listening through your microphone.' : 'This one listens through a microphone or audio interface.'); }
     else if (mod === 'ear') { b.hidden = true; detailsBtn.hidden = true; ioState('on', 'Nothing to connect. Turn your sound up.'); }
     else {
       b.hidden = midiOn; b.textContent = 'Connect MIDI'; detailsBtn.hidden = false;
-      if (midiOn) { const names = midiNames(), label = names.length > 1 ? names.join(' and ') : names[0], heardOnThisRoute = midiPortInputs.some(i => midiHeard.has(i)); ioState('on', label + (heardOnThisRoute ? (names.length > 1 ? ' are working.' : ' is working.') : (names.length > 1 ? ' found. Press any key on one.' : ' found. Press any key on it.'))); }
+      if (midiOn) { ioState('on', midiStatus()); }
       else ioState('', mod === 'rhy' ? 'Space bar or the pad works. MIDI is optional.' : 'Screen keys and computer keys work. MIDI is optional.');
     }
     if (!$('midiDetails').hidden) renderMidiDetails();
@@ -2439,7 +2445,7 @@ import { register as registerPathway } from './ui/pathway.js';
   // the keyboard itself is reaching the page.
   function midiBlink() { const dot = $('midiActDot'); dot.hidden = false; dot.classList.add('on'); clearTimeout(midiBlinkTimer); midiBlinkTimer = setTimeout(() => dot.classList.remove('on'), 150); }
   function renderMidiDetails() {
-    const lines = midiPorts.length ? [] : ['No MIDI input has been seen yet.'];
+    const lines = midiPorts.length ? [] : ['No MIDI input has been seen yet.'];  // midiLog is cleared with the last port (wire()), so old bytes never sit under this line
     midiPorts.forEach((p, i) => lines.push(p.name + ' -- state: ' + p.state + ', connection: ' + p.connection + (p.ok ? ', opened.' : ', open failed: ' + (p.error || 'unknown reason') + (midiHeard.has(midiPortInputs[i]) ? ', but it is sending messages anyway.' : '.'))));
     if (midiLog.length) { lines.push(''); lines.push('Last messages heard (hex):'); midiLog.forEach(h => lines.push(h)); }
     $('midiDetailsText').textContent = lines.join('\n');
@@ -2528,7 +2534,7 @@ import { register as registerPathway } from './ui/pathway.js';
         const connected = inputs.filter(i => i.state === 'connected');
         Promise.all(connected.map(i => i.open().then(() => ({ input: i, ok: true }), e => ({ input: i, ok: false, error: (e && e.message) || 'could not be opened' })))).then(results => {
           midiPorts = results.map(r => ({ name: r.input.name || 'MIDI device', state: r.input.state, connection: r.input.connection, ok: r.ok, error: r.error }));
-          midiPortInputs = results.map(r => r.input);
+          midiPortInputs = results.map(r => r.input); if (!midiPorts.length) midiLog.length = 0;
           midiOn = results.some((r, i) => r.ok || midiWorks(i));
           ioRefresh();
           // No MIDI input at all: an e-kit was tried and genuinely is not
