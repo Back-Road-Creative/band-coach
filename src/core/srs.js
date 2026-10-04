@@ -24,6 +24,7 @@ const DAY_MS = 86400000;
 export const DEFAULT_STABILITY_DAYS = 10; // matches the old flat half-life, so a freshly-migrated item behaves the same until its next review
 export const MIN_STABILITY_DAYS = 0.5;
 export const MAX_STABILITY_DAYS = 3650;
+const SAME_SESSION_DAYS = 0.25; // a success this soon after the last review is the same sitting: it earns a rep but no more growth
 const MIN_R = 1e-6; // floor to keep log2() finite for a fully-forgotten item
 
 const clamp = (x, lo, hi) => Math.min(hi, Math.max(lo, x));
@@ -88,6 +89,8 @@ export function review(item, { grade, now }) {
     };
   }
 
+  // One growth step per item per sitting: app.js reviews every note at one frozen clock, so without this a single drill compounds every item to the cap.
+  if (reps > 0 && elapsedDays < SAME_SESSION_DAYS) return { stability, difficulty: clamp(difficulty - DIFFICULTY_STEP * (grade - 2), 0, 1), lastSeen: now, reps: reps + 1, lapses };
   const growth = GRADE_GROWTH[grade] || GRADE_GROWTH[GRADE.GOOD];
   const difficultyBonus = 1 + (1 - difficulty) * 0.5; // an easy item that lands still grows, just less
   const gapBonus = 1 + clamp((elapsedDays - stability) / stability, 0, 1) * 0.6; // reviewed near/after it was due

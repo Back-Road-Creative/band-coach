@@ -186,6 +186,10 @@ test('Show me: a later independent answer on the same item (no help) is graded n
 
   const after = await page.evaluate(`window.__coach.state().item['${e.id}']`);
   const judgedAfter = await page.evaluate('window.__coach.state().judged');
-  assert.ok(after.stability > before.stability, `an unassisted correct answer must grow stability: before=${before.stability} after=${after.stability}`);
+  // Graded as an unassisted success: one more rep, no lapse, strength never drops. Within the same sitting
+  // src/core/srs.js grows stability once per item, so a same-session success may leave it unchanged.
+  assert.ok(after.reps > before.reps, `an unassisted correct answer is recorded as a rep: before=${before.reps} after=${after.reps}`);
+  assert.equal(after.lapses, before.lapses, 'an unassisted correct answer is not a lapse');
+  assert.ok(after.stability >= before.stability, `an unassisted correct answer never lowers stability: before=${before.stability} after=${after.stability}`);
   assert.ok(judgedAfter > judgedBefore, 'an unassisted answer counts as a judged answer');
 });
