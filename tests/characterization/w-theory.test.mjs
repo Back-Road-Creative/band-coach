@@ -145,3 +145,14 @@ test('Level 4 on the Wind and brass trainer grades for the saved B flat choice, 
   const ids = await page.evaluate("Array.from(document.getElementById('theoryTransposeInstrument').options).map(o => o.value)");
   assert.ok(!ids.includes('wind'));
 });
+
+test('the saved B flat choice is theory-only: the Songs arrangement for the Wind and brass trainer stays concert', async (t) => {
+  const page = await launchPage(HTML_PATH, { initScript: "localStorage.setItem('bandcoach.v1', JSON.stringify({ v: 1, prefs: { mod: 'wind', wind: 'bb' } }))" });
+  t.after(() => page.close());
+  await page.evaluate("window.__coach.openPanel('songs')");
+  await page.waitFor("document.querySelectorAll('.panel-songs-row button').length > 0");
+  await page.evaluate("Array.from(document.querySelectorAll('.panel-songs-row button')).find(b => b.textContent === 'Hot Cross Buns').click()");
+  await page.waitFor("document.getElementById('songsPracticeHeading') !== null");
+  const text = await page.evaluate("(document.querySelector('.panel-songs-arrangement') || { textContent: '' }).textContent");
+  assert.ok(!/higher than it sounds/.test(text), text);
+});

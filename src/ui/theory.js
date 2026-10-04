@@ -178,7 +178,8 @@ export function register(panels) {
       }
 
       function renderQuestion() {
-        const instrument = api.instrument();
+        let instrument = api.instrument();
+        if (instrument && instrument.id === 'wind' && api.windTransposition) instrument = Object.assign({}, instrument, { transposition: api.windTransposition() });
         question = make(lessonState.level, lessonState.seed, instrument);
         lastLessonQuestion = question;
         answered = false;
