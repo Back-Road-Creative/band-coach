@@ -73,6 +73,13 @@ export function name(midiOrPc, octave) {
   return nameFor(midiOrPc, { system: current.system, accidentals: current.accidentals, octave: !!octave });
 }
 
+// spelledName('Bb') -- a written root (letter, then an optional # or b) in the current naming
+// system, keeping its own sharp or flat: a list holding both C# and Db shows two different names.
+export function spelledName(n) {
+  const pc = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 }[n[0]] + (n[1] === '#' ? 1 : n[1] === 'b' ? -1 : 0);
+  return nameFor(pc, { system: current.system, accidentals: n[1] === '#' ? 'sharps' : n[1] === 'b' ? 'flats' : current.accidentals });
+}
+
 export function sanitizeNoteNaming(v) {
   const p = (v && typeof v === 'object') ? v : {};
   return { system: SYSTEMS.indexOf(p.system) >= 0 ? p.system : 'letters', accidentals: ACCIDENTALS.indexOf(p.accidentals) >= 0 ? p.accidentals : 'mixed' };
