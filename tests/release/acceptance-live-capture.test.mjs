@@ -280,3 +280,14 @@ test('T5d no "not hearing anything" or "too quiet" line in the seconds right aft
     assert.deepEqual(warned.map((r) => r.text), [], 'a mic warning came back within 7 s of a pass');
   });
 });
+
+// T5e: in a room the app itself measured as quiet, a learner who takes more than the 4 s grace to play
+// is never told the mic hears nothing or is too quiet before the pass.
+test('T5e a quiet measured room, a late correct pluck: no "not hearing anything" before the pass', async (t) => {
+  await run(t, 't5e', [{ at: 6, midis: [GTR.midi], gain: 0.6 }], { noiseFloorRms: 0.0005 }, GTR, async (page) => {
+    const pass = await firstRecord(page, isPass);
+    assert.ok(pass, 'the correct pluck was never passed');
+    const warned = (await lines(page)).filter((r) => r.el === 'coach' && r.t < pass.t && r.text === MSG.silent);
+    assert.deepEqual(warned.map((r) => r.text), [], 'a quiet room was called a dead mic before the pluck');
+  });
+});

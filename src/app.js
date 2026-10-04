@@ -416,7 +416,7 @@ import { register as registerPathway } from './ui/pathway.js';
     });
     return { frames, fresh: gen === micGen };
   }
-  const roomQuietOrNoisy = f => f < 0.003 ? 'Your room is quiet.' : 'There\'s a lot of background noise — move closer to the mic.';
+  const ROOM_QUIET_BELOW = 0.003, roomQuietOrNoisy = f => f < ROOM_QUIET_BELOW ? 'Your room is quiet.' : 'There\'s a lot of background noise — move closer to the mic.';
   const ROOM_NO_READING = 'Could not get a reading from the microphone, so the standard settings are in use. Press "Check my microphone" to try again.';
   const ROOM_ERROR = 'Something went wrong while listening to the microphone, so the standard settings are in use. Press "Check my microphone" to try again.'; // a throw inside listenRoom: kept apart from "no audio arrived" so the two can be told apart
   function storeRoomFloor(f) { DB.prefs.noiseFloor = f; DB.prefs.noiseFloorV = ROOM_CHECK_VERSION; applyGates(gatesFor(f)); save(); }
@@ -1426,7 +1426,7 @@ import { register as registerPathway } from './ui/pathway.js';
       // pluck/sustain both judge a note against gates.note (not gates.pitch)
       // below, so the diagnosis must use the same threshold or it could call
       // "too-quiet" a signal onPitch itself would already have judged.
-      const diag = diagnoseInput(diagInputFrames, { gates: { pitch: gates.note } });
+      const diag = diagnoseInput(diagInputFrames, { gates: { pitch: gates.note }, quietRoom: DB.prefs.noiseFloor > 0 && DB.prefs.noiseFloor < ROOM_QUIET_BELOW }); // a measured quiet room that has not been played in is not a dead mic
       // stepDiagnosis() holds back a silent/too-quiet verdict for the first moments of listening, and says when clean notes should take a warning down; the line it replaced is put back.
       if (diagSince === null || diag.state === 'ok') diagSince = now(); // the quiet-room grace counts from the last clean note, so a note that has just rung out is not called silence
       const step = stepDiagnosis(diag, diagLastState, { sinceSec: now() - diagSince }); diagLastState = step.last;

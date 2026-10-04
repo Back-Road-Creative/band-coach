@@ -202,3 +202,28 @@ test('stepDiagnosis: a warning that comes back after ok is said again', () => {
   const r = stepDiagnosis({ state: 'unclear', message: INPUT_DIAGNOSIS_MESSAGES.unclear }, 'ok', { sinceSec: 9 });
   assert.equal(r.say, INPUT_DIAGNOSIS_MESSAGES.unclear);
 });
+
+// ---------- quietRoom: a calibrated quiet room is not a dead microphone ----------
+
+test('quietRoom: a window that never reaches the gate is "waiting", not silent or too-quiet', () => {
+  for (const rms of [0, 0.0005, 0.002]) {
+    const r = diagnoseInput(steadyFrames(2, rms, 0), { gates: GATES, quietRoom: true });
+    assert.deepEqual(r, { state: 'waiting', message: null });
+  }
+});
+
+test('quietRoom: sound over the gate that is never clear is still too-quiet or a chord', () => {
+  const frames = steadyFrames(2, 0.002, 0.9);
+  frames[frames.length - 1] = { ...frames[frames.length - 1], rms: 0.02, clarity: 0.5 };
+  assert.equal(diagnoseInput(frames, { gates: GATES, quietRoom: true }).state, 'too-quiet');
+  assert.equal(diagnoseInput(steadyFrames(2, 0.02, 0.5), { gates: GATES, quietRoom: true }).state, 'unclear');
+});
+
+test('without quietRoom a window under the gate is still reported as before', () => {
+  assert.equal(diagnoseInput(steadyFrames(2, 0.0005, 0), { gates: GATES }).state, 'silent');
+});
+
+test('stepDiagnosis: a "waiting" verdict changes nothing', () => {
+  assert.deepEqual(stepDiagnosis({ state: 'waiting', message: null }, 'unclear', { sinceSec: 9 }), { last: 'unclear', say: null, clear: false });
+  assert.deepEqual(stepDiagnosis({ state: 'waiting', message: null }, null, { sinceSec: 9 }), { last: null, say: null, clear: false });
+});
