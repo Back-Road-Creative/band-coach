@@ -10,7 +10,8 @@ import { launchPage } from '../helpers/browser.mjs';
 
 async function openEditor(page, title) {
   await page.evaluate("window.__coach.openPanel('songs')");
-  await page.waitFor("document.querySelectorAll('.panel-songs-row button').length > 0");
+  // saved rows are listed after an async library read, so wait for this exact title
+  await page.waitFor(`Array.from(document.querySelectorAll('.panel-songs-row button')).some(b => b.textContent === ${JSON.stringify(title)})`);
   await page.evaluate(`Array.from(document.querySelectorAll('.panel-songs-row button')).find(b => b.textContent === ${JSON.stringify(title)}).click()`);
   await page.waitFor("document.querySelectorAll('.panel-songs-song-actions button').length > 0");
   await page.evaluate("Array.from(document.querySelectorAll('.panel-songs-song-actions button')).find(b => b.textContent === 'Edit notes').click()");
