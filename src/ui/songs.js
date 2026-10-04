@@ -700,18 +700,19 @@ function mountSongsPanel(hostEl, api) {
   }
 
   // The library read is async and mount + show() each call this back to back, so
-  // the list is rebuilt only AFTER the read, in one synchronous block: an
-  // overlapping call can never leave a saved song appended twice.
+  // the saved rows are swapped only AFTER the read, in one synchronous block: an
+  // overlapping call can never leave a saved song appended twice. The starter rows
+  // are built once and never replaced, so a row the learner has focused or pressed
+  // meanwhile stays in the page (and Escape still reaches the panel).
   async function refreshList() {
     if (!listUl.firstChild) starterSongs.forEach((song) => listUl.appendChild(songRow(song, null)));
     let saved = [];
     try { saved = await library.list(); } catch (e) { saved = []; }
-    listUl.innerHTML = '';
-    starterSongs.forEach((song) => listUl.appendChild(songRow(song, null)));
+    listUl.querySelectorAll('li[data-saved]').forEach((li) => li.remove());
     saved
       .slice()
       .sort((a, b) => a.title.localeCompare(b.title))
-      .forEach((meta) => listUl.appendChild(songRow(meta, meta.id)));
+      .forEach((meta) => { const li = songRow(meta, meta.id); li.dataset.saved = ''; listUl.appendChild(li); });
     // "Share with your band" packs up the library's own saved songs (same
     // as "Export as a challenge"), so it stays disabled with nothing to pack.
     if (saved.length) shareBtn.removeAttribute('disabled');
