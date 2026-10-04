@@ -2959,7 +2959,8 @@ import { register as registerPathway } from './ui/pathway.js';
   // only from inside Songs, so they count as Songs too -- otherwise opening
   // either would make the nav go dark, which reads as "you left Songs"
   // even though there is no other screen to go "back" to.
-  function navDestFor(panelId) { return (panelId === 'songs' || panelId === 'editor' || panelId === 'playalong') ? 'songs' : panelId === 'history' ? 'progress' : panelId ? null : 'practice'; }
+  // The keyboard path panel is reached only from Practice's keyboard options, so it counts as Practice for the same reason.
+  function navDestFor(panelId) { return panelId === 'pathway' ? 'practice' : (panelId === 'songs' || panelId === 'editor' || panelId === 'playalong') ? 'songs' : panelId === 'history' ? 'progress' : panelId ? null : 'practice'; }
   // P2b-2: Settings isn't a panel (panels.current() knows nothing about it),
   // so the nav's notion of "current" has to check #settingsView first.
   function currentDest() { return !$('settingsView').hidden ? 'settings' : navDestFor(panels.current()); }

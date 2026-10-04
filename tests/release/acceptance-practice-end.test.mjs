@@ -62,3 +62,14 @@ test('Skip ahead after an answer clears the old answer card', async (t) => {
     assert.equal(await hidden(page, 'feedbackCard'), true);
   });
 });
+
+test('the keyboard path panel keeps Practice highlighted and spaces its button from the steps', async (t) => {
+  await withAcceptancePage(t, {}, async (page) => {
+    await page.clickSelector('#picker button[data-mod="kbd"]');
+    await page.clickSelector('#kbdPathwayBtn');
+    await page.waitFor("document.getElementById('pathwayAction')");
+    assert.equal(await page.evaluate("document.querySelector('#mainNav button[data-route=\"practice\"]').getAttribute('aria-current')"), 'page', 'reached from Practice, so Practice stays current');
+    const gap = await page.evaluate("document.getElementById('pathwayAction').getBoundingClientRect().top - document.querySelector('.pathway-steps').getBoundingClientRect().bottom");
+    assert.ok(gap >= 8, 'the action button is not flush against the last step (gap ' + gap + 'px)');
+  });
+});
