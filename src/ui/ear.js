@@ -6,6 +6,8 @@
 // without a browser; this file is just DOM wiring.
 import { EAR_EXERCISES, makeQuestion, checkAnswer } from '../core/ear/index.js';
 import { SCALE_FAMILIES } from '../core/ear/scales-modes.js';
+import { beatsText } from '../core/ear/rhythm-dictation.js';
+import { name as noteNameFor } from '../core/note-names.js';
 import { yin } from '../audio/yin.js';
 import {
   defaultExerciseState,
@@ -57,11 +59,14 @@ function choiceLabel(exerciseId, value) {
   return String(value);
 }
 
-function noteName(midi) {
-  const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
-  const pc = ((midi % 12) + 12) % 12;
-  const octave = Math.floor(midi / 12) - 1;
-  return NAMES[pc] + octave;
+// Note label that follows the Settings naming choice (letters / German / solfege, sharps or flats).
+function noteName(midi) { return noteNameFor(midi, true); }
+
+// The expected answer in words: note names for pitch lists, beat numbers for rhythm, the shown label otherwise.
+function expectedText(exerciseId, answer) {
+  if (exerciseId === 'rhythm-dictation' || exerciseId === 'song-rhythm') return beatsText(answer);
+  if (exerciseId === 'melodic-dictation' || exerciseId === 'song-dictation' || exerciseId === 'sing-back') return answer.map(noteName).join(', ');
+  return Array.isArray(answer) ? answer.join(', ') : choiceLabel(exerciseId, answer);
 }
 
 function el(tag, attrs, children) {
@@ -217,7 +222,7 @@ export function registerEar(panels) {
         const result = checkAnswer(exerciseId, question, rawResponse, opts || {});
         store.exercises[exerciseId] = recordAnswer(exerciseState(), result.ok, MAX_LEVEL);
         save();
-        setFeedback(result.ok, result.ok ? '' : `Expected: ${JSON.stringify(question.answer)}.`);
+        setFeedback(result.ok, result.ok ? '' : `Expected: ${expectedText(exerciseId, question.answer)}.`);
         renderStatus();
         reveal();
         api.say(result.ok ? 'Nice ear.' : 'Listen again and compare.', result.ok ? 'ok' : 'no');
