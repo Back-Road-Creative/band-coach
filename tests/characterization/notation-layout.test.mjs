@@ -8,6 +8,11 @@ import assert from 'node:assert/strict';
 import { HTML_PATH } from '../helpers/html-path.mjs';
 import { launchPage } from '../helpers/browser.mjs';
 
+// The staff is drawn to the canvas height, so a short page (CI's runner lays the
+// page out shorter than a desktop does) gets a shorter staff: every check runs at
+// a normal and a short page height.
+const HEIGHTS = [600, 445];
+
 const SCAN = `(function () {
   var c = document.getElementById('cv'), img = c.getContext('2d').getImageData(0, 0, c.width, c.height), W = c.width, H = c.height, d = img.data;
   var px = function (x, y) { var i = (y * W + x) * 4; return [d[i], d[i + 1], d[i + 2]]; };
@@ -16,15 +21,16 @@ const SCAN = `(function () {
     var run = 0, best = 0, brown = 0;
     for (var x = 0; x < W; x++) { var p = px(x, y); if (p[0] > 150 && p[1] > 150 && p[2] > 160) { run++; if (run > best) best = run; } else run = 0; if (Math.abs(p[0] - 42) < 4 && Math.abs(p[1] - 28) < 4 && Math.abs(p[2] - 18) < 4) brown++; }
     if (brown > W * 0.3) { if (board < 0) board = y; boardBottom = y; }
-    if (best > W * 0.25) lines.push(y);
+    if (best > W * 0.15) lines.push(y); // a staff line: at least 15% of the canvas wide (a short canvas draws a shorter staff; note heads and text are far narrower)
   }
   return { board: board, boardBottom: boardBottom, lines: lines, W: W, H: H };
 })()`;
 
-for (const mod of ['gtr', 'uke', 'bass']) {
-  test(`${mod}: the staff sits above the fretboard, not across it`, async (t) => {
+for (const mod of ['gtr', 'uke', 'bass']) for (const height of HEIGHTS) {
+  test(`${mod}: the staff sits above the fretboard, not across it (page ${height}px tall)`, async (t) => {
     const page = await launchPage(HTML_PATH);
     t.after(() => page.close());
+    await page.setViewport({ width: 800, height });
     await page.evaluate(`window.__coach.setMod('${mod}')`);
     await page.evaluate("document.getElementById('playBtn').click()");
     await page.waitFor('window.__coach.task()');
@@ -53,16 +59,17 @@ const SCAN2 = `(function () {
   for (var y = 0; y < H; y++) {
     var run = 0, best = 0, key = 0;
     for (var x = 0; x < W; x++) { var i = (y * W + x) * 4; if (d[i + 3] > 60 && d[i] > 150 && d[i + 1] > 150 && d[i + 2] > 160) { run++; if (run > best) best = run; } else run = 0; if (Math.abs(d[i] - 233) < 4 && Math.abs(d[i + 1] - 237) < 4 && Math.abs(d[i + 2] - 246) < 4) key++; }
-    if (best > W * 0.25 && y < H * 0.9) lines.push(y); // below 0.9H is the keyboard overview strip's outline
+    if (best > W * 0.15 && y < H * 0.9) lines.push(y); // below 0.9H is the keyboard overview strip's outline
     if (keyTop < 0 && key > W * 0.3) keyTop = y;
   }
   return { lines: lines, keyTop: keyTop, W: W, H: H };
 })()`;
 
-for (const mod of ['voice', 'kbd']) {
-  test(`${mod}: the staff sits above the instrument, not across it`, async (t) => {
+for (const mod of ['voice', 'kbd']) for (const height of HEIGHTS) {
+  test(`${mod}: the staff sits above the instrument, not across it (page ${height}px tall)`, async (t) => {
     const page = await launchPage(HTML_PATH);
     t.after(() => page.close());
+    await page.setViewport({ width: 800, height });
     await page.evaluate(`window.__coach.setMod('${mod}')`);
     await page.evaluate("document.getElementById('playBtn').click()");
     await page.waitFor('window.__coach.task()');
