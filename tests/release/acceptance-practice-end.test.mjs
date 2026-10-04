@@ -71,5 +71,7 @@ test('the keyboard path panel keeps Practice highlighted and spaces its button f
     assert.equal(await page.evaluate("document.querySelector('#mainNav button[data-route=\"practice\"]').getAttribute('aria-current')"), 'page', 'reached from Practice, so Practice stays current');
     const gap = await page.evaluate("document.getElementById('pathwayAction').getBoundingClientRect().top - document.querySelector('.pathway-steps').getBoundingClientRect().bottom");
     assert.ok(gap >= 8, 'the action button is not flush against the last step (gap ' + gap + 'px)');
+    const widths = await page.evaluate("[document.querySelector('.pathway-steps').getBoundingClientRect().width, document.querySelector('.panel-pathway').getBoundingClientRect().width]");
+    assert.ok(widths[0] >= widths[1] - 1, 'the step list spans the panel (' + widths[0] + ' of ' + widths[1] + 'px)');
   });
 });
