@@ -140,3 +140,26 @@ test('Find my range: cancelling mid-flow leaves the previous voice choice untouc
   );
   if (range !== 'no-hook') assert.equal(range, null, 'cancelling should not save a range');
 });
+
+test('Find my range: cancelling at either step puts the idle coach line back', async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'band-coach-voice-range-cancel-coach-'));
+  const wavPath = writeAlternatingWav(join(dir, 'low-high.wav'));
+  const page = await launchPage(htmlPath, { fakeAudioFile: wavPath });
+  t.after(() => page.close());
+
+  await openVoice(page);
+  const coachText = () => page.evaluate("document.getElementById('coach').textContent");
+  const idle = await coachText();
+  assert.match(idle, /Press Start/);
+
+  await page.evaluate("document.getElementById('optRangeStart').click()");
+  assert.match(await coachText(), /lowest/);
+  await page.evaluate("document.getElementById('optRangeCancel').click()");
+  assert.equal(await coachText(), idle, 'cancelling the low step should not leave the "Sing your lowest" instruction');
+
+  await page.evaluate("document.getElementById('optRangeStart').click()");
+  await page.evaluate("document.getElementById('optRangeNext').click()");
+  assert.match(await coachText(), /highest/);
+  await page.evaluate("document.getElementById('optRangeCancel2').click()");
+  assert.equal(await coachText(), idle, 'cancelling the high step should not leave the "Now sing your highest" instruction');
+});

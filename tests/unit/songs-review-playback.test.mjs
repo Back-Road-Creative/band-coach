@@ -65,3 +65,10 @@ test('playbackPlanFor schedules every note from t0=0 in seconds', () => {
 test('playbackPlanFor is empty for a song with no notes', () => {
   assert.deepEqual(playbackPlanFor(song([])), []);
 });
+
+test('a percussion note keeps its kit piece so Play notes can sound a drum, not a pitch', () => {
+  const s = { bpm: BPM, parts: [{ id: 'k', role: 'percussion', notes: [{ start: 0, dur: 480, midi: 42, piece: 'hihat' }, { start: 480, dur: 480, midi: 60 }] }] };
+  const plan = playbackPlanFor(s);
+  assert.equal(plan[0].piece, 'hihat');
+  assert.equal(plan[1].piece, undefined);
+});

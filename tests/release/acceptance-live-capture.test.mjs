@@ -237,3 +237,57 @@ test('control: the loud pluck with the microphone blocked is never judged', asyn
     assert.deepEqual(judged, [], 'a blocked microphone still produced a pass or a correction');
   });
 });
+
+// T5b: a learner in a quiet room who takes a few seconds to play is not told the mic is dead or too
+// quiet before they play, and a correct pluck leaves no such warning beside the pass.
+test('T5b no "not hearing anything" or "too quiet" line before a correct pluck, and none beside the pass', async (t) => {
+  await run(t, 't5b', [{ at: AT, midis: [GTR.midi], gain: 0.6 }], {}, GTR, async (page) => {
+    const pass = await firstRecord(page, isPass);
+    assert.ok(pass, 'the correct pluck was never passed');
+    const warned = (await lines(page)).filter((r) => r.el === 'coach' && (r.text === MSG.silent || r.text === MSG.quiet));
+    assert.deepEqual(warned.map((r) => r.text), [], 'a mic warning was shown before the learner could play');
+    const coach = await page.evaluate("document.getElementById('coach').textContent");
+    assert.ok(coach !== MSG.silent && coach !== MSG.quiet, 'a mic warning is still on screen beside the pass');
+  });
+});
+
+// T5c: a chord warning is taken down once a clean note passes, and the line it replaced comes back.
+test('T5c a chord warning is cleared by a clean pluck and the coach line it replaced returns', async (t) => {
+  const plucks = [{ at: AT, midis: [GTR.midi, GTR.midi + 7], gain: 1 }, { at: AT + 3, midis: [GTR.midi], gain: 0.6 }];
+  await run(t, 't5c', plucks, {}, GTR, async (page) => {
+    const said = await firstRecord(page, (r) => r.el === 'coach' && r.text === MSG.chord);
+    assert.ok(said, 'the chord was never called a chord');
+    const pass = await firstRecord(page, (r) => isPass(r) && r.t > said.t);
+    assert.ok(pass, 'the clean pluck after the chord was never passed');
+    const coachLines = (await lines(page)).filter((r) => r.el === 'coach');
+    const before = coachLines.filter((r) => r.t < said.t).pop();
+    const after = coachLines.filter((r) => r.t > said.t && r.text !== MSG.chord)[0];
+    assert.ok(before && after, 'the coach line was never put back after the chord warning');
+    assert.equal(after.text, before.text, 'the line that came back is not the one the warning replaced');
+    const now = await page.evaluate("document.getElementById('coach').textContent");
+    assert.notEqual(now, MSG.chord, 'the chord warning is still on screen after a clean pass');
+  });
+});
+
+// T5d: the quiet-room grace counts from the last clean note, so "not hearing anything" is not said while the
+// note the learner just played rings out (before the fix it came back about 4.8 s after the pass).
+test('T5d no "not hearing anything" or "too quiet" line in the seconds right after a pass', async (t) => {
+  await run(t, 't5d', [{ at: AT + 1, midis: [GTR.midi], gain: 0.6, decay: 0.99 }], {}, GTR, async (page) => {
+    const pass = await firstRecord(page, isPass);
+    assert.ok(pass, 'the correct pluck was never passed');
+    await waitUntilPageTime(page, pass.t + 7000);
+    const warned = (await lines(page)).filter((r) => r.el === 'coach' && r.t > pass.t && (r.text === MSG.silent || r.text === MSG.quiet));
+    assert.deepEqual(warned.map((r) => r.text), [], 'a mic warning came back within 7 s of a pass');
+  });
+});
+
+// T5e: in a room the app itself measured as quiet, a learner who takes more than the 4 s grace to play
+// is never told the mic hears nothing or is too quiet before the pass.
+test('T5e a quiet measured room, a late correct pluck: no "not hearing anything" before the pass', async (t) => {
+  await run(t, 't5e', [{ at: 6, midis: [GTR.midi], gain: 0.6 }], { noiseFloorRms: 0.0005 }, GTR, async (page) => {
+    const pass = await firstRecord(page, isPass);
+    assert.ok(pass, 'the correct pluck was never passed');
+    const warned = (await lines(page)).filter((r) => r.el === 'coach' && r.t < pass.t && r.text === MSG.silent);
+    assert.deepEqual(warned.map((r) => r.text), [], 'a quiet room was called a dead mic before the pluck');
+  });
+});

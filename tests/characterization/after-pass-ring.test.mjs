@@ -26,7 +26,7 @@ async function begin(t) {
   const page = await launchPage(HTML_PATH);
   t.after(() => page.close());
   await read(page, "window.__coach.setMod('gtr')");
-  await click(page, 'playBtn');
+  await read(page, 'window.__coach.startWithoutMic()');
   await page.waitFor('window.__coach.task()');
   await read(page, 'window.__t0 = null; window.__coach.task().limit = 1e9; window.__first = window.__coach.cur().info');
   assert.notEqual(await read(page, 'window.__coach.cur().info.kind'), 'chord');
@@ -116,7 +116,7 @@ test('F4 the first task after Start hears the first pluck', async (t) => {
   await click(page, 'endBtn');
   await page.waitFor('!window.__coach.playing()');
   await feedAll(page, three(57, loud)); // a loud string heard while stopped
-  await click(page, 'playBtn');
+  await read(page, 'window.__coach.startWithoutMic()');
   await nextTask(page);
   await feedAll(page, three(await target(page), loud)); // no onset
   assert.equal((await judged(page)).done, true);
@@ -128,7 +128,7 @@ test('F5 after Stop and Start in a quiet room the same note passes without an on
   await click(page, 'endBtn');
   await page.waitFor('!window.__coach.playing()');
   await feedAll(page, Array.from({ length: 3 }, () => frame(m1, rf / 2, { freq: 0 }))); // silence while stopped
-  await click(page, 'playBtn');
+  await read(page, 'window.__coach.startWithoutMic()');
   await nextTask(page);
   await sameAsFirst(page);
   // One wobble frame (the string settling, between the release floor and the note gate) restarts the
@@ -145,7 +145,7 @@ test('F6 after Stop and Start with the string still ringing, it is not judged', 
   await click(page, 'endBtn');
   await page.waitFor('!window.__coach.playing()');
   await feedAll(page, three(m1, loud)); // still ringing while stopped
-  await click(page, 'playBtn');
+  await read(page, 'window.__coach.startWithoutMic()');
   await nextTask(page);
   await sameAsFirst(page);
   await feedAll(page, [dropout(m1, loud), ...three(m1, loud)]);

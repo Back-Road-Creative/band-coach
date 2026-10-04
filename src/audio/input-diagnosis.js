@@ -45,7 +45,9 @@ export const INPUT_DIAGNOSIS_MESSAGES = Object.freeze({
 // checks (kept as a parameter so a change to that constant elsewhere cannot
 // silently desync this module). windowSec: how much trailing history must
 // be covered before a verdict other than 'insufficient' is returned.
-export function diagnoseInput(frames, { gates, clarityGate = 0.8, windowSec = 1.5 } = {}) {
+// quietRoom: the room was measured and is quiet, so a window that never reaches the gate is the learner not
+// playing yet ('waiting', no message), not a dead or muted mic.
+export function diagnoseInput(frames, { gates, clarityGate = 0.8, windowSec = 1.5, quietRoom = false } = {}) {
   const list = Array.isArray(frames) ? frames : [];
   const pitchGate = gates && Number.isFinite(gates.pitch) ? gates.pitch : SILENCE_RMS;
   if (!list.length) return { state: 'insufficient', message: null };
@@ -66,6 +68,8 @@ export function diagnoseInput(frames, { gates, clarityGate = 0.8, windowSec = 1.
   const anyClear = inWindow.some((f) => Number.isFinite(f.rms) && f.rms >= pitchGate && Number.isFinite(f.clarity) && f.clarity > clarityGate);
   if (anyClear) return { state: 'ok', message: null };
 
+  if (quietRoom && !inWindow.some((f) => Number.isFinite(f.rms) && f.rms >= pitchGate)) return { state: 'waiting', message: null };
+
   const anyAboveSilence = inWindow.some((f) => Number.isFinite(f.rms) && f.rms > SILENCE_RMS);
   if (!anyAboveSilence) return { state: 'silent', message: INPUT_DIAGNOSIS_MESSAGES.silent };
 
@@ -77,4 +81,21 @@ export function diagnoseInput(frames, { gates, clarityGate = 0.8, windowSec = 1.
   if (shareAboveGate < UNCLEAR_SHARE) return { state: 'too-quiet', message: INPUT_DIAGNOSIS_MESSAGES['too-quiet'] };
 
   return { state: 'unclear', message: INPUT_DIAGNOSIS_MESSAGES.unclear };
+}
+
+// Seconds of listening before a 'silent' or 'too-quiet' verdict may be said. A learner who has just
+// pressed Start is still getting the instrument up, so a quiet room is not a fault yet. 'unclear' (a
+// chord) needs loud sound, so it is never held back.
+export const DIAGNOSIS_GRACE_SEC = 4;
+
+// Turns a verdict into what the coach line should do. `last` is the state a line was last decided for
+// (null at the start); `sinceSec` is how long this run of listening has lasted. Returns the new `last`,
+// the message to `say` (or null), and whether to `clear` a warning already on screen because clean
+// notes are now passing. Pure: the caller owns the DOM and the clock.
+export function stepDiagnosis(diag, last, { sinceSec, graceSec = DIAGNOSIS_GRACE_SEC } = {}) {
+  const none = { last, say: null, clear: false };
+  if (!diag || diag.state === 'insufficient' || diag.state === 'waiting' || diag.state === last) return none;
+  if ((diag.state === 'silent' || diag.state === 'too-quiet') && !(sinceSec >= graceSec)) return none;
+  if (!diag.message) return { last: diag.state, say: null, clear: last !== null && last !== 'ok' };
+  return { last: diag.state, say: diag.message, clear: false };
 }
