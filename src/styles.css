@@ -209,6 +209,7 @@
   .panel-songs-export button, .panel-songs-export-btn { width: auto; }
   .panel-songs-intro { color: var(--muted); }
   .panel-songs-msg { min-height: 1.2em; color: var(--good); }
+  .panel-songs-msg[data-state="no"] { color: var(--bad); }
   .panel-songs-warn { color: var(--warn); }
   /* A9: margin/padding/gap trimmed from 12/12/8 -- with the library and the
      "Play it on…" row moved out of the way (src/ui/songs.js), this section's

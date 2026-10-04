@@ -683,6 +683,7 @@ function mountSongsPanel(hostEl, api) {
 
   function say(text, kind) {
     importMsg.textContent = text;
+    importMsg.dataset.state = kind || 'ok'; // .panel-songs-msg[data-state="no"] is --bad, like the verdict line
     if (typeof api.say === 'function') api.say(text, kind);
   }
 
@@ -2518,6 +2519,8 @@ function mountSongsPanel(hostEl, api) {
     say('Added the "' + challenge.title + '" challenge (' + challenge.songs.length + ' song' + (challenge.songs.length === 1 ? '' : 's') + ').', 'ok');
     renderChallenge(challenge);
     await refreshList();
+    // The challenge list sits under the whole library, far below the message: bring it on screen (guarded like the song-heading scroll).
+    if (typeof challengeSection.scrollIntoView === 'function') challengeSection.scrollIntoView({ block: 'start' });
     return;
   }
 

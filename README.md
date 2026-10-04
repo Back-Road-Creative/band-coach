@@ -498,7 +498,8 @@ Share downloads a `.bandpack` of that one song alone, and Print sends just that 
 plain paper, black on white, with nothing else on the page. A teacher challenge's title field,
 "Export as a challenge", "Share with your band" and any read-only band-pack part assignments live
 under their own **Assignments** heading below the song list, separate from a single open song's
-own actions.
+own actions. Importing a challenge scrolls that list into view, and a failed import's message is
+drawn in the error colour, not the success green.
 
 Reopening a song, in Learn or Rehearse, carries on from the step you left off on, at the same
 practice speed, with a plain "Picking up where you left off." line — a **"Carry on:
