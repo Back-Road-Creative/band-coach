@@ -683,7 +683,20 @@ function mountSongsPanel(hostEl, api) {
 
   function say(text, kind) {
     importMsg.textContent = text;
+    importMsg.dataset.state = kind || 'ok'; // .panel-songs-msg[data-state="no"] is --bad, like the verdict line
     if (typeof api.say === 'function') api.say(text, kind);
+  }
+
+  // A judged try's verdict is also kept on the practice so the lesson itself can show it next to
+  // Your turn: #panelSay (api.say's mirror) sits above the panel, which the scroll to the song heading
+  // pushes off-screen, and importMsg lives in the hidden Add-a-song section.
+  function sayVerdict(text, kind) {
+    say(text, kind);
+    practice.lastVerdict = { text, kind };
+  }
+
+  function renderVerdict() {
+    if (practice.lastVerdict) practiceSection.appendChild(el('p', { class: 'panel-songs-verdict', 'data-state': practice.lastVerdict.kind, text: practice.lastVerdict.text }));
   }
 
   async function refreshList() {
@@ -1196,6 +1209,9 @@ function mountSongsPanel(hostEl, api) {
     // 'learn', same as no mode at all.
     const mode = opts.mode === 'rehearse' || opts.mode === 'check' ? opts.mode : 'learn';
     const assistance = mode === 'check' ? 'none' : 'shown';
+    // No instrument named (review's "Practise this") and a percussion part: practise it on the drum kit, not whatever pitched instrument is on the main screen (every note would be skipped).
+    const partRec = song.parts.find((p) => p.id === partId);
+    if (!instrumentOverride && partRec && partRec.role === 'percussion' && api.instrument('drum-kit')) instrumentOverride = api.instrument('drum-kit');
     const instrumentId = instrumentOverride ? instrumentOverride.id : api.mod();
     const instrument = instrumentOverride || api.instrument(instrumentId);
     if (!instrument) {
@@ -1699,6 +1715,7 @@ function mountSongsPanel(hostEl, api) {
     // The last judged try's bar-by-bar result (advance() below), kept on
     // screen until the learner starts another try (startRecording() clears
     // it) so they can read it while deciding what to do next.
+    renderVerdict();
     if (practice.lastHeat) {
       practiceSection.appendChild(renderBarStrip(practice.lastHeat, practice.lastHeatBars));
     }
@@ -1715,6 +1732,13 @@ function mountSongsPanel(hostEl, api) {
     const arrangementLine = arrangementText(practice.arrangement);
     if (arrangementLine) practiceSection.appendChild(el('p', { class: 'panel-songs-arrangement', text: arrangementLine }));
     const { plan, stepIndex } = practice;
+    if (!plan.steps.length && plan.fit && plan.fit.unplayable.length) {
+      // Every note skipped on this instrument: nothing to play, so say so -- never the "played it" end screen or a passed mark. (A part with no notes at all still finishes at once, as before.)
+      practiceSection.appendChild(el('p', { text: 'None of this part\'s notes can be played on ' + practice.instrument.name + ', so there is nothing to practise here. Pick another instrument from "Play it on…".' }));
+      practiceSection.appendChild(renderPlayItOn(practice.song, practice.partId, practice.instrumentId)); // the way out the message promises
+      practiceSection.appendChild(el('button', { type: 'button', text: 'Back to songs', onclick: () => { practice = null; currentPractice = null; practiceSection.hidden = true; libraryDetails.open = true; } }));
+      return;
+    }
     if (stepIndex >= plan.steps.length) {
       renderPracticeEnd();
       return;
@@ -1786,6 +1810,7 @@ function mountSongsPanel(hostEl, api) {
     }));
     countEl = el('p', { class: 'panel-songs-count', text: countLabel() });
     practiceSection.appendChild(countEl);
+    renderVerdict();
     if (practice.lastHeat) {
       practiceSection.appendChild(renderBarStrip(practice.lastHeat, practice.lastHeatBars));
     }
@@ -2045,6 +2070,7 @@ function mountSongsPanel(hostEl, api) {
     practice.lastHeatBars = null;
     practice.lastAssessed = null;
     practice.lastCheckVerdict = null;
+    practice.lastVerdict = null;
 
     // Real listening only begins once the count-in ends (below); this is the
     // rest of the old startRecording() body, unchanged, just deferred.
@@ -2189,7 +2215,7 @@ function mountSongsPanel(hostEl, api) {
     // a miss keeps it -- try again, same isolated notes.
   function advanceRepair(passed, result, elapsedMs) {
     const repairStep = practice.repair.step;
-    say(passed ? 'Good. Back to the phrase.' : (firstCorrection(result, repairStep.passRule) || 'Not quite yet — try that again.'), passed ? 'ok' : 'no');
+    sayVerdict(passed ? 'Good. Back to the phrase.' : (firstCorrection(result, repairStep.passRule) || 'Not quite yet — try that again.'), passed ? 'ok' : 'no');
     if (result) {
       practice.lastHeat = barHeat(practice.song, result.matches);
       practice.lastHeatBars = repairStep.bars;
@@ -2264,7 +2290,7 @@ function mountSongsPanel(hostEl, api) {
     // -- instead of the generic retry prompt, so the learner knows the
     // ONE thing to work on next.
     const correction = !passed && result ? firstCorrection(result, step.passRule) : null;
-    say(passed
+    sayVerdict(passed
       ? 'Nice. ' + (result ? result.hitCount + ' of ' + result.judgedCount + ' notes.' : '')
       : correction || 'Not quite yet — try that again.', passed ? 'ok' : 'no');
     if (result) {
@@ -2348,6 +2374,7 @@ function mountSongsPanel(hostEl, api) {
       practice.lastHeatBars = null;
       practice.lastAssessed = null;
       practice.lastCheckVerdict = null;
+    practice.lastVerdict = null;
     }
     finishStep(step, passed, opts);
   }
@@ -2528,6 +2555,9 @@ function mountSongsPanel(hostEl, api) {
     say('Added the "' + challenge.title + '" challenge (' + challenge.songs.length + ' song' + (challenge.songs.length === 1 ? '' : 's') + ').', 'ok');
     renderChallenge(challenge);
     await refreshList();
+    // The challenge list sits under the whole library, far below the message: bring it on screen (guarded like the song-heading scroll).
+    libraryDetails.open = true; // an open lesson folds the library; a collapsed <details> would hide the list
+    if (typeof challengeSection.scrollIntoView === 'function') challengeSection.scrollIntoView({ block: 'start' });
     return;
   }
 
