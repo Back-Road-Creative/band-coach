@@ -465,7 +465,13 @@ opening straight into the Songs panel with the phrase-by-phrase lesson a whole i
 path: it keeps only the pitch of each note heard, in order, dropping how long each note was held
 and how far apart they came, and loads that note list (capped at 300 notes) as the "Practise my
 captured melody" custom drill on whichever instrument you pick, four notes at a time, the same
-repeat-until-clean chunking a built-in curriculum level uses.
+repeat-until-clean chunking a built-in curriculum level uses. Starting that drill keeps its own coach
+line (not the level plan, since a captured-melody drill is a warm-up that does not count).
+
+Listen needs a connected microphone: without one it does not start, and says to connect first. The
+"N notes" count updates while you play. Every message here ("Nothing captured yet.", a failed save)
+shows in the feedback card, which the Capture tool keeps visible. Pressing "Make it a lesson" again
+on the same capture re-opens the song it already saved instead of adding another copy.
 
 ## Songs
 
@@ -653,6 +659,13 @@ becomes a short repair on just the single worst note (`repairFor()` in `src/core
 instead of a third run at the whole phrase; passing that one note returns to the original step
 where it left off. A repair try is logged as guided assistance, not independent evidence — it is
 a redo of a note the step already failed on, not a fresh, unaided attempt.
+
+A song you saved can be removed again: each of your own rows in the library has a "Remove" button
+that asks "Remove ... for good?" first (Yes, remove it / Keep it); removing it also clears its
+Draft/Checked label. The built-in starter tunes have no Remove button. A notation file with no
+notes in it (an empty or header-only `.abc`) is refused with a plain message instead of being
+saved, and a notation import is never labelled "Original recording not kept", since it never had
+a recording.
 
 The lesson follows the whole teaching loop (`src/core/teaching.js`: explain, demo, guided, check,
 repair, transfer), moving between its phases with `nextPhase()`. In Learn mode, pressing Next on a
@@ -1032,7 +1045,7 @@ held, CHECK asks for a fresh bass note-on followed by a short three-note melody 
 (`heldBassMelody()` in `src/core/hands-together.js` — the right hand's own note, its neighbouring
 pair's note, then the right hand's own note again, e.g. C-D-C; the top pair, G, has no pair above
 it to borrow from, so it plays G-F-G instead) while the bass keeps sounding. A melody note played while the bass has already
-been let go, or the bass being released before the last melody note-on, fails with a plain-language
+been let go (whatever its pitch), or the bass being released before the last melody note-on, fails with a plain-language
 reason naming the left hand and the hold; a melody note that is not the next one expected fails
 naming the expected note instead. The exercise passes on the bass note-off, once it comes after the
 last melody note-on (`gradeHeldBass()`). This grading needs real note-on/note-off events, so — the
@@ -1075,7 +1088,7 @@ same finger shape there. There is no LEARN/CHECK split and no millisecond tolera
 grader, `gradePositionChange()`, covers both the pre-shift and post-shift chord, telling them apart
 by whether the shift has already happened once this attempt. Playing the old position again after
 the shift is a scored fail naming it ("that is the old position"), not a silent no-op and not a
-second pass. A "before you start" line names the starting position and the shift before the
+second pass. Lifting the left hand after the shift (MIDI or computer keys) is a scored fail naming the left hand, and restarts the exercise from the first position, so pressing it down again cannot pass it. A "before you start" line names the starting position and the shift before the
 exercise begins, the same as level 13's own prep line. This grading runs on a real MIDI keyboard or
 the computer keys, and — because there is no hold to lose and no release timing at stake — a screen
 tap (or the on-screen focus cursor's Enter/Space) is graded exactly the same way as a computer key,
@@ -1111,7 +1124,7 @@ higher- or lower-keyed harp is not silently mis-heard.
 
 Draw and blow bends — a reed pulled down in pitch with your breath — are new practice levels
 appended after the nine open-note levels, so an existing learner's saved level numbers do not
-shift. A bend is graded by its exact bent pitch, the same way an open note is graded by its own
+shift. A bend is graded by its exact bent pitch, and the on-screen prompt names the bend ("Draw 3 ↓2"), so what you are told to play is what is graded. An open note is graded by its own
 pitch. Bend availability (which holes bend, and how deep) does not change with key, since
 transposing the whole harmonica preserves the blow/draw gap inside every hole.
 

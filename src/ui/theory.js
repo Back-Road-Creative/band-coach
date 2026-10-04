@@ -124,6 +124,8 @@ export function register(panels) {
     mount(hostEl, api) {
       const root = el('div', { class: 'panel-theory' });
       hostEl.appendChild(root);
+      // Named like Ear training and How to play it, so opening this panel from the sheet has a heading to move focus to (app.js focusPanelHeading).
+      root.appendChild(el('h2', { id: 'theoryHeading', tabindex: '-1' }, [document.createTextNode('Music theory')]));
 
       // ---------- tabs ----------
       const tabsBar = el('div', { class: 'panel-theory-tabs', role: 'tablist', 'aria-label': 'Music theory sections' });

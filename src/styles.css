@@ -150,10 +150,12 @@
   .picker-variant-group > .variant-toggle[open] { width: auto; }
   /* WCAG 2.5.8 (2.2 AA) needs a 24x24 CSS px tap target -- the 11px text
      alone rendered a box under 24px tall (axe's target-size rule flagged
-     every variant-toggle summary at first load). min-height plus a flex
-     row keeps the same 11px label, vertically centred, inside a taller box
-     instead of growing the text or the row's visual weight. */
-  .picker-variant-group > .variant-toggle > summary { cursor: pointer; list-style: none; font: 500 11px var(--body); color: var(--muted); display: flex; align-items: center; min-height: 24px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+     every variant-toggle summary at first load). A 24px line-height keeps
+     the same 11px label, vertically centred, inside a taller box instead of
+     growing the text or the row's visual weight. It stays a block (not
+     flex): text-overflow draws no ellipsis on a flex container, so the
+     shut label would stop mid-letter. */
+  .picker-variant-group > .variant-toggle > summary { cursor: pointer; list-style: none; font: 500 11px var(--body); color: var(--muted); display: block; line-height: 24px; min-height: 24px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .picker-variant-group > .variant-toggle > summary::-webkit-details-marker { display: none; }
   .picker-variant-group > .variant-toggle > summary::before { content: '\25b8  '; }
   .picker-variant-group > .variant-toggle[open] > summary::before { content: '\25be  '; }
@@ -205,6 +207,8 @@
   .add-song-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
   .panel-songs-list { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
   .panel-songs-row button { width: 100%; text-align: left; }
+  .panel-songs-remove-box { display: block; margin-top: 2px; }
+  .panel-songs-remove-box button { width: auto; }
   .panel-songs-export { display: flex; gap: 4px; margin-top: 2px; }
   .panel-songs-export button, .panel-songs-export-btn { width: auto; }
   .panel-songs-intro { color: var(--muted); }
