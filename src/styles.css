@@ -1,6 +1,7 @@
   /* Dark stage is the committed default, kept whenever the system prefers
      dark or no light rule below fires. */
   :root {
+    color-scheme: dark; /* native form controls (number spinners, scrollbars) follow the theme */
     --ground: #0a0d14; --panel: #121726; --panel-2: #1a2033; --line: #2a3350;
     --text: #e9edf6; --muted: #93a0bd; --accent: #2f93ee; --accent-ink: #2f93ee; --good: #5be08a; --warn: #f3c52f; --bad: #ff6b5e;
     /* P7-5: ink for text/icons painted directly on --good/--warn/--bad/--muted
@@ -30,6 +31,7 @@
      these exact numbers, so a future edit only needs to land in one block. */
   @media (prefers-color-scheme: light) {
     :root:not([data-theme="dark"]) {
+      color-scheme: light;
       --ground: #f5f7fb; --panel: #ffffff; --panel-2: #e7ebf3; --line: #c7cfde;
       --text: #101728; --muted: #4a5570; --accent: #1667c1; --accent-ink: #1667c1; --good: #1a7a44; --warn: #8a6100; --bad: #b3261e;
       --press-muted: #aeb8cc;
@@ -39,6 +41,7 @@
     }
   }
   :root[data-theme="light"] {
+    color-scheme: light;
     --ground: #f5f7fb; --panel: #ffffff; --panel-2: #e7ebf3; --line: #c7cfde;
     --text: #101728; --muted: #4a5570; --accent: #1667c1; --accent-ink: #1667c1; --good: #1a7a44; --warn: #8a6100; --bad: #b3261e;
     --press-muted: #aeb8cc;
@@ -353,7 +356,7 @@
   .panel-history h2 { font: 700 26px var(--display); margin: 0; }
   .panel-history h3 { font: 700 16px var(--display); color: var(--muted); margin: 6px 0 0; }
   .panel-history label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 4px; }
-  .panel-history input[type="text"], .panel-history select, .panel-history textarea { width: 100%; font: 500 15px var(--body); color: var(--text); background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; }
+  .panel-history input[type="text"], .panel-history input[type="number"], #challengeTitleInput, .panel-history select, .panel-history textarea { width: 100%; font: 500 15px var(--body); color: var(--text); background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; }
   .panel-history ul { list-style: none; margin: 4px 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
   .panel-history ul li { display: flex; gap: 6px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; font-size: 13px; }
   .history-instrument { border: 1px solid var(--line); border-radius: 8px; padding: 10px; margin-top: 8px; }
