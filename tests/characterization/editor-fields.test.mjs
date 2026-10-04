@@ -122,3 +122,38 @@ test('Beats/bar and Pickup are held to sensible bounds', async (t) => {
   await page.evaluate("Array.from(document.querySelectorAll('.editor-toolbar button')).find(b => b.textContent.startsWith('Shift barline')).click()");
   assert.ok((await page.evaluate("window.__coach.editorSong().parts[0].notes[0].start")) <= 1920, 'pickup is at most one bar');
 });
+
+test('unsaved edits made after saving a starter copy come back through Edit notes on the saved copy', async (t) => {
+  const page = await launchPage(HTML_PATH);
+  t.after(() => page.close());
+  await openEditor(page, 'Hot Cross Buns');
+  await page.evaluate("document.getElementById('editorSaveBtn').click()");
+  await page.waitFor("document.querySelector('.editor-saved-status').textContent === 'Saved'");
+  await type(page, 'editorBpm', '77');
+  await page.evaluate("document.querySelector('button[data-route=\"settings\"]').click()");
+  await page.waitFor("document.getElementById('settingsView').hidden === false");
+  await openEditor(page, 'My copy of Hot Cross Buns');
+  await page.waitFor("document.querySelector('.editor-status').textContent.indexOf('Restored your unsaved changes') === 0");
+  assert.equal((await fields(page)).bpm, '77');
+});
+
+// the blue selection box is drawn in #5b8dee; read its top-left corner back out of the pixels
+const selBox = (page) => page.evaluate(`(function(){ var c = document.getElementById('editorCanvas'), d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data, x0 = 1e9, y0 = 1e9; for (var y = 0; y < c.height; y++) for (var x = 0; x < c.width; x++) { var i = (y * c.width + x) * 4; if (d[i] === 0x5b && d[i + 1] === 0x8d && d[i + 2] === 0xee) { if (y < y0) y0 = y; if (x < x0) x0 = x; } } return x0 === 1e9 ? null : { x: x0, y: y0 }; })()`);
+
+test('clicking a drawn note selects it when the canvas is shown at another size than it is drawn', async (t) => {
+  const page = await launchPage(HTML_PATH);
+  t.after(() => page.close());
+  await openEditor(page, 'Hot Cross Buns');
+  const key = () => page.evaluate("document.getElementById('editorCanvas').dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }))");
+  await key();
+  const first = await selBox(page);
+  await key();
+  const second = await selBox(page);
+  assert.ok(first && second && (first.x !== second.x || first.y !== second.y), 'two different notes were selected by key');
+  // show the canvas at half the size it is drawn at (a narrow screen does the same through max-width:100%)
+  await page.evaluate("(function(){ var c = document.getElementById('editorCanvas'); c.style.width = (c.width / 2) + 'px'; c.style.maxWidth = 'none'; c.scrollIntoView({ block: 'start' }); })()");
+  const r = await page.evaluate("(function(){ var c = document.getElementById('editorCanvas'), r = c.getBoundingClientRect(); return { l: r.left, t: r.top, sx: r.width / c.width, sy: r.height / c.height }; })()");
+  assert.ok(r.sx < 0.6, 'canvas is shown smaller than drawn: ' + r.sx);
+  await page.click(r.l + (first.x + 5) * r.sx, r.t + (first.y + 8) * r.sy);
+  assert.deepEqual(await selBox(page), first, 'the click landed on the first note, not where an unscaled click would');
+});

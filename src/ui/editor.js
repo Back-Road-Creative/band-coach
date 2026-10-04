@@ -665,7 +665,7 @@ function mountEditor(hostEl, api) {
       // Edit notes on the song that was being edited when the learner left gives the unsaved work back; any other song replaces it.
       const stashed = restoreWorking(api.store(EDITOR_WORKING_STORE_ID).get());
       const wanted = req && (req.songId || req.starterId);
-      if (wanted && stashed && stashed.song.id === wanted) {
+      if (wanted && stashed && (stashed.meta.loadedId || stashed.song.id) === wanted) {
         api.store(EDITOR_OPEN_REQUEST_STORE_ID).set(null);
         api.store(EDITOR_WORKING_STORE_ID).set(null);
         applyRestoredWorking(stashed);
