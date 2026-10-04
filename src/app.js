@@ -132,7 +132,7 @@ import { register as registerPathway } from './ui/pathway.js';
   const CELLS = { q: { b: 1, on: [0], say: 'quarter note' }, ee: { b: 1, on: [0, 0.5], say: 'two eighths' }, h: { b: 2, on: [0], say: 'half note' }, qr: { b: 1, on: [], say: 'quarter rest' }, ssss: { b: 1, on: [0, 0.25, 0.5, 0.75], say: 'four sixteenths' }, dqe: { b: 2, on: [0, 1.5], say: 'dotted quarter, eighth' }, ree: { b: 1, on: [0.5], say: 'eighth rest, eighth' }, ess: { b: 1, on: [0, 0.5, 0.75], say: 'eighth, two sixteenths' }, sse: { b: 1, on: [0, 0.25, 0.5], say: 'two sixteenths, eighth' }, eqe: { b: 2, on: [0, 0.5, 1.5], say: 'eighth, quarter, eighth' } };
 
   // ---------- audio ----------
-  let actx = null, micStream = null, anTime = null, anFreq = null, micReady = false, testNodes = [];
+  let actx = null, micStream = null, anTime = null, anFreq = null, micReady = false, micHideReleased = false, testNodes = [];
   let gates = gatesFor(null), micDevices = [];
   // Counts ticks of the pitch-analysis setInterval (below) where the buffer
   // it read actually carried signal, not silence or a freshly-connected
@@ -357,7 +357,7 @@ import { register as registerPathway } from './ui/pathway.js';
       let st;
       try { st = await navigator.mediaDevices.getUserMedia({ audio: wanted }); }
       catch (e) { if (!DB.prefs.inputDeviceId) throw e; st = await navigator.mediaDevices.getUserMedia({ audio: base }); }
-      micStream = st; const src = actx.createMediaStreamSource(st); wireAnalysers(monoSum(src)); micReady = true;
+      micStream = st; micHideReleased = false; const src = actx.createMediaStreamSource(st); wireAnalysers(monoSum(src)); micReady = true;
       // A successful Connect clears the 'blocked' sentence calibrateNoiseFloor wrote (its catch below: keep the two texts identical), so it does not sit beside 'Listening through your microphone.'. Any other result text is left alone.
       { const cr = $('calibrateResult'); if (cr && cr.textContent === 'The microphone was blocked, so it could not be checked.') cr.textContent = ''; }
       // A track that ends (device unplugged, permission revoked) leaves the mic as the teardown 'mic' stopper does, then the status and Connect button follow. Only the CURRENT stream counts: a switched-away stream ending later must not close its replacement. micGen++ makes a room check still running for it discard its result.
@@ -382,7 +382,7 @@ import { register as registerPathway } from './ui/pathway.js';
   // called from both sites and needs to be idempotent either way.
   const teardown = createTeardown();
   let teardownRunCount = 0;
-  teardown.add('mic', () => { const pm = $('practiceMeter'); if (pm) pm.hidden = true; if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; micReady = false; micGen++; } });
+  teardown.add('mic', (reason) => { const pm = $('practiceMeter'); if (pm) pm.hidden = true; if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; micReady = false; micGen++; if (reason === 'hidden') micHideReleased = true; } }); // micHideReleased: only a hide that really released an open mic lets resume() say so
   teardown.add('audioContext', () => { if (actx && actx.state === 'running') actx.suspend(); });
   // "Play it for me" (see midiOutPlay below): a hidden/closed tab must not leave a keyboard sounding.
   teardown.add('midiOut', () => midiOutStop());
@@ -2180,7 +2180,7 @@ import { register as registerPathway } from './ui/pathway.js';
   function resume() {
     const gone = pauseInfo ? (Date.now() - pauseInfo.at) / 1000 : 0; paused = false; playing = true; breakTrap.deactivate(); $('breakCard').hidden = true; $('playBtn').textContent = 'Pause'; ensureAudio(); task = null; lastInputAt = now();
     if (gone >= 90) { sess.breaks++; sess.sinceBreak = 0; sess.w30 = []; sess.best30 = 0; sess.rts = []; sess.bestRt = null; sess.tiredFor = 0; sess.failRun = 0; sess.warm = 3; coach('Welcome back after ' + (Math.round(gone / 6) / 10) + ' minutes. That counts as a real break, so your energy is reset. Three easy ones to warm back up.'); } else coach('Resuming level ' + S.level + '.');
-    if (MODS[mod] && (MODS[mod].input === 'pluck' || MODS[mod].input === 'sustain') && !micReady) coach($('coach').textContent + ' Your microphone was released while the page was hidden. Press Connect microphone to let me hear you again.'); // README: hiding the tab releases the mic; coming back does not reopen it
+    if (MODS[mod] && (MODS[mod].input === 'pluck' || MODS[mod].input === 'sustain') && !micReady && micHideReleased) coach($('coach').textContent + ' Your microphone was released while the page was hidden. Press Connect microphone to let me hear you again.'); // README: hiding the tab releases the mic; coming back does not reopen it
     pauseInfo = null; showAll();
   }
 

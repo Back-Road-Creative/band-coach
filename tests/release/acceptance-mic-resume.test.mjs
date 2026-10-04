@@ -39,3 +39,21 @@ test('resuming after a tab hide says the mic was released and never blames the l
     assert.match(coach, /Connect microphone/, 'the coach tells the learner how to get the mic back: ' + coach);
   });
 });
+
+// A learner who never pressed Connect, pauses and resumes: the mic was never
+// open and the page was never hidden, so the coach must not claim either.
+test('pause and resume with no mic ever connected does not claim the page was hidden', async (t) => {
+  await withAcceptancePage(t, {}, async (page) => {
+    await page.clickSelector('#picker button[data-mod="gtr"]');
+    await page.clickSelector('#setupBtn');
+    await page.clickSelector('#playBtn');
+    await sleep(1000);
+    await page.clickSelector('#playBtn');
+    await page.waitFor("!document.getElementById('breakCard').hidden");
+    await page.clickSelector('#backBtn');
+    await sleep(1500);
+    const coach = await page.evaluate("document.getElementById('coach').textContent");
+    assert.match(coach, /Resuming/, 'resume ran: ' + coach);
+    assert.doesNotMatch(coach, /released|hidden/, 'the coach made a false claim about the mic: ' + coach);
+  });
+});
