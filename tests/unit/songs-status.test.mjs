@@ -78,3 +78,10 @@ test('a ledger stays under the 256 KB panel limit', () => {
   }
   assert.ok(JSON.stringify(ledger).length < PANEL_DATA_MAX);
 });
+
+test('a notation import never had a recording, so the label does not say one was not kept', () => {
+  assert.equal(statusLabel({ draft: false, needsCheck: 0, source: 'notation', originalAudioKept: false }), 'Checked');
+  assert.equal(statusLabel({ draft: true, needsCheck: 1, source: 'notation', originalAudioKept: false }), 'Draft — 1 note to check');
+  const clean = sanitizeStatusLedger(markDraft({}, 'a-1', { source: 'notation' }));
+  assert.equal(clean['a-1'].source, 'notation');
+});
