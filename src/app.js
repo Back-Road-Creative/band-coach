@@ -24,7 +24,7 @@ import { yin } from './audio/yin.js';
 import { createPitchNode } from './audio/pitch-worklet.js';
 //
 import { gatesFor, meterLevel, releaseFloor, classifyRoomCheck, ROOM_CHECK_VERSION, MIN_FLOOR, QUIET_RELEASE_SEC } from './audio/levels.js';
-import { diagnoseInput } from './audio/input-diagnosis.js';
+import { diagnoseInput, stepDiagnosis } from './audio/input-diagnosis.js';
 import { createOnsetDetector } from './audio/onset.js';
 import { createDrumClassifier } from './audio/drum-classify.js';
 //
@@ -418,7 +418,7 @@ import { register as registerPathway } from './ui/pathway.js';
     });
     return { frames, fresh: gen === micGen };
   }
-  const roomQuietOrNoisy = f => f < 0.003 ? 'Your room is quiet.' : 'There\'s a lot of background noise — move closer to the mic.';
+  const ROOM_QUIET_BELOW = 0.003, roomQuietOrNoisy = f => f < ROOM_QUIET_BELOW ? 'Your room is quiet.' : 'There\'s a lot of background noise — move closer to the mic.';
   const ROOM_NO_READING = 'Could not get a reading from the microphone, so the standard settings are in use. Press "Check my microphone" to try again.';
   const ROOM_ERROR = 'Something went wrong while listening to the microphone, so the standard settings are in use. Press "Check my microphone" to try again.'; // a throw inside listenRoom: kept apart from "no audio arrived" so the two can be told apart
   function storeRoomFloor(f) { DB.prefs.noiseFloor = f; DB.prefs.noiseFloorV = ROOM_CHECK_VERSION; applyGates(gatesFor(f)); save(); }
@@ -1082,7 +1082,7 @@ import { register as registerPathway } from './ui/pathway.js';
   // of silent / too-quiet / unclear-chord is actually happening, instead of
   // saying nothing at all. diagLastState tracks the last state a message was
   // shown for so a held state doesn't re-say the same line every frame.
-  let diagInputFrames = [], diagLastState = null;
+  let diagInputFrames = [], diagLastState = null, diagSince = null, diagShown = null, diagBefore = ''; // diagSince: when this run of listening began; diagShown/diagBefore: the warning on the coach line and the line it replaced
   const DIAG_WINDOW_SEC = 1.5;
 
   function playRef(t) {
@@ -1170,6 +1170,7 @@ import { register as registerPathway } from './ui/pathway.js';
     const e = cur(); e.rt = now() - e.t0; e.q = e.failed ? 0 : timeQ(e.rt, task.limit) * (extraQ === undefined ? 1 : extraQ); if (assistance) e.assistance = assistance; if (typeof input === 'string') e.input = input; flashGood = performance.now(); lastInputAt = now();
     if (!e.failed && !e.helped) say(msg || (inf(e.id).short + ': yes, in ' + e.rt.toFixed(1) + ' s.'), 'ok'); else say('That is the one. ' + inf(e.id).short + (e.info.string ? ' lives on string ' + e.info.string + (e.info.fret ? ', fret ' + e.info.fret : ', open') : '') + '.', '');
     task.idx++; held = []; holdFor = 0; holdCents = []; wrongFor = 0;
+    if (diagShown && $('coach').textContent === diagShown) { coach(diagBefore); } diagInputFrames = []; diagLastState = null; diagSince = null; diagShown = null; // a pass starts the listening afresh: no warning left beside it
     if (task.idx >= task.els.length) finishTask(); else { cur().t0 = now(); refreshPrompt(); }
   }
   function failEl(msg, confKey) { const e = cur(); if (!e) return; if (!e.failed) { e.failed = true; e.reveal = true; } if (confKey) S.conf[confKey] = (S.conf[confKey] || 0) + 1; flashBad = performance.now(); say(msg, 'no'); updateDesc(); }
@@ -1431,9 +1432,13 @@ import { register as registerPathway } from './ui/pathway.js';
       // pluck/sustain both judge a note against gates.note (not gates.pitch)
       // below, so the diagnosis must use the same threshold or it could call
       // "too-quiet" a signal onPitch itself would already have judged.
-      const diag = diagnoseInput(diagInputFrames, { gates: { pitch: gates.note } });
-      if (diag.state !== 'insufficient' && diag.state !== diagLastState) { diagLastState = diag.state; if (diag.message) coach(diag.message); }
-    } else { diagInputFrames = []; diagLastState = null; }
+      const diag = diagnoseInput(diagInputFrames, { gates: { pitch: gates.note }, quietRoom: DB.prefs.noiseFloor > 0 && DB.prefs.noiseFloor < ROOM_QUIET_BELOW }); // a measured quiet room that has not been played in is not a dead mic
+      // stepDiagnosis() holds back a silent/too-quiet verdict for the first moments of listening, and says when clean notes should take a warning down; the line it replaced is put back.
+      if (diagSince === null || diag.state === 'ok') diagSince = now(); // the quiet-room grace counts from the last clean note, so a note that has just rung out is not called silence
+      const step = stepDiagnosis(diag, diagLastState, { sinceSec: now() - diagSince }); diagLastState = step.last;
+      if (step.say) { if ($('coach').textContent !== diagShown) diagBefore = $('coach').textContent; diagShown = step.say; coach(step.say); }
+      else if (step.clear && diagShown && $('coach').textContent === diagShown) { coach(diagBefore); diagShown = null; }
+    } else { diagInputFrames = []; diagLastState = null; diagSince = null; diagShown = null; }
     if (M.input === 'pluck') {
       // F8: an onset detector (src/audio/onset.js) catches a re-pluck of the
       // SAME note on a still-ringing string, which the RMS-drop/pitch-change
@@ -2146,6 +2151,7 @@ import { register as registerPathway } from './ui/pathway.js';
     // writing) -- the suggestion is teaching content no player has checked,
     // so it is never claimed reviewed just because it appears in the plan.
     if (!customOn && mod === 'kbd' && sessionPlan.some(b => b.kind === 'song')) { const entry = songFor(S.level); if (entry && !isReviewCurrent(itemReview(entry.id, contentRev(entry)))) { const s = starterSongs.find(x => x.id === entry.songId); msg += ' ' + (s ? s.title : entry.songId) + ': ' + t('review.unreviewed'); } }
+    diagInputFrames = []; diagLastState = null; diagSince = null; diagShown = null; // a new sitting starts the mic diagnosis afresh
     playing = true; paused = false; $('playBtn').textContent = 'Pause'; $('endBtn').hidden = false; coach(msg); showAll(); wakeLock.acquire();
   }
   // logSession(): a panel (e.g. a song lesson) logs its own practice as a
