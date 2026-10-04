@@ -1118,7 +1118,7 @@ higher- or lower-keyed harp is not silently mis-heard.
 
 Draw and blow bends — a reed pulled down in pitch with your breath — are new practice levels
 appended after the nine open-note levels, so an existing learner's saved level numbers do not
-shift. A bend is graded by its exact bent pitch, the same way an open note is graded by its own
+shift. A bend is graded by its exact bent pitch, and the on-screen prompt names the bend ("Draw 3 ↓2"), so what you are told to play is what is graded. An open note is graded by its own
 pitch. Bend availability (which holes bend, and how deep) does not change with key, since
 transposing the whole harmonica preserves the blow/draw gap inside every hole.
 
