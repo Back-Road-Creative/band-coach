@@ -61,13 +61,20 @@ function keySignatureQuestion(rng, instrument) { // level 1: name the key from i
   };
 }
 
+// The internal quality key as a written chord symbol: Ab7, Gm7b5, Cmaj, Dm.
+function chordSymbol(root, quality) {
+  return root + (quality === 'min' ? 'm' : quality);
+}
+
 function buildChordQuestion(rng, instrument) { // level 2: build a chord
   const roots = MAJOR_KEYS.map(k => k.letter + k.accidental);
   const root = pick(rng, roots);
-  const quality = pick(rng, chordQualities());
+  const spelled = q => chord(root, q).notes.map(spellingToString).join(' ');
+  const real = chordQualities().filter(q => !/bbb|###/.test(spelled(q))); // Cb dim7 = Bbbb is not real-world spelling: never asked either
+  const quality = pick(rng, real);
   const correct = chord(root, quality);
   const correctText = correct.notes.map(spellingToString).join(' ');
-  const distractorQualities = chordQualities().filter(q => q !== quality);
+  const distractorQualities = real.filter(q => q !== quality);
   const distractors = [];
   while (distractors.length < 3 && distractorQualities.length) {
     const i = Math.floor(rng() * distractorQualities.length) % distractorQualities.length;
@@ -77,10 +84,10 @@ function buildChordQuestion(rng, instrument) { // level 2: build a chord
   const choices = shuffledChoices(rng, correctText, distractors, Math.min(4, distractors.length + 1));
   return {
     id: 'theory-build-chord',
-    prompt: 'Which notes make up ' + root + ' ' + quality + '?',
+    prompt: 'Which notes make up ' + chordSymbol(root, quality) + '?',
     choices,
     answer: correctText,
-    explain: root + ' ' + quality + ' is ' + correctText + '.',
+    explain: chordSymbol(root, quality) + ' is ' + correctText + '.',
   };
 }
 
@@ -103,7 +110,9 @@ function romanNumeralQuestion(rng, instrument) { // level 3: roman numeral of a 
 // Distractors are the neighbouring semitones, spelled for real in the
 // written key, not an invented "note+shift" label.
 function transposeQuestion(rng, instrument) { // level 4: transpose for the instrument
-  const inst = instrument || { name: 'B flat trumpet', transposition: -2 };
+  // A concert-pitch instrument writes what sounds, so the question would be trivial: ask it for an E flat alto sax instead and say so.
+  const concertPitch = !!instrument && !instrument.transposition;
+  const inst = instrument && instrument.transposition ? instrument : concertPitch ? { name: 'E flat alto sax', transposition: -9 } : { name: 'B flat trumpet', transposition: -2 };
   const startMidi = 60 + pick(rng, [0, 2, 4, 5, 7]);
   const result = transposePhraseForInstrument([{ start: 0, dur: 480, midi: startMidi }], { tonic: 0, mode: 'major' }, inst);
   const target = result.notes[0];
@@ -111,12 +120,13 @@ function transposeQuestion(rng, instrument) { // level 4: transpose for the inst
   const distractors = spellNotes([-2, -1, 1, 2].map(d => ({ midi: target.midi + d })), result.key)
     .map(n => spellingToString(n) + n.octave);
   const choices = shuffledChoices(rng, correct, distractors, 4);
+  const concertName = spellingToString(spellNotes([{ midi: startMidi }], { name: 'C' })[0]) + (Math.floor(startMidi / 12) - 1);
   return {
     id: 'theory-transpose',
-    prompt: 'On ' + instrumentLabel(inst) + ', what do you write for a concert-pitch note at MIDI ' + startMidi + '?',
+    prompt: (concertPitch ? instrumentLabel(instrument) + ' is written as it sounds, so try a transposing one. ' : '') + 'On ' + instrumentLabel(inst) + ', what do you write for a concert-pitch ' + concertName + '?',
     choices,
     answer: correct,
-    explain: 'Concert MIDI ' + startMidi + ' written for ' + instrumentLabel(inst) + ' is ' + correct + '.',
+    explain: 'Concert ' + concertName + ' written for ' + instrumentLabel(inst) + ' is ' + correct + '.',
   };
 }
 
@@ -125,12 +135,15 @@ function scaleMembershipQuestion(rng, instrument) { // level 5: which notes are 
   const built = scale({ letter: key.letter, accidental: key.accidental }, 'major');
   const inScale = pick(rng, built.degrees);
   const inScaleText = spellingToString(inScale);
-  const outsidePcs = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].filter(pc => !built.degrees.some(d => d.pc === pc));
-  const distractors = outsidePcs.slice(0, 3).map(pc => {
-    const near = built.degrees.reduce((a, b) => (Math.abs(a.pc - pc) < Math.abs(b.pc - pc) ? a : b));
-    return near.letter + (pc > near.pc ? '#' : 'b');
-  });
-  const choices = shuffledChoices(rng, inScaleText, distractors, Math.min(4, distractors.length + 1));
+  // Wrong choices are real spellings whose pitch class is NOT in the key (so
+  // Eb is never offered as wrong in Ab major); odd spellings like E# stay out.
+  const NAT_PC = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
+  const distractors = [];
+  Object.keys(NAT_PC).forEach(l => ['', 'b', '#'].forEach(a => {
+    const pc = (NAT_PC[l] + (a === '#' ? 1 : a === 'b' ? 11 : 0)) % 12;
+    if (!built.degrees.some(d => d.pc === pc) && !['Cb', 'Fb', 'E#', 'B#'].includes(l + a)) distractors.push(l + a);
+  }));
+  const choices = shuffledChoices(rng, inScaleText, distractors, 4);
   return {
     id: 'theory-scale-membership',
     prompt: 'Which of these notes is in ' + key.name + ' major, on ' + instrumentLabel(instrument) + '?',

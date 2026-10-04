@@ -2910,7 +2910,7 @@ import { register as registerPathway } from './ui/pathway.js';
   // below; everything it needs from the app goes through panelApi.
   const panels = createPanels({ onEscape: () => { closePanel(); const nb = $('navInstrument'); if (document.activeElement === document.body && nb) nb.focus(); } });
   const panelApi = {
-    db: () => DB, save: save, mod: () => mod, setMod: m => { closePanel(); setMod(m); }, instrument: id => instrumentById[id || mod],
+    db: () => DB, save: save, mod: () => mod, setMod: m => { closePanel(); setMod(m); }, instrument: id => instrumentById[id || mod], windTransposition: () => { const k = WIND_KINDS[DB.prefs.wind || 'bb']; return k[2] === 'bass' ? 0 : k[1]; }, // wind: the learner's B flat/E flat/F choice (theory panel only; the shared record stays concert)
     audio: () => { ensureAudio(); return actx; }, openMic: openMic, analysers: () => ({ time: anTime, freq: anFreq }), gates: () => gates,
     tone: tone, click: click, now: now, say: say, coach: coach, recordError: recordError, close: () => closePanel(),
     drum: (piece, at) => drumHit(piece, at),
