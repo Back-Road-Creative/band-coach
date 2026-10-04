@@ -607,7 +607,8 @@ import { register as registerPathway } from './ui/pathway.js';
   info = function (m, id, prefs) { const hk = (prefs && Number.isInteger(prefs.harpKey) && prefs.harpKey >= 0 && prefs.harpKey <= 11) ? prefs.harpKey : 0; if (id[0] === 'h') { const mm = /^h([bd])(\d+)$/.exec(id), dir = mm[1], hole = +mm[2], layout = harpLayoutFor(hk), midi = layout[hole - 1][dir === 'b' ? 'blow' : 'draw']; return { kind: 'note', midi: midi, hole: hole, dir: dir, note: nname(midi), label: (dir === 'b' ? 'Blow ' : 'Draw ') + hole + ' (' + nname(midi) + ')', short: (dir === 'b' ? 'Blow ' : 'Draw ') + hole }; } if (id[0] === 'y') { const mm = /^y(\d+)x(\d)$/.exec(id), hole = +mm[1], depth = +mm[2], layout = harpLayoutFor(hk), b = layout[hole - 1].bends.find(x => x.semitonesBent === depth), dir = b.action === 'draw' ? 'd' : 'b'; return { kind: 'note', midi: b.pitch, hole: hole, dir: dir, bend: depth, note: nname(b.pitch), label: (dir === 'b' ? 'Blow ' : 'Draw ') + hole + ' bent ' + depth + (depth === 1 ? ' semitone' : ' semitones') + ' (' + nname(b.pitch) + ')', short: (dir === 'b' ? 'Blow ' : 'Draw ') + hole + ' ↓' + depth }; } return _info(m, id, prefs); };
   validId = function (m, id) { if (typeof id === 'string' && id[0] === 'h') return /^h[bd]([1-9]|10)$/.test(id); if (typeof id === 'string' && id[0] === 'y') { const mm = /^y([1-9]|10)x([1-3])$/.exec(id); return !!mm && HARP_BEND_DEPTHS[+mm[1] - 1].indexOf(+mm[2]) >= 0; } return _valid(m, id); };
   const _info2 = info, _valid2 = validId;
-  info = function (m, id, prefs) { if (typeof id === 'string' && id[0] === 'j' && handsTogetherById(id)) { const ex = handsTogetherById(id); const timed = isTimedPairId(id), stage = handsStageFromId(id); const label = stage === 'held' ? ex.label + ', bass held' : stage === 'split' ? ex.label + ', different rhythms' : stage === 'position' ? ex.label : ex.label + (timed ? ', in time' : ''); const short = stage === 'held' ? ex.name + ' (left hand holds)' : stage === 'split' ? ex.name + ' (different rhythms)' : stage === 'position' ? ex.short : timed ? ex.name + ' (both hands, in time)' : ex.short; return { kind: 'hands-together', ex: ex, label: label, short: short, timed: timed }; } return _info2(m, id, prefs); };
+  info = function (m, id, prefs) { if (typeof id === 'string' && id[0] === 'j' && handsTogetherById(id)) { const ex0 = handsTogetherById(id), nm = nname(ex0.oldRh ? ex0.oldRh.midi : ex0.rh.midi), ex = Object.assign({}, ex0, { name: nm, label: nm + ex0.label.slice(ex0.name.length), short: nm + ex0.short.slice(ex0.name.length) }); // names follow Settings > Note names; the start note, each exercise keeps its own suffix
+    const timed = isTimedPairId(id), stage = handsStageFromId(id); const label = stage === 'held' ? ex.label + ', bass held' : stage === 'split' ? ex.label + ', different rhythms' : stage === 'position' ? ex.label : ex.label + (timed ? ', in time' : ''); const short = stage === 'held' ? ex.name + ' (left hand holds)' : stage === 'split' ? ex.name + ' (different rhythms)' : stage === 'position' ? ex.short : timed ? ex.name + ' (both hands, in time)' : ex.short; return { kind: 'hands-together', ex: ex, label: label, short: short, timed: timed }; } return _info2(m, id, prefs); };
   validId = function (m, id) { if (typeof id === 'string' && id[0] === 'j') return !!handsTogetherById(id); return _valid2(m, id); };
   // Bowed instruments (violin, viola, cello, double-bass) reuse the 's'
   // string+fret item id scheme (stringLevels above) so the fingerings panel
@@ -2227,9 +2228,11 @@ import { register as registerPathway } from './ui/pathway.js';
   // to reach 3:1, so COACH stays a near match for the Start button instead of
   // dropping to --accent-ink's navy (R10 P1).
   function accentDisplayFor(hex) { if (!themeIsLight()) return hex; const n = parseInt(hex.slice(1), 16), c0 = [(n >> 16) & 255, (n >> 8) & 255, n & 255], lin = c => { c /= 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }, lum = ([r, g, b]) => 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b), gl = 0.929; for (let k = 1; k > 0; k -= 0.02) { const c = c0.map(v => Math.round(v * k)); if ((gl + 0.05) / (lum(c) + 0.05) >= 3) return '#' + c.map(v => v.toString(16).padStart(2, '0')).join(''); } return '#000000'; }
+  // The three accent properties on <html>; also re-run by the Theme control, since the light theme darkens the ink and a switch must not keep the old one.
+  function applyAccent() { const accentRaw = (MODS[mod] || TOOLS[mod]).color === '#e9edf6' ? '#9fb4d8' : (MODS[mod] || TOOLS[mod]).color, st = document.documentElement.style; st.setProperty('--accent', accentRaw); st.setProperty('--accent-ink', accentInkFor(accentRaw)); st.setProperty('--accent-display', accentDisplayFor(accentRaw)); }
   function showAll() {
-    const tool = !!TOOLS[mod], accentRaw = (MODS[mod] || TOOLS[mod]).color === '#e9edf6' ? '#9fb4d8' : (MODS[mod] || TOOLS[mod]).color;
-    document.documentElement.style.setProperty('--accent', accentRaw); document.documentElement.style.setProperty('--accent-ink', accentInkFor(accentRaw)); document.documentElement.style.setProperty('--accent-display', accentDisplayFor(accentRaw));
+    const tool = !!TOOLS[mod];
+    applyAccent();
     $('helpText').innerHTML = ''; const st = document.createElement('strong'); st.textContent = 'How this one works: '; $('helpText').appendChild(st); $('helpText').appendChild(document.createTextNode((MODS[mod] || TOOLS[mod]).help));
     document.querySelectorAll('.side .card, .side .stats, #playBtn, #resetBtn').forEach(el => { el.style.display = tool && !(mod === 'capture' && el.id === 'feedbackCard') ? 'none' : ''; }); $('tapPad').hidden = mod !== 'rhy'; $('timeFill').parentElement.style.visibility = tool || mod === 'rhy' || (MODS[mod] && MODS[mod].kit) ? 'hidden' : 'visible'; // capture's own messages ('Nothing captured yet.') need the feedback card; .hidden still hides it while empty
     if (tool) { $('prompt').textContent = ''; $('hint').textContent = mod === 'tuner' ? 'One open string at a time.' : 'One note at a time.'; $('choices').hidden = true; $('replayBtn').hidden = true; $('showMeBtn').hidden = true; $('howPeekHost').hidden = true; return; }
@@ -2286,7 +2289,7 @@ import { register as registerPathway } from './ui/pathway.js';
     // -- a change takes effect at the next Start, never a running session's
     // sess.target, so it cannot fire a surprise break or cancel one mid-session.
     if (!TOOLS[mod]) sel('optSessionMinutes', 'Session length', [['none', ['No limit']], ['5', ['5 minutes']], ['10', ['10 minutes']], ['15', ['15 minutes']]] /* pairs: integer-like object keys would sort first */, DB.prefs.sessionMinutes ? String(DB.prefs.sessionMinutes) : 'none', v => { DB.prefs.sessionMinutes = v === 'none' ? null : +v; save(); });
-    if (NOTATE_MOD_IDS.indexOf(mod) >= 0) sel('optNotate', 'Show', { names: ['Note names (today)'], staff: ['Staff'], both: ['Staff and names'] }, DB.prefs.notate[mod], v => { DB.prefs.notate[mod] = v; save(); });
+    if (NOTATE_MOD_IDS.indexOf(mod) >= 0) sel('optNotate', 'Show', { names: [DB.prefs.names ? 'Note names (today)' : 'Note names (off in Settings)'], staff: ['Staff'], both: [DB.prefs.names ? 'Staff and names' : 'Staff (names off in Settings)'] }, DB.prefs.notate[mod], v => { DB.prefs.notate[mod] = v; save(); });
     if (mod === 'wind') { sel('optWind', 'My instrument', WIND_KINDS, DB.prefs.wind, v => { DB.prefs.wind = v; task = null; save(); }); chk('optRef', 'Play me the note first', false, () => {}); }
     if (mod === 'voice') sel('optVoice', 'My range', Object.assign({}, VOICE_KINDS, DB.prefs.voiceRange ? { mine: ['My range (found by test)', tonicFromRange(exerciseRangeFor(DB.prefs.voiceRange)).tonic] } : {}), DB.prefs.voice, v => { DB.prefs.voice = v; task = null; save(); });
     if (mod === 'voice' && !rangeTest) btn('optRangeStart', DB.prefs.voiceRange ? 'Find my range again' : 'Find my range', () => { handleRangeTest('start'); renderOpts(); });
@@ -2658,13 +2661,13 @@ import { register as registerPathway } from './ui/pathway.js';
   function jump(dl) { const nl = Math.max(1, S.level + dl); if (nl === S.level) return; S.level = nl; S.ready = 0.3; task = null; coach((dl < 0 ? 'Moved down' : 'Skipped ahead') + ' to level ' + S.level + ': ' + D().name + '.'); save(); if (mod === 'kbd') renderOpts(); showAll(); }
   $('easierBtn').addEventListener('click', function () { this.blur(); jump(-1); }); $('harderBtn').addEventListener('click', function () { this.blur(); jump(1); });
   $('resetBtn').addEventListener('click', function () { this.blur(); if (!confirm(t('reset.confirm', { name: MODS[mod].name }))) return; if (sess) endSession(); DB.mods[mod] = S = freshModel(); recent = []; streak = 0; coach(t('reset.progressCleared', { name: MODS[mod].name })); save(); showAll(); });
-  $('optNames').addEventListener('change', function () { DB.prefs.names = this.checked; save(); });
+  $('optNames').addEventListener('change', function () { DB.prefs.names = this.checked; save(); renderOpts(); }); // the practice Show labels own up to names off
   // Theme J1: 'system' removes the attribute so styles.css's own
   // prefers-color-scheme media query decides; 'light'/'dark' pin it,
   // overriding the OS setting either way (see src/styles.css).
   function applyTheme(t) { if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t); else document.documentElement.removeAttribute('data-theme'); }
-  $('optTheme').addEventListener('change', function () { DB.prefs.theme = this.value; applyTheme(this.value); save(); });
-  $('optLocale').addEventListener('change', function () { DB.prefs.locale = LOCALES.some(l => l.code === this.value) ? this.value : 'en'; applyLocale(DB.prefs.locale); updateNavInstrumentLabel(); showAll(); save(); });
+  $('optTheme').addEventListener('change', function () { DB.prefs.theme = this.value; applyTheme(this.value); applyAccent(); save(); });
+  $('optLocale').addEventListener('change', function () { DB.prefs.locale = LOCALES.some(l => l.code === this.value) ? this.value : 'en'; applyLocale(DB.prefs.locale); updateNavInstrumentLabel(); showAll(); refreshModelPack(); save(); });
   function applyNoteNaming() { DB.prefs.noteNaming = { system: $('optNoteSystem').value, accidentals: $('optAccidentals').value }; setNoteNaming(DB.prefs.noteNaming); save(); showAll(); }
   $('optNoteSystem').addEventListener('change', applyNoteNaming); $('optAccidentals').addEventListener('change', applyNoteNaming);
 
@@ -2874,6 +2877,7 @@ import { register as registerPathway } from './ui/pathway.js';
   // ---------- optional model pack: same consent-on-press shape as the update check above. Nothing
   // is requested until the button is pressed; the status line only ever READS the local IndexedDB
   // cache (src/core/model-pack.js carries fetch/verify/cache policy and is unit-tested on its own).
+  let refreshModelPack = () => {};
   (function () {
     const btn = $('modelPackBtn'), out = $('modelPackStatus');
     if (!btn || !out) return;
@@ -2888,7 +2892,7 @@ import { register as registerPathway } from './ui/pathway.js';
       const show = (text) => { if (mine === ticket) out.textContent = text; };
       packStatus({ store, packName: DEFAULT_MODEL_PACK, inFlight }).then(s => { show(s.state === 'cached' ? t('modelPack.cached', { version: s.version }) : s.state === 'downloading' ? t('modelPack.downloading') : t('modelPack.absent')); }, () => { show(t('modelPack.absent')); });
     }
-    render();
+    render(); refreshModelPack = render; // a language switch re-reads the status so it is re-worded
     btn.addEventListener('click', function () {
       this.blur();
       if (btn.disabled) return;
