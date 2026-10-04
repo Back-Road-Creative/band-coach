@@ -395,3 +395,29 @@ test('saving a score import from Edit notes keeps its plain row wording', async 
   assert.ok(rows.every((r) => !/Original recording not kept/.test(r)), 'saved row: ' + JSON.stringify(rows));
   assert.ok(rows.some((r) => /thing to check/.test(r)), 'saved row: ' + JSON.stringify(rows));
 });
+
+// "Save a copy" adds a NEW id with no ledger entry; the copy must inherit the
+// open song's source/audio-kept fields, not read as a lost recording.
+test('saving a copy of a score import keeps the plain row wording on the copy', async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'band-coach-add-song-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const noTempo = join(dir, 'notempo.abc');
+  writeFileSync(noTempo, 'X:1\nT:Copy Probe Draft\nM:4/4\nL:1/8\nK:C\nCDEFGABc|\n', 'utf8');
+  const page = await launchPage(htmlPath);
+  t.after(() => page.close());
+  await page.evaluate("window.__coach.setMod('kbd')");
+  await openAddSongSection(page);
+  await page.setFileInput('#songsFileInput', noTempo);
+  await page.waitFor("document.querySelector('.panel-learn-result').hidden === false", 20000);
+  await page.evaluate("document.querySelector('.panel-learn-fixitup-btn').click()");
+  await page.waitFor("window.__coach.panelOpen() === 'editor'");
+  await page.waitFor("document.getElementById('editorTitle').value === 'Copy Probe Draft'");
+  await page.evaluate("document.getElementById('editorAck').click()");
+  await page.evaluate("document.getElementById('editorSaveCopyBtn').click()");
+  await page.waitFor("document.querySelector('.editor-saved-status').textContent === 'Saved'");
+  await page.evaluate("window.__coach.openPanel('songs')");
+  await page.waitFor("document.querySelectorAll('.panel-songs-status').length >= 2");
+  const rows = await page.evaluate("Array.from(document.querySelectorAll('.panel-songs-status')).map(e => e.textContent)");
+  assert.ok(rows.length >= 2, 'original and copy rows: ' + JSON.stringify(rows));
+  assert.ok(rows.every((r) => !/Original recording not kept/.test(r)), 'copy row: ' + JSON.stringify(rows));
+});
