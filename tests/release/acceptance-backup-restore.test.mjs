@@ -13,10 +13,10 @@ import { copyFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from '
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { WAIT_FLOOR_MS, acceptanceHtmlPath, withAcceptancePage } from '../helpers/browser.mjs';
+import { WAIT_FLOOR_MS, acceptanceHtmlPath, effectiveWaitMs, withAcceptancePage } from '../helpers/browser.mjs';
 import { chooseFile } from '../helpers/file-chooser.mjs';
 import { captureDownloads, fillLocalStorage, localStorageItem, setLocalStorageItem } from '../helpers/cdp-extras.mjs';
-import { t as say } from '../../src/core/i18n.js';
+import { en, es, t as say } from '../../src/core/i18n.js';
 
 const TUNE = fileURLToPath(new URL('../fixtures/acceptance/backup-restore/tune.abc', import.meta.url));
 const KEY = 'bandcoach.v1';
@@ -75,7 +75,23 @@ async function saveBackup(t, page) {
   await page.clickSelector('#backupSaveBtn');
   return waitForDownload(BACKUP_NAME);
 }
-const restore = (page, file, dialog) => chooseFile(page, 'label[for="backupRestoreInput"]', file, { dialog });
+// The app reads and checks the file BEFORE it asks "replace your progress?", so the confirm opens a moment after
+// the pick has returned (chooseFile only answers dialogs raised during the pick). This answers it itself:
+// `expectDialog` waits for the confirm to show; a refusal passes false and calls stop() once the message is up.
+async function restore(page, file, dialog, { expectDialog = true } = {}) {
+  const dialogs = [];
+  const off = page.cdp.on((msg) => {
+    if (msg.method !== 'Page.javascriptDialogOpening') return;
+    dialogs.push({ type: msg.params.type, message: msg.params.message });
+    page.cdp.send('Page.handleJavaScriptDialog', { accept: dialog === 'accept' }).catch(() => {});
+  });
+  try {
+    await chooseFile(page, 'label[for="backupRestoreInput"]', file);
+    if (expectDialog) { const give_up = Date.now() + effectiveWaitMs(WAIT_FLOOR_MS); while (!dialogs.length && Date.now() < give_up) await new Promise((r) => setTimeout(r, 20)); }
+  } catch (e) { off(); throw e; }
+  if (expectDialog) off();
+  return { dialogs, stop: off };
+}
 // The restore's verdict is the first moment #coach reads "Backup restored." or the not-saved text; the three
 // status lines are read in that same instant. A failed write also queues a retry 1.2 s later that rewrites
 // #settingsSay and #mainSay, so reading them one call at a time would race it.
@@ -199,9 +215,10 @@ test('A09 T3: six bad backup files each say what is wrong and leave progress and
       const path = join(dir, `bad-${n}.json`);
       writeFileSync(path, body);
       await go(page, 'settings');
-      const picked = await restore(page, path, 'accept');
-      assert.deepEqual(picked.dialogs, [CONFIRM], `${label}: the confirm was raised, so the change event fired`);
+      const picked = await restore(page, path, 'accept', { expectDialog: false });
       await waitSettingsSay(page, message);
+      picked.stop();
+      assert.deepEqual(picked.dialogs, [], `${label}: a file that is not a restorable backup never raises the "replace your progress" confirm`);
       const now = await says(page);
       assert.equal(now.settingsSay, message, `${label}: #settingsSay`);
       assert.equal(now.coach, message, `${label}: #coach`);
@@ -301,5 +318,25 @@ test('A09 T6: the same build opened under another file name restores a backup ma
     assert.deepEqual(picked.dialogs, [CONFIRM]);
     await waitSettingsSay(page, RESTORED);
     assert.equal(await level(page), 'Level 3');
+  }));
+});
+
+test('A09 T7: with Español selected, a refused backup says why in Spanish', async (t) => {
+  await timed(t, () => withAcceptancePage(t, {}, async (page) => {
+    await chooseKeyboard(page);
+    await go(page, 'settings');
+    await page.evaluate("(() => { const s = document.getElementById('optLocale'); s.value = 'es'; s.dispatchEvent(new Event('change')); })()");
+    const dir = scratchDir(t);
+    const cases = [['not-json.json', 'this is not json {{{', 'backup.err.notBackup'], ['newer.json', '{"format":"band-coach-progress","formatVersion":99,"db":{}}', 'backup.err.tooNew']];
+    for (const [name, body, id] of cases) {
+      const path = join(dir, name);
+      writeFileSync(path, body);
+      const picked = await restore(page, path, 'accept', { expectDialog: false });
+      assert.ok(es[id] && es[id] !== en[id], `${id} has its own Spanish text`);
+      await waitSettingsSay(page, es[id]);
+      picked.stop();
+      assert.deepEqual(picked.dialogs, []);
+      assert.equal(await textOf(page, 'coach'), es[id]);
+    }
   }));
 });
