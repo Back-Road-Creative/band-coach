@@ -2186,7 +2186,7 @@ import { register as registerPathway } from './ui/pathway.js';
       let up = null, low = null, lowR = 1; Object.keys(S.item).forEach(id => { const cur = S.item[id], r1 = retrievability(cur, modelNow), r0 = retrievability(sess.m0[id] || cur, modelNow), g0 = r1 - r0; if (up === null || g0 > up.g) up = { id: id, g: g0 }; if (cur.reps >= 3 && (low === null || r1 < lowR)) { low = id; lowR = r1; } });
       line = 'Session done: ' + Math.round(min * 10) / 10 + ' min, ' + Math.round(100 * sess.ok / sess.judged) + '% right, best streak ' + sess.bestStreak + ', level ' + sess.from + ' to ' + S.level + '.' + (up && up.g > 0.05 ? ' Most improved: ' + inf(up.id).short + '.' : '') + (low ? ' Next time starts with extra ' + inf(low).short + '.' : ''); }
     if (sess.judged >= 8 && Date.now() - lastBackupAt > 7 * 86400000) showBackupNudge('You have been practising a while. Save a backup, just in case.');
-    sess = null; playing = false; paused = false; task = null; bar = null; breakTrap.deactivate(); $('breakCard').hidden = true; $('playBtn').textContent = 'Start'; $('endBtn').hidden = true; $('choices').hidden = true; $('prompt').textContent = ''; $('hint').textContent = ''; coach(line); save(); showAll(); wakeLock.release();
+    sess = null; playing = false; paused = false; task = null; bar = null; breakTrap.deactivate(); $('breakCard').hidden = true; $('playBtn').textContent = 'Start'; $('endBtn').hidden = true; $('choices').hidden = true; $('prompt').textContent = ''; $('hint').textContent = ''; say(''); $('timeFill').style.width = '0%'; $('showMeBtn').hidden = true; $('howPeekHost').hidden = true; coach(line); save(); showAll(); wakeLock.release();
   }
   const BREAKS = {
     user: ['Paused', 'Take your time. A pause of 90 seconds or more counts as a break and resets your energy.', 0], away: ['You stepped away', 'Nothing came in for a while, so I paused. The exercise you left does not count against you.', 0], hidden: ['Paused', 'The page was hidden, so I stopped the clock. Nothing was counted while you were gone.', 0],
@@ -2246,7 +2246,7 @@ import { register as registerPathway } from './ui/pathway.js';
     // practised today -- full means the OPPOSITE, so a full bar gets its own
     // word ahead of the minutes, never just the colour, to say so.
     $('sessLine').textContent = (ep === 100 ? t('energy.full') + ' · ' : '') + (sess ? Math.floor(sess.active / 60) + ' min this session, ' + sess.breaks + ' break' + (sess.breaks === 1 ? '' : 's') + ' · ' : '') + Math.round(todayMinutes()) + ' min today' + (ds > 1 ? ' · ' + ds + ' days in a row' : '') + (lastS ? ' · last ' + MODS[mod].name.toLowerCase() + ' session ' + Math.round(100 * lastS.acc) + '%' : '');
-    $('sAcc').textContent = recent.length ? Math.round(100 * mean(recent)) + '%' : '0%'; $('sStreak').textContent = streak; $('sRt').textContent = sess && sess.rts.length ? median(sess.rts).toFixed(1) : '0.0'; $('statsBlock').hidden = !recent.length;
+    $('sAcc').textContent = recent.length ? Math.round(100 * mean(recent)) + '%' : '0%'; $('sStreak').textContent = streak; $('sRt').textContent = sess && sess.rts.length ? median(sess.rts).toFixed(1) : '-'; $('statsBlock').hidden = !recent.length;
     const act = activeItems(mod, S.level), weakEntries = []; act.forEach(id => { const o = S.item[id]; if (o && o.reps >= 2) weakEntries.push(Object.assign({}, o, { id: 'i:' + id, label: inf(id).short })); });
     Object.keys(S.trans).forEach(k => { const o = S.trans[k], ab = k.split('>'); if (o.reps >= 2 && act.indexOf(ab[0]) >= 0 && act.indexOf(ab[1]) >= 0) weakEntries.push(Object.assign({}, o, { id: 't:' + k, label: inf(ab[0]).short + ' → ' + inf(ab[1]).short })); });
     const rows = due(weakEntries, modelNow).filter(e => e.r < 0.7);
@@ -2272,7 +2272,7 @@ import { register as registerPathway } from './ui/pathway.js';
   // does not try to filter samples itself.
   let rangeTest = null;
   // The coach line a mod shows before Start; Cancel puts it back so a stopped test never leaves its "Sing your..." instruction behind.
-  const idleCoachLine = () => S.judged ? 'Welcome back. You are on level ' + S.level + ': ' + D().name + '. Press Start.' : 'Press Start. Level 1: ' + D().name + '.';
+  const idleCoachLine = () => S.judged ? 'Welcome back. You are on level ' + S.level + ': ' + D().name + '. Press Start.' : 'Press Start. Level ' + S.level + ': ' + D().name + '.';
   function handleRangeTest(action, fr) {
     if (action === 'start') { rangeTest = { stage: 'low', samples: [], curMidi: null, curSince: 0 }; coach('Sing your lowest comfortable note and hold it, then press "Got it -- now the highest".'); return; }
     if (!rangeTest) return;
@@ -2660,7 +2660,7 @@ import { register as registerPathway } from './ui/pathway.js';
   // everything noteState is holding rather than leave a phantom note "held"
   // until some later, unrelated message happens to clear that same pitch.
   window.addEventListener('blur', () => releaseNotes());
-  function jump(dl) { const nl = Math.max(1, S.level + dl); if (nl === S.level) return; S.level = nl; S.ready = 0.3; task = null; coach((dl < 0 ? 'Moved down' : 'Skipped ahead') + ' to level ' + S.level + ': ' + D().name + '.'); save(); if (mod === 'kbd') renderOpts(); showAll(); }
+  function jump(dl) { const nl = Math.max(1, S.level + dl); if (nl === S.level) { coach('You are already on level 1: ' + D().name + '. That is the easiest level.'); return; } S.level = nl; S.ready = 0.3; task = null; say(''); coach((dl < 0 ? 'Moved down' : 'Skipped ahead') + ' to level ' + S.level + ': ' + D().name + '.'); save(); if (mod === 'kbd') renderOpts(); showAll(); }
   $('easierBtn').addEventListener('click', function () { this.blur(); jump(-1); }); $('harderBtn').addEventListener('click', function () { this.blur(); jump(1); });
   $('resetBtn').addEventListener('click', function () { this.blur(); if (!confirm(t('reset.confirm', { name: MODS[mod].name }))) return; if (sess) endSession(); DB.mods[mod] = S = freshModel(); recent = []; streak = 0; coach(t('reset.progressCleared', { name: MODS[mod].name })); save(); showAll(); });
   $('optNames').addEventListener('change', function () { DB.prefs.names = this.checked; save(); renderOpts(); }); // the practice Show labels own up to names off
@@ -3013,7 +3013,8 @@ import { register as registerPathway } from './ui/pathway.js';
   // only from inside Songs, so they count as Songs too -- otherwise opening
   // either would make the nav go dark, which reads as "you left Songs"
   // even though there is no other screen to go "back" to.
-  function navDestFor(panelId) { return (panelId === 'songs' || panelId === 'editor' || panelId === 'playalong') ? 'songs' : panelId === 'history' ? 'progress' : panelId ? null : 'practice'; }
+  // The keyboard path panel is reached only from Practice's keyboard options, so it counts as Practice for the same reason.
+  function navDestFor(panelId) { return panelId === 'pathway' ? 'practice' : (panelId === 'songs' || panelId === 'editor' || panelId === 'playalong') ? 'songs' : panelId === 'history' ? 'progress' : panelId ? null : 'practice'; }
   // P2b-2: Settings isn't a panel (panels.current() knows nothing about it),
   // so the nav's notion of "current" has to check #settingsView first.
   function currentDest() { return !$('settingsView').hidden ? 'settings' : navDestFor(panels.current()); }
@@ -3048,6 +3049,8 @@ import { register as registerPathway } from './ui/pathway.js';
     // counts as "already there"; every other case (including re-pressing
     // Songs while Songs is open) still hits the guard unchanged.
     if (dest === 'songs' && panels.current() !== 'songs') { openPanel('songs'); return true; }
+    // The keyboard path panel counts as Practice too (navDestFor), so pressing Practice there goes back to the exercise.
+    if (dest === 'practice' && panels.current() === 'pathway') { closePanel(); return true; }
     if (dest === currentDest()) return false;
     if (dest === 'practice') { closePanel(); return true; }
     if (dest === 'settings') { openSettings(); return true; }

@@ -87,5 +87,11 @@ test('peeking at "How to play this" shows the diagram inline, without ending the
   const row = events[events.length - 1];
   assert.equal(row.assistance, 'shown', 'a peeked-at element logs assistance "shown", the same as Show me');
 
+  // End session drops the peek: the note it explained is no longer asked. The
+  // toggle was left open above, so a stale diagram would still be on screen.
+  await page.evaluate("document.getElementById('endBtn').click()");
+  await page.waitFor("document.getElementById('playBtn').textContent.trim() === 'Start'");
+  assert.equal(await page.evaluate("document.getElementById('howPeekHost').hidden"), true);
+
   assert.deepEqual(page.exceptions, []);
 });
