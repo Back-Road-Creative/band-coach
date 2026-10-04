@@ -459,7 +459,13 @@ opening straight into the Songs panel with the phrase-by-phrase lesson a whole i
 path: it keeps only the pitch of each note heard, in order, dropping how long each note was held
 and how far apart they came, and loads that note list (capped at 300 notes) as the "Practise my
 captured melody" custom drill on whichever instrument you pick, four notes at a time, the same
-repeat-until-clean chunking a built-in curriculum level uses.
+repeat-until-clean chunking a built-in curriculum level uses. Starting that drill keeps its own coach
+line (not the level plan, since a captured-melody drill is a warm-up that does not count).
+
+Listen needs a connected microphone: without one it does not start, and says to connect first. The
+"N notes" count updates while you play. Every message here ("Nothing captured yet.", a failed save)
+shows in the feedback card, which the Capture tool keeps visible. Pressing "Make it a lesson" again
+on the same capture re-opens the song it already saved instead of adding another copy.
 
 ## Songs
 
