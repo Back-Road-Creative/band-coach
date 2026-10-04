@@ -654,6 +654,13 @@ instead of a third run at the whole phrase; passing that one note returns to the
 where it left off. A repair try is logged as guided assistance, not independent evidence — it is
 a redo of a note the step already failed on, not a fresh, unaided attempt.
 
+A song you saved can be removed again: each of your own rows in the library has a "Remove" button
+that asks "Remove ... for good?" first (Yes, remove it / Keep it); removing it also clears its
+Draft/Checked label. The built-in starter tunes have no Remove button. A notation file with no
+notes in it (an empty or header-only `.abc`) is refused with a plain message instead of being
+saved, and a notation import is never labelled "Original recording not kept", since it never had
+a recording.
+
 The lesson follows the whole teaching loop (`src/core/teaching.js`: explain, demo, guided, check,
 repair, transfer), moving between its phases with `nextPhase()`. In Learn mode, pressing Next on a
 passage's Listen step opens a **Watch and listen** step: the app plays the passage slowly (55% of

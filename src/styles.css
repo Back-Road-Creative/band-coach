@@ -207,6 +207,8 @@
   .add-song-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
   .panel-songs-list { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
   .panel-songs-row button { width: 100%; text-align: left; }
+  .panel-songs-remove-box { display: block; margin-top: 2px; }
+  .panel-songs-remove-box button { width: auto; }
   .panel-songs-export { display: flex; gap: 4px; margin-top: 2px; }
   .panel-songs-export button, .panel-songs-export-btn { width: auto; }
   .panel-songs-intro { color: var(--muted); }
