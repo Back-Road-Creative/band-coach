@@ -203,6 +203,9 @@ test('A01: first visit on computer keys -- choose, start, play, pause, play, end
     const inputs = db.events.map((e) => e.input);
     assert.ok(inputs.filter((x) => x === 'computer-key').length >= 10, `at least ten computer-key rows, got ${JSON.stringify(inputs)}`);
     assert.ok(!inputs.includes('midi'), 'no row claims a MIDI keyboard');
+    // The coach line's minutes are the stored row's minutes, not a whole-minute rounding of them.
+    assert.equal(db.sessions.length, 1, 'one session row stored');
+    assert.equal(Number(/^Session done: (\d+(?:\.\d)?) min/.exec(done)[1]), db.sessions[0].min, `coach line minutes match the stored session (${done})`);
 
     assert.deepEqual(page.exceptions, [], 'no uncaught exceptions');
   });
