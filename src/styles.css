@@ -516,6 +516,9 @@
   .opts select { max-width: 100%; }
   .opts input { accent-color: var(--accent); width: 16px; height: 16px; }
   .file-label { display: inline-flex; align-items: center; }
+  /* a file picker is a <label>, so the button look (button, button.small) never reached it */
+  label.small.file-label { font: 600 13px var(--body); color: var(--text); background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 5px 10px; cursor: pointer; }
+  label.small.file-label:hover { border-color: var(--muted); }
   .backup-nudge { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; justify-content: space-between; background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 8px 12px; font-size: 13px; color: var(--muted); }
   button.danger { border-color: var(--bad); color: var(--bad); }
   button.danger:hover { background: var(--bad); color: #1a0a08; }

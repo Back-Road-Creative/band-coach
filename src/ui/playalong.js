@@ -235,13 +235,20 @@ function mountPlayalong(el, api) {
     return Math.max(0, Math.min(recording.duration, fraction * recording.duration));
   }
 
-  function applyLoop(a, b) {
+  // `refusal` is said out loud when the loop would end up backwards (the set-start/end
+  // buttons); a drag passes none, since a click with no drag is just a zero-length request.
+  function applyLoop(a, b, refusal) {
     if (!transport) return;
     try {
       transport.setLoop(a, b);
     } catch (e) {
-      return; // zero/negative-length request from a click with no drag; ignore
+      if (refusal) {
+        errorEl.textContent = refusal;
+        errorEl.hidden = false;
+      }
+      return;
     }
+    errorEl.hidden = true;
     persistLoop();
     renderTimeline();
   }
@@ -273,12 +280,12 @@ function mountPlayalong(el, api) {
   setStartBtn.addEventListener('click', () => {
     if (!transport) return;
     const loop = transport.getLoop();
-    applyLoop(playheadSeconds(), loop.end);
+    applyLoop(playheadSeconds(), loop.end, 'The loop start has to come before the loop end. Move the playhead earlier, or set the end later first.');
   });
   setEndBtn.addEventListener('click', () => {
     if (!transport) return;
     const loop = transport.getLoop();
-    applyLoop(loop.start, playheadSeconds());
+    applyLoop(loop.start, playheadSeconds(), 'The loop end has to come after the loop start. Move the playhead later, or set the start earlier first.');
   });
 
   speedInput.addEventListener('input', () => {
