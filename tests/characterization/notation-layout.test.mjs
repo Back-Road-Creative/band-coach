@@ -76,3 +76,23 @@ for (const mod of ['voice', 'kbd']) {
     if (mod === 'kbd') assert.ok(s.keyTop >= s.H * band, `the keys start below the staff band (keys at ${s.keyTop}, H ${s.H})`);
   });
 }
+
+// Show = Staff must not shrink the keyboard below the 24 CSS px tap floor
+// (README "Phone-sized windows"): measured on the same four phone windows as
+// the release tap suite, smallest white and black key height in CSS px.
+for (const [w, h] of [[320, 568], [390, 844], [844, 390], [640, 400]]) {
+  test(`kbd ${w}x${h}: Show = Staff keeps every white key at least 24 CSS px tall`, async (t) => {
+    const page = await launchPage(HTML_PATH);
+    t.after(() => page.close());
+    await page.setViewport({ width: w, height: h, mobile: true, deviceScaleFactor: 2 });
+    await page.evaluate("window.__coach.setMod('kbd')");
+    await page.evaluate("document.getElementById('playBtn').click()");
+    await page.waitFor('window.__coach.task()');
+    await page.evaluate("window.__coach.setNotate('staff')");
+    await page.waitFor('window.__coach.lastStaff() !== null', 5000);
+    await page.evaluate('new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())))');
+    const m = await page.evaluate(`(function () { var c = document.getElementById('cv'), d = c.width / c.getBoundingClientRect().width, k = window.__coach.kbdKeys(); return { white: Math.min.apply(null, k.filter(function (x) { return !x.black; }).map(function (x) { return x.h / d; })), black: Math.min.apply(null, k.filter(function (x) { return x.black; }).map(function (x) { return x.h / d; })), n: k.length }; })()`);
+    assert.ok(m.n > 0 && m.white >= 24, 'white keys >= 24 CSS px: ' + JSON.stringify(m));
+    assert.ok(m.black >= 0.6 * 24, 'black keys keep their usual 0.62 share of a white key: ' + JSON.stringify(m));
+  });
+}
