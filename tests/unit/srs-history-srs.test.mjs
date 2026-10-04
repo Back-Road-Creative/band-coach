@@ -124,3 +124,21 @@ test('migrateItem: default stability is the same as the old fixed half-life, unt
   const migrated = migrateItem({ m: 0.4, n: 0, last: 0, seen: 0 }, NOW);
   assert.equal(migrated.stability, DEFAULT_STABILITY_DAYS);
 });
+
+test('review: repeated successes within one sitting grow stability once, not per note', () => {
+  let item = { stability: 10, difficulty: 0.3, lastSeen: NOW - 2 * DAY, reps: 2, lapses: 0 };
+  item = review(item, { grade: GRADE.GOOD, now: NOW });
+  const afterFirst = item.stability;
+  assert.ok(afterFirst > 10);
+  for (let i = 0; i < 30; i++) item = review(item, { grade: GRADE.GOOD, now: NOW });
+  assert.equal(item.stability, afterFirst, 'same-sitting reviews must not compound stability');
+  assert.equal(item.reps, 33);
+  assert.ok(item.stability < 3650, 'must not saturate at the cap after one drill');
+});
+
+test('review: a first-ever review still grows, and the next day grows again', () => {
+  const first = review({ stability: 10, lastSeen: NOW, reps: 0, lapses: 0 }, { grade: GRADE.GOOD, now: NOW });
+  assert.ok(first.stability > 10);
+  const next = review(first, { grade: GRADE.GOOD, now: NOW + DAY });
+  assert.ok(next.stability > first.stability);
+});

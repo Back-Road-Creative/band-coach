@@ -70,7 +70,7 @@ function describeFretboard(midi, positions, tuning, capo) {
   const parts = positions.map(p => {
     const openName = noteName(tuning[p.stringIndex] + capo);
     const where = p.fret === 0 ? 'open' : 'fret ' + p.fret;
-    return 'string ' + (p.stringIndex + 1) + ' (' + openName + '), ' + where;
+    return 'string ' + (tuning.length - p.stringIndex) + ' (' + openName + '), ' + where;
   });
   const capoNote = capo > 0 ? ' (frets counted from the capo at fret ' + capo + ')' : '';
   return name + ': ' + parts.join('; or ') + '.' + capoNote;
@@ -90,7 +90,7 @@ function describeFingerboard(midi, positions, tuning) {
     const where = p.fret === 0
       ? 'open string'
       : p.fret + ' semitone' + (p.fret > 1 ? 's' : '') + ' up (no frets — find it by ear or hand position)';
-    return 'string ' + (p.stringIndex + 1) + ' (' + openName + '), ' + where;
+    return 'string ' + (tuning.length - p.stringIndex) + ' (' + openName + '), ' + where;
   });
   return name + ': ' + parts.join('; or ') + '.';
 }

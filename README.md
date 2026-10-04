@@ -299,8 +299,8 @@ restoring one brings both back — a restore replaces your progress and songs to
 songs in the backup cannot be stored on this device, nothing changes: your current progress and
 songs are left exactly as they were. An older backup made before songs were included still restores —
 it just has no songs to bring back. A backup file that is damaged or was written by a newer Band
-Coach is refused with a message explaining why, and your current progress is left untouched. A quiet reminder appears once you have actually practised a
-while without one — never on a fresh profile, since there is nothing yet to lose. The "My progress" panel also shows a practice calendar (minutes and
+Coach is refused with a message explaining why (in the language you chose), before any "replace your progress" question is asked, and your current progress is left untouched. A quiet reminder appears at the end of a session long enough to be logged (8 answers or more) when you have not saved a
+backup in the last week — never after a session too short to log, since there is nothing yet to lose. The "My progress" panel also shows a practice calendar (minutes and
 level changes, one cell per day, for the last 8 weeks) and a daily minutes goal with a streak — the
 practice log itself only keeps the most recent 60 sessions, so days older than that say "earlier
 sessions not kept" rather than a false zero. "Print this week's report" turns the last 7 days into a
@@ -460,7 +460,13 @@ opening straight into the Songs panel with the phrase-by-phrase lesson a whole i
 path: it keeps only the pitch of each note heard, in order, dropping how long each note was held
 and how far apart they came, and loads that note list (capped at 300 notes) as the "Practise my
 captured melody" custom drill on whichever instrument you pick, four notes at a time, the same
-repeat-until-clean chunking a built-in curriculum level uses.
+repeat-until-clean chunking a built-in curriculum level uses. Starting that drill keeps its own coach
+line (not the level plan, since a captured-melody drill is a warm-up that does not count).
+
+Listen needs a connected microphone: without one it does not start, and says to connect first. The
+"N notes" count updates while you play. Every message here ("Nothing captured yet.", a failed save)
+shows in the feedback card, which the Capture tool keeps visible. Pressing "Make it a lesson" again
+on the same capture re-opens the song it already saved instead of adding another copy.
 
 ## Songs
 
@@ -648,6 +654,13 @@ becomes a short repair on just the single worst note (`repairFor()` in `src/core
 instead of a third run at the whole phrase; passing that one note returns to the original step
 where it left off. A repair try is logged as guided assistance, not independent evidence — it is
 a redo of a note the step already failed on, not a fresh, unaided attempt.
+
+A song you saved can be removed again: each of your own rows in the library has a "Remove" button
+that asks "Remove ... for good?" first (Yes, remove it / Keep it); removing it also clears its
+Draft/Checked label. The built-in starter tunes have no Remove button. A notation file with no
+notes in it (an empty or header-only `.abc`) is refused with a plain message instead of being
+saved, and a notation import is never labelled "Original recording not kept", since it never had
+a recording.
 
 The lesson follows the whole teaching loop (`src/core/teaching.js`: explain, demo, guided, check,
 repair, transfer), moving between its phases with `nextPhase()`. In Learn mode, pressing Next on a
@@ -1106,7 +1119,7 @@ higher- or lower-keyed harp is not silently mis-heard.
 
 Draw and blow bends — a reed pulled down in pitch with your breath — are new practice levels
 appended after the nine open-note levels, so an existing learner's saved level numbers do not
-shift. A bend is graded by its exact bent pitch, the same way an open note is graded by its own
+shift. A bend is graded by its exact bent pitch, and the on-screen prompt names the bend ("Draw 3 ↓2"), so what you are told to play is what is graded. An open note is graded by its own
 pitch. Bend availability (which holes bend, and how deep) does not change with key, since
 transposing the whole harmonica preserves the blow/draw gap inside every hole.
 

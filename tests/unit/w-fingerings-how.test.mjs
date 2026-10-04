@@ -89,7 +89,14 @@ test('fretboard: open low E string on guitar', () => {
   assert.equal(how.kind, 'fretboard');
   assert.equal(how.playable, true);
   assert.deepEqual(how.positions[0], { stringIndex: 0, displayIndex: 0, fret: 0 });
-  assert.match(how.description, /string 1 \(E2\), open/);
+  assert.match(how.description, /string 6 \(E2\), open/); // 1 = highest, like the hint and tuner
+});
+
+test('fretboard/fingerboard: strings are numbered 1 = highest, matching the hint and tuner', () => {
+  assert.match(computeHow(gtr, 64).description, /string 1 \(E4\), open/);
+  assert.match(computeHow(uke, 67).description, /string 4 \(G4\), open/); // re-entrant G is string 4
+  assert.match(computeHow(violin, 55).description, /string 4 \(G3\), open string/);
+  assert.match(computeHow(violin, 76).description, /string 1 \(E5\), open string/);
 });
 
 test('fretboard: a note off the neck (below every open string) is unplayable', () => {
