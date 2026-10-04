@@ -590,8 +590,9 @@
     .main:has(#howPeekHost:not([hidden])) #coach { font-size: 13px; line-height: 1.25; min-height: 0; }
     .main:has(#howPeekHost:not([hidden])) #feedbackCard > .eyebrow { display: none; }
     body:has(#howPeekHost:not([hidden])) .setup-sheet { padding: 6px 10px; gap: 6px 10px; margin-top: 0; }
-    body:has(#howPeekHost:not([hidden])) .setup-sheet > label[for="micDeviceSelect"] { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); }
-    body:has(#howPeekHost:not([hidden])) .setup-sheet > #micDeviceSelect { flex: 1 1 0; min-width: 0; }
+    body:has(#howPeekHost:not([hidden])) .setup-sheet label[for="micDeviceSelect"] { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); }
+    body:has(#howPeekHost:not([hidden])) .setup-sheet .setup-pair:has(> #micDeviceSelect) { flex: 1 1 0; min-width: 0; }
+    body:has(#howPeekHost:not([hidden])) .setup-sheet #micDeviceSelect { flex: 1 1 0; min-width: 0; }
     body:has(#howPeekHost:not([hidden])) #calibrateResult { flex: 1 1 100%; line-height: 1.2; }
     /* Show = Staff on the keyboard needs room for the grand staff above keys that stay at the 24px tap floor. */
     #cv.staffkbd { aspect-ratio: 16 / 10; }
