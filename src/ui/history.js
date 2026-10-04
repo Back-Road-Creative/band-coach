@@ -68,7 +68,7 @@ function calendarHtml(l) {
   const [y, m, dd] = l.days[0].day.split('-').map(Number);
   const wd = new Date(y, m - 1, dd).getDay();
   const heads = Array.from({ length: 7 }, (_, i) => `<span class="ledger-weekday">${['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][(wd + i) % 7]}</span>`).join('');
-  return `${banner}<div class="ledger-weekdays" aria-hidden="true">${heads}</div><div class="ledger-grid" role="img" aria-label="Practice calendar, last ${l.weeks} weeks">${cells}</div><p class="ledger-legend">Newest day is the last square. A dark outline means that day reached your ${l.goalMin}-minute goal; a darker fill means more minutes.</p>`;
+  return `${banner}<div class="ledger-weekdays" aria-hidden="true">${heads}</div><div class="ledger-grid" role="img" aria-label="Practice calendar, last ${l.weeks} weeks">${cells}</div><p class="ledger-legend">Newest day is the last square. An outlined square means that day reached your ${l.goalMin}-minute goal; a darker fill means more minutes.</p>`;
 }
 
 /** Renders a weeklyReport() result (src/core/history.js) into the printable
