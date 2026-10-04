@@ -2662,14 +2662,14 @@ import { register as registerPathway } from './ui/pathway.js';
   // plain, always-visible group now, not a shut-by-default <details> -- once
   // the instrument sheet itself is open (setInstrumentSheetOpen), everything
   // inside it, tools included, is visible with no second disclosure to find.
-  function buildPickerButton(m, o) { const b = document.createElement('button'); b.type = 'button'; b.dataset.mod = m; b.style.setProperty('--c', o.color); b.setAttribute('aria-pressed', 'false'); b.appendChild(document.createTextNode(o.name)); const sm = document.createElement('small'); sm.textContent = o.tag; b.appendChild(sm); b.addEventListener('click', () => { b.blur(); closePanel(); pickerAsSheet = true; setMod(m); setInstrumentSheetOpen(false); }); return b; }
+  function buildPickerButton(m, o) { const b = document.createElement('button'); b.type = 'button'; b.dataset.mod = m; b.style.setProperty('--c', o.color); b.setAttribute('aria-pressed', 'false'); b.appendChild(document.createTextNode(o.name)); const sm = document.createElement('small'); sm.textContent = o.tag; b.appendChild(sm); b.addEventListener('click', () => { b.blur(); closePanel(); pickerAsSheet = true; setMod(m); setInstrumentSheetOpen(false); if (document.activeElement === document.body) focusNavInstrument(); }); return b; }
   // A panel tool button (Ear training / How to play it / Music theory)
   // shares buildPickerButton's look (--c colour dot, <small> tag line) but
   // opens a registered panel instead of selecting a mod, and shuts the
   // instrument sheet on click exactly like picking an instrument does --
   // both leave the learner looking at what they just chose, not an empty
   // sheet still hanging open behind it.
-  function buildPanelToolButton(p) { const b = document.createElement('button'); b.type = 'button'; b.dataset.panel = p.id; b.style.setProperty('--c', p.color || '#93a0bd'); b.setAttribute('aria-pressed', 'false'); b.appendChild(document.createTextNode(p.name)); const sm = document.createElement('small'); sm.textContent = p.tag || ''; b.appendChild(sm); b.addEventListener('click', () => { b.blur(); openPanel(p.id); setInstrumentSheetOpen(false); }); return b; }
+  function buildPanelToolButton(p) { const b = document.createElement('button'); b.type = 'button'; b.dataset.panel = p.id; b.style.setProperty('--c', p.color || '#93a0bd'); b.setAttribute('aria-pressed', 'false'); b.appendChild(document.createTextNode(p.name)); const sm = document.createElement('small'); sm.textContent = p.tag || ''; b.appendChild(sm); b.addEventListener('click', () => { b.blur(); openPanel(p.id); setInstrumentSheetOpen(false); focusPanelHeading(); }); return b; }
   // U2: children[parentId] lists the variant ids grouped under it, built
   // from VARIANT_PARENTS rather than a second hand-written map, so the two
   // stay impossible to drift apart.
@@ -2700,8 +2700,14 @@ import { register as registerPathway } from './ui/pathway.js';
     const box = $('picker'); if (box) box.hidden = !open;
     const btn = $('navInstrument'); if (btn) btn.setAttribute('aria-expanded', String(open));
   }
+  // Closing the sheet hides the button that had focus, which would drop focus to <body>: put it on the nav Instrument button (where the sheet opened from) instead.
+  function focusNavInstrument() { const b = $('navInstrument'); if (b) b.focus(); }
+  // A tool panel (Ear training / How to play it / Music theory) opened from the sheet announces itself the way the nav screens do (F2): focus lands on its heading.
+  function focusPanelHeading() { const h = $('panelHost').querySelector('h2'); if (h) { if (!h.hasAttribute('tabindex')) h.tabIndex = -1; h.focus(); } else focusNavInstrument(); }
   function buildPicker() {
     const box = $('picker'), instrumentIds = MOD_IDS.filter(m => TOOL_MOD_IDS.indexOf(m) < 0), toolIds = TOOL_MOD_IDS.concat(Object.keys(TOOLS)), children = variantChildrenByParent();
+    // Escape closes the sheet from anywhere inside it and puts focus back on the nav Instrument button (the other dismissible surfaces -- panels, the break card -- already do).
+    box.addEventListener('keydown', ev => { if (ev.key === 'Escape' && !ev.defaultPrevented && !box.hidden) { ev.preventDefault(); setInstrumentSheetOpen(false); focusNavInstrument(); } });
     // Each variant family renders as ONE top-level control (the parent
     // button, always visible and independently selectable -- e.g. "Ukulele"
     // still reaches mod 'uke') plus a quiet <details> disclosure beside it
@@ -2858,7 +2864,7 @@ import { register as registerPathway } from './ui/pathway.js';
   // ---------- feature panels (src/ui/panels.js): learn, songs, ear, theory, history, fingerings, play-along ----------
   // A panel unit registers ONE panel by replacing its own slot:panel line
   // below; everything it needs from the app goes through panelApi.
-  const panels = createPanels();
+  const panels = createPanels({ onEscape: () => { closePanel(); const nb = $('navInstrument'); if (document.activeElement === document.body && nb) nb.focus(); } });
   const panelApi = {
     db: () => DB, save: save, mod: () => mod, setMod: m => { closePanel(); setMod(m); }, instrument: id => instrumentById[id || mod],
     audio: () => { ensureAudio(); return actx; }, openMic: openMic, analysers: () => ({ time: anTime, freq: anFreq }), gates: () => gates,
