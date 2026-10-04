@@ -2520,6 +2520,7 @@ function mountSongsPanel(hostEl, api) {
     renderChallenge(challenge);
     await refreshList();
     // The challenge list sits under the whole library, far below the message: bring it on screen (guarded like the song-heading scroll).
+    libraryDetails.open = true; // an open lesson folds the library; a collapsed <details> would hide the list
     if (typeof challengeSection.scrollIntoView === 'function') challengeSection.scrollIntoView({ block: 'start' });
     return;
   }
