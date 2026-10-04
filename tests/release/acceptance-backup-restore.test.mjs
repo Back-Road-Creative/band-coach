@@ -257,7 +257,7 @@ test('A09 T4: a restore that cannot be saved says so instead of "Backup restored
     assert.equal(await textOf(page, 'levelNum'), 'Level 10');
     await waitStoredLevel(page, 10);
     const saved = await saveBackup(t, page);
-    await page.clickSelector('#resetBtn');
+    assert.deepEqual(await clickReset(page, 'accept'), [RESET_CONFIRM]);
     await waitStoredLevel(page, 1);
     const before = await storedRaw(page);
     t.diagnostic(`stored profile before the restore: ${before.length} characters; the Level 10 backup's profile: ${JSON.stringify(JSON.parse(saved.text).db).length} characters`);
