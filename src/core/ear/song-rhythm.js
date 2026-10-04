@@ -9,7 +9,7 @@
 // sight-reading exercise: the song title is part of the prompt up front.
 
 import { makeRng, pickFrom, intRange } from './rng.js';
-import { check as rhythmCheck } from './rhythm-dictation.js';
+import { check as rhythmCheck, beatsText } from './rhythm-dictation.js';
 import { METRES, validateBar } from '../rhythm.js';
 import { barsOf, notesInBar } from '../../song/model.js';
 import { starterMelodies } from '../../song/starter/index.js';
@@ -108,6 +108,6 @@ export function make(level, seed, { songs = starterMelodies } = {}) {
     play,
     choices: [],
     answer: onsets,
-    explain: `Onsets in ticks (480/quarter): ${onsets.join(', ')}. From "${song.title}".`,
+    explain: `Taps on beats: ${beatsText(onsets)}. From "${song.title}".`,
   };
 }

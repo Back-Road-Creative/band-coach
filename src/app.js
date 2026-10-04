@@ -24,7 +24,7 @@ import { yin } from './audio/yin.js';
 import { createPitchNode } from './audio/pitch-worklet.js';
 //
 import { gatesFor, meterLevel, releaseFloor, classifyRoomCheck, ROOM_CHECK_VERSION, MIN_FLOOR, QUIET_RELEASE_SEC } from './audio/levels.js';
-import { diagnoseInput } from './audio/input-diagnosis.js';
+import { diagnoseInput, stepDiagnosis } from './audio/input-diagnosis.js';
 import { createOnsetDetector } from './audio/onset.js';
 import { createDrumClassifier } from './audio/drum-classify.js';
 //
@@ -418,7 +418,7 @@ import { register as registerPathway } from './ui/pathway.js';
     });
     return { frames, fresh: gen === micGen };
   }
-  const roomQuietOrNoisy = f => f < 0.003 ? 'Your room is quiet.' : 'There\'s a lot of background noise — move closer to the mic.';
+  const ROOM_QUIET_BELOW = 0.003, roomQuietOrNoisy = f => f < ROOM_QUIET_BELOW ? 'Your room is quiet.' : 'There\'s a lot of background noise — move closer to the mic.';
   const ROOM_NO_READING = 'Could not get a reading from the microphone, so the standard settings are in use. Press "Check my microphone" to try again.';
   const ROOM_ERROR = 'Something went wrong while listening to the microphone, so the standard settings are in use. Press "Check my microphone" to try again.'; // a throw inside listenRoom: kept apart from "no audio arrived" so the two can be told apart
   function storeRoomFloor(f) { DB.prefs.noiseFloor = f; DB.prefs.noiseFloorV = ROOM_CHECK_VERSION; applyGates(gatesFor(f)); save(); }
@@ -1082,7 +1082,7 @@ import { register as registerPathway } from './ui/pathway.js';
   // of silent / too-quiet / unclear-chord is actually happening, instead of
   // saying nothing at all. diagLastState tracks the last state a message was
   // shown for so a held state doesn't re-say the same line every frame.
-  let diagInputFrames = [], diagLastState = null;
+  let diagInputFrames = [], diagLastState = null, diagSince = null, diagShown = null, diagBefore = ''; // diagSince: when this run of listening began; diagShown/diagBefore: the warning on the coach line and the line it replaced
   const DIAG_WINDOW_SEC = 1.5;
 
   function playRef(t) {
@@ -1099,7 +1099,7 @@ import { register as registerPathway } from './ui/pathway.js';
     else if (t.kind === 'bar') { p = 'Read it, then <b>tap it</b>'; h = 'Four clicks to get ready, then tap the bar in time.'; startBar(); }
     else if (t.kind === 'bar2') { p = 'Read it, then <b>tap it</b>'; h = 'Listen for the count-in, then tap the bar (or bars) in time.'; startBar2(); }
     else if (t.kind === 'kit') { p = 'Read it, then <b>play it</b>'; h = (t.kit.bar.tip ? t.kit.bar.tip + ' ' : '') + 'Listen for the count-in, then play the bar on the drums it shows.'; startKitBar(); }
-    else if (t.kind === 'groove') { p = 'Get ready — <b>play it in time</b>'; h = 'Four clicks to count in, then play each note on the beat.'; startGroove(); }
+    else if (t.kind === 'groove') { p = 'Play ' + t.els.map(el => promptFor(el.info, el.reveal)).join(' → ') + ' — <b>in time</b>'; h = 'Four clicks to count in, then play each note on the beat.'; startGroove(); }
     else { const verb = mod === 'voice' ? 'Sing' : 'Play'; p = verb + ' ' + t.els.map((el, k) => (k === t.idx ? '<b>' : '') + promptFor(el.info, el.reveal) + (k === t.idx ? '</b>' : '')).join(' → '); if (t.kind === 'hold') p = (mod === 'voice' ? 'Hold ' : 'Hold ') + '<b>' + e.info.label + '</b> for two seconds'; h = hintFor(e); playRef(t); }
     $('prompt').innerHTML = p; $('hint').textContent = (t.warm ? 'Warm-up, does not count. ' : '') + h; updateDesc(); updateHowPeek();
   }
@@ -1134,7 +1134,7 @@ import { register as registerPathway } from './ui/pathway.js';
   function refreshPrompt() { if (!task || task.kind === 'ear' || task.kind === 'bar' || task.kind === 'hold') return; const verb = mod === 'voice' ? 'Sing' : 'Play'; $('prompt').innerHTML = verb + ' ' + task.els.map((el, k) => (k === task.idx ? '<b>' : '') + promptFor(el.info, el.reveal) + (k === task.idx ? '</b>' : '')).join(' → '); const e = cur(); if (e) $('hint').textContent = (task.warm ? 'Warm-up, does not count. ' : '') + hintFor(e); updateDesc(); updateHowPeek(); }
   // text mirror of the canvas for the visually-hidden #cvDesc element (unit 7.7 item 1):
   // revealed mirrors the current element's own reveal/failed flag, never invents one.
-  function updateDesc() { const el = $('cvDesc'); if (!el) return; const e = cur(); const revealed = task && task.kind === 'ear' ? !!task.revealed : !!(e && (e.reveal || e.failed)); el.textContent = task && task.kind === 'kit' ? 'Drum kit, ' + task.kit.name + ': ' + task.kit.bar.hits.map(h => (h.flam ? 'a flam on ' : '') + h.pieces.map(kitName).join(' with ')).join(', then ') + '. Play it after the count-in.' : describeTask(task, { revealed: revealed, fretless: !!MODS[mod].fretless }); }
+  function updateDesc() { const el = $('cvDesc'); if (!el) return; if (task && task.kind === 'groove') { el.textContent = 'Play in time: ' + task.els.map(x => promptFor(x.info, x.reveal)).join(', ') + '. Four clicks to count in, then play each note on the beat.'; return; } const e = cur(); const revealed = task && task.kind === 'ear' ? !!task.revealed : !!(e && (e.reveal || e.failed)); el.textContent = task && task.kind === 'kit' ? 'Drum kit, ' + task.kit.name + ': ' + task.kit.bar.hits.map(h => (h.flam ? 'a flam on ' : '') + h.pieces.map(kitName).join(' with ')).join(', then ') + '. Play it after the count-in.' : describeTask(task, { revealed: revealed, fretless: !!MODS[mod].fretless }); }
   // "How to play this" peek (C1a): the SAME Fingerings-panel diagram Songs'
   // own inline expander shows for a lesson step (renderHowInline, src/ui/
   // fingerings.js), dropped beside the active note here instead. Never
@@ -1170,6 +1170,7 @@ import { register as registerPathway } from './ui/pathway.js';
     const e = cur(); e.rt = now() - e.t0; e.q = e.failed ? 0 : timeQ(e.rt, task.limit) * (extraQ === undefined ? 1 : extraQ); if (assistance) e.assistance = assistance; if (typeof input === 'string') e.input = input; flashGood = performance.now(); lastInputAt = now();
     if (!e.failed && !e.helped) say(msg || (inf(e.id).short + ': yes, in ' + e.rt.toFixed(1) + ' s.'), 'ok'); else say('That is the one. ' + inf(e.id).short + (e.info.string ? ' lives on string ' + e.info.string + (e.info.fret ? ', fret ' + e.info.fret : ', open') : '') + '.', '');
     task.idx++; held = []; holdFor = 0; holdCents = []; wrongFor = 0;
+    if (diagShown && $('coach').textContent === diagShown) { coach(diagBefore); } diagInputFrames = []; diagLastState = null; diagSince = null; diagShown = null; // a pass starts the listening afresh: no warning left beside it
     if (task.idx >= task.els.length) finishTask(); else { cur().t0 = now(); refreshPrompt(); }
   }
   function failEl(msg, confKey) { const e = cur(); if (!e) return; if (!e.failed) { e.failed = true; e.reveal = true; } if (confKey) S.conf[confKey] = (S.conf[confKey] || 0) + 1; flashBad = performance.now(); say(msg, 'no'); updateDesc(); }
@@ -1431,9 +1432,13 @@ import { register as registerPathway } from './ui/pathway.js';
       // pluck/sustain both judge a note against gates.note (not gates.pitch)
       // below, so the diagnosis must use the same threshold or it could call
       // "too-quiet" a signal onPitch itself would already have judged.
-      const diag = diagnoseInput(diagInputFrames, { gates: { pitch: gates.note } });
-      if (diag.state !== 'insufficient' && diag.state !== diagLastState) { diagLastState = diag.state; if (diag.message) coach(diag.message); }
-    } else { diagInputFrames = []; diagLastState = null; }
+      const diag = diagnoseInput(diagInputFrames, { gates: { pitch: gates.note }, quietRoom: DB.prefs.noiseFloor > 0 && DB.prefs.noiseFloor < ROOM_QUIET_BELOW }); // a measured quiet room that has not been played in is not a dead mic
+      // stepDiagnosis() holds back a silent/too-quiet verdict for the first moments of listening, and says when clean notes should take a warning down; the line it replaced is put back.
+      if (diagSince === null || diag.state === 'ok') diagSince = now(); // the quiet-room grace counts from the last clean note, so a note that has just rung out is not called silence
+      const step = stepDiagnosis(diag, diagLastState, { sinceSec: now() - diagSince }); diagLastState = step.last;
+      if (step.say) { if ($('coach').textContent !== diagShown) diagBefore = $('coach').textContent; diagShown = step.say; coach(step.say); }
+      else if (step.clear && diagShown && $('coach').textContent === diagShown) { coach(diagBefore); diagShown = null; }
+    } else { diagInputFrames = []; diagLastState = null; diagSince = null; diagShown = null; }
     if (M.input === 'pluck') {
       // F8: an onset detector (src/audio/onset.js) catches a re-pluck of the
       // SAME note on a still-ringing string, which the RMS-drop/pitch-change
@@ -2003,11 +2008,12 @@ import { register as registerPathway } from './ui/pathway.js';
       g.fillText(nname(e.info.midi), x0, band ? H * (staffBandH(mod, H) - 0.02) : y0 + H * 0.34);
     }
   }
+  let kbdTargetDbg = []; // last keyboard target list drawn (debug hook only)
   function draw() {
     cv.classList.toggle('staffkbd', staffBand('kbd') && mod === 'kbd'); size(); const W = cv.width, H = cv.height; g.clearRect(0, 0, W, H); rowRects = []; keyRects = []; kbdOverviewRect = null;
     if (TOOLS[mod]) { if (mod === 'tuner') drawTuner(W, H); else drawCapture(W, H); return; }
     const M = MODS[mod], e = playing && task && !task.done ? cur() : null, showE = e || (task && task.done ? task.els[task.els.length - 1] : null);
-    if (mod === 'kbd') { const kr = kbdRange(), sb = staffBand('kbd'), oy = sb ? H * staffBandH('kbd', H) : 0, Hk = sb ? H * (1 - staffBandH('kbd', H)) : H; const tg = []; let rhMidi = null, lhMidi = null; if (e) { if (e.info.kind === 'chord') { if (e.reveal || e.failed) e.info.pcs.forEach(x => tg.push(60 + x)); } else if (e.info.kind === 'hands-together') { if (e.reveal || e.failed) { tg.push(e.info.ex.rh.midi, e.info.ex.lh.midi); rhMidi = e.info.ex.rh.midi; lhMidi = e.info.ex.lh.midi; } } else if (e.reveal || e.failed) tg.push(e.info.midi); } const good = performance.now() - flashGood < 300 && task ? task.els.slice(0, task.idx).map(x => x.info.midi).filter(x => x) : []; const kOpts = { target: tg, good: good, names: DB.prefs.names, rhMidi: rhMidi, lhMidi: lhMidi };
+    if (mod === 'kbd') { const kr = kbdRange(), sb = staffBand('kbd'), oy = sb ? H * staffBandH('kbd', H) : 0, Hk = sb ? H * (1 - staffBandH('kbd', H)) : H; const tg = []; let rhMidi = null, lhMidi = null; if (e && !(task.kind === 'groove')) { if (e.info.kind === 'chord') { if (e.reveal || e.failed) e.info.pcs.forEach(x => tg.push(60 + x)); } else if (e.info.kind === 'hands-together') { if (e.reveal || e.failed) { tg.push(e.info.ex.rh.midi, e.info.ex.lh.midi); rhMidi = e.info.ex.rh.midi; lhMidi = e.info.ex.lh.midi; } } else if (e.reveal || e.failed) tg.push(e.info.midi); } if (task && task.kind === 'groove' && !task.done) task.els.forEach(x => { if (x.info.midi && (x.reveal || x.failed)) tg.push(x.info.midi); }); kbdTargetDbg = tg; const good = performance.now() - flashGood < 300 && task ? task.els.slice(0, task.idx).map(x => x.info.midi).filter(x => x) : []; const kOpts = { target: tg, good: good, names: DB.prefs.names, rhMidi: rhMidi, lhMidi: lhMidi };
       if (kr[0] === 48) {
         // item B2 (Wave kbd): once the octave below is unlocked (level 8+, or
         // a custom captured melody below middle C) a single 15-white-key strip
@@ -2147,6 +2153,7 @@ import { register as registerPathway } from './ui/pathway.js';
     if (!customOn && mod === 'kbd' && sessionPlan.some(b => b.kind === 'song')) { const entry = songFor(S.level); if (entry && !isReviewCurrent(itemReview(entry.id, contentRev(entry)))) { const s = starterSongs.find(x => x.id === entry.songId); msg += ' ' + (s ? s.title : entry.songId) + ': ' + t('review.unreviewed'); } }
     // Start is a choice of the instrument on screen: shut the sheet and own the label, so the exercise is on screen.
     pickerAsSheet = true; setInstrumentSheetOpen(false); updateNavInstrumentLabel();
+    diagInputFrames = []; diagLastState = null; diagSince = null; diagShown = null; // a new sitting starts the mic diagnosis afresh
     playing = true; paused = false; $('playBtn').textContent = 'Pause'; $('endBtn').hidden = false; coach(msg); showAll(); wakeLock.acquire();
   }
   // logSession(): a panel (e.g. a song lesson) logs its own practice as a
@@ -2176,7 +2183,7 @@ import { register as registerPathway } from './ui/pathway.js';
     if (!sess) return; const min = sess.active / 60; let line = 'Session ended. Too short to log.';
     if (sess.judged >= 8) { DB.sessions.push({ d: today(), mod: mod, min: Math.round(min * 10) / 10, acc: sess.ok / sess.judged, a1: mean(sess.first), a2: mean(sess.last), from: sess.from, to: S.level, breaks: sess.breaks }); DB.sessions = DB.sessions.slice(-60);
       let up = null, low = null, lowR = 1; Object.keys(S.item).forEach(id => { const cur = S.item[id], r1 = retrievability(cur, modelNow), r0 = retrievability(sess.m0[id] || cur, modelNow), g0 = r1 - r0; if (up === null || g0 > up.g) up = { id: id, g: g0 }; if (cur.reps >= 3 && (low === null || r1 < lowR)) { low = id; lowR = r1; } });
-      line = 'Session done: ' + Math.round(min) + ' min, ' + Math.round(100 * sess.ok / sess.judged) + '% right, best streak ' + sess.bestStreak + ', level ' + sess.from + ' to ' + S.level + '.' + (up && up.g > 0.05 ? ' Most improved: ' + inf(up.id).short + '.' : '') + (low ? ' Next time starts with extra ' + inf(low).short + '.' : ''); }
+      line = 'Session done: ' + Math.round(min * 10) / 10 + ' min, ' + Math.round(100 * sess.ok / sess.judged) + '% right, best streak ' + sess.bestStreak + ', level ' + sess.from + ' to ' + S.level + '.' + (up && up.g > 0.05 ? ' Most improved: ' + inf(up.id).short + '.' : '') + (low ? ' Next time starts with extra ' + inf(low).short + '.' : ''); }
     if (sess.judged >= 8 && Date.now() - lastBackupAt > 7 * 86400000) showBackupNudge('You have been practising a while. Save a backup, just in case.');
     sess = null; playing = false; paused = false; task = null; bar = null; breakTrap.deactivate(); $('breakCard').hidden = true; $('playBtn').textContent = 'Start'; $('endBtn').hidden = true; $('choices').hidden = true; $('prompt').textContent = ''; $('hint').textContent = ''; coach(line); save(); showAll(); wakeLock.release();
   }
@@ -2273,14 +2280,14 @@ import { register as registerPathway } from './ui/pathway.js';
     if (action === 'finish') { handleRangeTest('flush'); const range = estimateRange(rangeTest.samples); rangeTest = null; if (!range) { coach("I didn't catch a held note either time -- make sure the mic is connected, sing clearly and hold each note for at least half a second, then try again."); return; } const clamped = { low: clamp(range.low, 24, 96), high: clamp(range.high, 24, 96) }; DB.prefs.voiceRange = clamped; DB.prefs.voice = 'mine'; task = null; save(); const t = tonicFromRange(exerciseRangeFor(clamped)), hint = classify(clamped); coach(hint.wording + (t.stretch ? ' That is a little under an octave, so the exercises will stretch a bit past what you just sang.' : ' Exercises are set from your range now.')); return; }
   }
   function renderOpts() {
-    const box = $('modOpts'); box.innerHTML = ''; const sel = (id, label, opts, val, on) => { const l = document.createElement('label'); l.htmlFor = id; l.textContent = label + ' '; const s = document.createElement('select'); s.id = id; Object.keys(opts).forEach(k => { const o = document.createElement('option'); o.value = k; o.textContent = opts[k][0]; s.appendChild(o); }); s.value = val; s.addEventListener('change', () => on(s.value)); l.appendChild(s); box.appendChild(l); };
+    const box = $('modOpts'); box.innerHTML = ''; const sel = (id, label, opts, val, on) => { const l = document.createElement('label'); l.htmlFor = id; l.textContent = label + ' '; const s = document.createElement('select'); s.id = id; (Array.isArray(opts) ? opts : Object.keys(opts).map(k => [k, opts[k]])).forEach(([k, v]) => { const o = document.createElement('option'); o.value = k; o.textContent = v[0]; s.appendChild(o); }); s.value = val; s.addEventListener('change', () => on(s.value)); l.appendChild(s); box.appendChild(l); };
     const btn = (id, text, on, primary) => { const b = document.createElement('button'); b.type = 'button'; b.id = id; b.className = 'small' + (primary ? ' primary' : ''); b.textContent = text; b.addEventListener('click', () => { b.blur(); on(); }); box.appendChild(b); return b; };
     const chk = (id, text, val, on) => { const l = document.createElement('label'); l.htmlFor = id; const c = document.createElement('input'); c.type = 'checkbox'; c.id = id; c.checked = val; c.addEventListener('change', () => on(c.checked)); l.appendChild(c); l.appendChild(document.createTextNode(' ' + text)); box.appendChild(l); };
     const noteWithReview = (id, text, reviewId, reviewKey, revValue) => { const note = document.createElement('span'); note.id = id; note.className = 'small'; note.textContent = text; box.appendChild(note); if (!isReviewCurrent(itemReview(reviewKey, contentRev(revValue)))) { const review = document.createElement('span'); review.id = reviewId; review.setAttribute('role', 'note'); review.className = 'small'; review.textContent = t('review.unreviewed'); box.appendChild(review); } };
     // Session length E7c: 5/10/15 minutes or no limit, per DB.prefs.sessionMinutes
     // -- a change takes effect at the next Start, never a running session's
     // sess.target, so it cannot fire a surprise break or cancel one mid-session.
-    if (!TOOLS[mod]) sel('optSessionMinutes', 'Session length', { none: ['No limit'], '5': ['5 minutes'], '10': ['10 minutes'], '15': ['15 minutes'] }, DB.prefs.sessionMinutes ? String(DB.prefs.sessionMinutes) : 'none', v => { DB.prefs.sessionMinutes = v === 'none' ? null : +v; save(); });
+    if (!TOOLS[mod]) sel('optSessionMinutes', 'Session length', [['none', ['No limit']], ['5', ['5 minutes']], ['10', ['10 minutes']], ['15', ['15 minutes']]] /* pairs: integer-like object keys would sort first */, DB.prefs.sessionMinutes ? String(DB.prefs.sessionMinutes) : 'none', v => { DB.prefs.sessionMinutes = v === 'none' ? null : +v; save(); });
     if (NOTATE_MOD_IDS.indexOf(mod) >= 0) sel('optNotate', 'Show', { names: ['Note names (today)'], staff: ['Staff'], both: ['Staff and names'] }, DB.prefs.notate[mod], v => { DB.prefs.notate[mod] = v; save(); });
     if (mod === 'wind') { sel('optWind', 'My instrument', WIND_KINDS, DB.prefs.wind, v => { DB.prefs.wind = v; task = null; save(); }); chk('optRef', 'Play me the note first', false, () => {}); }
     if (mod === 'voice') sel('optVoice', 'My range', Object.assign({}, VOICE_KINDS, DB.prefs.voiceRange ? { mine: ['My range (found by test)', tonicFromRange(exerciseRangeFor(DB.prefs.voiceRange)).tonic] } : {}), DB.prefs.voice, v => { DB.prefs.voice = v; task = null; save(); });
@@ -2652,7 +2659,7 @@ import { register as registerPathway } from './ui/pathway.js';
   window.addEventListener('blur', () => releaseNotes());
   function jump(dl) { const nl = Math.max(1, S.level + dl); if (nl === S.level) return; S.level = nl; S.ready = 0.3; task = null; coach((dl < 0 ? 'Moved down' : 'Skipped ahead') + ' to level ' + S.level + ': ' + D().name + '.'); save(); if (mod === 'kbd') renderOpts(); showAll(); }
   $('easierBtn').addEventListener('click', function () { this.blur(); jump(-1); }); $('harderBtn').addEventListener('click', function () { this.blur(); jump(1); });
-  $('resetBtn').addEventListener('click', function () { this.blur(); if (sess) endSession(); DB.mods[mod] = S = freshModel(); recent = []; streak = 0; coach(t('reset.progressCleared', { name: MODS[mod].name })); save(); showAll(); });
+  $('resetBtn').addEventListener('click', function () { this.blur(); if (!confirm(t('reset.confirm', { name: MODS[mod].name }))) return; if (sess) endSession(); DB.mods[mod] = S = freshModel(); recent = []; streak = 0; coach(t('reset.progressCleared', { name: MODS[mod].name })); save(); showAll(); });
   $('optNames').addEventListener('change', function () { DB.prefs.names = this.checked; save(); });
   // Theme J1: 'system' removes the attribute so styles.css's own
   // prefers-color-scheme media query decides; 'light'/'dark' pin it,
@@ -3087,6 +3094,7 @@ import { register as registerPathway } from './ui/pathway.js';
   if (__DEBUG_HOOK__) Object.assign(hook, { judgeChord: judgeChord, chroma: chroma });
   if (__DEBUG_HOOK__) Object.assign(hook, { groove: () => groove, grooveLast: () => grooveLast, grooveBpm: () => S.grooveBpm, grooveOn: v => { grooveOn = !!v; task = null; groove = null; }, grooveInject: (midi, atAudioTime) => { const fire = () => { if (audioNow() >= atAudioTime) onNote(midi, true); else setTimeout(fire, 4); }; fire(); } });
   //
+  if (__DEBUG_HOOK__) Object.assign(hook, { kbdTarget: () => kbdTargetDbg });
   if (__DEBUG_HOOK__) Object.assign(hook, { showMe: () => $('showMeBtn').click() });
   //
   if (__DEBUG_HOOK__) Object.assign(hook, { midi: () => ({ on: midiOn, ports: midiPorts, log: midiLog.slice(), held: Array.from(realMidiHeld) }), heldNotes: () => noteState.heldPitches() });

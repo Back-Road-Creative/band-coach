@@ -113,7 +113,7 @@ test('melodic dictation: entering the exact heard notes on the on-screen keys gr
   const answer = await page.evaluate('window.__coach.ear().getQuestion().answer');
   for (const midi of answer) {
     await page.evaluate(`(function () {
-      const names = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+      const names = ['C','C♯','D','E♭','E','F','F♯','G','A♭','A','B♭','B']; // the app's default (mixed) spelling
       const pc = (((${midi}) % 12) + 12) % 12, octave = Math.floor((${midi}) / 12) - 1;
       const label = names[pc] + octave;
       const btn = Array.from(document.querySelectorAll('.ear-note-entry button')).find(b => b.textContent === label);
@@ -135,7 +135,7 @@ test('song dictation: entering the exact heard notes grades ok and does not name
   const answer = await page.evaluate('window.__coach.ear().getQuestion().answer');
   for (const midi of answer) {
     await page.evaluate(`(function () {
-      const names = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+      const names = ['C','C♯','D','E♭','E','F','F♯','G','A♭','A','B♭','B']; // the app's default (mixed) spelling
       const pc = (((${midi}) % 12) + 12) % 12, octave = Math.floor((${midi}) / 12) - 1;
       const label = names[pc] + octave;
       const btn = Array.from(document.querySelectorAll('.ear-note-entry button')).find(b => b.textContent === label);
@@ -209,4 +209,40 @@ test('sing it back and chord progressions and scales/inversions panels open with
   }
   assert.deepEqual(page.exceptions, []);
   assert.deepEqual(page.consoleErrors, []);
+});
+
+test('a wrong dictation answer says the expected notes by name, not as MIDI numbers or JSON', async (t) => {
+  const page = await launchPage(htmlPath);
+  t.after(() => page.close());
+  await openEar(page);
+  await selectExercise(page, 'melodic-dictation');
+  await page.waitFor('window.__coach.ear().getQuestion()');
+  const need = await page.evaluate('window.__coach.ear().getQuestion().answer.length');
+  // The lowest key (C3) is never the phrase's note in the C4-ish range, so this is always wrong.
+  for (let i = 0; i < need; i++) await page.evaluate("document.querySelector('.ear-note-entry button').click()");
+  await page.waitFor("document.getElementById('earFeedback').className === 'ear-feedback no'");
+  const fb = await page.evaluate("document.getElementById('earFeedback').textContent");
+  assert.match(fb, /^Not quite\. Expected: [A-G][^,\d]*\d(, [A-G][^,\d]*\d)*\.$/, fb);
+  assert.ok(!/[\[\]]/.test(fb) && !/\b\d{2}\b/.test(fb), fb);
+  assert.ok(!/Notes: \d/.test(await page.evaluate("document.getElementById('earExplain').textContent")));
+});
+
+test('the dictation keys follow the Settings note-naming choice', async (t) => {
+  const page = await launchPage(htmlPath);
+  t.after(() => page.close());
+  await page.evaluate(`(function () {
+    const s = document.getElementById('optNoteSystem'); s.value = 'solfege'; s.dispatchEvent(new Event('change', { bubbles: true }));
+    const a = document.getElementById('optAccidentals'); a.value = 'flats'; a.dispatchEvent(new Event('change', { bubbles: true }));
+  })()`);
+  await openEar(page);
+  await selectExercise(page, 'melodic-dictation');
+  const labels = await page.evaluate("Array.from(document.querySelectorAll('.ear-note-entry button')).map(b => b.textContent).slice(0, 5)");
+  assert.deepEqual(labels, ['Do3', 'Re♭3', 'Re3', 'Mi♭3', 'Mi3']);
+  await page.evaluate("window.__coach.openPanel('theory')");
+  await page.waitFor("document.getElementById('theoryExploreTonic')");
+  const tonics = await page.evaluate("Array.from(document.querySelectorAll('#theoryExploreTonic option')).map(o => o.textContent).slice(0, 4)");
+  // The root list spells both C# and Db, so each keeps its own sign in the chosen system.
+  assert.deepEqual(tonics, ['Do', 'Do♯', 'Re♭', 'Re']);
+  const roots = await page.evaluate("Array.from(document.querySelectorAll('#theoryExploreChordRoot option')).map(o => o.textContent)");
+  assert.ok(roots.includes('Si♭') && !roots.includes('Bb'), roots.join(' '));
 });

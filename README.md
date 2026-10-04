@@ -24,7 +24,7 @@ saved and imported tunes; Progress takes you straight to your practice history. 
 one you're already on does nothing, so it's always safe to press. Instrument is the one place to
 change what you're playing: it names your current instrument (or invites you to choose one the
 first time) and opens the full instrument list as a sheet; picking one closes the sheet again.
-Settings gathers everything you rarely touch — theme, note naming, backups, reset, update checks
+Settings gathers everything you rarely touch — theme, note naming, backups, reset (it asks before clearing an instrument's progress), update checks
 and the "How this works" explainer — in one plain screen, away from the controls you use every
 practice session.
 
@@ -70,6 +70,7 @@ of quiet and tunes the listening thresholds to your room and hardware instead of
 one-size-fits-all level, including the level the pitch detector itself gates on; a small meter
 shows the live input level. An instrument plugged into only one channel of a 2-channel interface
 is summed into the listening path rather than silenced.
+While you practise, the coach line says why nothing is being judged: "not hearing anything" or "too quiet to judge" only after about 4 seconds of quiet, counted from the start or from your last clean note (you may still be getting ready, or a note may still be ringing out), and "a chord" as soon as it hears one. In a room the check measured as quiet, an unplayed mic is simply waiting for you, so those two lines are not shown until a sound loud enough to judge arrives and is still not a clean note. The moment a clean single note is heard, that warning comes down and the line it replaced comes back.
 
 Both checks say what they are doing and what they heard in the line beside the button ("Checking the
 room — stay quiet", then "Your room is quiet." or a background-noise warning). If you start playing
@@ -341,7 +342,7 @@ recorded; only the judged result is. The record keeps the most recent 500 attemp
 skill, the first time it was played right (from a drill, and from anywhere) and, for each song
 played on that skill, the play that first counted as applied (per-skill records are kept first when
 space runs short), so it never grows without limit. The "My progress" panel turns that record into
-one plain line — how many attempts were passed with help, passed independently, retained on a
+one plain line — how many tries were made with help (passed or not), passed independently, retained on a
 later check (not just repeated in the same sitting), and applied in a song rather than a drill — or,
 with nothing recorded yet, says so plainly instead of claiming anything is retained. A given song
 only counts toward "applied" once per skill, no matter how many times it is replayed — practising
@@ -1376,6 +1377,11 @@ chord inversions, in-tune-or-not intonation discrimination, and sing-it-back. So
 song rhythm both draw only from the one-hand starter melodies (`starterMelodies`,
 `src/song/starter/index.js`) -- a two-hand starter is never pulled apart into a monophonic phrase
 or tapped-back rhythm.
+
+Answers are always in words: a wrong answer and "Show me the answer" name the expected notes
+(with octave, e.g. `C4, B3`) and count rhythms in beats (`1, 2, 4`) -- never MIDI numbers or
+ticks. The note buttons here, and the Theory tonic and root lists, follow the Settings
+note-naming and sharps/flats choice like the rest of the app.
 
 ## Find your own singing range
 
