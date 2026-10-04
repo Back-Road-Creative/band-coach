@@ -1633,7 +1633,11 @@ release.
   session (with the objective, on a narrow window) are on one screen at: 320x568: keyboard one
   scroll position, drum kit one scroll position; 390x844: keyboard no scrolling after Start, drum
   kit one scroll position; 844x390: keyboard one scroll position, drum kit one scroll position;
-  640x400: keyboard one scroll position, drum kit one scroll position. Misses the layout cannot fix
+  640x400: keyboard one scroll position, drum kit one scroll position. A fretted or microphone
+  instrument (guitar) is held to the same screen at 390x844 only, in
+  `tests/release/acceptance-phone-fit-mic-fretted.test.mjs`: after Start, the prompt and the whole
+  drawing are on the first screen with no scrolling, with "Set up input" open or shut ("How to play
+  this" and the input level move below the drawing; the other sizes are not measured for it). Misses the layout cannot fix
   are recorded in the sizes file as `todo` rows and need a change to the drawing code: at 320x568 the
   black keys are 20 px tall and the drum kit's hi-hat pieces are under 24 px in a bar. Real phones
   are untested: do not tell a learner it works on theirs.
