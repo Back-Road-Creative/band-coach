@@ -112,9 +112,13 @@ Play Along) can dismiss it with Escape from wherever focus landed inside it, wit
 to a close control — the same WCAG 2.1.2/2.4.3 expectation the break card's own Escape-to-resume
 already met (`src/ui/dialog-focus.js`). `src/ui/panels.js`'s `open()` attaches the Escape listener
 to the panel's own container, so it only ever fires for a keydown that bubbled up from inside that
-panel, and closing runs the panel's existing close path — focus returns to whatever control opened
-it, same as closing any other way.
-Proof: `node --test tests/characterization/a11y-panel-escape.test.mjs`.
+panel, and closing runs the app's own close path (`closePanel()`, passed in as `createPanels({ onEscape })`),
+so the Practice screen comes back and the nav marks Practice current — focus returns to whatever
+control opened it, same as closing any other way (or to the nav Instrument button when that control
+was hidden with the sheet). Escape also closes the instrument sheet, and choosing an instrument or
+opening Ear training / How to play it / Music theory from the sheet moves focus to the nav Instrument
+button or the panel's heading instead of dropping to `<body>`.
+Proof: `node --test tests/characterization/a11y-panel-escape.test.mjs tests/characterization/a11y-escape-and-focus.test.mjs`.
 
 ## axe over the Songs internal screens and Ear training
 

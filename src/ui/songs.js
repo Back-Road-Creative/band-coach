@@ -701,6 +701,31 @@ function mountSongsPanel(hostEl, api) {
     else shareBtn.setAttribute('disabled', 'disabled');
   }
 
+  // Remove a saved song: a first tap only asks ("Remove ... for good?"), a second tap deletes the
+  // song, its Draft/Checked label and its Carry-on place; Keep puts the row back. Starter tunes
+  // are built in, so only library rows get one.
+  function removeControl(meta, libraryId) {
+    const box = el('span', { class: 'panel-songs-remove-box' });
+    function ask() {
+      box.innerHTML = '';
+      box.appendChild(el('span', { text: 'Remove "' + meta.title + '" for good? ' }));
+      const yes = el('button', { type: 'button', class: 'panel-songs-remove-yes', text: 'Yes, remove it', onclick: async () => {
+        try { await library.remove(libraryId); } catch (e) { say('The song could not be removed: ' + (e && e.message ? e.message : String(e)), 'no'); return; }
+        const ledger = songStatusLedger(); delete ledger[libraryId]; statusStore.set(ledger);
+        say('Removed "' + meta.title + '".', 'ok');
+        await refreshList(); renderCarryOn();
+      } });
+      const keep = el('button', { type: 'button', class: 'panel-songs-remove-keep', text: 'Keep it', onclick: idle });
+      box.appendChild(yes); box.appendChild(keep); keep.focus();
+    }
+    function idle() {
+      box.innerHTML = '';
+      box.appendChild(el('button', { type: 'button', class: 'panel-songs-remove', text: 'Remove', 'aria-label': 'Remove ' + meta.title, onclick: ask }));
+    }
+    idle();
+    return box;
+  }
+
   function songRow(songOrMeta, libraryId) {
     const li = el('li', { class: 'panel-songs-row' });
     const btn = el('button', {
@@ -722,6 +747,7 @@ function mountSongsPanel(hostEl, api) {
     if (libraryId) {
       const label = statusLabel(statusFor(songStatusLedger(), libraryId));
       if (label) li.appendChild(el('span', { class: 'panel-songs-status', text: label }));
+      li.appendChild(removeControl(songOrMeta, libraryId));
     }
     // P3-8: no more per-row Save-as/export controls here -- MIDI/MusicXML/
     // ABC now live inside the open song's own Export action (songHeader,
@@ -2520,6 +2546,10 @@ function mountSongsPanel(hostEl, api) {
       say('That file could not be read: ' + (e && e.message ? e.message : String(e)), 'no');
       return;
     }
+    if (!song || !Array.isArray(song.parts) || !song.parts.some((p) => p.notes && p.notes.length)) {
+      say('That file has no notes in it, so nothing was added. Pick a tune file (an .abc, MIDI or MusicXML file).', 'no');
+      return;
+    }
     const { ok, errors } = validateSong(song);
     if (!ok) {
       say('That file did not turn into a usable song: ' + errors.join('; '), 'no');
@@ -2550,8 +2580,8 @@ function mountSongsPanel(hostEl, api) {
     // check item is the exception, e.g. a tempo-less ABC file) -- Checked
     // the moment it lands when there is nothing to check, a Draft when
     // there is, same as a transcribed recording just above.
-    if (warnings && warnings.length) setSongStatus(markDraft, storedId, { needsCheck: warnings.length, source: 'file', originalAudioKept: false });
-    else setSongStatus(markChecked, storedId);
+    if (warnings && warnings.length) setSongStatus(markDraft, storedId, { needsCheck: warnings.length, source: 'notation', originalAudioKept: false });
+    else setSongStatus((l, id) => markChecked(markDraft(l, id, { source: 'notation' }), id), storedId);
     renderAddReview({ ...song, id: storedId }, warnings || [], null);
     await refreshList();
   }
