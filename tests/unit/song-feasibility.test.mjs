@@ -137,3 +137,19 @@ test('a part with no notes reports empty, not a false pass', () => {
   const f = feasibility(song, 'melody', gtr);
   assert.equal(f.level, 'empty');
 });
+
+test('a non-octave shift never says "to fit" twice in the transposed detail', () => {
+  let seen = 0;
+  for (const song of starterSongs) {
+    for (const part of song.parts) {
+      for (const inst of readyInstruments) {
+        const f = feasibility(song, part.id, inst);
+        if (f.level === 'transposed' && /semitone/.test(f.detail)) {
+          seen++;
+          assert.equal((f.detail.match(/to fit/g) || []).length, 1, f.detail);
+        }
+      }
+    }
+  }
+  assert.ok(seen > 0, 'expected at least one non-octave shift among the starter songs');
+});

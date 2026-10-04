@@ -191,7 +191,7 @@ function mountEditor(hostEl, api) {
   const checkList = el('ul');
   const ackCheckbox = el('input', { type: 'checkbox', id: 'editorAck' });
   checkBox.append(
-    el('p', { text: "Before you practise or save, check these — the computer guessed and isn't sure:" }),
+    el('p', { text: "Before you practise or save, check these:" }),
     checkList,
     el('label', { for: 'editorAck' }, [ackCheckbox, document.createTextNode(" I've checked these")]),
   );
@@ -605,6 +605,7 @@ function mountEditor(hostEl, api) {
       return;
     }
     const target = chooseSaveTarget({ loadedId, asCopy: !!asCopy });
+    const prevEntry = sanitizeStatusLedger(api.store('song-status').get())[loadedId] || {}; // a copy gets a new id with no entry: inherit the open song's source/audio-kept.
     try {
       if (target.mode === 'update') {
         await getLibrary().update(target.id, named, { now: Date.now() });
@@ -626,7 +627,7 @@ function mountEditor(hostEl, api) {
       const remaining = report && Array.isArray(report.needsCheck) ? report.needsCheck.length : 0;
       const statusStore = api.store('song-status');
       const ledger = sanitizeStatusLedger(statusStore.get());
-      statusStore.set(remaining === 0 ? markChecked(ledger, loadedId) : markDraft(ledger, loadedId, { needsCheck: remaining }));
+      statusStore.set(remaining === 0 ? markChecked(ledger, loadedId, prevEntry) : markDraft(ledger, loadedId, { needsCheck: remaining, source: prevEntry.source, originalAudioKept: prevEntry.originalAudioKept }));
       markSaved();
       backToSongsBtn.hidden = false;
       practiseBtn.hidden = false;

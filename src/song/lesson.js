@@ -265,7 +265,7 @@ export function fitToInstrument(song, partId, instrument) {
     changes.push(
       abs % 12 === 0
         ? 'transposed ' + (abs / 12) + ' octave' + (abs === 12 ? '' : 's') + ' ' + dir
-        : 'shifted ' + abs + ' semitone' + (abs === 1 ? '' : 's') + ' ' + dir + " to fit the instrument's playable notes"
+        : 'shifted ' + abs + ' semitone' + (abs === 1 ? '' : 's') + ' ' + dir
     );
   }
   if (chords.chordCount > 0) {

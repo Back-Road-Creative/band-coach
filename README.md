@@ -496,7 +496,7 @@ sure" — never colour alone; a song with no unsure notes says so in one line in
 nothing. A song saved this way is a **Draft** until its check items are resolved — every song row
 shows its status ("Draft — N notes to check", or "Checked") next to its title, and since Songs
 cannot keep the original recording (only its notes), a Draft or Checked row from a recording also
-says so plainly. Stopping never leaves a half-finished song behind: a "Cancel" button shows while
+says so plainly (a score file never had a recording, so its row does not say this, whether it is a Draft or Checked, and its open items read "things to check" with the importer's warnings, including a Guitar Pro track's merged voices, put in plain words). Stopping never leaves a half-finished song behind: a "Cancel" button shows while
 a picked audio file is being decoded and transcribed ("Stopped. Nothing was saved."), and leaving
 Songs outright mid-recording or mid-analysis stops the mic/meter and discards whatever was in
 flight the same way, saying so plainly on the next visit ("Your last recording was stopped before

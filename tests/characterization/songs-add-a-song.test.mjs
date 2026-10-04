@@ -338,3 +338,86 @@ test('there is no separate Learn this screen any more', async (t) => {
   const playalongHasTipBtn = await page.evaluate("document.querySelector('#paLearnTipBtn') === null");
   assert.equal(playalongHasTipBtn, true, 'Play Along no longer offers an Open Learn this button');
 });
+
+// importNotationFile's own wiring: a tempo-less ABC reads as a score Draft in
+// plain words, a clean ABC as Checked -- neither claims a lost recording.
+test('a score import row and message read in plain words, never as a lost recording', async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'band-coach-add-song-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const noTempo = join(dir, 'notempo.abc');
+  writeFileSync(noTempo, 'X:1\nT:No Tempo Tune\nM:4/4\nL:1/8\nK:C\nCDEFGABc|\n', 'utf8');
+  const clean = join(dir, 'clean.abc');
+  writeFileSync(clean, ABC, 'utf8');
+
+  const page = await launchPage(htmlPath);
+  t.after(() => page.close());
+
+  await page.evaluate("window.__coach.setMod('kbd')");
+  await openAddSongSection(page);
+  await page.setFileInput('#songsFileInput', noTempo);
+  await page.waitFor("document.querySelector('.panel-learn-result').hidden === false", 20000);
+  const msg = await page.evaluate("document.querySelector('.panel-songs-msg').textContent");
+  assert.match(msg, /doesn't say how fast/);
+  assert.doesNotMatch(msg, /no Q: tempo found/);
+  await page.waitFor("document.querySelector('.panel-songs-status')", 20000);
+  const rows = await page.evaluate("Array.from(document.querySelectorAll('.panel-songs-status')).map(e => e.textContent)");
+  assert.ok(rows.some((r) => r === 'Draft — 1 thing to check'), 'warned import row: ' + JSON.stringify(rows));
+
+  await openAddSongSection(page);
+  await page.setFileInput('#songsFileInput', clean);
+  await page.waitFor("Array.from(document.querySelectorAll('.panel-songs-status')).some(e => e.textContent === 'Checked')", 20000);
+  const all = await page.evaluate("Array.from(document.querySelectorAll('.panel-songs-status')).map(e => e.textContent)");
+  assert.ok(all.every((r) => !/Original recording not kept/.test(r)), 'no score row claims a lost recording: ' + JSON.stringify(all));
+});
+
+// editor.js's save re-marks the Draft row; it must carry the import's own
+// source/audio-kept fields through, not reset them to a lost recording.
+test('saving a score import from Edit notes keeps its plain row wording', async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'band-coach-add-song-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const noTempo = join(dir, 'notempo.abc');
+  writeFileSync(noTempo, 'X:1\nT:Edit Save Tune\nM:4/4\nL:1/8\nK:C\nCDEFGABc|\n', 'utf8');
+  const page = await launchPage(htmlPath);
+  t.after(() => page.close());
+  await page.evaluate("window.__coach.setMod('kbd')");
+  await openAddSongSection(page);
+  await page.setFileInput('#songsFileInput', noTempo);
+  await page.waitFor("document.querySelector('.panel-learn-result').hidden === false", 20000);
+  await page.evaluate("document.querySelector('.panel-learn-fixitup-btn').click()");
+  await page.waitFor("window.__coach.panelOpen() === 'editor'");
+  await page.waitFor("document.getElementById('editorTitle').value === 'Edit Save Tune'");
+  await page.evaluate("document.getElementById('editorAck').click()");
+  await page.evaluate("document.getElementById('editorSaveBtn').click()");
+  await page.waitFor("document.querySelector('.editor-saved-status').textContent === 'Saved'");
+  await page.evaluate("window.__coach.openPanel('songs')");
+  await page.waitFor("document.querySelector('.panel-songs-status')");
+  const rows = await page.evaluate("Array.from(document.querySelectorAll('.panel-songs-status')).map(e => e.textContent)");
+  assert.ok(rows.every((r) => !/Original recording not kept/.test(r)), 'saved row: ' + JSON.stringify(rows));
+  assert.ok(rows.some((r) => /thing to check/.test(r)), 'saved row: ' + JSON.stringify(rows));
+});
+
+// "Save a copy" adds a NEW id with no ledger entry; the copy must inherit the
+// open song's source/audio-kept fields, not read as a lost recording.
+test('saving a copy of a score import keeps the plain row wording on the copy', async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'band-coach-add-song-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const noTempo = join(dir, 'notempo.abc');
+  writeFileSync(noTempo, 'X:1\nT:Copy Probe Draft\nM:4/4\nL:1/8\nK:C\nCDEFGABc|\n', 'utf8');
+  const page = await launchPage(htmlPath);
+  t.after(() => page.close());
+  await page.evaluate("window.__coach.setMod('kbd')");
+  await openAddSongSection(page);
+  await page.setFileInput('#songsFileInput', noTempo);
+  await page.waitFor("document.querySelector('.panel-learn-result').hidden === false", 20000);
+  await page.evaluate("document.querySelector('.panel-learn-fixitup-btn').click()");
+  await page.waitFor("window.__coach.panelOpen() === 'editor'");
+  await page.waitFor("document.getElementById('editorTitle').value === 'Copy Probe Draft'");
+  await page.evaluate("document.getElementById('editorAck').click()");
+  await page.evaluate("document.getElementById('editorSaveCopyBtn').click()");
+  await page.waitFor("document.querySelector('.editor-saved-status').textContent === 'Saved'");
+  await page.evaluate("window.__coach.openPanel('songs')");
+  await page.waitFor("document.querySelectorAll('.panel-songs-status').length >= 2");
+  const rows = await page.evaluate("Array.from(document.querySelectorAll('.panel-songs-status')).map(e => e.textContent)");
+  assert.ok(rows.length >= 2, 'original and copy rows: ' + JSON.stringify(rows));
+  assert.ok(rows.every((r) => !/Original recording not kept/.test(r)), 'copy row: ' + JSON.stringify(rows));
+});
