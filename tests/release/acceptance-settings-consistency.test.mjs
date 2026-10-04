@@ -84,3 +84,27 @@ test('Level 13 with Do-Re-Mi chosen: the prompt and the hint use the same name',
     assert.ok(hint.includes(name[1]), `and the hint uses the same name: ${hint}`);
   });
 });
+
+test('Level 17 keeps its position-change prompt, naming the starting note', async (t) => {
+  const state = { prefs: { mod: 'kbd' }, mods: { kbd: { level: 17, item: { j1p: { reps: 1, seen: 1, stability: 1, difficulty: 0.3, lastSeen: Date.now() } } } } };
+  await withAcceptancePage(t, { initScript: seed(state) }, async (page) => {
+    await go(page, 'practice');
+    await page.clickSelector('#playBtn');
+    await page.waitFor("/position/.test(document.getElementById('prompt').textContent)");
+    const prompt = await textOf(page, 'prompt');
+    assert.match(prompt, /^Play [A-G]#? position, then move the right hand up/, prompt);
+    assert.doesNotMatch(prompt, /both hands together/);
+  });
+});
+
+test('Unticking Note names in Settings updates the practice Show control without a reload', async (t) => {
+  await withAcceptancePage(t, { initScript: seed({ prefs: { mod: 'kbd' } }) }, async (page) => {
+    await go(page, 'practice');
+    assert.deepEqual(await showOptions(page), ['Note names (today)', 'Staff', 'Staff and names']);
+    await go(page, 'settings');
+    await page.evaluate("(() => { const c = document.getElementById('optNames'); c.checked = false; c.dispatchEvent(new Event('change', { bubbles: true })); })()");
+    await go(page, 'practice');
+    const opts = await showOptions(page);
+    assert.match(opts[0], /off in Settings/, `labels: ${opts}`);
+  });
+});
