@@ -3043,6 +3043,8 @@ import { register as registerPathway } from './ui/pathway.js';
     // counts as "already there"; every other case (including re-pressing
     // Songs while Songs is open) still hits the guard unchanged.
     if (dest === 'songs' && panels.current() !== 'songs') { openPanel('songs'); return true; }
+    // The keyboard path panel counts as Practice too (navDestFor), so pressing Practice there goes back to the exercise.
+    if (dest === 'practice' && panels.current() === 'pathway') { closePanel(); return true; }
     if (dest === currentDest()) return false;
     if (dest === 'practice') { closePanel(); return true; }
     if (dest === 'settings') { openSettings(); return true; }

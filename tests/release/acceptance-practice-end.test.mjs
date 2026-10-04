@@ -73,5 +73,7 @@ test('the keyboard path panel keeps Practice highlighted and spaces its button f
     assert.ok(gap >= 8, 'the action button is not flush against the last step (gap ' + gap + 'px)');
     const widths = await page.evaluate("[document.querySelector('.pathway-steps').getBoundingClientRect().width, document.querySelector('.panel-pathway').getBoundingClientRect().width]");
     assert.ok(widths[0] >= widths[1] - 1, 'the step list spans the panel (' + widths[0] + ' of ' + widths[1] + 'px)');
+    await page.clickSelector('#mainNav button[data-route="practice"]');
+    assert.equal(await hidden(page, 'panelHost'), true, 'pressing Practice from the path panel goes back to the exercise');
   });
 });
