@@ -611,7 +611,7 @@ function mountEditor(hostEl, api) {
       const remaining = report && Array.isArray(report.needsCheck) ? report.needsCheck.length : 0;
       const statusStore = api.store('song-status');
       const ledger = sanitizeStatusLedger(statusStore.get());
-      statusStore.set(remaining === 0 ? markChecked(ledger, loadedId) : markDraft(ledger, loadedId, { needsCheck: remaining }));
+      statusStore.set(remaining === 0 ? markChecked(ledger, loadedId) : markDraft(ledger, loadedId, { needsCheck: remaining, source: (ledger[loadedId] || {}).source, originalAudioKept: (ledger[loadedId] || {}).originalAudioKept }));
       markSaved();
       backToSongsBtn.hidden = false;
       practiseBtn.hidden = false;
