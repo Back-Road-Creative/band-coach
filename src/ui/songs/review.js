@@ -139,7 +139,9 @@ export function renderReview(resultEl, { song, warnings, audioRec, api, onPracti
     const t0 = api.now() + 0.1;
     let endAt = 0;
     plan.forEach((n) => {
-      api.tone(n.midi, t0 + n.at, n.dur, 0.22);
+      // A percussion note carries its kit piece: sound the drum, as practice does -- a hi-hat is not a bass note.
+      if (n.piece && typeof api.drum === 'function') api.drum(n.piece, t0 + n.at);
+      else api.tone(n.midi, t0 + n.at, n.dur, 0.22);
       endAt = Math.max(endAt, n.at + n.dur);
     });
     setTimeout(() => setPlaying(false), (endAt + 0.2) * 1000);

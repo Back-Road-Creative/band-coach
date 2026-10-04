@@ -56,6 +56,11 @@ Press "Set up input" to open Connect, the input list, "Check my microphone" and 
 they stay tucked away until you need them, so the status line (whether the app is hearing you) and
 the MIDI activity dot are the only things shown up front.
 
+Pressing Start on a microphone instrument asks the browser for the microphone first and begins once
+it is allowed; if it is blocked, the coach says so and tells you to use "Set up input", then "Connect
+microphone" (no exercise runs that cannot hear you). Switching to an instrument that does not listen
+(Keyboard, Ear training) closes the microphone again.
+
 If you have more than one input
 (e.g. an audio interface), pick it from the input list next to Connect. Connect also listens to
 your room for about a second and a half the first time and sets the listening thresholds from it,
@@ -88,15 +93,17 @@ goes for one inside a progress file you restore; the next Connect measures again
 Switching away from the tab (or backgrounding the app on a phone) stops the microphone and
 suspends audio outright, rather than merely pausing the exercise on screen — the OS mic indicator
 goes off, exactly as if you had closed the tab. Coming back does not reopen the mic on its own:
-press Connect again (or resume through a drill that needs it) and the status line and mic indicator
-catch up. The app's own clock does come back on its own, though — the moment the tab is visible
+press Connect again and the status line and mic indicator catch up. If you resume a drill that
+needs the mic before doing that, the coach says the mic was released and to press Connect (it does
+not run the drill deaf and blame your microphone). The app's own clock does come back on its own, though — the moment the tab is visible
 again (or, on a phone, the moment the OS restores it from its back/forward cache), suspended audio
 resumes so a lesson already in progress keeps ticking rather than freezing solid until some other
 click happens to wake it.
 
 Press "Connect MIDI" to use a keyboard. The status line only says a device is connected once the
 page has actually opened it, so "Keystation found. Press any key on it." means the keyboard is
-wired up but the app has not heard a note yet, and "Keystation is working." means it has. If it
+wired up but the app has not heard a note yet, and "Keystation is working." means it has. With two keyboards each is judged on its own: "Alpha
+is working. Beta found. Press any key on it." means only Alpha has been heard. If it
 instead says another program may be using the keyboard, close whatever else has it open (another
 tab, a DAW) and press Connect again — though it is worth pressing a key first, because the app
 listens to every port whether or not it managed to open it, and a note actually arriving is taken
@@ -298,8 +305,8 @@ restoring one brings both back — a restore replaces your progress and songs to
 songs in the backup cannot be stored on this device, nothing changes: your current progress and
 songs are left exactly as they were. An older backup made before songs were included still restores —
 it just has no songs to bring back. A backup file that is damaged or was written by a newer Band
-Coach is refused with a message explaining why, and your current progress is left untouched. A quiet reminder appears once you have actually practised a
-while without one — never on a fresh profile, since there is nothing yet to lose. The "My progress" panel also shows a practice calendar (minutes and
+Coach is refused with a message explaining why (in the language you chose), before any "replace your progress" question is asked, and your current progress is left untouched. A quiet reminder appears at the end of a session long enough to be logged (8 answers or more) when you have not saved a
+backup in the last week — never after a session too short to log, since there is nothing yet to lose. The "My progress" panel also shows a practice calendar (minutes and
 level changes, one cell per day, for the last 8 weeks) and a daily minutes goal with a streak — the
 practice log itself only keeps the most recent 60 sessions, so days older than that say "earlier
 sessions not kept" rather than a false zero. "Print this week's report" turns the last 7 days into a
@@ -448,7 +455,7 @@ disabled until any unresolved check items are fixed) lives in `src/ui/songs/revi
 ## Capture a melody
 
 The "Capture a melody" tool (`TOOLS.capture` in `src/app.js`) is the fast, no-file path from a sound
-to something practisable: press Connect, then Listen, and play, sing, hum or whistle a tune, or hold the
+to something practisable: press "Set up input", then "Connect microphone", then Listen, and play, sing, hum or whistle a tune, or hold the
 microphone up to a recording of one instrument playing one note at a time. Like the rest of this
 app's pitch tracking it is monophonic and hears one note at a time — it cannot pull a separate part
 out of a full band recording. Once notes are captured, two buttons turn them into practice: "Make
@@ -459,7 +466,13 @@ opening straight into the Songs panel with the phrase-by-phrase lesson a whole i
 path: it keeps only the pitch of each note heard, in order, dropping how long each note was held
 and how far apart they came, and loads that note list (capped at 300 notes) as the "Practise my
 captured melody" custom drill on whichever instrument you pick, four notes at a time, the same
-repeat-until-clean chunking a built-in curriculum level uses.
+repeat-until-clean chunking a built-in curriculum level uses. Starting that drill keeps its own coach
+line (not the level plan, since a captured-melody drill is a warm-up that does not count).
+
+Listen needs a connected microphone: without one it does not start, and says to connect first. The
+"N notes" count updates while you play. Every message here ("Nothing captured yet.", a failed save)
+shows in the feedback card, which the Capture tool keeps visible. Pressing "Make it a lesson" again
+on the same capture re-opens the song it already saved instead of adding another copy.
 
 ## Songs
 
@@ -498,7 +511,8 @@ Share downloads a `.bandpack` of that one song alone, and Print sends just that 
 plain paper, black on white, with nothing else on the page. A teacher challenge's title field,
 "Export as a challenge", "Share with your band" and any read-only band-pack part assignments live
 under their own **Assignments** heading below the song list, separate from a single open song's
-own actions.
+own actions. Importing a challenge re-opens the library if a lesson had folded it and scrolls that list into view, and a failed import's message is
+drawn in the error colour, not the success green.
 
 Reopening a song, in Learn or Rehearse, carries on from the step you left off on, at the same
 practice speed, with a plain "Picking up where you left off." line — a **"Carry on:
@@ -584,7 +598,7 @@ call involved. Between the step title and "Play it", each step also shows its ow
 a keyboard reads a grand staff, a B flat clarinet reads its part a tone higher than it sounds, with
 a plain-language text alternative on the canvas for a screen reader. Each phrase
 step also shows a plain-word Easy/Medium/Hard difficulty (`src/song/phrase-difficulty.js`), and
-after a judged try the panel draws a small bar-by-bar strip (`src/song/bar-heat.js`) naming which
+after a judged try the panel states the verdict ("Missed the D4", "Nice. 7 of 7 notes.") right under Your turn, where it is on screen, and draws a small bar-by-bar strip (`src/song/bar-heat.js`) naming which
 bars went well and which need another pass, plus a plain-word list (`src/ui/songs/assessed.js`)
 saying what each dimension — notes, timing, holding notes, in tune — showed, or, for one this step
 never grades (a clapped rhythm's pitch, a keyboard's fixed pitch and length), Not assessed and why.
@@ -600,7 +614,8 @@ assignments read-only, one line per song ("Song title: Alex plays Melody, Sam pl
 with your band" bundles a learner's own saved library into a downloadable `.bandpack` with no
 assignments, the same file-exchange pattern as a challenge — no account, no server, no network
 call. A MIDI file's drum track (channel 10) imports as a drum-kit part; the trainer reads it on
-the percussion staff. Each phrase's tempo-ladder rungs run their own "Riff Repeater" loop
+the percussion staff; Review's "Play notes" sounds it as drums and "Practise this" opens it on the drum kit. A part with no
+playable note on the chosen instrument says so instead of passing. Each phrase's tempo-ladder rungs run their own "Riff Repeater" loop
 (`src/ui/songs/loop-backing.js`, wiring `src/audio/stretch/loop.js`'s difficulty ladder into the
 lesson): a missed attempt steps the synthesized backing's speed down, a fully clean attempt steps
 it back up, and the panel always shows the current rate in plain words ("Playing at 90% speed",
@@ -647,6 +662,13 @@ becomes a short repair on just the single worst note (`repairFor()` in `src/core
 instead of a third run at the whole phrase; passing that one note returns to the original step
 where it left off. A repair try is logged as guided assistance, not independent evidence — it is
 a redo of a note the step already failed on, not a fresh, unaided attempt.
+
+A song you saved can be removed again: each of your own rows in the library has a "Remove" button
+that asks "Remove ... for good?" first (Yes, remove it / Keep it); removing it also clears its
+Draft/Checked label. The built-in starter tunes have no Remove button. A notation file with no
+notes in it (an empty or header-only `.abc`) is refused with a plain message instead of being
+saved, and a notation import is never labelled "Original recording not kept", since it never had
+a recording.
 
 The lesson follows the whole teaching loop (`src/core/teaching.js`: explain, demo, guided, check,
 repair, transfer), moving between its phases with `nextPhase()`. In Learn mode, pressing Next on a
@@ -705,8 +727,7 @@ into extra rows rather than letting fret numbers run past its fixed-width
 canvas.
 
 Keyboard, guitar, bass, ukulele and voice each have a per-instrument "Show"
-preference (note names, staff, or both) that draws this staff as an overlay
-alongside the existing display; it defaults to "Note names (today)", so
+preference (note names, staff, or both) that draws this staff alongside the existing display (the staff takes a band along the top of the canvas and the instrument -- fretboard, voice lanes or keys -- shrinks to fit below it, so the two never overlap; on the keyboard the canvas grows taller in Staff mode and the band is capped so every key stays at the 24 CSS px tap floor); it defaults to "Note names (today)", so
 nothing changes unless a learner switches it. Wind and brass keeps its own
 hand-drawn staff (task-row layout, live tuning gauge, hold timer) rather
 than being swapped onto the engine, since the two are not equivalent.
@@ -1026,7 +1047,7 @@ held, CHECK asks for a fresh bass note-on followed by a short three-note melody 
 (`heldBassMelody()` in `src/core/hands-together.js` — the right hand's own note, its neighbouring
 pair's note, then the right hand's own note again, e.g. C-D-C; the top pair, G, has no pair above
 it to borrow from, so it plays G-F-G instead) while the bass keeps sounding. A melody note played while the bass has already
-been let go, or the bass being released before the last melody note-on, fails with a plain-language
+been let go (whatever its pitch), or the bass being released before the last melody note-on, fails with a plain-language
 reason naming the left hand and the hold; a melody note that is not the next one expected fails
 naming the expected note instead. The exercise passes on the bass note-off, once it comes after the
 last melody note-on (`gradeHeldBass()`). This grading needs real note-on/note-off events, so — the
@@ -1069,7 +1090,7 @@ same finger shape there. There is no LEARN/CHECK split and no millisecond tolera
 grader, `gradePositionChange()`, covers both the pre-shift and post-shift chord, telling them apart
 by whether the shift has already happened once this attempt. Playing the old position again after
 the shift is a scored fail naming it ("that is the old position"), not a silent no-op and not a
-second pass. A "before you start" line names the starting position and the shift before the
+second pass. Lifting the left hand after the shift (MIDI or computer keys) is a scored fail naming the left hand, and restarts the exercise from the first position, so pressing it down again cannot pass it. A "before you start" line names the starting position and the shift before the
 exercise begins, the same as level 13's own prep line. This grading runs on a real MIDI keyboard or
 the computer keys, and — because there is no hold to lose and no release timing at stake — a screen
 tap (or the on-screen focus cursor's Enter/Space) is graded exactly the same way as a computer key,
@@ -1105,7 +1126,7 @@ higher- or lower-keyed harp is not silently mis-heard.
 
 Draw and blow bends — a reed pulled down in pitch with your breath — are new practice levels
 appended after the nine open-note levels, so an existing learner's saved level numbers do not
-shift. A bend is graded by its exact bent pitch, the same way an open note is graded by its own
+shift. A bend is graded by its exact bent pitch, and the on-screen prompt names the bend ("Draw 3 ↓2"), so what you are told to play is what is graded. An open note is graded by its own
 pitch. Bend availability (which holes bend, and how deep) does not change with key, since
 transposing the whole harmonica preserves the blow/draw gap inside every hole.
 
@@ -1296,6 +1317,10 @@ multiple of 12), not the sounding pitch the mic actually hears, so a song's
 notes land where the learner's printed part says, not just where a real
 instrument could reach; `src/song/arrange/transposing.js` computes a part's
 written notes and written key signature for display.
+
+A wrong-note correction on a transposing wind (microphone sustain or MIDI) names both the note
+heard and the target in that same written key (`writtenMidi` in `src/core/wrong-note.js` maps the
+sounding pitch back), so it never says "the note is B♭" under a prompt that reads "Play C4".
 
 `src/song/feasibility.js`'s `feasibility(song, partId, instrument)` turns
 `fitToInstrument`'s own result into a plain-language badge -- "Fits as

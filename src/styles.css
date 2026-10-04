@@ -101,7 +101,7 @@
      the base 9px/15px so the extra row costs the least height it can --
      measured against journey-first-visit.test.mjs's #playBtn-in-first-
      screen contract, which this must not break. */
-  .main-nav { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .main-nav { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
   .main-nav button { flex: none; text-align: center; overflow: visible; text-overflow: clip; white-space: normal; overflow-wrap: break-word; padding: 6px 8px; font-size: 13px; line-height: 1.15; }
   .main-nav button[data-route="instrument"] { grid-column: 1 / 3; }
   .main-nav button[data-route="settings"] { grid-column: 3; }
@@ -150,10 +150,12 @@
   .picker-variant-group > .variant-toggle[open] { width: auto; }
   /* WCAG 2.5.8 (2.2 AA) needs a 24x24 CSS px tap target -- the 11px text
      alone rendered a box under 24px tall (axe's target-size rule flagged
-     every variant-toggle summary at first load). min-height plus a flex
-     row keeps the same 11px label, vertically centred, inside a taller box
-     instead of growing the text or the row's visual weight. */
-  .picker-variant-group > .variant-toggle > summary { cursor: pointer; list-style: none; font: 500 11px var(--body); color: var(--muted); display: flex; align-items: center; min-height: 24px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+     every variant-toggle summary at first load). A 24px line-height keeps
+     the same 11px label, vertically centred, inside a taller box instead of
+     growing the text or the row's visual weight. It stays a block (not
+     flex): text-overflow draws no ellipsis on a flex container, so the
+     shut label would stop mid-letter. */
+  .picker-variant-group > .variant-toggle > summary { cursor: pointer; list-style: none; font: 500 11px var(--body); color: var(--muted); display: block; line-height: 24px; min-height: 24px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .picker-variant-group > .variant-toggle > summary::-webkit-details-marker { display: none; }
   .picker-variant-group > .variant-toggle > summary::before { content: '\25b8  '; }
   .picker-variant-group > .variant-toggle[open] > summary::before { content: '\25be  '; }
@@ -205,10 +207,13 @@
   .add-song-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
   .panel-songs-list { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
   .panel-songs-row button { width: 100%; text-align: left; }
+  .panel-songs-remove-box { display: block; margin-top: 2px; }
+  .panel-songs-remove-box button { width: auto; }
   .panel-songs-export { display: flex; gap: 4px; margin-top: 2px; }
   .panel-songs-export button, .panel-songs-export-btn { width: auto; }
   .panel-songs-intro { color: var(--muted); }
   .panel-songs-msg { min-height: 1.2em; color: var(--good); }
+  .panel-songs-msg[data-state="no"] { color: var(--bad); }
   .panel-songs-warn { color: var(--warn); }
   /* A9: margin/padding/gap trimmed from 12/12/8 -- with the library and the
      "Play it on…" row moved out of the way (src/ui/songs.js), this section's
@@ -269,6 +274,9 @@
   .panel-songs-mode, .panel-songs-hands { display: flex; flex-wrap: wrap; gap: 4px; }
   .panel-songs-mode button[aria-pressed="true"], .panel-songs-hands button[aria-pressed="true"] { border-color: var(--good); }
   .panel-songs-check-result { color: var(--muted); }
+  .panel-songs-verdict { margin: 4px 0; font-weight: 600; }
+  .panel-songs-verdict[data-state="ok"] { color: var(--good); }
+  .panel-songs-verdict[data-state="no"] { color: var(--bad); }
   /* how inline (C1b): the "How to play this" toggle/body under the step's
      own notation, tab or fingering line -- a scrollable body (the diagram
      itself can be wider than a phone) so it never forces page-level
@@ -494,6 +502,8 @@
   .practice-meter[hidden] { display: none; }
   #calibrateResult { font-size: 13px; color: var(--muted); }
   .setup-sheet { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 14px; margin-top: -4px; }
+  /* A label and its select wrap as one unit, so on a phone a label never ends a row away from its own select. */
+  .setup-pair { display: inline-flex; align-items: center; gap: 10px; max-width: 100%; } .setup-pair:has(> select[hidden]) { display: none; } .setup-pair select { min-width: 0; }
   #coach { font-weight: 500; min-height: 2.9em; }
   #sessLine { font-size: 14px; color: var(--muted); font-variant-numeric: tabular-nums; }
   #feedback { min-height: 2.9em; font-weight: 600; }
@@ -506,10 +516,15 @@
   .weak li { display: flex; justify-content: space-between; gap: 10px; font-size: 14px; }
   .weak li span:last-child { font-variant-numeric: tabular-nums; color: var(--muted); }
   .weak .none { color: var(--muted); }
-  .opts { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; color: var(--muted); font-size: 14px; }
-  .opts label { display: flex; gap: 7px; align-items: center; cursor: pointer; }
+  .opts { min-width: 0; max-width: 100%; display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; color: var(--muted); font-size: 14px; }
+  /* wrap + shrink so a select never pushes the page sideways at ~200% page zoom (a ~195px layout) */
+  .opts label { display: flex; flex-wrap: wrap; gap: 7px; align-items: center; cursor: pointer; max-width: 100%; }
+  .opts select { max-width: 100%; }
   .opts input { accent-color: var(--accent); width: 16px; height: 16px; }
   .file-label { display: inline-flex; align-items: center; }
+  /* a file picker is a <label>, so the button look (button, button.small) never reached it */
+  label.small.file-label { font: 600 13px var(--body); color: var(--text); background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 5px 10px; cursor: pointer; }
+  label.small.file-label:hover { border-color: var(--muted); }
   .backup-nudge { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; justify-content: space-between; background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 8px 12px; font-size: 13px; color: var(--muted); }
   button.danger { border-color: var(--bad); color: var(--bad); }
   button.danger:hover { background: var(--bad); color: #1a0a08; }
@@ -564,6 +579,8 @@
     }
     /* 16 / 7 applies to every #cv instrument except the kit (keyboard, tuner, ...), not just the keyboard; it shortens the keys about 15% (Q6-1 F1). */
     #cv:not(.kit) { aspect-ratio: 16 / 7; }
+    /* Show = Staff on the keyboard needs room for the grand staff above keys that stay at the 24px tap floor. */
+    #cv.staffkbd { aspect-ratio: 16 / 10; }
   }
   @media (orientation: landscape) and (max-height: 500px) {
     .main { grid-template-columns: max-content minmax(0, 1fr); gap: 6px; }
@@ -622,3 +639,4 @@
     body.printing-song .songs-print-sheet { display: block; position: absolute; top: 0; left: 0; width: 100%; color: #000; background: #fff; }
   }
   .panel-songs-rate { color: var(--muted); font-size: 13px; margin: 0; }
+.midi-details pre { white-space: pre-wrap; overflow-wrap: anywhere; max-width: 100%; }
