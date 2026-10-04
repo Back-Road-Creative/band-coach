@@ -304,8 +304,8 @@ restoring one brings both back — a restore replaces your progress and songs to
 songs in the backup cannot be stored on this device, nothing changes: your current progress and
 songs are left exactly as they were. An older backup made before songs were included still restores —
 it just has no songs to bring back. A backup file that is damaged or was written by a newer Band
-Coach is refused with a message explaining why, and your current progress is left untouched. A quiet reminder appears once you have actually practised a
-while without one — never on a fresh profile, since there is nothing yet to lose. The "My progress" panel also shows a practice calendar (minutes and
+Coach is refused with a message explaining why (in the language you chose), before any "replace your progress" question is asked, and your current progress is left untouched. A quiet reminder appears at the end of a session long enough to be logged (8 answers or more) when you have not saved a
+backup in the last week — never after a session too short to log, since there is nothing yet to lose. The "My progress" panel also shows a practice calendar (minutes and
 level changes, one cell per day, for the last 8 weeks) and a daily minutes goal with a streak — the
 practice log itself only keeps the most recent 60 sessions, so days older than that say "earlier
 sessions not kept" rather than a false zero. "Print this week's report" turns the last 7 days into a

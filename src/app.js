@@ -18,7 +18,7 @@ import { resolveAppVersion, DEV_VERSION } from './core/version.js';
 import { loadPack, packStatus, createIndexedDBStore, packManifestUrl, DEFAULT_MODEL_PACK } from './core/model-pack.js';
 import { checkForUpdate, FALLBACK_DOWNLOAD_URL } from './core/update-check.js';
 import { setNoteNaming, sanitizeNoteNaming, name as noteNameFor } from './core/note-names.js';
-import { t, setLocale, LOCALES } from './core/i18n.js';
+import { t, en, setLocale, LOCALES } from './core/i18n.js';
 import { yin } from './audio/yin.js';
 import { createPitchNode } from './audio/pitch-worklet.js';
 //
@@ -2158,7 +2158,7 @@ import { register as registerPathway } from './ui/pathway.js';
     if (sess.judged >= 8) { DB.sessions.push({ d: today(), mod: mod, min: Math.round(min * 10) / 10, acc: sess.ok / sess.judged, a1: mean(sess.first), a2: mean(sess.last), from: sess.from, to: S.level, breaks: sess.breaks }); DB.sessions = DB.sessions.slice(-60);
       let up = null, low = null, lowR = 1; Object.keys(S.item).forEach(id => { const cur = S.item[id], r1 = retrievability(cur, modelNow), r0 = retrievability(sess.m0[id] || cur, modelNow), g0 = r1 - r0; if (up === null || g0 > up.g) up = { id: id, g: g0 }; if (cur.reps >= 3 && (low === null || r1 < lowR)) { low = id; lowR = r1; } });
       line = 'Session done: ' + Math.round(min) + ' min, ' + Math.round(100 * sess.ok / sess.judged) + '% right, best streak ' + sess.bestStreak + ', level ' + sess.from + ' to ' + S.level + '.' + (up && up.g > 0.05 ? ' Most improved: ' + inf(up.id).short + '.' : '') + (low ? ' Next time starts with extra ' + inf(low).short + '.' : ''); }
-    if (sess.judged >= 1 && Date.now() - lastBackupAt > 7 * 86400000) showBackupNudge('You have been practising a while. Save a backup, just in case.');
+    if (sess.judged >= 8 && Date.now() - lastBackupAt > 7 * 86400000) showBackupNudge('You have been practising a while. Save a backup, just in case.');
     sess = null; playing = false; paused = false; task = null; bar = null; breakTrap.deactivate(); $('breakCard').hidden = true; $('playBtn').textContent = 'Start'; $('endBtn').hidden = true; $('choices').hidden = true; $('prompt').textContent = ''; $('hint').textContent = ''; coach(line); save(); showAll(); wakeLock.release();
   }
   const BREAKS = {
@@ -2777,19 +2777,19 @@ import { register as registerPathway } from './ui/pathway.js';
   }
   async function doImportProgress(text) {
     const result = importProgressFile(text);
-    if (!result.ok) { coach(result.error); return result; }
+    if (!result.ok) { coach(t(result.errorId)); return result; }
     // The songs go first because that is the store that can fail (e.g.
     // IndexedDB unavailable): if it does, nothing about the live profile
     // has changed yet, so there is nothing to roll back. Only once the
     // songs are safely in does this replace DB, prefs, theme and mod.
     if (Array.isArray(result.songs) && result.songs.length) {
       try { await backupLibrary().importAll(result.songs); }
-      catch (e) { const error = 'Nothing was changed: the saved songs in this backup could not be stored on this device.'; coach(error); return { ok: false, error }; }
+      catch (e) { const error = en['backup.err.songsNotStored']; coach(t('backup.err.songsNotStored')); return { ok: false, error }; }
     }
     const priorLatencyMs = DB && DB.latencyMs;
     modelNow = Date.now(); DB = sanitizeDB(result.db, undefined, modelNow); DB.latencyMs = num(priorLatencyMs, DB.latencyMs, 0, 300); if (!Array.isArray(DB.custom)) DB.custom = [];
     $('optNames').checked = DB.prefs.names; $('optTheme').value = DB.prefs.theme; applyTheme(DB.prefs.theme); $('optLocale').value = DB.prefs.locale; applyLocale(DB.prefs.locale); setNoteNaming(DB.prefs.noteNaming); $('optNoteSystem').value = DB.prefs.noteNaming.system; $('optAccidentals').value = DB.prefs.noteNaming.accidentals; setMod(DB.prefs.mod);
-    if (!writeDB()) { const error = 'Your restored progress could not be saved on this device (storage may be full).'; coach(error); return { ok: false, error }; }
+    if (!writeDB()) { const error = en['backup.err.notSaved']; coach(t('backup.err.notSaved')); return { ok: false, error }; }
     coach(t('backup.restored'));
     return result;
   }
@@ -2797,9 +2797,9 @@ import { register as registerPathway } from './ui/pathway.js';
   $('backupRestoreInput').addEventListener('change', function () {
     const file = this.files && this.files[0]; this.value = '';
     if (!file) return;
-    if (!confirm(t('backup.confirmRestore'))) return;
     const reader = new FileReader();
-    reader.onload = () => doImportProgress(String(reader.result));
+    // Check the file before asking: a file that is not a backup is refused with the reason, and the "replace your progress" confirm is only raised for one that can be restored.
+    reader.onload = () => { const text = String(reader.result), check = importProgressFile(text); if (!check.ok) { coach(t(check.errorId)); return; } if (confirm(t('backup.confirmRestore'))) doImportProgress(text); };
     reader.onerror = () => coach(t('backup.readError'));
     reader.readAsText(file);
   });
