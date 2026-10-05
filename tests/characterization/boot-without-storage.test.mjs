@@ -52,13 +52,16 @@ test('a boot with blocked storage is still usable: a drill runs and its save is 
   t.after(() => page.close());
 
   assert.equal(await page.evaluate('typeof window.__coach'), 'object', 'boot must run to its last line, which installs the debug hook');
+  // The boot-time notice already put the "could not be saved" line on screen. Clear it, so what is read
+  // back below can only have been written by a save that the drill + pagehide actually attempted.
+  await page.evaluate("document.getElementById('settingsSay').textContent = ''; document.getElementById('mainSay').textContent = ''");
   await page.evaluate("window.__coach.setMod('kbd')");
   await page.evaluate("document.getElementById('playBtn').click()");
   await page.waitFor('window.__coach.task()');
   await page.evaluate("window.dispatchEvent(new Event('pagehide'))");
   await page.evaluate('document.querySelector(\'[data-route="settings"]\').click()');
   const settingsSay = await page.evaluate("document.getElementById('settingsSay').textContent");
-  assert.match(settingsSay, /could not be saved/i);
+  assert.match(settingsSay, /could not be saved/i, `a save must have been attempted and reported failed, got: ${JSON.stringify(settingsSay)}`);
 });
 
 test('a boot step that throws shows a visible could-not-start panel with the error text', async (t) => {
