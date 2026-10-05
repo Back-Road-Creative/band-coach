@@ -69,6 +69,11 @@ test('a boot step that throws shows a visible could-not-start panel with the err
   const text = await page.evaluate("document.getElementById('bootFailed').textContent");
   assert.match(text, /could not start/i);
   assert.match(text, /frame loop refused to start/, 'the error text is shown, not hidden');
+  // The panel is for the learner; the error log and console are for everything that
+  // watches a boot (release gate, acceptance lanes). A boot that threw must not look clean to them.
+  const logged = await page.evaluate("window.__coach.errors().filter(e => e.where === 'boot').map(e => e.message)");
+  assert.deepEqual(logged, ['frame loop refused to start'], 'the boot failure is recorded in the error log');
+  assert.ok(page.consoleErrors.some((m) => /\[boot\]/.test(m)), `the boot failure is mirrored to console.error, got: ${JSON.stringify(page.consoleErrors)}`);
 });
 
 test('a healthy boot shows neither the storage notice nor the could-not-start panel', async (t) => {
