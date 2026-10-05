@@ -96,8 +96,8 @@ test('electron-builder.json turns off runAsNode and the inspector/NODE_OPTIONS f
 // Runs preload.js the way a sandboxed preload sees the world: only `electron`
 // can be required, and the page's <html> may not exist until DOMContentLoaded.
 function runPreload() {
-  const classes = new Set(), listeners = {};
-  const html = { classList: { add: c => classes.add(c) } };
+  const attrs = {}, listeners = {};
+  const html = { setAttribute: (k, v) => { attrs[k] = v; } };
   let parsed = false;
   const doc = {
     get documentElement() { return parsed ? html : null; },
@@ -110,20 +110,20 @@ function runPreload() {
   vm.runInNewContext(readFileSync(join(storeRoot, 'preload.js'), 'utf8'), { require: sandboxRequire, document: doc, window: {} });
   parsed = true;
   (listeners.DOMContentLoaded || []).forEach(fn => fn());
-  return { classes };
+  return { attrs };
 }
 
 test('preload marks <html> as the Store shell', () => {
-  const { classes } = runPreload();
-  assert.ok(classes.has('bc-store-shell'), 'preload must add the bc-store-shell class to <html>');
+  const { attrs } = runPreload();
+  assert.equal(attrs['data-shell'], 'store', 'preload must set data-shell="store" on <html>');
 });
 
-test('styles.css hides the update-check and model-pack groups only under .bc-store-shell', () => {
+test('styles.css hides the update-check and model-pack groups only under html[data-shell="store"]', () => {
   const css = readFileSync(join(repoRoot, 'src', 'styles.css'), 'utf8');
-  const rule = css.match(/([^{}]*\.bc-store-shell[^{}]*)\{([^}]*)\}/);
-  assert.ok(rule, 'styles.css needs a .bc-store-shell rule');
+  const rule = css.match(/([^{}]*data-shell="store"[^{}]*)\{([^}]*)\}/);
+  assert.ok(rule, 'styles.css needs a data-shell="store" rule');
   assert.match(rule[1], /#updateCheckBtn/);
   assert.match(rule[1], /#modelPackBtn/);
   assert.match(rule[2], /display:\s*none/);
-  assert.doesNotMatch(css.replace(rule[0], ''), /bc-store-shell/, 'one rule only');
+  assert.doesNotMatch(css.replace(rule[0], ''), /data-shell/, 'one rule only');
 });
