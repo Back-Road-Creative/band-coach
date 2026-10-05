@@ -10,7 +10,42 @@ permissions:
   contents: read
 
 jobs:
+  # release.yml is the only tag workflow that runs the test suite and the
+  # release gate. Without this job a tag on a red commit still packages and uploads a Store .appx,
+  # because the build here only proves it built. This waits for release.yml's
+  # run for the SAME commit to finish and fails unless it succeeded; a run
+  # that has not appeared yet is given time to (all three workflows start on
+  # the same tag push). The budget matches release.yml's 30 minute job limit
+  # plus its queue time. A manual run on a branch has no tag run to wait for.
+  release-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      actions: read
+    steps:
+      - name: wait for release.yml to pass for this commit
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for attempt in $(seq 1 70); do
+            if runs="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow release.yml --commit "$GITHUB_SHA" --event push --limit 20 --json status,conclusion)"; then
+              verdict="$(printf '%s' "$runs" | jq -r 'if any(.[]; .conclusion == "success") then "pass" elif length == 0 or any(.[]; .status != "completed") then "wait" else "fail" end')" || verdict=wait
+            else
+              verdict=wait
+            fi
+            case "$verdict" in
+              pass) echo "release.yml passed for $GITHUB_SHA"; exit 0 ;;
+              fail) echo "release.yml did not pass for $GITHUB_SHA, so the Store package is blocked. Fix the failure and re-run release.yml for this tag." >&2; exit 1 ;;
+            esac
+            echo "waiting for release.yml for $GITHUB_SHA (attempt $attempt)"
+            sleep 30
+          done
+          echo "release.yml never finished for $GITHUB_SHA within the wait, so the Store package is blocked." >&2
+          exit 1
+
   package:
+    needs: release-gate
     runs-on: windows-latest
     timeout-minutes: 40
     steps:
