@@ -101,7 +101,7 @@ test('a judged song step logs a row whose `at` is epoch ms, not the audio clock'
   assert.deepEqual(page.exceptions, []);
 });
 
-// sanitizeDB's on-load repair (src/app.js repairEventClocks): a row saved
+// sanitizeDB's on-load repair (src/core/sanitize-db.js repairEventClocks): a row saved
 // with the old audio-clock `at` (finite, under 1e12 -- the year 2001, no page
 // stays open that many SECONDS) is repaired using the next row in save order
 // that carries a real epoch `at`.
