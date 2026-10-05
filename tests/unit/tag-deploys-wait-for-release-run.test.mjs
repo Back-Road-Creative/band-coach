@@ -68,8 +68,27 @@ for (const { file, job: gated } of GATED) {
     const sh = script(file);
     assert.match(sh, /--workflow release\.yml/, 'must read the release.yml runs');
     assert.match(sh, /--commit "\$GITHUB_SHA"/, 'must be the run for THIS commit, not any recent run');
+    assert.match(sh, /--branch "\$GITHUB_REF_NAME"/, "must be the run for THIS tag (a tag run's branch is the tag name), not an older tag on the same commit");
+  });
+
+  // The gate only blocks if a red or unfinished release run really stops the
+  // gated job. These three are the quiet ways to keep every test above green
+  // while a red tag still deploys: a job condition that runs it anyway, a gate
+  // step whose failure is ignored, or a gate job whose failure is ignored.
+  test(`${file}: nothing lets ${gated} run after a failed or skipped release-gate`, () => {
+    const text = workflow(file);
+    const gatedBlock = job(text, gated);
+    const jobIf = gatedBlock.match(/^ {4}if:[ \t]*(.*)$/m);
+    if (jobIf) assert.doesNotMatch(jobIf[1], /always\(\)|cancelled\(\)|failure\(\)|success\(\)/, `${file}: an if on ${gated} that overrides the default "needs succeeded" lets a red tag through`);
+    assert.doesNotMatch(gatedBlock, /continue-on-error/, `${file}: ${gated} must not ignore its own failures either`);
+    assert.doesNotMatch(job(text, 'release-gate'), /continue-on-error/, `${file}: a gate whose failure is ignored gates nothing`);
   });
 }
+
+test('pages.yml: a manual run on a branch builds but never deploys, because no release run exists to wait for', () => {
+  const dep = job(workflow('pages.yml'), 'deploy');
+  assert.match(dep, /^ {4}if: github\.ref_type == 'tag'[ \t]*$/m, 'deploy must run only on a tag, where release-gate has a run to read');
+});
 
 test('release.yml still runs the suite and the gate that pages and the store now wait for', () => {
   const text = workflow('release.yml');
@@ -102,7 +121,7 @@ node -e '
   chmodSync(join(bin, 'sleep'), 0o755);
   writeFileSync(join(dir, 'step.sh'), script(file));
   const r = spawnSync('bash', ['-e', join(dir, 'step.sh')], {
-    env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, GITHUB_SHA: SHA, GITHUB_REPOSITORY: 'o/r', GH_TOKEN: 'x' },
+    env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, GITHUB_SHA: SHA, GITHUB_REF_NAME: 'v9.9.9', GITHUB_REPOSITORY: 'o/r', GH_TOKEN: 'x' },
     encoding: 'utf8',
   });
   const read = (f) => (existsSync(join(dir, f)) ? readFileSync(join(dir, f), 'utf8').trim().split('\n') : []);
@@ -118,6 +137,7 @@ for (const { file } of GATED) {
     const r = run(file, [[ok]]);
     assert.equal(r.rc, 0, r.out);
     assert.equal(r.calls.length, 1);
+    assert.match(r.calls[0], /--branch v9\.9\.9(\s|$)/);
     assert.match(r.calls[0], /--commit 1874d63f13d5c4777aaee7e872cf126460644b7c/);
     assert.match(r.calls[0], /--workflow release\.yml/);
   });
