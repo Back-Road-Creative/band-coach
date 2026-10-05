@@ -1492,6 +1492,10 @@ reports the new version, and opens a `Store submission for vX.Y.Z` issue so the 
 Center submission step is tracked instead of relied on to be remembered. To re-run it by hand for a
 tag: **Actions → release-consistency → Run workflow**, choosing the tag as the ref.
 
+If a release turns out to be bad, [docs/release-recovery.md](docs/release-recovery.md) is the
+runbook for withdrawing it (GitHub release, Pages copy, Store hold), what to tell learners, and
+how they keep their progress while going back to a good file.
+
 Once the GitHub release exists, `release.yml` also tells the Headless Mode marketing site
 (`Back-Road-Creative/headlessmode`) that a new `band-coach` version shipped, so its own site can
 update right away instead of only through its daily poll. That needs a fine-grained personal
