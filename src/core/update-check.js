@@ -28,6 +28,22 @@ export const VERSION_CHECK_URL = 'https://back-road-creative.github.io/band-coac
 export const FALLBACK_DOWNLOAD_URL =
   'https://github.com/Back-Road-Creative/band-coach/releases/latest/download/band-coach.html';
 
+// version.json's "download" is untrusted network input that becomes a link the learner clicks, so
+// only an https link to the project's own release / Pages hosts is accepted -- no other scheme
+// (javascript:, http:, data:), no look-alike or sub-domain host, no userinfo, no non-default port.
+// The parsed href is returned (not the raw text), so the string checked is the string rendered; a
+// default port written out (:443) is the same host and comes back without it. Anything else is
+// rejected and the caller falls back to the known-good release asset.
+const TRUSTED_DOWNLOAD_HOSTS = ['github.com', 'back-road-creative.github.io'];
+function trustedDownloadUrl(raw) {
+  if (typeof raw !== 'string' || !raw) return null;
+  let u;
+  try { u = new URL(raw); } catch (e) { return null; }
+  if (u.protocol !== 'https:' || !TRUSTED_DOWNLOAD_HOSTS.includes(u.hostname)) return null;
+  if (u.username || u.password || u.port) return null;
+  return u.href;
+}
+
 // ~5s: long enough for a slow connection, short enough that a learner who
 // pressed the button gets an answer instead of a spinner that never ends.
 export const CHECK_TIMEOUT_MS = 5000;
@@ -91,7 +107,7 @@ export async function checkForUpdate(opts = {}) {
     const data = await res.json();
     const latest = data && typeof data.version === 'string' ? data.version : null;
     if (!latest) return { status: 'error', downloadUrl: fallbackDownloadUrl };
-    const downloadUrl = (data && typeof data.download === 'string' && data.download) || fallbackDownloadUrl;
+    const downloadUrl = trustedDownloadUrl(data && data.download) || fallbackDownloadUrl;
     const cmp = compareVersions(currentVersion, latest);
     if (cmp === null) return { status: 'error', downloadUrl: fallbackDownloadUrl };
     if (cmp >= 0) return { status: 'up-to-date', latestVersion: latest };
