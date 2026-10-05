@@ -277,10 +277,10 @@ export function validateSong(song) {
   validateTickList(song.metreChanges, 'metreChanges', checkMetreFields, errors);
   validateTickList(song.keyChanges, 'keyChanges', checkKeyFields, errors);
 
-  // Length in bars of the shortest metre, once the shape is sound.
+  // Length in bars, counted segment by segment as barsOf lays them out, once the shape is sound.
   if (errors.length === 0) {
-    const bars = songDurationTicks(song) / minBarTicksOf(song);
-    if (bars > MAX_SONG_BARS) fail('the song is too long to open: about ' + Math.round(bars) + ' bars (the limit is ' + MAX_SONG_BARS + '); a note or rest probably has a wrong length');
+    const bars = songBarCount(song);
+    if (bars > MAX_SONG_BARS) fail('the song is too long to open: about ' + bars + ' bars (the limit is ' + MAX_SONG_BARS + '); a note or rest probably has a wrong length');
   }
 
   return { ok: errors.length === 0, errors };
@@ -333,6 +333,7 @@ function normalizePart(raw, index) {
   if (!Array.isArray(raw.notes)) {
     throw new Error('parts[' + index + '].notes is missing or not an array');
   }
+  // Early exit: stops normalizing a huge array note by note. validatePart's own cap would refuse it too, but later and with the 'song could not be normalized' prefix; tests/unit/song-size-caps pins this message.
   if (raw.notes.length > MAX_NOTES_PER_PART) {
     throw new Error('parts[' + index + '] is too large to open: it has ' + raw.notes.length + ' notes (the limit is ' + MAX_NOTES_PER_PART + ')');
   }
@@ -527,13 +528,6 @@ function barTicksOf(song) {
   return song.metre.num * beatsToQuarterRatio * song.ticksPerQuarter;
 }
 
-// Shortest bar the song uses (opening metre or a metreChanges entry).
-function minBarTicksOf(song) {
-  let min = barTicksOf(song);
-  for (const change of song.metreChanges || []) min = Math.min(min, change.num * (4 / change.den) * song.ticksPerQuarter);
-  return min;
-}
-
 // The metre in force from tick 0, followed by each entry in song.metreChanges
 // (already sorted-by-tick and normalized), each carrying its own bar length.
 // An entry at tick 0 replaces the opening metre rather than adding a
@@ -560,12 +554,26 @@ function metreSegmentsOf(song) {
   return segments;
 }
 
+// Number of bars barsOf would lay out, counted per metre segment (span / that segment's bar length, rounded up) with no allocation, so a hostile song is measured before anything is built.
+export function songBarCount(song) {
+  const segments = metreSegmentsOf(song);
+  const duration = songDurationTicks(song);
+  let bars = 0;
+  segments.forEach((seg, i) => {
+    const to = Math.min(i + 1 < segments.length ? segments[i + 1].tick : Infinity, duration);
+    if (to > seg.tick) bars += Math.ceil((to - seg.tick) / seg.barTicks);
+  });
+  return Math.max(bars, 1);
+}
+
 // Bar boundaries in ticks, e.g. [0, 1920, 3840]. Always covers at least one
 // bar, even for an empty song, so a coach UI always has a bar 1 to show.
 // Each entry in song.metreChanges forces a bar boundary at its tick -- the
 // bar straddling a change is shortened to end exactly there -- and bars
 // after it use that change's own length until the next change (if any).
 export function barsOf(song) {
+  // Backstop for a song that never passed validateSong (e.g. saved before the ceiling): refuse before building millions of boundaries.
+  if (songBarCount(song) > MAX_SONG_BARS) throw new Error('barsOf: this song is too long to open (over ' + MAX_SONG_BARS + ' bars)');
   const duration = songDurationTicks(song);
   const segments = metreSegmentsOf(song);
   const boundaries = [0];
@@ -577,8 +585,6 @@ export function barsOf(song) {
     const next = tick + segments[segIdx].barTicks;
     tick = next > nextChangeTick ? nextChangeTick : next;
     boundaries.push(tick);
-    // Backstop for a song that never passed validateSong (e.g. saved before the ceiling).
-    if (boundaries.length > MAX_SONG_BARS + segments.length + 2) throw new Error('barsOf: this song is too long to open (over ' + MAX_SONG_BARS + ' bars)');
   }
   return boundaries;
 }

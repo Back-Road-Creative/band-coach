@@ -14,7 +14,7 @@ import { createLibrary, memoryStore } from '../../src/song/library.js';
 import * as route from '../../src/ui/songs/import-route.js';
 import { MAX_IMPORT_BYTES } from '../../src/core/progress-file.js';
 
-const { validateSong, normalizeSong, barsOf, SCHEMA, TICKS_PER_QUARTER } = model;
+const { validateSong, normalizeSong, barsOf, songBarCount, SCHEMA, TICKS_PER_QUARTER } = model;
 const fixture = (name) => new URL('../fixtures/hostile/' + name, import.meta.url);
 const MB = 1024 * 1024;
 
@@ -67,7 +67,8 @@ test('a part with 60000 notes is refused, named and counted', () => {
   const { ok, errors } = validateSong(s);
   assert.equal(ok, false);
   assert.match(errors.join(' '), /60000 notes/);
-  assert.throws(() => normalizeSong({ ...s, parts: [{ id: 'p', name: 'P', notes: manyNotes(60000) }] }), /too large/i);
+  // normalizeSong stops at the part itself (an early exit, before it normalizes 60000 notes one by one), so its own message comes through unwrapped.
+  assert.throws(() => normalizeSong(s), /^Error: parts\[0\] is too large to open: it has 60000 notes/);
 });
 
 test('the bar ceiling is measured in bars of the song\'s own metre', () => {
@@ -86,6 +87,34 @@ test('a metre change to very short bars counts toward the ceiling', () => {
   // 60 4/4 bars of ticks is 3840 bars of 1/64, still fine; 600 4/4 bars is not.
   assert.equal(validateSong(s).ok, true);
   assert.equal(validateSong({ ...s, parts: [{ id: 'p', name: 'P', notes: [{ start: 0, dur: 600 * barTicks, midi: 60 }] }] }).ok, false);
+});
+
+test('one very short metre-change bar does not shrink the allowance for the whole piece', () => {
+  // 4/4 for 1000 bars, one 1/8 bar, then 3/4: refused only once the real bar count passes 4000.
+  const atEnd = (n34) => song([{ start: 0, dur: 1000 * barTicks + 240 + n34 * 3 * TICKS_PER_QUARTER, midi: 60 }], { metreChanges: [{ tick: 1000 * barTicks, num: 1, den: 8 }, { tick: 1000 * barTicks + 240, num: 3, den: 4 }] });
+  assert.equal(validateSong(atEnd(2999)).ok, true, '1000 + 1 + 2999 = 4000 bars opens');
+  assert.equal(normalizeSong(atEnd(2999)).parts[0].notes.length, 1);
+  const over = validateSong(atEnd(3000));
+  assert.equal(over.ok, false, '4001 bars is refused');
+  assert.match(over.errors.join(' '), /about 4001 bars/);
+  // The same piece with no short bar at all is plainly fine: 2000 bars of 4/4 and one 1/8 bar.
+  const s = song([{ start: 0, dur: 2000 * barTicks, midi: 60 }], { metreChanges: [{ tick: 1000 * barTicks, num: 1, den: 8 }, { tick: 1000 * barTicks + 240, num: 4, den: 4 }] });
+  assert.equal(validateSong(s).ok, true);
+});
+
+test('songBarCount counts exactly the bars barsOf lays out, with no allocation', () => {
+  assert.equal(typeof songBarCount, 'function');
+  const cases = [
+    song([]),
+    song([{ start: 0, dur: 1, midi: 60 }]),
+    song([{ start: 0, dur: 7 * barTicks + 5, midi: 60 }]),
+    song([{ start: 0, dur: 10 * barTicks, midi: 60 }], { metre: { num: 6, den: 8 } }),
+    song([{ start: 0, dur: 10 * barTicks, midi: 60 }], { metreChanges: [{ tick: 0, num: 3, den: 4 }] }),
+    song([{ start: 0, dur: 10 * barTicks, midi: 60 }], { metreChanges: [{ tick: 3 * barTicks + 100, num: 7, den: 8 }, { tick: 6 * barTicks, num: 2, den: 4 }] }),
+    song([{ start: 0, dur: 2 * barTicks, midi: 60 }], { metreChanges: [{ tick: 50 * barTicks, num: 1, den: 4 }] }),
+  ];
+  for (const c of cases) assert.equal(songBarCount(c), barsOf(c).length - 1, JSON.stringify(c.metreChanges || c.metre) + ' / ' + c.parts[0].notes.length);
+  assert.ok(songBarCount(song([{ start: 0, dur: 5368709100, midi: 60 }])) > 1000000, 'a hostile song is measured without being built');
 });
 
 test('barsOf stops at a bound instead of building millions of boundaries', () => {
@@ -107,7 +136,11 @@ test('checkFileSize refuses an oversized file by its size alone and says what to
   // A band pack and a challenge list carry several songs, so they get more room.
   assert.equal(route.checkFileSize(f(18 * MB), 'band-pack'), null);
   assert.equal(typeof route.checkFileSize(f(25 * MB), 'band-pack'), 'string');
-  assert.equal(route.checkFileSize(f(18 * MB), 'challenge'), null);
+  // A challenge file is one song list, and parseChallenge itself refuses anything over 5 MB, so it is turned away at 5 MB.
+  assert.equal(route.checkFileSize(f(4 * MB), 'challenge'), null);
+  const refused = route.checkFileSize(f(6 * MB), 'challenge');
+  assert.equal(typeof refused, 'string', 'a 6 MB challenge file is refused');
+  assert.match(refused, /6 MB.*limit is 5 MB/);
   assert.equal(route.checkFileSize(f(30 * MB), 'backup'), null);
   assert.equal(typeof route.checkFileSize(f(MAX_IMPORT_BYTES + 1), 'backup'), 'string');
 });

@@ -44,7 +44,7 @@ import { rangeForInstrument } from '../audio/range.js';
 import { countInTimes, clampBpm, DEFAULT_BPM } from './learn/count-in.js';
 import { starterSongs } from '../song/starter/index.js';
 import { createLibrary, memoryStore, indexedDbStore } from '../song/library.js';
-import { validateSong } from '../song/model.js';
+import { validateSong, songBarCount, MAX_SONG_BARS } from '../song/model.js';
 import { buildLessonPlan, nextStep, creditFor } from '../song/lesson.js';
 import { INSTRUMENTS } from '../instruments/index.js';
 import { capabilityFor } from '../instruments/capability.js';
@@ -1158,6 +1158,15 @@ function mountSongsPanel(hostEl, api) {
     songHeaderSection.appendChild(headerSheetButton(song));
   }
 
+  // A song saved before the length ceiling can be too long for any bar view to build: say so, and keep the list open so it can be removed. Every other way into a lesson (a hand-off after a save or an add) carries a song validateSong just passed.
+  function refuseIfTooLong(song) {
+    const bars = songBarCount(song);
+    if (bars <= MAX_SONG_BARS) return false;
+    songHeaderSection.hidden = true; practiceSection.hidden = true; practiceSection.innerHTML = '';
+    say('"' + song.title + '" is too long to open (about ' + bars + ' bars, the limit is ' + MAX_SONG_BARS + '). Remove it from your list and add a corrected file.', 'no');
+    return true;
+  }
+
   function openSong(song, libraryId) {
     // A song already mid-recording (Stop and check never clicked) has its
     // mic/MIDI listener subscribed via `practice`, the module-level variable
@@ -1167,6 +1176,7 @@ function mountSongsPanel(hostEl, api) {
     // no auto-start below) or a 0-note song (dead end) never calls
     // startPractice() again to clean it up on its own.
     stopRecording();
+    if (refuseIfTooLong(song)) return;
     songHeader(song, libraryId || null);
     practiceSection.hidden = false;
     practiceSection.innerHTML = '';

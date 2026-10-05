@@ -92,3 +92,30 @@ test('restoring a backup reads and parses the file once', async (t) => {
   await page.waitFor("document.getElementById('coach').textContent === 'Backup restored.'");
   assert.equal(await page.evaluate('window.__backupParses'), 1, 'the backup text was parsed once');
 });
+
+// A song saved BEFORE the ceiling existed can still be in the library: opening it must say so, not leave a blank lesson.
+test('opening a saved song that is too long to open says why and leaves the screen usable', async (t) => {
+  const page = await launchPage(HTML_PATH);
+  t.after(() => page.close());
+  const song = { schema: 'song/1', id: 'legacy', title: 'Legacy Huge', composer: null, licence: null, source: null, key: null, metre: { num: 4, den: 4 }, bpm: 120, ticksPerQuarter: 480, parts: [{ id: 'p', name: 'P', notes: [{ start: 0, dur: 480, midi: 60 }, { start: 480, dur: 5368709100, midi: 62 }] }], chords: [] };
+  await page.evaluate(`(async () => {
+    const db = await new Promise((res, rej) => { const q = indexedDB.open('bandcoach-songs', 1); q.onupgradeneeded = () => q.result.createObjectStore('kv'); q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error); });
+    const tx = db.transaction('kv', 'readwrite'); const st = tx.objectStore('kv');
+    st.put(${JSON.stringify(song)}, 'song:legacy'); st.put({ id: 'legacy', title: 'Legacy Huge', addedAt: 1, durationTicks: 5368709580, durationSeconds: 1 }, 'meta:legacy');
+    await new Promise((res) => { tx.oncomplete = res; }); db.close();
+  })()`);
+  await openSongs(page);
+  await page.waitFor("Array.from(document.querySelectorAll('.panel-songs-row button')).some(b => b.textContent === 'Legacy Huge')");
+
+  await page.evaluate("Array.from(document.querySelectorAll('.panel-songs-row button')).find(b => b.textContent === 'Legacy Huge').click()");
+  await page.waitFor("document.querySelector('.panel-songs-msg').textContent.length > 0", 5000).catch(() => {}); // a silent failure must show up as the assertions below, not as a timeout
+  const msg = await songsMsg(page);
+  assert.match(msg, /too long/i);
+  assert.match(msg, /remove/i, 'the learner is told what to do about it');
+  assert.equal(await page.evaluate("document.querySelector('.panel-songs-msg').dataset.state"), 'no');
+  assert.match(await page.evaluate("document.getElementById('panelSay').textContent"), /too long/i, 'it is said where the learner is looking');
+  assert.equal(await page.evaluate("document.querySelector('.panel-songs-practice').hidden"), true, 'no blank lesson is left on screen');
+  assert.equal(await page.evaluate("document.querySelector('.panel-songs-library').open"), true, 'the song list stays open so the song can be removed');
+  assert.equal(await page.evaluate("Array.from(document.querySelectorAll('.panel-songs-row button')).some(b => b.textContent === 'Remove')"), true);
+  assert.deepEqual(page.exceptions, []);
+});
