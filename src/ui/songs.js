@@ -1158,11 +1158,11 @@ function mountSongsPanel(hostEl, api) {
     songHeaderSection.appendChild(headerSheetButton(song));
   }
 
-  // A song saved before the length ceiling can be too long for any bar view to build: say so, and keep the list open so it can be removed. Every other way into a lesson (a hand-off after a save or an add) carries a song validateSong just passed.
+  // A song saved before the length ceiling can be too long for any bar view to build: say so, and keep the list open so it can be removed. Called by openSong() (the part list builds before any lesson) and by startPractice() itself, so Carry on, a deep-link and a hand-off are covered too.
   function refuseIfTooLong(song) {
     const bars = songBarCount(song);
     if (bars <= MAX_SONG_BARS) return false;
-    songHeaderSection.hidden = true; practiceSection.hidden = true; practiceSection.innerHTML = '';
+    songHeaderSection.hidden = true; practiceSection.hidden = true; practiceSection.innerHTML = ''; libraryDetails.open = true;
     say('"' + song.title + '" is too long to open (about ' + bars + ' bars, the limit is ' + MAX_SONG_BARS + '). Remove it from your list and add a corrected file.', 'no');
     return true;
   }
@@ -1217,6 +1217,7 @@ function mountSongsPanel(hostEl, api) {
   // again" button) skips the lookup outright.
   function startPractice(song, partId, instrumentOverride, opts = {}) {
     stopRecording();
+    if (refuseIfTooLong(song)) return;
     practiceSection.hidden = false; // a hand-off skips openSong(), which is what un-hides it for a row click
     // A song lesson has three modes on one control (never saved -- every
     // new open starts in Learn): 'learn' (today's behaviour, assistance

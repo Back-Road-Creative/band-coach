@@ -119,3 +119,44 @@ test('opening a saved song that is too long to open says why and leaves the scre
   assert.equal(await page.evaluate("Array.from(document.querySelectorAll('.panel-songs-row button')).some(b => b.textContent === 'Remove')"), true);
   assert.deepEqual(page.exceptions, []);
 });
+
+// The other ways into a lesson reach startPractice() without openSong(): Carry on (a multi-part song), and a requestOpenSong() hand-off.
+const LEGACY_2PART = { schema: 'song/1', id: 'legacy', title: 'Legacy Huge', composer: null, licence: null, source: null, key: null, metre: { num: 4, den: 4 }, bpm: 120, ticksPerQuarter: 480,
+  parts: [{ id: 'p', name: 'P', notes: [{ start: 0, dur: 480, midi: 60 }, { start: 480, dur: 5368709100, midi: 62 }] }, { id: 'q', name: 'Q', notes: [{ start: 0, dur: 480, midi: 48 }] }], chords: [] };
+async function seedLegacy(page) {
+  await page.evaluate(`(async () => {
+    const db = await new Promise((res, rej) => { const q = indexedDB.open('bandcoach-songs', 1); q.onupgradeneeded = () => q.result.createObjectStore('kv'); q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error); });
+    const tx = db.transaction('kv', 'readwrite'); const st = tx.objectStore('kv');
+    st.put(${JSON.stringify(LEGACY_2PART)}, 'song:legacy'); st.put({ id: 'legacy', title: 'Legacy Huge', addedAt: 1, durationTicks: 5368709580, durationSeconds: 1 }, 'meta:legacy');
+    await new Promise((res) => { tx.oncomplete = res; }); db.close();
+  })()`);
+}
+async function assertRefusedCleanly(page) {
+  await page.waitFor("document.querySelector('.panel-songs-msg').textContent.length > 0", 5000).catch(() => {}); // a silent failure must show up as the assertions below, not as a timeout
+  assert.match(await songsMsg(page), /too long/i);
+  assert.equal(await page.evaluate("document.querySelector('.panel-songs-msg').dataset.state"), 'no');
+  assert.equal(await page.evaluate("document.querySelector('.panel-songs-practice').hidden"), true, 'no blank lesson is left on screen');
+  assert.equal(await page.evaluate("document.querySelector('.panel-songs-library').open"), true, 'the song list is open so the song can be removed');
+  await new Promise((r) => setTimeout(r, 300)); // an uncaught error from the lesson builder lands a moment later
+  assert.deepEqual(page.exceptions, []);
+}
+
+test('Carry on for a multi-part saved song that is too long says why, with no uncaught error', async (t) => {
+  const page = await launchPage(HTML_PATH);
+  t.after(() => page.close());
+  await seedLegacy(page);
+  await page.evaluate(`(() => { const db = window.__coach.db(); db.panels = db.panels || {}; db.panels.songs = { lessons: [{ key: { songId: 'legacy', rev: 'x', partId: 'p', arrangement: 'x', setup: 'kbd', tempo: 1, assist: 'none' }, stepIndex: 1, tail: [], level: 1 }] }; })()`);
+  await openSongs(page);
+  await page.waitFor("document.querySelector('.panel-songs-carry-on') && !document.querySelector('.panel-songs-carry-on').hidden", 10000);
+  await page.evaluate("document.querySelector('.panel-songs-carry-on').click()");
+  await assertRefusedCleanly(page);
+});
+
+test('a hand-off (requestOpenSong) naming a saved song that is too long says why, with no uncaught error', async (t) => {
+  const page = await launchPage(HTML_PATH);
+  t.after(() => page.close());
+  await seedLegacy(page);
+  await page.evaluate(`(() => { const db = window.__coach.db(); db.panels = db.panels || {}; db.panels['songs-open-request'] = { songId: 'legacy', partId: 'p', instrumentId: null, returnTo: null, mode: null }; })()`);
+  await openSongs(page);
+  await assertRefusedCleanly(page);
+});
