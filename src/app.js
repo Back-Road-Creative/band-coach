@@ -63,7 +63,7 @@ import { reviewItems as kbdPathwayOutcomes, outcomeReviewed } from './instrument
 import { describeTask } from './ui/describe.js';
 import { createWakeLock } from './ui/wake-lock.js';
 import { createFocusTrap } from './ui/dialog-focus.js';
-import { createPanels } from './ui/panels.js';
+import { createPanels, sanitizePanelData } from './ui/panels.js';
 import { estimateRange, classify, exerciseRangeFor, tonicFromRange } from './instruments/how/voice-range.js';
 //
 //
@@ -720,7 +720,7 @@ import { register as registerPathway } from './ui/pathway.js';
     return s;
   }
   // sanitizeDB (src/core/sanitize-db.js, with repairEventClocks): the pure gate between a stored or restored profile and the app; the tables it checks against come in here.
-  function sanitizeDB(v, defaultLatencyMs, modelNow) { return sanitizeDBCore(v, defaultLatencyMs, modelNow, { MODS, MOD_IDS, WIND_KINDS, VOICE_KINDS, LOCALES, NOTATE_MOD_IDS, sanitizeModel, skillMap: KBD_SONG_SKILL_MAP }); }
+  function sanitizeDB(v, defaultLatencyMs, modelNow) { return sanitizeDBCore(v, defaultLatencyMs, modelNow, { MODS, MOD_IDS, WIND_KINDS, VOICE_KINDS, LOCALES, NOTATE_MOD_IDS, sanitizeModel, sanitizePanelData, skillMap: KBD_SONG_SKILL_MAP }); }
   // The exact string this page last read from or wrote to storage. flushSave()
   // compares against it so a page going away never clobbers a newer write made
   // by someone else in the meantime (another tab, a restored backup).

@@ -18,7 +18,10 @@ for (const key of ['constructor', '__proto__', 'toString']) {
 
     const saved = `{"v":1,"mods":{},"sessions":[{"d":"2026-01-01","mod":"${key}"}],"prefs":{"mod":"${key}","wind":"${key}","voice":"${key}"}}`;
     await page.evaluate(`localStorage.setItem('bandcoach.v1', ${JSON.stringify(saved)})`);
-    await page.reload();
+    // A boot that never finishes names the page exception behind it, not just the deadline. A boot that threw never reaches the assertions below, so no
+    // separate page.exceptions check follows it: no own-key mutation (all, mod, wind, voice, session) boots and then throws, so it could not fail. The wind,
+    // voice and session rules are carried by the value assertions; the mod rule by this reload.
+    await page.reload().catch((e) => { throw new Error(`${e.message}; page exceptions: ${JSON.stringify(page.exceptions)}`, { cause: e }); });
     await page.waitFor('typeof window.__coach !== "undefined"', 8000);
 
     const got = await page.evaluate(`(() => { const p = window.__coach.db().prefs, s = window.__coach.state(); return { mod: p.mod, wind: p.wind, voice: p.voice, sessions: window.__coach.db().sessions.length, stateLevel: typeof s === 'object' && s ? typeof s.level : typeof s }; })()`);

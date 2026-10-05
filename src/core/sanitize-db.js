@@ -2,7 +2,8 @@
 // running app. Pure: no DOM, no storage, no clock (the caller passes
 // `modelNow`). The app's instrument tables come in through `deps`, the same
 // way safeSet takes its storage, so a unit test can drive this with a few
-// fake tables and never boot a browser.
+// fake tables and never boot a browser. sanitizePanelData (src/ui/panels.js)
+// comes in the same way, so this core module imports nothing from src/ui.
 //
 // Every allow-list check is an OWN-key check (own()): a plain-object lookup
 // such as MODS[p.mod] is truthy for an inherited key, so a hand-edited or
@@ -10,13 +11,13 @@
 // valid instrument and the app booted on Object's own constructor.
 import { validateEvent, boundEvents } from './learning-events.js';
 import { sanitizeNoteNaming } from './note-names.js';
-import { sanitizePanelData } from '../ui/panels.js';
 import { ROOM_CHECK_VERSION } from '../audio/levels.js';
 import { exerciseRangeFor, tonicFromRange } from '../instruments/how/voice-range.js';
 
 const NOTATE_MODES = ['names', 'staff', 'both'];
 const clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
 const num = (x, d, lo, hi) => { x = +x; if (!isFinite(x)) x = d; return clamp(x, lo, hi); };
+// hasOwnProperty.call, not Object.hasOwn: the build targets es2020 and Object.hasOwn is ES2022, so an older browser would throw on every load.
 const own = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
 
 // repairEventClocks (bc-clk): before this fix, src/ui/songs.js stamped a song row's
@@ -45,7 +46,7 @@ function repairEventClocks(events, modelNow) {
 }
 
 export function sanitizeDB(v, defaultLatencyMs, modelNow, deps) {
-  const { MODS, MOD_IDS, WIND_KINDS, VOICE_KINDS, LOCALES, NOTATE_MOD_IDS, sanitizeModel, skillMap } = deps;
+  const { MODS, MOD_IDS, WIND_KINDS, VOICE_KINDS, LOCALES, NOTATE_MOD_IDS, sanitizeModel, sanitizePanelData, skillMap } = deps;
   const notate = {}; NOTATE_MOD_IDS.forEach(m => { notate[m] = 'names'; });
   const d = { v: 1, mods: {}, sessions: [], events: [], prefs: { mod: 'kbd', wind: 'bb', voice: 'low', kbdHands: 'both', sessionMinutes: null, names: true, noiseFloor: null, noiseFloorV: null, inputDeviceId: null, notate: notate, theme: 'system', locale: 'en', noteNaming: { system: 'letters', accidentals: 'mixed' } } }; v = (v && typeof v === 'object') ? v : {};
   MOD_IDS.forEach(m => { d.mods[m] = sanitizeModel(m, v.mods && v.mods[m], modelNow); });

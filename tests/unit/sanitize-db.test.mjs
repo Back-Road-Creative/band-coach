@@ -9,6 +9,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { sanitizeDB } from '../../src/core/sanitize-db.js';
+import { sanitizePanelData } from '../../src/ui/panels.js';
 import { EVENT_VERSION, EVENT_HISTORY_MAX } from '../../src/core/learning-events.js';
 
 const MODS = { kbd: {}, gtr: {}, voice: {}, harp: {} };
@@ -20,6 +21,7 @@ const deps = {
   LOCALES: [{ code: 'en' }, { code: 'es' }],
   NOTATE_MOD_IDS: ['kbd', 'gtr', 'voice'],
   sanitizeModel: (m) => ({ m }),
+  sanitizePanelData,
   skillMap: {},
 };
 const run = (v) => sanitizeDB(v, 12, 1.7e12, deps);
