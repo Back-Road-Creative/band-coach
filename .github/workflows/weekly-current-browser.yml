@@ -86,3 +86,127 @@ jobs:
           path: dist/test-artifacts/
           if-no-files-found: ignore
           retention-days: 7
+
+  # The same steps on Chrome beta, so a break in the next Chrome shows up weeks
+  # before it reaches everyone. Its artifacts carry `beta` in their names:
+  # upload-artifact v4 rejects a second upload of one name within a run.
+  test-beta:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      # Chrome beta, installed from Google's .deb so the apt sources the runner
+      # image ships do not matter. google-chrome is put first on PATH so the
+      # unchanged `locate Chrome` step below finds the beta. The job fails here
+      # unless the browser reports itself a beta: a leg that quietly tested stable
+      # would be a second copy of the first job.
+      - name: install Chrome beta
+        run: |
+          curl -fsSLo "$RUNNER_TEMP/chrome-beta.deb" https://dl.google.com/linux/direct/google-chrome-beta_current_amd64.deb
+          sudo apt-get install -y "$RUNNER_TEMP/chrome-beta.deb"
+          sudo ln -sf /usr/bin/google-chrome-beta /usr/local/bin/google-chrome
+          /usr/local/bin/google-chrome --version | tee -a "$GITHUB_STEP_SUMMARY" | /bin/grep -qi beta
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: pin the build date to the commit
+        run: echo "SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)" >> "$GITHUB_ENV"
+      - name: locate Chrome
+        run: echo "CHROME_BIN=$(which google-chrome)" >> "$GITHUB_ENV"
+      - name: record Chrome version
+        run: '"$CHROME_BIN" --version >> "$GITHUB_STEP_SUMMARY"'
+      - run: npm ci
+      - id: gate
+        name: release size budget and smoke checks
+        shell: bash
+        env:
+          CI: true
+        run: |
+          set +e
+          { node build/build.mjs --release && node --test tests/release/gate.test.mjs; } 2>&1 | tee "$RUNNER_TEMP/gate.log"
+          rc=${PIPESTATUS[0]}; echo "$rc" > "$RUNNER_TEMP/gate.rc"; exit "$rc"
+      - id: suite
+        name: browser suite, then the full release lane
+        shell: bash
+        env:
+          CI: true
+        run: |
+          set +e
+          npm test 2>&1 | tee "$RUNNER_TEMP/suite.log"
+          rc=${PIPESTATUS[0]}; echo "$rc" > "$RUNNER_TEMP/suite.rc"; exit "$rc"
+      - name: summarise the run
+        if: always()
+        env:
+          GATE_OUTCOME: ${{ steps.gate.outcome }}
+          SUITE_OUTCOME: ${{ steps.suite.outcome }}
+        run: node build/ci-summary.mjs
+      - name: keep the run summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: run-summary-beta-${{ github.run_id }}-${{ github.run_attempt }}
+          path: dist/test-artifacts/run-summary.json
+          if-no-files-found: error
+          retention-days: 7
+      - name: keep failure evidence
+        if: failure() || cancelled()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-artifacts-beta-${{ github.run_id }}-${{ github.run_attempt }}
+          path: dist/test-artifacts/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  # One issue, not one per red week. needs.*.result, not failure(): this job's own
+  # steps do not fail when a test job did. A cancelled run opens and closes nothing.
+  # The Chrome version is read from the run summary each test job uploads.
+  report:
+    needs: [test, test-beta]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+      actions: read
+    steps:
+      - name: open or update the failing-run issue
+        if: needs.test.result == 'failure' || needs.test-beta.result == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          STABLE_RESULT: ${{ needs.test.result }}
+          BETA_RESULT: ${{ needs.test-beta.result }}
+        run: |
+          title='weekly browser run failing'
+          chrome() {
+            d="$(mktemp -d)"
+            if gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" -n "$1-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" -D "$d" >/dev/null 2>&1; then
+              jq -r '.facts.chrome // "unknown"' "$d/run-summary.json" 2>/dev/null || echo unknown
+            else
+              echo "unknown (no run summary was uploaded)"
+            fi
+          }
+          body="The weekly current-browser run failed, so a Chrome release may be breaking Band Coach for people whose browser updates itself.
+
+          Run: $RUN_URL
+          Stable Chrome ($STABLE_RESULT): $(chrome run-summary)
+          Chrome beta ($BETA_RESULT): $(chrome run-summary-beta)
+
+          Open the run for the summary, and download its test-artifacts for the screenshots and logs. This issue closes itself when a weekly run passes on both."
+          n="$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "\"$title\" in:title" --json number,title -q ".[] | select(.title == \"$title\") | .number" | head -n1)"
+          if [ -n "$n" ]; then
+            gh issue comment "$n" --repo "$GITHUB_REPOSITORY" --body "$body"
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --body "$body"
+          fi
+      - name: close the failing-run issue
+        if: needs.test.result == 'success' && needs.test-beta.result == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          title='weekly browser run failing'
+          for n in $(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "\"$title\" in:title" --json number,title -q ".[] | select(.title == \"$title\") | .number"); do
+            gh issue close "$n" --repo "$GITHUB_REPOSITORY" --comment "The weekly current-browser run passed on stable Chrome and Chrome beta: $RUN_URL"
+          done
