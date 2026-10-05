@@ -226,6 +226,17 @@ test('a failing run opens or updates ONE issue with the run URL and the Chrome v
   assert.match(s, /\bgh issue comment\b(?:(?!\bgh\b).)*?--body "\$body"/, 'an existing issue is commented with that body');
   assert.match(s, /gh run download/, 'the Chrome version comes from the run summary the test job uploaded');
   assert.match(s, /\.facts\.chrome/, 'the version is the summary\'s facts.chrome');
+  // The download name must be the upload name: "<prefix>-<run id>-<attempt>", with the
+  // prefix each test job's run-summary upload uses. A mismatch finds nothing, and the
+  // issue would say 'unknown' every week.
+  assert.ok(s.includes('-n "$1-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"'), 'the download name is "$1-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"');
+  for (const [job, prefix] of [['test', 'run-summary'], ['test-beta', 'run-summary-beta']]) {
+    const up = uploads(bodySteps(noComments(jobBody(weekly(), job)))).find((x) => /path: dist\/test-artifacts\/run-summary\.json\b/.test(x));
+    assert.ok(up && up.includes(`name: ${prefix}-\${{ github.run_id }}-\${{ github.run_attempt }} path:`), `${job} uploads its run summary as ${prefix}-<run id>-<attempt>, the name the report downloads`);
+  }
+  // Only the issue with exactly this title is touched: the search is fuzzy, and a
+  // 'weekly browser run failing (old)' must never be commented on.
+  assert.ok(s.includes('select(.title == \\"$title\\")'), 'the issue list is filtered to the exact title');
   assert.match(s, /GH_TOKEN: \$\{\{ github\.token \}\}/, 'gh needs the token');
 });
 
@@ -236,6 +247,7 @@ test('a green run closes the issue', () => {
   assert.match(s, /\bif: needs\.test\.result == 'success' && needs\.test-beta\.result == 'success'/, 'only when BOTH legs passed');
   assert.ok(s.includes("title='weekly browser run failing'"), 'it closes the same fixed-title issue');
   assert.match(s, /--state open/, 'only an open issue is touched');
+  assert.ok(s.includes('select(.title == \\"$title\\")'), 'only the issue with exactly that title is closed, not one the fuzzy search merely returned');
 });
 
 test('the Chrome beta job installs beta and proves it before running the same steps', () => {
