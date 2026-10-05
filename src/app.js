@@ -1,6 +1,7 @@
 import { judgePitch, OCTAVE_POLICY } from './core/judge.js';
 import { createDeafWindow } from './audio/deaf-window.js';
 import { exportProgress as exportProgressFile, importProgress as importProgressFile, migrate as migrateDB } from './core/progress-file.js';
+import { checkFileSize } from './ui/songs/import-route.js';
 import { safeSet, safeGet } from './core/storage.js';
 import { sanitizeDB as sanitizeDBCore } from './core/sanitize-db.js';
 import { createLibrary, indexedDbStore, memoryStore } from './song/library.js';
@@ -21,6 +22,7 @@ import { loadPack, packStatus, createIndexedDBStore, packManifestUrl, DEFAULT_MO
 import { checkForUpdate, FALLBACK_DOWNLOAD_URL } from './core/update-check.js';
 import { setNoteNaming, name as noteNameFor } from './core/note-names.js';
 import { t, en, setLocale, LOCALES } from './core/i18n.js';
+import { micErrorMessage } from './core/mic-error.js';
 import { CLEF_PATHS } from './notation/glyphs.js';
 import { yin } from './audio/yin.js';
 import { createPitchNode } from './audio/pitch-worklet.js';
@@ -253,8 +255,32 @@ import { register as registerPathway } from './ui/pathway.js';
   // allowed to start" for a context created anywhere else. Handlers that
   // merely bring a learner back (visibilitychange, bfcache pageshow) call
   // resumeAudio(), which wakes a suspended context and never makes one.
-  function ensureAudio() { if (!actx) { try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { actx = null; } } resumeAudio(); return actx; }
-  function resumeAudio() { if (actx && actx.state === 'suspended') actx.resume(); }
+  // The OS or browser can stop a context on its own (iOS: a phone call, Siri or
+  // an AirPods route change sets 'interrupted' with no visibilitychange), and
+  // now() is actx.currentTime, so the exercise would sit frozen and silent.
+  // onAudioState says so and pauses; the Resume button (a tap) wakes it.
+  // audioParked marks the app's OWN hide/pagehide suspend (teardown above),
+  // which is not an interruption and must not raise the pause card.
+  let audioParked = false;
+  // A closed context can never run again: forget everything built on it (and
+  // the mic source wired into it) so the next gesture's ensureAudio() rebuilds.
+  // The pitch timers hold the DEAD context's currentTime and the new clock
+  // starts near 0, so they are zeroed too: a stale one makes the first mic
+  // frame's dt hugely negative, and a silent frame then banks a huge holdFor.
+  // (holdFor/wrongFor need no reset: the break nulls the task, and a new task zeroes them.)
+  function dropAudio() {
+    if (lastAudioSource) { if (lastAudioSource.__monoRouteInterval) clearInterval(lastAudioSource.__monoRouteInterval); try { lastAudioSource.disconnect(); } catch (e) {} }
+    if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; micGen++; micHideReleased = true; const pm = $('practiceMeter'); if (pm) pm.hidden = true; }
+    lastPitchAt = lastWorkletPitchAt = 0; actx = anTime = anFreq = lastAudioSource = pitchWorkletNode = pitchWorkletPromise = null; micReady = false; ioRefresh();
+  }
+  function onAudioState(ctx) {
+    if (ctx !== actx) return; const st = ctx.state; if (st === 'closed') dropAudio();
+    if (st === 'running' || audioParked || document.hidden || !playing) return;
+    BREAKS.audio = [t('audio.stoppedTitle'), t('audio.stoppedWhy'), 0]; takeBreak('audio'); coach(t('audio.tapToResume'));
+  }
+  function ensureAudio() { if (actx && actx.state === 'closed') dropAudio(); if (!actx) { try { const c = actx = new (window.AudioContext || window.webkitAudioContext)(); c.onstatechange = () => onAudioState(c); } catch (e) { actx = null; } } resumeAudio(); return actx; }
+  // A resume that is refused, or settles with the context still not running (iOS keeps 'interrupted' through a call), fires no further statechange: say so again rather than leave the learner frozen after their tap.
+  function resumeAudio() { const c = actx; if (!c) return; if (c.state === 'closed') { dropAudio(); return; } if (c.state !== 'running') { const again = () => onAudioState(c); try { Promise.resolve(c.resume()).then(again, e => { recordError('audio-resume', e); again(); }); } catch (e) { recordError('audio-resume', e); again(); } } }
   const now = () => actx ? actx.currentTime : performance.now() / 1000;
   // Instrument-family-shaped reference tone (src/audio/voices.js): a
   // pre-rendered buffer, computed by pure JS synthesis, never an embedded
@@ -364,10 +390,15 @@ import { register as registerPathway } from './ui/pathway.js';
     const base = { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: { ideal: 2 } };
     const wanted = DB.prefs.inputDeviceId ? { ...base, deviceId: { exact: DB.prefs.inputDeviceId } } : base;
     openMicPromise = (async () => {
+      // No AudioContext: fail before the browser's prompt; never open a stream nothing can listen to.
+      if (!actx) throw new DOMException('no AudioContext', 'NoAudioContext');
       let st;
       try { st = await navigator.mediaDevices.getUserMedia({ audio: wanted }); }
       catch (e) { if (!DB.prefs.inputDeviceId) throw e; st = await navigator.mediaDevices.getUserMedia({ audio: base }); }
-      micStream = st; micHideReleased = false; const src = actx.createMediaStreamSource(st); wireAnalysers(monoSum(src)); micReady = true;
+      micHideReleased = false;
+      // Wiring can throw with the stream live: stop it, or the OS mic light stays on. micStream is only set once wired, so a failure leaves nothing to undo.
+      try { wireAnalysers(monoSum(actx.createMediaStreamSource(st))); micStream = st; micReady = true; }
+      catch (e) { st.getTracks().forEach(tr => tr.stop()); throw e; }
       // A successful Connect clears the 'blocked' sentence calibrateNoiseFloor wrote (its catch below: keep the two texts identical), so it does not sit beside 'Listening through your microphone.'. Any other result text is left alone.
       { const cr = $('calibrateResult'); if (cr && cr.textContent === 'The microphone was blocked, so it could not be checked.') cr.textContent = ''; }
       // A track that ends (device unplugged, permission revoked) leaves the mic as the teardown 'mic' stopper does, then the status and Connect button follow. Only the CURRENT stream counts: a switched-away stream ending later must not close its replacement. micGen++ makes a room check still running for it discard its result.
@@ -2290,11 +2321,11 @@ import { register as registerPathway } from './ui/pathway.js';
     let parser = midiParsers.get(input); if (!parser) { parser = createMidiParser(); midiParsers.set(input, parser); }
     parser.feed(d).forEach(evt => { if (evt.type === 'on') { noteState.noteOn(input, evt.channel, evt.note); realMidiHeld.add(evt.note); onNote(evt.note, true, 'midi'); } else { noteState.noteOff(input, evt.channel, evt.note); if (!noteState.isHeld(evt.note)) realMidiHeld.delete(evt.note); onNoteOff(evt.note, 'midi'); } });
   }
-  function connectMic() { openMic().then(ioRefresh).catch(() => ioState('off', 'The microphone was blocked. Allow it in the browser, or open the standalone copy in Chrome.')); }
+  function connectMic() { openMic().then(ioRefresh).catch(e => { recordError('mic:connect', e); ioState('off', micErrorMessage(e)); }); }
   // Start on a mic instrument asks for the mic FIRST (the browser's own prompt), then begins: an exercise that cannot hear only ever says "Time." and "You stepped away". Blocked or unavailable: say so and do not start.
   function startAfterMic() {
     if (!needsMic() || micReady) { startSession(); return; }
-    const m = mod, blocked = () => { const msg = 'The microphone was blocked, so I could not start. Press "Set up input", then "Connect microphone", and allow it in your browser.'; ioState('off', msg); if (mod === m) coach(msg); };
+    const m = mod, blocked = e => { recordError('mic:start', e); const msg = e && e.name === 'NotAllowedError' ? 'The microphone was blocked, so I could not start. Press "Set up input", then "Connect microphone", and allow it in your browser.' : micErrorMessage(e); ioState('off', msg); if (mod === m) coach(msg); };
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { const msg = 'This browser cannot open a microphone here. Open the standalone copy in Chrome.'; ioState('off', msg); coach(msg); return; }
     ensureAudio(); openMic().then(() => { ioRefresh(); if (!sess && mod === m) startSession(); }).catch(blocked);
   }
@@ -2408,7 +2439,7 @@ import { register as registerPathway } from './ui/pathway.js';
   $('playBtn').addEventListener('click', function () { this.blur(); if (!sess) startAfterMic(); else if (paused) resume(); else takeBreak('user'); });
   $('endBtn').addEventListener('click', function () { this.blur(); endSession(); }); $('endBtn2').addEventListener('click', endSession); $('backBtn').addEventListener('click', resume);
   $('snoozeBtn').addEventListener('click', () => { sess.snoozeUntil = Date.now() + 5 * 60000; sess.tiredFor = 0; S.ready = Math.min(S.ready, 0.6); pauseInfo = { at: Date.now(), secs: 0 }; resume(); coach('Five more minutes, then I will ask again. I have eased off the pace meanwhile.'); });
-  document.addEventListener('visibilitychange', () => { if (document.hidden && playing) takeBreak('hidden'); if (document.hidden) { flushSave(); releaseNotes(); runTeardown('hidden'); } else { refreshModelClock(); resumeAudio(); ioRefresh(); } wakeLock.handleVisibilityChange(document); });
+  document.addEventListener('visibilitychange', () => { if (document.hidden && playing) takeBreak('hidden'); if (document.hidden) { flushSave(); releaseNotes(); runTeardown('hidden'); } else { audioParked = false; refreshModelClock(); resumeAudio(); ioRefresh(); } wakeLock.handleVisibilityChange(document); });
   // A hidden tab is a pause the learner might return to; pagehide (real tab
   // close, navigation, reload) never comes back, so it gets the same
   // teardown -- a hidden tab that goes straight to being closed must not
@@ -2417,7 +2448,7 @@ import { register as registerPathway } from './ui/pathway.js';
   // already run), so a hidden tab that is THEN closed safely runs it twice.
   // Kept next to this listener rather than in the flushSave/writeDB pagehide
   // wiring above, which an unrelated unit also edits.
-  window.addEventListener('pagehide', () => runTeardown('pagehide'));
+  window.addEventListener('pagehide', () => { audioParked = true; runTeardown('pagehide'); });
   // now() is actx.currentTime, so a context the teardown stopper suspended
   // above freezes the app clock solid -- nextTaskAt, scheduled against that
   // frozen now(), can never become due again. The visible branch above
@@ -2426,7 +2457,7 @@ import { register as registerPathway } from './ui/pathway.js';
   // browsers, so resumeAudio() (a no-op unless actx exists and is suspended)
   // needs its own call here too, or a learner returning from history
   // navigation gets the same frozen clock this whole fix exists to prevent.
-  window.addEventListener('pageshow', ev => { if (ev.persisted) resumeAudio(); });
+  window.addEventListener('pageshow', ev => { if (ev.persisted) { audioParked = false; resumeAudio(); } });
   // A held note has no way to send its own note-off once the window itself
   // loses focus (alt-tab, another app grabbing the keyboard) -- release
   // everything noteState is holding rather than leave a phantom note "held"
@@ -2591,8 +2622,8 @@ import { register as registerPathway } from './ui/pathway.js';
     noteBackupMade(Date.now()); $('backupNudge').hidden = true;
     coach(t('backup.saved'));
   }
-  async function doImportProgress(text) {
-    const result = importProgressFile(text);
+  async function doImportProgress(textOrChecked) {
+    const result = typeof textOrChecked === 'string' ? importProgressFile(textOrChecked) : textOrChecked; // a pre-checked result: parsed once
     if (!result.ok) { coach(t(result.errorId)); return result; }
     // The songs go first because that is the store that can fail (e.g.
     // IndexedDB unavailable): if it does, nothing about the live profile
@@ -2613,9 +2644,10 @@ import { register as registerPathway } from './ui/pathway.js';
   $('backupRestoreInput').addEventListener('change', function () {
     const file = this.files && this.files[0]; this.value = '';
     if (!file) return;
+    if (checkFileSize(file, 'backup')) { coach(t('backup.err.tooLarge')); return; } // before a FileReader is built
     const reader = new FileReader();
     // Check the file before asking: a file that is not a backup is refused with the reason, and the "replace your progress" confirm is only raised for one that can be restored.
-    reader.onload = () => { const text = String(reader.result), check = importProgressFile(text); if (!check.ok) { coach(t(check.errorId)); return; } if (confirm(t('backup.confirmRestore'))) doImportProgress(text); };
+    reader.onload = () => { const text = String(reader.result), check = importProgressFile(text); if (!check.ok) { coach(t(check.errorId)); return; } if (confirm(t('backup.confirmRestore'))) doImportProgress(check); };
     reader.onerror = () => coach(t('backup.readError'));
     reader.readAsText(file);
   });
@@ -2875,6 +2907,7 @@ import { register as registerPathway } from './ui/pathway.js';
     // fabricating a pass.
     setNoiseFloorForTest: floor => { DB.prefs.noiseFloor = floor; applyGates(gatesFor(floor)); save(); } });
   if (__DEBUG_HOOK__) Object.assign(hook, { micOpen: () => micReady, audioExists: () => !!actx, audioSuspended: () => !!(actx && actx.state === 'suspended'), teardownRuns: () => teardownRunCount });
+  if (__DEBUG_HOOK__) Object.assign(hook, { pitchClocks: () => [lastPitchAt, lastWorkletPitchAt] });
   //
   if (__DEBUG_HOOK__) Object.assign(hook, { judgeChord: judgeChord, chroma: chroma });
   if (__DEBUG_HOOK__) Object.assign(hook, { groove: () => groove, grooveLast: () => grooveLast, grooveBpm: () => S.grooveBpm, grooveOn: v => { grooveOn = !!v; task = null; groove = null; }, grooveInject: (midi, atAudioTime) => { const fire = () => { if (audioNow() >= atAudioTime) onNote(midi, true); else setTimeout(fire, 4); }; fire(); } });
