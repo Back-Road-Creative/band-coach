@@ -44,11 +44,11 @@ import { rangeForInstrument } from '../audio/range.js';
 import { countInTimes, clampBpm, DEFAULT_BPM } from './learn/count-in.js';
 import { starterSongs } from '../song/starter/index.js';
 import { createLibrary, memoryStore, indexedDbStore } from '../song/library.js';
-import { validateSong } from '../song/model.js';
+import { validateSong, songBarCount, MAX_SONG_BARS } from '../song/model.js';
 import { buildLessonPlan, nextStep, creditFor } from '../song/lesson.js';
 import { INSTRUMENTS } from '../instruments/index.js';
 import { capabilityFor } from '../instruments/capability.js';
-import { importerFor } from './songs/import-route.js';
+import { importerFor, checkFileSize } from './songs/import-route.js';
 import { judgeAttempt, passesRule, firstCorrection, phraseSec } from './songs/practice.js';
 import { createSongClock } from '../song/clock.js';
 import { phaseOf, repairFor, interludeAfter, addReview, dueReviews, dropReviews, sanitizeReviewQueue } from '../core/teaching.js';
@@ -441,12 +441,14 @@ export function summarizePracticeSession(practice, nowSec) {
 // something the learner is told, not something that just silently vanished.
 const ADD_STATE_STORE_ID = 'songs-add-state';
 
-function readFile(file, as) {
+function readFile(file, route) {
   return new Promise((resolve, reject) => {
+    const tooBig = checkFileSize(file, route.kind); // before a FileReader is built
+    if (tooBig) return reject(new Error(tooBig));
     const reader = new FileReader();
     reader.onerror = () => reject(new Error('the file could not be read'));
     reader.onload = () => resolve(reader.result);
-    if (as === 'bytes') reader.readAsArrayBuffer(file);
+    if (route.readAs === 'bytes') reader.readAsArrayBuffer(file);
     else reader.readAsText(file);
   });
 }
@@ -1156,6 +1158,15 @@ function mountSongsPanel(hostEl, api) {
     songHeaderSection.appendChild(headerSheetButton(song));
   }
 
+  // A song saved before the length ceiling: say so, keep the list open. Guards openSong() and startPractice() (Carry on, hand-offs).
+  function refuseIfTooLong(song) {
+    const bars = songBarCount(song);
+    if (bars <= MAX_SONG_BARS) return false;
+    songHeaderSection.hidden = true; practiceSection.hidden = true; practiceSection.innerHTML = ''; libraryDetails.open = true;
+    say('"' + song.title + '" is too long to open (about ' + bars + ' bars, the limit is ' + MAX_SONG_BARS + '). Remove it from your list and add a corrected file.', 'no');
+    return true;
+  }
+
   function openSong(song, libraryId) {
     // A song already mid-recording (Stop and check never clicked) has its
     // mic/MIDI listener subscribed via `practice`, the module-level variable
@@ -1165,6 +1176,7 @@ function mountSongsPanel(hostEl, api) {
     // no auto-start below) or a 0-note song (dead end) never calls
     // startPractice() again to clean it up on its own.
     stopRecording();
+    if (refuseIfTooLong(song)) return;
     songHeader(song, libraryId || null);
     practiceSection.hidden = false;
     practiceSection.innerHTML = '';
@@ -1205,6 +1217,7 @@ function mountSongsPanel(hostEl, api) {
   // again" button) skips the lookup outright.
   function startPractice(song, partId, instrumentOverride, opts = {}) {
     stopRecording();
+    if (refuseIfTooLong(song)) return;
     practiceSection.hidden = false; // a hand-off skips openSong(), which is what un-hides it for a row click
     // A song lesson has three modes on one control (never saved -- every
     // new open starts in Learn): 'learn' (today's behaviour, assistance
@@ -2502,7 +2515,7 @@ function mountSongsPanel(hostEl, api) {
   async function importBandPack(file, route) {
     let pack;
     try {
-      const buffer = await readFile(file, route.readAs);
+      const buffer = await readFile(file, route);
       pack = readBandPack(new Uint8Array(buffer));
     } catch (e) {
       say(e && e.message ? e.message : String(e), 'no');
@@ -2539,7 +2552,7 @@ function mountSongsPanel(hostEl, api) {
   async function importChallenge(file, route) {
     let challenge;
     try {
-      const text = await readFile(file, route.readAs);
+      const text = await readFile(file, route);
       challenge = parseChallenge(text);
     } catch (e) {
       say('That file could not be read: ' + (e && e.message ? e.message : String(e)), 'no');
@@ -2569,7 +2582,7 @@ function mountSongsPanel(hostEl, api) {
   async function importNotationFile(file, route) {
     let song, warnings;
     try {
-      const data = await readFile(file, route.readAs);
+      const data = await readFile(file, route);
       // routeImportFile() decided the kind above; importerFor() (src/ui/
       // songs/import-route.js) is the one place that maps a kind to its
       // actual importer, so a .gp file reaches importGp7 rather than
