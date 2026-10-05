@@ -16,6 +16,13 @@
   "extraMetadata": {
     "main": "main.js"
   },
+  "electronFuses": {
+    "runAsNode": false,
+    "enableNodeCliInspectArguments": false,
+    "enableNodeOptionsEnvironmentVariable": false,
+    "onlyLoadAppFromAsar": true,
+    "enableEmbeddedAsarIntegrityValidation": true
+  },
   "win": {
     "target": [
       "appx"
