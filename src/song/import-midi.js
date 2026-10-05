@@ -376,5 +376,5 @@ export function importMidi(bytes, options = {}) {
     chords: [],
   };
 
-  return finishImport('importMidi', song, warnings);
+  return finishImport(song, warnings);
 }

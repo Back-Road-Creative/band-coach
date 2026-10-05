@@ -280,7 +280,7 @@ export function importAbc(rawText, options = {}) {
     parts,
     chords,
   };
-  return finishImport('importAbc', song, warnings);
+  return finishImport(song, warnings);
 }
 
 // --- tokenizer -------------------------------------------------------

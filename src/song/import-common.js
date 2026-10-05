@@ -23,9 +23,10 @@ export function num(str, fallback) {
 
 // Every importer's last step. A damaged file can decode "successfully" into a Song with a
 // zero duration, a note outside 0-127 or a zero tempo; that is a refusal the learner can be
-// told about here, not a half-built Song for the library to meet later.
-export function finishImport(who, song, warnings) {
+// told about here, not a half-built Song for the library to meet later. The message is
+// shown as-is after "That file could not be read: ", so it is a plain clause with no code names.
+export function finishImport(song, warnings) {
   const { ok, errors } = validateSong(song);
-  if (!ok) throw new Error(`${who}: this file did not turn into a usable song, so it may be damaged (${errors[0]})`);
+  if (!ok) throw new Error(`it did not turn into a usable song, so it may be damaged (${errors[0]})`);
   return { song, warnings };
 }

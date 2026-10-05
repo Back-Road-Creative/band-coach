@@ -629,5 +629,5 @@ export function importGp5(bytes, options = {}) {
     metreChanges,
   };
 
-  return finishImport('importGp5', song, warnings);
+  return finishImport(song, warnings);
 }

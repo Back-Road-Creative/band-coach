@@ -2,6 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import zlib from 'node:zlib';
+import { fileURLToPath } from 'node:url';
+import { Worker, isMainThread, parentPort, workerData } from 'node:worker_threads';
 import { makeRng } from './audio-analysis-fixtures.mjs';
 import { importMidi } from '../../src/song/import-midi.js';
 import { importGp5 } from '../../src/song/import-gp5.js';
@@ -19,7 +21,8 @@ import { validateSong } from '../../src/song/model.js';
 // show. It must never hang, never throw a non-Error, never hand back a half-built Song.
 // Every case is a pure function of (BASE_SEED, target, fixture, index); a failure prints
 // the seed and strategy so the exact bytes can be rebuilt. Set FUZZ_SEED to explore another
-// corner, FUZZ_CASES to run more cases per target.
+// corner, FUZZ_CASES to run more cases per target. Each sweep runs in a worker thread (this
+// same file, re-entered) so a real hang is killed at a deadline and reported with its seed.
 
 const BASE_SEED = Number(process.env.FUZZ_SEED) || 0x5eed1e5;
 const CASES = Number(process.env.FUZZ_CASES) || 320;
@@ -122,12 +125,17 @@ function unzipAll(bytes) {
 
 // ---- the contract every case is held to ----
 
-function runCase({ target, fixtureName, index, seed, label }, run, check) {
-  const where = `${target} / ${fixtureName} / case ${index} / ${label} / seed ${seed} (FUZZ_SEED=${BASE_SEED})`;
+const whereOf = ({ target, fixtureName, index, seed, label }) => `${target} / ${fixtureName} / case ${index} / ${label} / seed ${seed} (FUZZ_SEED=${BASE_SEED})`;
+
+// `neverThrows` is for parsers whose contract is a plain-English refusal, not an exception
+// (the backup reader): any throw there is a failure. Returns 'rejected' or 'imported'.
+function runCase(ctx, run, check, { neverThrows = false, classify = () => 'imported' } = {}) {
+  const where = whereOf(ctx);
   const started = Date.now();
   let result, thrown, threw = false;
   try { result = run(); } catch (e) { threw = true; thrown = e; }
   if (threw) {
+    assert.ok(!neverThrows, `${where}: threw ${thrown && thrown.message ? thrown.message : String(thrown)} (this reader must refuse, never throw)`);
     assert.ok(thrown instanceof Error, `${where}: threw a non-Error: ${String(thrown)}`);
     assert.ok(typeof thrown.message === 'string' && thrown.message.trim() !== '', `${where}: threw an Error with no message`);
   } else {
@@ -135,7 +143,7 @@ function runCase({ target, fixtureName, index, seed, label }, run, check) {
   }
   const ms = Date.now() - started;
   assert.ok(ms < CASE_BUDGET_MS, `${where}: took ${ms} ms (budget ${CASE_BUDGET_MS} ms)`);
-  return threw ? 'rejected' : 'imported';
+  return threw ? 'rejected' : classify(result);
 }
 
 function checkSong(result, where) {
@@ -144,79 +152,6 @@ function checkSong(result, where) {
   const v = validateSong(result.song);
   assert.ok(v.ok, `${where}: imported a Song that fails validateSong: ${JSON.stringify(v.errors).slice(0, 400)}`);
 }
-
-// Sweeps `CASES` damaged inputs spread evenly over `seeds` (name -> original bytes).
-// `build(bytes)` turns mutated bytes into the importer's input (default: as is).
-function sweep(target, seeds, strategies, importer, { build = (b) => b, check = checkSong } = {}) {
-  test(`${target}: ${CASES} seeded corrupt files import to a valid Song or fail with a clear Error`, () => {
-    const names = Object.keys(seeds);
-    const tally = { imported: 0, rejected: 0 };
-    const failures = []; // every broken case, so one run shows the whole damage, not just the first
-    for (let i = 0; i < CASES; i++) {
-      const fixtureName = names[i % names.length];
-      const seed = (BASE_SEED + Math.imul(i + 1, 0x9e3779b1) + target.length * 7919) >>> 0;
-      const rng = makeRng(seed);
-      // Mutation and input construction run outside runCase: a bug there is the harness's,
-      // and must not be mistaken for (or hidden as) an importer rejection.
-      const m = mutate(seeds[fixtureName], rng, strategies);
-      const input = build(m.bytes);
-      try {
-        tally[runCase({ target, fixtureName, index: i, seed, label: m.label }, () => importer(input), check)]++;
-      } catch (e) { failures.push(e.message); }
-    }
-    assert.equal(failures.length, 0, `${failures.length} of ${CASES} cases broke the contract; first ${Math.min(failures.length, 5)}:\n  ${failures.slice(0, 5).join('\n  ')}`);
-    // A sweep that rejects everything (or accepts everything) is not exercising both sides.
-    assert.ok(tally.rejected > 0, `${target}: no damaged file was ever rejected (${JSON.stringify(tally)})`);
-    assert.ok(tally.imported > 0, `${target}: no damaged file ever still imported (${JSON.stringify(tally)})`);
-  });
-}
-
-// ---- the sweeps ----
-
-const names = (dir, list) => Object.fromEntries(list.map((n) => [n, fixture(dir, n)]));
-const GP7 = ['notes.gp', 'score-info.gp', 'time-signatures.gp'];
-const XML = ['tutorial-chopin-prelude.musicxml', 'harmonic-element.musicxml', 'barline-multiple-coda.musicxml'];
-
-sweep('midi', names('midi', ['beat.mid', 'pitchBendTest.mid']), BINARY,
-  (b) => importMidi(b, { fileName: 'fuzz.mid' }));
-
-sweep('gp5', names('gp5', ['multitrack.gp5', 'Voices.gp5', 'Repeat.gp5', 'tuplets.gp5']), BINARY,
-  (b) => importGp5(b, { fileName: 'fuzz.gp5' }));
-
-sweep('gp7 (damaged zip container)', names('gp7', GP7), BINARY,
-  (b) => importGp7(b, { fileName: 'fuzz.gp' }));
-
-// Damage inside the archive: take the real score.gpif, damage it, re-zip it (deflated), so
-// the damage reaches the XML reader and the importer instead of stopping at the zip reader.
-sweep('gp7 (damaged score.gpif)',
-  Object.fromEntries(GP7.map((n) => [n, unzipAll(fixture('gp7', n)).find((e) => e.name === 'Content/score.gpif').data])), TEXT,
-  (b) => importGp7(buildZip([{ name: 'Content/score.gpif', method: 8, data: b }]), { fileName: 'fuzz.gp' }),
-);
-
-sweep('musicxml', names('musicxml', XML), TEXT, (b) => importMusicXml(asText(b), { fileName: 'fuzz.musicxml' }));
-
-const CONTAINER = '<?xml version="1.0"?><container><rootfiles><rootfile full-path="score.musicxml"/></rootfiles></container>';
-const mxlOf = (xml, method = 8) => buildZip([
-  { name: 'META-INF/container.xml', method: 0, data: Buffer.from(CONTAINER) },
-  { name: 'score.musicxml', method, data: xml },
-]);
-sweep('mxl (damaged zip container)',
-  Object.fromEntries(XML.map((n, i) => [n, mxlOf(fixture('musicxml', n), i % 2 ? 0 : 8)])), BINARY,
-  (b) => importMxl(b, { fileName: 'fuzz.mxl' }));
-sweep('mxl (damaged score inside a good zip)', names('musicxml', XML), TEXT,
-  (b) => importMxl(mxlOf(b), { fileName: 'fuzz.mxl' }));
-
-const ABC_RICH = [
-  'X:1', 'T:Fuzz Seed', 'C:Nobody', 'M:6/8', 'L:1/8', 'Q:1/4=96', 'K:Gmix', '%%score (1 2)',
-  'V:1 name="Melody"', 'V:2 name="Bass" clef=bass',
-  '[V:1] |:"G"GAB c2d|(3efg [ceg]2z|1 d3 B3:|2 d3 B3|]',
-  '[V:2] |:G,3 D,3|C,3 G,,3|1 G,6:|2 G,6|]',
-  'w: la la la la',
-].join('\n');
-sweep('abc', {
-  'tune.abc': fixture('acceptance/backup-restore', 'tune.abc'),
-  'rich (voices, repeats, tuplet, chords)': asBytes(ABC_RICH),
-}, TEXT, (b) => importAbc(asText(b), { fileName: 'fuzz.abc' }));
 
 // The backup parser returns a plain-English refusal rather than throwing, so its contract is
 // different: never throw at all, and hand back either { ok: false, error, errorId } or a
@@ -233,43 +168,154 @@ function checkBackup(result, where) {
     assert.ok(result.songs.every((s) => s && typeof s === 'object' && !Array.isArray(s)), `${where}: ok result has a non-object song`);
   }
 }
-test(`backup: ${CASES} seeded corrupt backup files are refused in plain English or restore a db, never throw`, () => {
-  const seeds = names('backups', ['v2-snapshot.json', 'v1-backup.json']);
-  const keys = Object.keys(seeds);
-  const tally = { ok: 0, refused: 0 };
-  const failures = [];
+
+// ---- the sweeps: plain data, so a worker thread can rebuild any of them by index ----
+
+const names = (dir, list) => Object.fromEntries(list.map((n) => [n, fixture(dir, n)]));
+const GP7 = ['notes.gp', 'score-info.gp', 'time-signatures.gp'];
+const XML = ['tutorial-chopin-prelude.musicxml', 'harmonic-element.musicxml', 'barline-multiple-coda.musicxml'];
+const CONTAINER = '<?xml version="1.0"?><container><rootfiles><rootfile full-path="score.musicxml"/></rootfiles></container>';
+const mxlOf = (xml, method = 8) => buildZip([
+  { name: 'META-INF/container.xml', method: 0, data: Buffer.from(CONTAINER) },
+  { name: 'score.musicxml', method, data: xml },
+]);
+const ABC_RICH = [
+  'X:1', 'T:Fuzz Seed', 'C:Nobody', 'M:6/8', 'L:1/8', 'Q:1/4=96', 'K:Gmix', '%%score (1 2)',
+  'V:1 name="Melody"', 'V:2 name="Bass" clef=bass',
+  '[V:1] |:"G"GAB c2d|(3efg [ceg]2z|1 d3 B3:|2 d3 B3|]',
+  '[V:2] |:G,3 D,3|C,3 G,,3|1 G,6:|2 G,6|]',
+  'w: la la la la',
+].join('\n');
+
+// Each sweep damages `seeds` (name -> original bytes) with `strategies`; `build(bytes)`
+// turns the damaged bytes into the importer's input (default: as is).
+const SWEEPS = [
+  { target: 'midi', seeds: names('midi', ['beat.mid', 'pitchBendTest.mid']), strategies: BINARY,
+    importer: (b) => importMidi(b, { fileName: 'fuzz.mid' }) },
+  { target: 'gp5', seeds: names('gp5', ['multitrack.gp5', 'Voices.gp5', 'Repeat.gp5', 'tuplets.gp5']), strategies: BINARY,
+    importer: (b) => importGp5(b, { fileName: 'fuzz.gp5' }) },
+  { target: 'gp7 (damaged zip container)', seeds: names('gp7', GP7), strategies: BINARY,
+    importer: (b) => importGp7(b, { fileName: 'fuzz.gp' }) },
+  // Damage inside the archive: take the real score.gpif, damage it, re-zip it (deflated), so
+  // the damage reaches the XML reader and the importer instead of stopping at the zip reader.
+  { target: 'gp7 (damaged score.gpif)',
+    seeds: Object.fromEntries(GP7.map((n) => [n, unzipAll(fixture('gp7', n)).find((e) => e.name === 'Content/score.gpif').data])),
+    strategies: TEXT,
+    importer: (b) => importGp7(buildZip([{ name: 'Content/score.gpif', method: 8, data: b }]), { fileName: 'fuzz.gp' }) },
+  { target: 'musicxml', seeds: names('musicxml', XML), strategies: TEXT,
+    importer: (b) => importMusicXml(asText(b), { fileName: 'fuzz.musicxml' }) },
+  { target: 'mxl (damaged zip container)',
+    seeds: Object.fromEntries(XML.map((n, i) => [n, mxlOf(fixture('musicxml', n), i % 2 ? 0 : 8)])), strategies: BINARY,
+    importer: (b) => importMxl(b, { fileName: 'fuzz.mxl' }) },
+  { target: 'mxl (damaged score inside a good zip)', seeds: names('musicxml', XML), strategies: TEXT,
+    importer: (b) => importMxl(mxlOf(b), { fileName: 'fuzz.mxl' }) },
+  { target: 'abc', strategies: TEXT,
+    seeds: { 'tune.abc': fixture('acceptance/backup-restore', 'tune.abc'), 'rich (voices, repeats, tuplet, chords)': asBytes(ABC_RICH) },
+    importer: (b) => importAbc(asText(b), { fileName: 'fuzz.abc' }) },
+  { target: 'backup', seeds: names('backups', ['v2-snapshot.json', 'v1-backup.json']), strategies: TEXT,
+    importer: (b) => importProgress(asText(b)), check: checkBackup, neverThrows: true,
+    classify: (r) => (r.ok === false ? 'rejected' : 'imported') },
+];
+
+// Runs one sweep: `CASES` damaged inputs spread evenly over the seeds. `announce(where)` is
+// called just before each importer call, so a watcher outside this thread always knows which
+// case is in flight, even if the importer never comes back.
+function runSweep(def, announce) {
+  const keys = Object.keys(def.seeds);
+  const tally = { imported: 0, rejected: 0 };
+  const failures = []; // every broken case, so one run shows the whole damage, not just the first
   for (let i = 0; i < CASES; i++) {
     const fixtureName = keys[i % keys.length];
-    const seed = (BASE_SEED + Math.imul(i + 1, 0x9e3779b1) + 'backup'.length * 7919) >>> 0;
-    const m = mutate(seeds[fixtureName], makeRng(seed), TEXT);
-    const where = `backup / ${fixtureName} / case ${i} / ${m.label} / seed ${seed} (FUZZ_SEED=${BASE_SEED})`;
-    const started = Date.now();
-    let result;
-    try {
-      result = importProgress(asText(m.bytes));
-      checkBackup(result, where);
-      assert.ok(Date.now() - started < CASE_BUDGET_MS, `${where}: too slow`);
-    } catch (e) { failures.push(e.message.startsWith('backup /') ? e.message : `${where}: importProgress threw ${e && e.message}`); continue; }
-    tally[result.ok ? 'ok' : 'refused']++;
+    const seed = (BASE_SEED + Math.imul(i + 1, 0x9e3779b1) + def.target.length * 7919) >>> 0;
+    // Mutation and input construction run outside runCase: a bug there is the harness's,
+    // and must not be mistaken for (or hidden as) an importer rejection.
+    const m = mutate(def.seeds[fixtureName], makeRng(seed), def.strategies);
+    const input = (def.build || ((b) => b))(m.bytes);
+    const ctx = { target: def.target, fixtureName, index: i, seed, label: m.label };
+    announce(whereOf(ctx));
+    try { tally[runCase(ctx, () => def.importer(input), def.check || checkSong, def)]++; } catch (e) { failures.push(e.message); }
   }
-  assert.equal(failures.length, 0, `${failures.length} of ${CASES} cases broke the contract; first ${Math.min(failures.length, 5)}:\n  ${failures.slice(0, 5).join('\n  ')}`);
-  assert.ok(tally.refused > 0 && tally.ok > 0, `backup: sweep exercised only one side ${JSON.stringify(tally)}`);
-});
+  return { tally, failures };
+}
 
-// A sweep that cannot fail is a bug: prove the harness catches a bad importer.
-test('the sweep harness itself: a hang, a non-Error throw and a half-built Song are all caught', () => {
-  const ctx = { target: 'self', fixtureName: 'x', index: 0, seed: 1, label: 'none' };
-  assert.throws(() => runCase(ctx, () => { throw 'boom'; }, checkSong), /non-Error/);
-  assert.throws(() => runCase(ctx, () => { throw new Error(''); }, checkSong), /no message/);
-  assert.throws(() => runCase(ctx, () => ({ song: { schema: 'nope' }, warnings: [] }), checkSong), /fails validateSong/);
-  assert.throws(() => runCase(ctx, () => ({ song: null }), checkSong), /warnings is not an array/);
-  const spin = () => { const end = Date.now() + CASE_BUDGET_MS + 50; while (Date.now() < end); return { song: null, warnings: [] }; };
-  assert.throws(() => runCase(ctx, spin, () => {}), /took \d+ ms/);
-});
+// ---- worker side: run one sweep and report; the main thread owns the hang deadline ----
 
-test('the same seed always builds the same damaged bytes', () => {
-  const src = fixture('midi', 'beat.mid');
-  const a = mutate(src, makeRng(42), BINARY), b = mutate(src, makeRng(42), BINARY);
-  assert.deepEqual(a.bytes, b.bytes);
-  assert.equal(a.label, b.label);
-});
+if (!isMainThread) {
+  // A deliberately hung importer lets the self-test below prove a real hang is reported.
+  const HANG = { target: 'self-test hang', seeds: { x: fixture('midi', 'beat.mid') }, strategies: BINARY,
+    importer: () => { if (HANG.calls++ >= 2) for (;;); return { song: null, warnings: [] }; }, check: () => {}, calls: 0 };
+  const def = workerData.selfTest === 'hang' ? HANG : SWEEPS[workerData.sweep];
+  parentPort.postMessage({ done: runSweep(def, (where) => parentPort.postMessage({ where })) });
+}
+
+// ---- main side ----
+
+// Runs a sweep in a worker thread and waits. A synchronous importer that never returns would
+// freeze this test file's own thread, so the sweep runs elsewhere: if the worker says nothing
+// for `hangMs`, it is killed and the failure names the case, strategy and seed it was stuck in.
+const HANG_MS = CASE_BUDGET_MS + 2000;
+const STARTUP_MS = 30000; // loading the fixtures, before the first case is announced
+function inWorker(data, hangMs = HANG_MS) {
+  return new Promise((resolve, reject) => {
+    const worker = new Worker(fileURLToPath(import.meta.url), { workerData: data });
+    let where = 'before the first case', lastNews = Date.now(), started = false, settled = false;
+    const end = (fn, value) => { if (settled) return; settled = true; clearInterval(watchdog); worker.terminate(); fn(value); };
+    const watchdog = setInterval(() => {
+      if (Date.now() - lastNews > (started ? hangMs : STARTUP_MS)) end(reject, new Error(`${where}: HUNG, no answer for ${hangMs} ms, worker killed`));
+    }, 50);
+    worker.on('message', (m) => {
+      lastNews = Date.now(); started = true;
+      if (m.done) end(resolve, m.done); else where = m.where;
+    });
+    worker.on('error', (e) => end(reject, new Error(`${where}: worker crashed: ${e && e.message}`)));
+    worker.on('exit', () => end(reject, new Error(`${where}: worker exited without a result`)));
+  });
+}
+
+if (isMainThread) {
+  SWEEPS.forEach((def, sweep) => {
+    const backup = def.neverThrows;
+    test(backup
+      ? `backup: ${CASES} seeded corrupt backup files are refused in plain English or restore a db, never throw`
+      : `${def.target}: ${CASES} seeded corrupt files import to a valid Song or fail with a clear Error`, async () => {
+      const { tally, failures } = await inWorker({ sweep });
+      assert.equal(failures.length, 0, `${failures.length} of ${CASES} cases broke the contract; first ${Math.min(failures.length, 5)}:\n  ${failures.slice(0, 5).join('\n  ')}`);
+      // A sweep that rejects everything (or accepts everything) is not exercising both sides.
+      assert.ok(tally.rejected > 0, `${def.target}: no damaged file was ever rejected (${JSON.stringify(tally)})`);
+      assert.ok(tally.imported > 0, `${def.target}: no damaged file ever still imported (${JSON.stringify(tally)})`);
+    });
+  });
+
+  // A sweep that cannot fail is a bug: prove the harness catches a bad importer.
+  test('the sweep harness itself: a hang, a non-Error throw and a half-built Song are all caught', async () => {
+    const ctx = { target: 'self', fixtureName: 'x', index: 0, seed: 1, label: 'none' };
+    assert.throws(() => runCase(ctx, () => { throw 'boom'; }, checkSong), /non-Error/);
+    assert.throws(() => runCase(ctx, () => { throw new Error(''); }, checkSong), /no message/);
+    assert.throws(() => runCase(ctx, () => ({ song: { schema: 'nope' }, warnings: [] }), checkSong), /fails validateSong/);
+    assert.throws(() => runCase(ctx, () => ({ song: null }), checkSong), /warnings is not an array/);
+    assert.throws(() => runCase(ctx, () => { throw new Error('x'); }, checkBackup, { neverThrows: true }), /must refuse, never throw/);
+    const spin = () => { const end = Date.now() + CASE_BUDGET_MS + 50; while (Date.now() < end); return { song: null, warnings: [] }; };
+    assert.throws(() => runCase(ctx, spin, () => {}), /took \d+ ms/);
+    // A true hang never returns, so the per-case clock above cannot see it: the worker deadline must.
+    await assert.rejects(inWorker({ selfTest: 'hang' }, 400), /self-test hang \/ x \/ case 2 \/ \w+ \/ seed \d+ \(FUZZ_SEED=\d+\): HUNG/);
+  });
+
+  test('the same seed always builds the same damaged bytes', () => {
+    const src = fixture('midi', 'beat.mid');
+    const a = mutate(src, makeRng(42), BINARY), b = mutate(src, makeRng(42), BINARY);
+    assert.deepEqual(a.bytes, b.bytes);
+    assert.equal(a.label, b.label);
+  });
+
+  // What the learner reads: songs.js shows "That file could not be read: <message>", so the
+  // refusal must be one plain sentence, with no importer function name leaking into it.
+  test('a refused file reads as plain English, with no code names in it', () => {
+    const bad = (tune) => assert.throws(() => importAbc(tune, { fileName: 'bad.abc' }), (e) => {
+      assert.match(e.message, /^it did not turn into a usable song, so it may be damaged \(.+\)$/);
+      assert.doesNotMatch(e.message, /\bimport[A-Z]\w*|finishImport/);
+      return true;
+    });
+    bad('X:1\nT:t\nM:4/4\nL:1/4\nQ:1/4=0\nK:C\nCDEF|\n');
+    bad('X:1\nT:t\nM:0/4\nL:1/4\nK:C\nCDEF|\n');
+  });
+}

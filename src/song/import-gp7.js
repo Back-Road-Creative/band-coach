@@ -293,5 +293,5 @@ export function importGp7(bytes, options = {}) {
   if (tempoMap.length) song.tempoMap = tempoMap;
   if (metreChanges.length) song.metreChanges = metreChanges;
   if (keyChanges.length) song.keyChanges = keyChanges;
-  return finishImport('importGp7', song, warnings);
+  return finishImport(song, warnings);
 }
