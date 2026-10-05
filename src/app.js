@@ -244,8 +244,27 @@ import { register as registerPathway } from './ui/pathway.js';
   // allowed to start" for a context created anywhere else. Handlers that
   // merely bring a learner back (visibilitychange, bfcache pageshow) call
   // resumeAudio(), which wakes a suspended context and never makes one.
-  function ensureAudio() { if (!actx) { try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { actx = null; } } resumeAudio(); return actx; }
-  function resumeAudio() { if (actx && actx.state === 'suspended') actx.resume(); }
+  // The OS or browser can stop a context on its own (iOS: a phone call, Siri or
+  // an AirPods route change sets 'interrupted' with no visibilitychange), and
+  // now() is actx.currentTime, so the exercise would sit frozen and silent.
+  // onAudioState says so and pauses; the Resume button (a tap) wakes it.
+  // audioParked marks the app's OWN hide/pagehide suspend (teardown above),
+  // which is not an interruption and must not raise the pause card.
+  let audioParked = false;
+  // A closed context can never run again: forget everything built on it (and
+  // the mic source wired into it) so the next gesture's ensureAudio() rebuilds.
+  function dropAudio() {
+    if (lastAudioSource) { if (lastAudioSource.__monoRouteInterval) clearInterval(lastAudioSource.__monoRouteInterval); try { lastAudioSource.disconnect(); } catch (e) {} }
+    if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; micGen++; const pm = $('practiceMeter'); if (pm) pm.hidden = true; }
+    actx = anTime = anFreq = lastAudioSource = pitchWorkletNode = pitchWorkletPromise = null; micReady = false; ioRefresh();
+  }
+  function onAudioState(ctx) {
+    if (ctx !== actx) return; const st = ctx.state; if (st === 'closed') dropAudio();
+    if (st === 'running' || audioParked || document.hidden || !playing) return;
+    BREAKS.audio = [t('audio.stoppedTitle'), t('audio.stoppedWhy'), 0]; takeBreak('audio'); coach(t('audio.tapToResume'));
+  }
+  function ensureAudio() { if (actx && actx.state === 'closed') dropAudio(); if (!actx) { try { const c = actx = new (window.AudioContext || window.webkitAudioContext)(); c.onstatechange = () => onAudioState(c); } catch (e) { actx = null; } } resumeAudio(); return actx; }
+  function resumeAudio() { if (!actx) return; if (actx.state === 'closed') { dropAudio(); return; } if (actx.state !== 'running') { try { Promise.resolve(actx.resume()).catch(e => recordError('audio-resume', e)); } catch (e) { recordError('audio-resume', e); } } }
   const now = () => actx ? actx.currentTime : performance.now() / 1000;
   // Instrument-family-shaped reference tone (src/audio/voices.js): a
   // pre-rendered buffer, computed by pure JS synthesis, never an embedded
@@ -2638,7 +2657,7 @@ import { register as registerPathway } from './ui/pathway.js';
   $('playBtn').addEventListener('click', function () { this.blur(); if (!sess) startAfterMic(); else if (paused) resume(); else takeBreak('user'); });
   $('endBtn').addEventListener('click', function () { this.blur(); endSession(); }); $('endBtn2').addEventListener('click', endSession); $('backBtn').addEventListener('click', resume);
   $('snoozeBtn').addEventListener('click', () => { sess.snoozeUntil = Date.now() + 5 * 60000; sess.tiredFor = 0; S.ready = Math.min(S.ready, 0.6); pauseInfo = { at: Date.now(), secs: 0 }; resume(); coach('Five more minutes, then I will ask again. I have eased off the pace meanwhile.'); });
-  document.addEventListener('visibilitychange', () => { if (document.hidden && playing) takeBreak('hidden'); if (document.hidden) { flushSave(); releaseNotes(); runTeardown('hidden'); } else { refreshModelClock(); resumeAudio(); ioRefresh(); } wakeLock.handleVisibilityChange(document); });
+  document.addEventListener('visibilitychange', () => { if (document.hidden && playing) takeBreak('hidden'); if (document.hidden) { audioParked = true; flushSave(); releaseNotes(); runTeardown('hidden'); } else { audioParked = false; refreshModelClock(); resumeAudio(); ioRefresh(); } wakeLock.handleVisibilityChange(document); });
   // A hidden tab is a pause the learner might return to; pagehide (real tab
   // close, navigation, reload) never comes back, so it gets the same
   // teardown -- a hidden tab that goes straight to being closed must not
@@ -2647,7 +2666,7 @@ import { register as registerPathway } from './ui/pathway.js';
   // already run), so a hidden tab that is THEN closed safely runs it twice.
   // Kept next to this listener rather than in the flushSave/writeDB pagehide
   // wiring above, which an unrelated unit also edits.
-  window.addEventListener('pagehide', () => runTeardown('pagehide'));
+  window.addEventListener('pagehide', () => { audioParked = true; runTeardown('pagehide'); });
   // now() is actx.currentTime, so a context the teardown stopper suspended
   // above freezes the app clock solid -- nextTaskAt, scheduled against that
   // frozen now(), can never become due again. The visible branch above
@@ -2656,7 +2675,7 @@ import { register as registerPathway } from './ui/pathway.js';
   // browsers, so resumeAudio() (a no-op unless actx exists and is suspended)
   // needs its own call here too, or a learner returning from history
   // navigation gets the same frozen clock this whole fix exists to prevent.
-  window.addEventListener('pageshow', ev => { if (ev.persisted) resumeAudio(); });
+  window.addEventListener('pageshow', ev => { if (ev.persisted) { audioParked = false; resumeAudio(); } });
   // A held note has no way to send its own note-off once the window itself
   // loses focus (alt-tab, another app grabbing the keyboard) -- release
   // everything noteState is holding rather than leave a phantom note "held"
