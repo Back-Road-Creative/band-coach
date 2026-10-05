@@ -62,5 +62,8 @@ test('buildDiagnostics blanks file paths and links inside an error message and c
     ],
   });
   assert.doesNotMatch(text, /jane|my-song|song\.mp3/);
-  assert.ok(text.length < 1500, 'a 1000-character message is shortened (got ' + text.length + ')');
+  const longLine = text.split('\n').find(l => l.startsWith('  [c]'));
+  const shown = longLine.slice('  [c] '.length).length;
+  assert.ok(shown <= 200, 'the 1000-character message is cut to 200 characters (shows ' + shown + ')');
+  assert.ok(shown > 150, 'and is cut, not dropped (shows ' + shown + ')');
 });

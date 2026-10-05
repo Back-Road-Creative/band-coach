@@ -64,6 +64,27 @@ test('a burst of errors keeps every ring entry but shows the notice only once un
   assert.ok(errs.includes('burst-1') && errs.includes('burst-2'), 'both are recorded: ' + JSON.stringify(errs));
 });
 
+test('once the gap has passed a new error is announced again, and never as a second notice on top of the first', async (t) => {
+  const page = await launchPage(htmlPath, { initScript: 'window.__now = 1e12; Date.now = () => window.__now;' });
+  t.after(() => page.close());
+  const COUNT = "document.querySelectorAll('#errorNotice').length";
+
+  await page.evaluate(REJECT('gap-1'));
+  await page.waitFor(NOTICE_SHOWN, 10000);
+  await page.evaluate('window.__now += 31000');
+  await page.evaluate(REJECT('gap-2'));
+  await page.waitFor(RING_HAS('gap-2'), 10000);
+  assert.equal(await page.evaluate(COUNT), 1, 'one notice on screen, not two stacked');
+
+  await page.evaluate("document.querySelector('#errorNotice button').click()");
+  await page.evaluate('window.__now += 31000');
+  await page.evaluate(REJECT('gap-3'));
+  await page.waitFor(RING_HAS('gap-3'), 10000);
+  await page.waitFor(NOTICE_SHOWN, 10000);
+  assert.equal(await page.evaluate(COUNT), 1, 'after a dismissal and a long enough gap the notice comes back');
+});
+
+const SHOWN_TEXT = "(document.getElementById('diagCopyText') || {}).textContent || ''";
 const SECRET_DEVICE = 'SECRET-DEVICE-ID-4711';
 const SECRET_TITLE = 'My Secret Song Title';
 const SEED_PROFILE = `try { if (!localStorage.getItem('bandcoach.v1')) localStorage.setItem('bandcoach.v1', JSON.stringify({ v: 1, prefs: { inputDeviceId: ${JSON.stringify(SECRET_DEVICE)} } })); } catch (e) {}`;
@@ -99,7 +120,12 @@ test('Copy diagnostics copies version, browser, recent errors and capabilities, 
   assert.match(copied, /"microphone":(true|false)/, 'capability states are in it');
   assert.ok(!copied.includes(SECRET_DEVICE), 'no device id');
   assert.ok(!copied.includes(SECRET_TITLE), 'no song title');
-  assert.match(await page.evaluate("document.getElementById('diagCopyResult').textContent"), /Copied/, 'the learner is told it worked');
+  await page.waitFor("document.getElementById('diagCopyResult').textContent !== ''", 10000); // the handler finishes after the clipboard promise settles
+  const status = await page.evaluate("document.getElementById('diagCopyResult').textContent");
+  assert.match(status, /Copied/, 'the learner is told it worked');
+  assert.ok(!status.includes('Features:') && !status.includes('Browser:'), 'the live status line holds the short message only, so a screen reader does not read the whole report out');
+  assert.equal(await page.evaluate(SHOWN_TEXT), copied, 'the text that was copied is also shown, to check what is shared');
+  assert.equal(await page.evaluate("!!(document.getElementById('diagCopyText') || document.body).closest('[role], [aria-live]')"), false, 'and that text is not inside a live region');
 });
 
 test('with no clipboard the diagnostics text is shown to select and copy by hand', async (t) => {
@@ -109,8 +135,11 @@ test('with no clipboard the diagnostics text is shown to select and copy by hand
   await page.evaluate("document.querySelector('#mainNav button[data-route=\"settings\"]').click()");
   assert.equal(await page.evaluate("!!document.getElementById('diagCopyBtn')"), true, 'Settings has a Copy diagnostics button');
   await page.evaluate("document.getElementById('diagCopyBtn').click()");
-  await page.waitFor("/Band Coach/.test(document.getElementById('diagCopyResult').textContent)", 10000);
-  assert.match(await page.evaluate("document.getElementById('diagCopyResult').textContent"), /Select this text/, 'says what to do next, and the text to copy is on screen');
+  await page.waitFor("document.getElementById('diagCopyResult').textContent !== ''", 10000);
+  assert.match(await page.evaluate(SHOWN_TEXT), /Band Coach/, 'the text to copy is on screen');
+  const status = await page.evaluate("document.getElementById('diagCopyResult').textContent");
+  assert.match(status, /Select this text/, 'says what to do next');
+  assert.ok(!status.includes('Browser:'), 'the live status line holds the short message only');
 });
 
 // The 50 ms pitch timer (listen) runs outside frame()'s try. With no AudioWorklet it is the live pitch path;

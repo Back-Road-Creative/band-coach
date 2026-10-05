@@ -97,11 +97,9 @@ import { register as registerPathway } from './ui/pathway.js';
 (function () {
   'use strict';
   const $ = id => document.getElementById(id);
-  // Faults outside frame()/onPitch: record, tell the learner (rate-limited, dismissible).
   const errorGate = createNoticeGate();
   function noteFault(where, err) { try {
-    recordError(where, err); if (!errorGate.allow(Date.now())) return;
-    if ($('errorNotice')) $('errorNotice').remove();
+    recordError(where, err); if (!errorGate.allow(Date.now()) || $('errorNotice')) return;
     document.body.insertAdjacentHTML('afterbegin', '<div id="errorNotice" class="backup-nudge" role="alert"><span>' + t('error.generic') + '</span><button class="small">' + t('side.backupDismiss') + '</button></div>');
     $('errorNotice').lastChild.onclick = () => $('errorNotice').remove();
   } catch (e) {} }
@@ -1683,7 +1681,7 @@ import { register as registerPathway } from './ui/pathway.js';
   // not used for judging -- onHit()/tickKitBar() are the source of truth.
   let drumOnsetDetector = null, drumClassifier = null, drumRing = null, drumMicHits = [];
   const DRUM_FRAME = 2048, DRUM_HOP = 512;
-  // listen() is a timer outside frame()'s try: report the first 3 faults of a streak.
+  // report the first 3 faults of a streak
   let listenFails = 0;
   function listen() { try { listenOnce(); listenFails = 0; } catch (e) { if (++listenFails <= 3) noteFault('listen', e); } }
   function listenOnce() {
@@ -2862,11 +2860,11 @@ import { register as registerPathway } from './ui/pathway.js';
     reader.readAsText(file);
   });
   $('backupNudgeDismiss').addEventListener('click', () => { $('backupNudge').hidden = true; });
-  // ---------- Copy diagnostics (allow-list in src/core/diagnostics.js); no clipboard: show the text to copy by hand.
+  // ---------- Copy diagnostics (src/core/diagnostics.js)
   $('diagCopyBtn').addEventListener('click', async () => {
     const text = buildDiagnostics({ version: APP_VERSION, userAgent: navigator.userAgent, errors: getErrors(), capabilities: { microphone: !!navigator.mediaDevices, midi: !!navigator.requestMIDIAccess, audioWorklet: !!window.AudioWorkletNode, songStorage: !!window.indexedDB } });
     const ok = await new Promise(r => r(navigator.clipboard.writeText(text))).then(() => true, () => false);
-    $('diagCopyResult').textContent = t(ok ? 'diag.copied' : 'diag.manual') + '\n\n' + text;
+    $('diagCopyResult').textContent = t(ok ? 'diag.copied' : 'diag.manual'); $('diagCopyText').textContent = text;
   });
 
   // ---------- check for updates: a file:// copy can never rewrite or replace itself (browser
