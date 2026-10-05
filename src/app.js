@@ -6,7 +6,8 @@ import { createLibrary, indexedDbStore, memoryStore } from './song/library.js';
 import { captureToSong } from './song/capture.js';
 import { toAudioTime, judgeTap, medianLatency } from './core/timing.js';
 import { DEFAULT_STABILITY_DAYS, MIN_STABILITY_DAYS, MAX_STABILITY_DAYS, GRADE, retrievability, review, due, migrateItem } from './core/srs.js';
-import { handsTogetherById, handsModeFromId, fingeringLabel, gradeHandsTogetherExact, gradeHandsTogetherApprox, bothUnlocked, effectiveHands, prepLine, HANDS_TOGETHER_EXERCISES, isTimedPairId, gradeTimedPair, PAIR_ONSET_TOL_MS, PAIR_RELEASE_TOL_MS, isStagedPairId, handsStageFromId, heldBassMelody, gradeHeldBass, gradeSplitRhythm, SPLIT_MID_TOL_RATIO, gradePositionChange, POSITION_SHIFT_SEMITONES, HANDS_POSITION_EXERCISES, positionPrepLine } from './core/hands-together.js';
+import { handsTogetherById, handsModeFromId, fingeringLabel, bothUnlocked, effectiveHands, prepLine, HANDS_TOGETHER_EXERCISES, isTimedPairId, PAIR_ONSET_TOL_MS, PAIR_RELEASE_TOL_MS, isStagedPairId, handsStageFromId, heldBassMelody, SPLIT_MID_TOL_RATIO, POSITION_SHIFT_SEMITONES, HANDS_POSITION_EXERCISES, positionPrepLine } from './core/hands-together.js';
+import { step as stepHandsTogether } from './core/hands-together-stage.js';
 import { createMidiParser, describeOutputs, scheduleSong, playOnOutput, stopAll } from './core/midi.js';
 import { createNoteState } from './core/note-state.js';
 import { PCKEYS } from './core/pckeys.js';
@@ -1234,138 +1235,10 @@ import { register as registerPathway } from './ui/pathway.js';
     const where = wrongNoteHint({ heardMidi: midi, targetMidi: i.midi, policy, fretted: !!i.string && !MODS[mod].fretless });
     const wn = (x) => i.written === undefined ? nname(x) : nname(writtenMidi(i, x)); failEl('That was ' + wn(midi) + ', the note is ' + wn(i.midi) + '. ' + where, e.id + '>' + wn(midi)); // transposing winds: both names in the written key the prompt uses
   }
-  // onNote's hands-together branch, moved out as-is (same statements, same order).
-  function onHandsTogetherNote(e, i, midi, exact, source) {
-    const ex = i.ex, handsMode = handsModeFromId(e.id);
-    if (!exact) {
-      const g = gradeHandsTogetherApprox(ex, midi, handsMode);
-      if (!g.ok) { if (g.wrong === false) return; failEl(nname(midi) + ' is not part of ' + ex.short + ' (approximate: a microphone only hears one note at a time).', e.id + '>xa' + midi); return; }
-      const approxTail = handsMode === 'right' ? 'Right hand checked; the left hand was not.' : handsMode === 'left' ? 'Left hand checked; the right hand was not.' : 'Connect a MIDI keyboard to grade both hands together.';
-      passEl(0.7, 'Approximate (one note heard, microphone): ' + (g.hand === 'rh' ? 'right' : 'left') + ' hand, ' + nname(midi) + '. ' + approxTail, 'approximate', source); return;
-    }
-    // K3/K4, levels 14-16 (j<n>t/j<n>h/j<n>d): LEARN (untimed, both notes
-    // just held together -- shared across all three stages) then CHECK,
-    // which branches by handsStageFromId: 'timed' is gradeTimedPair
-    // (unchanged from K3); 'held'/'split' are gradeHeldBass/
-    // gradeSplitRhythm, both of which also need each hand's OWN moment
-    // (real note-on/note-off timestamps off e.pair), never realMidiHeld/
-    // the 0.6s window below.
-    if (isStagedPairId(e.id)) {
-      const stage = handsStageFromId(e.id);
-      const wrongMsg = nname(midi) + ' is not part of ' + ex.short + ' (' + fingeringLabel(ex) + ').';
-      // K5: level 17 ("position change") is untimed (no note-on/note-off
-      // synchronisation, unlike timed/held/split) so it never needs the
-      // LEARN/CHECK phase split below -- one grader, gradePositionChange(),
-      // covers both the pre-shift chord and the post-shift one, told apart
-      // by e.pair.moved (set true the first time the pre-shift chord is
-      // matched). MIDI exact and computer-key both grade it, off the same
-      // "recent note-ons" window every other non-real-MIDI-held exact
-      // caller in this file uses (screen taps included, same as level 13's
-      // plain both-hands item -- there is no timing evidence to lose here).
-      if (stage === 'position') {
-        // The left hand must stay down across the whole move -- real
-        // holding, not a recent-note-on window -- so MIDI and computer
-        // keys (both tracked by noteState, keyup included) read the
-        // true held set; only a screen tap has no hold to read, so it
-        // falls back to the same "recent note-ons" window every other
-        // non-held exact caller in this file uses for taps.
-        const heldMidis = source === 'midi' || source === 'computer-key' ? noteState.heldPitches() : (held.push({ m: midi, t: now() }), held = held.filter(x => now() - x.t < 0.6), held.map(x => x.m));
-        const g = gradePositionChange(ex, heldMidis, e.pair.moved);
-        if (g.oldPosition) { failEl('That is the old position -- move your right hand up to ' + nname(ex.rh.midi) + '.', e.id + '>old'); if (source !== 'midi') held = []; return; }
-        if (g.wrong.length) { failEl(wrongMsg, e.id + '>x' + midi); if (source !== 'midi') held = []; return; }
-        if (!g.ok) return;
-        if (!e.pair.moved) { e.pair.moved = true; e.pair.phase = 'check'; if (source !== 'midi') held = []; say('Good. Now move your right hand up to ' + nname(ex.rh.midi) + ' and play the same shape.', ''); refreshPrompt(); return; }
-        passEl(undefined, ex.short + ': position change complete. ' + fingeringLabel(ex) + '.', undefined, source); return;
-      }
-      if (e.pair.phase === 'learn') {
-        if (source === 'midi' || source === 'computer-key') {
-          if (midi !== ex.rh.midi && midi !== ex.lh.midi) { failEl(wrongMsg, e.id + '>x' + midi); e.pair.learnOn = []; return; }
-          e.pair.learnOn.push(midi);
-          const freshHeld = e.pair.learnOn.filter(m => noteState.isHeld(m));
-          const g = gradeHandsTogetherExact(ex, freshHeld, 'both');
-          if (g.wrong.length) { failEl(wrongMsg, e.id + '>x' + midi); e.pair.learnOn = []; return; }
-          if (g.ok) {
-            e.pair.phase = 'check'; e.pair.on = {}; e.pair.off = {}; e.pair.notes = []; e.pair.rhOns = []; e.pair.rhOffs = [];
-            const goLine = stage === 'held' ? 'Good. Now let go, press the bass again and keep holding it, then play the melody over it.' : stage === 'split' ? 'Good. Now let go, then hold the left hand under two even right-hand notes.' : 'Good. Now in time: let go, then press both keys at the same moment and let go together.';
-            say(goLine, ''); refreshPrompt();
-          }
-          return;
-        }
-        // Screen tap, on-screen Enter/Space, or the debug hook: no note-off
-        // to time against, so this stays practice only -- the same 0.6s
-        // "recent note-ons" window every other non-MIDI exact caller uses.
-        held.push({ m: midi, t: now() }); held = held.filter(x => now() - x.t < 0.6);
-        const g = gradeHandsTogetherExact(ex, held.map(x => x.m), 'both');
-        if (g.wrong.length) { failEl(wrongMsg, e.id + '>x' + midi); held = []; return; }
-        if (g.ok) passEl(undefined, ex.short + ': together. Practice only: held notes need a MIDI keyboard or computer keys.', 'guided', source);
-        return;
-      }
-      // CHECK: only a real note-on (MIDI or computer key) counts -- a
-      // screen tap or the debug hook has no matching note-off, so it can
-      // never complete the timing check and is silently ignored here.
-      if (source !== 'midi' && source !== 'computer-key') return;
-      if (stage === 'timed') {
-        if (midi !== ex.rh.midi && midi !== ex.lh.midi) { failEl(wrongMsg, e.id + '>x' + midi); return; }
-        e.pair.on[midi] = performance.now(); delete e.pair.off[midi];
-        const g = gradeTimedPair(ex, e.pair);
-        if (g.state === 'fail') { failEl(g.reason, e.id + '>t'); e.pair.on = {}; e.pair.off = {}; }
-        return;
-      }
-      if (stage === 'held') {
-        if (midi === ex.lh.midi) { e.pair.on[midi] = performance.now(); e.pair.off = {}; e.pair.notes = []; return; }
-        e.pair.notes.push({ midi: midi, ms: performance.now(), bassHeld: (ex.lh.midi in e.pair.on) && noteState.isHeld(ex.lh.midi) });
-        const g = gradeHeldBass(ex, { bassOn: e.pair.on[ex.lh.midi], bassOff: e.pair.off[ex.lh.midi], notes: e.pair.notes });
-        // A fail while the bass is STILL physically down is only the
-        // melody's fault -- clearing e.pair.on here would make the very
-        // next melody note read bassHeld:false (nothing in e.pair.on to
-        // check against) and the bass's own note-off get ignored (not in
-        // e.pair.on), telling a learner who never let go that their left
-        // hand let go. Keep the bass's onset and only reset the melody, so
-        // the retry grades from the bass still being held; a fail with the
-        // bass already up resets as before (there is no held bass left to
-        // preserve).
-        if (g.state === 'fail') { failEl(g.reason, e.id + '>h'); if (noteState.isHeld(ex.lh.midi)) { e.pair.notes = []; } else { e.pair.on = {}; e.pair.off = {}; e.pair.notes = []; } }
-        return;
-      }
-      if (stage === 'split') {
-        if (midi !== ex.rh.midi && midi !== ex.lh.midi) { failEl(wrongMsg, e.id + '>x' + midi); return; }
-        if (midi === ex.lh.midi) {
-          // A stray right-hand tap-and-release BEFORE the bass ever goes
-          // down (a learner tapping the melody key first, or tapping it
-          // again right after a fail reset) must not squat rhOns[0]/
-          // rhOffs[0] -- gradeSplitRhythm reads rhOns[0] as the onset
-          // paired against the bass's own onset, so a stale completed tap
-          // there pushes the real first note into rhOns[1] and throws off
-          // every comparison after it. Pressing the bass starts the RH
-          // lists fresh for this attempt -- but ONLY when rhOns/rhOffs are
-          // already balanced (no right-hand note currently held): a right
-          // hand that came in EARLY and is still down when the bass
-          // finally arrives (the left-hand-late case) is real evidence for
-          // this attempt, not a stray tap, and must be kept.
-          if (e.pair.rhOns.length === e.pair.rhOffs.length) { e.pair.rhOns = []; e.pair.rhOffs = []; }
-          e.pair.on[midi] = performance.now(); delete e.pair.off[midi];
-        }
-        else if (e.pair.rhOns.length === e.pair.rhOffs.length) { e.pair.rhOns.push(performance.now()); }
-        const g = gradeSplitRhythm(ex, { lhOn: e.pair.on[ex.lh.midi], lhOff: e.pair.off[ex.lh.midi], rhOns: e.pair.rhOns, rhOffs: e.pair.rhOffs });
-        e.pair.last = { rh: g.rh.state, lh: g.lh.state };
-        if (g.state === 'fail') { failEl(g.reason, e.id + '>d'); e.pair.on = {}; e.pair.off = {}; e.pair.rhOns = []; e.pair.rhOffs = []; }
-        return;
-      }
-      return;
-    }
-    // Real MIDI: heldMidis comes from actual note-on/note-off state
-    // (realMidiHeld, kept current by handleMidiMessage below), so holding a
-    // chord for longer than the old 0.6s note-on timer window still
-    // grades correctly. Every other exact-input caller (screen keys,
-    // computer keys, the debug hook) has no note-off to track, so it keeps
-    // the original "recent note-ons" window -- same grading outcomes as
-    // before this change for all of those.
-    const heldMidis = source === 'midi' ? Array.from(realMidiHeld) : (held.push({ m: midi, t: now() }), held = held.filter(x => now() - x.t < 0.6), held.map(x => x.m));
-    const g = gradeHandsTogetherExact(ex, heldMidis, handsMode);
-    if (g.wrong.length) { failEl(nname(midi) + ' is not part of ' + ex.short + ' (' + fingeringLabel(ex) + ').', e.id + '>x' + midi); if (source !== 'midi') held = []; return; }
-    if (g.ok) passEl(undefined, ex.short + ': ' + (handsMode === 'right' ? 'right hand' : handsMode === 'left' ? 'left hand' : 'both hands together') + '. ' + fingeringLabel(ex) + '.', undefined, source);
-    return;
-  }
+  // onNote's hands-together branch: the stage machine lives in src/core/hands-together-stage.js (pure, table-tested); this applies its verdict to the UI.
+  function handsCtx(e) { return { id: e.id, ex: e.info.ex, pair: e.pair, held: held, now: now, perfNow: () => performance.now(), noteState: noteState, realMidiHeld: realMidiHeld, nname: nname }; }
+  function applyHandsVerdict(v) { if (v.held) held = v.held; v.acts.forEach(a => { if (a.t === 'fail') failEl(a.msg, a.key); else if (a.t === 'pass') passEl(a.q, a.msg, a.assist, a.input); else if (a.t === 'say') say(a.msg, a.cls); else refreshPrompt(); }); }
+  function onHandsTogetherNote(e, i, midi, exact, source) { applyHandsVerdict(stepHandsTogether(handsCtx(e), { type: 'on', midi: midi, exact: exact, source: source })); }
   // K3/K4: the note-off half of levels 14-16's CHECK phase (onNote above
   // handles every note-on). Only a real MIDI or computer-key release
   // reaches here (handleMidiMessage's note-off branch, keyup) -- a screen
@@ -1373,45 +1246,8 @@ import { register as registerPathway } from './ui/pathway.js';
   // ever pass on real held-note evidence. Ignored outside CHECK (LEARN's
   // note-offs mean nothing).
   function onNoteOff(midi, source) {
-    if (!playing || !task || task.done) return; const e = cur(); if (!e || !e.pair || e.pair.phase !== 'check') return;
-    const ex = e.info.ex, stage = handsStageFromId(e.id);
-    if (stage === 'position') {
-      // untimed: onNote's note-on grades level 17 alone; the one release that matters is the left hand lifting after the shift, which fails and restarts the exercise (a later re-press must not pass it)
-      if (e.pair.moved && midi === ex.lh.midi && !noteState.isHeld(midi)) { failEl('The left hand let go of ' + nname(ex.lh.midi) + ' during the move. Keep it down while your right hand moves up, then start again from the first position.', e.id + '>l'); e.pair.moved = false; e.pair.phase = 'learn'; refreshPrompt(); }
-      return;
-    }
-    if (stage === 'timed') {
-      if (!(midi in e.pair.on)) return;
-      e.pair.off[midi] = performance.now();
-      const g = gradeTimedPair(ex, e.pair);
-      if (g.state === 'pass') { passEl(undefined, ex.short + ': together, in time.', undefined, source); return; }
-      if (g.state === 'fail') { failEl(g.reason, e.id + '>t'); e.pair.on = {}; e.pair.off = {}; }
-      return;
-    }
-    if (stage === 'held') {
-      if (midi !== ex.lh.midi || !(midi in e.pair.on)) return;
-      if (noteState.isHeld(midi)) return; // another port is still holding the bass
-      e.pair.off[midi] = performance.now();
-      const g = gradeHeldBass(ex, { bassOn: e.pair.on[midi], bassOff: e.pair.off[midi], notes: e.pair.notes });
-      if (g.state === 'pass') { passEl(undefined, ex.short + ': bass held, melody played over it.', undefined, source); return; }
-      if (g.state === 'fail') { failEl(g.reason, e.id + '>h'); e.pair.on = {}; e.pair.off = {}; e.pair.notes = []; }
-      return;
-    }
-    if (stage === 'split') {
-      if (midi === ex.lh.midi) {
-        if (!(midi in e.pair.on)) return;
-        if (noteState.isHeld(midi)) return; // another port is still holding it
-        e.pair.off[midi] = performance.now();
-      } else if (midi === ex.rh.midi) {
-        if (e.pair.rhOns.length <= e.pair.rhOffs.length) return;
-        if (noteState.isHeld(midi)) return; // another port is still holding it
-        e.pair.rhOffs.push(performance.now());
-      } else return;
-      const g = gradeSplitRhythm(ex, { lhOn: e.pair.on[ex.lh.midi], lhOff: e.pair.off[ex.lh.midi], rhOns: e.pair.rhOns, rhOffs: e.pair.rhOffs });
-      e.pair.last = { rh: g.rh.state, lh: g.lh.state };
-      if (g.state === 'pass') { passEl(undefined, ex.short + ': two even notes over one held bass.', undefined, source); return; }
-      if (g.state === 'fail') { failEl(g.reason, e.id + '>d'); e.pair.on = {}; e.pair.off = {}; e.pair.rhOns = []; e.pair.rhOffs = []; }
-    }
+    if (!playing || !task || task.done) return; const e = cur(); if (!e || !e.pair) return;
+    applyHandsVerdict(stepHandsTogether(handsCtx(e), { type: 'off', midi: midi, source: source }));
   }
   function answer(id) {
     lastInputAt = now(); if (!playing || !task || task.kind !== 'ear' || task.done) return; const e = cur(), right = id === e.id; e.rt = now() - e.t0; e.q = right ? timeQ(e.rt, task.limit) : 0; task.revealed = true; updateDesc();
