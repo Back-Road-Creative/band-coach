@@ -51,11 +51,11 @@ test('a local version newer than the published one is up to date, never "behind"
 });
 
 test('reports "behind" with the published version number and its download link', async () => {
-  const fetchImpl = async () => okResponse({ version: '1.4.0', download: 'https://example.test/get-the-file' });
+  const fetchImpl = async () => okResponse({ version: '1.4.0', download: 'https://github.com/Back-Road-Creative/band-coach/releases/download/v1.4.0/band-coach.html' });
   const result = await checkForUpdate({ currentVersion: '1.3.0', fetchImpl });
   assert.equal(result.status, 'behind');
   assert.equal(result.latestVersion, '1.4.0');
-  assert.equal(result.downloadUrl, 'https://example.test/get-the-file');
+  assert.equal(result.downloadUrl, 'https://github.com/Back-Road-Creative/band-coach/releases/download/v1.4.0/band-coach.html');
 });
 
 // The tests below assert the fallback link symbolically, so on their own they
