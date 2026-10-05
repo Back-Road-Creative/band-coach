@@ -18,7 +18,8 @@
     "pretest": "npm run build",
     "test": "node --test --test-concurrency=$(node tests/helpers/browser.mjs) \"tests/*.test.mjs\" \"tests/build/*.test.mjs\" \"tests/characterization/*.test.mjs\" \"tests/unit/*.test.mjs\" \"tests/unit/notation/*.test.mjs\"",
     "posttest": "npm run gate",
-    "gate": "node build/build.mjs --release && node --test \"tests/release/*.test.mjs\""
+    "gate": "node build/build.mjs --release && node --test \"tests/release/*.test.mjs\"",
+    "coverage": "node --test --experimental-test-coverage --test-coverage-include=\"src/core/**\" --test-coverage-include=\"src/song/**\" --test-coverage-include=\"src/audio/**\" --test-reporter=spec --test-reporter-destination=stdout --test-reporter=lcov --test-reporter-destination=coverage/lcov.info \"tests/unit/*.test.mjs\" \"tests/unit/notation/*.test.mjs\" && node tests/unit/coverage-floor.mjs coverage/lcov.info"
   },
   "devDependencies": {
     "axe-core": "4.13.0",
