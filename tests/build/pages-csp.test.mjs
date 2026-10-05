@@ -68,7 +68,14 @@ test('every inline script is allowed by hash in script-src and every inline styl
   const inline = inlineElements(pagesHtml);
   const scripts = inline.filter((e) => e.tag === 'script');
   const styles = inline.filter((e) => e.tag === 'style');
-  assert.ok(scripts.length >= 2 && styles.length >= 1);
+  // Exactly the bundle + the service-worker registration, and the one stylesheet. A new inline element must be a
+  // deliberate change here, not something the hash list silently absorbs. The naive count of raw `<script`/`<style`
+  // text must agree with the matcher: if the bundle ever gained such a literal, the matcher (shared with
+  // build/pages.mjs cspMeta) could hash the wrong span, and only the browser boot would notice.
+  assert.equal(scripts.length, 2, 'two inline scripts: the app bundle and the service-worker registration');
+  assert.equal(styles.length, 1, 'one inline stylesheet');
+  assert.equal((pagesHtml.match(/<script/gi) || []).length, scripts.length, 'a literal "<script" outside a real element would make the hashes unreliable');
+  assert.equal((pagesHtml.match(/<style/gi) || []).length, styles.length, 'a literal "<style" outside a real element would make the hashes unreliable');
   for (const el of scripts) assert.ok(directives['script-src']?.includes(sha(el.text)), `script-src lacks the hash of the inline script starting ${JSON.stringify(el.text.slice(0, 60))}`);
   for (const el of styles) assert.ok(directives['style-src-elem']?.includes(sha(el.text)), 'style-src-elem lacks the hash of the inline <style>');
   const hashes = (d) => (directives[d] || []).filter((s) => s.startsWith("'sha256-"));
