@@ -191,7 +191,9 @@ test('hosted copy under its CSP: boots, runs the worklet from blob:, raises no v
   await evaluate("document.getElementById('updateCheckBtn').click()");
   await evaluate("document.getElementById('modelPackBtn').click()");
   await waitFor("!document.getElementById('updateCheckBtn').disabled && !document.getElementById('modelPackBtn').disabled", 30000, 'both press-to-fetch buttons to settle');
-  // Let a service-worker registration and any deferred load surface a violation.
+  // The page registers its service worker on load; worker-src 'self' has to let that through.
+  await waitFor('navigator.serviceWorker.getRegistration().then(function (r) { return !!r; })', 15000, 'the service worker to register under worker-src');
+  // Let any deferred load surface a violation (a negative check: a wait here can only miss one, never fail falsely).
   await new Promise((r) => setTimeout(r, 500));
 
   const modules = await evaluate('JSON.stringify(window.__bcModules)');
@@ -199,25 +201,36 @@ test('hosted copy under its CSP: boots, runs the worklet from blob:, raises no v
   const before = await evaluate('JSON.stringify(window.__bcViolations)');
   assert.equal(before, '[]', `a normal session under the CSP raised violations: ${before}`);
 
-  // What an HTML-injection bug would try. None may run.
+  // What an HTML-injection bug would try. None may run. Each injection reports
+  // when it has SETTLED (the inline script is synchronous; the data: script and
+  // the image fire load or error; the handler's <img> fires error), so the
+  // assertions below name the injection that got through if the policy is weak.
   await evaluate(`
-    window.__inj = { inline: 0, data: 0, handler: 0, dataErrored: false };
+    window.__inj = { inline: 0, data: 0, handler: 0, dataSettled: false, imgSettled: false };
     var s = document.createElement('script'); s.textContent = 'window.__inj.inline = 1'; document.body.appendChild(s);
     var d = document.createElement('script'); d.src = 'data:text/javascript,window.__inj.data = 1';
-    d.addEventListener('error', function () { window.__inj.dataErrored = true; }); document.body.appendChild(d);
-    var h = document.createElement('div'); h.innerHTML = '<img src="x:0" onerror="window.__inj.handler = 1">'; document.body.appendChild(h);
+    d.addEventListener('error', function () { window.__inj.dataSettled = true; });
+    d.addEventListener('load', function () { window.__inj.dataSettled = true; }); document.body.appendChild(d);
+    var h = document.createElement('div'); h.innerHTML = '<img src="x:0" onerror="window.__inj.handler = 1">';
+    h.firstChild.addEventListener('error', function () { window.__inj.imgSettled = true; }); document.body.appendChild(h);
     true
   `);
-  await waitFor('window.__inj.dataErrored && window.__bcViolations.length >= 3', 8000, 'the injected script to be refused');
-  await new Promise((r) => setTimeout(r, 300));
+  await waitFor('window.__inj.dataSettled && window.__inj.imgSettled', 8000, 'the injected data: script and handler image to settle (load or error)');
 
   const inj = JSON.parse(await evaluate('JSON.stringify(window.__inj)'));
   assert.equal(inj.inline, 0, 'an injected inline <script> ran');
   assert.equal(inj.data, 0, 'an injected <script src="data:..."> ran');
   assert.equal(inj.handler, 0, 'an injected inline event handler ran');
-  const violations = JSON.parse(await evaluate('JSON.stringify(window.__bcViolations)'));
-  const has = (directive, blocked) => violations.some((v) => v.directive === directive && v.blocked === blocked);
-  assert.ok(has('script-src-elem', 'inline'), `no violation for the inline <script>: ${JSON.stringify(violations)}`);
-  assert.ok(has('script-src-elem', 'data'), `no violation for the data: script: ${JSON.stringify(violations)}`);
-  assert.ok(has('script-src-attr', 'inline'), `no violation for the inline event handler: ${JSON.stringify(violations)}`);
+  // Each refusal must also have been REPORTED (the browser queues the event as a task).
+  for (const [directive, blocked, what] of [
+    ['script-src-elem', 'inline', 'the inline <script>'],
+    ['script-src-elem', 'data', 'the data: script'],
+    ['script-src-attr', 'inline', 'the inline event handler'],
+  ]) {
+    await waitFor(
+      `window.__bcViolations.some(function (v) { return v.directive === ${JSON.stringify(directive)} && v.blocked === ${JSON.stringify(blocked)}; })`,
+      8000,
+      `a ${directive} violation for ${what}`
+    );
+  }
 });

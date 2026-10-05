@@ -99,8 +99,10 @@ test('everything else is closed by default and only opened where the app needs i
   assert.deepEqual(directives['form-action'], ["'none'"]);
   assert.deepEqual(directives['object-src'], ["'none'"]);
   assert.deepEqual(directives['manifest-src'], ["'self'"]);
-  assert.ok(directives['worker-src'].includes("'self'"), 'the service worker is registered from this origin');
+  // Only the service worker is a Worker; the pitch worklet loads under script-src (blob:), so worker-src needs no blob:.
+  assert.deepEqual(directives['worker-src'], ["'self'"], 'the service worker is registered from this origin, and nothing else is a worker');
   assert.ok(directives['connect-src'].includes("'self'"));
+  // A model pack's manifest `url` (src/core/model-pack.js) must live on this same origin, or this copy would refuse it.
   assert.ok(directives['connect-src'].includes('https://back-road-creative.github.io'), 'the update check and model pack read the project Pages origin');
   assert.deepEqual(directives['img-src'], ["'self'"], 'the app draws no images itself; only the manifest and touch icons load');
   for (const src of directives['connect-src']) {

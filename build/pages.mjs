@@ -179,7 +179,12 @@ function injectPwaHead(releaseHtml) {
 //   - img-src: the app itself draws no <img>/CSS images (everything is inline
 //     SVG or canvas); 'self' covers only the manifest and apple-touch icons.
 //   - connect-src: the update check and the optional model pack fetch from the
-//     project's own Pages origin (src/core/update-check.js, model-pack.js).
+//     project's own Pages origin (src/core/update-check.js, model-pack.js). A
+//     model pack's manifest `url` must therefore live on that same origin: a
+//     pack file hosted anywhere else would be refused on this copy.
+//   - worker-src: only the service worker (./sw.js, same origin). The pitch
+//     worklet is not a Worker; addModule is governed by script-src, which is
+//     why blob: lives there and not here (measured: no violation without it).
 //   - frame-ancestors is ignored inside a <meta>, so it is left out.
 function cspMeta(html) {
   const hashes = { script: [], style: [] };
@@ -194,7 +199,7 @@ function cspMeta(html) {
     "style-src-attr 'unsafe-inline'",
     "img-src 'self'",
     "connect-src 'self' https://back-road-creative.github.io",
-    "worker-src 'self' blob:",
+    "worker-src 'self'",
     "manifest-src 'self'",
     "base-uri 'none'",
     "form-action 'none'",
