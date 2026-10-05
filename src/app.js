@@ -21,6 +21,7 @@ import { loadPack, packStatus, createIndexedDBStore, packManifestUrl, DEFAULT_MO
 import { checkForUpdate, FALLBACK_DOWNLOAD_URL } from './core/update-check.js';
 import { setNoteNaming, name as noteNameFor } from './core/note-names.js';
 import { t, en, setLocale, LOCALES } from './core/i18n.js';
+import { micErrorMessage } from './core/mic-error.js';
 import { CLEF_PATHS } from './notation/glyphs.js';
 import { yin } from './audio/yin.js';
 import { createPitchNode } from './audio/pitch-worklet.js';
@@ -357,10 +358,15 @@ import { register as registerPathway } from './ui/pathway.js';
     const base = { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: { ideal: 2 } };
     const wanted = DB.prefs.inputDeviceId ? { ...base, deviceId: { exact: DB.prefs.inputDeviceId } } : base;
     openMicPromise = (async () => {
+      // No AudioContext: fail before the browser's prompt; never open a stream nothing can listen to.
+      if (!actx) throw new DOMException('no AudioContext', 'NoAudioContext');
       let st;
       try { st = await navigator.mediaDevices.getUserMedia({ audio: wanted }); }
       catch (e) { if (!DB.prefs.inputDeviceId) throw e; st = await navigator.mediaDevices.getUserMedia({ audio: base }); }
-      micStream = st; micHideReleased = false; const src = actx.createMediaStreamSource(st); wireAnalysers(monoSum(src)); micReady = true;
+      micHideReleased = false;
+      // Wiring can throw with the stream live: stop it, or the OS mic light stays on. micStream is only set once wired, so a failure leaves nothing to undo.
+      try { wireAnalysers(monoSum(actx.createMediaStreamSource(st))); micStream = st; micReady = true; }
+      catch (e) { st.getTracks().forEach(tr => tr.stop()); throw e; }
       // A successful Connect clears the 'blocked' sentence calibrateNoiseFloor wrote (its catch below: keep the two texts identical), so it does not sit beside 'Listening through your microphone.'. Any other result text is left alone.
       { const cr = $('calibrateResult'); if (cr && cr.textContent === 'The microphone was blocked, so it could not be checked.') cr.textContent = ''; }
       // A track that ends (device unplugged, permission revoked) leaves the mic as the teardown 'mic' stopper does, then the status and Connect button follow. Only the CURRENT stream counts: a switched-away stream ending later must not close its replacement. micGen++ makes a room check still running for it discard its result.
@@ -2280,11 +2286,11 @@ import { register as registerPathway } from './ui/pathway.js';
     let parser = midiParsers.get(input); if (!parser) { parser = createMidiParser(); midiParsers.set(input, parser); }
     parser.feed(d).forEach(evt => { if (evt.type === 'on') { noteState.noteOn(input, evt.channel, evt.note); realMidiHeld.add(evt.note); onNote(evt.note, true, 'midi'); } else { noteState.noteOff(input, evt.channel, evt.note); if (!noteState.isHeld(evt.note)) realMidiHeld.delete(evt.note); onNoteOff(evt.note, 'midi'); } });
   }
-  function connectMic() { openMic().then(ioRefresh).catch(() => ioState('off', 'The microphone was blocked. Allow it in the browser, or open the standalone copy in Chrome.')); }
+  function connectMic() { openMic().then(ioRefresh).catch(e => { recordError('mic:connect', e); ioState('off', micErrorMessage(e)); }); }
   // Start on a mic instrument asks for the mic FIRST (the browser's own prompt), then begins: an exercise that cannot hear only ever says "Time." and "You stepped away". Blocked or unavailable: say so and do not start.
   function startAfterMic() {
     if (!needsMic() || micReady) { startSession(); return; }
-    const m = mod, blocked = () => { const msg = 'The microphone was blocked, so I could not start. Press "Set up input", then "Connect microphone", and allow it in your browser.'; ioState('off', msg); if (mod === m) coach(msg); };
+    const m = mod, blocked = e => { recordError('mic:start', e); const msg = e && e.name === 'NotAllowedError' ? 'The microphone was blocked, so I could not start. Press "Set up input", then "Connect microphone", and allow it in your browser.' : micErrorMessage(e); ioState('off', msg); if (mod === m) coach(msg); };
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { const msg = 'This browser cannot open a microphone here. Open the standalone copy in Chrome.'; ioState('off', msg); coach(msg); return; }
     ensureAudio(); openMic().then(() => { ioRefresh(); if (!sess && mod === m) startSession(); }).catch(blocked);
   }
