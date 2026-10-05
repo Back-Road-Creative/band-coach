@@ -68,12 +68,12 @@ jobs:
             fi
             case "$verdict" in
               pass) echo "release.yml passed for $GITHUB_SHA"; exit 0 ;;
-              fail) echo "release.yml did not pass for $GITHUB_SHA, so the Pages deploy is blocked. Fix the failure and re-run release.yml for this tag." >&2; exit 1 ;;
+              fail) echo "release.yml did not pass for $GITHUB_SHA, so the Pages deploy is blocked. Once release.yml passes for this tag, re-run this workflow's failed jobs (re-running release.yml alone does not re-trigger this one), or push a fixed commit and a new tag." >&2; exit 1 ;;
             esac
             echo "waiting for release.yml for $GITHUB_SHA (attempt $attempt)"
             sleep 30
           done
-          echo "release.yml never finished for $GITHUB_SHA within the wait, so the Pages deploy is blocked." >&2
+          echo "release.yml never finished for $GITHUB_SHA within the wait, so the Pages deploy is blocked. Once release.yml passes for this tag, re-run this workflow's failed jobs, or push a fixed commit and a new tag." >&2
           exit 1
 
   deploy:

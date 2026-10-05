@@ -90,6 +90,22 @@ test('pages.yml: a manual run on a branch builds but never deploys, because no r
   assert.match(dep, /^ {4}if: github\.ref_type == 'tag'[ \t]*$/m, 'deploy must run only on a tag, where release-gate has a run to read');
 });
 
+// A branch dispatch skips the gate, so the .appx it uploads has had no test
+// run. The artifact keeps its name (store/scripts/install-local.ps1 and
+// store/README.md download `band-coach-appx`), so the run itself must say so,
+// in a warning annotation that shows on the run page.
+test('store-package.yml: a branch run warns that its appx is untested, and a tag run does not', () => {
+  const pkg = job(workflow('store-package.yml'), 'package');
+  const at = pkg.search(/^ {6}- name: .*untested.*$/im);
+  assert.notEqual(at, -1, 'package has no step that labels a branch build as untested');
+  const rest = pkg.slice(at).split('\n');
+  const end = rest.findIndex((l, i) => i > 0 && /^ {6}- /.test(l));
+  const step = (end === -1 ? rest : rest.slice(0, end)).join('\n');
+  assert.match(step, /^ {8}if: github\.ref_type != 'tag'[ \t]*$/m, 'the warning is for branch runs only; a tag run has passed the gate');
+  assert.match(step, /::warning::/, 'a run annotation, so it shows on the run page');
+  assert.ok(pkg.indexOf(step) < pkg.indexOf('name: upload appx artifact'), 'warn before the artifact is uploaded');
+});
+
 test('release.yml still runs the suite and the gate that pages and the store now wait for', () => {
   const text = workflow('release.yml');
   const rel = job(text, 'release');
@@ -146,6 +162,7 @@ for (const { file } of GATED) {
     const r = run(file, [[bad]]);
     assert.notEqual(r.rc, 0, 'a red tag run must not let the deploy through');
     assert.match(r.out, /release\.yml/);
+    assert.match(r.out, /re-run this workflow's failed jobs/, 're-running release.yml alone does not re-trigger this workflow; the operator must be told to re-run this one too');
     assert.equal(r.sleeps.length, 0, 'a finished failure is final; do not keep waiting');
   });
 
@@ -165,6 +182,7 @@ for (const { file } of GATED) {
     const r = run(file, [[]]);
     assert.notEqual(r.rc, 0, 'with no test run on record the deploy must not go ahead');
     assert.ok(r.sleeps.length >= 10, 'a run that has not started yet is given time to appear');
+    assert.match(r.out, /re-run this workflow's failed jobs/, 'the operator must be told to re-run this workflow once release.yml has passed');
   });
 
   test(`${file}: a brief gh/API failure is retried, not read as a pass or a fail`, () => {

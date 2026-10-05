@@ -39,12 +39,12 @@ jobs:
             fi
             case "$verdict" in
               pass) echo "release.yml passed for $GITHUB_SHA"; exit 0 ;;
-              fail) echo "release.yml did not pass for $GITHUB_SHA, so the Store package is blocked. Fix the failure and re-run release.yml for this tag." >&2; exit 1 ;;
+              fail) echo "release.yml did not pass for $GITHUB_SHA, so the Store package is blocked. Once release.yml passes for this tag, re-run this workflow's failed jobs (re-running release.yml alone does not re-trigger this one), or push a fixed commit and a new tag." >&2; exit 1 ;;
             esac
             echo "waiting for release.yml for $GITHUB_SHA (attempt $attempt)"
             sleep 30
           done
-          echo "release.yml never finished for $GITHUB_SHA within the wait, so the Store package is blocked." >&2
+          echo "release.yml never finished for $GITHUB_SHA within the wait, so the Store package is blocked. Once release.yml passes for this tag, re-run this workflow's failed jobs, or push a fixed commit and a new tag." >&2
           exit 1
 
   package:
@@ -155,6 +155,14 @@ jobs:
           name: wack-report
           path: store/wack/
           if-no-files-found: ignore
+
+      # A branch run skips the gate above, so the .appx below has had no test
+      # run. It keeps the artifact name (store/scripts/install-local.ps1 and
+      # store/README.md download `band-coach-appx`), so say so on the run page.
+      - name: label a branch build as untested
+        if: github.ref_type != 'tag'
+        shell: bash
+        run: echo "::warning::This .appx was built from a branch run. No release test run was checked for it, so it is not a release candidate. Only tag runs are gated on release.yml."
 
       - name: upload appx artifact
         uses: actions/upload-artifact@v4
