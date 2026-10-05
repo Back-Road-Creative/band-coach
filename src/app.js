@@ -80,7 +80,7 @@ import { register as registerTheory, currentLessonQuestion as theoryCurrentQuest
 //
 //
 import { registerHistory } from './ui/history.js';
-import { createNoticeGate, isBenignError, buildDiagnostics } from './core/diagnostics.js';
+import { createNoticeGate, buildDiagnostics } from './core/diagnostics.js';
 //
 import { registerFingerings, renderHowInline } from './ui/fingerings.js';
 import { instrumentSetup } from './ui/fingerings/setup.js';
@@ -97,19 +97,15 @@ import { register as registerPathway } from './ui/pathway.js';
 (function () {
   'use strict';
   const $ = id => document.getElementById(id);
-  // Throws outside frame()/onPitch reach only the console: record each, tell the learner once per gap (dismissible).
+  // Faults outside frame()/onPitch: record, tell the learner (rate-limited, dismissible).
   const errorGate = createNoticeGate();
-  function showErrorNotice() {
-    try {
-      if (!errorGate.allow(Date.now())) return;
-      let n = document.getElementById('errorNotice');
-      if (!n) { n = document.createElement('div'); n.id = 'errorNotice'; n.className = 'backup-nudge'; n.setAttribute('role', 'alert'); const s = document.createElement('span'), b = document.createElement('button'); b.type = 'button'; b.className = 'small'; b.addEventListener('click', () => { n.hidden = true; }); n.append(s, b); document.body.prepend(n); }
-      n.firstChild.textContent = t('error.generic'); n.lastChild.textContent = t('side.backupDismiss'); n.hidden = false;
-    } catch (e) {}
-  }
-  function noteFault(where, err) { try { if (isBenignError(err && err.message ? err.message : err)) return; recordError(where, err); showErrorNotice(); } catch (e) {} }
-  window.addEventListener('error', ev => noteFault('window', ev.error || ev.message));
-  window.addEventListener('unhandledrejection', ev => noteFault('promise', ev.reason));
+  function noteFault(where, err) { try {
+    recordError(where, err); if (!errorGate.allow(Date.now())) return;
+    if ($('errorNotice')) $('errorNotice').remove();
+    document.body.insertAdjacentHTML('afterbegin', '<div id="errorNotice" class="backup-nudge" role="alert"><span>' + t('error.generic') + '</span><button class="small">' + t('side.backupDismiss') + '</button></div>');
+    $('errorNotice').lastChild.onclick = () => $('errorNotice').remove();
+  } catch (e) {} }
+  ['error', 'unhandledrejection'].forEach(k => window.addEventListener(k, ev => noteFault(k, ev.error || ev.reason || ev.message)));
   // Static page labels: every element src/index.html marks with data-i18n="id"
   // gets its textContent set from t(id) once at startup, so the shipped copy
   // comes from the same English table as the strings app.js writes itself
@@ -1687,7 +1683,7 @@ import { register as registerPathway } from './ui/pathway.js';
   // not used for judging -- onHit()/tickKitBar() are the source of truth.
   let drumOnsetDetector = null, drumClassifier = null, drumRing = null, drumMicHits = [];
   const DRUM_FRAME = 2048, DRUM_HOP = 512;
-  // listen() runs on a timer outside frame()'s try: record and announce the first 3 faults of a streak, keep the timer going.
+  // listen() is a timer outside frame()'s try: report the first 3 faults of a streak.
   let listenFails = 0;
   function listen() { try { listenOnce(); listenFails = 0; } catch (e) { if (++listenFails <= 3) noteFault('listen', e); } }
   function listenOnce() {
@@ -2866,11 +2862,11 @@ import { register as registerPathway } from './ui/pathway.js';
     reader.readAsText(file);
   });
   $('backupNudgeDismiss').addEventListener('click', () => { $('backupNudge').hidden = true; });
-  // ---------- Copy diagnostics: allow-listed text (src/core/diagnostics.js); with no clipboard it is shown to copy by hand.
-  $('diagCopyBtn').addEventListener('click', async function () {
-    const text = buildDiagnostics({ version: APP_VERSION, userAgent: navigator.userAgent, errors: getErrors(), capabilities: { microphone: !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia), midi: !!navigator.requestMIDIAccess, audioWorklet: typeof AudioWorkletNode === 'function', songLibrary: !!window.indexedDB} });
-    let ok = false; try { if (navigator.clipboard && navigator.clipboard.writeText) { await navigator.clipboard.writeText(text); ok = true; } } catch (e) {}
-    const box = $('diagText'); box.value = text; box.hidden = ok; $('diagCopyResult').textContent = t(ok ? 'diag.copied' : 'diag.manual'); if (!ok) box.select();
+  // ---------- Copy diagnostics (allow-list in src/core/diagnostics.js); no clipboard: show the text to copy by hand.
+  $('diagCopyBtn').addEventListener('click', async () => {
+    const text = buildDiagnostics({ version: APP_VERSION, userAgent: navigator.userAgent, errors: getErrors(), capabilities: { microphone: !!navigator.mediaDevices, midi: !!navigator.requestMIDIAccess, audioWorklet: !!window.AudioWorkletNode, songStorage: !!window.indexedDB } });
+    const ok = await new Promise(r => r(navigator.clipboard.writeText(text))).then(() => true, () => false);
+    $('diagCopyResult').textContent = t(ok ? 'diag.copied' : 'diag.manual') + '\n\n' + text;
   });
 
   // ---------- check for updates: a file:// copy can never rewrite or replace itself (browser

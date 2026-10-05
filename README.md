@@ -327,13 +327,14 @@ a pre-JS/no-JS fallback, and `applyStaticLabels` in `src/app.js` overwrites it f
 startup and again whenever the language is changed.
 
 - **When something breaks:** an error that escapes the practice loop (a rejected promise, a MIDI
-  or microphone handler, the 50 ms pitch timer) is recorded in an in-memory error list and the
+  or microphone handler, the 50 ms pitch timer) is recorded in the in-memory error list and the
   learner sees one dismissible notice (at most one per 30 seconds) instead of silence. Settings >
-  Report a problem > "Copy diagnostics" copies the app version, browser string, recent error
-  messages and which features exist (microphone, MIDI, AudioWorklet, song storage, clipboard); with
-  no clipboard it shows the text to copy by hand. It is built from that allow-list in
-  `src/core/diagnostics.js`, so audio, song titles, file names and device ids are never in it, and
-  nothing is sent anywhere.
+  "Copy diagnostics" copies the app version, browser string, recent error
+  messages (links and file paths blanked, 200 characters each) and whether the microphone, MIDI,
+  AudioWorklet and song storage exist; the text is shown on screen too, so with no clipboard it can be copied by hand. It is
+  built from that short list in `src/core/diagnostics.js`, so audio, songs, practice records and
+  device ids are not included by design. An error message is whatever the browser or app wrote, so
+  it can still name something the app was handling. Nothing is sent anywhere.
 
 ## Progress
 

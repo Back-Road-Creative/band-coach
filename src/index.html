@@ -70,11 +70,8 @@
       <input type="file" accept=".json,application/json" id="backupRestoreInput" hidden>
     </div>
     <div class="settings-group">
-      <h3 data-i18n="settings.diagnostics">Report a problem</h3>
       <button type="button" class="small" id="diagCopyBtn" data-i18n="diag.copy">Copy diagnostics</button>
-      <p class="update-check-help" data-i18n="diag.help">Copies a short note: app version, browser, recent errors, features. No audio, song titles, file names or device names.</p>
-      <span id="diagCopyResult" role="status"></span>
-      <textarea id="diagText" readonly rows="8" hidden></textarea>
+      <p id="diagCopyResult" role="status" style="white-space:pre-wrap;overflow-wrap:anywhere"></p>
     </div>
     <div class="settings-group">
       <h3 data-i18n="settings.updates">Updates</h3>

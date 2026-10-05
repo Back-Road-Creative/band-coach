@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createNoticeGate, NOTICE_GAP_MS, isBenignError, buildDiagnostics } from '../../src/core/diagnostics.js';
+import { createNoticeGate, buildDiagnostics } from '../../src/core/diagnostics.js';
 
 test('the notice gate lets the first notice through, then holds the rest for the gap', () => {
   const gate = createNoticeGate(1000);
@@ -18,14 +18,9 @@ test('a clock that goes backwards never locks the notice out for good', () => {
 });
 
 test('the default gap is long enough that a runaway fault cannot flood the screen', () => {
-  assert.ok(NOTICE_GAP_MS >= 10000);
-});
-
-test('ResizeObserver loop noise is benign; a real error is not', () => {
-  assert.equal(isBenignError('ResizeObserver loop completed with undelivered notifications.'), true);
-  assert.equal(isBenignError('ResizeObserver loop limit exceeded'), true);
-  assert.equal(isBenignError('x is not a function'), false);
-  assert.equal(isBenignError(''), false);
+  const gate = createNoticeGate();
+  assert.equal(gate.allow(0), true);
+  assert.equal(gate.allow(9999), false, 'ten seconds later is still held');
 });
 
 test('buildDiagnostics lists version, browser, error messages and capability states', () => {
@@ -39,13 +34,13 @@ test('buildDiagnostics lists version, browser, error messages and capability sta
   assert.match(text, /TestAgent\/9/);
   assert.match(text, /boom one/);
   assert.match(text, /boom two/);
-  assert.match(text, /microphone: available/);
-  assert.match(text, /midi: missing/);
+  assert.match(text, /"microphone":true/);
+  assert.match(text, /"midi":false/);
 });
 
 test('buildDiagnostics says plainly when nothing has gone wrong', () => {
   const text = buildDiagnostics({ version: '1', userAgent: 'x', errors: [], capabilities: {} });
-  assert.match(text, /No errors/i);
+  assert.match(text, /Recent errors: none/);
 });
 
 test('buildDiagnostics reads messages only: stacks and extra fields never reach the text', () => {
@@ -62,6 +57,7 @@ test('buildDiagnostics blanks file paths and links inside an error message and c
     errors: [
       { message: 'failed at file:///home/jane/Music/my-song.mid now', where: 'a', time: 1 },
       { message: 'could not read C:\\Users\\jane\\Desktop\\song.mp3 ok', where: 'b', time: 2 },
+      { message: 'cannot open /home/jane/Music/my-song.mid', where: 'd', time: 4 },
       { message: 'long ' + 'z'.repeat(1000), where: 'c', time: 3 },
     ],
   });

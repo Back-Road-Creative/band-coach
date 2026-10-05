@@ -18,7 +18,7 @@ export const en = {
   // src/core/storage.js's safeSet). Cleared the moment a later save
   // succeeds, so it never outlives the problem it describes.
   'storage.saveFailed': "Your progress just now could not be saved on this device (storage may be full, or private browsing may be blocking it). Keep playing -- I'll keep trying to save.",
-  'error.generic': 'Something went wrong. If practice stops responding, reload the page. To report it, open Settings and press Copy diagnostics.',
+  'error.generic': 'Something went wrong. Reload if practice stops. To report it: Settings > Copy diagnostics.',
   'backup.saved': 'Backup saved to your downloads. Keep that file somewhere safe.',
   'backup.restored': 'Backup restored.',
   'backup.readError': 'That file could not be read.',
@@ -76,11 +76,9 @@ export const en = {
   'settings.language': 'Language',
   'settings.backups': 'Backups and reset',
   'settings.updates': 'Updates',
-  'settings.diagnostics': 'Report a problem',
   'diag.copy': 'Copy diagnostics',
-  'diag.help': 'Copies a short note: app version, browser, recent errors, features. No audio, song titles, file names or device names.',
   'diag.copied': 'Copied. Paste it into your message.',
-  'diag.manual': 'Copying was blocked. Select the text below and copy it yourself.',
+  'diag.manual': 'Copy was blocked. Select this text and copy it:',
   'settings.modelPack': 'Model pack',
   'settings.how': 'How this works',
   'songs.addRow': 'Add a song',
@@ -214,7 +212,7 @@ export const en = {
 // app has not yet routed through t() still show in English.
 export const es = {
   'storage.saveFailed': 'Tu progreso de hace un momento no se pudo guardar en este dispositivo (puede que el almacenamiento esté lleno o que la navegación privada lo esté bloqueando). Sigue tocando: seguiré intentando guardar.',
-  'error.generic': 'Algo salió mal. Si la práctica deja de responder, recarga la página. Para avisar, abre Ajustes y pulsa Copiar diagnóstico.',
+  'error.generic': 'Algo salió mal. Recarga si la práctica se detiene. Para informar: Ajustes > Copiar diagnóstico.',
   'backup.saved': 'Copia de seguridad guardada en tus descargas. Guarda ese archivo en un lugar seguro.',
   'backup.restored': 'Copia de seguridad restaurada.',
   'backup.readError': 'No se pudo leer ese archivo.',
@@ -257,11 +255,9 @@ export const es = {
   'settings.language': 'Idioma',
   'settings.backups': 'Copias de seguridad y reinicio',
   'settings.updates': 'Actualizaciones',
-  'settings.diagnostics': 'Informar de un problema',
   'diag.copy': 'Copiar diagnóstico',
-  'diag.help': 'Copia una nota breve: versión, navegador, errores recientes, funciones. Sin audio, títulos de canciones, nombres de archivos ni de dispositivos.',
   'diag.copied': 'Copiado. Pégalo en tu mensaje.',
-  'diag.manual': 'Se bloqueó el copiado. Selecciona el texto de abajo y cópialo.',
+  'diag.manual': 'Copia bloqueada. Selecciona este texto y cópialo:',
   'settings.modelPack': 'Paquete de modelo',
   'settings.how': 'Cómo funciona',
   'songs.addRow': 'Añadir una canción',

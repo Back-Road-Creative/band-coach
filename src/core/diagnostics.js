@@ -1,27 +1,8 @@
-// Pure helpers for the error notice and Copy diagnostics. The text is built from an allow-list, so titles, audio, file names and device ids never reach it.
-export const NOTICE_GAP_MS = 30000;
-const MAX_MESSAGE = 200;
+// Pure helpers for the error notice and Copy diagnostics: text is built from an allow-list (version, browser, error messages, feature states).
+// One notice per gap; a clock stepping back by more than the gap is let through, never silenced.
+export const createNoticeGate = (gapMs = 30000, last = -Infinity) => ({ allow: now => Math.abs(now - last) >= gapMs && ((last = now), true) });
 
-// One notice per gap; a clock stepping backwards is let through, never silenced.
-export function createNoticeGate(gapMs = NOTICE_GAP_MS) {
-  let last = null;
-  return { allow(now) { if (last !== null && now >= last && now - last < gapMs) return false; last = now; return true; } };
-}
+// Messages only, trimmed of file paths and links, 200 characters at most.
+const scrub = m => String(m).replace(/(?:\b[a-z][\w+.-]*:\/\/|\b[a-z]:\\|(?:^|\s)\/)\S*/gi, ' [path]').replace(/\s+/g, ' ').slice(0, 200);
 
-// Layout churn, not a fault.
-export function isBenignError(message) { return /^ResizeObserver loop/.test(String(message || '')); }
-
-function scrub(message) {
-  return String(message == null ? '' : message).replace(/\b[a-z][\w+.-]*:\/\/\S+|\b[A-Za-z]:\\\S+|(?:^|\s)\/(?:[\w.-]+\/)+\S*/gi, ' [path]').replace(/\s+/g, ' ').trim().slice(0, MAX_MESSAGE);
-}
-
-export function buildDiagnostics({ version, userAgent, errors, capabilities }) {
-  const lines = ['Band Coach ' + version, 'Browser: ' + String(userAgent || 'unknown'), '', 'Features:'];
-  Object.keys(capabilities || {}).forEach(k => lines.push('  ' + k + ': ' + (capabilities[k] ? 'available' : 'missing')));
-  lines.push('', 'Recent errors:');
-  const list = Array.isArray(errors) ? errors : [];
-  if (!list.length) lines.push('  No errors recorded since this page opened.');
-  list.forEach(e => lines.push('  [' + scrub(e && e.where) + '] ' + scrub(e && e.message)));
-  lines.push('', 'This note holds no audio, song titles, file names or device names.');
-  return lines.join('\n');
-}
+export const buildDiagnostics = ({ version, userAgent, errors, capabilities }) => ['Band Coach ' + version, 'Browser: ' + userAgent, 'Features: ' + JSON.stringify(capabilities), 'Recent errors: ' + (errors.length || 'none'), ...errors.map(e => '  [' + e.where + '] ' + scrub(e.message))].join('\n');
