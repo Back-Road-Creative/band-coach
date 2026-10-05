@@ -1,6 +1,7 @@
 import { judgePitch, OCTAVE_POLICY } from './core/judge.js';
 import { createDeafWindow } from './audio/deaf-window.js';
 import { exportProgress as exportProgressFile, importProgress as importProgressFile, migrate as migrateDB } from './core/progress-file.js';
+import { checkFileSize } from './ui/songs/import-route.js';
 import { safeSet, safeGet } from './core/storage.js';
 import { createLibrary, indexedDbStore, memoryStore } from './song/library.js';
 import { captureToSong } from './song/capture.js';
@@ -2821,8 +2822,8 @@ import { register as registerPathway } from './ui/pathway.js';
     noteBackupMade(Date.now()); $('backupNudge').hidden = true;
     coach(t('backup.saved'));
   }
-  async function doImportProgress(text) {
-    const result = importProgressFile(text);
+  async function doImportProgress(textOrChecked) {
+    const result = typeof textOrChecked === 'string' ? importProgressFile(textOrChecked) : textOrChecked; // the restore handler hands over its own pre-check so the file is parsed once
     if (!result.ok) { coach(t(result.errorId)); return result; }
     // The songs go first because that is the store that can fail (e.g.
     // IndexedDB unavailable): if it does, nothing about the live profile
@@ -2843,9 +2844,10 @@ import { register as registerPathway } from './ui/pathway.js';
   $('backupRestoreInput').addEventListener('change', function () {
     const file = this.files && this.files[0]; this.value = '';
     if (!file) return;
+    if (checkFileSize(file, 'backup')) { coach(t('backup.err.tooLarge')); return; } // by size alone, before a FileReader pulls it into memory
     const reader = new FileReader();
     // Check the file before asking: a file that is not a backup is refused with the reason, and the "replace your progress" confirm is only raised for one that can be restored.
-    reader.onload = () => { const text = String(reader.result), check = importProgressFile(text); if (!check.ok) { coach(t(check.errorId)); return; } if (confirm(t('backup.confirmRestore'))) doImportProgress(text); };
+    reader.onload = () => { const text = String(reader.result), check = importProgressFile(text); if (!check.ok) { coach(t(check.errorId)); return; } if (confirm(t('backup.confirmRestore'))) doImportProgress(check); };
     reader.onerror = () => coach(t('backup.readError'));
     reader.readAsText(file);
   });

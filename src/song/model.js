@@ -13,6 +13,9 @@ export const TICKS_PER_QUARTER = 480;
 export const MODES = ['major', 'minor'];
 export const ROLES = ['melody', 'bass', 'inner', 'percussion'];
 const VALID_DENOMINATORS = [1, 2, 4, 8, 16, 32, 64];
+// Size ceilings every import, band pack, save and restore inherits (a tiny file can claim billions of ticks).
+export const MAX_SONG_BARS = 4000;
+export const MAX_NOTES_PER_PART = 50000;
 
 function isFiniteNumber(x) { return typeof x === 'number' && Number.isFinite(x); }
 function isInt(x) { return isFiniteNumber(x) && Math.floor(x) === x; }
@@ -115,6 +118,10 @@ function validatePart(part, pIndex, errors) {
   }
   if (!Array.isArray(part.notes)) {
     errors.push(path + '.notes must be an array');
+    return;
+  }
+  if (part.notes.length > MAX_NOTES_PER_PART) {
+    errors.push(path + ' is too large to open: it has ' + part.notes.length + ' notes (the limit is ' + MAX_NOTES_PER_PART + ')');
     return;
   }
   let prev;
@@ -270,6 +277,12 @@ export function validateSong(song) {
   validateTickList(song.metreChanges, 'metreChanges', checkMetreFields, errors);
   validateTickList(song.keyChanges, 'keyChanges', checkKeyFields, errors);
 
+  // Length in bars of the shortest metre, once the shape is sound.
+  if (errors.length === 0) {
+    const bars = songDurationTicks(song) / minBarTicksOf(song);
+    if (bars > MAX_SONG_BARS) fail('the song is too long to open: about ' + Math.round(bars) + ' bars (the limit is ' + MAX_SONG_BARS + '); a note or rest probably has a wrong length');
+  }
+
   return { ok: errors.length === 0, errors };
 }
 
@@ -319,6 +332,9 @@ function normalizePart(raw, index) {
   }
   if (!Array.isArray(raw.notes)) {
     throw new Error('parts[' + index + '].notes is missing or not an array');
+  }
+  if (raw.notes.length > MAX_NOTES_PER_PART) {
+    throw new Error('parts[' + index + '] is too large to open: it has ' + raw.notes.length + ' notes (the limit is ' + MAX_NOTES_PER_PART + ')');
   }
   const notes = raw.notes
     .map((n, i) => normalizeNote(n, 'parts[' + index + '].notes[' + i + ']'))
@@ -511,6 +527,13 @@ function barTicksOf(song) {
   return song.metre.num * beatsToQuarterRatio * song.ticksPerQuarter;
 }
 
+// Shortest bar the song uses (opening metre or a metreChanges entry).
+function minBarTicksOf(song) {
+  let min = barTicksOf(song);
+  for (const change of song.metreChanges || []) min = Math.min(min, change.num * (4 / change.den) * song.ticksPerQuarter);
+  return min;
+}
+
 // The metre in force from tick 0, followed by each entry in song.metreChanges
 // (already sorted-by-tick and normalized), each carrying its own bar length.
 // An entry at tick 0 replaces the opening metre rather than adding a
@@ -554,6 +577,8 @@ export function barsOf(song) {
     const next = tick + segments[segIdx].barTicks;
     tick = next > nextChangeTick ? nextChangeTick : next;
     boundaries.push(tick);
+    // Backstop for a song that never passed validateSong (e.g. saved before the ceiling).
+    if (boundaries.length > MAX_SONG_BARS + segments.length + 2) throw new Error('barsOf: this song is too long to open (over ' + MAX_SONG_BARS + ' bars)');
   }
   return boundaries;
 }

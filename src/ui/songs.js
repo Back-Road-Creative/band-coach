@@ -48,7 +48,7 @@ import { validateSong } from '../song/model.js';
 import { buildLessonPlan, nextStep, creditFor } from '../song/lesson.js';
 import { INSTRUMENTS } from '../instruments/index.js';
 import { capabilityFor } from '../instruments/capability.js';
-import { importerFor } from './songs/import-route.js';
+import { importerFor, checkFileSize } from './songs/import-route.js';
 import { judgeAttempt, passesRule, firstCorrection, phraseSec } from './songs/practice.js';
 import { createSongClock } from '../song/clock.js';
 import { phaseOf, repairFor, interludeAfter, addReview, dueReviews, dropReviews, sanitizeReviewQueue } from '../core/teaching.js';
@@ -441,8 +441,10 @@ export function summarizePracticeSession(practice, nowSec) {
 // something the learner is told, not something that just silently vanished.
 const ADD_STATE_STORE_ID = 'songs-add-state';
 
-function readFile(file, as) {
+function readFile(file, as, kind) {
   return new Promise((resolve, reject) => {
+    const tooBig = checkFileSize(file, kind); // by size alone, before a FileReader is even built
+    if (tooBig) { reject(new Error(tooBig)); return; }
     const reader = new FileReader();
     reader.onerror = () => reject(new Error('the file could not be read'));
     reader.onload = () => resolve(reader.result);
@@ -2502,7 +2504,7 @@ function mountSongsPanel(hostEl, api) {
   async function importBandPack(file, route) {
     let pack;
     try {
-      const buffer = await readFile(file, route.readAs);
+      const buffer = await readFile(file, route.readAs, route.kind);
       pack = readBandPack(new Uint8Array(buffer));
     } catch (e) {
       say(e && e.message ? e.message : String(e), 'no');
@@ -2539,7 +2541,7 @@ function mountSongsPanel(hostEl, api) {
   async function importChallenge(file, route) {
     let challenge;
     try {
-      const text = await readFile(file, route.readAs);
+      const text = await readFile(file, route.readAs, route.kind);
       challenge = parseChallenge(text);
     } catch (e) {
       say('That file could not be read: ' + (e && e.message ? e.message : String(e)), 'no');
@@ -2569,7 +2571,7 @@ function mountSongsPanel(hostEl, api) {
   async function importNotationFile(file, route) {
     let song, warnings;
     try {
-      const data = await readFile(file, route.readAs);
+      const data = await readFile(file, route.readAs, route.kind);
       // routeImportFile() decided the kind above; importerFor() (src/ui/
       // songs/import-route.js) is the one place that maps a kind to its
       // actual importer, so a .gp file reaches importGp7 rather than

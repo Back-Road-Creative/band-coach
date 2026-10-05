@@ -40,6 +40,19 @@ import { importAbc } from '../../song/import-abc.js';
 import { importMusicXml } from '../../song/import-musicxml.js';
 import { importGp7 } from '../../song/import-gp7.js';
 import { importGp5 } from '../../song/import-gp5.js';
+import { MAX_BAND_PACK_BYTES } from '../../song/band-pack.js';
+import { MAX_IMPORT_BYTES } from '../../core/progress-file.js';
+
+const MAX_NOTATION_BYTES = 16 * 1024 * 1024;
+
+// Plain-English refusal of a file too big to read, from its size alone so the caller says no BEFORE a FileReader loads it. `kind`: a routed kind, or 'backup'. Null when fine or when the size is unknown.
+export function checkFileSize(file, kind) {
+  const size = file && file.size;
+  if (typeof size !== 'number' || !Number.isFinite(size)) return null;
+  const limit = kind === 'backup' ? MAX_IMPORT_BYTES : (kind === 'band-pack' || kind === 'challenge') ? MAX_BAND_PACK_BYTES : MAX_NOTATION_BYTES;
+  if (size <= limit) return null;
+  return 'This file is ' + Math.ceil(size / 1048576) + ' MB, which is more than Band Coach can open here (the limit is ' + Math.floor(limit / 1048576) + ' MB). Pick a smaller file.';
+}
 
 function extensionOf(fileName) {
   const name = String(fileName || '');
