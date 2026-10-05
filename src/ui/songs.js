@@ -441,14 +441,14 @@ export function summarizePracticeSession(practice, nowSec) {
 // something the learner is told, not something that just silently vanished.
 const ADD_STATE_STORE_ID = 'songs-add-state';
 
-function readFile(file, as, kind) {
+function readFile(file, route) {
   return new Promise((resolve, reject) => {
-    const tooBig = checkFileSize(file, kind); // by size alone, before a FileReader is even built
-    if (tooBig) { reject(new Error(tooBig)); return; }
+    const tooBig = checkFileSize(file, route.kind); // before a FileReader is built
+    if (tooBig) return reject(new Error(tooBig));
     const reader = new FileReader();
     reader.onerror = () => reject(new Error('the file could not be read'));
     reader.onload = () => resolve(reader.result);
-    if (as === 'bytes') reader.readAsArrayBuffer(file);
+    if (route.readAs === 'bytes') reader.readAsArrayBuffer(file);
     else reader.readAsText(file);
   });
 }
@@ -1158,7 +1158,7 @@ function mountSongsPanel(hostEl, api) {
     songHeaderSection.appendChild(headerSheetButton(song));
   }
 
-  // A song saved before the length ceiling can be too long for any bar view to build: say so, and keep the list open so it can be removed. Called by openSong() (the part list builds before any lesson) and by startPractice() itself, so Carry on, a deep-link and a hand-off are covered too.
+  // A song saved before the length ceiling: say so, keep the list open. Guards openSong() and startPractice() (Carry on, hand-offs).
   function refuseIfTooLong(song) {
     const bars = songBarCount(song);
     if (bars <= MAX_SONG_BARS) return false;
@@ -2515,7 +2515,7 @@ function mountSongsPanel(hostEl, api) {
   async function importBandPack(file, route) {
     let pack;
     try {
-      const buffer = await readFile(file, route.readAs, route.kind);
+      const buffer = await readFile(file, route);
       pack = readBandPack(new Uint8Array(buffer));
     } catch (e) {
       say(e && e.message ? e.message : String(e), 'no');
@@ -2552,7 +2552,7 @@ function mountSongsPanel(hostEl, api) {
   async function importChallenge(file, route) {
     let challenge;
     try {
-      const text = await readFile(file, route.readAs, route.kind);
+      const text = await readFile(file, route);
       challenge = parseChallenge(text);
     } catch (e) {
       say('That file could not be read: ' + (e && e.message ? e.message : String(e)), 'no');
@@ -2582,7 +2582,7 @@ function mountSongsPanel(hostEl, api) {
   async function importNotationFile(file, route) {
     let song, warnings;
     try {
-      const data = await readFile(file, route.readAs, route.kind);
+      const data = await readFile(file, route);
       // routeImportFile() decided the kind above; importerFor() (src/ui/
       // songs/import-route.js) is the one place that maps a kind to its
       // actual importer, so a .gp file reaches importGp7 rather than

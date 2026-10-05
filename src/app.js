@@ -2823,7 +2823,7 @@ import { register as registerPathway } from './ui/pathway.js';
     coach(t('backup.saved'));
   }
   async function doImportProgress(textOrChecked) {
-    const result = typeof textOrChecked === 'string' ? importProgressFile(textOrChecked) : textOrChecked; // the restore handler hands over its own pre-check so the file is parsed once
+    const result = typeof textOrChecked === 'string' ? importProgressFile(textOrChecked) : textOrChecked; // a pre-checked result: parsed once
     if (!result.ok) { coach(t(result.errorId)); return result; }
     // The songs go first because that is the store that can fail (e.g.
     // IndexedDB unavailable): if it does, nothing about the live profile
@@ -2844,7 +2844,7 @@ import { register as registerPathway } from './ui/pathway.js';
   $('backupRestoreInput').addEventListener('change', function () {
     const file = this.files && this.files[0]; this.value = '';
     if (!file) return;
-    if (checkFileSize(file, 'backup')) { coach(t('backup.err.tooLarge')); return; } // by size alone, before a FileReader pulls it into memory
+    if (checkFileSize(file, 'backup')) { coach(t('backup.err.tooLarge')); return; } // before a FileReader is built
     const reader = new FileReader();
     // Check the file before asking: a file that is not a backup is refused with the reason, and the "replace your progress" confirm is only raised for one that can be restored.
     reader.onload = () => { const text = String(reader.result), check = importProgressFile(text); if (!check.ok) { coach(t(check.errorId)); return; } if (confirm(t('backup.confirmRestore'))) doImportProgress(check); };

@@ -36,7 +36,7 @@ const hostile = [
 
 for (const [label, make] of hostile) {
   test('refuses ' + label + ' cleanly and quickly', async () => {
-    const t0 = Date.now();
+    const t0 = performance.now();
     const s = make();
     const check = validateSong(s);
     assert.equal(check.ok, false, 'validateSong must refuse it');
@@ -46,7 +46,7 @@ for (const [label, make] of hostile) {
     const lib = createLibrary(memoryStore());
     await assert.rejects(() => lib.add(s, { now: 1 }), /too long|too large/i);
     assert.deepEqual(await lib.list(), [], 'nothing was saved');
-    assert.ok(Date.now() - t0 < 1000, 'import + refusal took ' + (Date.now() - t0) + ' ms');
+    assert.ok(performance.now() - t0 < 1000, 'import + refusal took ' + (performance.now() - t0) + ' ms');
   });
 }
 
@@ -119,9 +119,9 @@ test('songBarCount counts exactly the bars barsOf lays out, with no allocation',
 
 test('barsOf stops at a bound instead of building millions of boundaries', () => {
   const hostileSong = song([{ start: 0, dur: 5368709100, midi: 60 }]);
-  const t0 = Date.now();
+  const t0 = performance.now();
   assert.throws(() => barsOf(hostileSong), /too long/i);
-  assert.ok(Date.now() - t0 < 1000, 'barsOf refused in ' + (Date.now() - t0) + ' ms');
+  assert.ok(performance.now() - t0 < 1000, 'barsOf refused in ' + (performance.now() - t0) + ' ms');
 });
 
 test('checkFileSize refuses an oversized file by its size alone and says what to do', () => {

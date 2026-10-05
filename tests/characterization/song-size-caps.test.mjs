@@ -160,3 +160,13 @@ test('a hand-off (requestOpenSong) naming a saved song that is too long says why
   await openSongs(page);
   await assertRefusedCleanly(page);
 });
+
+test('clicking a multi-part saved song that is too long says why and leaves the library open', async (t) => {
+  const page = await launchPage(HTML_PATH);
+  t.after(() => page.close());
+  await seedLegacy(page);
+  await openSongs(page);
+  await page.waitFor("Array.from(document.querySelectorAll('.panel-songs-row button')).some(b => b.textContent === 'Legacy Huge')");
+  await page.evaluate("Array.from(document.querySelectorAll('.panel-songs-row button')).find(b => b.textContent === 'Legacy Huge').click()");
+  await assertRefusedCleanly(page);
+});

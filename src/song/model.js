@@ -13,9 +13,10 @@ export const TICKS_PER_QUARTER = 480;
 export const MODES = ['major', 'minor'];
 export const ROLES = ['melody', 'bass', 'inner', 'percussion'];
 const VALID_DENOMINATORS = [1, 2, 4, 8, 16, 32, 64];
-// Size ceilings every import, band pack, save and restore inherits (a tiny file can claim billions of ticks).
+// Size ceilings (a tiny file can claim billions of ticks).
 export const MAX_SONG_BARS = 4000;
 export const MAX_NOTES_PER_PART = 50000;
+const tooManyNotes = (path, n) => path + ' is too large to open: it has ' + n + ' notes (the limit is ' + MAX_NOTES_PER_PART + ')';
 
 function isFiniteNumber(x) { return typeof x === 'number' && Number.isFinite(x); }
 function isInt(x) { return isFiniteNumber(x) && Math.floor(x) === x; }
@@ -121,7 +122,7 @@ function validatePart(part, pIndex, errors) {
     return;
   }
   if (part.notes.length > MAX_NOTES_PER_PART) {
-    errors.push(path + ' is too large to open: it has ' + part.notes.length + ' notes (the limit is ' + MAX_NOTES_PER_PART + ')');
+    errors.push(tooManyNotes(path, part.notes.length));
     return;
   }
   let prev;
@@ -277,7 +278,7 @@ export function validateSong(song) {
   validateTickList(song.metreChanges, 'metreChanges', checkMetreFields, errors);
   validateTickList(song.keyChanges, 'keyChanges', checkKeyFields, errors);
 
-  // Length in bars, counted segment by segment as barsOf lays them out, once the shape is sound.
+  // Length in bars, once the shape is sound.
   if (errors.length === 0) {
     const bars = songBarCount(song);
     if (bars > MAX_SONG_BARS) fail('the song is too long to open: about ' + bars + ' bars (the limit is ' + MAX_SONG_BARS + '); a note or rest probably has a wrong length');
@@ -333,9 +334,9 @@ function normalizePart(raw, index) {
   if (!Array.isArray(raw.notes)) {
     throw new Error('parts[' + index + '].notes is missing or not an array');
   }
-  // Early exit: stops normalizing a huge array note by note. validatePart's own cap would refuse it too, but later and with the 'song could not be normalized' prefix; tests/unit/song-size-caps pins this message.
+  // Early exit, before normalizing a huge array note by note.
   if (raw.notes.length > MAX_NOTES_PER_PART) {
-    throw new Error('parts[' + index + '] is too large to open: it has ' + raw.notes.length + ' notes (the limit is ' + MAX_NOTES_PER_PART + ')');
+    throw new Error(tooManyNotes('parts[' + index + ']', raw.notes.length));
   }
   const notes = raw.notes
     .map((n, i) => normalizeNote(n, 'parts[' + index + '].notes[' + i + ']'))
@@ -554,15 +555,11 @@ function metreSegmentsOf(song) {
   return segments;
 }
 
-// Number of bars barsOf would lay out, counted per metre segment (span / that segment's bar length, rounded up) with no allocation, so a hostile song is measured before anything is built.
+// Bars barsOf would lay out, counted per metre segment with no allocation.
 export function songBarCount(song) {
-  const segments = metreSegmentsOf(song);
-  const duration = songDurationTicks(song);
+  const segs = metreSegmentsOf(song), end = songDurationTicks(song);
   let bars = 0;
-  segments.forEach((seg, i) => {
-    const to = Math.min(i + 1 < segments.length ? segments[i + 1].tick : Infinity, duration);
-    if (to > seg.tick) bars += Math.ceil((to - seg.tick) / seg.barTicks);
-  });
+  segs.forEach((s, i) => { const to = Math.min(i + 1 < segs.length ? segs[i + 1].tick : Infinity, end); if (to > s.tick) bars += Math.ceil((to - s.tick) / s.barTicks); });
   return Math.max(bars, 1);
 }
 
@@ -572,8 +569,6 @@ export function songBarCount(song) {
 // bar straddling a change is shortened to end exactly there -- and bars
 // after it use that change's own length until the next change (if any).
 export function barsOf(song) {
-  // Backstop for a song that never passed validateSong (e.g. saved before the ceiling): refuse before building millions of boundaries.
-  if (songBarCount(song) > MAX_SONG_BARS) throw new Error('barsOf: this song is too long to open (over ' + MAX_SONG_BARS + ' bars)');
   const duration = songDurationTicks(song);
   const segments = metreSegmentsOf(song);
   const boundaries = [0];
@@ -584,7 +579,8 @@ export function barsOf(song) {
     const nextChangeTick = segIdx + 1 < segments.length ? segments[segIdx + 1].tick : Infinity;
     const next = tick + segments[segIdx].barTicks;
     tick = next > nextChangeTick ? nextChangeTick : next;
-    boundaries.push(tick);
+    // Backstop for a song that never passed validateSong.
+    if (boundaries.push(tick) > MAX_SONG_BARS + 1) throw new Error('barsOf: this song is too long to open (over ' + MAX_SONG_BARS + ' bars)');
   }
   return boundaries;
 }

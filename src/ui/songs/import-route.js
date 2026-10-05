@@ -43,16 +43,14 @@ import { importGp5 } from '../../song/import-gp5.js';
 import { MAX_BAND_PACK_BYTES } from '../../song/band-pack.js';
 import { MAX_IMPORT_BYTES } from '../../core/progress-file.js';
 
-const MAX_NOTATION_BYTES = 16 * 1024 * 1024;
-const MAX_CHALLENGE_FILE_BYTES = 5 * 1024 * 1024; // the same 5 MB parseChallenge refuses above (src/song/challenge.js MAX_CHALLENGE_BYTES), so the file is turned away before it is read
+const MB = 1048576, MAX_NOTATION_BYTES = 16 * MB, MAX_CHALLENGE_BYTES = 5 * MB; // the challenge cap matches parseChallenge's
 
-// Plain-English refusal of a file too big to read, from its size alone so the caller says no BEFORE a FileReader loads it. `kind`: a routed kind, or 'backup'. Null when fine or when the size is unknown.
+// Refusal text for a file too big to read, or null. `kind`: a routed kind or 'backup'.
 export function checkFileSize(file, kind) {
   const size = file && file.size;
-  if (typeof size !== 'number' || !Number.isFinite(size)) return null;
-  const limit = kind === 'backup' ? MAX_IMPORT_BYTES : kind === 'band-pack' ? MAX_BAND_PACK_BYTES : kind === 'challenge' ? MAX_CHALLENGE_FILE_BYTES : MAX_NOTATION_BYTES;
-  if (size <= limit) return null;
-  return 'This file is ' + Math.ceil(size / 1048576) + ' MB, which is more than Band Coach can open here (the limit is ' + Math.floor(limit / 1048576) + ' MB). Pick a smaller file.';
+  if (!Number.isFinite(size)) return null;
+  const limit = { backup: MAX_IMPORT_BYTES, 'band-pack': MAX_BAND_PACK_BYTES, challenge: MAX_CHALLENGE_BYTES }[kind] || MAX_NOTATION_BYTES;
+  return size <= limit ? null : 'This file is ' + Math.ceil(size / MB) + ' MB; the limit is ' + Math.floor(limit / MB) + ' MB. Pick a smaller file.';
 }
 
 function extensionOf(fileName) {
