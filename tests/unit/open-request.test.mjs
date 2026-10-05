@@ -36,7 +36,11 @@ function song() {
   return {
     schema: SCHEMA, id: 's1', title: 'S1', composer: null, licence: null, source: null,
     key: null, metre: { num: 4, den: 4 }, bpm: 100, ticksPerQuarter: TICKS_PER_QUARTER,
-    parts: [{ id: 'melody', name: 'Melody', notes: [{ start: 0, dur: 480, midi: 60 }, { start: 480, dur: 480, midi: 64 }] }],
+    parts: [
+      { id: 'melody', name: 'Melody', notes: [{ start: 0, dur: 480, midi: 60 }, { start: 480, dur: 480, midi: 64 }] },
+      // A second part in a very different range, so badges that ignore the part id cannot match.
+      { id: 'bass', name: 'Bass', notes: [{ start: 0, dur: 480, midi: 24 }, { start: 480, dur: 480, midi: 28 }] },
+    ],
     chords: [],
   };
 }
@@ -85,6 +89,19 @@ test('the Play it on row has one card per ready instrument, each badged with the
       assert.equal(badge.textContent, f.label);
       assert.equal(badge.attrs['data-feasibility'], f.level);
     });
+  } finally {
+    delete globalThis.document;
+  }
+});
+
+test('the badges follow the part id that was asked for, not the first part', () => {
+  globalThis.document = { createElement: fakeNode };
+  try {
+    const s = song();
+    const labelsFor = (partId) => all(renderPlayItOnCards(s, partId, null, () => {}), (n) => n.attrs.class === 'panel-songs-badge').map((b) => b.textContent);
+    const bass = labelsFor('bass');
+    assert.deepEqual(bass, READY.map((inst) => feasibility(s, 'bass', inst).label));
+    assert.notDeepEqual(bass, labelsFor('melody'), 'the fixture parts must read differently or this test proves nothing');
   } finally {
     delete globalThis.document;
   }

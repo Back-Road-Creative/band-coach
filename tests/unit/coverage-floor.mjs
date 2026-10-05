@@ -6,8 +6,10 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-// Measured src/core line coverage, rounded down: 98.75% (5364 of 5432 lines, 48 files) on 2026-10-05.
-// Raise it when coverage rises; never lower it to get a run green.
+// Measured src/core line coverage, rounded down: 98.75% (5364 of 5432 lines, 48 files) on 2026-10-05,
+// from per-batch lcovs merged by hand (the browser-launching unit tests were not in that merge).
+// The first weekly `npm run coverage` run prints the exact figure for the real command.
+// Raise it when coverage rises; never lower it to get a run green (a test pins it at 98 or more).
 export const COVERAGE_FLOOR_PERCENT = 98;
 
 // lcov text -> { found, hit, percent } for every file whose path sits under `dir`.

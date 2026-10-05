@@ -47,9 +47,11 @@ test('checkFloor fails, not passes, when the report has no src/core files', () =
   assert.match(r.message, /cannot be checked/);
 });
 
-test('the committed floor is a real, sane percentage', () => {
+// Ratchet: the floor is the measured src/core line coverage rounded down (98.75% -> 98).
+// Lowering it needs an edit here too, so it shows in review; raise both when coverage rises.
+test('the committed floor is a whole percentage at the measured 98, never lowered quietly', () => {
   assert.ok(Number.isInteger(COVERAGE_FLOOR_PERCENT));
-  assert.ok(COVERAGE_FLOOR_PERCENT >= 50 && COVERAGE_FLOOR_PERCENT <= 100, 'floor ' + COVERAGE_FLOOR_PERCENT);
+  assert.ok(COVERAGE_FLOOR_PERCENT >= 98 && COVERAGE_FLOOR_PERCENT <= 100, 'floor ' + COVERAGE_FLOOR_PERCENT);
 });
 
 test('run as a script: exit 0 above the floor, 1 below it, 1 for a missing report', () => {
@@ -73,9 +75,12 @@ test('run as a script: exit 0 above the floor, 1 below it, 1 for a missing repor
 // ---- the wiring: npm script and the weekly workflow ----
 const root = (rel) => fileURLToPath(new URL('../../' + rel, import.meta.url));
 
-test('npm run coverage reports src/core, src/song and src/audio, writes lcov and then runs the floor', () => {
+test('npm run coverage makes its report folder, reports src/core, src/song and src/audio, writes lcov and then runs the floor', () => {
   const cmd = JSON.parse(readFileSync(root('package.json'), 'utf8')).scripts.coverage;
   assert.ok(cmd, 'package.json must have a coverage script');
+  // Node does not create the folder of --test-reporter-destination: on a fresh checkout the run dies with ENOENT.
+  // mkdirSync via node, not `mkdir -p`, so the script also runs on Windows.
+  assert.ok(cmd.startsWith('node -e "require(\'fs\').mkdirSync(\'coverage\',{recursive:true})" && node --test '), 'the coverage folder must be made before the test run');
   assert.match(cmd, /--experimental-test-coverage/);
   for (const dir of ['src/core', 'src/song', 'src/audio']) assert.ok(cmd.includes('--test-coverage-include="' + dir + '/**"'), dir + ' must be included');
   assert.match(cmd, /--test-reporter=lcov --test-reporter-destination=coverage\/lcov\.info/);
