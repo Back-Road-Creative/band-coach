@@ -101,6 +101,7 @@ test('npm run coverage prepares its report folder first, reports src/core, src/s
   for (const dir of ['src/core', 'src/song', 'src/audio']) assert.ok(cmd.includes('--test-coverage-include="' + dir + '/**"'), dir + ' must be included');
   assert.match(cmd, /--test-reporter=lcov --test-reporter-destination=coverage\/lcov\.info/);
   assert.match(cmd, /"tests\/unit\/\*\.test\.mjs"/);
+  assert.match(cmd, /"tests\/unit\/notation\/\*\.test\.mjs"/, 'the floor was measured with the notation tests included');
   assert.match(cmd, /&& node tests\/unit\/coverage-floor\.mjs coverage\/lcov\.info$/, 'the floor must run last, on the report just written');
 });
 
@@ -114,7 +115,7 @@ test('the weekly coverage workflow runs on a schedule and by hand only, read-onl
   assert.doesNotMatch(on, /push|pull_request/, 'a push or PR trigger would add runs the merge barrier could count');
   assert.match(yml, /^permissions:\n {2}contents: read\n/m);
   assert.doesNotMatch(yml, /contents: write/);
-  assert.match(yml, /run: npm run coverage/);
-  assert.match(yml, /uses: actions\/upload-artifact@v4/);
+  assert.match(yml, /run: node build\/build\.mjs\n[\s\S]*run: npm run coverage/, 'some unit tests read the built page, so build first');
+  assert.match(yml, /uses: actions\/upload-artifact@[0-9a-f]{40} /, 'actions are pinned to a commit, as in every other workflow');
   assert.match(yml, /path: coverage\/lcov\.info/);
 });
