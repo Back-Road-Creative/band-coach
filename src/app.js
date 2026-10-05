@@ -1244,7 +1244,7 @@ import { register as registerPathway } from './ui/pathway.js';
   // reaches here (handleMidiMessage's note-off branch, keyup) -- a screen
   // tap or the debug hook never fires this, so a CHECK-phase pair can only
   // ever pass on real held-note evidence. Ignored outside CHECK (LEARN's
-  // note-offs mean nothing).
+  // note-offs mean nothing) -- that gate sits in the stage machine's stepOff.
   function onNoteOff(midi, source) {
     if (!playing || !task || task.done) return; const e = cur(); if (!e || !e.pair) return;
     applyHandsVerdict(stepHandsTogether(handsCtx(e), { type: 'off', midi: midi, source: source }));

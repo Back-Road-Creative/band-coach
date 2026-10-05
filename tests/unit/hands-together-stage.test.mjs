@@ -222,7 +222,7 @@ test('position change, two phases: old chord says move up and advances; old key 
   assert.equal(old.acts[0].msg, 'That is the old position -- move your right hand up to F4.'); assert.equal(old.acts[0].key, 'j1p>old');
   r.off(60);
   const ok = r.on(65);
-  assert.deepEqual(ok.acts, [{ t: 'pass', q: undefined, msg: 'C (position change): position change complete. ' + ok.acts[0].msg.split('complete. ')[1], assist: undefined, input: 'midi' }]);
+  assert.deepEqual(ok.acts, [{ t: 'pass', q: undefined, msg: 'C (position change): position change complete. right hand finger 1, left hand finger 5.', assist: undefined, input: 'midi' }]);
 });
 
 test('position change: the left hand lifting after the shift fails, un-moves, and returns to LEARN; before the shift a release means nothing', () => {
