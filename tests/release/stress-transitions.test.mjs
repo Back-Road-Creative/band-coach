@@ -27,7 +27,9 @@ import { chooseFile } from '../helpers/file-chooser.mjs';
 import { clickByText } from '../helpers/profile-seed.mjs';
 import { pluck, writePluckWav } from '../helpers/pluck-wav.mjs';
 
-const CYCLES = Number(process.env.STRESS_CYCLES) || 100;
+// CI runs 25 rounds: the full 100 take about 9 min on the shared runner, which would push the 30 min CI job to its
+// limit. Every per-round check still runs each round; only the heap trend has fewer rounds behind it.
+const CYCLES = Number(process.env.STRESS_CYCLES) || (process.env.CI ? 25 : 100);
 // Heap growth allowed between the baseline round (one-off start-up allocations done) and the last round, after a
 // forced garbage collection. A run on the release file measured +0.4 MB over 95 rounds; a source or buffer held per
 // round (about 50 KB) would add 5 MB or more.
