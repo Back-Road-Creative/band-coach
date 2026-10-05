@@ -67,7 +67,7 @@ test('loading the page makes no request at all -- nothing on load, no timer, no 
 
 test('pressing the button when up to date reports it in one line, with the real published version', async (t) => {
   const page = await launchPage(htmlPath, {
-    initScript: fakeFetchInit(`(url) => ({ ok: true, status: 200, json: async () => ({ version: '1.3.0', download: 'https://example.test/dl' }) })`, { fakeVersion: true }),
+    initScript: fakeFetchInit(`(url) => ({ ok: true, status: 200, json: async () => ({ version: '1.3.0', download: 'https://github.com/Back-Road-Creative/band-coach/releases/download/v1.3.0/band-coach.html' }) })`, { fakeVersion: true }),
   });
   t.after(() => page.close());
 
@@ -81,7 +81,7 @@ test('pressing the button when up to date reports it in one line, with the real 
 
 test('pressing the button when behind names the version and links to the download', async (t) => {
   const page = await launchPage(htmlPath, {
-    initScript: fakeFetchInit(`(url) => ({ ok: true, status: 200, json: async () => ({ version: '1.4.0', download: 'https://example.test/get-the-file' }) })`, { fakeVersion: true }),
+    initScript: fakeFetchInit(`(url) => ({ ok: true, status: 200, json: async () => ({ version: '1.4.0', download: 'https://github.com/Back-Road-Creative/band-coach/releases/download/v1.4.0/band-coach.html' }) })`, { fakeVersion: true }),
   });
   t.after(() => page.close());
 
@@ -95,7 +95,7 @@ test('pressing the button when behind names the version and links to the downloa
     return a ? { href: a.href, text: a.textContent } : null;
   })()`);
   assert.ok(link, 'a download link is shown');
-  assert.equal(link.href, 'https://example.test/get-the-file');
+  assert.equal(link.href, 'https://github.com/Back-Road-Creative/band-coach/releases/download/v1.4.0/band-coach.html');
   assert.match(link.text, /download/i, 'the link reads as an action');
 });
 
@@ -123,7 +123,7 @@ test('a check that cannot reach the server answers in place with a working downl
 test('the button disables itself while a check is in flight, and a second press starts no second request', async (t) => {
   let resolveFetch;
   const page = await launchPage(htmlPath, {
-    initScript: fakeFetchInit(`(url) => new Promise((resolve) => { window.__resolveFetch = () => resolve({ ok: true, status: 200, json: async () => ({ version: '1.3.0', download: 'https://example.test/dl' }) }); })`, { fakeVersion: true }),
+    initScript: fakeFetchInit(`(url) => new Promise((resolve) => { window.__resolveFetch = () => resolve({ ok: true, status: 200, json: async () => ({ version: '1.3.0', download: 'https://github.com/Back-Road-Creative/band-coach/releases/download/v1.3.0/band-coach.html' }) }); })`, { fakeVersion: true }),
   });
   t.after(() => page.close());
 
