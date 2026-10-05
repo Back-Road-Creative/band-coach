@@ -9,7 +9,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { COVERAGE_FLOOR_PERCENT, lineCoverageUnder, checkFloor } from './coverage-floor.mjs';
+import { COVERAGE_FLOOR_PERCENT, lineCoverageUnder, checkFloor, prepareReportDir } from './coverage-floor.mjs';
 
 const lcov = (files) => files.map(([sf, lf, lh]) => `TN:\nSF:${sf}\nDA:1,1\nLF:${lf}\nLH:${lh}\nend_of_record\n`).join('');
 
@@ -75,12 +75,28 @@ test('run as a script: exit 0 above the floor, 1 below it, 1 for a missing repor
 // ---- the wiring: npm script and the weekly workflow ----
 const root = (rel) => fileURLToPath(new URL('../../' + rel, import.meta.url));
 
-test('npm run coverage makes its report folder, reports src/core, src/song and src/audio, writes lcov and then runs the floor', () => {
+test('prepareReportDir makes the folder (nested too) and a catch-all .gitignore in it, and can run twice', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'cov-prep-'));
+  try {
+    const target = join(dir, 'a', 'coverage');
+    prepareReportDir(target);
+    prepareReportDir(target);
+    assert.equal(readFileSync(join(target, '.gitignore'), 'utf8'), '*\n');
+    const script = fileURLToPath(new URL('./coverage-floor.mjs', import.meta.url));
+    const run = spawnSync(process.execPath, [script, '--prepare', 'fresh'], { cwd: dir });
+    assert.equal(run.status, 0);
+    assert.equal(readFileSync(join(dir, 'fresh', '.gitignore'), 'utf8'), '*\n');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('npm run coverage prepares its report folder first, reports src/core, src/song and src/audio, writes lcov and then runs the floor', () => {
   const cmd = JSON.parse(readFileSync(root('package.json'), 'utf8')).scripts.coverage;
   assert.ok(cmd, 'package.json must have a coverage script');
   // Node does not create the folder of --test-reporter-destination: on a fresh checkout the run dies with ENOENT.
-  // mkdirSync via node, not `mkdir -p`, so the script also runs on Windows.
-  assert.ok(cmd.startsWith('node -e "require(\'fs\').mkdirSync(\'coverage\',{recursive:true})" && node --test '), 'the coverage folder must be made before the test run');
+  // Done by a node script, not `mkdir -p`, so the script also runs on Windows; it also keeps the folder out of git.
+  assert.ok(cmd.startsWith('node tests/unit/coverage-floor.mjs --prepare coverage && node --test '), 'the coverage folder must be made before the test run');
   assert.match(cmd, /--experimental-test-coverage/);
   for (const dir of ['src/core', 'src/song', 'src/audio']) assert.ok(cmd.includes('--test-coverage-include="' + dir + '/**"'), dir + ' must be included');
   assert.match(cmd, /--test-reporter=lcov --test-reporter-destination=coverage\/lcov\.info/);
