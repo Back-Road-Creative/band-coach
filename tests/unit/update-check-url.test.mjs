@@ -13,14 +13,18 @@ async function downloadFor(download) {
   return result.downloadUrl;
 }
 
+// [given, rendered]: the link handed to the page is the parsed-and-normalised href, so the string
+// that was checked is the string that gets rendered (no second parse of the raw text).
 const ACCEPTED = [
-  'https://github.com/Back-Road-Creative/band-coach/releases/download/v1.4.0/band-coach.html',
-  'https://back-road-creative.github.io/band-coach/band-coach.html',
-  'https://GitHub.com/Back-Road-Creative/band-coach/releases/latest/download/band-coach.html',
+  ['https://github.com/Back-Road-Creative/band-coach/releases/download/v1.4.0/band-coach.html', 'https://github.com/Back-Road-Creative/band-coach/releases/download/v1.4.0/band-coach.html'],
+  ['https://back-road-creative.github.io/band-coach/band-coach.html', 'https://back-road-creative.github.io/band-coach/band-coach.html'],
+  ['https://GitHub.com/Back-Road-Creative/band-coach/releases/latest/download/band-coach.html', 'https://github.com/Back-Road-Creative/band-coach/releases/latest/download/band-coach.html'],
+  // the default port written out is the same host; it is accepted on purpose and rendered without it
+  ['https://github.com:443/Back-Road-Creative/band-coach/', 'https://github.com/Back-Road-Creative/band-coach/'],
 ];
-for (const url of ACCEPTED) {
+for (const [url, rendered] of ACCEPTED) {
   test(`accepts the trusted link ${url}`, async () => {
-    assert.equal(await downloadFor(url), url);
+    assert.equal(await downloadFor(url), rendered);
   });
 }
 
