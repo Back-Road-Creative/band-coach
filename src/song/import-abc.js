@@ -32,7 +32,7 @@
 
 import { songIdentity } from './ident.js';
 import { TICKS_PER_QUARTER } from './model.js';
-import { SHARP_ORDER, IMPORT_DEFAULT_BPM, midiFromStep } from './import-common.js';
+import { finishImport, SHARP_ORDER, IMPORT_DEFAULT_BPM, midiFromStep } from './import-common.js';
 
 
 // Key-signature accidentals for a major key of `fifths` sharps(+)/flats(-),
@@ -280,7 +280,7 @@ export function importAbc(rawText, options = {}) {
     parts,
     chords,
   };
-  return { song, warnings };
+  return finishImport('importAbc', song, warnings);
 }
 
 // --- tokenizer -------------------------------------------------------

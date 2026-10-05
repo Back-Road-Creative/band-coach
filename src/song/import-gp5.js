@@ -46,7 +46,7 @@
 
 import { songIdentity } from './ident.js';
 import { TICKS_PER_QUARTER } from './model.js';
-import { IMPORT_DEFAULT_BPM } from './import-common.js';
+import { finishImport, IMPORT_DEFAULT_BPM } from './import-common.js';
 
 const CHANNEL_COUNT = 64;
 // Mirrors model.js's VALID_DENOMINATORS -- this importer validates the
@@ -629,5 +629,5 @@ export function importGp5(bytes, options = {}) {
     metreChanges,
   };
 
-  return { song, warnings };
+  return finishImport('importGp5', song, warnings);
 }

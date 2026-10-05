@@ -46,7 +46,7 @@ import { songIdentity } from './ident.js';
 import { parseXml, elements, element, childText, attr } from './xml-lite.js';
 import { readZipEntries, readZipEntryData } from './unzip-lite.js';
 import { TICKS_PER_QUARTER } from './model.js';
-import { IMPORT_DEFAULT_BPM, num } from './import-common.js';
+import { finishImport, IMPORT_DEFAULT_BPM, num } from './import-common.js';
 
 const NOTE_VALUE_TICKS = {
   Whole: 1920, Half: 960, Quarter: 480, Eighth: 240, '16th': 120, '32nd': 60, '64th': 30, '128th': 15,
@@ -293,5 +293,5 @@ export function importGp7(bytes, options = {}) {
   if (tempoMap.length) song.tempoMap = tempoMap;
   if (metreChanges.length) song.metreChanges = metreChanges;
   if (keyChanges.length) song.keyChanges = keyChanges;
-  return { song, warnings };
+  return finishImport('importGp7', song, warnings);
 }

@@ -28,7 +28,7 @@
 // GM 39 hand clap), and the part carries `unmapped`, a count of those.
 
 import { pieceForMidi } from '../instruments/drum-kit.js';
-import { IMPORT_DEFAULT_BPM } from './import-common.js';
+import { finishImport, IMPORT_DEFAULT_BPM } from './import-common.js';
 
 const MTHD = [0x4d, 0x54, 0x68, 0x64]; // "MThd"
 const MTRK = [0x4d, 0x54, 0x72, 0x6b]; // "MTrk"
@@ -376,5 +376,5 @@ export function importMidi(bytes, options = {}) {
     chords: [],
   };
 
-  return { song, warnings };
+  return finishImport('importMidi', song, warnings);
 }

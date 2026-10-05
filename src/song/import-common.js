@@ -1,7 +1,10 @@
 // Pure helpers and constants shared by the song importers (import-abc.js,
 // import-gp5.js, import-gp7.js, import-midi.js, import-musicxml.js) and
-// export-abc.js. No imports, no DOM: only pieces that were byte-identical
-// across those files. Decoders and key-signature mappers stay per-importer.
+// export-abc.js. No DOM, and nothing imported beyond model.js's validateSong: only
+// pieces that were byte-identical across those files. Decoders and key-signature
+// mappers stay per-importer.
+
+import { validateSong } from './model.js';
 
 export const STEP_PC = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
 export const SHARP_ORDER = ['F', 'C', 'G', 'D', 'A', 'E', 'B'];
@@ -16,4 +19,13 @@ export function num(str, fallback) {
   if (str === undefined || str === null || str === '') return fallback;
   const n = Number(str);
   return Number.isFinite(n) ? n : fallback;
+}
+
+// Every importer's last step. A damaged file can decode "successfully" into a Song with a
+// zero duration, a note outside 0-127 or a zero tempo; that is a refusal the learner can be
+// told about here, not a half-built Song for the library to meet later.
+export function finishImport(who, song, warnings) {
+  const { ok, errors } = validateSong(song);
+  if (!ok) throw new Error(`${who}: this file did not turn into a usable song, so it may be damaged (${errors[0]})`);
+  return { song, warnings };
 }
