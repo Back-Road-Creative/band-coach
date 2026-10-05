@@ -187,8 +187,8 @@ const ABC_RICH = [
   'w: la la la la',
 ].join('\n');
 
-// Each sweep damages `seeds` (name -> original bytes) with `strategies`; `build(bytes)`
-// turns the damaged bytes into the importer's input (default: as is).
+// Each sweep damages `seeds` (name -> original bytes) with `strategies`; `importer(bytes)`
+// wraps the damaged bytes however that format needs (re-zip, decode as text) and imports them.
 const SWEEPS = [
   { target: 'midi', seeds: names('midi', ['beat.mid', 'pitchBendTest.mid']), strategies: BINARY,
     importer: (b) => importMidi(b, { fileName: 'fuzz.mid' }) },
@@ -227,13 +227,12 @@ function runSweep(def, announce) {
   for (let i = 0; i < CASES; i++) {
     const fixtureName = keys[i % keys.length];
     const seed = (BASE_SEED + Math.imul(i + 1, 0x9e3779b1) + def.target.length * 7919) >>> 0;
-    // Mutation and input construction run outside runCase: a bug there is the harness's,
+    // Mutation runs outside runCase: a bug there is the harness's,
     // and must not be mistaken for (or hidden as) an importer rejection.
     const m = mutate(def.seeds[fixtureName], makeRng(seed), def.strategies);
-    const input = (def.build || ((b) => b))(m.bytes);
     const ctx = { target: def.target, fixtureName, index: i, seed, label: m.label };
     announce(whereOf(ctx));
-    try { tally[runCase(ctx, () => def.importer(input), def.check || checkSong, def)]++; } catch (e) { failures.push(e.message); }
+    try { tally[runCase(ctx, () => def.importer(m.bytes), def.check || checkSong, def)]++; } catch (e) { failures.push(e.message); }
   }
   return { tally, failures };
 }
