@@ -99,6 +99,22 @@ test('pressing the button when behind names the version and links to the downloa
   assert.match(link.text, /download/i, 'the link reads as an action');
 });
 
+test('a feed that names a javascript: download link is rejected: the page shows the known-good release link instead', async (t) => {
+  const page = await launchPage(htmlPath, {
+    initScript: fakeFetchInit(`(url) => ({ ok: true, status: 200, json: async () => ({ version: '1.4.0', download: 'javascript:alert(1)' }) })`, { fakeVersion: true }),
+  });
+  t.after(() => page.close());
+
+  await page.evaluate("document.getElementById('updateCheckBtn').click()");
+  await page.waitFor("document.getElementById('updateCheckResult').textContent.indexOf('1.4.0') !== -1");
+
+  const link = await page.evaluate(`(() => {
+    const a = document.querySelector('#updateCheckResult a');
+    return a ? a.href : null;
+  })()`);
+  assert.equal(link, 'https://github.com/Back-Road-Creative/band-coach/releases/latest/download/band-coach.html', 'the untrusted feed link is never rendered; the fixed fallback is');
+});
+
 test('a check that cannot reach the server answers in place with a working download link, and nothing throws', async (t) => {
   const page = await launchPage(htmlPath, {
     initScript: fakeFetchInit('async () => { throw new TypeError("Failed to fetch"); }', { fakeVersion: true }),
