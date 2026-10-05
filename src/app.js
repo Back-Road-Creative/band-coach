@@ -356,15 +356,15 @@ import { register as registerPathway } from './ui/pathway.js';
     const base = { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: { ideal: 2 } };
     const wanted = DB.prefs.inputDeviceId ? { ...base, deviceId: { exact: DB.prefs.inputDeviceId } } : base;
     openMicPromise = (async () => {
-      // No AudioContext (ensureAudio left it null): say so before the browser's prompt, and never open a stream nothing can listen to.
-      if (!actx) throw Object.assign(new Error('This browser could not create an AudioContext.'), { name: 'NoAudioContext' });
+      // No AudioContext: fail before the browser's prompt; never open a stream nothing can listen to.
+      if (!actx) throw new DOMException('no AudioContext', 'NoAudioContext');
       let st;
       try { st = await navigator.mediaDevices.getUserMedia({ audio: wanted }); }
       catch (e) { if (!DB.prefs.inputDeviceId) throw e; st = await navigator.mediaDevices.getUserMedia({ audio: base }); }
       micHideReleased = false;
-      // Wiring can throw after the stream is already live: stop its tracks and forget it, or the OS microphone light stays on with nothing listening.
-      try { micStream = st; wireAnalysers(monoSum(actx.createMediaStreamSource(st))); micReady = true; }
-      catch (e) { st.getTracks().forEach(tr => tr.stop()); micStream = null; micReady = false; throw e; }
+      // Wiring can throw with the stream live: stop it, or the OS mic light stays on. micStream is only set once wired, so a failure leaves nothing to undo.
+      try { wireAnalysers(monoSum(actx.createMediaStreamSource(st))); micStream = st; micReady = true; }
+      catch (e) { st.getTracks().forEach(tr => tr.stop()); throw e; }
       // A successful Connect clears the 'blocked' sentence calibrateNoiseFloor wrote (its catch below: keep the two texts identical), so it does not sit beside 'Listening through your microphone.'. Any other result text is left alone.
       { const cr = $('calibrateResult'); if (cr && cr.textContent === 'The microphone was blocked, so it could not be checked.') cr.textContent = ''; }
       // A track that ends (device unplugged, permission revoked) leaves the mic as the teardown 'mic' stopper does, then the status and Connect button follow. Only the CURRENT stream counts: a switched-away stream ending later must not close its replacement. micGen++ makes a room check still running for it discard its result.
@@ -2530,7 +2530,7 @@ import { register as registerPathway } from './ui/pathway.js';
   // Start on a mic instrument asks for the mic FIRST (the browser's own prompt), then begins: an exercise that cannot hear only ever says "Time." and "You stepped away". Blocked or unavailable: say so and do not start.
   function startAfterMic() {
     if (!needsMic() || micReady) { startSession(); return; }
-    const m = mod, blocked = e => { recordError('mic:start', e); const msg = micErrorMessage(e, { start: true }); ioState('off', msg); if (mod === m) coach(msg); };
+    const m = mod, blocked = e => { recordError('mic:start', e); const msg = e && e.name === 'NotAllowedError' ? 'The microphone was blocked, so I could not start. Press "Set up input", then "Connect microphone", and allow it in your browser.' : micErrorMessage(e); ioState('off', msg); if (mod === m) coach(msg); };
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { const msg = 'This browser cannot open a microphone here. Open the standalone copy in Chrome.'; ioState('off', msg); coach(msg); return; }
     ensureAudio(); openMic().then(() => { ioRefresh(); if (!sess && mod === m) startSession(); }).catch(blocked);
   }

@@ -22,7 +22,7 @@ const CASES = [
   ['NotFoundError', /no microphone/i],
   ['NotReadableError', /another (program|app)/i],
   ['OverconstrainedError', /cannot be used|different input|another input/i],
-  ['SecurityError', /will not let this page/i],
+  ['SecurityError', /cannot use the microphone/i],
 ];
 const ioText = (page) => page.evaluate("document.getElementById('ioText').textContent");
 const waitFailed = (page) => page.waitFor("document.getElementById('ioText').textContent && document.getElementById('ioText').textContent !== 'This one listens through a microphone or audio interface.' && !/Listening|Checking/.test(document.getElementById('ioText').textContent)", 8000);
@@ -48,9 +48,12 @@ test('Start on a mic instrument with no microphone says so, not "blocked"', asyn
   t.after(() => page.close());
   await page.evaluate("window.__coach.setMod('gtr')");
   await page.evaluate("document.getElementById('playBtn').click()");
-  await page.waitFor("/no microphone/i.test(document.getElementById('coach').textContent)", 8000);
+  // Wait for ANY settled failure text (wording-independent), so a wrong text fails the assertions below, not a timeout.
+  await page.waitFor("/microphone/i.test(document.getElementById('coach').textContent)", 8000);
+  const coachText = await page.evaluate("document.getElementById('coach').textContent");
+  assert.match(coachText, /no microphone/i, coachText);
+  assert.doesNotMatch(coachText, /blocked|\ballow\b/i, coachText);
   assert.match(await ioText(page), /no microphone/i);
-  assert.doesNotMatch(await page.evaluate("document.getElementById('coach').textContent"), /blocked|\ballow\b/i);
   const errs = await page.evaluate('window.__coach.errors()');
   assert.ok(errs.some((e) => /^mic/.test(e.where)), 'logged: ' + JSON.stringify(errs));
 });
