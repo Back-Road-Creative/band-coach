@@ -181,7 +181,9 @@ test('split rhythm: a stray right-hand tap before the bass is dropped when the b
   const r = rig('j1d'); r.on(60); r.on(48); r.off(60); r.off(48);
   r.at(2000).on(60); r.at(2050).off(60);
   assert.deepEqual(r.pair.rhOns, [2000]); assert.deepEqual(r.pair.rhOffs, [2050]);
-  r.at(3000).on(48);
+  // The stale tap at 2000 must not be graded against the bass: no verdict, bass onset recorded, lists restarted.
+  assert.deepEqual(kinds(r.at(3000).on(48)), [], 'a stale balanced tap is not evidence for this attempt');
+  assert.equal(r.pair.on[48], 3000);
   assert.deepEqual(r.pair.rhOns, [], 'balanced lists restart with the bass');
   const k = rig('j1d'); k.on(60); k.on(48); k.off(60); k.off(48);
   k.at(2000).on(60); k.at(2040).on(48);
