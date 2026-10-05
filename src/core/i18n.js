@@ -226,7 +226,7 @@ export const es = {
   'backup.err.notSaved': 'Tu progreso restaurado no se pudo guardar en este dispositivo (puede que el almacenamiento esté lleno).',
   'reset.progressCleared': 'Progreso de {name} borrado. Vuelves al nivel 1.',
   'audio.stoppedTitle': 'Sonido detenido',
-  'audio.stoppedWhy': 'Tu dispositivo pausó el sonido (una llamada, un cambio de auriculares u otra aplicación). Pulsa el botón Resume para continuar.',
+  'audio.stoppedWhy': 'Tu dispositivo pausó el sonido (una llamada, un cambio de auriculares u otra aplicación). Pulsa el botón de reanudar para continuar.',
   'audio.tapToResume': 'Toca para reanudar el sonido.',
   'hint.staffNote': 'Lee {label} en el pentagrama y tócalo. Mantenlo firme.',
   'kbd.help': 'Teclado: conecta un teclado MIDI y pulsa Conectar, o haz clic en las teclas de la pantalla, o usa las teclas del ordenador como práctica en pantalla (no es un teclado real): a w s e d f t g y h u j k tocan de Do4 a Do5, y z x c v b n m tocan de Do3 a Si3 (solo notas naturales, sin sostenidos en esa fila). Las teclas nuevas se iluminan las dos primeras veces; después las encuentras tú solo. Manos juntas: un teclado MIDI real, o dos manos en las teclas del ordenador (una en cada fila), comprueba ambas notas y las califica con exactitud; un micrófono solo oye una nota a la vez, así que esa calificación es aproximada.',
