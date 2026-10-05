@@ -5,8 +5,10 @@
 // way it always was; this only adds files alongside it under `dist/pages/`:
 //
 //   index.html            the release build, plus a manifest link, a
-//                         theme-color/apple-touch-icon meta/link, and a tiny
-//                         inline service-worker registration script
+//                         theme-color/apple-touch-icon meta/link, a tiny
+//                         inline service-worker registration script, and a
+//                         strict hash-based Content-Security-Policy <meta>
+//                         (the one-file download has none; see injectCsp)
 //   manifest.webmanifest  installable-app metadata
 //   sw.js                 cache-first app-shell service worker
 //   icon-192.png, icon-512.png, icon-512-maskable.png
@@ -30,6 +32,7 @@
 // build.mjs's own CLI entry, so there is nothing mid-evaluation to cycle
 // back into.
 import { readFileSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { encodePng } from './pages/png.mjs';
@@ -161,6 +164,56 @@ function injectPwaHead(releaseHtml) {
   return html;
 }
 
+// The hosted copy's Content-Security-Policy, as a <meta> (GitHub Pages cannot
+// set headers). Only the hosted copy gets one: under file:// the pitch worklet
+// can only load from a data: URL, and data: in script-src would let an
+// injected <script src="data:..."> run -- the very thing this policy exists to
+// stop. Here the worklet loads from a blob: URL instead (createPitchNode).
+//   - script-src: the sha256 of every inline <script> (the bundle and the
+//     service-worker registration) plus blob: for the worklet. No
+//     'unsafe-inline', no 'unsafe-eval', no data:, so injected markup cannot
+//     become running code.
+//   - style-src-elem: the hash of the inline <style>. style-src-attr allows
+//     'unsafe-inline' only because the UI sets style="..." attributes, and a
+//     style attribute cannot run script.
+//   - img-src: the app itself draws no <img>/CSS images (everything is inline
+//     SVG or canvas); 'self' covers only the manifest and apple-touch icons.
+//   - connect-src: the update check and the optional model pack fetch from the
+//     project's own Pages origin (src/core/update-check.js, model-pack.js).
+//   - frame-ancestors is ignored inside a <meta>, so it is left out.
+function cspMeta(html) {
+  const hashes = { script: [], style: [] };
+  for (const m of html.matchAll(/<(script|style)(\s[^>]*)?>([\s\S]*?)<\/\1>/gi)) {
+    if (/\ssrc\s*=/i.test(m[2] || '')) continue;
+    hashes[m[1].toLowerCase()].push(`'sha256-${createHash('sha256').update(m[3], 'utf8').digest('base64')}'`);
+  }
+  const policy = [
+    "default-src 'none'",
+    `script-src ${[...hashes.script, 'blob:'].join(' ')}`,
+    `style-src-elem ${hashes.style.join(' ')}`,
+    "style-src-attr 'unsafe-inline'",
+    "img-src 'self'",
+    "connect-src 'self' https://back-road-creative.github.io",
+    "worker-src 'self' blob:",
+    "manifest-src 'self'",
+    "base-uri 'none'",
+    "form-action 'none'",
+    "object-src 'none'",
+  ].join('; ');
+  return `<meta http-equiv="Content-Security-Policy" content="${policy}">`;
+}
+
+// Goes straight after the document's own charset meta (which has to stay in
+// the first 1024 bytes), so it precedes every inline script and style. The
+// hashes are of the final bytes: the policy meta is neither a script nor a
+// style, so adding it cannot change them.
+function injectCsp(html) {
+  const head = /<head>(<meta charset="utf-8">)?/i.exec(html);
+  if (!head) throw new Error('release build has no <head>; cannot inject the Content-Security-Policy');
+  const at = head.index + head[0].length;
+  return html.slice(0, at) + cspMeta(html) + html.slice(at);
+}
+
 // The release file is ONE file with the whole app inlined, so `</head>` and
 // `</body>` also occur inside the JavaScript (a panel that builds an HTML
 // string). String.replace takes the FIRST match, which injected the PWA
@@ -191,7 +244,7 @@ function insertBeforeLast(html, tag, addition, tailIsRight) {
  * so no two can ever collide by construction.
  */
 export async function writePagesFiles({ releaseHtml, version, outDir = PAGES_DIR }) {
-  const pagesHtml = injectPwaHead(releaseHtml);
+  const pagesHtml = injectCsp(injectPwaHead(releaseHtml));
 
   rmSync(outDir, { recursive: true, force: true });
   mkdirSync(outDir, { recursive: true });
