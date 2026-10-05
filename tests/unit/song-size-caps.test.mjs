@@ -28,27 +28,34 @@ function song(notes, extra = {}) {
 const barTicks = 4 * TICKS_PER_QUARTER;
 const manyNotes = (n) => Array.from({ length: n }, (_, i) => ({ start: i, dur: 1, midi: 60 }));
 
+// Every importer ends in finishImport (import-common.js), which runs validateSong, so a
+// hostile file is refused by the importer itself, with the size reason in its message.
 const hostile = [
-  ['a crafted 54-byte MIDI with four 0x0FFFFFFF gaps', () => importMidi(new Uint8Array(readFileSync(fixture('huge-ticks.mid'))), { fileName: 'huge-ticks.mid' }).song],
-  ['an ABC file with thousands of repeats', () => importAbc(readFileSync(fixture('repeat-explosion.abc'), 'utf8'), { fileName: 'repeat-explosion.abc' }).song],
-  ['a MusicXML file with a 99999999999-division note', () => importMusicXml(readFileSync(fixture('huge-duration.xml'), 'utf8'), { fileName: 'huge-duration.xml' }).song],
+  ['a crafted 54-byte MIDI with four 0x0FFFFFFF gaps', () => importMidi(new Uint8Array(readFileSync(fixture('huge-ticks.mid'))), { fileName: 'huge-ticks.mid' })],
+  ['an ABC file with thousands of repeats', () => importAbc(readFileSync(fixture('repeat-explosion.abc'), 'utf8'), { fileName: 'repeat-explosion.abc' })],
+  ['a MusicXML file with a 99999999999-division note', () => importMusicXml(readFileSync(fixture('huge-duration.xml'), 'utf8'), { fileName: 'huge-duration.xml' })],
 ];
 
 for (const [label, make] of hostile) {
-  test('refuses ' + label + ' cleanly and quickly', async () => {
+  test('refuses ' + label + ' cleanly and quickly', () => {
     const t0 = performance.now();
-    const s = make();
-    const check = validateSong(s);
-    assert.equal(check.ok, false, 'validateSong must refuse it');
-    assert.ok(check.errors.length >= 1 && check.errors.length <= 5, 'a short list of reasons, not one line per note');
-    assert.match(check.errors.join(' '), /too long|too large/i);
-    assert.throws(() => normalizeSong(s), /too long|too large/i);
-    const lib = createLibrary(memoryStore());
-    await assert.rejects(() => lib.add(s, { now: 1 }), /too long|too large/i);
-    assert.deepEqual(await lib.list(), [], 'nothing was saved');
+    assert.throws(make, /too long|too large/i, 'the importer refuses it and says why');
     assert.ok(performance.now() - t0 < 1000, 'import + refusal took ' + (performance.now() - t0) + ' ms');
   });
 }
+
+// A song that reaches the model some other way (a backup, a stored copy) is refused there too.
+test('a song past the bar ceiling is refused by validateSong, normalizeSong and the library', async () => {
+  const s = song([{ start: (model.MAX_SONG_BARS + 10) * barTicks, dur: 1, midi: 60 }]);
+  const check = validateSong(s);
+  assert.equal(check.ok, false, 'validateSong must refuse it');
+  assert.ok(check.errors.length >= 1 && check.errors.length <= 5, 'a short list of reasons, not one line per note');
+  assert.match(check.errors.join(' '), /too long|too large/i);
+  assert.throws(() => normalizeSong(s), /too long|too large/i);
+  const lib = createLibrary(memoryStore());
+  await assert.rejects(() => lib.add(s, { now: 1 }), /too long|too large/i);
+  assert.deepEqual(await lib.list(), [], 'nothing was saved');
+});
 
 test('the song-size ceilings are exported numbers', () => {
   assert.equal(typeof model.MAX_SONG_BARS, 'number');
