@@ -80,7 +80,7 @@ import { register as registerTheory, currentLessonQuestion as theoryCurrentQuest
 //
 //
 import { registerHistory } from './ui/history.js';
-//
+import { createNoticeGate, isBenignError, buildDiagnostics } from './core/diagnostics.js';
 //
 import { registerFingerings, renderHowInline } from './ui/fingerings.js';
 import { instrumentSetup } from './ui/fingerings/setup.js';
@@ -97,6 +97,19 @@ import { register as registerPathway } from './ui/pathway.js';
 (function () {
   'use strict';
   const $ = id => document.getElementById(id);
+  // Throws outside frame()/onPitch reach only the console: record each, tell the learner once per gap (dismissible).
+  const errorGate = createNoticeGate();
+  function showErrorNotice() {
+    try {
+      if (!errorGate.allow(Date.now())) return;
+      let n = document.getElementById('errorNotice');
+      if (!n) { n = document.createElement('div'); n.id = 'errorNotice'; n.className = 'backup-nudge'; n.setAttribute('role', 'alert'); const s = document.createElement('span'), b = document.createElement('button'); b.type = 'button'; b.className = 'small'; b.addEventListener('click', () => { n.hidden = true; }); n.append(s, b); document.body.prepend(n); }
+      n.firstChild.textContent = t('error.generic'); n.lastChild.textContent = t('side.backupDismiss'); n.hidden = false;
+    } catch (e) {}
+  }
+  function noteFault(where, err) { try { if (isBenignError(err && err.message ? err.message : err)) return; recordError(where, err); showErrorNotice(); } catch (e) {} }
+  window.addEventListener('error', ev => noteFault('window', ev.error || ev.message));
+  window.addEventListener('unhandledrejection', ev => noteFault('promise', ev.reason));
   // Static page labels: every element src/index.html marks with data-i18n="id"
   // gets its textContent set from t(id) once at startup, so the shipped copy
   // comes from the same English table as the strings app.js writes itself
@@ -1674,7 +1687,10 @@ import { register as registerPathway } from './ui/pathway.js';
   // not used for judging -- onHit()/tickKitBar() are the source of truth.
   let drumOnsetDetector = null, drumClassifier = null, drumRing = null, drumMicHits = [];
   const DRUM_FRAME = 2048, DRUM_HOP = 512;
-  function listen() {
+  // listen() runs on a timer outside frame()'s try: record and announce the first 3 faults of a streak, keep the timer going.
+  let listenFails = 0;
+  function listen() { try { listenOnce(); listenFails = 0; } catch (e) { if (++listenFails <= 3) noteFault('listen', e); } }
+  function listenOnce() {
     // A drum kit has no pitch for the worklet's YIN tracker to lock onto, so
     // it is checked first and returns either way: it must run even once
     // openMic() has built a pitch worklet (kit's ioBtn click opens the mic
@@ -2850,6 +2866,12 @@ import { register as registerPathway } from './ui/pathway.js';
     reader.readAsText(file);
   });
   $('backupNudgeDismiss').addEventListener('click', () => { $('backupNudge').hidden = true; });
+  // ---------- Copy diagnostics: allow-listed text (src/core/diagnostics.js); with no clipboard it is shown to copy by hand.
+  $('diagCopyBtn').addEventListener('click', async function () {
+    const text = buildDiagnostics({ version: APP_VERSION, userAgent: navigator.userAgent, errors: getErrors(), capabilities: { microphone: !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia), midi: !!navigator.requestMIDIAccess, audioWorklet: typeof AudioWorkletNode === 'function', songLibrary: !!window.indexedDB} });
+    let ok = false; try { if (navigator.clipboard && navigator.clipboard.writeText) { await navigator.clipboard.writeText(text); ok = true; } } catch (e) {}
+    const box = $('diagText'); box.value = text; box.hidden = ok; $('diagCopyResult').textContent = t(ok ? 'diag.copied' : 'diag.manual'); if (!ok) box.select();
+  });
 
   // ---------- check for updates: a file:// copy can never rewrite or replace itself (browser
   // security, not a missing feature), so the honest alternative is a button that ASKS and answers
