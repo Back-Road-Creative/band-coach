@@ -237,6 +237,11 @@ Some npm setups run with `ignore-scripts` on (check `npm config get ignore-scrip
 `pretest`/`posttest` entirely — run `npm run build`, `npm test`, and `npm run gate` as separate
 commands there. CI always runs the full `pretest` → `test` → `posttest` chain.
 
+`npm run coverage` measures unit-test line coverage of `src/core`, `src/song` and `src/audio`, writes
+`coverage/lcov.info` (git-ignored) and fails if `src/core` falls below the floor in
+`tests/unit/coverage-floor.mjs` (`COVERAGE_FLOOR_PERCENT`, 98). It is not part of `npm test`; the
+weekly `coverage.yml` workflow runs it and keeps the report as an artifact.
+
 The helper looks for a browser in this order: the `CHROME_BIN` environment
 variable, a Playwright headless-shell install under
 `~/.cache/ms-playwright/chromium_headless_shell-*`, then `google-chrome`,
