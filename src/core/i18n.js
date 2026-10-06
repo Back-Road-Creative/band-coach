@@ -18,6 +18,7 @@ export const en = {
   // src/core/storage.js's safeSet). Cleared the moment a later save
   // succeeds, so it never outlives the problem it describes.
   'storage.saveFailed': "Your progress just now could not be saved on this device (storage may be full, or private browsing may be blocking it). Keep playing -- I'll keep trying to save.",
+  'error.generic': 'Something went wrong. Reload if practice stops. To report it: Settings > Copy diagnostics.',
   'boot.failed': 'Band Coach could not start. Reload the page; if this keeps happening, your browser may be blocking something the app needs. What went wrong: {error}',
   'backup.saved': 'Backup saved to your downloads. Keep that file somewhere safe.',
   'backup.restored': 'Backup restored.',
@@ -86,6 +87,9 @@ export const en = {
   'settings.language': 'Language',
   'settings.backups': 'Backups and reset',
   'settings.updates': 'Updates',
+  'diag.copy': 'Copy diagnostics',
+  'diag.copied': 'Copied. Paste it into your message.',
+  'diag.manual': 'Copy was blocked. Select this text and copy it:',
   'settings.modelPack': 'Model pack',
   'settings.how': 'How this works',
   'songs.addRow': 'Add a song',
@@ -219,6 +223,7 @@ export const en = {
 // app has not yet routed through t() still show in English.
 export const es = {
   'storage.saveFailed': 'Tu progreso de hace un momento no se pudo guardar en este dispositivo (puede que el almacenamiento esté lleno o que la navegación privada lo esté bloqueando). Sigue tocando: seguiré intentando guardar.',
+  'error.generic': 'Algo salió mal. Recarga si la práctica se detiene. Para informar: Ajustes > Copiar diagnóstico.',
   'boot.failed': 'Band Coach no pudo iniciarse. Recarga la página; si sigue pasando, puede que tu navegador esté bloqueando algo que la app necesita. Qué falló: {error}',
   'backup.saved': 'Copia de seguridad guardada en tus descargas. Guarda ese archivo en un lugar seguro.',
   'backup.restored': 'Copia de seguridad restaurada.',
@@ -272,6 +277,9 @@ export const es = {
   'settings.language': 'Idioma',
   'settings.backups': 'Copias de seguridad y reinicio',
   'settings.updates': 'Actualizaciones',
+  'diag.copy': 'Copiar diagnóstico',
+  'diag.copied': 'Copiado. Pégalo en tu mensaje.',
+  'diag.manual': 'Copia bloqueada. Selecciona este texto y cópialo:',
   'settings.modelPack': 'Paquete de modelo',
   'settings.how': 'Cómo funciona',
   'songs.addRow': 'Añadir una canción',

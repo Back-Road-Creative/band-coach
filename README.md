@@ -326,6 +326,16 @@ the same table: each element carries `data-i18n="<id>"` and keeps its English te
 a pre-JS/no-JS fallback, and `applyStaticLabels` in `src/app.js` overwrites it from `t(id)` at
 startup and again whenever the language is changed.
 
+- **When something breaks:** an error that escapes the practice loop (a rejected promise, a MIDI
+  or microphone handler, the 50 ms pitch timer) is recorded in the in-memory error list and the
+  learner sees one dismissible notice (at most one per 30 seconds) instead of silence. Settings >
+  "Copy diagnostics" copies the app version, browser string, recent error
+  messages (links and file paths blanked, 200 characters each) and whether the microphone, MIDI,
+  AudioWorklet and song storage exist; the text is shown on screen too, so with no clipboard it can be copied by hand. It is
+  built from that short list in `src/core/diagnostics.js`, so audio, songs, practice records and
+  device ids are not included by design. An error message is whatever the browser or app wrote, so
+  it can still name something the app was handling. Nothing is sent anywhere.
+
 ## Progress
 
 Every judged drill answer, warm-up answer and judged song step leaves one small record — which

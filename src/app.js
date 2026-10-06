@@ -84,7 +84,7 @@ import { register as registerTheory, currentLessonQuestion as theoryCurrentQuest
 //
 //
 import { registerHistory } from './ui/history.js';
-//
+import { createNoticeGate, buildDiagnostics } from './core/diagnostics.js';
 //
 import { registerFingerings, renderHowInline } from './ui/fingerings.js';
 import { instrumentSetup } from './ui/fingerings/setup.js';
@@ -101,6 +101,13 @@ import { register as registerPathway } from './ui/pathway.js';
 (function () {
   'use strict';
   const $ = id => document.getElementById(id);
+  const errorGate = createNoticeGate();
+  function noteFault(where, err) { try {
+    recordError(where, err); if (!errorGate.allow(Date.now()) || $('errorNotice')) return;
+    document.body.insertAdjacentHTML('afterbegin', '<div id="errorNotice" class="backup-nudge" role="alert"><span>' + t('error.generic') + '</span><button class="small">' + t('side.backupDismiss') + '</button></div>');
+    $('errorNotice').lastChild.onclick = () => $('errorNotice').remove();
+  } catch (e) {} }
+  ['error', 'unhandledrejection'].forEach(k => window.addEventListener(k, ev => noteFault(k, ev.error || ev.reason || ev.message)));
   // Static page labels: every element src/index.html marks with data-i18n="id"
   // gets its textContent set from t(id) once at startup, so the shipped copy
   // comes from the same English table as the strings app.js writes itself
@@ -1468,7 +1475,10 @@ import { register as registerPathway } from './ui/pathway.js';
   // not used for judging -- onHit()/tickKitBar() are the source of truth.
   let drumOnsetDetector = null, drumClassifier = null, drumRing = null, drumMicHits = [];
   const DRUM_FRAME = 2048, DRUM_HOP = 512;
-  function listen() {
+  // report the first 3 faults of a streak
+  let listenFails = 0;
+  function listen() { try { listenOnce(); listenFails = 0; } catch (e) { if (++listenFails <= 3) noteFault('listen', e); } }
+  function listenOnce() {
     // A drum kit has no pitch for the worklet's YIN tracker to lock onto, so
     // it is checked first and returns either way: it must run even once
     // openMic() has built a pitch worklet (kit's ioBtn click opens the mic
@@ -2645,6 +2655,12 @@ import { register as registerPathway } from './ui/pathway.js';
     reader.readAsText(file);
   });
   $('backupNudgeDismiss').addEventListener('click', () => { $('backupNudge').hidden = true; });
+  // ---------- Copy diagnostics (src/core/diagnostics.js)
+  $('diagCopyBtn').addEventListener('click', async () => {
+    const text = buildDiagnostics({ version: APP_VERSION, userAgent: navigator.userAgent, errors: getErrors(), capabilities: { microphone: !!navigator.mediaDevices, midi: !!navigator.requestMIDIAccess, audioWorklet: !!window.AudioWorkletNode, songStorage: !!window.indexedDB } });
+    const ok = await new Promise(r => r(navigator.clipboard.writeText(text))).then(() => true, () => false);
+    $('diagCopyResult').textContent = t(ok ? 'diag.copied' : 'diag.manual'); $('diagCopyText').textContent = text;
+  });
 
   // ---------- check for updates: a file:// copy can never rewrite or replace itself (browser
   // security, not a missing feature), so the honest alternative is a button that ASKS and answers
