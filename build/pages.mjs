@@ -147,9 +147,11 @@ function injectPwaHead(releaseHtml) {
     '<link rel="manifest" href="./manifest.webmanifest">' +
     `<meta name="theme-color" content="${THEME_COLOR}">` +
     '<link rel="apple-touch-icon" href="./icon-192.png">';
-  // The document's own </head> is the last one that still has the <body> after
-  // it — an occurrence inside the script bundle does not.
-  let html = insertBeforeLast(releaseHtml, '</head>', headAdditions, (tail) => /<body[\s>]/i.test(tail));
+  // The document's own </head> is the FIRST one: the release file keeps every
+  // script in the <body>, and the bundle builds a whole report document as a
+  // string ('<html><head>...</head><body>'), so the LAST </head> -- even one
+  // with a <body after it -- can be inside the script.
+  let html = insertBeforeOwnHeadEnd(releaseHtml, headAdditions);
 
   // Guarded so this never throws in an insecure context (plain http on a
   // non-loopback host) or a browser with no Service Worker support at all.
@@ -221,10 +223,17 @@ function injectCsp(html) {
 
 // The release file is ONE file with the whole app inlined, so `</head>` and
 // `</body>` also occur inside the JavaScript (a panel that builds an HTML
-// string). String.replace takes the FIRST match, which injected the PWA
-// metadata and the service-worker registration into the middle of the script
-// bundle, where they are inert: the page rendered but no service worker was
-// ever registered. The document's own closing tags are the LAST ones.
+// string). The document's own </body> is the LAST one, with only </html> after
+// it. Its own </head> is the FIRST one, with no script before it.
+function insertBeforeOwnHeadEnd(html, addition) {
+  const at = html.indexOf('</head>');
+  if (at === -1) throw new Error('release build is missing </head>; cannot inject the phone-copy additions');
+  if (/<script[\s>]/i.test(html.slice(0, at))) {
+    throw new Error('a <script> comes before the first </head>; refusing to guess which </head> is the document\'s own');
+  }
+  return html.slice(0, at) + addition + html.slice(at);
+}
+
 function insertBeforeLast(html, tag, addition, tailIsRight) {
   const at = html.lastIndexOf(tag);
   if (at === -1) throw new Error(`release build is missing ${tag}; cannot inject the phone-copy additions`);
