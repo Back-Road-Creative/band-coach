@@ -2,7 +2,7 @@ import { judgePitch, OCTAVE_POLICY } from './core/judge.js';
 import { createDeafWindow } from './audio/deaf-window.js';
 import { exportProgress as exportProgressFile, importProgress as importProgressFile, migrate as migrateDB } from './core/progress-file.js';
 import { checkFileSize } from './ui/songs/import-route.js';
-import { safeSet, safeGet } from './core/storage.js';
+import { safeSet, safeGet, getStorage } from './core/storage.js';
 import { sanitizeDB as sanitizeDBCore } from './core/sanitize-db.js';
 import { createLibrary, indexedDbStore, memoryStore } from './song/library.js';
 import { captureToSong } from './song/capture.js';
@@ -289,6 +289,7 @@ import { register as registerPathway } from './ui/pathway.js';
   // to a plain sustained tone rather than throwing or staying silent. The
   // deaf window is opened for the BUFFER'S OWN length, so it always covers
   // exactly what will actually play, however long that family's tail runs.
+  const toneSrcs = new Set(); // reference tones scheduled and not yet ended, so ending a session can cancel the ones still queued
   function tone(m, at, dur, vol) {
     if (!actx) return;
     const family = instrumentById[mod] && instrumentById[mod].family;
@@ -297,7 +298,7 @@ import { register as registerPathway } from './ui/pathway.js';
     buffer.getChannelData(0).set(samples);
     const src = actx.createBufferSource(), v = actx.createGain();
     src.buffer = buffer; v.gain.value = 1; src.connect(v); v.connect(actx.destination);
-    src.start(at);
+    src.start(at); toneSrcs.add(src); src.onended = () => toneSrcs.delete(src);
     const seconds = samples.length / actx.sampleRate;
     deafWindow.open(Math.max(0, (at + seconds - now()) * 1000));
   }
@@ -771,7 +772,9 @@ import { register as registerPathway } from './ui/pathway.js';
   // shot at ever recovering it, but that recovery is future work -- today
   // this is no worse than the old behaviour (sanitizeDB always papered over
   // a corrupt record with a fresh one), except the evidence now survives.
-  function loadDB() { modelNow = Date.now(); const got = safeGet(localStorage, KEY); lastStored = (got.ok && !got.corrupt && got.value !== null) ? JSON.stringify(got.value) : null; const v = (got.ok && !got.corrupt) ? migrateDB(got.value) : null; hasSavedMod = !!(v && v.prefs && MODS[v.prefs.mod] && TOOL_MOD_IDS.indexOf(v.prefs.mod) < 0); DB = sanitizeDB(v, actx ? (actx.outputLatency || actx.baseLatency || 0) * 1000 : 0, modelNow); mod = DB.prefs.mod; S = DB.mods[mod]; gates = gatesFor(DB.prefs.noiseFloor); setNoteNaming(DB.prefs.noteNaming); }
+  // Resolved once: reading window.localStorage can itself throw (see getStorage), so no other line may touch the bare global to reach the DB.
+  const store = getStorage(window);
+  function loadDB() { modelNow = Date.now(); const got = safeGet(store.storage, KEY); lastStored = (got.ok && !got.corrupt && got.value !== null) ? JSON.stringify(got.value) : null; const v = (got.ok && !got.corrupt) ? migrateDB(got.value) : null; hasSavedMod = !!(v && v.prefs && MODS[v.prefs.mod] && TOOL_MOD_IDS.indexOf(v.prefs.mod) < 0); DB = sanitizeDB(v, actx ? (actx.outputLatency || actx.baseLatency || 0) * 1000 : 0, modelNow); mod = DB.prefs.mod; S = DB.mods[mod]; gates = gatesFor(DB.prefs.noiseFloor); setNoteNaming(DB.prefs.noteNaming); }
   let saveTimer = null;
   // Tracks only whether #settingsSay currently shows OUR failed-save
   // message, so a successful save clears exactly that message and never an
@@ -794,7 +797,7 @@ import { register as registerPathway } from './ui/pathway.js';
   function writeDB() {
     if (MODS[mod]) DB.mods[mod] = S = sanitizeModel(mod, S, modelNow);
     const candidate = JSON.stringify(DB);
-    const result = safeSet(localStorage, KEY, candidate);
+    const result = store.blocked ? { ok: false } : safeSet(store.storage, KEY, candidate);
     if (result.ok) { lastStored = candidate; if (saveFailedShown) { saveFailedShown = false; $('settingsSay').textContent = ''; $('mainSay').textContent = ''; } }
     else { saveFailedShown = true; $('settingsSay').textContent = t('storage.saveFailed'); $('mainSay').textContent = t('storage.saveFailed'); }
     return result.ok;
@@ -807,7 +810,7 @@ import { register as registerPathway } from './ui/pathway.js';
   // closing this one, which pagehide alone would miss.
   // Skipped when storage no longer holds what this page last saw: the newer
   // write wins, exactly as it would have had the debounce been cancelled.
-  function flushSave() { if (!saveTimer) return; let cur; try { cur = localStorage.getItem(KEY); } catch (e) { return; } if (cur !== lastStored) return; clearTimeout(saveTimer); saveTimer = null; writeDB(); }
+  function flushSave() { if (!saveTimer) return; let cur; try { cur = store.storage.getItem(KEY); } catch (e) { return; } if (cur !== lastStored) return; clearTimeout(saveTimer); saveTimer = null; writeDB(); }
   window.addEventListener('pagehide', flushSave);
   // `now` is always the caller's `modelNow` (frozen per page load/import,
   // never Date.now() read live) — see the comment on `modelNow` above.
@@ -1984,7 +1987,7 @@ import { register as registerPathway } from './ui/pathway.js';
     DB.events.push(ev); DB.events = boundEvents(DB.events, { skillMap: KBD_SONG_SKILL_MAP, skillMapInstrument: 'kbd' }); save();
   }
   function endSession() {
-    if (!sess) return; const min = sess.active / 60; let line = 'Session ended. Too short to log.';
+    if (!sess) return; toneSrcs.forEach(s => { try { s.stop(); } catch (e) {} }); const min = sess.active / 60; let line = 'Session ended. Too short to log.';
     if (sess.judged >= 8) { DB.sessions.push({ d: today(), mod: mod, min: Math.round(min * 10) / 10, acc: sess.ok / sess.judged, a1: mean(sess.first), a2: mean(sess.last), from: sess.from, to: S.level, breaks: sess.breaks }); DB.sessions = DB.sessions.slice(-60);
       let up = null, low = null, lowR = 1; Object.keys(S.item).forEach(id => { const cur = S.item[id], r1 = retrievability(cur, modelNow), r0 = retrievability(sess.m0[id] || cur, modelNow), g0 = r1 - r0; if (up === null || g0 > up.g) up = { id: id, g: g0 }; if (cur.reps >= 3 && (low === null || r1 < lowR)) { low = id; lowR = r1; } });
       line = 'Session done: ' + Math.round(min * 10) / 10 + ' min, ' + Math.round(100 * sess.ok / sess.judged) + '% right, best streak ' + sess.bestStreak + ', level ' + sess.from + ' to ' + S.level + '.' + (up && up.g > 0.05 ? ' Most improved: ' + inf(up.id).short + '.' : '') + (low ? ' Next time starts with extra ' + inf(low).short + '.' : ''); }
@@ -2885,7 +2888,10 @@ import { register as registerPathway } from './ui/pathway.js';
     document.querySelectorAll('#mainNav button[data-route]').forEach(b => b.addEventListener('click', () => { focusDestination(b.dataset.route, routeTo(b.dataset.route), b); }));
     updateNavState();
   }
-  loadDB(); applyLocale(DB.prefs.locale); if (!Array.isArray(DB.custom)) DB.custom = []; $('optNames').checked = DB.prefs.names; $('optTheme').value = DB.prefs.theme; $('optLocale').value = DB.prefs.locale; applyTheme(DB.prefs.theme); $('optNoteSystem').value = DB.prefs.noteNaming.system; $('optAccidentals').value = DB.prefs.noteNaming.accidentals; buildPicker(); pickerAsSheet = hasSavedMod; setInstrumentSheetOpen(!hasSavedMod); buildNav(); setMod(mod); requestAnimationFrame(frame);
+  // A boot step that throws used to leave a blank or half-wired page with no word to the learner; say so, with the error text, instead (and record it, so the error log, console and release gate see the failed boot too).
+  try { loadDB(); applyLocale(DB.prefs.locale); if (!Array.isArray(DB.custom)) DB.custom = []; $('optNames').checked = DB.prefs.names; $('optTheme').value = DB.prefs.theme; $('optLocale').value = DB.prefs.locale; applyTheme(DB.prefs.theme); $('optNoteSystem').value = DB.prefs.noteNaming.system; $('optAccidentals').value = DB.prefs.noteNaming.accidentals; buildPicker(); pickerAsSheet = hasSavedMod; setInstrumentSheetOpen(!hasSavedMod); buildNav(); setMod(mod); requestAnimationFrame(frame);
+    if (store.blocked) { saveFailedShown = true; $('settingsSay').textContent = t('storage.saveFailed'); $('mainSay').textContent = t('storage.saveFailed'); }
+  } catch (e) { recordError('boot', e); const p = document.createElement('div'); p.id = 'bootFailed'; p.setAttribute('role', 'alert'); p.style.cssText = 'padding:12px;margin:8px;border:2px solid #c0392b;background:#fff;color:#111'; p.textContent = t('boot.failed', { error: (e && e.message) || String(e) }); document.body.insertBefore(p, document.body.firstChild); }
   const hook = !__DEBUG_HOOK__ ? null : { state: () => S, db: () => DB, sess: () => sess, task: () => task, cur: cur, note: onNote, answer: answer, tap: onTap, bar: () => bar, playing: () => playing, setMod: setMod, testSource: testSource, heard: () => heard, yin: yin, cap: () => cap, tuner: () => tunerState, tunerLock: () => tunerLock, deaf: () => deafWindow.isDeaf(), deafUntil: () => deafWindow.until(), exportProgress: doExportProgress, importProgress: doImportProgress, audioNow: audioNow, modelNow: () => modelNow, plan: () => sessionPlan, planProgress: () => planProgress,
     // levelDef(): D() -- a test's seam onto a mix level's limit/bpm.
     levelDef: () => D() };

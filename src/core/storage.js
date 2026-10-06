@@ -62,3 +62,21 @@ export function safeGet(storage, key) {
   }
   return { ok: true, value: parsed, corrupt: false };
 }
+
+// The store the app should use. In Chrome with all site data blocked (and some
+// locked-down Safari setups) merely READING `window.localStorage` throws
+// SecurityError, and some browsers hand back null -- so the global can never
+// be passed as an argument (it is evaluated before any try the callee has).
+// The read sits inside this try instead. When there is no real store the app
+// still has to start, so it gets a throwaway in-memory stand-in and
+// `blocked: true`, which the caller turns into the plain "could not be saved"
+// line rather than pretending the progress is kept. `win` is a parameter so a
+// unit test can hand over a fake window with a throwing getter.
+export function getStorage(win) {
+  try {
+    const real = win.localStorage;
+    if (real) return { storage: real, blocked: false };
+  } catch (e) { /* blocked: fall through to the in-memory stand-in */ }
+  const m = new Map();
+  return { storage: { getItem: k => (m.has(k) ? m.get(k) : null), setItem: (k, v) => { m.set(k, String(v)); }, removeItem: k => { m.delete(k); } }, blocked: true };
+}
