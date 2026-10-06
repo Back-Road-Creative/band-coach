@@ -19,6 +19,7 @@ const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { isAllowed, ALLOWED_PERMISSIONS } = require('./lib/permission-policy.js');
 const { SMOKE_FLAG, smokeExitCode } = require('./lib/smoke.js');
+const { isSafeExternalUrl } = require('./lib/external-url.js');
 
 const APP_HTML_PATH = path.join(__dirname, 'app', 'band-coach.html');
 const APP_FILE_URL = pathToFileURL(APP_HTML_PATH).href;
@@ -153,8 +154,10 @@ function createWindow() {
   win.webContents.setWindowOpenHandler(({ url }) => {
     // The app never legitimately opens a second window; anything a page
     // script asks to open externally goes to the OS browser instead of a
-    // new Electron/Chromium window with its own capabilities.
-    if (!isAppUrl(url)) {
+    // new Electron/Chromium window with its own capabilities. Only https
+    // goes out (lib/external-url.js): any other scheme would reach the OS
+    // protocol handlers.
+    if (!isAppUrl(url) && isSafeExternalUrl(url)) {
       shell.openExternal(url).catch(() => {});
     }
     return { action: 'deny' };
