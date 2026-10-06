@@ -9,6 +9,9 @@ permissions:
   contents: write
 
 jobs:
+  # pages.yml and store-package.yml wait for this workflow's run on the same
+  # commit to succeed (their release-gate job) before they deploy or package;
+  # tests/unit/tag-deploys-wait-for-release-run.test.mjs pins that.
   release:
     runs-on: ubuntu-latest
     # This job runs the same two release-lane runs as ci.yml (here: the suite,
