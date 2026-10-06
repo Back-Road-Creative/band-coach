@@ -282,6 +282,7 @@ import { register as registerPathway } from './ui/pathway.js';
   // to a plain sustained tone rather than throwing or staying silent. The
   // deaf window is opened for the BUFFER'S OWN length, so it always covers
   // exactly what will actually play, however long that family's tail runs.
+  const toneSrcs = new Set(); // reference tones scheduled and not yet ended, so ending a session can cancel the ones still queued
   function tone(m, at, dur, vol) {
     if (!actx) return;
     const family = instrumentById[mod] && instrumentById[mod].family;
@@ -290,7 +291,7 @@ import { register as registerPathway } from './ui/pathway.js';
     buffer.getChannelData(0).set(samples);
     const src = actx.createBufferSource(), v = actx.createGain();
     src.buffer = buffer; v.gain.value = 1; src.connect(v); v.connect(actx.destination);
-    src.start(at);
+    src.start(at); toneSrcs.add(src); src.onended = () => toneSrcs.delete(src);
     const seconds = samples.length / actx.sampleRate;
     deafWindow.open(Math.max(0, (at + seconds - now()) * 1000));
   }
@@ -1976,7 +1977,7 @@ import { register as registerPathway } from './ui/pathway.js';
     DB.events.push(ev); DB.events = boundEvents(DB.events, { skillMap: KBD_SONG_SKILL_MAP, skillMapInstrument: 'kbd' }); save();
   }
   function endSession() {
-    if (!sess) return; const min = sess.active / 60; let line = 'Session ended. Too short to log.';
+    if (!sess) return; toneSrcs.forEach(s => { try { s.stop(); } catch (e) {} }); const min = sess.active / 60; let line = 'Session ended. Too short to log.';
     if (sess.judged >= 8) { DB.sessions.push({ d: today(), mod: mod, min: Math.round(min * 10) / 10, acc: sess.ok / sess.judged, a1: mean(sess.first), a2: mean(sess.last), from: sess.from, to: S.level, breaks: sess.breaks }); DB.sessions = DB.sessions.slice(-60);
       let up = null, low = null, lowR = 1; Object.keys(S.item).forEach(id => { const cur = S.item[id], r1 = retrievability(cur, modelNow), r0 = retrievability(sess.m0[id] || cur, modelNow), g0 = r1 - r0; if (up === null || g0 > up.g) up = { id: id, g: g0 }; if (cur.reps >= 3 && (low === null || r1 < lowR)) { low = id; lowR = r1; } });
       line = 'Session done: ' + Math.round(min * 10) / 10 + ' min, ' + Math.round(100 * sess.ok / sess.judged) + '% right, best streak ' + sess.bestStreak + ', level ' + sess.from + ' to ' + S.level + '.' + (up && up.g > 0.05 ? ' Most improved: ' + inf(up.id).short + '.' : '') + (low ? ' Next time starts with extra ' + inf(low).short + '.' : ''); }
