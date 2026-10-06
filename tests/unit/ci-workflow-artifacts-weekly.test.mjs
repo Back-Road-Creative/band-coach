@@ -25,11 +25,17 @@ function block(text, key) {
   assert.ok(m, `workflow must have a top-level \`${key}:\` block`);
   return m[1];
 }
-// Everything after the job's `steps:` line (steps is the last key of the job).
-function steps(text) {
-  const i = text.search(/^ {4}steps:\s*$/m);
+// The job's `steps:` block (steps is the last key of the job), up to the next
+// job so a second job in the file (the weekly alert) is not read as these steps.
+function steps(text, job = 'test') {
+  const at = text.search(new RegExp('^ {2}' + job + ':\\s*$', 'm'));
+  assert.ok(at >= 0, `the workflow must have a \`${job}:\` job`);
+  const rest = text.slice(at).split('\n').slice(1).join('\n');
+  const end = rest.search(/^ {0,2}\S/m);
+  const own = end < 0 ? rest : rest.slice(0, end);
+  const i = own.search(/^ {4}steps:\s*$/m);
   assert.ok(i >= 0, 'the job must have a `steps:` block');
-  return text.slice(i).replace(/\s+/g, ' ').trim();
+  return own.slice(i).replace(/\s+/g, ' ').trim();
 }
 // Individual `- ` steps, each normalised.
 function stepList(text) {
@@ -104,7 +110,7 @@ test('the weekly workflow has its own concurrency group and read-only permission
 
 test('the weekly workflow runs exactly ci.yml\'s test-job steps', () => {
   const a = steps(ci());
-  const b = steps(weekly());
+  const b = steps(weekly(), 'test');
   assert.ok(a.length > 200, 'ci steps were not extracted');
   assert.equal(b, a, 'the weekly steps must be identical to ci.yml\'s so the weekly run proves what a PR run proves');
 });
@@ -171,4 +177,96 @@ test('the failure upload is still last, and there are exactly two uploads', () =
   assert.equal(list[list.length - 1], ups[1], 'the failure upload stays the last step');
   assert.match(ups[1], /if: failure\(\) \|\| cancelled\(\)/);
   assert.ok(list.indexOf(ups[0]) < list.indexOf(ups[1]));
+});
+
+// The weekly alert: a red Monday run used to be visible only on the Actions tab,
+// so users on auto-updated Chrome hit a break for days. The run now opens (or
+// comments on) ONE issue, closes it when the run is green again, and a second
+// job runs the same steps on Chrome beta so a break shows up before it ships.
+const jobBody = (text, name) => {
+  const m = new RegExp('^ {2}' + name + ':[^\\n]*\\n((?:(?: {4}.*)?\\n)*)', 'm').exec(text);
+  assert.ok(m, `weekly workflow must have a \`${name}:\` job`);
+  return m[1];
+};
+const bodySteps = (body) => body.slice(body.search(/^ {4}steps:\s*$/m)).split('\n').slice(1).join('\n').split(/^ {6}- /m).slice(1).map((s) => s.replace(/\s+/g, ' ').trim());
+const noComments = (t) => t.split('\n').filter((l) => !/^\s*#/.test(l)).join('\n');
+
+test('the weekly workflow keeps read-only defaults; only the alert job may write issues', () => {
+  const text = weekly();
+  assert.doesNotMatch(block(text, 'permissions'), /issues:/, 'the workflow-wide permissions stay contents: read');
+  const report = jobBody(text, 'report');
+  assert.match(report, /^ {4}permissions:\s*\n(?: {6}.*\n)*? {6}issues:\s*write\s*$/m, 'the alert job needs issues: write');
+  assert.match(report, / {6}actions:\s*read\s*$/m, 'and actions: read to download the run summaries');
+  for (const name of ['test', 'test-beta']) assert.doesNotMatch(jobBody(text, name), /\bpermissions:/, `${name} runs the suite with the read-only defaults`);
+});
+
+test('the alert job runs after both test jobs, whatever their result', () => {
+  const report = jobBody(weekly(), 'report');
+  assert.match(report, /^ {4}needs:\s*\[\s*test\s*,\s*test-beta\s*\]\s*$/m, 'needs both test jobs');
+  assert.match(report, /^ {4}if:\s*always\(\)\s*$/m, 'it runs when a needed job failed');
+});
+
+test('a failing run opens or updates ONE issue with the run URL and the Chrome version', () => {
+  const list = bodySteps(noComments(jobBody(weekly(), 'report')));
+  const s = list.find((x) => /\bgh issue create\b/.test(x));
+  assert.ok(s, 'a step must `gh issue create`');
+  assert.match(s, /\bif: needs\.test\.result == 'failure' \|\| needs\.test-beta\.result == 'failure'/, 'only when a test job failed (a cancelled run is not a break)');
+  assert.ok(s.includes("title='weekly browser run failing'"), 'the one issue has a fixed title');
+  assert.match(s, /\bgh issue list\b[^|]*--state open/, 'look for the open issue first, so a second red week updates it');
+  assert.match(s, /\bgh issue comment\b/, 'an existing issue gets a comment, not a duplicate');
+  // RUN_URL is built from the server URL and this run's id in the step's env...
+  assert.match(s, /\bRUN_URL: \$\{\{ github\.server_url \}\}\/\$\{\{ github\.repository \}\}\/actions\/runs\/\$\{\{ github\.run_id \}\}/, 'RUN_URL points at this run');
+  // ...and what is posted is the body, which must carry it and both Chrome versions.
+  const body = /\bbody="([^"]*)"/.exec(s);
+  assert.ok(body, 'the step builds the issue text as body="..."');
+  assert.ok(body[1].includes('Run: $RUN_URL'), 'the body links the run');
+  assert.ok(body[1].includes('$(chrome run-summary)'), 'the body names the stable Chrome version');
+  assert.ok(body[1].includes('$(chrome run-summary-beta)'), 'the body names the Chrome beta version');
+  assert.match(s, /\bgh issue create\b(?:(?!\bgh\b).)*?--body "\$body"/, 'a new issue is created with that body');
+  assert.match(s, /\bgh issue comment\b(?:(?!\bgh\b).)*?--body "\$body"/, 'an existing issue is commented with that body');
+  assert.match(s, /gh run download/, 'the Chrome version comes from the run summary the test job uploaded');
+  assert.match(s, /\.facts\.chrome/, 'the version is the summary\'s facts.chrome');
+  // The download name must be the upload name: "<prefix>-<run id>-<attempt>", with the
+  // prefix each test job's run-summary upload uses. A mismatch finds nothing, and the
+  // issue would say 'unknown' every week.
+  assert.ok(s.includes('-n "$1-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"'), 'the download name is "$1-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"');
+  for (const [job, prefix] of [['test', 'run-summary'], ['test-beta', 'run-summary-beta']]) {
+    const up = uploads(bodySteps(noComments(jobBody(weekly(), job)))).find((x) => /path: dist\/test-artifacts\/run-summary\.json\b/.test(x));
+    assert.ok(up && up.includes(`name: ${prefix}-\${{ github.run_id }}-\${{ github.run_attempt }} path:`), `${job} uploads its run summary as ${prefix}-<run id>-<attempt>, the name the report downloads`);
+  }
+  // Only the issue with exactly this title is touched: the search is fuzzy, and a
+  // 'weekly browser run failing (old)' must never be commented on.
+  assert.ok(s.includes('select(.title == \\"$title\\")'), 'the issue list is filtered to the exact title');
+  assert.match(s, /GH_TOKEN: \$\{\{ github\.token \}\}/, 'gh needs the token');
+});
+
+test('a green run closes the issue', () => {
+  const list = bodySteps(noComments(jobBody(weekly(), 'report')));
+  const s = list.find((x) => /\bgh issue close\b/.test(x));
+  assert.ok(s, 'a step must `gh issue close`');
+  assert.match(s, /\bif: needs\.test\.result == 'success' && needs\.test-beta\.result == 'success'/, 'only when BOTH legs passed');
+  assert.ok(s.includes("title='weekly browser run failing'"), 'it closes the same fixed-title issue');
+  assert.match(s, /--state open/, 'only an open issue is touched');
+  assert.ok(s.includes('select(.title == \\"$title\\")'), 'only the issue with exactly that title is closed, not one the fuzzy search merely returned');
+});
+
+test('the Chrome beta job installs beta and proves it before running the same steps', () => {
+  const list = bodySteps(noComments(jobBody(weekly(), 'test-beta')));
+  const [install, ...rest] = list;
+  // One ordered pin: install the .deb, put the beta first on PATH as google-chrome
+  // (what the unchanged `locate Chrome` step finds), then fail the job unless that
+  // browser calls itself a beta, so the leg cannot quietly test stable.
+  assert.match(install, /apt-get install -y "\$RUNNER_TEMP\/chrome-beta\.deb" sudo ln -sf \/usr\/bin\/google-chrome-beta \/usr\/local\/bin\/google-chrome \/usr\/local\/bin\/google-chrome --version \| tee -a "\$GITHUB_STEP_SUMMARY" \| \/bin\/grep -qi beta$/, 'install the beta .deb, link it as google-chrome, then `google-chrome --version | ... | grep -qi beta` last');
+  const code = codeSteps();
+  const norm = (arr) => arr.join(' | ').replace(/run-summary-beta-/g, 'run-summary-').replace(/test-artifacts-beta-/g, 'test-artifacts-');
+  assert.equal(norm(rest), code.join(' | '), 'after the install step, test-beta runs exactly ci.yml\'s steps (artifact names aside)');
+});
+
+test('the two test jobs never upload the same artifact name, and no new action is introduced', () => {
+  const text = weekly();
+  const names = [...text.matchAll(/^\s+name: ((?:run-summary|test-artifacts)-.+?)\s*$/gm)].map((m) => m[1]);
+  assert.equal(names.length, 4, 'two uploads in each of the two test jobs');
+  assert.equal(new Set(names).size, 4, 'upload-artifact v4 fails the second upload of a name');
+  const known = new Set([...ci().matchAll(/\buses: (\S+)/g)].map((m) => m[1]));
+  for (const m of text.matchAll(/\buses: (\S+)/g)) assert.ok(known.has(m[1]), `${m[1]} must be a ref ci.yml already uses, copied verbatim`);
 });
