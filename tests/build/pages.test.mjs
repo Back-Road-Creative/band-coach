@@ -16,7 +16,7 @@ import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 import { build } from '../../build/build.mjs';
-import { buildPages, PRECACHE_FILES, ICON_FILES, WRITTEN_FILES } from '../../build/pages.mjs';
+import { buildPages, writePagesFiles, PRECACHE_FILES, ICON_FILES, WRITTEN_FILES } from '../../build/pages.mjs';
 import { HTML_PATH } from '../helpers/html-path.mjs';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
@@ -136,6 +136,40 @@ test('the one-file release build is byte-for-byte unaffected by the pages featur
     assert.ok(before.equals(after), 'dist/release/band-coach.html is unchanged by building the pages edition');
   } finally {
     delete process.env.SOURCE_DATE_EPOCH;
+  }
+});
+
+// The bundle builds a whole HTML document as a string (the printable progress
+// report: '<html><head>...</head><body>'), so the file holds a second </head>
+// with a <body after it, deep inside the script. The phone-install tags only do
+// anything in the document's own <head>; inside that string they are inert, and
+// they would also leak into every printed report.
+test('the PWA head tags land in the document\'s own <head>, not in the bundle\'s report string', async () => {
+  await pages();
+  const html = readFileSync(join(PAGES_DIR, 'index.html'), 'utf8');
+  const tags = [
+    '<link rel="manifest" href="./manifest.webmanifest">',
+    '<link rel="apple-touch-icon" href="./icon-192.png">',
+  ];
+  const ownHeadEnd = html.indexOf('</head>');
+  const firstScript = html.search(/<script[\s>]/i);
+  assert.ok(ownHeadEnd !== -1 && ownHeadEnd < firstScript, 'the document\'s own </head> comes before any script');
+  for (const tag of tags) {
+    assert.equal(html.split(tag).length - 1, 1, `${tag} appears exactly once`);
+    assert.ok(html.indexOf(tag) < ownHeadEnd, `${tag} sits in the document's own <head>`);
+  }
+  assert.ok(html.search(/<meta name="theme-color"/) < ownHeadEnd, 'theme-color sits in the document\'s own <head>');
+  assert.match(html, /<title>Band Coach progress report<\/title><\/head>/, 'the report string inside the bundle is left as built');
+});
+
+test('a release file with a script before its own </head> is refused rather than guessed at', async () => {
+  const outDir = mkdtempSync(join(tmpdir(), 'band-coach-pages-bad-'));
+  try {
+    const releaseHtml = '<!doctype html><html><head><meta charset="utf-8"><script>const r = "<head></head><body>";</script>'
+      + '</head><body><p>x</p></body></html>';
+    await assert.rejects(() => writePagesFiles({ releaseHtml, version: '0.0.0', outDir }), /<\/head>/);
+  } finally {
+    rmSync(outDir, { recursive: true, force: true });
   }
 });
 
