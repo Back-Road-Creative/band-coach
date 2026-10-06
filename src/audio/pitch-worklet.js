@@ -172,10 +172,11 @@ export function createPitchNode(actx, opts = {}) {
   if (!actx || !actx.audioWorklet || typeof actx.audioWorklet.addModule !== 'function') {
     return Promise.reject(new Error('AudioWorklet is not available on this AudioContext'));
   }
-  const encoded = btoa(unescape(encodeURIComponent(PITCH_WORKLET_SOURCE)));
-  const url = `data:application/javascript;base64,${encoded}`;
-  return actx.audioWorklet
-    .addModule(url)
+  // blob: first -- the hosted copy's CSP allows blob: but not data: in script-src -- then data:, which
+  // the downloaded file:// copy needs (and loads first, as it always did). Either way it rejects when neither loads.
+  const viaData = () => actx.audioWorklet.addModule(`data:application/javascript;base64,${btoa(unescape(encodeURIComponent(PITCH_WORKLET_SOURCE)))}`);
+  const viaBlob = () => { const url = URL.createObjectURL(new Blob([PITCH_WORKLET_SOURCE], { type: 'application/javascript' })); return actx.audioWorklet.addModule(url).finally(() => URL.revokeObjectURL(url)); };
+  return (typeof location !== 'undefined' && location.protocol === 'file:' ? viaData() : Promise.resolve().then(viaBlob).catch(viaData))
     .then(() => {
       return new AudioWorkletNode(actx, PROCESSOR_NAME, {
         numberOfInputs: 1,
