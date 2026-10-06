@@ -94,3 +94,47 @@ test('safeGet preserves the raw unparseable text under a "<key>.corrupt" side ke
   safeGet(storage, 'k');
   assert.equal(storage.getItem('k.corrupt'), '{not json at all');
 });
+
+// getStorage(win): merely READING window.localStorage throws SecurityError in
+// Chrome with all site data blocked (and some locked-down Safari setups), so
+// the global cannot be passed as an argument -- the read itself has to sit
+// inside a try. The fake window below throws from the getter exactly as the
+// browser does.
+import * as storageModule from '../../src/core/storage.js';
+
+// Looked up off the namespace (not a named import) so a missing export fails
+// the named assertion below instead of killing the whole file at link time.
+function getStorage(win) {
+  assert.equal(typeof storageModule.getStorage, 'function', 'src/core/storage.js must export getStorage');
+  return storageModule.getStorage(win);
+}
+
+function blockedWindow(value) {
+  const win = {};
+  Object.defineProperty(win, 'localStorage', { get() { if (value === undefined) { const e = new Error('denied'); e.name = 'SecurityError'; throw e; } return value; } });
+  return win;
+}
+
+test('getStorage hands back the real storage, not blocked, when the getter works', () => {
+  const real = fakeStorage();
+  const got = getStorage({ localStorage: real });
+  assert.equal(got.storage, real);
+  assert.equal(got.blocked, false);
+});
+
+test('getStorage survives a throwing localStorage getter with a working in-memory stand-in', () => {
+  const got = getStorage(blockedWindow());
+  assert.equal(got.blocked, true);
+  assert.deepEqual(safeSet(got.storage, 'k', 'v'), { ok: true });
+  assert.deepEqual(safeGet(got.storage, 'missing'), { ok: true, value: null, corrupt: false });
+  got.storage.setItem('j', '{"a":1}');
+  assert.deepEqual(safeGet(got.storage, 'j'), { ok: true, value: { a: 1 }, corrupt: false });
+  got.storage.removeItem('j');
+  assert.equal(got.storage.getItem('j'), null);
+});
+
+test('getStorage treats a null localStorage (some browsers) the same as a throwing getter', () => {
+  const got = getStorage(blockedWindow(null));
+  assert.equal(got.blocked, true);
+  assert.equal(got.storage.getItem('anything'), null);
+});
