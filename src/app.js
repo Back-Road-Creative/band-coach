@@ -1,12 +1,15 @@
 import { judgePitch, OCTAVE_POLICY } from './core/judge.js';
 import { createDeafWindow } from './audio/deaf-window.js';
 import { exportProgress as exportProgressFile, importProgress as importProgressFile, migrate as migrateDB } from './core/progress-file.js';
+import { checkFileSize } from './ui/songs/import-route.js';
 import { safeSet, safeGet } from './core/storage.js';
+import { sanitizeDB as sanitizeDBCore } from './core/sanitize-db.js';
 import { createLibrary, indexedDbStore, memoryStore } from './song/library.js';
 import { captureToSong } from './song/capture.js';
 import { toAudioTime, judgeTap, medianLatency } from './core/timing.js';
 import { DEFAULT_STABILITY_DAYS, MIN_STABILITY_DAYS, MAX_STABILITY_DAYS, GRADE, retrievability, review, due, migrateItem } from './core/srs.js';
-import { handsTogetherById, handsModeFromId, fingeringLabel, gradeHandsTogetherExact, gradeHandsTogetherApprox, bothUnlocked, effectiveHands, prepLine, HANDS_TOGETHER_EXERCISES, isTimedPairId, gradeTimedPair, PAIR_ONSET_TOL_MS, PAIR_RELEASE_TOL_MS, isStagedPairId, handsStageFromId, heldBassMelody, gradeHeldBass, gradeSplitRhythm, SPLIT_MID_TOL_RATIO, gradePositionChange, POSITION_SHIFT_SEMITONES, HANDS_POSITION_EXERCISES, positionPrepLine } from './core/hands-together.js';
+import { handsTogetherById, handsModeFromId, fingeringLabel, bothUnlocked, effectiveHands, prepLine, HANDS_TOGETHER_EXERCISES, isTimedPairId, PAIR_ONSET_TOL_MS, PAIR_RELEASE_TOL_MS, isStagedPairId, handsStageFromId, heldBassMelody, SPLIT_MID_TOL_RATIO, POSITION_SHIFT_SEMITONES, HANDS_POSITION_EXERCISES, positionPrepLine } from './core/hands-together.js';
+import { step as stepHandsTogether } from './core/hands-together-stage.js';
 import { createMidiParser, describeOutputs, scheduleSong, playOnOutput, stopAll } from './core/midi.js';
 import { createNoteState } from './core/note-state.js';
 import { PCKEYS } from './core/pckeys.js';
@@ -17,8 +20,9 @@ import { recordError, getErrors } from './core/error-log.js';
 import { resolveAppVersion, DEV_VERSION } from './core/version.js';
 import { loadPack, packStatus, createIndexedDBStore, packManifestUrl, DEFAULT_MODEL_PACK } from './core/model-pack.js';
 import { checkForUpdate, FALLBACK_DOWNLOAD_URL } from './core/update-check.js';
-import { setNoteNaming, sanitizeNoteNaming, name as noteNameFor } from './core/note-names.js';
+import { setNoteNaming, name as noteNameFor } from './core/note-names.js';
 import { t, en, setLocale, LOCALES } from './core/i18n.js';
+import { micErrorMessage } from './core/mic-error.js';
 import { CLEF_PATHS } from './notation/glyphs.js';
 import { yin } from './audio/yin.js';
 import { createPitchNode } from './audio/pitch-worklet.js';
@@ -244,8 +248,32 @@ import { register as registerPathway } from './ui/pathway.js';
   // allowed to start" for a context created anywhere else. Handlers that
   // merely bring a learner back (visibilitychange, bfcache pageshow) call
   // resumeAudio(), which wakes a suspended context and never makes one.
-  function ensureAudio() { if (!actx) { try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { actx = null; } } resumeAudio(); return actx; }
-  function resumeAudio() { if (actx && actx.state === 'suspended') actx.resume(); }
+  // The OS or browser can stop a context on its own (iOS: a phone call, Siri or
+  // an AirPods route change sets 'interrupted' with no visibilitychange), and
+  // now() is actx.currentTime, so the exercise would sit frozen and silent.
+  // onAudioState says so and pauses; the Resume button (a tap) wakes it.
+  // audioParked marks the app's OWN hide/pagehide suspend (teardown above),
+  // which is not an interruption and must not raise the pause card.
+  let audioParked = false;
+  // A closed context can never run again: forget everything built on it (and
+  // the mic source wired into it) so the next gesture's ensureAudio() rebuilds.
+  // The pitch timers hold the DEAD context's currentTime and the new clock
+  // starts near 0, so they are zeroed too: a stale one makes the first mic
+  // frame's dt hugely negative, and a silent frame then banks a huge holdFor.
+  // (holdFor/wrongFor need no reset: the break nulls the task, and a new task zeroes them.)
+  function dropAudio() {
+    if (lastAudioSource) { if (lastAudioSource.__monoRouteInterval) clearInterval(lastAudioSource.__monoRouteInterval); try { lastAudioSource.disconnect(); } catch (e) {} }
+    if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; micGen++; micHideReleased = true; const pm = $('practiceMeter'); if (pm) pm.hidden = true; }
+    lastPitchAt = lastWorkletPitchAt = 0; actx = anTime = anFreq = lastAudioSource = pitchWorkletNode = pitchWorkletPromise = null; micReady = false; ioRefresh();
+  }
+  function onAudioState(ctx) {
+    if (ctx !== actx) return; const st = ctx.state; if (st === 'closed') dropAudio();
+    if (st === 'running' || audioParked || document.hidden || !playing) return;
+    BREAKS.audio = [t('audio.stoppedTitle'), t('audio.stoppedWhy'), 0]; takeBreak('audio'); coach(t('audio.tapToResume'));
+  }
+  function ensureAudio() { if (actx && actx.state === 'closed') dropAudio(); if (!actx) { try { const c = actx = new (window.AudioContext || window.webkitAudioContext)(); c.onstatechange = () => onAudioState(c); } catch (e) { actx = null; } } resumeAudio(); return actx; }
+  // A resume that is refused, or settles with the context still not running (iOS keeps 'interrupted' through a call), fires no further statechange: say so again rather than leave the learner frozen after their tap.
+  function resumeAudio() { const c = actx; if (!c) return; if (c.state === 'closed') { dropAudio(); return; } if (c.state !== 'running') { const again = () => onAudioState(c); try { Promise.resolve(c.resume()).then(again, e => { recordError('audio-resume', e); again(); }); } catch (e) { recordError('audio-resume', e); again(); } } }
   const now = () => actx ? actx.currentTime : performance.now() / 1000;
   // Instrument-family-shaped reference tone (src/audio/voices.js): a
   // pre-rendered buffer, computed by pure JS synthesis, never an embedded
@@ -355,10 +383,15 @@ import { register as registerPathway } from './ui/pathway.js';
     const base = { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: { ideal: 2 } };
     const wanted = DB.prefs.inputDeviceId ? { ...base, deviceId: { exact: DB.prefs.inputDeviceId } } : base;
     openMicPromise = (async () => {
+      // No AudioContext: fail before the browser's prompt; never open a stream nothing can listen to.
+      if (!actx) throw new DOMException('no AudioContext', 'NoAudioContext');
       let st;
       try { st = await navigator.mediaDevices.getUserMedia({ audio: wanted }); }
       catch (e) { if (!DB.prefs.inputDeviceId) throw e; st = await navigator.mediaDevices.getUserMedia({ audio: base }); }
-      micStream = st; micHideReleased = false; const src = actx.createMediaStreamSource(st); wireAnalysers(monoSum(src)); micReady = true;
+      micHideReleased = false;
+      // Wiring can throw with the stream live: stop it, or the OS mic light stays on. micStream is only set once wired, so a failure leaves nothing to undo.
+      try { wireAnalysers(monoSum(actx.createMediaStreamSource(st))); micStream = st; micReady = true; }
+      catch (e) { st.getTracks().forEach(tr => tr.stop()); throw e; }
       // A successful Connect clears the 'blocked' sentence calibrateNoiseFloor wrote (its catch below: keep the two texts identical), so it does not sit beside 'Listening through your microphone.'. Any other result text is left alone.
       { const cr = $('calibrateResult'); if (cr && cr.textContent === 'The microphone was blocked, so it could not be checked.') cr.textContent = ''; }
       // A track that ends (device unplugged, permission revoked) leaves the mic as the teardown 'mic' stopper does, then the status and Connect button follow. Only the CURRENT stream counts: a switched-away stream ending later must not close its replacement. micGen++ makes a room check still running for it discard its result.
@@ -514,7 +547,6 @@ import { register as registerPathway } from './ui/pathway.js';
   // equivalent to the engine's output (task-row layout, live tuning gauge,
   // hold timer) so it is left alone rather than swapped.
   const NOTATE_MOD_IDS = ['kbd', 'gtr', 'bass', 'uke', 'voice'];
-  const NOTATE_MODES = ['names', 'staff', 'both'];
   const WIND_KINDS = { c: ['Concert pitch: flute, oboe, violin', 0, 'treble'], bb: ['B flat: trumpet, clarinet, soprano sax', -2, 'treble'], bbt: ['B flat, octave lower: tenor sax', -14, 'treble'], eb: ['E flat: alto sax', -9, 'treble'], ebb: ['E flat, octave lower: baritone sax', -21, 'treble'], f: ['F: French horn', -7, 'treble'], bc: ['Bass clef: trombone, euphonium, tuba', -19, 'bass'] };
   const VOICE_KINDS = { low: ['Lower voice (Do = C3)', 48], mid: ['Middle voice (Do = G3)', 55], high: ['Higher voice (Do = C4)', 60] };
 
@@ -719,84 +751,8 @@ import { register as registerPathway } from './ui/pathway.js';
     Object.keys(v.acc || {}).forEach(k => { s.acc[k] = num(v.acc[k], 0, 0, 3); }); Object.keys(v.cr || {}).forEach(k => { if (validId(m, k)) s.cr[k] = num(v.cr[k], 0, -80, 80); });
     return s;
   }
-  // repairEventClocks (bc-clk): before this fix, src/ui/songs.js stamped a song row's
-  // `at` with the audio clock (seconds since page load, resets to 0 every reload)
-  // instead of epoch ms like every other row -- so a saved row with a finite `at`
-  // under EVENT_CLOCK_EPOCH_FLOOR (1e12 ms is the year 2001; the audio clock could
-  // never reach that many SECONDS of page-open time) came from that bug and its
-  // stamped `at` is not the real time. Repaired with the `at` of the next row in
-  // array order (DB.events is append-only -- logEvent only pushes, boundEvents only
-  // drops rows, never reorders, so array order IS push order) that has a real epoch
-  // `at`; a bad row with no later epoch row (nothing trustworthy comes after it) falls
-  // back to `modelNow`, the load time -- never earlier than the truth, so a
-  // return/retention wait (src/core/pathway.js) is never granted early. `id` is left
-  // untouched.
-  const EVENT_CLOCK_EPOCH_FLOOR = 1e12;
-  function repairEventClocks(events, modelNow) {
-    const out = events.slice();
-    for (let i = 0; i < out.length; i++) {
-      if (Number.isFinite(out[i].at) && out[i].at < EVENT_CLOCK_EPOCH_FLOOR) {
-        let fixedAt = modelNow;
-        for (let j = i + 1; j < out.length; j++) { if (Number.isFinite(out[j].at) && out[j].at >= EVENT_CLOCK_EPOCH_FLOOR) { fixedAt = out[j].at; break; } }
-        out[i] = Object.assign({}, out[i], { at: fixedAt });
-      }
-    }
-    return out;
-  }
-  function sanitizeDB(v, defaultLatencyMs, modelNow) {
-    const notate = {}; NOTATE_MOD_IDS.forEach(m => { notate[m] = 'names'; });
-    const d = { v: 1, mods: {}, sessions: [], events: [], prefs: { mod: 'kbd', wind: 'bb', voice: 'low', kbdHands: 'both', sessionMinutes: null, names: true, noiseFloor: null, noiseFloorV: null, inputDeviceId: null, notate: notate, theme: 'system', locale: 'en', noteNaming: { system: 'letters', accidentals: 'mixed' } } }; v = (v && typeof v === 'object') ? v : {};
-    MOD_IDS.forEach(m => { d.mods[m] = sanitizeModel(m, v.mods && v.mods[m], modelNow); });
-    if (Array.isArray(v.sessions)) d.sessions = v.sessions.filter(x => x && typeof x.d === 'string' && MODS[x.mod]).slice(-60).map(x => {
-      // source/songId (a panel-logged row, e.g. a finished or abandoned song
-      // lesson -- see songs.js's logSession()) are optional: a built-in
-      // drill's row never carried them and still shouldn't after this load,
-      // so an absent/non-string value is dropped rather than sanitised to ''
-      // or null, keeping a drill row and a song row's own shape distinct.
-      const row = { d: x.d.slice(0, 10), mod: x.mod, min: num(x.min, 0, 0, 600), acc: num(x.acc, 0, 0, 1), a1: num(x.a1, 0, 0, 1), a2: num(x.a2, 0, 0, 1), from: num(x.from, 1, 1, 80), to: num(x.to, 1, 1, 80), breaks: num(x.breaks, 0, 0, 99) };
-      if (typeof x.source === 'string') row.source = x.source;
-      if (typeof x.songId === 'string') row.songId = x.songId;
-      return row;
-    });
-    // DB.events (src/core/learning-events.js): each row is validated with
-    // the SAME validateEvent() a writer runs before push -- a corrupt or
-    // hand-edited row is dropped here, never thrown, exactly like an
-    // invalid DB.sessions row above is filtered rather than crashing load.
-    if (Array.isArray(v.events)) d.events = boundEvents(repairEventClocks(v.events.filter(x => validateEvent(x).ok), modelNow), { skillMap: KBD_SONG_SKILL_MAP, skillMapInstrument: 'kbd' });
-    const p = v.prefs || {}; if (MODS[p.mod]) d.prefs.mod = p.mod; if (WIND_KINDS[p.wind]) d.prefs.wind = p.wind; d.prefs.voiceRange = (p.voiceRange && typeof p.voiceRange === 'object' && Number.isFinite(p.voiceRange.low) && Number.isFinite(p.voiceRange.high) && p.voiceRange.low < p.voiceRange.high) ? { low: clamp(Math.round(p.voiceRange.low), 24, 96), high: clamp(Math.round(p.voiceRange.high), 24, 96) } : null; const VKp = Object.assign({}, VOICE_KINDS, d.prefs.voiceRange ? { mine: ['My range (found by test)', tonicFromRange(exerciseRangeFor(d.prefs.voiceRange)).tonic] } : {}); if (VKp[p.voice]) d.prefs.voice = p.voice; d.prefs.names = p.names !== false;
-    d.prefs.noiseFloor = (typeof p.noiseFloor === 'number' && isFinite(p.noiseFloor) && p.noiseFloor >= 0) ? clamp(p.noiseFloor, 0, 1) : null;
-    // A floor stored before the room check could abstain (no marker, or an older one) may have learned playing: drop it, so the next Connect measures again. Progress-file imports run through this too.
-    d.prefs.noiseFloorV = p.noiseFloorV === ROOM_CHECK_VERSION ? ROOM_CHECK_VERSION : null; if (d.prefs.noiseFloorV === null) d.prefs.noiseFloor = null; if (d.prefs.noiseFloor === null) d.prefs.noiseFloorV = null;
-    d.prefs.inputDeviceId = typeof p.inputDeviceId === 'string' && p.inputDeviceId ? p.inputDeviceId : null;
-    // Theme J1: System/Light/Dark, an unrecognised or missing saved value
-    // sanitises to 'system' so a corrupt/old backup never leaves the toggle
-    // stuck on nothing it can render.
-    d.prefs.theme = ['system', 'light', 'dark'].indexOf(p.theme) >= 0 ? p.theme : 'system';
-    d.prefs.locale = LOCALES.some(l => l.code === p.locale) ? p.locale : 'en';
-    // Note naming J2: letters / German (H/B) / fixed-do solfege, each in
-    // sharps, flats or mixed spelling -- unknown or missing sanitises to
-    // today's default so nname() never has a pref it can't render.
-    d.prefs.noteNaming = sanitizeNoteNaming(p.noteNaming);
-    d.prefs.harpKey = (Number.isInteger(p.harpKey) && p.harpKey >= 0 && p.harpKey <= 11) ? p.harpKey : 0;
-    // Piano hands together B1: Both/Right only/Left only, same allow-list
-    // sanitising pattern as prefs.wind/prefs.voice above -- an unrecognised
-    // or missing saved value sanitises to 'both', today's only behaviour.
-    d.prefs.kbdHands = ['both', 'right', 'left'].indexOf(p.kbdHands) >= 0 ? p.kbdHands : 'both';
-    // Session length E7c: 5/10/15 minutes or no limit at all (null, today's
-    // only behaviour) -- same allow-list sanitising pattern as
-    // prefs.kbdHands above, so any other saved value (a string '5', 0, 20,
-    // garbage) sanitises to no limit rather than a target the coach can't
-    // explain.
-    d.prefs.sessionMinutes = [5, 10, 15].indexOf(p.sessionMinutes) >= 0 ? p.sessionMinutes : null;
-    // "Show: staff / names / both" is per-instrument and defaults to 'names',
-    // i.e. today's display, untouched, for any instrument not set.
-    const pn = (p.notate && typeof p.notate === 'object') ? p.notate : {};
-    NOTATE_MOD_IDS.forEach(m => { if (NOTATE_MODES.indexOf(pn[m]) >= 0) d.prefs.notate[m] = pn[m]; });
-    d.custom = Array.isArray(v.custom) ? v.custom.map(x => Math.round(num(x, 60, 20, 110))).slice(0, 300) : [];
-    d.latencyMs = num(v.latencyMs, defaultLatencyMs || 0, 0, 300);
-    d.panels = sanitizePanelData(v.panels);
-    return d;
-  }
+  // sanitizeDB (src/core/sanitize-db.js, with repairEventClocks): the pure gate between a stored or restored profile and the app; the tables it checks against come in here.
+  function sanitizeDB(v, defaultLatencyMs, modelNow) { return sanitizeDBCore(v, defaultLatencyMs, modelNow, { MODS, MOD_IDS, WIND_KINDS, VOICE_KINDS, LOCALES, NOTATE_MOD_IDS, sanitizeModel, sanitizePanelData, skillMap: KBD_SONG_SKILL_MAP }); }
   // The exact string this page last read from or wrote to storage. flushSave()
   // compares against it so a page going away never clobbers a newer write made
   // by someone else in the meantime (another tab, a restored backup).
@@ -1234,184 +1190,19 @@ import { register as registerPathway } from './ui/pathway.js';
     const where = wrongNoteHint({ heardMidi: midi, targetMidi: i.midi, policy, fretted: !!i.string && !MODS[mod].fretless });
     const wn = (x) => i.written === undefined ? nname(x) : nname(writtenMidi(i, x)); failEl('That was ' + wn(midi) + ', the note is ' + wn(i.midi) + '. ' + where, e.id + '>' + wn(midi)); // transposing winds: both names in the written key the prompt uses
   }
-  // onNote's hands-together branch, moved out as-is (same statements, same order).
-  function onHandsTogetherNote(e, i, midi, exact, source) {
-    const ex = i.ex, handsMode = handsModeFromId(e.id);
-    if (!exact) {
-      const g = gradeHandsTogetherApprox(ex, midi, handsMode);
-      if (!g.ok) { if (g.wrong === false) return; failEl(nname(midi) + ' is not part of ' + ex.short + ' (approximate: a microphone only hears one note at a time).', e.id + '>xa' + midi); return; }
-      const approxTail = handsMode === 'right' ? 'Right hand checked; the left hand was not.' : handsMode === 'left' ? 'Left hand checked; the right hand was not.' : 'Connect a MIDI keyboard to grade both hands together.';
-      passEl(0.7, 'Approximate (one note heard, microphone): ' + (g.hand === 'rh' ? 'right' : 'left') + ' hand, ' + nname(midi) + '. ' + approxTail, 'approximate', source); return;
-    }
-    // K3/K4, levels 14-16 (j<n>t/j<n>h/j<n>d): LEARN (untimed, both notes
-    // just held together -- shared across all three stages) then CHECK,
-    // which branches by handsStageFromId: 'timed' is gradeTimedPair
-    // (unchanged from K3); 'held'/'split' are gradeHeldBass/
-    // gradeSplitRhythm, both of which also need each hand's OWN moment
-    // (real note-on/note-off timestamps off e.pair), never realMidiHeld/
-    // the 0.6s window below.
-    if (isStagedPairId(e.id)) {
-      const stage = handsStageFromId(e.id);
-      const wrongMsg = nname(midi) + ' is not part of ' + ex.short + ' (' + fingeringLabel(ex) + ').';
-      // K5: level 17 ("position change") is untimed (no note-on/note-off
-      // synchronisation, unlike timed/held/split) so it never needs the
-      // LEARN/CHECK phase split below -- one grader, gradePositionChange(),
-      // covers both the pre-shift chord and the post-shift one, told apart
-      // by e.pair.moved (set true the first time the pre-shift chord is
-      // matched). MIDI exact and computer-key both grade it, off the same
-      // "recent note-ons" window every other non-real-MIDI-held exact
-      // caller in this file uses (screen taps included, same as level 13's
-      // plain both-hands item -- there is no timing evidence to lose here).
-      if (stage === 'position') {
-        // The left hand must stay down across the whole move -- real
-        // holding, not a recent-note-on window -- so MIDI and computer
-        // keys (both tracked by noteState, keyup included) read the
-        // true held set; only a screen tap has no hold to read, so it
-        // falls back to the same "recent note-ons" window every other
-        // non-held exact caller in this file uses for taps.
-        const heldMidis = source === 'midi' || source === 'computer-key' ? noteState.heldPitches() : (held.push({ m: midi, t: now() }), held = held.filter(x => now() - x.t < 0.6), held.map(x => x.m));
-        const g = gradePositionChange(ex, heldMidis, e.pair.moved);
-        if (g.oldPosition) { failEl('That is the old position -- move your right hand up to ' + nname(ex.rh.midi) + '.', e.id + '>old'); if (source !== 'midi') held = []; return; }
-        if (g.wrong.length) { failEl(wrongMsg, e.id + '>x' + midi); if (source !== 'midi') held = []; return; }
-        if (!g.ok) return;
-        if (!e.pair.moved) { e.pair.moved = true; e.pair.phase = 'check'; if (source !== 'midi') held = []; say('Good. Now move your right hand up to ' + nname(ex.rh.midi) + ' and play the same shape.', ''); refreshPrompt(); return; }
-        passEl(undefined, ex.short + ': position change complete. ' + fingeringLabel(ex) + '.', undefined, source); return;
-      }
-      if (e.pair.phase === 'learn') {
-        if (source === 'midi' || source === 'computer-key') {
-          if (midi !== ex.rh.midi && midi !== ex.lh.midi) { failEl(wrongMsg, e.id + '>x' + midi); e.pair.learnOn = []; return; }
-          e.pair.learnOn.push(midi);
-          const freshHeld = e.pair.learnOn.filter(m => noteState.isHeld(m));
-          const g = gradeHandsTogetherExact(ex, freshHeld, 'both');
-          if (g.wrong.length) { failEl(wrongMsg, e.id + '>x' + midi); e.pair.learnOn = []; return; }
-          if (g.ok) {
-            e.pair.phase = 'check'; e.pair.on = {}; e.pair.off = {}; e.pair.notes = []; e.pair.rhOns = []; e.pair.rhOffs = [];
-            const goLine = stage === 'held' ? 'Good. Now let go, press the bass again and keep holding it, then play the melody over it.' : stage === 'split' ? 'Good. Now let go, then hold the left hand under two even right-hand notes.' : 'Good. Now in time: let go, then press both keys at the same moment and let go together.';
-            say(goLine, ''); refreshPrompt();
-          }
-          return;
-        }
-        // Screen tap, on-screen Enter/Space, or the debug hook: no note-off
-        // to time against, so this stays practice only -- the same 0.6s
-        // "recent note-ons" window every other non-MIDI exact caller uses.
-        held.push({ m: midi, t: now() }); held = held.filter(x => now() - x.t < 0.6);
-        const g = gradeHandsTogetherExact(ex, held.map(x => x.m), 'both');
-        if (g.wrong.length) { failEl(wrongMsg, e.id + '>x' + midi); held = []; return; }
-        if (g.ok) passEl(undefined, ex.short + ': together. Practice only: held notes need a MIDI keyboard or computer keys.', 'guided', source);
-        return;
-      }
-      // CHECK: only a real note-on (MIDI or computer key) counts -- a
-      // screen tap or the debug hook has no matching note-off, so it can
-      // never complete the timing check and is silently ignored here.
-      if (source !== 'midi' && source !== 'computer-key') return;
-      if (stage === 'timed') {
-        if (midi !== ex.rh.midi && midi !== ex.lh.midi) { failEl(wrongMsg, e.id + '>x' + midi); return; }
-        e.pair.on[midi] = performance.now(); delete e.pair.off[midi];
-        const g = gradeTimedPair(ex, e.pair);
-        if (g.state === 'fail') { failEl(g.reason, e.id + '>t'); e.pair.on = {}; e.pair.off = {}; }
-        return;
-      }
-      if (stage === 'held') {
-        if (midi === ex.lh.midi) { e.pair.on[midi] = performance.now(); e.pair.off = {}; e.pair.notes = []; return; }
-        e.pair.notes.push({ midi: midi, ms: performance.now(), bassHeld: (ex.lh.midi in e.pair.on) && noteState.isHeld(ex.lh.midi) });
-        const g = gradeHeldBass(ex, { bassOn: e.pair.on[ex.lh.midi], bassOff: e.pair.off[ex.lh.midi], notes: e.pair.notes });
-        // A fail while the bass is STILL physically down is only the
-        // melody's fault -- clearing e.pair.on here would make the very
-        // next melody note read bassHeld:false (nothing in e.pair.on to
-        // check against) and the bass's own note-off get ignored (not in
-        // e.pair.on), telling a learner who never let go that their left
-        // hand let go. Keep the bass's onset and only reset the melody, so
-        // the retry grades from the bass still being held; a fail with the
-        // bass already up resets as before (there is no held bass left to
-        // preserve).
-        if (g.state === 'fail') { failEl(g.reason, e.id + '>h'); if (noteState.isHeld(ex.lh.midi)) { e.pair.notes = []; } else { e.pair.on = {}; e.pair.off = {}; e.pair.notes = []; } }
-        return;
-      }
-      if (stage === 'split') {
-        if (midi !== ex.rh.midi && midi !== ex.lh.midi) { failEl(wrongMsg, e.id + '>x' + midi); return; }
-        if (midi === ex.lh.midi) {
-          // A stray right-hand tap-and-release BEFORE the bass ever goes
-          // down (a learner tapping the melody key first, or tapping it
-          // again right after a fail reset) must not squat rhOns[0]/
-          // rhOffs[0] -- gradeSplitRhythm reads rhOns[0] as the onset
-          // paired against the bass's own onset, so a stale completed tap
-          // there pushes the real first note into rhOns[1] and throws off
-          // every comparison after it. Pressing the bass starts the RH
-          // lists fresh for this attempt -- but ONLY when rhOns/rhOffs are
-          // already balanced (no right-hand note currently held): a right
-          // hand that came in EARLY and is still down when the bass
-          // finally arrives (the left-hand-late case) is real evidence for
-          // this attempt, not a stray tap, and must be kept.
-          if (e.pair.rhOns.length === e.pair.rhOffs.length) { e.pair.rhOns = []; e.pair.rhOffs = []; }
-          e.pair.on[midi] = performance.now(); delete e.pair.off[midi];
-        }
-        else if (e.pair.rhOns.length === e.pair.rhOffs.length) { e.pair.rhOns.push(performance.now()); }
-        const g = gradeSplitRhythm(ex, { lhOn: e.pair.on[ex.lh.midi], lhOff: e.pair.off[ex.lh.midi], rhOns: e.pair.rhOns, rhOffs: e.pair.rhOffs });
-        e.pair.last = { rh: g.rh.state, lh: g.lh.state };
-        if (g.state === 'fail') { failEl(g.reason, e.id + '>d'); e.pair.on = {}; e.pair.off = {}; e.pair.rhOns = []; e.pair.rhOffs = []; }
-        return;
-      }
-      return;
-    }
-    // Real MIDI: heldMidis comes from actual note-on/note-off state
-    // (realMidiHeld, kept current by handleMidiMessage below), so holding a
-    // chord for longer than the old 0.6s note-on timer window still
-    // grades correctly. Every other exact-input caller (screen keys,
-    // computer keys, the debug hook) has no note-off to track, so it keeps
-    // the original "recent note-ons" window -- same grading outcomes as
-    // before this change for all of those.
-    const heldMidis = source === 'midi' ? Array.from(realMidiHeld) : (held.push({ m: midi, t: now() }), held = held.filter(x => now() - x.t < 0.6), held.map(x => x.m));
-    const g = gradeHandsTogetherExact(ex, heldMidis, handsMode);
-    if (g.wrong.length) { failEl(nname(midi) + ' is not part of ' + ex.short + ' (' + fingeringLabel(ex) + ').', e.id + '>x' + midi); if (source !== 'midi') held = []; return; }
-    if (g.ok) passEl(undefined, ex.short + ': ' + (handsMode === 'right' ? 'right hand' : handsMode === 'left' ? 'left hand' : 'both hands together') + '. ' + fingeringLabel(ex) + '.', undefined, source);
-    return;
-  }
+  // onNote's hands-together branch: the stage machine lives in src/core/hands-together-stage.js (pure, table-tested); this applies its verdict to the UI.
+  function handsCtx(e) { return { id: e.id, ex: e.info.ex, pair: e.pair, held: held, now: now, perfNow: () => performance.now(), noteState: noteState, realMidiHeld: realMidiHeld, nname: nname }; }
+  function applyHandsVerdict(v) { if (v.held) held = v.held; v.acts.forEach(a => { if (a.t === 'fail') failEl(a.msg, a.key); else if (a.t === 'pass') passEl(a.q, a.msg, a.assist, a.input); else if (a.t === 'say') say(a.msg, a.cls); else refreshPrompt(); }); }
+  function onHandsTogetherNote(e, i, midi, exact, source) { applyHandsVerdict(stepHandsTogether(handsCtx(e), { type: 'on', midi: midi, exact: exact, source: source })); }
   // K3/K4: the note-off half of levels 14-16's CHECK phase (onNote above
   // handles every note-on). Only a real MIDI or computer-key release
   // reaches here (handleMidiMessage's note-off branch, keyup) -- a screen
   // tap or the debug hook never fires this, so a CHECK-phase pair can only
   // ever pass on real held-note evidence. Ignored outside CHECK (LEARN's
-  // note-offs mean nothing).
+  // note-offs mean nothing) -- that gate sits in the stage machine's stepOff.
   function onNoteOff(midi, source) {
-    if (!playing || !task || task.done) return; const e = cur(); if (!e || !e.pair || e.pair.phase !== 'check') return;
-    const ex = e.info.ex, stage = handsStageFromId(e.id);
-    if (stage === 'position') {
-      // untimed: onNote's note-on grades level 17 alone; the one release that matters is the left hand lifting after the shift, which fails and restarts the exercise (a later re-press must not pass it)
-      if (e.pair.moved && midi === ex.lh.midi && !noteState.isHeld(midi)) { failEl('The left hand let go of ' + nname(ex.lh.midi) + ' during the move. Keep it down while your right hand moves up, then start again from the first position.', e.id + '>l'); e.pair.moved = false; e.pair.phase = 'learn'; refreshPrompt(); }
-      return;
-    }
-    if (stage === 'timed') {
-      if (!(midi in e.pair.on)) return;
-      e.pair.off[midi] = performance.now();
-      const g = gradeTimedPair(ex, e.pair);
-      if (g.state === 'pass') { passEl(undefined, ex.short + ': together, in time.', undefined, source); return; }
-      if (g.state === 'fail') { failEl(g.reason, e.id + '>t'); e.pair.on = {}; e.pair.off = {}; }
-      return;
-    }
-    if (stage === 'held') {
-      if (midi !== ex.lh.midi || !(midi in e.pair.on)) return;
-      if (noteState.isHeld(midi)) return; // another port is still holding the bass
-      e.pair.off[midi] = performance.now();
-      const g = gradeHeldBass(ex, { bassOn: e.pair.on[midi], bassOff: e.pair.off[midi], notes: e.pair.notes });
-      if (g.state === 'pass') { passEl(undefined, ex.short + ': bass held, melody played over it.', undefined, source); return; }
-      if (g.state === 'fail') { failEl(g.reason, e.id + '>h'); e.pair.on = {}; e.pair.off = {}; e.pair.notes = []; }
-      return;
-    }
-    if (stage === 'split') {
-      if (midi === ex.lh.midi) {
-        if (!(midi in e.pair.on)) return;
-        if (noteState.isHeld(midi)) return; // another port is still holding it
-        e.pair.off[midi] = performance.now();
-      } else if (midi === ex.rh.midi) {
-        if (e.pair.rhOns.length <= e.pair.rhOffs.length) return;
-        if (noteState.isHeld(midi)) return; // another port is still holding it
-        e.pair.rhOffs.push(performance.now());
-      } else return;
-      const g = gradeSplitRhythm(ex, { lhOn: e.pair.on[ex.lh.midi], lhOff: e.pair.off[ex.lh.midi], rhOns: e.pair.rhOns, rhOffs: e.pair.rhOffs });
-      e.pair.last = { rh: g.rh.state, lh: g.lh.state };
-      if (g.state === 'pass') { passEl(undefined, ex.short + ': two even notes over one held bass.', undefined, source); return; }
-      if (g.state === 'fail') { failEl(g.reason, e.id + '>d'); e.pair.on = {}; e.pair.off = {}; e.pair.rhOns = []; e.pair.rhOffs = []; }
-    }
+    if (!playing || !task || task.done) return; const e = cur(); if (!e || !e.pair) return;
+    applyHandsVerdict(stepHandsTogether(handsCtx(e), { type: 'off', midi: midi, source: source }));
   }
   function answer(id) {
     lastInputAt = now(); if (!playing || !task || task.kind !== 'ear' || task.done) return; const e = cur(), right = id === e.id; e.rt = now() - e.t0; e.q = right ? timeQ(e.rt, task.limit) : 0; task.revealed = true; updateDesc();
@@ -2520,11 +2311,11 @@ import { register as registerPathway } from './ui/pathway.js';
     let parser = midiParsers.get(input); if (!parser) { parser = createMidiParser(); midiParsers.set(input, parser); }
     parser.feed(d).forEach(evt => { if (evt.type === 'on') { noteState.noteOn(input, evt.channel, evt.note); realMidiHeld.add(evt.note); onNote(evt.note, true, 'midi'); } else { noteState.noteOff(input, evt.channel, evt.note); if (!noteState.isHeld(evt.note)) realMidiHeld.delete(evt.note); onNoteOff(evt.note, 'midi'); } });
   }
-  function connectMic() { openMic().then(ioRefresh).catch(() => ioState('off', 'The microphone was blocked. Allow it in the browser, or open the standalone copy in Chrome.')); }
+  function connectMic() { openMic().then(ioRefresh).catch(e => { recordError('mic:connect', e); ioState('off', micErrorMessage(e)); }); }
   // Start on a mic instrument asks for the mic FIRST (the browser's own prompt), then begins: an exercise that cannot hear only ever says "Time." and "You stepped away". Blocked or unavailable: say so and do not start.
   function startAfterMic() {
     if (!needsMic() || micReady) { startSession(); return; }
-    const m = mod, blocked = () => { const msg = 'The microphone was blocked, so I could not start. Press "Set up input", then "Connect microphone", and allow it in your browser.'; ioState('off', msg); if (mod === m) coach(msg); };
+    const m = mod, blocked = e => { recordError('mic:start', e); const msg = e && e.name === 'NotAllowedError' ? 'The microphone was blocked, so I could not start. Press "Set up input", then "Connect microphone", and allow it in your browser.' : micErrorMessage(e); ioState('off', msg); if (mod === m) coach(msg); };
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { const msg = 'This browser cannot open a microphone here. Open the standalone copy in Chrome.'; ioState('off', msg); coach(msg); return; }
     ensureAudio(); openMic().then(() => { ioRefresh(); if (!sess && mod === m) startSession(); }).catch(blocked);
   }
@@ -2638,7 +2429,7 @@ import { register as registerPathway } from './ui/pathway.js';
   $('playBtn').addEventListener('click', function () { this.blur(); if (!sess) startAfterMic(); else if (paused) resume(); else takeBreak('user'); });
   $('endBtn').addEventListener('click', function () { this.blur(); endSession(); }); $('endBtn2').addEventListener('click', endSession); $('backBtn').addEventListener('click', resume);
   $('snoozeBtn').addEventListener('click', () => { sess.snoozeUntil = Date.now() + 5 * 60000; sess.tiredFor = 0; S.ready = Math.min(S.ready, 0.6); pauseInfo = { at: Date.now(), secs: 0 }; resume(); coach('Five more minutes, then I will ask again. I have eased off the pace meanwhile.'); });
-  document.addEventListener('visibilitychange', () => { if (document.hidden && playing) takeBreak('hidden'); if (document.hidden) { flushSave(); releaseNotes(); runTeardown('hidden'); } else { refreshModelClock(); resumeAudio(); ioRefresh(); } wakeLock.handleVisibilityChange(document); });
+  document.addEventListener('visibilitychange', () => { if (document.hidden && playing) takeBreak('hidden'); if (document.hidden) { flushSave(); releaseNotes(); runTeardown('hidden'); } else { audioParked = false; refreshModelClock(); resumeAudio(); ioRefresh(); } wakeLock.handleVisibilityChange(document); });
   // A hidden tab is a pause the learner might return to; pagehide (real tab
   // close, navigation, reload) never comes back, so it gets the same
   // teardown -- a hidden tab that goes straight to being closed must not
@@ -2647,7 +2438,7 @@ import { register as registerPathway } from './ui/pathway.js';
   // already run), so a hidden tab that is THEN closed safely runs it twice.
   // Kept next to this listener rather than in the flushSave/writeDB pagehide
   // wiring above, which an unrelated unit also edits.
-  window.addEventListener('pagehide', () => runTeardown('pagehide'));
+  window.addEventListener('pagehide', () => { audioParked = true; runTeardown('pagehide'); });
   // now() is actx.currentTime, so a context the teardown stopper suspended
   // above freezes the app clock solid -- nextTaskAt, scheduled against that
   // frozen now(), can never become due again. The visible branch above
@@ -2656,7 +2447,7 @@ import { register as registerPathway } from './ui/pathway.js';
   // browsers, so resumeAudio() (a no-op unless actx exists and is suspended)
   // needs its own call here too, or a learner returning from history
   // navigation gets the same frozen clock this whole fix exists to prevent.
-  window.addEventListener('pageshow', ev => { if (ev.persisted) resumeAudio(); });
+  window.addEventListener('pageshow', ev => { if (ev.persisted) { audioParked = false; resumeAudio(); } });
   // A held note has no way to send its own note-off once the window itself
   // loses focus (alt-tab, another app grabbing the keyboard) -- release
   // everything noteState is holding rather than leave a phantom note "held"
@@ -2821,8 +2612,8 @@ import { register as registerPathway } from './ui/pathway.js';
     noteBackupMade(Date.now()); $('backupNudge').hidden = true;
     coach(t('backup.saved'));
   }
-  async function doImportProgress(text) {
-    const result = importProgressFile(text);
+  async function doImportProgress(textOrChecked) {
+    const result = typeof textOrChecked === 'string' ? importProgressFile(textOrChecked) : textOrChecked; // a pre-checked result: parsed once
     if (!result.ok) { coach(t(result.errorId)); return result; }
     // The songs go first because that is the store that can fail (e.g.
     // IndexedDB unavailable): if it does, nothing about the live profile
@@ -2843,9 +2634,10 @@ import { register as registerPathway } from './ui/pathway.js';
   $('backupRestoreInput').addEventListener('change', function () {
     const file = this.files && this.files[0]; this.value = '';
     if (!file) return;
+    if (checkFileSize(file, 'backup')) { coach(t('backup.err.tooLarge')); return; } // before a FileReader is built
     const reader = new FileReader();
     // Check the file before asking: a file that is not a backup is refused with the reason, and the "replace your progress" confirm is only raised for one that can be restored.
-    reader.onload = () => { const text = String(reader.result), check = importProgressFile(text); if (!check.ok) { coach(t(check.errorId)); return; } if (confirm(t('backup.confirmRestore'))) doImportProgress(text); };
+    reader.onload = () => { const text = String(reader.result), check = importProgressFile(text); if (!check.ok) { coach(t(check.errorId)); return; } if (confirm(t('backup.confirmRestore'))) doImportProgress(check); };
     reader.onerror = () => coach(t('backup.readError'));
     reader.readAsText(file);
   });
@@ -3099,6 +2891,7 @@ import { register as registerPathway } from './ui/pathway.js';
     // fabricating a pass.
     setNoiseFloorForTest: floor => { DB.prefs.noiseFloor = floor; applyGates(gatesFor(floor)); save(); } });
   if (__DEBUG_HOOK__) Object.assign(hook, { micOpen: () => micReady, audioExists: () => !!actx, audioSuspended: () => !!(actx && actx.state === 'suspended'), teardownRuns: () => teardownRunCount });
+  if (__DEBUG_HOOK__) Object.assign(hook, { pitchClocks: () => [lastPitchAt, lastWorkletPitchAt] });
   //
   if (__DEBUG_HOOK__) Object.assign(hook, { judgeChord: judgeChord, chroma: chroma });
   if (__DEBUG_HOOK__) Object.assign(hook, { groove: () => groove, grooveLast: () => grooveLast, grooveBpm: () => S.grooveBpm, grooveOn: v => { grooveOn = !!v; task = null; groove = null; }, grooveInject: (midi, atAudioTime) => { const fire = () => { if (audioNow() >= atAudioTime) onNote(midi, true); else setTimeout(fire, 4); }; fire(); } });

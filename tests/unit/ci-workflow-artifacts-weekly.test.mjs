@@ -40,7 +40,7 @@ function stepList(text) {
 test('ci uploads failure evidence as its last step, on failure or cancel', () => {
   const list = stepList(ci());
   const last = list[list.length - 1];
-  assert.match(last, /\buses: actions\/upload-artifact@v4\b/, 'the last ci step must be actions/upload-artifact@v4');
+  assert.match(last, /\buses: actions\/upload-artifact@[0-9a-f]{40}\b/, 'the last ci step must be actions/upload-artifact pinned to a commit SHA');
   assert.match(last, /if: failure\(\) \|\| cancelled\(\)/, 'upload only when the run failed or was cancelled');
   assert.match(last, /path: dist\/test-artifacts\/?(?: |$)/, 'upload dist/test-artifacts/, where the acceptance lane writes failure evidence');
   assert.match(last, /if-no-files-found: ignore/, 'a run with nothing to keep must not fail the upload');
@@ -118,7 +118,7 @@ const find = (list, re, what) => {
   assert.ok(s, `ci.yml needs ${what}`);
   return s;
 };
-const uploads = (list) => list.filter((s) => /\buses: actions\/upload-artifact@v4\b/.test(s));
+const uploads = (list) => list.filter((s) => /\buses: actions\/upload-artifact@[0-9a-f]{40}\b/.test(s));
 
 test('the build date is pinned to the commit before the first build', () => {
   const list = codeSteps();
@@ -150,7 +150,7 @@ test('the run summary is computed after the suite, always, from both outcomes', 
   assert.ok(s.includes('steps.gate.outcome') && s.includes('steps.suite.outcome'), 'it reads both step outcomes');
   const suite = list.findIndex((x) => /^id: suite\b/.test(x));
   assert.ok(suite >= 0 && at > suite, 'the summary must come after the suite step');
-  const firstUpload = list.findIndex((x) => /\buses: actions\/upload-artifact@v4\b/.test(x));
+  const firstUpload = list.findIndex((x) => /\buses: actions\/upload-artifact@[0-9a-f]{40}\b/.test(x));
   assert.ok(at < firstUpload, 'the summary must come before both uploads, or it uploads nothing');
 });
 
