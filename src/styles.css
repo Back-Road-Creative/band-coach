@@ -625,6 +625,8 @@
   #verFooter:empty { display: none; }
   .update-check { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; color: var(--muted); font-size: 12px; }
   .update-check-help { margin: 0; max-width: 46ch; }
+  /* Store shell (store/preload.js sets the attribute; an attribute, not a class, because the dead-class check only sees src): updates arrive through the Store and the shell blocks the network, so both web-only groups would fail every time. */
+  html[data-shell="store"] .settings-group:has(#updateCheckBtn), html[data-shell="store"] .settings-group:has(#modelPackBtn) { display: none; }
   .update-check a { color: var(--accent-ink); }
   .ledger-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; margin: 8px 0; }
   .ledger-cell { aspect-ratio: 1; border-radius: 3px; background: color-mix(in srgb, var(--accent) var(--ledger-shade, 0%), var(--panel-2)); border: 1px solid var(--line); }

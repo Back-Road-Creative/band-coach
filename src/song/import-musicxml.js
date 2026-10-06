@@ -25,7 +25,7 @@ import { songIdentity } from './ident.js';
 import { parseXml, elements, element, childText, attr, text } from './xml-lite.js';
 import { readMxlRootEntry } from './unzip-lite.js';
 import { TICKS_PER_QUARTER } from './model.js';
-import { STEP_PC, IMPORT_DEFAULT_BPM, midiFromStep, num } from './import-common.js';
+import { finishImport, STEP_PC, IMPORT_DEFAULT_BPM, midiFromStep, num } from './import-common.js';
 
 
 function keyFromFifthsAndMode(fifths, modeRaw, warnings) {
@@ -270,5 +270,5 @@ export function importMusicXml(rawText, options = {}) {
   if (tempoMap.length) song.tempoMap = tempoMap;
   if (metreChanges.length) song.metreChanges = metreChanges;
   if (keyChanges.length) song.keyChanges = keyChanges;
-  return { song, warnings };
+  return finishImport(song, warnings);
 }

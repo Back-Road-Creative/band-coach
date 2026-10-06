@@ -105,7 +105,7 @@ test('T6 a failed or cancelled run uploads its test artifacts as the last step',
   assert.equal(ups.length, 1, `expected one upload-artifact step, found ${ups.length}`);
   const up = ups[0];
   assert.equal(up, all[all.length - 1], 'the upload must be the last step so it sees every earlier failure');
-  assert.equal(up.uses, 'actions/upload-artifact@v4');
+  assert.match(up.uses, /^actions\/upload-artifact@[0-9a-f]{40}\b/);
   assert.equal(scalar(up.text, 'if'), 'failure() || cancelled()');
   assert.match(up.text, /^ {10}path: dist\/test-artifacts\/$/m);
   assert.match(up.text, /^ {10}if-no-files-found: ignore$/m);

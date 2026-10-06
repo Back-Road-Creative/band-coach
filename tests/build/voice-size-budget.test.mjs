@@ -93,7 +93,14 @@ test('the voices budget fails loudly if its module is renamed away', async () =>
 // about 55KB for the whole pathway). 1.125MB leaves about 74KB past that and
 // still leaves no room for a media library. The downloaded (release) file was
 // 575,707 bytes against its own 1.5MB gate.
-const TOTAL_BUDGET_BYTES = 1.125 * 1024 * 1024;
+// Raised again to 1.15MB (2026-10-05), measured the same way: main (14fd84d,
+// after the first hardening merges) built to 1,179,490 bytes, 158 under, with no
+// comments in the dev build to cut. The open hardening units add, each measured
+// at its pushed head against its base: +144 (store shell), +229 (stress test's
+// leak fix), +336 (Pages CSP), +1,483 (storage blocked), +2,931 (error notice
+// and Copy diagnostics), about 5.1KB in all. 1.15MB leaves about 21KB past that
+// and still leaves no room for a media library.
+const TOTAL_BUDGET_BYTES = 1.15 * 1024 * 1024;
 
 test('the built single-file app stays under its total size ceiling', async () => {
   const outDir = mkdtempSync(join(tmpdir(), 'band-coach-total-budget-'));

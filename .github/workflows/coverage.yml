@@ -1,0 +1,46 @@
+name: coverage
+
+# Unit-test coverage of src/core, src/song and src/audio, once a week and on
+# demand, with a line-coverage floor on src/core (tests/unit/coverage-floor.mjs).
+# A separate file from ci.yml on purpose: bin/autoland.py counts every ci.yml
+# run on a commit whatever its event, so a `schedule` trigger there would feed
+# the merge barrier. Separate from weekly-current-browser.yml too: that one runs
+# the browser suite on the newest Chrome; this one only reports coverage. The
+# lcov file is kept as an artifact so the numbers can be read per file.
+on:
+  schedule:
+    - cron: '41 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: coverage
+  cancel-in-progress: false
+
+jobs:
+  coverage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+      # A few unit tests start Chrome, as in ci.yml's test job.
+      - name: locate Chrome
+        run: echo "CHROME_BIN=$(which google-chrome)" >> "$GITHUB_ENV"
+      - run: npm ci
+      # Some unit tests read the built page, as in ci.yml (npm test's pretest).
+      - run: node build/build.mjs
+      - name: unit coverage, then the src/core floor
+        run: npm run coverage
+      - name: keep the lcov report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: coverage-lcov-${{ github.run_id }}-${{ github.run_attempt }}
+          path: coverage/lcov.info
+          if-no-files-found: warn
+          retention-days: 30
