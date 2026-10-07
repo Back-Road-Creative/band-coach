@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const scripts = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).scripts;
-const globs = `${scripts.test} ${scripts.gate}`.match(/tests[^"\s]*\*\.test\.mjs/g) || [];
+const globs = `${scripts.test} ${scripts['test:release']}`.match(/tests[^"\s]*\*\.test\.mjs/g) || [];
 const covered = new Set(globs.map((g) => dirname(g)));
 
 function testDirs(dir, out = new Set()) {
@@ -20,7 +20,7 @@ function testDirs(dir, out = new Set()) {
   return out;
 }
 
-test('every directory holding a test file is run by the test or gate script', () => {
+test('every directory holding a test file is run by the test or test:release script', () => {
   const missing = [...testDirs(join(root, 'tests'))].filter((d) => !covered.has(d));
   assert.deepEqual(missing, [], `add these to package.json scripts: ${missing.join(', ')}`);
 });

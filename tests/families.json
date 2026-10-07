@@ -1,0 +1,20 @@
+{
+  "_doc": "Test families for CI selection (build/ci-select.mjs). script = the package.json script; globs = what it runs; needsBuild = needs the dev build (npm run build) first; needsRelease = builds and drives dist/release (its script builds it). browser = families whose files launch Chromium. rules: the FIRST rule matching a changed file decides which families that file selects; a file no rule matches selects everything (test:all), as does an empty list. Selecting every family prints test:all.",
+  "all": "test:all",
+  "families": {
+    "root": { "script": "test:root", "globs": ["tests/*.test.mjs"], "needsBuild": true, "needsRelease": false, "browser": false },
+    "build": { "script": "test:build", "globs": ["tests/build/*.test.mjs"], "needsBuild": true, "needsRelease": false, "browser": true, "browserFiles": ["tests/build/pages-offline.test.mjs"] },
+    "char": { "script": "test:char", "globs": ["tests/characterization/*.test.mjs"], "needsBuild": true, "needsRelease": false, "browser": true },
+    "unit": { "script": "test:unit", "globs": ["tests/unit/*.test.mjs", "tests/unit/notation/*.test.mjs"], "needsBuild": true, "needsRelease": false, "browser": false, "browserFiles": ["about a dozen files under tests/unit launch Chromium: see tests/helpers/browser.mjs imports"] },
+    "release": { "script": "test:release", "globs": ["tests/release/*.test.mjs"], "needsBuild": false, "needsRelease": true, "browser": true }
+  },
+  "browserScript": "test:browser",
+  "rules": [
+    { "match": ["src/core/**", "tests/unit/**"], "run": ["unit"] },
+    { "match": ["tests/build/**"], "run": ["build"] },
+    { "match": ["tests/characterization/**"], "run": ["char"] },
+    { "match": ["tests/release/**"], "run": ["release"] },
+    { "match": ["tests/*.test.mjs"], "run": ["root"] },
+    { "match": ["src/**", "build/**", "tests/helpers/**", "tests/fixtures/**", "tests/acceptance/**"], "run": ["root", "build", "char", "unit", "release"] }
+  ]
+}

@@ -259,6 +259,57 @@ test('C14 a clean release block with a non-zero suite rc is NOT READY', () => {
   assert.ok(s.reasons.some((r) => /rc 1|exit 1|exit code 1/i.test(r)), s.reasons.join(' | '));
 });
 
+// A pull_request run may select only some test families (build/ci-select.mjs);
+// ci.yml records the selection in $RUNNER_TEMP/selection.txt. No file means the
+// full chain ran, so everything above still holds with no file at all.
+const withSelection = (sel, opts) => {
+  const w = world(opts);
+  writeFileSync(join(w.rt, 'selection.txt'), sel + '\n');
+  return { w, s: summarise({ root: w.root, env: w.env }) };
+};
+
+test('C19 a narrow selection that leaves the release family out is READY, reported "not run (narrow selection)"', () => {
+  const { w, s } = withSelection('test:unit', { gateLog: L.pass, suiteLog: banner('test:unit', 'node --test "tests/unit/*.test.mjs"') + L.pass });
+  assert.equal(s.verdict, 'READY', s.reasons.join(' | '));
+  assert.deepEqual(s.reasons, []);
+  assert.equal(s.releaseRun, 'not run (narrow selection)');
+  assert.match(renderMarkdown(s), /not run \(narrow selection\)/);
+  const r = spawnSync(process.execPath, [SCRIPT], { cwd: w.root, encoding: 'utf8', env: { PATH: process.env.PATH, ...w.env } });
+  assert.equal(r.status, 0, `an intentional exclusion does not fail the CLI:\n${r.stdout}\n${r.stderr}`);
+});
+
+test('C20 release selected but its block is missing is NOT READY', () => {
+  for (const sel of ['test:release', 'test:unit test:release', 'test:all']) {
+    const { s } = withSelection(sel, { gateLog: L.pass, suiteLog: banner('test:unit', 'node --test "tests/unit/*.test.mjs"') + L.pass });
+    assert.equal(s.verdict, 'NOT READY', sel);
+    assert.ok(s.reasons.some((r) => /no release block/i.test(r)), s.reasons.join(' | '));
+    assert.notEqual(s.releaseRun, 'not run (narrow selection)', sel);
+  }
+});
+
+test('C21 release selected and cut off is NOT READY', () => {
+  const cut = L.pass.slice(0, L.pass.indexOf('# tests'));
+  const { s } = withSelection('test:release', { gateLog: L.pass, suiteLog: banner('test:release', REL_CMD) + cut });
+  assert.equal(s.verdict, 'NOT READY');
+  assert.ok(s.reasons.some((r) => /cut off/i.test(r)), s.reasons.join(' | '));
+});
+
+test('C22 release selected and present is READY; a narrow selection that ran a release block anyway is still judged', () => {
+  const ok = withSelection('test:release', { gateLog: L.pass, suiteLog: banner('test:release', REL_CMD) + L.pass });
+  assert.equal(ok.s.verdict, 'READY', ok.s.reasons.join(' | '));
+  assert.equal(ok.s.releaseRun, 'ran');
+  const bad = withSelection('test:unit', { gateLog: L.pass, suiteLog: banner('test:release', REL_CMD) + L.fail });
+  assert.equal(bad.s.verdict, 'NOT READY', 'a release block that is present is never ignored');
+});
+
+test('C23 a narrow selection never hides a failed step: the rc is reported and the CLI keeps both logs as evidence', () => {
+  const { w, s } = withSelection('test:unit', { gateLog: L.pass, suiteLog: banner('test:unit', 'node --test "tests/unit/*.test.mjs"') + L.fail, suiteRc: 1, env: { SUITE_OUTCOME: 'failure' } });
+  assert.equal(s.steps.suite.rc, 1);
+  assert.equal(s.releaseRun, 'not run (narrow selection)');
+  spawnSync(process.execPath, [SCRIPT], { cwd: w.root, encoding: 'utf8', env: { PATH: process.env.PATH, ...w.env } });
+  assert.ok(existsSync(join(w.root, 'dist/test-artifacts/suite.log')), 'a failed step still copies its log');
+});
+
 // The facts a person reads next to the verdict. Chrome comes from CHROME_BIN.
 test('C16 facts: the Chrome version, node, commit and outcomes are reported, "unknown" when absent', () => {
   const dir = mkdtempSync(join(scratch, 'chrome-'));
