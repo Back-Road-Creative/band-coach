@@ -196,6 +196,31 @@ Needs Node 22+. `pretest` runs the build first, so tests always see a fresh `dis
 and `posttest` runs the release gate (`npm run gate`) so a plain `npm test` also proves the release
 file downloads cleanly. Tests use only Node built-ins plus `esbuild` (the one build-time dependency).
 
+Each family of tests also has its own script, so one can be run alone (every one except
+`test:release` expects a fresh dev build first: `npm run build`):
+
+| script | runs | drives a browser |
+|---|---|---|
+| `npm run test:unit` | `tests/unit/*.test.mjs`, `tests/unit/notation/*.test.mjs` | a dozen files here launch Chromium (the harness's own tests, drum-kit, preference-sanitiser, file-chooser and CI-summary tests) |
+| `npm run test:build` | `tests/build/*.test.mjs` | `pages-offline.test.mjs` only |
+| `npm run test:char` | `tests/characterization/*.test.mjs` | every file |
+| `npm run test:root` | `tests/*.test.mjs` | no |
+| `npm run test:browser` | `tests/characterization/*.test.mjs` plus `tests/build/pages-offline.test.mjs`: the files whose whole job is to drive the page | yes |
+| `npm run test:release` | builds `dist/release/band-coach.html`, then `tests/release/*.test.mjs` (`npm run gate` is an alias) | every file |
+| `npm run test:all` | build, then every family above in `npm test`'s order, then `test:release` | |
+
+`npm test` is unchanged: `pretest` (build), every family in one run, `posttest` (`npm run gate`).
+
+CI narrows a pull request to the families its changed files need. `tests/families.json` lists each
+family's script, globs and whether it needs a build, plus the rules that map changed paths to
+families (`src/core/**` and `tests/unit/**` select `test:unit`; a test directory selects its own
+family; `src/**`, `build/**` and the shared test helpers select every family). `node build/ci-select.mjs
+[--base <ref>] [file ...]` prints the scripts for the changed files (default: `git diff --name-only
+origin/main...HEAD`); an unknown path, an empty list or an unreadable diff prints `test:all`, so a gap
+in the manifest costs time, never coverage. A push to `main` always runs the full `npm test`.
+`build/ci-summary.mjs` still requires the release block whenever the release family was selected, and
+reports "not run (narrow selection)" when a pull request's selection left it out on purpose.
+
 Six kinds of tests live under `tests/`:
 
 - `tests/import.test.mjs` checks the built file stays one self-contained page.
@@ -235,7 +260,8 @@ Six kinds of tests live under `tests/`:
 
 Some npm setups run with `ignore-scripts` on (check `npm config get ignore-scripts`), which skips
 `pretest`/`posttest` entirely — run `npm run build`, `npm test`, and `npm run gate` as separate
-commands there. CI always runs the full `pretest` → `test` → `posttest` chain.
+commands there. CI runs the full `pretest` → `test` → `posttest` chain on every push to `main`; a pull
+request runs the families its changed files select (above).
 
 `npm run coverage` measures unit-test line coverage of `src/core`, `src/song` and `src/audio`, writes
 `coverage/lcov.info` (git-ignored) and fails if `src/core` falls below the floor in

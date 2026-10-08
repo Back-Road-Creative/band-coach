@@ -18,6 +18,11 @@
 // gate step's log, which has no banner. NOT READY when it is missing or cut off,
 // its step's rc is not 0, it has a failed or cancelled test, a skip, a retried
 // attempt (`# retryFlaky:` lines), or a todo with a reason that now passes.
+// A pull_request run may select only some families (build/ci-select.mjs); when
+// $RUNNER_TEMP/selection.txt names a selection without test:release or test:all,
+// the missing release block is reported "not run (narrow selection)" and is not
+// a reason. Selected and missing or cut off is still NOT READY, and a block that
+// is present is always judged. No selection file means the full chain ran.
 // Reported, not judged: the main suite's counts and retries (its rc already
 // fails the job) and the gate step's block.
 import { execFileSync } from 'node:child_process';
@@ -33,6 +38,7 @@ const RELEASE_GLOB = 'tests/release/*.test.mjs';
 const STEPS = ['gate', 'suite'];
 const REQUIRED = ['tests', 'pass', 'fail', 'cancelled', 'skipped', 'todo'];
 const NOT_RUN = 'not run';
+const NARROW = 'not run (narrow selection)';
 
 // node prints `\#` for a `#` and `\\` for a backslash in a test name or reason.
 const unescape = (s) => s.replace(/\\([#\\])/g, '$1');
@@ -109,6 +115,14 @@ function readStep(name, env) {
   return out;
 }
 
+// The family scripts a pull_request run chose (ci.yml writes them to
+// $RUNNER_TEMP/selection.txt from build/ci-select.mjs). null means no selection
+// was recorded, i.e. the full `npm test` chain ran, so the release block is owed.
+function readSelection(env) {
+  const f = env.RUNNER_TEMP && join(env.RUNNER_TEMP, 'selection.txt');
+  return f && existsSync(f) ? readFileSync(f, 'utf8').split(/\s+/).filter(Boolean) : null;
+}
+
 function chromeVersion(bin) {
   if (!bin) return 'unknown';
   try { return execFileSync(bin, ['--version'], { encoding: 'utf8', timeout: 10000, stdio: ['ignore', 'pipe', 'ignore'] }).trim() || 'unknown'; } catch { return 'unknown'; }
@@ -119,8 +133,12 @@ export function summarise({ root, env = process.env } = {}) {
   const release = [];
   for (const s of STEPS) for (const b of steps[s].blocks) if (b.banner && b.banner.command.includes(RELEASE_GLOB)) release.push({ ...b, step: s });
 
+  const selection = readSelection(env);
+  const releaseOwed = !selection || selection.includes('test:release') || selection.includes('test:all');
+  const releaseRun = release.length ? 'ran' : releaseOwed ? 'missing' : NARROW;
   const reasons = [];
-  if (!release.length) reasons.push(`no release block: no TAP block follows an npm banner whose command contains ${RELEASE_GLOB}, so nothing proves the release lane ran`);
+  // A selection that left the release family out on purpose is not a missing block; a block that is present is judged either way.
+  if (!release.length && releaseOwed) reasons.push(`no release block: no TAP block follows an npm banner whose command contains ${RELEASE_GLOB}, so nothing proves the release lane ran`);
   for (const b of release) {
     const rc = steps[b.step].rc;
     if (rc === NOT_RUN) reasons.push(`release block: the ${b.step} step's exit code (${b.step}.rc) is missing (${NOT_RUN})`);
@@ -147,7 +165,7 @@ export function summarise({ root, env = process.env } = {}) {
     releaseBytes: bytes ? bytes.length : 'absent',
     releaseSha256: bytes ? createHash('sha256').update(bytes).digest('hex') : 'absent',
   };
-  return { verdict: reasons.length ? 'NOT READY' : 'READY', reasons, steps, release, facts };
+  return { verdict: reasons.length ? 'NOT READY' : 'READY', reasons, selection, releaseRun, steps, release, facts };
 }
 
 const capped = (items, show) => [...items.slice(0, LIST_CAP).map(show), ...(items.length > LIST_CAP ? [`- ... ${items.length - LIST_CAP} more (all in run-summary.json)`] : [])];
@@ -156,6 +174,7 @@ const withReason = (x) => `- ${x.name}${x.reason ? ` (${x.reason})` : ''}`;
 export function renderMarkdown(s) {
   const out = [`## Run summary: ${s.verdict}`, ''];
   if (s.reasons.length) out.push(...s.reasons.map((r) => `- ${r}`)); else out.push('No reasons to hold this run back.');
+  if (s.selection) out.push('', `Selected families: ${s.selection.join(' ')}. Release lane: ${s.releaseRun}.`);
   out.push('', '| step | block | rc | outcome | tests | pass | fail | cancelled | skipped | todo | retries | ms |', '|---|---|---|---|---|---|---|---|---|---|---|---|');
   const lists = [];
   for (const name of STEPS) {

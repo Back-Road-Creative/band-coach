@@ -18,7 +18,14 @@
     "pretest": "npm run build",
     "test": "node --test --test-concurrency=$(node tests/helpers/browser.mjs) \"tests/*.test.mjs\" \"tests/build/*.test.mjs\" \"tests/characterization/*.test.mjs\" \"tests/unit/*.test.mjs\" \"tests/unit/notation/*.test.mjs\"",
     "posttest": "npm run gate",
-    "gate": "node build/build.mjs --release && node --test \"tests/release/*.test.mjs\"",
+    "gate": "npm run test:release",
+    "test:unit": "node --test --test-concurrency=$(node tests/helpers/browser.mjs) \"tests/unit/*.test.mjs\" \"tests/unit/notation/*.test.mjs\"",
+    "test:build": "node --test --test-concurrency=$(node tests/helpers/browser.mjs) \"tests/build/*.test.mjs\"",
+    "test:char": "node --test --test-concurrency=$(node tests/helpers/browser.mjs) \"tests/characterization/*.test.mjs\"",
+    "test:root": "node --test --test-concurrency=$(node tests/helpers/browser.mjs) \"tests/*.test.mjs\"",
+    "test:browser": "node --test --test-concurrency=$(node tests/helpers/browser.mjs) \"tests/characterization/*.test.mjs\" tests/build/pages-offline.test.mjs",
+    "test:release": "node build/build.mjs --release && node --test \"tests/release/*.test.mjs\"",
+    "test:all": "npm run build && node --test --test-concurrency=$(node tests/helpers/browser.mjs) \"tests/*.test.mjs\" \"tests/build/*.test.mjs\" \"tests/characterization/*.test.mjs\" \"tests/unit/*.test.mjs\" \"tests/unit/notation/*.test.mjs\" && npm run test:release",
     "coverage": "node tests/unit/coverage-floor.mjs --prepare coverage && node --test --experimental-test-coverage --test-coverage-include=\"src/core/**\" --test-coverage-include=\"src/song/**\" --test-coverage-include=\"src/audio/**\" --test-reporter=spec --test-reporter-destination=stdout --test-reporter=lcov --test-reporter-destination=coverage/lcov.info \"tests/unit/*.test.mjs\" \"tests/unit/notation/*.test.mjs\" && node tests/unit/coverage-floor.mjs coverage/lcov.info"
   },
   "devDependencies": {

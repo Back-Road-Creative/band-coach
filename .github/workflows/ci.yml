@@ -41,7 +41,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
+      # Depth 2: on a pull_request run HEAD is GitHub's merge commit, and HEAD^1
+      # (the base) is what build/ci-select.mjs diffs against.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 2
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 22
@@ -69,15 +73,34 @@ jobs:
           set +e
           { node build/build.mjs --release && node --test tests/release/gate.test.mjs; } 2>&1 | tee "$RUNNER_TEMP/gate.log"
           rc=${PIPESTATUS[0]}; echo "$rc" > "$RUNNER_TEMP/gate.rc"; exit "$rc"
+      # A pull_request runs only the test families its changed files select
+      # (build/ci-select.mjs + tests/families.json; unknown or empty selects
+      # everything) and records the selection in $RUNNER_TEMP/selection.txt so
+      # build/ci-summary.mjs can tell "release lane intentionally not run" from
+      # "release lane missing". A push to main always runs the full `npm test`.
       - id: suite
-        name: browser suite, then the full release lane
+        name: test families, then the release lane when selected
         shell: bash
         env:
           CI: true
         run: |
           set +e
-          npm test 2>&1 | tee "$RUNNER_TEMP/suite.log"
-          rc=${PIPESTATUS[0]}; echo "$rc" > "$RUNNER_TEMP/suite.rc"; exit "$rc"
+          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
+            sel=$(node build/ci-select.mjs --base HEAD^1)
+            echo "$sel" > "$RUNNER_TEMP/selection.txt"
+            {
+              echo "selected test families: $sel"
+              npm run build || exit 1
+              fail=0
+              for s in $sel; do npm run "$s" || fail=1; done
+              exit "$fail"
+            } 2>&1 | tee "$RUNNER_TEMP/suite.log"
+            rc=${PIPESTATUS[0]}
+          else
+            npm test 2>&1 | tee "$RUNNER_TEMP/suite.log"
+            rc=${PIPESTATUS[0]}
+          fi
+          echo "$rc" > "$RUNNER_TEMP/suite.rc"; exit "$rc"
       # NOT READY (a retry, skip, cancel or passing todo with a reason in the
       # release lane, or no release block at all) fails this step even when the
       # suite step went green.

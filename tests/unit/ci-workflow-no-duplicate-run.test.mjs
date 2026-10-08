@@ -113,5 +113,6 @@ test('ci runs the full release lane exactly once: gate.test.mjs first, then npm 
   assert.ok(gateAt < suites[0][1], 'gate.test.mjs must run before the browser suite so a size-budget failure surfaces in seconds');
   const pkg = JSON.parse(readFileSync(fileURLToPath(new URL('../../package.json', import.meta.url)), 'utf8'));
   assert.equal(pkg.scripts.posttest, 'npm run gate', 'npm test must still run the gate as posttest, or the lane would not run at all');
-  assert.ok(pkg.scripts.gate.includes('tests/release/*.test.mjs'), 'the gate script runs every release file');
+  assert.equal(pkg.scripts.gate, 'npm run test:release', 'gate stays an alias of test:release');
+  assert.ok(pkg.scripts['test:release'].includes('tests/release/*.test.mjs'), 'the release script runs every release file');
 });
