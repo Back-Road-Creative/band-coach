@@ -150,7 +150,7 @@ jobs:
 
       - name: upload the WACK report
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: wack-report
           path: store/wack/
@@ -165,7 +165,7 @@ jobs:
         run: echo "::warning::This .appx was built from a branch run. No release test run was checked for it, so it is not a release candidate. Only tag runs are gated on release.yml."
 
       - name: upload appx artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: band-coach-appx
           path: store/release/*.appx
