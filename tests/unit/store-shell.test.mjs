@@ -234,7 +234,7 @@ test('store/package.json does not add electron to the root install', () => {
   assert.ok(!rootDeps.includes('electron-builder'));
 
   const storePkg = JSON.parse(readFileSync(join(storeRoot, 'package.json'), 'utf8'));
-  assert.equal(storePkg.devDependencies.electron, '44.4.3');
+  assert.equal(storePkg.devDependencies.electron, '44.7.0');
   assert.equal(storePkg.devDependencies['electron-builder'], '26.15.3');
 });
 
