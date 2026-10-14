@@ -107,6 +107,23 @@ The `e4b6fb5` section above is kept as it stood at `4f0f210`. Four statements in
 | 6 | None: not reproduced in full Chromium (#377) | PASS: Windows lane W1 in a clean profile, extensions off, no console error or warning (report in the Windows lane row) |
 | 7 | #376 (`eb3d78e`), a fresh profile's first session is invited to play, not told nothing is due | PASS: `session-plan-coach-line` and `curriculum` (added to by #376) and `acceptance-first-visit`, npm test and gate at the commit |
 
+## Candidate: `e504c75` rebuilt on main, 2026-10-14
+
+| Field | Value |
+|---|---|
+| Commit | `e504c75` (`origin/main`, 2026-10-14, after the dependency bumps #479 to #482; 272 commits since `v1.9.0`). Supersedes `09f7c35` for the hand check: that record's artifact is no longer what `main` builds. |
+| Last published release | `v1.9.0`, tagged 2026-09-24; this candidate is not tagged yet |
+| Candidate artifact | `npm run stage` at `e504c75`: `dist/release/band-coach.html` sha256 `bcf76275e75e844f4c832d19e9842f4bc861a4295a8be9f2e9fda5885fb6664a`, 651,332 bytes, staged to `D:\band-coach.html` for the hand run. Three release builds at the commit gave the same bytes. Pages and the Store package wrap this same file. |
+| Platforms | As README 'Browser and device support', unchanged from `09f7c35`: headless Chromium in CI on every commit; windowed Chrome on Windows only through the Windows lane and the hand check; Firefox and Safari untested; phone sizes emulated only, real phones untested. |
+| Inputs | As README 'Browser and device support': computer keys, on-screen keys, a stubbed MIDI keyboard and a fake microphone in CI; real MIDI keyboards, e-kits and instruments through a real microphone untested beyond the hardware of the last hand run. |
+| Content | As README 'Beginner pathway status': every row's content review is provisional (no reviewer yet). |
+| Dependencies | Node v22.22.2; `npm ci` clean; `npm audit`: found 0 vulnerabilities. Electron 44.7.0 (Store edition, #482), axe-core 4.14.0 (#481). |
+| Automated checks | CI `test` green on `e504c75` (main run 38549136743, job 115802846693): suites of 5 tests (5 pass), 3796 tests (3795 pass, 0 fail, 1 skipped) and the release gate 227 tests (222 pass, 0 fail, 5 todo). No local suite run for this record. |
+| Windows lane | **Not run for this candidate.** The `09f7c35` lane report checked a different sha256, so README check steps 1, 5 and 6 are done by hand on this candidate unless the lane is rerun on `bcf76275…`. |
+| Manual runs | **Pending.** README "Before announcing a release: a five-minute human check", every step, on `D:\band-coach.html`, naming the machine, browser version and hardware, and the time the whole check took. Every **open** "Human on device" cell in the D2 / E9 ledger stays open until the person who ran them fills them in. |
+| Unresolved limitations | As `09f7c35`: step time estimates untimed; README check 2 (notes from a real keyboard) is human-only; the offline update check is not covered. |
+| Reviewer / date | _unsigned_ |
+
 ## D2 / E9 evidence ledger
 
 What the automated suite proves for each interaction, device and accessibility dimension, and
