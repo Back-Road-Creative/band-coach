@@ -120,14 +120,15 @@ The `e4b6fb5` section above is kept as it stood at `4f0f210`. Four statements in
 | Dependencies | Node v22.22.2; `npm ci` clean; `npm audit`: found 0 vulnerabilities. Electron 44.7.0 (Store edition, #482), axe-core 4.14.0 (#481). |
 | Automated checks | CI `test` green on `e504c75` (main run 38549136743, job 115802846693): suites of 5 tests (5 pass), 3796 tests (3795 pass, 0 fail, 1 skipped) and the release gate 227 tests (222 pass, 0 fail, 5 todo). No local suite run for this record. |
 | Windows lane | **Not run for this candidate.** The `09f7c35` lane report checked a different sha256, so README check steps 1, 5 and 6 are done by hand on this candidate unless the lane is rerun on `bcf76275…`. |
-| Manual runs | **Pending.** README "Before announcing a release: a five-minute human check", every step, on `D:\band-coach.html`, naming the machine, browser version and hardware, and the time the whole check took. Every **open** "Human on device" cell in the D2 / E9 ledger stays open until the person who ran them fills them in. |
+| Manual runs | **Verdict unknown.** JP ran the check on `D:\band-coach.html` (`e504c75`) at 06:31 ET on 2026-10-14; machine, browser, hardware, time and verdict were not recorded, so it is not counted as a pass. Still owed: that run's machine, browser version, hardware, time taken and verdict, from JP. Every **open** "Human on device" cell in the D2 / E9 ledger stays open until the person who ran them fills them in. |
 | Unresolved limitations | As `09f7c35`: step time estimates untimed; README check 2 (notes from a real keyboard) is human-only; the offline update check is not covered. |
 | Reviewer / date | _unsigned_ |
 
 ## D2 / E9 evidence ledger
 
 What the automated suite proves for each interaction, device and accessibility dimension, and
-what still needs a person on a real device. "Automated" names the test files that pin the
+what still needs a person on a real device. The "Human on device" column lists only what a person must check on real hardware or with
+real assistive technology; a row marked "Not a device item" needs nothing from a person. "Automated" names the test files that pin the
 behaviour in headless Chromium at `2f37dec`; it is never a claim about a real phone,
 screen reader or browser. An axe pass is not a "screen-reader-clean" claim.
 
@@ -135,37 +136,37 @@ screen reader or browser. An axe pass is not a "screen-reader-clean" claim.
 
 | Dimension | Automated (headless Chromium) | Human on device |
 |---|---|---|
-| 320 px phone width | `nav-readable-widths` (names at 320, no ellipsis, `#playBtn` in the first screen at 320x844); `journey-first-visit`, `visual-polish-r10` set 320/390 viewports | **open** |
+| 320 px phone width | `nav-readable-widths` (names at 320, no ellipsis, `#playBtn` in the first screen at 320x844); `journey-first-visit`, `visual-polish-r10` set 320/390 viewports | Not a device item: the automated column is the evidence |
 | 390 px phone width | `nav-readable-widths`, `songs-lesson-first`, `phone-objective-beside-start`, `kbd-focus-overview` (level-13 white keys clear the 40 px tap floor at the phone viewport); `withViewports` phone pass (390x844, touch) | **open**: touch-target size on the real Android phone (plan residual B2) |
-| Tablet and desktop | `withViewports` passes at 768x1024 (touch) and 1280x800 (mouse) in `nav-readable-widths` and `songs-lesson-first` | **open** |
-| Landscape | `landscape-no-sideways-scroll` (phone landscape 844x390 and tablet landscape 1024x768, both touch: no sideways scroll, nav labels readable with no ellipsis or overlap, `#playBtn` reachable and not covered once scrolled to) | **open** |
+| Tablet and desktop | `withViewports` passes at 768x1024 (touch) and 1280x800 (mouse) in `nav-readable-widths` and `songs-lesson-first` | Not a device item: the automated column is the evidence |
+| Landscape | `landscape-no-sideways-scroll` (phone landscape 844x390 and tablet landscape 1024x768, both touch: no sideways scroll, nav labels readable with no ellipsis or overlap, `#playBtn` reachable and not covered once scrolled to) | Not a device item: the automated column is the evidence |
 | Text enlargement | `withViewports` "phone-200%-text" pass (document zoom 200% at phone width) in `nav-readable-widths` and `songs-lesson-first`; `narrow-zoom-no-sideways-scroll` (real 195 and 240 px layouts, the width 200% page zoom gives a 390 px phone: no sideways scroll). There is no user-selected zoom in the app (plan residual B2). | **open**: browser or OS text scaling on a real device |
-| Both themes | `theme-toggle` (Light sets `data-theme`, survives reload, stage text readable in both, Dark then System clears it); `theme-contrast`, `badge-contrast`, `stage-contrast` (unit, computed ratios); `theme-pref-sanitize` | **open** |
-| Keyboard-only | `a11y-dialog-focus` (Tab trapped in the break card, wraps both ends), `a11y-panel-escape` (Escape closes a panel and returns focus to its nav button), `a11y-setup-sheet-focus`, `a11y-focus-restore`, `journey-songs` (Tab through the Songs panel) | **open**: a full journey from set-up to backup with no pointer |
+| Both themes | `theme-toggle` (Light sets `data-theme`, survives reload, stage text readable in both, Dark then System clears it); `theme-contrast`, `badge-contrast`, `stage-contrast` (unit, computed ratios); `theme-pref-sanitize` | Not a device item: the automated column is the evidence |
+| Keyboard-only | `a11y-dialog-focus` (Tab trapped in the break card, wraps both ends), `a11y-panel-escape` (Escape closes a panel and returns focus to its nav button), `a11y-setup-sheet-focus`, `a11y-focus-restore`, `journey-songs` (Tab through the Songs panel) | Not a device item. **Automation gap**: no test walks set-up to backup with no pointer (`kbd-journey-scenarios` stops short of backup and restore) |
 | Real assistive technology | None. `a11y-axe` runs axe-core 4.13.0 with wcag2a, wcag2aa, wcag21a, wcag21aa and wcag22aa tags across the app's main states; `a11y-describe` checks the canvas role, label and description target, the polite live region, and that the description never leaks an unrevealed note name. | **open**: NVDA or VoiceOver through a lesson |
 | Held, crossing and simultaneous notes | `note-state` (port, channel and pitch held set), `kbd-hands-together`, `hands-together`, `hands-together-gate`, `hands-together-stages`, `hands-together-timed`, `practice-chord-judge`, `chords`, `audio-analysis-chords` | **open**: a real MIDI keyboard; MIDI latency not measured (plan residual E4) |
 | Mixed drum set-ups | `drum-kit-trainer`, `drum-kit-mic`, `drum-kit-curriculum`, `computed-instruments-drum-kit`; both drum "mic + MIDI" fallback branches in the Connect handler have no direct test (noted in the C12 PR) | **open**: a real e-kit (E4a finding 4, E4b finding 1) |
-| Critical flows | `journey-first-visit`, `journey-songs`, `kbd-journey-scenarios` (four keyboard journeys, R2), `restore-staging`, `restore-preserves-latency`, `persistence`, `songs-resume`, release gate | **open**: README five-minute check on the downloaded file |
+| Critical flows | `journey-first-visit`, `journey-songs`, `kbd-journey-scenarios` (four keyboard journeys, R2), `restore-staging`, `restore-preserves-latency`, `persistence`, `songs-resume`, release gate | **unknown**: JP ran the README check on `D:\band-coach.html` (`e504c75`) at 06:31 ET on 2026-10-14; machine, browser, hardware, time and verdict were not recorded, so it is not a pass |
 
 ### E9 accessibility
 
 | Requirement | Automated (headless Chromium) | Human on device |
 |---|---|---|
-| Text contrast | `theme-contrast`, `badge-contrast`, `stage-contrast` compute ratios from the stylesheet; `theme-toggle` checks the computed stage colour in both themes; axe colour-contrast rule | **open** |
-| Keyboard access | See D2 "Keyboard-only" | **open** |
-| Reflow and text resizing | See D2 "320 px", "Tablet and desktop", "Text enlargement" | **open** |
-| Focus visibility and non-obscuration | `focus-visible-not-obscured` (a real Tab walk over first paint, Songs, Progress and Settings at 1280 and 390 px: every stop has a computed outline or box-shadow, is inside the viewport, and `elementFromPoint` at its centre returns it, so no fixed bar covers it). Checked red by removing the `:focus-visible` rule from the built file. | **open** |
-| Focus return after dialogs and panels | `a11y-dialog-focus`, `a11y-panel-escape`, `a11y-focus-restore`, `a11y-setup-sheet-focus` | **open** |
-| Alternatives to dragging | Only `src/ui/playalong.js` listens for pointer moves. `playalong-loop-without-drag` sets a loop start and end with only the Playhead range and the Set loop start/end buttons (no pointer, mouse or touch event dispatched) and checks the loop text, timeline region and stored loop points match. | **open** |
+| Text contrast | `theme-contrast`, `badge-contrast`, `stage-contrast` compute ratios from the stylesheet; `theme-toggle` checks the computed stage colour in both themes; axe colour-contrast rule | Not a device item: the automated column is the evidence |
+| Keyboard access | See D2 "Keyboard-only" | See D2 "Keyboard-only" |
+| Reflow and text resizing | See D2 "320 px", "Tablet and desktop", "Text enlargement" | Not a device item: the automated column is the evidence |
+| Focus visibility and non-obscuration | `focus-visible-not-obscured` (a real Tab walk over first paint, Songs, Progress and Settings at 1280 and 390 px: every stop has a computed outline or box-shadow, is inside the viewport, and `elementFromPoint` at its centre returns it, so no fixed bar covers it). Checked red by removing the `:focus-visible` rule from the built file. | Not a device item: the automated column is the evidence |
+| Focus return after dialogs and panels | `a11y-dialog-focus`, `a11y-panel-escape`, `a11y-focus-restore`, `a11y-setup-sheet-focus` | Not a device item: the automated column is the evidence |
+| Alternatives to dragging | Only `src/ui/playalong.js` listens for pointer moves. `playalong-loop-without-drag` sets a loop start and end with only the Playhead range and the Set loop start/end buttons (no pointer, mouse or touch event dispatched) and checks the loop text, timeline region and stored loop points match. | Not a device item: the automated column is the evidence |
 | Target size (24x24 AA; 44x44 product goal) | axe wcag22aa target-size rule; `kbd-focus-overview` 40 px floor for level-13 keys at phone width | **open**: real phone (B2) |
 | Canvas companion descriptions | `a11y-describe` (role, label, hidden description matches `describeTask()`, revealed sentence on a fail); live region is polite, so frame-by-frame note updates do not flood a reader | **open**: screen-reader walk-through of a task |
-| Stop and pause while playing | `a11y-wake-lock` (wake lock requested on start, released on end), `songs-switch-stops-recording`, `browser-exit-cleanup`, `session-teardown`, `playalong-teardown` | **open** |
-| Colour-independent marks | `a11y-reduced-motion` (a wrong note flashes a non-colour glyph by default) | **open** |
-| Reduced motion | `a11y-reduced-motion` (with `prefers-reduced-motion`, the canvas flash and glyph are skipped) | **open** |
-| Readable note and finger labels | `w-fingerings`, `w-fingerings-how`, step-view and tab-view tests pin the text | **open** |
-| Captioned or described demonstrations | "Play it" demonstrations are audio only; no caption or text description is rendered and no test asks for one. | **open**: product decision as well as evidence |
-| Honest construct for hearing and timed tasks | `docs/capabilities.md` maturity matrix; `assessed` tests pin which dimensions a step assesses; ear and theory adapters record no input (plan residual E5) | **open** |
-| Independent set-up, lesson, transport, help, results, backup | `journey-first-visit`, `kbd-journey-scenarios`, `learn-handoffs`, `songs-how-inline`, `w-history-print`, `restore-*` cover each step with a pointer or the debug hook | **open**: keyboard-only and screen-reader users end to end |
+| Stop and pause while playing | `a11y-wake-lock` (wake lock requested on start, released on end), `songs-switch-stops-recording`, `browser-exit-cleanup`, `session-teardown`, `playalong-teardown` | Not a device item: the automated column is the evidence |
+| Colour-independent marks | `a11y-reduced-motion` (a wrong note flashes a non-colour glyph by default) | Not a device item: the automated column is the evidence |
+| Reduced motion | `a11y-reduced-motion` (with `prefers-reduced-motion`, the canvas flash and glyph are skipped) | Not a device item: the automated column is the evidence |
+| Readable note and finger labels | `w-fingerings`, `w-fingerings-how`, step-view and tab-view tests pin the text | Not a device item: the automated column is the evidence |
+| Captioned or described demonstrations | "Play it" demonstrations are audio only; no caption or text description is rendered and no test asks for one. | Not a device item: **product decision** (add captions or a text description to "Play it", or record that it stays audio only) |
+| Honest construct for hearing and timed tasks | `docs/capabilities.md` maturity matrix; `assessed` tests pin which dimensions a step assesses; ear and theory adapters record no input (plan residual E5) | Not a device item: a content review, tracked in README "Beginner pathway status" |
+| Independent set-up, lesson, transport, help, results, backup | `journey-first-visit`, `kbd-journey-scenarios`, `learn-handoffs`, `songs-how-inline`, `w-history-print`, `restore-*` cover each step with a pointer or the debug hook | **open**: screen-reader user end to end (the keyboard-only half is the D2 "Keyboard-only" automation gap) |
 
 ### Release-blocking accessibility failures
 
