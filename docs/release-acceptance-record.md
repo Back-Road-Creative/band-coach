@@ -8,6 +8,14 @@ is a claim that the app is ready; a blank "Reviewer" line means nobody has signe
 Copy the latest record to a new section for each candidate rather than editing the old one. A
 later content or code change gets its own record; it never inherits an earlier sign-off.
 
+A tag now requires two things before it counts as released. `release.yml` refuses unless
+`ci.yml` has a successful run on the tag's commit. `release-consistency.yml` then checks that
+the published `band-coach.html` has the same sha256 as the tested build of that tag, and runs
+`build/check-acceptance-record.mjs`: the newest (last) `## Candidate:` section must name the
+tag's commit, short or full, and no row in it may be open. A row that only a person on a
+device can close is written `**device-only: <why>**` (a missing reason fails); a bare
+`**open**`, `**Pending.**` or `**Not run**` row is agent-executable and fails.
+
 ## How to fill one in
 
 1. **Commit and artifact.** `git rev-parse HEAD` for the commit; `npm run build -- --release`
