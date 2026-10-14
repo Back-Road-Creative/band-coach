@@ -27,6 +27,9 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The record check below walks from the recorded candidate to the tag.
+          fetch-depth: 0
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
@@ -53,6 +56,12 @@ jobs:
             exit 1
           fi
           echo "ci.yml succeeded on $GITHUB_SHA"
+      # The acceptance record must name this tag's candidate (the tag commit, or
+      # an ancestor with only docs/ changed since) with no open agent-executable
+      # row. Checked here so a stale record stops the tag before it publishes;
+      # release-consistency.yml re-checks it after.
+      - name: acceptance record must name this candidate
+        run: node build/check-acceptance-record.mjs docs/release-acceptance-record.md "$GITHUB_SHA"
       - run: npm ci
       - run: npm test
         env:

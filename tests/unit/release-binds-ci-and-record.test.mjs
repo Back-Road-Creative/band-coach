@@ -23,6 +23,14 @@ test('release.yml: a successful ci.yml run for the tag commit is required before
   assert.doesNotMatch(step, /continue-on-error/);
 });
 
+test('release.yml: the acceptance record is checked against the tag before publish, with full history', () => {
+  const t = wf('release.yml');
+  const at = t.indexOf('node build/check-acceptance-record.mjs docs/release-acceptance-record.md "$GITHUB_SHA"');
+  assert.notEqual(at, -1, 'release.yml must run the record check, not only release-consistency after publish');
+  assert.ok(at < t.indexOf('gh release create'), 'record check must precede publish');
+  assert.match(t, /fetch-depth: 0/, 'the candidate ancestry check needs history');
+});
+
 test('release-consistency.yml: sha256 compare and the record check are wired in', () => {
   const t = wf('release-consistency.yml');
   assert.match(t, /node build\/check-acceptance-record\.mjs docs\/release-acceptance-record\.md "\$TAG_SHA"/);
@@ -31,4 +39,5 @@ test('release-consistency.yml: sha256 compare and the record check are wired in'
   assert.match(t, /sha256sum dist\/release\/band-coach\.html/);
   assert.match(t, /\[ "\$published" != "\$built" \]/);
   assert.match(t, /uses: actions\/checkout@/);
+  assert.match(t, /ref: \$\{\{ steps\.tag\.outputs\.tag \}\}\n\s+fetch-depth: 0/, 'the record check walks from the candidate to the tag');
 });

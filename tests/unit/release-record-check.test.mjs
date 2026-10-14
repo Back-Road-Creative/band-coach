@@ -11,9 +11,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { checkRecord } from '../../build/check-acceptance-record.mjs';
 
@@ -85,4 +85,35 @@ test('the CLI exits non-zero on a stale record and zero on a good one, and says 
   const bad = run(rec(good, 'e504c75'));
   assert.notEqual(bad.status, 0);
   assert.match(bad.stderr, /does not name 1874d63/);
+});
+
+// A commit cannot hold its own sha, so the record names the candidate and the
+// tag goes on a later commit that only records it. The CLI accepts the named
+// candidate when it is the tag commit, or an ancestor whose changes up to the
+// tag touch docs/ only; a code change after the candidate makes it stale.
+test('the CLI accepts a candidate recorded by a docs-only commit and refuses one with code after it', () => {
+  const repo = mkdtempSync(join(tmpdir(), 'bc-rec-git-'));
+  const script = fileURLToPath(new URL('../../build/check-acceptance-record.mjs', import.meta.url));
+  const git = (...a) => {
+    const r = spawnSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@example.test', '-c', 'commit.gpgsign=false', ...a], { cwd: repo, encoding: 'utf8' });
+    assert.equal(r.status, 0, r.stderr);
+    return r.stdout.trim();
+  };
+  const commit = (path, body, msg) => {
+    mkdirSync(join(repo, dirname(path)), { recursive: true });
+    writeFileSync(join(repo, path), body);
+    git('add', '-A');
+    git('commit', '-q', '-m', msg);
+    return git('rev-parse', 'HEAD');
+  };
+  git('init', '-q');
+  const cand = commit('src/app.js', 'v1\n', 'code');
+  const recorded = commit('docs/release-acceptance-record.md', rec(good, cand.slice(0, 7)), 'docs: record candidate');
+  const check = (tag) => spawnSync('node', [script, join(repo, 'docs/release-acceptance-record.md'), tag], { cwd: repo, encoding: 'utf8' });
+  const ok = check(recorded);
+  assert.equal(ok.status, 0, ok.stderr);
+  const later = commit('src/app.js', 'v2\n', 'more code');
+  const stale = check(later);
+  assert.notEqual(stale.status, 0, 'code changed after the candidate: the record is stale');
+  assert.match(stale.stderr, /src\/app\.js/, 'names the file that changed after the candidate');
 });
