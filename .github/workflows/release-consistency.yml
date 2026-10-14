@@ -121,6 +121,41 @@ jobs:
           fi
           echo "latest resolves to $TAG, and its download URL returns 200"
 
+      # The file people download must be the file that was tested: rebuild the
+      # tag's release file (the build is byte-reproducible; the acceptance
+      # record says so) and compare its sha256 with the published asset's. The
+      # same checkout feeds the record check: the newest candidate section of
+      # docs/release-acceptance-record.md must name this tag's commit and have
+      # no open agent-executable row (build/check-acceptance-record.mjs).
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ steps.tag.outputs.tag }}
+          fetch-depth: 0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+      - run: npm ci
+      - name: the published asset must be byte-identical to the tested build of this tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern band-coach.html --dir "$RUNNER_TEMP/published"
+          npm run build -- --release
+          published="$(sha256sum "$RUNNER_TEMP/published/band-coach.html" | cut -d' ' -f1)"
+          built="$(sha256sum dist/release/band-coach.html | cut -d' ' -f1)"
+          if [ "$published" != "$built" ]; then
+            echo "::error::The band-coach.html published for $TAG has sha256 $published, but the tested build of that tag is $built. The file people download is not the file that was tested; do not announce this release." >&2
+            exit 1
+          fi
+          echo "published asset equals the tested build: $built"
+      - name: the acceptance record must name this tag and have no open agent-executable row
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          TAG_SHA="$(git rev-parse "$TAG^{commit}")"
+          node build/check-acceptance-record.mjs docs/release-acceptance-record.md "$TAG_SHA"
+
       # GitHub Pages deployment lags the tag push -- pages.yml has to build
       # dist/pages, upload the artifact, and let deploy-pages roll it out to
       # the CDN, which is normally a couple of minutes but is not

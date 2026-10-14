@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: write
+  actions: read
 
 jobs:
   # pages.yml and store-package.yml wait for this workflow's run on the same
@@ -26,6 +27,9 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The record check below walks from the recorded candidate to the tag.
+          fetch-depth: 0
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
@@ -40,6 +44,24 @@ jobs:
           fi
       - name: record Chrome version
         run: '"$CHROME_BIN" --version >> "$GITHUB_STEP_SUMMARY"'
+      # A tag on a commit whose ci.yml run is missing or red must not publish.
+      # This runs before npm ci so a refused tag costs seconds, not a suite.
+      - name: ci.yml must have succeeded on this commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          found="$(gh run list --workflow ci.yml --commit "$GITHUB_SHA" --status success --json databaseId --jq length)"
+          if [ "${found:-0}" -lt 1 ]; then
+            echo "::error::No successful ci.yml run exists for commit $GITHUB_SHA, so tag $GITHUB_REF_NAME cannot be released. Wait for ci.yml to go green on this commit (or fix it and tag the fixed commit), then re-run this workflow." >&2
+            exit 1
+          fi
+          echo "ci.yml succeeded on $GITHUB_SHA"
+      # The acceptance record must name this tag's candidate (the tag commit, or
+      # an ancestor with only docs/ changed since) with no open agent-executable
+      # row. Checked here so a stale record stops the tag before it publishes;
+      # release-consistency.yml re-checks it after.
+      - name: acceptance record must name this candidate
+        run: node build/check-acceptance-record.mjs docs/release-acceptance-record.md "$GITHUB_SHA"
       - run: npm ci
       - run: npm test
         env:
