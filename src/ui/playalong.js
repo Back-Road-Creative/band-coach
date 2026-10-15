@@ -72,7 +72,7 @@ function mountPlayalong(el, api) {
     '<p id="paSavedHint" class="pa-note" hidden></p>' +
     '<div class="row pa-open">' +
     '<button type="button" id="paBackToSongsBtn" class="small">Back to songs</button>' +
-    '<label class="small file-label" for="paFileInput">Open a recording</label>' +
+    '<label class="small file-label" for="paFileInput" tabindex="0" role="button">Open a recording</label>' +
     '<input type="file" accept="audio/*" id="paFileInput" hidden>' +
     '<button type="button" id="paRecordBtn" class="small">Record a take</button>' +
     '<span id="paFileName" class="pa-filename"></span>' +

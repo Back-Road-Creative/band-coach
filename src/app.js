@@ -2422,6 +2422,8 @@ import { register as registerPathway } from './ui/pathway.js';
   if (navigator.mediaDevices && navigator.mediaDevices.addEventListener) navigator.mediaDevices.addEventListener('devicechange', refreshMicDevices);
   if ($('calibrateBtn')) $('calibrateBtn').addEventListener('click', function () { this.blur(); calibrateNoiseFloor(); });
   document.addEventListener('keydown', ev => {
+    // A file picker is a <label> for a hidden file input (Restore a backup, Open a recording): Enter or Space opens the chooser, as a click does.
+    if (ev.target.matches && ev.target.matches('label.file-label[for]') && (ev.key === 'Enter' || ev.key === ' ')) { ev.preventDefault(); const input = document.getElementById(ev.target.htmlFor); if (input) input.click(); return; }
     if (ev.repeat || ev.ctrlKey || ev.metaKey || ev.altKey) return; const tag = ev.target.tagName; if (tag === 'SELECT' || tag === 'TEXTAREA' || (tag === 'INPUT' && ev.target.type !== 'checkbox') || ev.target.isContentEditable) return;
     if (mod === 'rhy' && (ev.key === ' ' || ev.key.length === 1)) { if (tag === 'BUTTON' && ev.key === ' ' && ev.target.id !== 'tapPad') return; ev.preventDefault(); ensureAudio(); onTap(ev); return; }
     if (MODS[mod] && MODS[mod].kit && KIT_KEYS[ev.key.toLowerCase()]) { ev.preventDefault(); ensureAudio(); onHit(KIT_KEYS[ev.key.toLowerCase()], tapAudioTime(ev), 'key'); return; }
