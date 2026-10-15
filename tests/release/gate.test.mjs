@@ -5,16 +5,18 @@
 //
 // Run via `npm run gate`, which builds `--release` first. This file assumes
 // dist/release/band-coach.html already exists; it does not build it.
+// BAND_COACH_HTML points it at another copy: release.yml re-runs it on the
+// file downloaded back from the published release.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, statSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { launchPage, effectiveWaitMs } from '../helpers/browser.mjs';
+import { launchPage, effectiveWaitMs, acceptanceHtmlPath } from '../helpers/browser.mjs';
 import { FAKE_MIDI_INIT, midiAddPort, midiNoteOn } from '../helpers/fake-midi.mjs';
 
-const RELEASE_HTML = fileURLToPath(new URL('../../dist/release/band-coach.html', import.meta.url));
+const RELEASE_HTML = acceptanceHtmlPath();
 const PKG = JSON.parse(readFileSync(fileURLToPath(new URL('../../package.json', import.meta.url)), 'utf8'));
 const SIZE_BUDGET_BYTES = 1.5 * 1024 * 1024;
 

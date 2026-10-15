@@ -56,6 +56,11 @@ Replacing the asset in place (`gh release upload vX.Y.Z band-coach.html --clobbe
 but the file then no longer matches the tag's build, and holders of the bad file still see the same
 version number, so they are never told to update. Prefer a new version.
 
+A `release.yml` run that fails at "prove the downloaded release file" has already published the
+release: the downloaded asset differed from the gate's file or failed the gate or the A01 journey.
+Pages and the Store package wait for a successful run, so only the GitHub release is out; withdraw
+it as above.
+
 `release-consistency.yml` runs only after a successful `release.yml`, and checks the release for
 the tag it was given. Do not re-run it for a withdrawn tag; it will fail, correctly.
 

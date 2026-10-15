@@ -80,6 +80,20 @@ jobs:
           gh release create "$GITHUB_REF_NAME" dist/release/band-coach.html \
             --title "Band Coach $GITHUB_REF_NAME" \
             --generate-notes
+      # The file a learner downloads must be the gate's file and must still pass:
+      # download it back, byte-compare, and re-run the gate plus one journey on
+      # the download. A failure fails this run, so pages.yml and
+      # store-package.yml (which wait for it) ship nothing and the site is not
+      # notified; tests/unit/release-workflow-budget-evidence.test.mjs T7 pins it.
+      - name: prove the downloaded release file
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CI: true
+          BAND_COACH_HTML: ${{ runner.temp }}/published/band-coach.html
+        run: |
+          gh release download "$GITHUB_REF_NAME" -p band-coach.html -D "$RUNNER_TEMP/published"
+          cmp "$RUNNER_TEMP/published/band-coach.html" dist/release/band-coach.html
+          node --test tests/release/gate.test.mjs tests/release/acceptance-first-visit.test.mjs
       - name: check for HEADLESSMODE_DISPATCH_TOKEN
         id: headlessmode-token
         run: |
