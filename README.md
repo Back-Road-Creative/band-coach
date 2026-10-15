@@ -1505,7 +1505,11 @@ To cut a release:
 zero network calls, zero console errors, the debug hook is gone, the version is stamped, and a note
 played into a fake microphone is actually heard), then publishes that one file as `band-coach.html`
 on the GitHub release. The job fails the tag if it doesn't match `package.json`'s version, and fails
-the gate if the file exceeds a 1.5 MB size budget.
+the gate if the file exceeds a 1.5 MB size budget. After publishing it downloads `band-coach.html`
+back from the release, byte-compares it with the gate's file, and re-runs the gate and the A01
+first-visit journey on the downloaded copy (`BAND_COACH_HTML` points both at it). A failure there
+fails the run, so pages.yml and store-package.yml ship nothing and the site is not notified; the
+release itself is already public, so withdraw it as `docs/release-recovery.md` section 1 says.
 
 release.yml, pages.yml and store-package.yml each only prove their own artifact built -- none of
 them checks that the three still agree once the tag has finished rolling out.

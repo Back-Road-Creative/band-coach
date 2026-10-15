@@ -113,3 +113,31 @@ test('T6 a failed or cancelled run uploads its test artifacts as the last step',
   const days = up.text.match(/^ {10}retention-days: (\d+)$/m);
   assert.ok(days && Number(days[1]) >= 1 && Number(days[1]) <= 14, 'retention-days must be an integer from 1 to 14');
 });
+
+// BC-E3: the gate tested dist/release/band-coach.html on the runner; this proves
+// the file a learner actually downloads from the release is that same file and
+// still passes. A failure here fails the run, so pages.yml and
+// store-package.yml (which wait for this run's success) never ship it, and the
+// Headless Mode site is not notified.
+test('T7 the published file is downloaded back, byte-checked and re-tested before anyone is told', () => {
+  const pub = named('publish GitHub release');
+  const proofIdx = named('prove the downloaded release file');
+  assert.equal(proofIdx, pub + 1, `the download proof is step ${proofIdx}, publish is step ${pub}: it must follow publish directly`);
+  const proof = all[proofIdx];
+  assert.match(proof.run, /gh release download "\$GITHUB_REF_NAME" -p band-coach\.html -D "\$RUNNER_TEMP\/published"/, 'it must download the published asset by tag');
+  assert.match(proof.run, /\bcmp "\$RUNNER_TEMP\/published\/band-coach\.html" dist\/release\/band-coach\.html\b/, 'it must byte-compare the download with the gate file');
+  const node = proof.run.split('\n').find((l) => /\bnode --test\b/.test(l)) || '';
+  assert.match(node, /tests\/release\/gate\.test\.mjs/, 'it must re-run the release gate');
+  assert.match(node, /tests\/release\/acceptance-first-visit\.test\.mjs/, 'it must re-run one acceptance journey');
+  assert.match(proof.text, /\n\s+GH_TOKEN: \$\{\{ github\.token \}\}/, 'gh needs the job token');
+  assert.match(proof.text, /\n\s+CI: true\b/, 'the re-run must fail closed like the gate (CI: true)');
+  assert.match(proof.text, /\n\s+BAND_COACH_HTML: \$\{\{ runner\.temp \}\}\/published\/band-coach\.html\b/, 'the tests must drive the downloaded file');
+  const notify = [named('check for HEADLESSMODE_DISPATCH_TOKEN'), named('Notify the Headless Mode site')];
+  assert.ok(notify.every((i) => i > proofIdx), 'the site is notified only after the proof');
+});
+
+test('T8 the release gate drives the file BAND_COACH_HTML names, like the acceptance lane', () => {
+  const gate = readFileSync(fileURLToPath(new URL('../release/gate.test.mjs', import.meta.url)), 'utf8');
+  assert.match(gate, /\bacceptanceHtmlPath\(\)/, 'gate.test.mjs must take its file from acceptanceHtmlPath() so BAND_COACH_HTML can point it at the download');
+  assert.doesNotMatch(gate, /new URL\('\.\.\/\.\.\/dist\/release\/band-coach\.html'/, 'gate.test.mjs must not hard-code the build path');
+});
