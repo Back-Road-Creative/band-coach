@@ -64,11 +64,10 @@ test('T1 the tag run budget is at least ci.yml budget, which runs the same work'
   assert.ok(rel[0] >= Math.max(...ci), `release.yml allows ${rel[0]} min but ci.yml allows ${Math.max(...ci)} min for the same suite and gate runs; a later ci.yml rise must be followed here`);
 });
 
-test('T2 the workflow keeps its name and tag trigger and has no manual trigger', () => {
+test('T2 the workflow keeps its name and tag trigger; its manual trigger is a dry run (release-dry-run.test.mjs pins the guards)', () => {
   assert.match(release, /^name: release$/m, 'release-consistency.yml fires on workflow_run of "release"');
   assert.match(release, /tags:\s*\n\s*- 'v\*'/, 'release.yml should run on v* tags');
-  // release-consistency.yml treats every successful "release" run as a published tag, so a manual trigger needs its own guards first.
-  assert.doesNotMatch(release, /workflow_dispatch/, 'a manual trigger would let a run that published nothing read as a release');
+  assert.match(release, /^  workflow_dispatch:/m, 'a dispatch run exercises the release path without a tag');
 });
 
 test('T3 the release lane runs once, as npm test\'s posttest, and the file it tested is the file published', () => {

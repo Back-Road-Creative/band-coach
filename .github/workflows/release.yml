@@ -4,6 +4,14 @@ on:
   push:
     tags:
       - 'v*'
+  # A dispatch run is a dry run: it builds, runs the suite (with its posttest
+  # release lane) and records the tested-file hash, but every step that needs a
+  # tag or has an outside effect is guarded by
+  # `github.event_name == 'push' && github.ref_type == 'tag'`, so it publishes
+  # and notifies nothing. pages.yml and store-package.yml count only
+  # `--event push` runs of this workflow, and release-consistency.yml ignores a
+  # non-push run; tests/unit/release-dry-run.test.mjs pins all three.
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -33,9 +41,15 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
+      # One commit, one candidate: the release footer's date is the commit's
+      # (build/build.mjs reads SOURCE_DATE_EPOCH), as in ci.yml, so a rebuild of
+      # the same commit is byte-identical.
+      - name: pin the build date to the commit
+        run: echo "SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)" >> "$GITHUB_ENV"
       - name: locate Chrome
         run: echo "CHROME_BIN=$(which google-chrome)" >> "$GITHUB_ENV"
       - name: tag must match package.json version
+        if: github.event_name == 'push' && github.ref_type == 'tag'
         run: |
           pkg_version="v$(node -p "require('./package.json').version")"
           if [ "$GITHUB_REF_NAME" != "$pkg_version" ]; then
@@ -75,6 +89,7 @@ jobs:
       - name: record the hash of the file the release lane tested
         run: sha256sum dist/release/band-coach.html > "$RUNNER_TEMP/tested.sha256"
       - name: publish GitHub release
+        if: github.event_name == 'push' && github.ref_type == 'tag'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -88,6 +103,7 @@ jobs:
       # store-package.yml (which wait for it) ship nothing and the site is not
       # notified; tests/unit/release-workflow-budget-evidence.test.mjs T7 pins it.
       - name: prove the downloaded release file
+        if: github.event_name == 'push' && github.ref_type == 'tag'
         env:
           GH_TOKEN: ${{ github.token }}
           CI: true
@@ -96,7 +112,19 @@ jobs:
           gh release download "$GITHUB_REF_NAME" -p band-coach.html -D "$RUNNER_TEMP/published"
           cmp "$RUNNER_TEMP/published/band-coach.html" dist/release/band-coach.html
           node --test tests/release/gate.test.mjs tests/release/acceptance-first-visit.test.mjs
+      # A dispatch run stops here: say what a tag run would have published.
+      - name: summarise what a tag run would publish
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          {
+            echo "### Dry run: nothing was published or notified"
+            echo "A tag push of this commit would publish dist/release/band-coach.html ($(wc -c < dist/release/band-coach.html) bytes) as the release asset, with this sha256:"
+            echo '```'
+            cat "$RUNNER_TEMP/tested.sha256"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
       - name: check for HEADLESSMODE_DISPATCH_TOKEN
+        if: github.event_name == 'push' && github.ref_type == 'tag'
         id: headlessmode-token
         run: |
           if [ -n "${{ secrets.HEADLESSMODE_DISPATCH_TOKEN }}" ]; then
@@ -105,10 +133,10 @@ jobs:
             echo "present=false" >> "$GITHUB_OUTPUT"
           fi
       - name: warn if the Headless Mode site will not be notified
-        if: steps.headlessmode-token.outputs.present != 'true'
+        if: github.event_name == 'push' && github.ref_type == 'tag' && steps.headlessmode-token.outputs.present != 'true'
         run: echo "::warning::HEADLESSMODE_DISPATCH_TOKEN not set — site not notified; its daily poll picks the release up within 24h"
       - name: Notify the Headless Mode site
-        if: steps.headlessmode-token.outputs.present == 'true'
+        if: github.event_name == 'push' && github.ref_type == 'tag' && steps.headlessmode-token.outputs.present == 'true'
         continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.HEADLESSMODE_DISPATCH_TOKEN }}
