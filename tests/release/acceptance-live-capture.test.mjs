@@ -7,21 +7,12 @@
 //
 // What is asserted is what the learner is told, in order: a pass is the FIRST thing said about the
 // target pluck, a wrong note names both notes and the way to move, a silent room and a noisy room
-// and a chord each get their own plain sentence. Known and not asserted: after a correct pass a
-// still-ringing string can be judged against the NEXT item, so a stray "That was E, the note is A"
-// can follow a pass. Unit Q10d fixed the first cause (src/app.js present() no longer re-arms a note
-// that is still ringing at a task start) and unit Q10d-2 the second (the quiet rule now releases a
-// ringing note after 0.1 s of delivered quiet, not after three frames). Remaining: a false onset after
-// a clarity dropout (src/app.js:1404) and the quiet-at-present branch (src/app.js:1062); the test.todo
-// entries below name them. Live-capture strays out of 42 runs (clipped 20, loud 10, decay999 6, quiet
-// 6), before then after Q10d-2, in seven back-to-back pairs, one run each, none retried: 5 then 2 (load 21
-// to 45), 3 then 1 (load 5 to 30), 1 then 1 (load 13 to 26), 18 then 19 (load 36 to 54), 17 then 11 (load 29
-// to 35), 4 then 14 (load 26 to 39) and 12 then 10 (load 14 to 23): 1 to 19 of 42 across load 5 to 54. The
-// strays of the last three pairs were false onsets, plus quiet-rule strays in the parent runs only (5, 1
-// and 1; none at head). The rate follows the machine's load more than the change, and the change does not
-// touch the onset path.
-// The literal claims they break (T1 and T7: no "That was" record in the window; T4: one pass and
-// nothing else) stay todos: the rate moves with machine load, so no literal claim is deterministic.
+// and a chord each get their own plain sentence, and a note that is passed and keeps ringing is not
+// corrected against the next item (T1, T4, T7: no "That was" record in the 7 s after the pass). That
+// last claim was a set of todos while a false onset (the ring dipping and coming back read as a new
+// attack) and an exact-0 capture dropout at a task start could still release a ringing note; both
+// are fixed (src/app.js onPitch ringEnv, src/audio/levels.js ringBefore) and pinned without a browser
+// clock in tests/characterization/onset-ring-envelope.test.mjs.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { withAcceptancePage, effectiveWaitMs } from '../helpers/browser.mjs';
@@ -118,14 +109,7 @@ for (const [label, gain] of [['quiet', 0.12], ['loud', 1.0]]) {
   });
 }
 
-// Q10d fixed the present() re-arm (src/app.js:1062) and Q10d-2 the quiet rule (a ringing note is released
-// by 0.1 s of delivered quiet, src/app.js:1406). Residual causes still let a ring fire against the next
-// item in live capture, so these stay todos: (a) a false onset on a clipped or long ring right after a
-// clarity dropout (src/audio/onset.js; the pluck branch's `if (fr.onset) { released = true; stableN = 0; }`,
-// src/app.js:1404), the commonest cause in the p3 runs; (b) the quiet-at-present branch (src/app.js:1062),
-// seen in the p1q replay at about 2 of 42. p3 rates (clipped 20, loud 10, decay999 6, quiet 6), before
-// then after Q10d-2: 5/42 then 2/42, 3/42 then 1/42, 1/41 then 1/42, 18/42 then 19/42, 17/42 then 11/42,
-// 4/42 then 14/42, 12/42 then 10/42, at load 5 to 54. JP decides.
+// T1 (literal): after the pass the old note rings out and is never corrected against the next item.
 for (const [label, gain] of [['quiet', 0.12], ['loud', 1.0]]) {
   test(`T1 (literal) no "That was" record in the window after a correct ${label} pluck`, async (t) => {
     await run(t, `t1l-${label}`, [{ at: AT, midis: [GTR.midi], gain }], {}, GTR, (page) => assertPassedOnceThenNothing(page, `${label} pluck`));
@@ -160,14 +144,8 @@ test('T3 the same wrong note plucked three times in one loop is corrected each t
   });
 });
 
-// T4 (decaying note, decay 0.999: one pass, no "That was" record in the window; protecting mutation
-// src/audio/onset.js thresholdMult = 2.2 -> 0 and minFlux = 0.02 -> 0) is not yet green with the
-// present() fix alone.
-// Q10d fixed the present() re-arm (src/app.js:1062) and Q10d-2 the quiet rule (src/app.js:1406); residual
-// causes remain (a: false onset after a clarity dropout, src/audio/onset.js and src/app.js:1404; b: quiet
-// at a task start, src/app.js:1062). the decay999 case strayed in 1 of 6 in p1c (load not recorded) and, in the last three p3
-// pairs, in 2 then 3, 0 then 0 and 1 then 0 of 6 (before then after Q10d-2), so the claim is load-dependent,
-// not deterministic. JP decides.
+// T4: a decaying note (decay 0.999: one pass, no "That was" record in the window; protecting mutation
+// src/audio/onset.js thresholdMult = 2.2 -> 0 and minFlux = 0.02 -> 0).
 test('T4 a decaying correct note is passed once and never corrected', async (t) => {
   await run(t, 't4', [{ at: AT, midis: [GTR.midi], gain: 0.6, decay: 0.999 }], {}, GTR, (page) => assertPassedOnceThenNothing(page, 'decaying pluck'));
 });
@@ -201,12 +179,7 @@ test('T7 a clipped pluck of the target note is passed, never corrected first', a
   });
 });
 
-// The same after-pass re-fire as T1, on the clipped note.
-// Q10d fixed the present() re-arm (src/app.js:1062) and Q10d-2 the quiet rule (src/app.js:1406); the
-// residual cause is a false onset after a clarity dropout (src/audio/onset.js and src/app.js:1404), plus
-// the quiet-at-present branch (src/app.js:1062). p3 strays out of all 42 runs, before then after Q10d-2:
-// 5 then 2, 3 then 1, 1 then 1, 18 then 19, 17 then 11, 4 then 14, 12 then 10, at load 5 to 54 (see the
-// header). JP decides.
+// T7 (literal): the same after-pass claim as T1, on the clipped note.
 test('T7 (literal) no "That was" record at all after a clipped pluck of the target', async (t) => {
   await run(t, 't7l', [{ at: AT, midis: [GTR.midi], gain: 4 }], {}, GTR, (page) => assertPassedOnceThenNothing(page, 'clipped pluck'));
 });
