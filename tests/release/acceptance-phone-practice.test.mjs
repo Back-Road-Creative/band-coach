@@ -57,7 +57,7 @@ const POLICY_TEXT = { [NO_SCROLL]: 'no scrolling after Start', [ONE_SCROLL]: 'on
 const SIZES = [
   { name: '320x568', vp: { width: 320, height: 568, mobile: true, deviceScaleFactor: 2 }, keyboard: ONE_SCROLL, kit: ONE_SCROLL },
   { name: '390x844', vp: { width: 390, height: 844, mobile: true, deviceScaleFactor: 3 }, keyboard: NO_SCROLL, kit: ONE_SCROLL },
-  { name: '844x390', vp: { width: 844, height: 390, mobile: true, deviceScaleFactor: 3 }, keyboard: ONE_SCROLL, kit: ONE_SCROLL },
+  { name: '844x390', vp: { width: 844, height: 390, mobile: true, deviceScaleFactor: 3 }, keyboard: NO_SCROLL, kit: NO_SCROLL },
   { name: '640x400', vp: { width: 640, height: 400, mobile: false, deviceScaleFactor: 2 }, keyboard: ONE_SCROLL, kit: ONE_SCROLL },
 ];
 const readmeClause = (s) => `${s.name}: keyboard ${POLICY_TEXT[s.keyboard]}, drum kit ${POLICY_TEXT[s.kit]}`;
@@ -432,4 +432,42 @@ test('A06 phone sizes: a learner sees and plays the keyboard and kit, and sees w
     for (const size of SIZES) await runSize(t, page, size);
     await runDesktop(t, page);
   });
+});
+
+// U2: a short phone (landscape) or a phone mid-practice gives the first screen to the prompt and the instrument:
+// the tagline goes and the nav is one row; both come back when the session ends.
+test('U2 compact header: short and practising phones put Start and the canvas on the first screen', async (t) => {
+  const vis = (page, sel) => page.evaluate(`(() => { const e = document.querySelector(${JSON.stringify(sel)}); if (!e) return false; const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0 && getComputedStyle(e).visibility !== 'hidden'; })()`);
+  const box = (page, sel) => page.evaluate(`(() => { const r = document.querySelector(${JSON.stringify(sel)}).getBoundingClientRect(); return { y: Math.round(r.top), b: Math.round(r.bottom) }; })()`);
+  for (const vp of [{ width: 844, height: 390, mobile: true, deviceScaleFactor: 3 }, { width: 390, height: 844, mobile: true, deviceScaleFactor: 3 }]) {
+    await t.test(`${vp.width}x${vp.height}`, async (st) => {
+      await withAcceptancePage(st, { initScript: PAGE_SCRIPT + "\nif (sessionStorage.getItem('__fresh')) { sessionStorage.removeItem('__fresh'); localStorage.clear(); }" }, async (page) => {
+        await page.setViewport(vp);
+        const fresh = "!document.getElementById('picker').hidden && !/:/.test(document.getElementById('navInstrument').textContent)";
+        for (let i = 0; i < 4 && !(i && await page.evaluate(fresh)); i++) { await page.evaluate("sessionStorage.setItem('__fresh', '1')"); await page.reload(); await page.waitFor("document.getElementById('playBtn') !== null"); }
+        assert.ok(await page.evaluate(fresh), 'the page is a first visit');
+        await raf(page);
+        const landscape = vp.height <= 600;
+        const p = await box(page, '#playBtn');
+        st.diagnostic(`${vp.width}x${vp.height} Start at first paint: ${JSON.stringify(p)}`);
+        assert.ok(p.y >= 0 && p.b <= vp.height, `Start spans y ${p.y}..${p.b} in a ${vp.height}px viewport`);
+        if (landscape) assert.equal(await vis(page, '.sub'), false, 'the tagline is hidden on a short screen');
+        await pickInstrument(page, 'kbd', 'Keyboard');
+        await startSession(page);
+        const c = await box(page, '#cv');
+        st.diagnostic(`${vp.width}x${vp.height} canvas after Start: ${JSON.stringify(c)}`);
+        assert.ok(c.y >= 0 && c.b <= vp.height, `canvas spans ${c.y}..${c.b} in a ${vp.height}px viewport`);
+        if (landscape) assert.ok(c.y <= 200, `canvas top is ${c.y}, expected the prompt and canvas near the top (<= 200)`);
+        assert.equal(await vis(page, '.sub'), false, 'the tagline is hidden while practising');
+        const navDuring = await box(page, '#mainNav');
+        await tapOnScreen(page, 'endBtn');
+        await page.waitFor("document.getElementById('playBtn').textContent.trim() === 'Start'");
+        await raf(page);
+        if (!landscape) assert.equal(await vis(page, '.sub'), true, 'the tagline is back after End');
+        assert.equal(await vis(page, '#mainNav'), true, 'the nav is back after End');
+        const navAfter = await box(page, '#mainNav');
+        st.diagnostic(`${vp.width}x${vp.height} nav height during ${navDuring.b - navDuring.y}, after ${navAfter.b - navAfter.y}`);
+      });
+    });
+  }
 });

@@ -559,6 +559,21 @@
      Compaction only: tighter padding and gaps, a shorter canvas, and a visual order that puts
      the feedback card above the stage (DOM and Tab order unchanged). The card's slot is kept
      while a session runs, so the first feedback never moves the canvas under a finger. */
+  /* U2: a short screen (phone landscape) or a phone mid-practice gives the first screen to the prompt and the
+     instrument: no tagline, and (wide enough for it) the nav in one row. body.practising is set by startSession
+     and cleared by endSession, so everything is back at End. */
+  @media (max-height: 600px) { .sub { display: none; } .wrap { gap: 6px; } h1 { font-size: 1.5rem; } .picker { gap: 4px 8px; } .picker { max-height: 45vh; overflow-y: auto; } .picker button { padding-block: 6px; } .picker-tools { margin-top: 2px; padding-top: 4px; gap: 4px 6px; } .picker-tools-label { flex-basis: auto; } body { padding-block: 8px 16px; } .wrap { flex-direction: row; flex-wrap: wrap; align-items: center; } .wrap > * { flex: 0 0 100%; } .wrap > header { flex: 0 0 auto; } .wrap > .main-nav { flex: 1 1 0; min-width: 0; } }
+  @media (max-height: 600px) and (min-width: 560px) { .main-nav { grid-template-columns: repeat(5, minmax(0, auto)); justify-content: start; } .main-nav button[data-route="instrument"], .main-nav button[data-route="settings"] { grid-column: auto; } }
+  @media (max-width: 600px) { body.practising .sub { display: none; } }
+  /* U2: practising on a short, wide screen: the stage takes the left column and Start/End, the feedback card and the
+     level card stack in the right one, so the canvas is not pushed below them. */
+  @media (max-height: 600px) and (min-width: 700px) {
+    body.practising .main { grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); }
+    body.practising .main > .stage { grid-column: 1; grid-row: 1 / span 4; }
+    body.practising .main > .side > .row:first-child { grid-column: 2; grid-row: 1; order: 0; }
+    body.practising .main > .side > #feedbackCard { grid-column: 2; grid-row: 2; order: 0; }
+    body.practising .main > .side > #levelCard { grid-column: 2; grid-row: 3; order: 0; }
+  }
   @media (max-width: 600px) {
     body { padding-block: 8px 24px; }
     .wrap { gap: 6px; }
