@@ -1559,6 +1559,11 @@ Steps 1, 5 and 6 are also run by the Windows lane
 names a passing Windows-lane run on this exact file (the same sha256), skip those three; otherwise
 do them by hand. Steps 2, 3, 4, 7 and 8 need real hardware and a person every time.
 
+Before a build reaches the person doing the hand check, an agent has already run the automated
+release tests and the Windows lane on the exact staged file (its sha256 is recorded beside it in
+`band-coach.html.evidence.json`), so the hand check covers only the steps that need real hardware:
+2, 3, 4, 7 and 8.
+
 1. **Open the file (30s).** Double-click it. **Fail** if the page does not load, or the browser
    console (F12) shows red errors. *Skip when the record has a passing Windows-lane run for
    this file.*

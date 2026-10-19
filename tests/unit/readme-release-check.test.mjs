@@ -141,3 +141,12 @@ test('the Total line adds up the step estimates', () => {
     'the checklist lets a Windows-lane run stand in for steps, so docs/windows-lane.md must exist to say how to run it',
   );
 });
+
+test('the hand check says what an agent already ran on the staged file', () => {
+  const section = checklist().replace(/\s+/g, ' ');
+  assert.ok(
+    /an agent has already run the automated release tests and the Windows lane on the exact staged file/.test(section) &&
+      /band-coach\.html\.evidence\.json/.test(section),
+    'the hand-check section must say an agent already ran the release tests and the Windows lane on the staged file, with its sha256 in band-coach.html.evidence.json',
+  );
+});
