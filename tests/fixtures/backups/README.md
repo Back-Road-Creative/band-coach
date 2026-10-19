@@ -8,3 +8,4 @@ Real progress-backup files kept on disk, so a change to the backup format cannot
 - `future-v3.json`: the v2 snapshot claiming formatVersion 3, as if made by a newer Band Coach. Must be refused.
 
 The tests are in `tests/unit/golden-backups.test.mjs`. They do not check calibration prefs (latency, noise floor handling), which are changing separately.
+- `v1.9.0-export.json`: a real export from Band Coach 1.9.0 (formatVersion 2, appVersion `1.9.0`, all 30 instruments, `prefs.mod` `kbd`, theme `system`, locale `en`, no songs, device id stripped), kept untouched. It is a fresh-profile export, so every instrument sits at level 1; `tests/release/acceptance-upgrade-1-9-0.test.mjs` restores it over a different profile to prove each of those values comes back.
