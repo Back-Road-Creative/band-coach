@@ -584,7 +584,6 @@ test('A4: piano keys show their computer letters only while the computer keyboar
     const px = (d) => Number(/(\d+)px/.exec(d.font)[1]);
     const size1 = px((await a4Drawn(page)).find((d) => d.text === 'a'));
     await page.evaluate("document.documentElement.style.fontSize = '32px'");
-    await page.waitFor("window.__a4.some(function (d) { return d.text === 'a' && /6\\\\d?px|[5-9]\\\\dpx/.test(d.font) })");
     const size2 = px((await a4Drawn(page)).find((d) => d.text === 'a'));
     assert.ok(size2 >= size1 * 1.8, `letters scale with the text size setting: ${size1}px at 16px root, ${size2}px at 32px`);
     await page.evaluate("document.documentElement.style.fontSize = ''");
