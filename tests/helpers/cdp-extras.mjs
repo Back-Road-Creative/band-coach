@@ -6,7 +6,7 @@
 // There is no dialog helper here: chooseFile (file-chooser.mjs) answers the
 // dialogs the page raises during a pick, and two answerers would race.
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { WAIT_FLOOR_MS, effectiveWaitMs } from './browser.mjs';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -133,4 +133,59 @@ export async function stubRequests(page, url, answer) {
     done.catch(() => {});
   });
   return { seen, stop: async () => { off(); await page.cdp.send('Fetch.disable'); } };
+}
+
+// Opens the browser's file chooser with a KEY on whatever holds focus (Enter or
+// Space on a button, a file input, or a label made a button) and answers it with
+// `filePath`, the way chooseFile does for a click. The caller has already Tabbed
+// to the control; nothing here clicks. Chrome fires the input's own trusted
+// change once. It answers NO dialogs: an app that confirm()s after reading the
+// file does so after this returns, so the caller registers its own
+// Page.javascriptDialogOpening answerer (page.cdp.on) before the pick.
+export async function chooseFileByKey(page, key, filePath, { timeoutMs = WAIT_FLOOR_MS } = {}) {
+  const file = resolve(filePath);
+  const stat = statSync(file, { throwIfNoEntry: false });
+  if (!stat || !stat.isFile()) throw new Error(`chooseFileByKey: no file at ${file}`);
+  const waitMs = effectiveWaitMs(timeoutMs);
+  let off = () => {};
+  let timer;
+  try {
+    const opened = new Promise((res) => {
+      off = page.cdp.on((msg) => { if (msg.method === 'Page.fileChooserOpened') res(msg.params); });
+    });
+    await page.cdp.send('Page.setInterceptFileChooserDialog', { enabled: true });
+    await page.press(key);
+    const timeout = new Promise((_, rej) => {
+      timer = setTimeout(() => rej(new Error(`chooseFileByKey: pressing ${JSON.stringify(key)} opened no file chooser within ${waitMs} ms`)), waitMs);
+    });
+    const { backendNodeId } = await Promise.race([opened, timeout]);
+    await page.cdp.send('DOM.setFileInputFiles', { files: [file], backendNodeId });
+  } finally {
+    clearTimeout(timer);
+    off();
+    await page.cdp.send('Page.setInterceptFileChooserDialog', { enabled: false }).catch(() => {});
+  }
+}
+
+// Every control a Tab key can reach that the accessibility tree lists without a
+// name. Reads Accessibility.getFullAXTree; a node counts when it is not ignored
+// and has the `focusable` property. Returns [{ role, backendDOMNodeId, html }].
+export async function unnamedFocusables(page) {
+  await page.cdp.send('Accessibility.enable');
+  const { nodes } = await page.cdp.send('Accessibility.getFullAXTree');
+  const bad = [];
+  for (const n of nodes) {
+    if (n.ignored) continue;
+    const focusable = (n.properties || []).some((p) => p.name === 'focusable' && p.value && p.value.value === true);
+    if (!focusable) continue;
+    if (n.name && typeof n.name.value === 'string' && n.name.value.trim()) continue;
+    let html = '';
+    try {
+      const { object } = await page.cdp.send('DOM.resolveNode', { backendNodeId: n.backendDOMNodeId });
+      const r = await page.cdp.send('Runtime.callFunctionOn', { objectId: object.objectId, functionDeclaration: 'function(){return this.outerHTML ? this.outerHTML.slice(0, 120) : String(this.nodeName)}', returnByValue: true });
+      html = r.result.value;
+    } catch { /* node gone */ }
+    bad.push({ role: n.role && n.role.value, backendDOMNodeId: n.backendDOMNodeId, html });
+  }
+  return bad;
 }

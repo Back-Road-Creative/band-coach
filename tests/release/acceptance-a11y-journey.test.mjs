@@ -19,6 +19,10 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { withAcceptancePage, VIEWPORTS } from '../helpers/browser.mjs';
 import { axeSource, WCAG_TAGS, formatViolations, tabTo, rectOf, assertInFirstScreen } from '../helpers/journey.mjs';
+import { captureDownloads, chooseFileByKey, unnamedFocusables } from '../helpers/cdp-extras.mjs';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 // ---- the recorder: what was drawn and what the live regions were told ------
 // Installed before the app boots. It wraps strokeRect and calls the original
@@ -501,6 +505,129 @@ test('reduced motion: the system setting is on before the page loads (launch B)'
     await t.test('A11-6 the meters do not animate', async () => {
       const durations = await read(page, "['readyFill', 'energyFill'].map((id) => getComputedStyle(document.getElementById(id)).transitionDuration)");
       for (const d of durations) assert.ok(d.split(',').every((v) => parseFloat(v) === 0), `transition-duration is zero under reduced motion (${d})`);
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Launch C: the whole first-day route with a keyboard and nothing else. Every
+// press is Input.dispatchKeyEvent (Tab, Shift-Tab, Enter, Space, letters); the file
+// chooser is opened by a key on the focused control and answered through the
+// protocol, as in tests/characterization/kbd-file-pickers.test.mjs. Page reads
+// only observe. At every stop the focused control must show a ring (a non-none
+// outline of at least 1px, or a box-shadow), and at the end of each screen the
+// accessibility tree is asked for any focusable, non-ignored node with no name.
+const SONG_FILE = new URL('../fixtures/midi/beat.mid', import.meta.url).pathname;
+const PROGRESS_NAV = '#mainNav button[data-route="progress"]';
+const RESTORE_LABEL = 'label[for="backupRestoreInput"]';
+
+const focusRing = (page) =>
+  read(page, `(() => {
+    const el = document.activeElement, s = getComputedStyle(el);
+    const name = el.id || el.getAttribute('aria-label') || (el.textContent || '').trim().slice(0, 30) || el.tagName;
+    return { name, tag: el.tagName, outlineStyle: s.outlineStyle, outlineWidth: parseFloat(s.outlineWidth), boxShadow: s.boxShadow };
+  })()`);
+
+test('keyboard-only walk of the first-day route: focus is visible and every focusable control has a name (launch C)', async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'band-coach-kbd-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  await withAcceptancePage(t, { initScript: RECORDER }, async (page) => {
+    await page.setViewport({ width: 1280, height: 800 });
+    const seen = [];
+    const visible = async (label) => {
+      const r = await focusRing(page);
+      seen.push(`${label}: ${r.name}`);
+      const ring = (r.outlineStyle !== 'none' && r.outlineWidth >= 1) || (r.boxShadow && r.boxShadow !== 'none');
+      assert.ok(ring, `${label}: focus on ${r.name} (${r.tag}) is visible (outline ${r.outlineStyle} ${r.outlineWidth}px, box-shadow ${r.boxShadow})`);
+    };
+    const key = async (label, selector, k = 'Enter') => { await tabTo(page, selector); await visible(label); await page.press(k); };
+    const named = async (label) => {
+      const bad = await unnamedFocusables(page);
+      assert.deepEqual(bad, [], `${label}: focusable nodes with no accessible name`);
+    };
+
+    await t.test('choose an instrument', async () => {
+      await tabTo(page, KBD_BUTTON);
+      await visible('instrument sheet');
+      await named('instrument sheet');
+      await page.press('Enter');
+      assert.equal(await isHidden(page, 'picker'), true, 'the sheet closed after Keyboard was chosen');
+    });
+
+    await t.test('Set up input', async () => {
+      await key('Set up input', '#setupBtn');
+      await page.waitFor("!document.getElementById('setupSheet').hidden");
+      assert.equal(await read(page, "document.getElementById('setupBtn').getAttribute('aria-expanded')"), 'true');
+      await tabTo(page, '#ioBtn');
+      await visible('Connect');
+      await named('setup sheet');
+      const ioBefore = await read(page, "document.getElementById('ioText').textContent");
+      await page.press('Enter');
+      // A Keyboard instrument has no device to open: Connect answers in words (MIDI found or not), which must change the line.
+      await page.waitFor(`document.getElementById('ioText').textContent !== ${JSON.stringify(ioBefore)}`);
+      t.diagnostic(`Connect said: ${await read(page, "document.getElementById('ioText').textContent")}`);
+    });
+
+    await t.test('Start, play notes by computer keyboard, End', async () => {
+      await key('Start', '#playBtn');
+      await page.waitFor("!document.getElementById('endBtn').hidden && !!document.querySelector('#prompt b')");
+      for (let i = 0; i < 3; i++) { const q = await playTarget(page); await waitNewQuestion(page, q); }
+      await named('session running');
+      await key('End', '#endBtn');
+      await page.waitFor("document.getElementById('endBtn').hidden");
+    });
+
+    await t.test('Songs, Add a song (file chooser opened by key)', async () => {
+      await key('Songs nav', SONGS_NAV);
+      await page.waitFor("document.querySelector('.add-song-row button')");
+      await tabTo(page, '.add-song-row button');
+      await visible('Add a song');
+      await page.press('Enter');
+      await page.waitFor("!document.querySelector('.add-song-section').hidden");
+      const before = await read(page, "document.querySelectorAll('.panel-songs-row').length");
+      await tabTo(page, '#songsFileInput');
+      await visible('song file input');
+      await chooseFileByKey(page, 'Enter', SONG_FILE);
+      await page.waitFor("document.querySelector('.panel-learn-result') && !document.querySelector('.panel-learn-result').hidden");
+      await page.waitFor(`document.querySelectorAll('.panel-songs-row').length > ${before}`);
+      await named('Songs');
+    });
+
+    await t.test('Progress', async () => {
+      await key('Progress nav', PROGRESS_NAV);
+      await page.waitFor("document.querySelector(" + JSON.stringify(PROGRESS_NAV) + ").getAttribute('aria-current') === 'page'");
+      await named('Progress');
+    });
+
+    let saved;
+    await t.test('Settings, Save a backup', async () => {
+      const wait = await captureDownloads(page, join(dir, 'save'));
+      await key('Settings nav', SETTINGS_NAV);
+      await page.waitFor("!document.getElementById('settingsView').hidden");
+      await key('Save a backup', '#backupSaveBtn');
+      saved = await wait('band-coach-progress.json');
+      assert.ok(JSON.parse(saved.text), 'the saved backup is JSON');
+      await named('Settings');
+    });
+
+    await t.test('Restore a backup (file chooser opened by Space)', async () => {
+      await tabTo(page, RESTORE_LABEL);
+      await visible('Restore a backup');
+      const dialogs = [];
+      const off = page.cdp.on((m) => {
+        if (m.method !== 'Page.javascriptDialogOpening') return;
+        dialogs.push(m.params.message);
+        page.cdp.send('Page.handleJavaScriptDialog', { accept: true }).catch(() => {});
+      });
+      await chooseFileByKey(page, ' ', saved.path);
+      await page.waitFor("/Backup restored/.test(document.getElementById('settingsSay').textContent)");
+      off();
+      assert.equal(dialogs.length, 1, 'restore asks to confirm first');
+    });
+
+    await t.test('the whole walk', async () => {
+      t.diagnostic(`focus stops: ${seen.join(' | ')}`);
+      await named('end of walk');
     });
   });
 });
