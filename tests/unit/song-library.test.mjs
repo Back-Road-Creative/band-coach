@@ -350,3 +350,45 @@ test('add: ids that are not starter ids are kept, and update keeps a copy\'s id 
   assert.equal((await library.get(r)).title, 'edited');
   assert.equal((await library.get(r)).id, r);
 });
+
+// ---- content dedupe (D9) ----
+
+// Only a restore dedupes. A fresh pick of the same file, or the editor's
+// "Save a copy" under the same title, is the learner asking for a second entry.
+test('add: the same song twice is two entries; add never dedupes', async () => {
+  const library = createLibrary(memoryStore());
+  const first = await library.add(song('a'), { now: 1 });
+  const again = await library.add(song('a'), { now: 2 });
+  assert.notEqual(again, first);
+  assert.equal((await library.list()).length, 2);
+});
+
+test('importAll: a backup song identical to one stored under another id is skipped', async () => {
+  const library = createLibrary(memoryStore());
+  const first = await library.add(song('a'), { now: 1 });
+  const r = await library.importAll([song('zzz', { title: 'Song a' })]);
+  assert.equal(r.skipped, 1);
+  assert.deepEqual(r.ids, [first], 'a different id with identical content is still the same song');
+  assert.equal((await library.list()).length, 1);
+});
+
+test('add: same title but different notes still gets its own suffixed entry', async () => {
+  const library = createLibrary(memoryStore());
+  await library.add(song('a'), { now: 1 });
+  const other = song('a', { parts: [{ id: 'p', name: 'P', notes: [{ start: 0, dur: 480, midi: 62 }] }] });
+  assert.equal(await library.add(other, { now: 2 }), 'a-2');
+  assert.equal((await library.list()).length, 2);
+});
+
+test('importAll: restoring the same backup twice keeps one copy of each and reports skipped', async () => {
+  const library = createLibrary(memoryStore());
+  const backup = [song('a'), song('b', { bpm: 90 })];
+  const r1 = await library.importAll(backup);
+  assert.equal(r1.imported, 2);
+  assert.equal(r1.skipped, 0);
+  const r2 = await library.importAll(JSON.stringify(backup));
+  assert.equal(r2.imported, 0);
+  assert.equal(r2.skipped, 2);
+  assert.deepEqual(r2.ids, r1.ids);
+  assert.equal((await library.list()).length, 2);
+});

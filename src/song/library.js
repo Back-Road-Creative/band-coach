@@ -33,6 +33,22 @@ function byteLength(str) {
   return new TextEncoder().encode(str).length;
 }
 
+// Stable fingerprint of a song's content: FNV-1a over canonical JSON (sorted keys) with the id
+// left out, so the same piece under a different id still matches. Title stays in: "Save a copy"
+// deliberately differs only by title. Pure and synchronous.
+function canonical(v) {
+  if (Array.isArray(v)) return '[' + v.map(canonical).join(',') + ']';
+  if (v && typeof v === 'object') return '{' + Object.keys(v).sort().map(k => JSON.stringify(k) + ':' + canonical(v[k])).join(',') + '}';
+  return JSON.stringify(v === undefined ? null : v);
+}
+function contentHash(song) {
+  const { id, ...rest } = song;
+  const text = canonical(rest);
+  let h = 0x811c9dc5;
+  for (let i = 0; i < text.length; i++) { h ^= text.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; }
+  return h.toString(16).padStart(8, '0') + ':' + text.length;
+}
+
 function metaFrom(song, addedAt) {
   const durationTicks = songDurationTicks(song);
   return {
@@ -40,7 +56,8 @@ function metaFrom(song, addedAt) {
     title: song.title,
     addedAt,
     durationTicks,
-    durationSeconds: ticksToSeconds(durationTicks, song.bpm)
+    durationSeconds: ticksToSeconds(durationTicks, song.bpm),
+    contentHash: contentHash(song)
   };
 }
 
@@ -81,7 +98,7 @@ export function createLibrary(store) {
     // atomically. A collision retries with the next suffix; any other
     // failure propagates with nothing stored (store.runTx rolls back the
     // whole attempt).
-    async add(song, { now } = {}) {
+    async add(song, { now, dedupe = false } = {}) {
       if (!Number.isFinite(now)) {
         throw new Error('add() requires a numeric `now` timestamp');
       }
@@ -89,6 +106,19 @@ export function createLibrary(store) {
       const serialized = JSON.stringify(normalized);
       if (byteLength(serialized) > MAX_SONG_BYTES) {
         throw new Error('song "' + normalized.title + '" is too large to store (over 5 MB)');
+      }
+      // A restore (importAll) passes dedupe: identical content already stored
+      // (hash match, then a full compare so a hash collision can never swallow a
+      // different song) hands back the existing id. A plain add never dedupes:
+      // a fresh pick or "Save a copy" is the learner asking for a second entry.
+      if (dedupe) {
+        const hash = contentHash(normalized);
+        const want = canonical({ ...normalized, id: undefined });
+        for (const meta of await this.list()) {
+          if (meta.contentHash !== undefined && meta.contentHash !== hash) continue;
+          const have = await store.get(songKey(meta.id));
+          if (have && canonical({ ...have, id: undefined }) === want) return meta.id;
+        }
       }
       let id = normalized.id;
       let n = 2;
@@ -170,18 +200,22 @@ export function createLibrary(store) {
     // Restores songs from exportAll()'s output (an array, or a JSON string
     // of one). Each song is validated and, on an id clash, given a new id
     // rather than overwriting what is already stored. Returns
-    // { imported: number, ids: string[] }.
+    // { imported: number, skipped: number, ids: string[] }; a song already
+    // stored with identical content is skipped (its existing id is in `ids`).
     async importAll(json) {
       const songs = typeof json === 'string' ? JSON.parse(json) : json;
       if (!Array.isArray(songs)) {
         throw new Error('importAll expects an array of songs (or a JSON string of one)');
       }
       const ids = [];
+      let skipped = 0;
       for (const song of songs) {
-        const id = await this.add(song, { now: Date.now() });
+        const before = new Set((await this.list()).map(m => m.id));
+        const id = await this.add(song, { now: Date.now(), dedupe: true });
+        if (before.has(id)) skipped++;
         ids.push(id);
       }
-      return { imported: ids.length, ids };
+      return { imported: ids.length - skipped, skipped, ids };
     }
   };
 }
