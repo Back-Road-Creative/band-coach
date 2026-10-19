@@ -129,6 +129,7 @@ test('A01: first visit on computer keys -- choose, start, play, pause, play, end
         const misses = [];
         const check = (name, fn) => { try { fn(); } catch (e) { misses.push(`${name}: ${e.message.split('\n')[0]}`); } };
         check('4a wrong key says what it heard', () => assert.match(r.wrong.text, new RegExp(`^That was [A-G][♯♭]?, the note is ${escapeRe(r.short)}\\. `), `wrong key: ${r.wrong.text}`));
+        check('4d hint counts white keys and names the computer key', () => assert.match(r.wrong.text, new RegExp(`Go one white key to the left\\. Press ${KEY_FOR[r.label].toUpperCase()}\\.$`), `wrong key: ${r.wrong.text}`));
         check('4b wrong key is a miss', () => assert.equal(r.wrong.cls, 'no', 'a wrong key is shown as a miss'));
         check('4c right key gets its own answer', () => assert.equal(r.answered, true, 'the right key after a wrong one was never answered'));
         check('5a right key recognised', () => assert.match(r.right.text, new RegExp(`^That is the one\\. ${escapeRe(r.short)}\\.$`), `right key after a miss: ${r.right.text}`));

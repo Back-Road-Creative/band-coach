@@ -20,3 +20,10 @@ export const PCKEYS_LOWER = { z: 48, x: 50, c: 52, v: 53, b: 55, n: 57, m: 59 };
 // named rows above so a caller that only cares about one row can still get
 // it on its own.
 export const PCKEYS = Object.assign({}, PCKEYS_UPPER, PCKEYS_LOWER);
+
+// Reverse lookup: the computer key that plays a MIDI note, or undefined when no key does
+// (a note outside both rows). Used to tell a computer-keyboard learner which key to press.
+export function pcKeyFor(midi) {
+  for (const k of Object.keys(PCKEYS)) if (PCKEYS[k] === midi) return k;
+  return undefined;
+}

@@ -207,9 +207,21 @@ const aimVia = (page, via, m, pt) => {
 };
 
 // What the app must say about a key that was played with the target T.
-function missText(clicked, target) {
-  const st = clicked - target, n = Math.abs(st);
-  const where = n === 12 ? `Right note, wrong octave: go one octave ${st > 0 ? 'down' : 'up'}.` : `Go ${n} key${n > 1 ? 's' : ''} to the ${st > 0 ? 'left' : 'right'}.`;
+// A learner counts WHITE keys on a drawn keyboard (U4): the white keys passed on the way to the target, the target
+// included; a black target is named, not counted. A computer key also says which key to press.
+const WHITE = (m) => [0, 2, 4, 5, 7, 9, 11].includes(((m % 12) + 12) % 12);
+const WORDS = ['', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'];
+function missText(clicked, target, pressKey) {
+  const st = clicked - target, n = Math.abs(st), dir = st > 0 ? 'left' : 'right';
+  let where;
+  if (n === 12) where = `Right note, wrong octave: go one octave ${st > 0 ? 'down' : 'up'}.`;
+  else if (!WHITE(target)) where = `Go to the black key ${nm(target)}, to the ${dir}.`;
+  else {
+    let w = 0;
+    for (let m = Math.min(clicked, target); m <= Math.max(clicked, target); m++) if (WHITE(m) && m !== clicked) w++;
+    where = w === 1 ? `Go one white key to the ${dir}.` : `Go ${WORDS[w] || w} white keys to the ${dir}.`;
+  }
+  if (pressKey && n !== 12) where += ` Press ${pressKey.toUpperCase()}.`;
   return `That was ${nm(clicked)}, the note is ${nm(target)}. ${where}`;
 }
 // First try: "<T>: yes, in N s."; after a miss on the same question: "That is the one. <T>." (passEl :1137).
@@ -239,7 +251,7 @@ function keyboardFailure(where, expect, passed, res) {
 
 // One keyboard input and everything the learner would notice. `expect` is the
 // MIDI number that must be delivered, or null for "nothing may play here".
-async function keyboardInput(page, ctx, { act, expect, what }) {
+async function keyboardInput(page, ctx, { act, expect, what, computer }) {
   const target = await readTarget(page);
   const before = await feedback(page);
   const afterMiss = afterMissLine(before);
@@ -273,7 +285,7 @@ async function keyboardInput(page, ctx, { act, expect, what }) {
     await nextQuestion(6000);
     assert.match(text, passText(target, afterMiss), `${where}: the feedback for the right note${afterMiss ? ' after a miss' : ' first time'}: got "${text}", wanted ${afterMiss ? `"That is the one. ${nm(target)}."` : `"${nm(target)}: yes, in <seconds> s."`}`);
   } else {
-    const wanted = missText(expect, target);
+    const wanted = missText(expect, target, computer ? Object.keys(COMPUTER_KEYS).find((k) => COMPUTER_KEYS[k] === target) : undefined);
     assert.equal(text, wanted, `${where}: the feedback for a wrong note: got "${text}", wanted "${wanted}"`);
   }
 }
@@ -424,6 +436,7 @@ async function computerKeys(page, ctx) {
       await keyboardInput(page, `${ctx} test 6 key ${key}`, {
         expect: midi,
         what: `press ${key}${upper ? ' with Shift' : ''}`,
+        computer: true,
         act: () => () => page.press(key, upper ? { modifiers: 8 } : {}),
       });
     }
