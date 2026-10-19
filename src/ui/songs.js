@@ -2488,7 +2488,7 @@ function mountSongsPanel(hostEl, api) {
     analysing = false;
     addSongCancelBtn.hidden = true;
     const { song, report, rec } = result;
-    if (refuseNoNotes(song, say)) return;
+    if (refuseNoNotes(song, say, 'file')) return;
     const warnings = (report && report.needsCheck) || [];
     const { ok, errors } = validateSong(song);
     if (!ok) { say('That recording did not turn into a usable song: ' + errors.join('; '), 'no'); return; }

@@ -49,6 +49,10 @@ test('a silent audio file saves no draft and says nothing was heard', async (t) 
   await page.setFileInput('#songsFileInput', wavPath);
   await page.waitFor("document.querySelector('.panel-songs-msg').textContent.indexOf('Nothing was heard') === 0", 20000);
 
+  // The advice fits the door the learner used.
+  const said = await page.evaluate("document.querySelector('.panel-songs-msg').textContent");
+  assert.match(said, /different recording/, said);
+  assert.doesNotMatch(said, /drop a recording/, said);
   assert.equal(await page.evaluate("document.querySelector('.panel-learn-result').hidden"), true, 'no review screen for a file with no notes');
   await page.evaluate("window.__coach.openPanel('songs')");
   const rowsAfter = await page.evaluate("document.querySelectorAll('.panel-songs-row').length");

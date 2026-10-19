@@ -52,6 +52,10 @@ test('a silent recording saves no draft and says nothing was heard', async (t) =
   await page.evaluate("document.querySelector('.panel-songs-record-btn').click()");
   await page.waitFor("document.querySelector('.panel-songs-msg').textContent.indexOf('Nothing was heard') === 0", 20000);
 
+  // The advice fits the door the learner used.
+  const said = await page.evaluate("document.querySelector('.panel-songs-msg').textContent");
+  assert.match(said, /closer to the mic/, said);
+  assert.doesNotMatch(said, /different recording/, said);
   assert.equal(await page.evaluate("document.querySelector('.panel-learn-result').hidden"), true, 'no review screen for a take with no notes');
   const btn = await page.evaluate("(() => { var b = document.querySelector('.panel-songs-record-btn'); return { text: b.textContent, disabled: b.disabled }; })()");
   assert.equal(btn.disabled, false, 'Record is usable again');

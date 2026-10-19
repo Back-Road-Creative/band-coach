@@ -35,10 +35,14 @@ function titleFromFileName(fileName) {
 
 // One rule for both doors (mic take and audio file): a transcription with no notes is refused with a
 // plain reason, never saved as an empty Draft. Says it through the caller's `say` and returns true.
-export function refuseNoNotes(song, say) {
+const NO_NOTES_ADVICE = {
+  take: 'Try again a little closer to the mic, or drop a recording instead.',
+  file: 'Try a different recording, or record one with the mic.',
+};
+export function refuseNoNotes(song, say, door = 'take') {
   const notes = song && song.parts && song.parts[0] ? song.parts[0].notes : [];
   if (notes && notes.length) return false;
-  say('Nothing was heard clearly enough to turn into notes. Try again a little closer to the mic, or drop a recording instead.', 'no');
+  say(`Nothing was heard clearly enough to turn into notes. ${NO_NOTES_ADVICE[door]}`, 'no');
   return true;
 }
 
