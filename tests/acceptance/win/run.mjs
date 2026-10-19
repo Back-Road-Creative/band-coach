@@ -92,7 +92,7 @@ export function laneExit({ status, hasReport }) {
 // What is copied into the run directory, relative to the repository: the driver, every
 // file in tests/acceptance/win, and the app's own text table W3 matches its verdict on.
 export function stageFiles(winFiles) {
-  return ['tests/helpers/browser.mjs', 'src/core/i18n.js', ...winFiles.filter((f) => f.endsWith('.mjs')).map((f) => `tests/acceptance/win/${f}`)];
+  return ['tests/helpers/browser.mjs', 'tests/helpers/console-allowlist.mjs', 'src/core/i18n.js', ...winFiles.filter((f) => f.endsWith('.mjs')).map((f) => `tests/acceptance/win/${f}`)];
 }
 
 // A byte copy by read and write: copyFileSync fails with EPERM on the /mnt/<letter>/ drives.

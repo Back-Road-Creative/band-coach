@@ -232,6 +232,7 @@ test('U9 stageFiles: every relative import of a staged file is itself staged', (
   const dir = join(repo, 'tests', 'acceptance', 'win');
   const staged = lane.stageFiles(readdirSync(dir));
   assert.ok(staged.includes('tests/helpers/browser.mjs'));
+  assert.ok(staged.includes('tests/helpers/console-allowlist.mjs'));
   assert.ok(staged.includes('tests/acceptance/win/run.mjs'));
   assert.ok(staged.includes('src/core/i18n.js'), 'W3 reads the app\'s own update strings');
   const set = new Set(staged);

@@ -6,13 +6,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { withAcceptancePage } from '../helpers/browser.mjs';
+import { MIC_BLOCKED_ERROR } from '../helpers/console-allowlist.mjs';
 
 const el = (page, id, prop) => page.evaluate(`document.getElementById('${id}').${prop}`);
 // Records every audio track the page opens so a test can see whether one is still live.
 const TRACK_WATCH = "window.__tracks = []; const gum = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices); navigator.mediaDevices.getUserMedia = async (c) => { const s = await gum(c); s.getTracks().forEach((t) => window.__tracks.push(t)); return s; };";
 
 test('Start on a microphone instrument with the mic blocked says so and does not run a deaf exercise', async (t) => {
-  await withAcceptancePage(t, {}, async (page) => {
+  await withAcceptancePage(t, { allowConsole: [MIC_BLOCKED_ERROR] }, async (page) => {
     await page.deny(['microphone']);
     await page.clickSelector('#picker button[data-mod="gtr"]');
     await page.clickSelector('#playBtn');

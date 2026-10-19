@@ -25,6 +25,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { withAcceptancePage, effectiveWaitMs } from '../helpers/browser.mjs';
+import { MIC_BLOCKED_ERROR } from '../helpers/console-allowlist.mjs';
 import { writeLoopWav, FEEDBACK_RECORDER, LOOP_SECONDS } from '../fixtures/acceptance/live-capture-wav.mjs';
 import { name } from '../../src/core/note-names.js';
 
@@ -221,7 +222,7 @@ test('T9 a mallet note two semitones high says "Go 2 keys to the left."', async 
 // Control for T1: the same loud pluck, but the browser blocks the microphone. If this ever hears a
 // pass, the tests above are passing on something other than the fake microphone.
 test('control: the loud pluck with the microphone blocked is never judged', async (t) => {
-  await withAcceptancePage(t, { fakeAudioFile: writeLoopWav('control', [{ at: AT, midis: [GTR.midi], gain: 1 }]), initScript: FEEDBACK_RECORDER, simulated: SIMULATED }, async (page) => {
+  await withAcceptancePage(t, { fakeAudioFile: writeLoopWav('control', [{ at: AT, midis: [GTR.midi], gain: 1 }]), initScript: FEEDBACK_RECORDER, simulated: SIMULATED, allowConsole: [MIC_BLOCKED_ERROR] }, async (page) => {
     await page.deny(['microphone']);
     await page.clickSelector(`#picker button[data-mod="${GTR.mod}"]`);
     await page.clickSelector('#setupBtn');
