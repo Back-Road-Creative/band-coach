@@ -65,7 +65,7 @@ import { exportAbc } from '../song/export-abc.js';
 import { makeEvent, isIndependentOk } from '../core/learning-events.js';
 import { t } from '../core/i18n.js';
 import { classifyAddFile, ADD_ACCEPT, ADD_HELP_LINE, UNSUPPORTED_MESSAGE } from './songs/add-source.js';
-import { createRecordDoor, transcribeAudioFile } from './songs/record-door.js';
+import { createRecordDoor, transcribeAudioFile, refuseNoNotes } from './songs/record-door.js';
 import { renderReview, makeHandoffs } from './songs/review.js';
 import { requestOpenInEditor } from './editor.js';
 import { el } from './dom.js';
@@ -2488,6 +2488,7 @@ function mountSongsPanel(hostEl, api) {
     analysing = false;
     addSongCancelBtn.hidden = true;
     const { song, report, rec } = result;
+    if (refuseNoNotes(song, say)) return;
     const warnings = (report && report.needsCheck) || [];
     const { ok, errors } = validateSong(song);
     if (!ok) { say('That recording did not turn into a usable song: ' + errors.join('; '), 'no'); return; }

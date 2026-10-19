@@ -33,6 +33,15 @@ function titleFromFileName(fileName) {
   return (dot > 0 ? name.slice(0, dot) : name) || 'My recording';
 }
 
+// One rule for both doors (mic take and audio file): a transcription with no notes is refused with a
+// plain reason, never saved as an empty Draft. Says it through the caller's `say` and returns true.
+export function refuseNoNotes(song, say) {
+  const notes = song && song.parts && song.parts[0] ? song.parts[0].notes : [];
+  if (notes && notes.length) return false;
+  say('Nothing was heard clearly enough to turn into notes. Try again a little closer to the mic, or drop a recording instead.', 'no');
+  return true;
+}
+
 // transcribeAudioFile(file, api): decodes a dropped/picked audio file
 // through the EXACT SAME pipeline the mic door's own capture uses --
 // decodeAudioData -> mixToMono (src/ui/playalong/audio-prep.js) ->
@@ -320,11 +329,7 @@ export function createRecordDoor(api, { onTake, say, onStart } = {}) {
     await new Promise((resolve) => setTimeout(resolve, 0));
     try {
       const { song, report } = transcribe(frames, { title: 'My recording' });
-      const notes = song.parts[0] ? song.parts[0].notes : [];
-      if (!notes.length) {
-        say('Nothing was heard clearly enough to turn into notes. Try again a little closer to the mic, or drop a recording instead.');
-        return;
-      }
+      if (refuseNoNotes(song, say)) return;
       const { ok, errors } = validateSong(song);
       if (!ok) { say('That recording did not turn into a usable song: ' + errors.join('; ')); return; }
       await onTake(song, (report && report.needsCheck) || [], rec);
