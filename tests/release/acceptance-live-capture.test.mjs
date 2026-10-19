@@ -93,6 +93,18 @@ const run = (t, wavName, plucks, wavOpts, item, fn) =>
     assert.deepEqual(page.exceptions, [], 'no uncaught exceptions');
   });
 
+// After the first pass the loop's next pluck is at least 7.9 s after the first one, so the 7 s after
+// the pass hold only the old note ringing out: any "That was" there is the ring judged against the next item.
+const AFTER_PASS_MS = 7000;
+async function assertPassedOnceThenNothing(page, where) {
+  const pass = await firstRecord(page, isFeedback);
+  assert.ok(pass && isPass(pass), `${where}: the first thing said was not a pass: ${pass && pass.cls} ${JSON.stringify(pass && pass.text)}`);
+  await waitUntilPageTime(page, pass.t + AFTER_PASS_MS);
+  const after = (await lines(page)).filter((r) => r.t > pass.t && r.t <= pass.t + AFTER_PASS_MS);
+  assert.deepEqual(after.filter(isCorrection).map((r) => r.text), [], `${where}: the ringing note was corrected after it was passed`);
+  assert.deepEqual(after.filter(isPass).map((r) => r.text), [], `${where}: a second pass for one pluck`);
+}
+
 // T1: the pass reads the same at a quiet and at a loud pluck, and it is the first thing said.
 for (const [label, gain] of [['quiet', 0.12], ['loud', 1.0]]) {
   test(`T1 a correct ${label} pluck is passed first, with the time it took, and the lesson moves on`, async (t) => {
@@ -114,7 +126,11 @@ for (const [label, gain] of [['quiet', 0.12], ['loud', 1.0]]) {
 // seen in the p1q replay at about 2 of 42. p3 rates (clipped 20, loud 10, decay999 6, quiet 6), before
 // then after Q10d-2: 5/42 then 2/42, 3/42 then 1/42, 1/41 then 1/42, 18/42 then 19/42, 17/42 then 11/42,
 // 4/42 then 14/42, 12/42 then 10/42, at load 5 to 54. JP decides.
-test.todo('T1 (literal) no "That was" record in the window after a correct pluck: not yet green, see the residual causes above (false onset after a dropout, src/app.js:1404; quiet at a task start, src/app.js:1062)');
+for (const [label, gain] of [['quiet', 0.12], ['loud', 1.0]]) {
+  test(`T1 (literal) no "That was" record in the window after a correct ${label} pluck`, async (t) => {
+    await run(t, `t1l-${label}`, [{ at: AT, midis: [GTR.midi], gain }], {}, GTR, (page) => assertPassedOnceThenNothing(page, `${label} pluck`));
+  });
+}
 
 // T2: the wrong note on a guitar names both notes and counts FRETS, by the real distance and
 // pointing the way the target is (heard above the target means a lower fret).
@@ -152,7 +168,9 @@ test('T3 the same wrong note plucked three times in one loop is corrected each t
 // at a task start, src/app.js:1062). the decay999 case strayed in 1 of 6 in p1c (load not recorded) and, in the last three p3
 // pairs, in 2 then 3, 0 then 0 and 1 then 0 of 6 (before then after Q10d-2), so the claim is load-dependent,
 // not deterministic. JP decides.
-test.todo('T4 a decaying correct note is passed once and never corrected: not yet green, see the residual causes above (false onset after a dropout, src/app.js:1404; quiet at a task start, src/app.js:1062)');
+test('T4 a decaying correct note is passed once and never corrected', async (t) => {
+  await run(t, 't4', [{ at: AT, midis: [GTR.midi], gain: 0.6, decay: 0.999 }], {}, GTR, (page) => assertPassedOnceThenNothing(page, 'decaying pluck'));
+});
 
 // T5: an empty room. One plain sentence, said once in two loops, and nothing judged.
 test('T5 a silent microphone is reported once, in plain words, and nothing is judged', async (t) => {
@@ -189,7 +207,9 @@ test('T7 a clipped pluck of the target note is passed, never corrected first', a
 // the quiet-at-present branch (src/app.js:1062). p3 strays out of all 42 runs, before then after Q10d-2:
 // 5 then 2, 3 then 1, 1 then 1, 18 then 19, 17 then 11, 4 then 14, 12 then 10, at load 5 to 54 (see the
 // header). JP decides.
-test.todo('T7 (literal) no "That was" record at all after a clipped pluck of the target: not yet green, see the residual causes above (false onset after a dropout, src/app.js:1404; quiet at a task start, src/app.js:1062)');
+test('T7 (literal) no "That was" record at all after a clipped pluck of the target', async (t) => {
+  await run(t, 't7l', [{ at: AT, midis: [GTR.midi], gain: 4 }], {}, GTR, (page) => assertPassedOnceThenNothing(page, 'clipped pluck'));
+});
 
 // T8: two notes at once (the target and the fifth above): told it is more than one note, and never
 // told about a note nobody played.
