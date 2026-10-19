@@ -1691,8 +1691,10 @@ release.
   measured and not required. While a session runs, the playing surface, the feedback line and End
   session (with the objective, on a narrow window) are on one screen at: 320x568: keyboard one
   scroll position, drum kit one scroll position; 390x844: keyboard no scrolling after Start, drum
-  kit one scroll position; 844x390: keyboard one scroll position, drum kit one scroll position;
-  640x400: keyboard one scroll position, drum kit one scroll position. A fretted or microphone
+  kit one scroll position; 844x390: keyboard no scrolling after Start, drum kit no scrolling after Start;
+  640x400: keyboard one scroll position, drum kit one scroll position. (On a screen 600 px tall or less the
+  tagline is hidden and the menu is one row; while a session runs on a phone the tagline is hidden, and on a
+  wide short screen the playing surface sits beside Start/End and the feedback. All of it returns at End.) A fretted or microphone
   instrument (guitar) is held to the same screen at 390x844 only, in
   `tests/release/acceptance-phone-fit-mic-fretted.test.mjs`: after Start, the prompt and the whole
   drawing are on the first screen with no scrolling, with "Set up input" open or shut ("How to play

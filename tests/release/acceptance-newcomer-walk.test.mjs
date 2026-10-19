@@ -4,8 +4,7 @@
 // nothing reaches through window.__coach. Live today: no sideways scroll and no console event, at every
 // config x state. Written in full but still todo where the defect is measured (each flips by deleting
 // its `todo` option): the four checks the U units fix. A check is todo only at the configs where it
-// fails today (CI's summary refuses a todo that passes), so U2 is todo in landscape only and U5 in the
-// light theme only. Their measured values are printed so the flip is one word.
+// fails today (CI's summary refuses a todo that passes), so U5 is todo in the light theme only (U2 has landed). Their measured values are printed so the flip is one word.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { withAcceptancePage } from '../helpers/browser.mjs';
@@ -144,7 +143,6 @@ for (const cfg of CONFIGS) {
     // ---- todo until the named U unit lands: delete `todo` to switch on ----
     // Measured on CI run 39273798944: Start sits below the first screen only at 844x390, and the hint
     // fails 4.5:1 only on the light theme (2.45; dark 7.41). Elsewhere these already pass, so they run live.
-    const landscape = cfg.h <= 600;
     await t.test('every control in view is at least 44x44 (U3)', { todo: 'U3' }, () => {
       const per = states.map((s) => `${s.state}=${s.m.smallControls.length}`);
       diag(`small controls per state: ${per.join(' ')}`);
@@ -152,7 +150,7 @@ for (const cfg of CONFIGS) {
       const bad = states.filter((s) => s.m.smallControls.length).map((s) => `${s.state}: ${s.m.smallControls.join('; ')}`);
       assert.deepEqual(bad, []);
     });
-    await t.test('Start is on the first screen at first paint (U2)', { todo: landscape ? 'U2' : false }, () => {
+    await t.test('Start is on the first screen at first paint (U2)', () => {
       const first = states[0].m, b = first.playBtn;
       diag(`Start box at first paint: ${JSON.stringify(b)} (viewport height ${first.vh})`);
       assert.ok(b, 'Start is visible at first paint');
