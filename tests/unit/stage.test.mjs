@@ -12,13 +12,20 @@ import { readFileSync as readSrc } from 'node:fs';
 import { stage } from '../../build/stage.mjs';
 
 function tmp() { return mkdtempSync(join(tmpdir(), 'bc-stage-')); }
+// stage() copies only after the release tests pass (gate pinned in
+// tests/build/stage.test.mjs); these pin the copy, so a stand-in run passes.
+function passing(dir) {
+  const script = join(dir, 'pass.mjs');
+  writeFileSync(script, "console.log('# pass 1\\n# fail 0\\n# todo 0\\n# skipped 0');");
+  return `${process.execPath} ${script}`;
+}
 
 test('stage copies the file into the target dir under its own name and reports hash and size', () => {
   const src = tmp(); const dst = tmp();
   try {
     const from = join(src, 'band-coach.html');
     writeFileSync(from, '<!doctype html><title>x</title>');
-    const r = stage({ from, dir: dst });
+    const r = stage({ from, dir: dst, testCmd: passing(src) });
     assert.equal(r.to, join(dst, 'band-coach.html'));
     assert.equal(readFileSync(r.to, 'utf8'), '<!doctype html><title>x</title>');
     assert.equal(r.bytes, 31);
@@ -32,7 +39,7 @@ test('stage overwrites an older copy rather than leaving it beside the new one',
     const from = join(src, 'band-coach.html');
     writeFileSync(join(dst, 'band-coach.html'), 'old');
     writeFileSync(from, 'new');
-    const r = stage({ from, dir: dst });
+    const r = stage({ from, dir: dst, testCmd: passing(src) });
     assert.equal(readFileSync(r.to, 'utf8'), 'new');
   } finally { rmSync(src, { recursive: true }); rmSync(dst, { recursive: true }); }
 });
