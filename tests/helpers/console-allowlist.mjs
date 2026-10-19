@@ -26,6 +26,16 @@ export const ALLOWED = [
 // block it. In any other journey it is a real failure.
 export const MIC_BLOCKED_ERROR = /^console\.error: \[mic:(connect|start)\] NotAllowedError/;
 
+// Per-journey too: the Settings "Check for updates" button asks the published
+// version.json on purpose, the one request the app makes when a person presses
+// it. Only the update-check journeys excuse it (they answer it through request
+// interception); any other journey making it is a real failure.
+export const UPDATE_CHECK_REQUEST = /^network request: https:\/\/back-road-creative\.github\.io\/band-coach\/version\.json$/;
+
+// The browser's own log line for the update check the test deliberately fails
+// (Fetch.failRequest InternetDisconnected). Only that journey excuses it.
+export const UPDATE_CHECK_OFFLINE_LOG = /^browser log error: Failed to load resource: net::ERR_INTERNET_DISCONNECTED$/;
+
 const LOCAL = /^(file|data|blob):/i;
 
 // Everything the page recorded that no allowlist entry covers, as labelled lines.

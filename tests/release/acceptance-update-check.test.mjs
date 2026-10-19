@@ -7,6 +7,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { withAcceptancePage, launchPage } from '../helpers/browser.mjs';
+import { UPDATE_CHECK_REQUEST, UPDATE_CHECK_OFFLINE_LOG } from '../helpers/console-allowlist.mjs';
 import { HTML_PATH } from '../helpers/html-path.mjs';
 import { stubRequests } from '../helpers/cdp-extras.mjs';
 import { en, t } from '../../src/core/i18n.js';
@@ -24,7 +25,7 @@ const result = (page) => page.evaluate("(() => { const r = document.getElementBy
 const settled = (page) => page.waitFor("!document.getElementById('updateCheckBtn').disabled && document.getElementById('updateCheckResult').textContent !== '' && document.getElementById('updateCheckResult').textContent !== " + JSON.stringify(t('update.checking')));
 
 test('release file, version.json names this very version: says it is the latest', async (t_) => {
-  await withAcceptancePage(t_, {}, async (page) => {
+  await withAcceptancePage(t_, { allowConsole: [UPDATE_CHECK_REQUEST] }, async (page) => {
     const stub = await stubRequests(page, VERSION_CHECK_URL, () => ({ body: { version: RELEASE_VERSION, released: '2026-01-01T00:00:00Z', download: SAFE_DOWNLOAD } }));
     await press(page);
     await settled(page);
@@ -36,7 +37,7 @@ test('release file, version.json names this very version: says it is the latest'
 });
 
 test('release file, version.json names a newer version: says so and links the safe download', async (t_) => {
-  await withAcceptancePage(t_, {}, async (page) => {
+  await withAcceptancePage(t_, { allowConsole: [UPDATE_CHECK_REQUEST] }, async (page) => {
     await stubRequests(page, VERSION_CHECK_URL, () => ({ body: { version: '99.0.0', download: SAFE_DOWNLOAD } }));
     await press(page);
     await settled(page);
@@ -47,7 +48,7 @@ test('release file, version.json names a newer version: says so and links the sa
 });
 
 test('release file, newer version but an untrusted download link: links the known-good release file instead', async (t_) => {
-  await withAcceptancePage(t_, {}, async (page) => {
+  await withAcceptancePage(t_, { allowConsole: [UPDATE_CHECK_REQUEST] }, async (page) => {
     await stubRequests(page, VERSION_CHECK_URL, () => ({ body: { version: '99.0.0', download: 'https://evil.example/band-coach.html' } }));
     await press(page);
     await settled(page);
@@ -56,7 +57,7 @@ test('release file, newer version but an untrusted download link: links the know
 });
 
 test('release file, the request fails: says it could not reach the server and still offers the download', async (t_) => {
-  await withAcceptancePage(t_, {}, async (page) => {
+  await withAcceptancePage(t_, { allowConsole: [UPDATE_CHECK_REQUEST, UPDATE_CHECK_OFFLINE_LOG] }, async (page) => {
     await stubRequests(page, VERSION_CHECK_URL, () => ({ fail: 'InternetDisconnected' }));
     await press(page);
     await settled(page);
