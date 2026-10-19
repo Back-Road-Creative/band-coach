@@ -1,0 +1,642 @@
+{
+ "format": "band-coach-progress",
+ "formatVersion": 2,
+ "appVersion": "1.9.0",
+ "exportedAt": "2026-10-03T19:55:17.134Z",
+ "db": {
+  "v": 1,
+  "mods": {
+   "kbd": {
+    "level": 1,
+    "ready": 0.2,
+    "item": {},
+    "trans": {},
+    "conf": {},
+    "gain": 0.05,
+    "gate": 0.6,
+    "offset": 0,
+    "acc": {},
+    "cr": {},
+    "tick": 0,
+    "judged": 0,
+    "promo": {
+     "at": -999,
+     "level": 0
+    },
+    "fast": 0,
+    "grooveBpm": 80
+   },
+   "gtr": {
+    "level": 1,
+    "ready": 0.2,
+    "item": {},
+    "trans": {},
+    "conf": {},
+    "gain": 0.05,
+    "gate": 0.6,
+    "offset": 0,
+    "acc": {},
+    "cr": {},
+    "tick": 0,
+    "judged": 0,
+    "promo": {
+     "at": -999,
+     "level": 0
+    },
+    "fast": 0,
+    "grooveBpm": 80
+   },
+   "bass": {
+    "level": 1,
+    "ready": 0.2,
+    "item": {},
+    "trans": {},
+    "conf": {},
+    "gain": 0.05,
+    "gate": 0.6,
+    "offset": 0,
+    "acc": {},
+    "cr": {},
+    "tick": 0,
+    "judged": 0,
+    "promo": {
+     "at": -999,
+     "level": 0
+    },
+    "fast": 0,
+    "grooveBpm": 80
+   },
+   "uke": {
+    "level": 1,
+    "ready": 0.2,
+    "item": {},
+    "trans": {},
+    "conf": {},
+    "gain": 0.05,
+    "gate": 0.6,
+    "offset": 0,
+    "acc": {},
+    "cr": {},
+    "tick": 0,
+    "judged": 0,
+    "promo": {
+     "at": -999,
+     "level": 0
+    },
+    "fast": 0,
+    "grooveBpm": 80
+   },
+   "voice": {
+    "level": 1,
+    "ready": 0.2,
+    "item": {},
+    "trans": {},
+    "conf": {},
+    "gain": 0.05,
+    "gate": 0.6,
+    "offset": 0,
+    "acc": {},
+    "cr": {},
+    "tick": 0,
+    "judged": 0,
+    "promo": {
+     "at": -999,
+     "level": 0
+    },
+    "fast": 0,
+    "grooveBpm": 80
+   },
+   "wind": {
+    "level": 1,
+    "ready": 0.2,
+    "item": {},
+    "trans": {},
+    "conf": {},
+    "gain": 0.05,
+    "gate": 0.6,
+    "offset": 0,
+    "acc": {},
+    "cr": {},
+    "tick": 0,
+    "judged": 0,
+    "promo": {
+     "at": -999,
+     "level": 0
+    },
+    "fast": 0,
+    "grooveBpm": 80
+   },
+   "ear": {
+    "level": 1,
+    "ready": 0.2,
+    "item": {},
+    "trans": {},
+    "conf": {},
+    "gain": 0.05,
+    "gate": 0.6,
+    "offset": 0,
+    "acc": {},
+    "cr": {},
+    "tick": 0,
+    "judged": 0,
+    "promo": {
+     "at": -999,
+     "level": 0
+    },
+    "fast": 0,
+    "grooveBpm": 80
+   },
+   "rhy": {
+    "level": 1,
+    "ready": 0.2,
+    "item": {},
+    "trans": {},
+    "conf": {},
+    "gain": 0.05,
+    "gate": 0.6,
+    "offset": 0,
+    "acc": {},
+    "cr": {},
+    "tick": 0,
+    "judged": 0,
+    "promo": {
+     "at": -999,
+     "level": 0
+    },
+    "fast": 0,
+    "grooveBpm": 80
+   },
+   "mandolin": {
+    "level": 1,
+    "ready": 0.2,
+    "item": {},
+    "trans": {},
+    "conf": {},
+    "gain": 0.05,
+    "gate": 0.6,
+    "offset": 0,
+    "acc": {},
+    "cr": {},
+    "tick": 0,
+    "judged": 0,
+    "promo": {
+     "at": -999,
+     "level": 0
+    },
+    "fast": 0,
+    "grooveBpm": 80
+   },
+   "banjo-5-string": {
+    "level": 1,
+    "ready": 0.2,
+    "item": {},
+    "trans": {},
+    "conf": {},
+    "gain": 0.05,
+    "gate": 0.6,
+    "offset": 0,
+    "acc": {},
+    "cr": {},
+    "tick": 0,
+    "judged": 0,
+    "promo": {
+     "at": -999,
+     "level": 0
+    },
+    "fast": 0,
+    "grooveBpm": 80
+   },
+   "bass-5-string": {
+    "level": 1,
+    "ready": 0.2,
+    "item": {},
+    "trans": {},
+    "conf": {},
+    "gain": 0.05,
+    "gate": 0.6,
+    "offset": 0,
+    "acc": {},
+    "cr": {},
+    "tick": 0,
+    "judged": 0,
+    "promo": {
+     "at": -999,
+     "level": 0
+    },
+    "fast": 0,
+    "grooveBpm": 80
+   },
+   "violin": {
+    "level": 1,
+    "ready": 0.2,
+    "item": {},
+    "trans": {},
+    "conf": {},
+    "gain": 0.05,
+    "gate": 0.6,
+    "offset": 0,
+    "acc": {},
+    "cr": {},
+    "tick": 0,
+    "judged": 0,
+    "promo": {
+     "at": -999,
+     "level": 0
+    },
+    "fast": 0,
+    "grooveBpm": 80
+   },
+   "viola": {
+    "level": 1,
+    "ready": 0.2,
+    "item": {},
+    "trans": {},
+    "conf": {},
+    "gain": 0.05,
+    "gate": 0.6,
+    "offset": 0,
+    "acc": {},
+    "cr": {},
+    "tick": 0,
+    "judged": 0,
+    "promo": {
+     "at": -999,
+     "level": 0
+    },
+    "fast": 0,
+    "grooveBpm": 80
+   },
+   "cello": {
+    "level": 1,
+    "ready": 0.2,
+    "item": {},
+    "trans": {},
+    "conf": {},
+    "gain": 0.05,
+    "gate": 0.6,
+    "offset": 0,
+    "acc": {},
+    "cr": {},
+    "tick": 0,
+    "judged": 0,
+    "promo": {
+     "at": -999,
+     "level": 0
+    },
+    "fast": 0,
+    "grooveBpm": 80
+   },
+   "double-bass": {
+    "level": 1,
+    "ready": 0.2,
+    "item": {},
+    "trans": {},
+    "conf": {},
+    "gain": 0.05,
+    "gate": 0.6,
+    "offset": 0,
+    "acc": {},
+    "cr": {},
+    "tick": 0,
+    "judged": 0,
+    "promo": {
+     "at": -999,
+     "level": 0
+    },
+    "fast": 0,
+    "grooveBpm": 80
+   },
+   "ukulele-low-g": {
+    "level": 1,
+    "ready": 0.2,
+    "item": {},
+    "trans": {},
+    "conf": {},
+    "gain": 0.05,
+    "gate": 0.6,
+    "offset": 0,
+    "acc": {},
+    "cr": {},
+    "tick": 0,
+    "judged": 0,
+    "promo": {
+     "at": -999,
+     "level": 0
+    },
+    "fast": 0,
+    "grooveBpm": 80
+   },
+   "ukulele-baritone": {
+    "level": 1,
+    "ready": 0.2,
+    "item": {},
+    "trans": {},
+    "conf": {},
+    "gain": 0.05,
+    "gate": 0.6,
+    "offset": 0,
+    "acc": {},
+    "cr": {},
+    "tick": 0,
+    "judged": 0,
+    "promo": {
+     "at": -999,
+     "level": 0
+    },
+    "fast": 0,
+    "grooveBpm": 80
+   },
+   "recorder-descant": {
+    "level": 1,
+    "ready": 0.2,
+    "item": {},
+    "trans": {},
+    "conf": {},
+    "gain": 0.05,
+    "gate": 0.6,
+    "offset": 0,
+    "acc": {},
+    "cr": {},
+    "tick": 0,
+    "judged": 0,
+    "promo": {
+     "at": -999,
+     "level": 0
+    },
+    "fast": 0,
+    "grooveBpm": 80
+   },
+   "tin-whistle": {
+    "level": 1,
+    "ready": 0.2,
+    "item": {},
+    "trans": {},
+    "conf": {},
+    "gain": 0.05,
+    "gate": 0.6,
+    "offset": 0,
+    "acc": {},
+    "cr": {},
+    "tick": 0,
+    "judged": 0,
+    "promo": {
+     "at": -999,
+     "level": 0
+    },
+    "fast": 0,
+    "grooveBpm": 80
+   },
+   "mallet-percussion": {
+    "level": 1,
+    "ready": 0.2,
+    "item": {},
+    "trans": {},
+    "conf": {},
+    "gain": 0.05,
+    "gate": 0.6,
+    "offset": 0,
+    "acc": {},
+    "cr": {},
+    "tick": 0,
+    "judged": 0,
+    "promo": {
+     "at": -999,
+     "level": 0
+    },
+    "fast": 0,
+    "grooveBpm": 80
+   },
+   "trumpet-bb": {
+    "level": 1,
+    "ready": 0.2,
+    "item": {},
+    "trans": {},
+    "conf": {},
+    "gain": 0.05,
+    "gate": 0.6,
+    "offset": 0,
+    "acc": {},
+    "cr": {},
+    "tick": 0,
+    "judged": 0,
+    "promo": {
+     "at": -999,
+     "level": 0
+    },
+    "fast": 0,
+    "grooveBpm": 80
+   },
+   "horn-f": {
+    "level": 1,
+    "ready": 0.2,
+    "item": {},
+    "trans": {},
+    "conf": {},
+    "gain": 0.05,
+    "gate": 0.6,
+    "offset": 0,
+    "acc": {},
+    "cr": {},
+    "tick": 0,
+    "judged": 0,
+    "promo": {
+     "at": -999,
+     "level": 0
+    },
+    "fast": 0,
+    "grooveBpm": 80
+   },
+   "trombone": {
+    "level": 1,
+    "ready": 0.2,
+    "item": {},
+    "trans": {},
+    "conf": {},
+    "gain": 0.05,
+    "gate": 0.6,
+    "offset": 0,
+    "acc": {},
+    "cr": {},
+    "tick": 0,
+    "judged": 0,
+    "promo": {
+     "at": -999,
+     "level": 0
+    },
+    "fast": 0,
+    "grooveBpm": 80
+   },
+   "flute": {
+    "level": 1,
+    "ready": 0.2,
+    "item": {},
+    "trans": {},
+    "conf": {},
+    "gain": 0.05,
+    "gate": 0.6,
+    "offset": 0,
+    "acc": {},
+    "cr": {},
+    "tick": 0,
+    "judged": 0,
+    "promo": {
+     "at": -999,
+     "level": 0
+    },
+    "fast": 0,
+    "grooveBpm": 80
+   },
+   "oboe": {
+    "level": 1,
+    "ready": 0.2,
+    "item": {},
+    "trans": {},
+    "conf": {},
+    "gain": 0.05,
+    "gate": 0.6,
+    "offset": 0,
+    "acc": {},
+    "cr": {},
+    "tick": 0,
+    "judged": 0,
+    "promo": {
+     "at": -999,
+     "level": 0
+    },
+    "fast": 0,
+    "grooveBpm": 80
+   },
+   "clarinet-bb": {
+    "level": 1,
+    "ready": 0.2,
+    "item": {},
+    "trans": {},
+    "conf": {},
+    "gain": 0.05,
+    "gate": 0.6,
+    "offset": 0,
+    "acc": {},
+    "cr": {},
+    "tick": 0,
+    "judged": 0,
+    "promo": {
+     "at": -999,
+     "level": 0
+    },
+    "fast": 0,
+    "grooveBpm": 80
+   },
+   "sax-alto-eb": {
+    "level": 1,
+    "ready": 0.2,
+    "item": {},
+    "trans": {},
+    "conf": {},
+    "gain": 0.05,
+    "gate": 0.6,
+    "offset": 0,
+    "acc": {},
+    "cr": {},
+    "tick": 0,
+    "judged": 0,
+    "promo": {
+     "at": -999,
+     "level": 0
+    },
+    "fast": 0,
+    "grooveBpm": 80
+   },
+   "sax-tenor-bb": {
+    "level": 1,
+    "ready": 0.2,
+    "item": {},
+    "trans": {},
+    "conf": {},
+    "gain": 0.05,
+    "gate": 0.6,
+    "offset": 0,
+    "acc": {},
+    "cr": {},
+    "tick": 0,
+    "judged": 0,
+    "promo": {
+     "at": -999,
+     "level": 0
+    },
+    "fast": 0,
+    "grooveBpm": 80
+   },
+   "drum-kit": {
+    "level": 1,
+    "ready": 0.2,
+    "item": {},
+    "trans": {},
+    "conf": {},
+    "gain": 0.05,
+    "gate": 0.6,
+    "offset": 0,
+    "acc": {},
+    "cr": {},
+    "tick": 0,
+    "judged": 0,
+    "promo": {
+     "at": -999,
+     "level": 0
+    },
+    "fast": 0,
+    "grooveBpm": 80
+   },
+   "harp": {
+    "level": 1,
+    "ready": 0.2,
+    "item": {},
+    "trans": {},
+    "conf": {},
+    "gain": 0.05,
+    "gate": 0.6,
+    "offset": 0,
+    "acc": {},
+    "cr": {},
+    "tick": 0,
+    "judged": 0,
+    "promo": {
+     "at": -999,
+     "level": 0
+    },
+    "fast": 0,
+    "grooveBpm": 80
+   }
+  },
+  "sessions": [],
+  "events": [],
+  "prefs": {
+   "mod": "kbd",
+   "wind": "bb",
+   "voice": "low",
+   "kbdHands": "both",
+   "sessionMinutes": null,
+   "names": true,
+   "noiseFloor": null,
+   "noiseFloorV": null,
+   "notate": {
+    "kbd": "names",
+    "gtr": "names",
+    "bass": "names",
+    "uke": "names",
+    "voice": "names"
+   },
+   "theme": "system",
+   "locale": "en",
+   "noteNaming": {
+    "system": "letters",
+    "accidentals": "mixed"
+   },
+   "voiceRange": null,
+   "harpKey": 0
+  },
+  "custom": [],
+  "latencyMs": 0,
+  "panels": {}
+ },
+ "songs": []
+}
