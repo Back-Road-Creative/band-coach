@@ -634,6 +634,17 @@
     #cv { max-height: 45vh; }
     #cv.kit { max-height: 53vh; }
   }
+  /* U3 (D17): on a finger-driven screen (pointer: coarse) every control is at least 44 CSS px in its
+     smaller dimension -- the nav, buttons, selects and text fields, the Variants disclosures, the song rows and
+     the label a checkbox sits in (tapping the label toggles it). A mouse (pointer: fine) keeps the compact
+     sizes above, so a laptop is unchanged. Placed after every other rule so equal-specificity ones lose. */
+  @media (pointer: coarse) {
+    button, select, summary, input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), label.file-label, .opts label, .settings-group label { min-height: 44px; box-sizing: border-box; }
+    button, select, label.file-label { min-width: 44px; }
+    .opts label, .settings-group label { align-content: center; }
+    .picker-variant-group > .variant-toggle > summary { min-height: 44px; line-height: 44px; }
+    .picker-variant-group > .variant-toggle > .variant-buttons button, .main-nav button, button.small { min-height: 44px; }
+  }
   @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
   .visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
   #verFooter { color: var(--muted); font-size: 0.75rem; text-align: center; padding-top: 4px; }
