@@ -18,7 +18,8 @@ import { pluck, rms, writePluckWav } from '../helpers/pluck-wav.mjs';
 
 const SR = 22050;
 const hz = (midi) => 440 * 2 ** ((midi - 69) / 12);
-const NO_NOTES = 'No notes were captured — nothing was transcribed.';
+// A file with nothing in it is refused with this reason, and nothing is stored (D10).
+const REFUSED = /^Nothing was heard clearly enough to turn into notes\./;
 const TPQ = 480; // ticks per quarter note (the stored song's resolution)
 
 // ---- fixtures, written to a temp dir at run time (no binary files in git) ----
@@ -115,12 +116,17 @@ const readReview = (page) => page.evaluate(`(() => {
 
 // Picks `file` and waits until the review is on screen and the song is stored
 // (the app's own "Working it out…" line has gone), then returns what it says.
-async function pickAndRead(t, page, file, { stored = 1 } = {}) {
+async function pickAndRead(t, page, file, { stored = 1, refused = false } = {}) {
   await pick(page, file);
   const deadline = Date.now() + 60000;
   for (;;) {
     const review = await readReview(page);
     const status = await page.evaluate("(document.querySelector('.panel-songs-msg') || {}).textContent || ''");
+    if (refused && REFUSED.test(status)) {
+      const songs = await readSongs(page);
+      t.diagnostic(`${file.split('/').pop()}: ${JSON.stringify({ review, status, stored: songs.length })}`);
+      return { review, songs, status };
+    }
     if (review && (await readStore(page)).length >= stored && !/Working it out/.test(status)) {
       const songs = await readSongs(page);
       // The probe, kept: what the review and the store said for this file.
@@ -140,25 +146,22 @@ const secondsOf = (song, ticks) => (ticks / TPQ) * (60 / (song.tempoMap && song.
 const midisOf = (song) => song.notes.map((n) => n.midi);
 const CLEAN_MIDIS = [60, 64, 67, 69];
 // Each test is one learner on a fresh page: open Songs, open Add a song, pick.
-async function learnerPicks(t, file, { polyphonic = false } = {}, then) {
+async function learnerPicks(t, file, { polyphonic = false, refused = false } = {}, then) {
   await withAcceptancePage(t, {}, async (page) => {
     await openAddSong(page);
     if (polyphonic) await tickPolyphonic(page);
-    const got = await pickAndRead(t, page, file);
+    const got = await pickAndRead(t, page, file, { refused });
     return then(got, page);
   });
 }
 
-// The review a recording with no notes in it gets: said plainly, nothing to
-// practise. Also the control for itself: the clean melody must not pass it.
-function assertEmptyReview({ review, songs }) {
-  assert.deepEqual(review.checks, [NO_NOTES], 'the check list says nothing was captured');
-  assert.deepEqual(review.strip, [], 'no note strip');
-  assert.deepEqual(review.unsure, [], 'no unsure-note list');
-  assert.equal(review.practiseDisabled, true, 'there is nothing to practise');
-  assert.ok(review.reason, 'and the review says why');
-  assert.equal(songs.length, 1);
-  assert.equal(songs[0].notes.length, 0, 'the stored song has no notes');
+// A recording with no notes in it is refused: the status line says why, no
+// review opens and no empty Draft is stored. Also the control for itself: the
+// clean melody must not pass it.
+function assertRefused({ review, songs, status }) {
+  assert.match(status, REFUSED, 'the status line says nothing was heard');
+  assert.equal(review, null, 'no review opens');
+  assert.equal(songs.length, 0, 'no empty Draft is stored');
 }
 
 test('1. a clean melody: four notes in order, nothing to check, ready to practise', async (t) => {
@@ -211,22 +214,18 @@ test('4. a long ring is one note that lasts about as long as it is loud enough t
   });
 });
 
-test('5. silence: the review says nothing was captured and offers nothing to practise', async (t) => {
-  await learnerPicks(t, FILE.silence, {}, assertEmptyReview);
+test('5. silence: refused with a plain reason, no empty Draft stored', async (t) => {
+  await learnerPicks(t, FILE.silence, { refused: true }, assertRefused);
 });
 
 test('5b. control: the clean melody does not pass the silence checks', async (t) => {
   await learnerPicks(t, FILE.clean, {}, (got) => {
-    assert.throws(() => assertEmptyReview(got), assert.AssertionError);
+    assert.throws(() => assertRefused(got), assert.AssertionError);
   });
 });
 
-test('6. noise: no notes on the strip and nothing to practise', async (t) => {
-  await learnerPicks(t, FILE.noise, {}, ({ review, songs }) => {
-    assert.deepEqual(review.strip, [], 'no strip');
-    assert.equal(review.practiseDisabled, true);
-    t.diagnostic(`noise: ${songs[0].notes.length} stored notes; checks ${JSON.stringify(review.checks)}`);
-  });
+test('6. noise: refused with a plain reason, no empty Draft stored', async (t) => {
+  await learnerPicks(t, FILE.noise, { refused: true }, assertRefused);
 });
 
 test('7. clipping: characterised, and no pitch but the one played is stored', async (t) => {

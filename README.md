@@ -470,6 +470,7 @@ at a time, from a file the same as from the mic — unless "More than one note a
 checked, in which case a multipitch detector (`src/audio/analysis/multipitch.js`) splits the file
 into a melody/bass/inner part per voice it hears, each shown as its own labelled lane once opened
 for editing.
+A recording (mic or file) in which no clear notes are heard is refused with a plain message, never saved as an empty Draft (`refuseNoNotes` in `src/ui/songs/record-door.js`, one rule for both doors).
 
 An imported recording follows the tempo it was actually played at: the clip's beat track becomes the
 song's `tempoMap` (`tempoMapFromBeats`, `src/audio/analysis/tempo-map.js`) and the notes are
