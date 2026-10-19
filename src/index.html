@@ -124,7 +124,7 @@
 
     <aside class="side">
       <div class="row">
-        <button type="button" class="primary big" id="playBtn">Start</button>
+        <button type="button" class="primary big" id="playBtn" hidden>Start</button>
         <button type="button" id="endBtn" hidden data-i18n="side.end">End session</button>
       </div>
       <div class="card">
@@ -134,9 +134,9 @@
       </div>
       <div class="card" id="levelCard">
         <div class="level-row"><span class="eyebrow" id="levelNum">Level 1</span><span class="eyebrow" id="limitOut"></span></div>
-        <div id="levelName"></div>
+        <div id="levelName" hidden></div>
         <div class="meterbox" role="progressbar" aria-label="Progress to next level" aria-valuemin="0" aria-valuemax="100" id="readyBar"><div id="readyFill"></div></div>
-        <div id="coach">Pick an instrument, then press Start.</div>
+        <div id="coach" hidden>Pick an instrument, then press Start.</div>
         <div class="row" style="margin-top:8px"><button type="button" class="small" id="easierBtn" data-i18n="side.easier">Make it easier</button><button type="button" class="small" id="harderBtn" data-i18n="side.harder">Skip ahead</button></div>
       </div>
       <div class="card" id="feedbackCard" hidden><div class="eyebrow" data-i18n="side.feedbackEyebrow">Instant feedback</div><div id="feedback" role="status"></div></div>
