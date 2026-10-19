@@ -40,7 +40,7 @@ test('tuner labels are readable on a phone and a tuned row label stays inside it
   await page.evaluate("document.querySelector('#picker button[data-mod=\"tuner\"]').click()");
   const k = await page.evaluate(KPX);
   // the long gauge message may wrap onto two lines: every word is drawn, each line at the floor
-  const GAUGE = 'press Set up input, then Connect microphone';
+  const GAUGE = 'press Connect microphone';
   const gaugeParts = `window.__ct.filter(x => x.s.length > 4 && ${JSON.stringify(GAUGE)}.includes(x.s))`;
   await page.waitFor(`window.__ct.some(x => x.s === "play one string") || ${gaugeParts}.map(x => x.s).join(' ') === ${JSON.stringify(GAUGE)}`);
   const css = (s) => page.evaluate(`(() => { const e = window.__ct.filter(x => x.s === ${JSON.stringify(s)}); return e.length ? Math.min(...e.map(x => x.px)) / (${KPX}) : null; })()`);

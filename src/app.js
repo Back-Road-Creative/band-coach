@@ -642,6 +642,7 @@ import { register as registerPathway } from './ui/pathway.js';
   // grouping is purely visual.
   function variantParentsFrom(mods, staticPairs) { const out = Object.assign({}, staticPairs); Object.keys(mods).forEach(id => { const p = mods[id] && mods[id].parent; if (p && p !== id && mods[p]) out[id] = p; }); return out; }
   const VARIANT_PARENTS = variantParentsFrom(MODS, { 'bass-5-string': 'bass', 'ukulele-low-g': 'uke', 'ukulele-baritone': 'uke' });
+  const TUNER_FOR = { gtr: 'gtr', bass: 'bass', uke: 'uke', violin: 'vln' }; // the tuner opens on the instrument the learner already chose, until they pick a tuning themselves
   const TUNINGS = { gtr: ['Guitar', [40, 45, 50, 55, 59, 64]], bass: ['Bass', [28, 33, 38, 43]], uke: ['Ukulele', [67, 60, 64, 69]], vln: ['Violin', [55, 62, 69, 76]], chrom: ['Any note (chromatic)', []] };
   const _info = info, _valid = validId;
   info = function (m, id, prefs) { const hk = (prefs && Number.isInteger(prefs.harpKey) && prefs.harpKey >= 0 && prefs.harpKey <= 11) ? prefs.harpKey : 0; if (id[0] === 'h') { const mm = /^h([bd])(\d+)$/.exec(id), dir = mm[1], hole = +mm[2], layout = harpLayoutFor(hk), midi = layout[hole - 1][dir === 'b' ? 'blow' : 'draw']; return { kind: 'note', midi: midi, hole: hole, dir: dir, note: nname(midi), label: (dir === 'b' ? 'Blow ' : 'Draw ') + hole + ' (' + nname(midi) + ')', short: (dir === 'b' ? 'Blow ' : 'Draw ') + hole }; } if (id[0] === 'y') { const mm = /^y(\d+)x(\d)$/.exec(id), hole = +mm[1], depth = +mm[2], layout = harpLayoutFor(hk), b = layout[hole - 1].bends.find(x => x.semitonesBent === depth), dir = b.action === 'draw' ? 'd' : 'b'; return { kind: 'note', midi: b.pitch, hole: hole, dir: dir, bend: depth, note: nname(b.pitch), label: (dir === 'b' ? 'Blow ' : 'Draw ') + hole + ' bent ' + depth + (depth === 1 ? ' semitone' : ' semitones') + ' (' + nname(b.pitch) + ')', short: (dir === 'b' ? 'Blow ' : 'Draw ') + hole + ' ↓' + depth }; } return _info(m, id, prefs); };
@@ -1856,7 +1857,7 @@ import { register as registerPathway } from './ui/pathway.js';
   }
 
   // ---------- tools: tuner and melody capture ----------
-  let tunerKind = 'gtr', tuned = {}, tunerState = null, tunerLock = null, cap = { on: false, notes: [], curM: -1, curN: 0, t0: 0, start: 0 }, customOn = false, chunk = 0;
+  let tunerKind = 'gtr', tunerPicked = false, tuned = {}, tunerState = null, tunerLock = null, cap = { on: false, notes: [], curM: -1, curN: 0, t0: 0, start: 0 }, customOn = false, chunk = 0;
   // dt is seconds (see the tuner's setInterval poll below), stepTuner wants ms.
   function toolPitch(fr, dt) {
     heard = fr;
@@ -1884,7 +1885,7 @@ import { register as registerPathway } from './ui/pathway.js';
     const tg = TUNINGS[tunerKind][1], n = tg.length, st = tunerState || {}; rowRects = []; playRects = [];
     const activeIdx = tunerLock !== null ? tunerLock : st.selIdx;
     if (n) tg.forEach((m, i) => { const y = H * 0.1 + i * (H * 0.8 / n), h = H * 0.8 / n - 8, ok = tuned[tunerKind + i], sel = i === activeIdx && st.phase && st.phase !== 'idle'; const playW = Math.min(Math.max(W * 0.05, 22 * cssK()), h); const rowW = W * 0.38 - playW - 10; rr(W * 0.05, y, W * 0.38, h, 8); g.fillStyle = ok ? '#5be08a' : sel ? '#2a3350' : '#121726'; g.fill(); g.fillStyle = ok ? '#04130a' : '#e9edf6'; let rowTxt = 'String ' + (n - i) + '   ' + nname(m, true) + (ok ? '   in tune' : '') + (tunerLock === i ? '   LOCKED' : ''), rfs = Math.min(H * 0.08, H * 0.34 / n); font(rfs); g.textAlign = 'left'; const rmax = W * 0.05 + rowW - W * 0.07 - 4; let rtw = g.measureText(rowTxt).width; if (ok && rtw > rmax && rfs * rmax / rtw < 9 * cssK()) { rowTxt = rowTxt.replace('   in tune', '   \u2713'); rtw = g.measureText(rowTxt).width; } if (rtw > rmax) font(rfs * rmax / rtw); g.fillText(rowTxt, W * 0.07, y + h * 0.62); g.fillStyle = '#93a0bd44'; rr(W * 0.05 + rowW + 8, y + 2, playW, h - 4, 6); g.fill(); g.fillStyle = '#e9edf6'; g.textAlign = 'center'; font(Math.min(H * 0.06, H * 0.28 / n)); g.fillText('♪', W * 0.05 + rowW + 8 + playW / 2, y + h * 0.6); rowRects.push({ x: W * 0.05, y: y, w: rowW, h: h, m: m, idx: i }); playRects.push({ x: W * 0.05 + rowW + 8, y: y + 2, w: playW, h: h - 4, m: m }); });
-    if (st.phase === 'idle' || st.midi === null || !micReady) { gauge(W * 0.45, H * 0.62, W * 0.5, null, !micReady ? 'press Set up input, then Connect microphone' : tunerLock !== null && n ? 'locked: play ' + nname(tg[tunerLock], true) : 'play one string'); return; }
+    if (st.phase === 'idle' || st.midi === null || !micReady) { gauge(W * 0.45, H * 0.62, W * 0.5, null, !micReady ? 'press Connect microphone' : tunerLock !== null && n ? 'locked: play ' + nname(tg[tunerLock], true) : 'play one string'); return; }
     const target = st.targetMidi, c = st.cents, offScale = Math.abs(c) > 50;
     const label = (Math.abs(c) <= 5 ? 'in tune' : Math.round(Math.abs(c)) + ' cents ' + (c > 0 ? 'sharp, loosen it' : 'flat, tighten it')) + (offScale ? ' (off scale)' : '');
     // Age (ms since the last confident reading) fades the readout instead of
@@ -2105,7 +2106,7 @@ import { register as registerPathway } from './ui/pathway.js';
     if (mod === 'voice' && !rangeTest) btn('optRangeStart', DB.prefs.voiceRange ? 'Find my range again' : 'Find my range', () => { handleRangeTest('start'); renderOpts(); });
     if (mod === 'voice' && rangeTest && rangeTest.stage === 'low') { btn('optRangeNext', 'Got it -- now the highest', () => { handleRangeTest('next'); renderOpts(); }, true); btn('optRangeCancel', 'Cancel', () => { handleRangeTest('cancel'); renderOpts(); }); }
     if (mod === 'voice' && rangeTest && rangeTest.stage === 'high') { btn('optRangeDone', 'Got it -- done', () => { handleRangeTest('finish'); renderOpts(); }, true); btn('optRangeCancel2', 'Cancel', () => { handleRangeTest('cancel'); renderOpts(); }); }
-    if (mod === 'tuner') { sel('optTune', 'Instrument', TUNINGS, tunerKind, v => { tunerKind = v; tunerState = null; tunerLock = null; }); btn('tuneReset', 'Start over', () => { tuned = {}; tunerLock = null; }); }
+    if (mod === 'tuner') { sel('optTune', 'Instrument', TUNINGS, tunerKind, v => { tunerKind = v; tunerPicked = true; tunerState = null; tunerLock = null; }); btn('tuneReset', 'Start over', () => { tuned = {}; tunerLock = null; }); const tc = btn('tunerConnect', t('tuner.connectMic'), () => $('ioBtn').click(), true); tc.hidden = micReady; }
     if (mod === 'harp') sel('optHarpKey', 'My harmonica is in the key of', HARP_KEY_OPTS, DB.prefs.harpKey, v => { DB.prefs.harpKey = +v; task = null; if (pitchWorkletNode) { lastWorkletRangeSent = { fmin: MODS.harp.fmin, fmax: MODS.harp.fmax }; pitchWorkletNode.port.postMessage({ type: 'range', fmin: MODS.harp.fmin, fmax: MODS.harp.fmax }); } save(); });
     // B1(3): Both/Right only/Left only for the hands-together drill (level
     // 13). Changing it clears the in-progress task so the next one is built
@@ -2252,7 +2253,7 @@ import { register as registerPathway } from './ui/pathway.js';
     return join(heard) + (heard.length > 1 ? ' are working.' : ' is working.') + (quiet.length ? ' ' + join(quiet) + ' found. Press any key on ' + (quiet.length > 1 ? 'one' : 'it') + '.' : '');
   }
   function ioRefresh() {
-    const b = $('ioBtn'), detailsBtn = $('midiDetailsBtn');
+    const b = $('ioBtn'), detailsBtn = $('midiDetailsBtn'), tcb = $('tunerConnect'); if (tcb) tcb.hidden = micReady;
     if (needsMic()) { b.hidden = micReady; b.textContent = 'Connect microphone'; detailsBtn.hidden = true; ioState(micReady ? 'on' : '', micReady ? 'Listening through your microphone.' : 'This one listens through a microphone or audio interface.'); }
     else if (mod === 'ear') { b.hidden = true; detailsBtn.hidden = true; ioState('on', 'Nothing to connect. Turn your sound up.'); }
     else {
@@ -2485,7 +2486,7 @@ import { register as registerPathway } from './ui/pathway.js';
   $('optNoteSystem').addEventListener('change', applyNoteNaming); $('optAccidentals').addEventListener('change', applyNoteNaming);
 
   function setMod(m) {
-    if (sess) endSession(); mod = m; if (micStream && !(TOOLS[m] || (MODS[m] && /^(pluck|sustain|mic)/.test(MODS[m].input)))) { const pm = $('practiceMeter'); if (pm) pm.hidden = true; micStream.getTracks().forEach(t => t.stop()); micStream = null; micReady = false; micGen++; } if (MODS[m]) { S = DB.mods[m]; DB.prefs.mod = m; } customOn = false; grooveOn = false; groove = null; task = null; bar = null; heard = null; cap.on = false; tunerState = null; tunerLock = null; diagInputFrames = []; diagLastState = null;
+    if (sess) endSession(); mod = m; if (micStream && !(TOOLS[m] || (MODS[m] && /^(pluck|sustain|mic)/.test(MODS[m].input)))) { const pm = $('practiceMeter'); if (pm) pm.hidden = true; micStream.getTracks().forEach(t => t.stop()); micStream = null; micReady = false; micGen++; } if (MODS[m]) { S = DB.mods[m]; DB.prefs.mod = m; } customOn = false; grooveOn = false; groove = null; task = null; bar = null; heard = null; cap.on = false; if (m === 'tuner' && !tunerPicked && TUNER_FOR[DB.prefs.mod]) tunerKind = TUNER_FOR[DB.prefs.mod]; tunerState = null; tunerLock = null; diagInputFrames = []; diagLastState = null;
     if (pitchWorkletNode && MODS[m] && MODS[m].fmin && MODS[m].fmax) { lastWorkletRangeSent = { fmin: MODS[m].fmin, fmax: MODS[m].fmax }; pitchWorkletNode.port.postMessage({ type: 'range', fmin: MODS[m].fmin, fmax: MODS[m].fmax }); }
     if (pitchWorkletNode && actx) { const neededFrameSize = frameSizeForInstrument(instrumentById[m], actx.sampleRate); if (neededFrameSize !== lastWorkletFrameSize) { lastWorkletFrameSize = neededFrameSize; pitchWorkletNode.port.postMessage({ type: 'frameSize', frameSize: neededFrameSize }); } }
     document.querySelectorAll('#picker button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.mod === m)));

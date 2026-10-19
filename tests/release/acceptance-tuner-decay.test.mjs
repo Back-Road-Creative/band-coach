@@ -83,7 +83,7 @@ test('idle tuner offers a Connect microphone button that follows the chosen inst
       await page.waitFor("document.querySelector('#picker button[data-mod=\"violin\"]').getAttribute('aria-pressed') === 'true'");
       await page.evaluate("document.querySelector('#picker button[data-mod=\"tuner\"]').click()");
       await page.waitFor("document.getElementById('optTune') && document.getElementById('optTune').value === 'vln'");
-      await page.waitFor("['G','D','A','E'].every(function (n) { return window.__bcCanvasText.indexOf(n) !== -1; })");
+      await page.waitFor("window.__bcCanvasText.filter(function (x) { return /^String \\d/.test(x); }).map(function (x) { return x.replace(/^String \\d +([A-G])\\S*.*$/, '$1'); }).join('') === 'GDAE'");
 
       const btn = "document.querySelector('#modOpts #tunerConnect')";
       assert.equal(await page.evaluate(`!!${btn} && !${btn}.hidden`), true, 'the idle tuner card has a visible Connect microphone button');
