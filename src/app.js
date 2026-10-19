@@ -1616,7 +1616,9 @@ import { register as registerPathway } from './ui/pathway.js';
   function rr(x, y, w, h, r) { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); }
   // canvas pixels per CSS pixel (2 on a phone, 1 on a plain desktop): a size floor in canvas pixels is half as big on screen at 2, so floors are written in CSS pixels times this
   const cssK = () => cv.width / (cv.getBoundingClientRect().width || cv.width);
-  const font = (px, w) => { g.font = (w || 700) + ' ' + Math.round(px) + 'px "Barlow Condensed", Arial, sans-serif'; };
+  // the browser's text-size setting (root font size / 16), read once per draw() so canvas text grows with it like the page text does
+  let rootK = 1;
+  const font = (px, w) => { g.font = (w || 700) + ' ' + Math.round(px * rootK) + 'px "Barlow Condensed", Arial, sans-serif'; };
   const accent = () => (MODS[mod] || TOOLS[mod]).color;
   const recentPress = m => pressed[m] && performance.now() - pressed[m] < 220;
   // The [lo, hi] MIDI range the on-screen keyboard is currently drawing (used
@@ -1817,7 +1819,7 @@ import { register as registerPathway } from './ui/pathway.js';
   }
   let kbdTargetDbg = []; // last keyboard target list drawn (debug hook only)
   function draw() {
-    cv.classList.toggle('staffkbd', staffBand('kbd') && mod === 'kbd'); size(); const W = cv.width, H = cv.height; g.clearRect(0, 0, W, H); rowRects = []; keyRects = []; kbdOverviewRect = null;
+    rootK = (parseFloat(getComputedStyle(document.documentElement).fontSize) || 16) / 16; cv.classList.toggle('staffkbd', staffBand('kbd') && mod === 'kbd'); size(); const W = cv.width, H = cv.height; g.clearRect(0, 0, W, H); rowRects = []; keyRects = []; kbdOverviewRect = null;
     if (TOOLS[mod]) { if (mod === 'tuner') drawTuner(W, H); else drawCapture(W, H); return; }
     const M = MODS[mod], e = playing && task && !task.done ? cur() : null, showE = e || (task && task.done ? task.els[task.els.length - 1] : null);
     if (mod === 'kbd') { const kr = kbdRange(), sb = staffBand('kbd'), oy = sb ? H * staffBandH('kbd', H) : 0, Hk = sb ? H * (1 - staffBandH('kbd', H)) : H; const tg = []; let rhMidi = null, lhMidi = null; if (e && !(task.kind === 'groove')) { if (e.info.kind === 'chord') { if (e.reveal || e.failed) e.info.pcs.forEach(x => tg.push(60 + x)); } else if (e.info.kind === 'hands-together') { if (e.reveal || e.failed) { tg.push(e.info.ex.rh.midi, e.info.ex.lh.midi); rhMidi = e.info.ex.rh.midi; lhMidi = e.info.ex.lh.midi; } } else if (e.reveal || e.failed) tg.push(e.info.midi); } if (task && task.kind === 'groove' && !task.done) task.els.forEach(x => { if (x.info.midi && (x.reveal || x.failed)) tg.push(x.info.midi); }); kbdTargetDbg = tg; const good = performance.now() - flashGood < 300 && task ? task.els.slice(0, task.idx).map(x => x.info.midi).filter(x => x) : []; const kOpts = { target: tg, good: good, names: DB.prefs.names, rhMidi: rhMidi, lhMidi: lhMidi };
