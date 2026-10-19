@@ -252,3 +252,32 @@ test('control for A01: keys pressed outside a judged note are never credited', a
     assert.deepEqual(page.exceptions, [], 'no uncaught exceptions');
   });
 });
+
+// One question first: a fresh profile is asked exactly one thing -- which
+// instrument -- and nothing is stored or offered until the learner answers it.
+test('first visit asks one question: nothing stored, no Start, until an instrument is chosen', async (t) => {
+  await withAcceptancePage(t, {}, async (page) => {
+    const stage = () => page.evaluate("['playBtn', 'levelName', 'coach'].map((id) => document.getElementById(id).hidden)");
+    assert.deepEqual(await stage(), [true, true, true], 'Start, the level name and the coach line are hidden before a choice');
+    // Longer than the app's 1200 ms save debounce: a boot-time save would have landed.
+    await new Promise((r) => setTimeout(r, 2000));
+    assert.equal(await page.evaluate("localStorage.getItem('bandcoach.v1')"), null, 'nothing is stored before a choice');
+
+    await page.reload();
+    assert.equal(await text(page, 'navInstrument'), 'Choose an instrument', 'a reload still asks');
+    assert.equal(await hidden(page, 'picker'), false, 'the sheet is still open after a reload');
+
+    // Start pressed anyway (a script, a stray key): refused, the question is put again.
+    await page.evaluate("document.getElementById('playBtn').click()");
+    assert.equal(await page.evaluate("document.activeElement && document.activeElement.closest('#picker') ? 'picker' : String(document.activeElement && document.activeElement.id)"), 'picker', 'focus lands in the picker');
+    assert.notEqual(await text(page, 'playBtn'), 'Pause', 'no session started');
+    assert.equal(await hidden(page, 'picker'), false, 'the sheet stays open');
+    await new Promise((r) => setTimeout(r, 1500));
+    assert.equal(await page.evaluate("localStorage.getItem('bandcoach.v1')"), null, 'still nothing stored');
+
+    await chooseKeyboard(page);
+    assert.deepEqual(await stage(), [false, false, false], 'a choice brings Start, the level name and the coach line');
+    await page.waitFor("localStorage.getItem('bandcoach.v1') !== null");
+    assert.deepEqual(page.exceptions, [], 'no uncaught exceptions');
+  });
+});
