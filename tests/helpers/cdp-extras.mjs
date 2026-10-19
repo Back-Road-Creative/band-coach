@@ -106,3 +106,31 @@ export const FULL_STORAGE_STUB = `(() => {
     return real.call(this, key, value);
   };
 })();`;
+
+// Answers requests for one URL from the test instead of the network, through
+// Fetch.requestPaused, so the page's own fetch() runs its real code path.
+// `answer()` returns { status, body } (body is JSON-encoded unless a string) or
+// { fail: 'InternetDisconnected' } to make the request fail as an offline
+// browser's would. The CORS header is what the real host sends, so a file://
+// page (Origin: null) is let through exactly as it is in production.
+// Returns { seen, stop }: `seen` lists the URLs answered.
+export async function stubRequests(page, url, answer) {
+  const seen = [];
+  await page.cdp.send('Fetch.enable', { patterns: [{ urlPattern: url }] });
+  const off = page.cdp.on((msg) => {
+    if (msg.method !== 'Fetch.requestPaused') return;
+    const { requestId, request } = msg.params;
+    seen.push(request.url);
+    const r = answer(request);
+    const done = r.fail
+      ? page.cdp.send('Fetch.failRequest', { requestId, errorReason: r.fail })
+      : page.cdp.send('Fetch.fulfillRequest', {
+          requestId,
+          responseCode: r.status ?? 200,
+          responseHeaders: [{ name: 'Content-Type', value: 'application/json' }, { name: 'Access-Control-Allow-Origin', value: '*' }],
+          body: Buffer.from(typeof r.body === 'string' ? r.body : JSON.stringify(r.body)).toString('base64'),
+        });
+    done.catch(() => {});
+  });
+  return { seen, stop: async () => { off(); await page.cdp.send('Fetch.disable'); } };
+}
