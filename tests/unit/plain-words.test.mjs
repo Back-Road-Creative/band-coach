@@ -44,3 +44,25 @@ test('the tagline is one line: a single sentence of at most 90 characters', () =
   assert.ok(tag.length <= 90, `${tag.length} characters`);
   assert.equal(tag.replace(/\.$/, '').split(/[.!?] /).length, 1, 'one sentence');
 });
+
+// Shown-to-learner sources: every UI module, app.js and the pathway texts. Import warnings
+// (src/song) are internal codes that song-status.js rewrites in plain words before showing.
+const SHOWN = (rel) => rel.startsWith('ui/') || rel === 'app.js' || rel === 'instruments/kbd-pathway.js';
+
+test('on-screen strings in the shown sources have none of the banned terms', async () => {
+  const { readdirSync, statSync } = await import('node:fs');
+  const { join } = await import('node:path');
+  const root = fileURLToPath(new URL('../../src/', import.meta.url));
+  const walk = (d) => readdirSync(d).flatMap((n) => { const p = join(d, n); return statSync(p).isDirectory() ? walk(p) : p.endsWith('.js') ? [p] : []; });
+  const hits = [];
+  for (const f of walk(root).filter((p) => SHOWN(p.slice(root.length)))) {
+    // string literals only (identifiers like step.bpm are code, not words on screen); comments are not shown
+    const src = readFileSync(f, 'utf8').replace(/\/\*[\s\S]*?\*\/|\/\/[^\n]*/g, '');
+    for (const lit of src.match(/'(?:[^'\\\n]|\\.)*'|"(?:[^"\\\n]|\\.)*"|`(?:[^`\\]|\\.)*`/g) || []) {
+      if (!/\s/.test(lit) && /[-.]/.test(lit)) continue; // a class, id or i18n key such as 'panel-learn-practise-btn', not words
+      const text = lit.replace(/class="[^"]*"/g, '').replace(/\$\{[^}]*\}/g, ''); // ${ev.retained} is code
+      for (const [re, plain] of BANNED) if (re.test(text)) hits.push(`${f.slice(root.length)}: ${lit.slice(0, 60)} -> ${plain}`);
+    }
+  }
+  assert.deepEqual(hits, []);
+});

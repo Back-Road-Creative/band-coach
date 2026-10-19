@@ -46,7 +46,7 @@ export function feasibility(song, partId, instrument) {
   const fit = fitToInstrument(song, partId, instrument);
 
   if (fit.notes.length === 0) {
-    return { level: 'empty', label: 'No notes yet', detail: 'This part has no notes to practise yet.', monophonic: true };
+    return { level: 'empty', label: 'No notes yet', detail: 'This part has no notes to practice yet.', monophonic: true };
   }
 
   // fit.unplayable mixes two different reasons a note doesn't reach the

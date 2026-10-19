@@ -104,5 +104,5 @@ export function plainImportWarning(w) {
 export function reviewGate(warnings) {
   const list = Array.isArray(warnings) ? warnings : [];
   if (!list.length) return { allowed: true, reason: null };
-  return { allowed: false, reason: 'Fix up the ' + list.length + ' thing' + (list.length === 1 ? '' : 's') + ' to check first, then practise.' };
+  return { allowed: false, reason: 'Fix up the ' + list.length + ' thing' + (list.length === 1 ? '' : 's') + ' to check first, then practice.' };
 }

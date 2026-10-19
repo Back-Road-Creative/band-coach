@@ -127,7 +127,7 @@ test('"Play along with this recording" opens Play Along already analysing the sa
   const fileName = await page.evaluate("document.getElementById('paFileName').textContent");
   assert.equal(fileName, 'three-notes.wav', 'Play Along is analysing the same file the learner just dropped');
   const factsText = await page.evaluate("Array.from(document.querySelectorAll('#paFacts .stat')).map(e => e.textContent).join('|')");
-  assert.match(factsText, /BPM/);
+  assert.match(factsText, /beats a minute/);
 });
 
 test('a notation import shows no "Play along with this recording" button (no decoded audio to hand over)', async (t) => {
@@ -152,7 +152,7 @@ test('a notation import shows no "Play along with this recording" button (no dec
 // P3-4 renamed the button's label "Fix it up" -> "Edit notes" (class kept);
 // this test's own name is left describing the old label to match the
 // scenario title, only the selector text below changed.
-test('a recording with unresolved check items disables "Practise this" and "Edit notes" carries the check list to the editor', async (t) => {
+test('a recording with unresolved check items disables "Practice this" and "Edit notes" carries the check list to the editor', async (t) => {
   const dir = mkdtempSync(join(tmpdir(), 'band-coach-learn-handoff-'));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   const wavPath = threeToneWav(join(dir, 'three-notes.wav'));
@@ -177,9 +177,9 @@ test('a recording with unresolved check items disables "Practise this" and "Edit
   // "Practise this" is disabled with a plain-language reason next to it, and
   // "Fix it up" is the way forward.
   const practiseDisabled = await page.evaluate(
-    "Array.from(document.querySelectorAll('.panel-learn-practise-btn')).find(b => b.textContent === 'Practise this').disabled"
+    "Array.from(document.querySelectorAll('.panel-learn-practise-btn')).find(b => b.textContent === 'Practice this').disabled"
   );
-  assert.equal(practiseDisabled, true, 'Practise this is disabled while check items are unresolved');
+  assert.equal(practiseDisabled, true, 'Practice this is disabled while check items are unresolved');
   const reason = await page.evaluate("(document.querySelector('.panel-learn-practise-gate-reason') || {}).textContent || ''");
   assert.match(reason, /fix/i, 'a plain-language reason is shown next to the disabled button');
 
