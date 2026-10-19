@@ -18,6 +18,7 @@ or an ancestor of it with only `docs/` changed since (tag the "record candidate"
 any change outside `docs/` after the candidate makes the record stale. No row in it may be open. A row that only a person on a
 device can close is written `**device-only: <why>**` (a missing reason fails); a bare
 `**open**`, `**Pending.**` or `**Not run**` row is agent-executable and fails.
+The Automated row quotes the `band-coach.html.evidence.json` that `npm run stage` writes beside the staged file (sha256, commit, pass line), so the row describes the file the person tested.
 
 ## How to fill one in
 
