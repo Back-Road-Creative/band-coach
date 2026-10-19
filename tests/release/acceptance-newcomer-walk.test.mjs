@@ -4,7 +4,7 @@
 // nothing reaches through window.__coach. Live today: no sideways scroll and no console event, at every
 // config x state. Written in full but still todo where the defect is measured (each flips by deleting
 // its `todo` option): the four checks the U units fix. A check is todo only at the configs where it
-// fails today (CI's summary refuses a todo that passes), so U5 is todo in the light theme only (U2 has landed). Their measured values are printed so the flip is one word.
+// fails today (CI's summary refuses a todo that passes), so U5 is todo in the light theme only (U2 has landed). U6 is live on the phone widths (the picker there shows a short "More" chip) and todo elsewhere. Their measured values are printed so the flip is one word.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { withAcceptancePage } from '../helpers/browser.mjs';
@@ -157,7 +157,7 @@ for (const cfg of CONFIGS) {
       assert.ok(b, 'Start is visible once an instrument is chosen');
       assert.ok(b.y >= 0 && b.y + b.h <= first.vh, `Start spans y ${b.y}..${b.y + b.h}, below the ${first.vh}px first screen`);
     });
-    await t.test('no control label ends in an ellipsis (U6)', { todo: 'U6' }, () => {
+    await t.test('no control label ends in an ellipsis (U6)', { todo: cfg.w <= 600 ? false : 'U6' }, () => {
       diag(`labels ending in an ellipsis: ${states.map((s) => `${s.state}=${s.m.ellipsis.length}`).join(' ')}`);
       const bad = states.filter((s) => s.m.ellipsis.length).map((s) => `${s.state}: ${s.m.ellipsis.join('; ')}`);
       assert.deepEqual(bad, []);

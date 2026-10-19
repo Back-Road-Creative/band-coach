@@ -21,7 +21,9 @@ test('each variant family is no wider than its parent button', async () => {
       await page.setViewport({ width, height, mobile });
       const rows = await page.evaluate(`JSON.stringify([...document.querySelectorAll('#picker .picker-variant-group')].map(g => {
         const b = g.querySelector(':scope > button');
-        return { id: g.dataset.modGroup, group: Math.round(g.getBoundingClientRect().width), button: Math.round(b.getBoundingClientRect().width) };
+        // On a phone (U6) the "More" chip sits beside the button, not under it, so the family may be one chip wider.
+        const chip = ${width <= 600} ? g.querySelector('summary').getBoundingClientRect().width + 8 : 0;
+        return { id: g.dataset.modGroup, group: Math.round(g.getBoundingClientRect().width), button: Math.round(b.getBoundingClientRect().width + chip) };
       }))`);
       const groups = JSON.parse(rows);
       assert.ok(groups.length > 0, `${name}: no variant families rendered`);

@@ -2600,7 +2600,7 @@ import { register as registerPathway } from './ui/pathway.js';
       // Same "build the label from the data" rule as the tools summary
       // below: naming the variants by hand would go stale the first time
       // one is renamed or a third is added.
-      const summary = document.createElement('summary'); summary.textContent = 'Variants: ' + kids.map(v => MODS[v].name).join(', '); summary.title = summary.textContent; toggle.appendChild(summary);
+      const summary = document.createElement('summary'); const full = 'Variants: ' + kids.map(v => MODS[v].name).join(', '); const fullSpan = document.createElement('span'); fullSpan.className = 'variant-full'; fullSpan.textContent = full; const moreSpan = document.createElement('span'); moreSpan.className = 'variant-more'; moreSpan.textContent = t('picker.more'); summary.append(fullSpan, moreSpan); summary.title = full; toggle.appendChild(summary); // phone: CSS shows the short "More…" chip instead of the clipped list
       const list = document.createElement('div'); list.className = 'variant-buttons';
       kids.forEach(v => list.appendChild(buildPickerButton(v, MODS[v])));
       toggle.appendChild(list);

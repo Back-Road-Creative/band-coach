@@ -293,7 +293,7 @@ test('first visit asks one question: nothing stored, no Start, until an instrume
 
 // U6: on a phone the instrument picker is part of the page, not a small box
 // with its own scrollbar, and no label is cut off. The variant lists sit behind
-// a short "More…" chip (a deliberate label, the one text allowed to end in an
+// a short "More" chip (a deliberate label, the one text allowed to end in an
 // ellipsis); every other visible label is whole, neither ending in "…" nor
 // clipped by the CSS.
 test('U6: at phone width the picker fits the page and no label is cut off', async (t) => {
@@ -314,6 +314,6 @@ test('U6: at phone width the picker fits the page and no label is cut off', asyn
     assert.equal(r.scrollHeight, r.clientHeight, 'the picker has no inner scroll area');
     assert.deepEqual(r.ellipsed, [], 'no label ends in an ellipsis');
     assert.deepEqual(r.clipped, [], 'no label is clipped');
-    assert.ok(r.chips.length > 0 && r.chips.every((c) => c === 'More…'), `variant chips read "More…" (got ${JSON.stringify(r.chips)})`);
+    assert.ok(r.chips.length > 0 && r.chips.every((c) => c === 'More'), `variant chips read "More" (got ${JSON.stringify(r.chips)})`);
   });
 });
