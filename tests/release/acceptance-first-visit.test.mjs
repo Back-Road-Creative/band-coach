@@ -275,6 +275,15 @@ test('first visit asks one question: nothing stored, no Start, until an instrume
     await new Promise((r) => setTimeout(r, 1500));
     assert.equal(await page.evaluate("localStorage.getItem('bandcoach.v1')"), null, 'still nothing stored');
 
+    // A setting the learner changes before choosing is theirs and survives a reload; the instrument question is still open.
+    await page.evaluate("const s = document.getElementById('optTheme'); s.value = 'light'; s.dispatchEvent(new Event('change'))");
+    await page.waitFor("localStorage.getItem('bandcoach.v1') !== null");
+    assert.equal(await page.evaluate("JSON.parse(localStorage.getItem('bandcoach.v1')).prefs.mod"), null, 'no instrument is stored with it');
+    await page.reload();
+    assert.equal(await page.evaluate("document.documentElement.getAttribute('data-theme')"), 'light', 'the theme choice survived the reload');
+    assert.equal(await text(page, 'navInstrument'), 'Choose an instrument', 'the question is still asked');
+    assert.deepEqual(await stage(), [true, true, true], 'Start is still hidden');
+
     await chooseKeyboard(page);
     assert.deepEqual(await stage(), [false, false, false], 'a choice brings Start, the level name and the coach line');
     await page.waitFor("localStorage.getItem('bandcoach.v1') !== null");

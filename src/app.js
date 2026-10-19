@@ -711,7 +711,7 @@ import { register as registerPathway } from './ui/pathway.js';
   // it stays directly reachable, and shutting the whole sheet on top of
   // that would hide it two levels deep behind two different controls.
   let hasSavedMod = false;
-  // One question first: true once the learner has answered "which instrument?" (a saved choice at boot, a pick, or a test's setMod). Until then nothing is written to storage and Start, the level name and the coach line stay hidden. `booting` marks the boot-time setMod(mod) as the default, not an answer.
+  // One question first: true once the learner has answered "which instrument?" (a saved choice at boot, a pick, or a test's setMod). Until then no instrument is written to storage (a changed setting still is) and Start, the level name and the coach line stay hidden. `booting` marks the boot-time setMod(mod) as the default, not an answer.
   let instrumentChosen = false, booting = true;
   function revealStage() { ['playBtn', 'levelName', 'coach'].forEach(id => { const el = $(id); if (el) el.hidden = false; }); }
   // P2b-1: once true, #picker behaves as a sheet that shuts itself after
@@ -800,13 +800,14 @@ import { register as registerPathway } from './ui/pathway.js';
   // every retry after it.
   function writeDB() {
     if (MODS[mod]) DB.mods[mod] = S = sanitizeModel(mod, S, modelNow);
-    const candidate = JSON.stringify(DB);
+    // Before the instrument question is answered, a setting the learner changed is stored, but not the boot-time default instrument, so the next visit still asks.
+    const candidate = JSON.stringify(instrumentChosen ? DB : Object.assign({}, DB, { prefs: Object.assign({}, DB.prefs, { mod: null }) }));
     const result = store.blocked ? { ok: false } : safeSet(store.storage, KEY, candidate);
     if (result.ok) { lastStored = candidate; if (saveFailedShown) { saveFailedShown = false; $('settingsSay').textContent = ''; $('mainSay').textContent = ''; } }
     else { saveFailedShown = true; $('settingsSay').textContent = t('storage.saveFailed'); $('mainSay').textContent = t('storage.saveFailed'); }
     return result.ok;
   }
-  function save() { if (saveTimer || !instrumentChosen) return; saveTimer = setTimeout(() => { saveTimer = null; writeDB(); }, 1200); }
+  function save() { if (saveTimer) return; saveTimer = setTimeout(() => { saveTimer = null; writeDB(); }, 1200); }
   // Closing or reloading within the 1200ms debounce window used to lose
   // whatever save() just queued -- nothing ever flushed it early. pagehide
   // fires on tab close, navigation and reload alike; visibilitychange with
