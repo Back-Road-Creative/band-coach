@@ -56,8 +56,9 @@ test('on-screen strings in the shown sources have none of the banned terms', asy
   const walk = (d) => readdirSync(d).flatMap((n) => { const p = join(d, n); return statSync(p).isDirectory() ? walk(p) : p.endsWith('.js') ? [p] : []; });
   const hits = [];
   for (const f of walk(root).filter((p) => SHOWN(p.slice(root.length)))) {
-    // string literals only (identifiers like step.bpm are code, not words on screen); comments are not shown
-    const src = readFileSync(f, 'utf8').replace(/\/\*[\s\S]*?\*\/|\/\/[^\n]*/g, '');
+    // string literals only (identifiers like step.bpm are code, not words on screen); comments are not shown,
+    // and classList arguments ('practising' on body) are class names, not words
+    const src = readFileSync(f, 'utf8').replace(/\/\*[\s\S]*?\*\/|\/\/[^\n]*/g, '').replace(/classList\.\w+\(\s*'[^']*'/g, 'classList.x(');
     for (const lit of src.match(/'(?:[^'\\\n]|\\.)*'|"(?:[^"\\\n]|\\.)*"|`(?:[^`\\]|\\.)*`/g) || []) {
       if (!/\s/.test(lit) && /[-.]/.test(lit)) continue; // a class, id or i18n key such as 'panel-learn-practise-btn', not words
       const text = lit.replace(/class="[^"]*"/g, '').replace(/\$\{[^}]*\}/g, ''); // ${ev.retained} is code
