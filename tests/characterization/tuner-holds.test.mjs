@@ -43,8 +43,23 @@ const CAPTURE_SCRIPT = `
     proto.fillText = function (text) {
       window.__bcCanvasText.push({ text: String(text), t: performance.now() });
       if (window.__bcCanvasText.length > 4000) window.__bcCanvasText.splice(0, 2000);
+      // Tuner frames, compact (the raw log above is trimmed every ~1s of
+      // drawing, which would eat the start of a long run). A tuner frame
+      // starts at its first string row ("String 4 ...") and ends at the
+      // "flat" scale label drawn right after the target letter "A"; the
+      // frame records whether "A" was drawn in it. t is the page clock.
+      var f = window.__bcFrames = window.__bcFrames || [], s = String(text);
+      if (/^String 4 /.test(s)) window.__bcCurA = false;
+      if (s === 'A') window.__bcCurA = true;
+      if (s === 'flat') f.push({ t: performance.now(), a: !!window.__bcCurA });
       return orig.apply(this, arguments);
     };
+    // The real-silence signal, also sampled on the page's clock.
+    window.__bcAge = [];
+    setInterval(function () {
+      var st = typeof window.__coach !== 'undefined' && typeof window.__coach.tuner === 'function' ? window.__coach.tuner() : null;
+      window.__bcAge.push({ t: performance.now(), ageMs: st ? st.ageMs || 0 : 0 });
+    }, 50);
   })();
 `;
 
@@ -162,35 +177,28 @@ test('a plucked note that decays into silence keeps being DRAWN for at least ~1s
   // starting line.
   await page.waitFor("(window.__bcCanvasText || []).some((e) => e.text === 'A')", effectiveWaitMs(5000));
 
-  const samples = [];
-  const start = Date.now();
-  while (Date.now() - start < POLL_BUDGET_MS) {
-    const drawnA = await drawnRecently(page, 'A');
-    // The hook (window.__coach.tuner()) is used ONLY as a secondary signal
-    // (ageMs, to corroborate the silence really was silence); it is guarded
-    // so a missing/renamed hook degrades this signal to null rather than
-    // throwing and masking the real, canvas-based assertion below.
-    const st = await page.evaluate("typeof window.__coach.tuner === 'function' ? window.__coach.tuner() : null");
-    samples.push({ t: Date.now() - start, drawnA, ageMs: st ? st.ageMs || 0 : 0 });
-    await new Promise((r) => setTimeout(r, 100));
-  }
-
-  // Find the longest continuous run where the "A" target letter was still
-  // being drawn on the canvas, and the max ageMs (real silence duration)
-  // reached inside that run. The old code's drawTuner never executed the
-  // fillText(nname(target), ...) call at all once `heard.freq` went falsy,
-  // so a fix-free run here could never grow ageMs while still drawing "A".
-  let bestSpan = 0, bestMaxAge = 0, runStart = null, runMaxAge = 0;
-  for (const s of samples) {
-    if (s.drawnA) {
-      if (runStart === null) runStart = s.t;
-      runMaxAge = Math.max(runMaxAge, s.ageMs);
-      const span = s.t - runStart;
-      if (span > bestSpan) { bestSpan = span; bestMaxAge = runMaxAge; }
-    } else {
-      runStart = null; runMaxAge = 0;
+  // Everything is measured on the PAGE's clock: the longest run of tuner
+  // frames that all drew "A" (a frame without it ends the run), and the
+  // largest ageMs the hook reported inside it. Node only waits; a slow CDP
+  // round trip or a starved Node timer cannot shorten the measured span.
+  const ANALYSE = `(function () {
+    var fr = window.__bcFrames || [], best = { span: 0, maxAge: 0 }, seenA = false, ended = false, i = 0;
+    while (i < fr.length) {
+      if (!fr[i].a) { if (seenA) ended = true; i++; continue; }
+      seenA = true;
+      var j = i; while (j + 1 < fr.length && fr[j + 1].a) j++;
+      var span = fr[j].t - fr[i].t, age = 0;
+      (window.__bcAge || []).forEach(function (s) { if (s.t >= fr[i].t && s.t <= fr[j].t) age = Math.max(age, s.ageMs); });
+      if (span > best.span) { best.span = span; best.maxAge = age; }
+      i = j + 1;
     }
-  }
+    best.ended = ended; return best;
+  })()`;
+  // Wait for the event, not a sleep: the run either reaches the asserted
+  // length, or ends (the "A" stops being drawn), whichever the app does.
+  await page.waitFor(`(function () { var r = ${ANALYSE}; return r.ended || (r.span >= 900 && r.maxAge >= 900); })()`, POLL_BUDGET_MS)
+    .catch(() => {});
+  const { span: bestSpan, maxAge: bestMaxAge } = await page.evaluate(ANALYSE);
   assert.ok(bestSpan >= 900, `expected "A" to be drawn continuously for >=900ms, longest run was ${bestSpan}ms`);
   assert.ok(bestMaxAge >= 900, `expected "A" to stay drawn through >=900ms of real silence (ageMs), best was ${bestMaxAge}ms`);
 });
