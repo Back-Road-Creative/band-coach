@@ -210,11 +210,11 @@ test('T8 two notes at once is called a chord, and only played notes are named', 
 });
 
 // T9: mallet percussion has keys, not frets.
-test('T9 a mallet note two semitones high says "Go 2 keys to the left."', async (t) => {
+test('T9 a mallet note two semitones high (the next white key) says "Go one white key to the left."', async (t) => {
   await run(t, 't9', [{ at: AT, midis: [MALLET.midi + 2], gain: 0.5 }], {}, MALLET, async (page) => {
     const first = await firstRecord(page, isFeedback);
     assert.ok(first, 'the app said nothing in #feedback about a wrong note');
-    assert.equal(first.text, `That was ${name(MALLET.midi + 2)}, the note is ${MALLET.letter}. Go 2 keys to the left.`);
+    assert.equal(first.text, `That was ${name(MALLET.midi + 2)}, the note is ${MALLET.letter}. Go one white key to the left.`);
     assert.equal(first.cls, 'no');
   });
 });

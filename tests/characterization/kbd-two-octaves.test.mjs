@@ -51,14 +51,14 @@ test('level 1 draws two labelled octaves, marks middle C, keeps the judged set, 
   await page.click(geo.pts.p48.x, geo.pts.p48.y);
   await page.waitFor("document.getElementById('feedback').className === 'no'");
   const fb48 = await page.evaluate("document.getElementById('feedback').textContent");
-  const where48 = T === 60 ? 'Right note, wrong octave: go one octave up.' : `Go ${T - 48} keys to the right.`;
+  const where48 = T === 60 ? 'Right note, wrong octave: go one octave up.' : `Go ${{ 62: 'eight', 64: 'nine' }[T]} white keys to the right.`;
   assert.ok(fb48.startsWith('That was C, the note is '), 'the click played C3: ' + fb48);
   assert.ok(fb48.endsWith(where48), `the click played 48, target ${T}: ` + fb48);
   // D3 (50), the next white key: a different note, so a mis-scaled or shifted hit test shows.
   await page.click(geo.pts.p50.x, geo.pts.p50.y);
   await page.waitFor("document.getElementById('feedback').textContent.startsWith('That was D,')");
   const fb50 = await page.evaluate("document.getElementById('feedback').textContent");
-  const where50 = T === 62 ? 'Right note, wrong octave: go one octave up.' : `Go ${T - 50} keys to the right.`;
+  const where50 = T === 62 ? 'Right note, wrong octave: go one octave up.' : `Go ${{ 60: 'six', 64: 'eight' }[T]} white keys to the right.`;
   assert.ok(fb50.endsWith(where50), `the click played 50, target ${T}: ` + fb50);
   assert.equal(await page.evaluate('window.__coach.cur().info.midi'), T, 'a miss does not move the target');
   // A click above every key plays nothing: no feedback change, no recorded answer.

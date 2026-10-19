@@ -1197,7 +1197,7 @@ import { register as registerPathway } from './ui/pathway.js';
     const policy = i.anywhere ? 'fold' : (OCTAVE_POLICY[mod] || 'fold');
     const judged = judgePitch({ heardMidi: midi, targetMidi: i.midi, policy });
     if (judged.ok) { passEl(undefined, undefined, undefined, source); return; }
-    const where = wrongNoteHint({ heardMidi: midi, targetMidi: i.midi, policy, fretted: !!i.string && !MODS[mod].fretless });
+    const where = wrongNoteHint({ heardMidi: midi, targetMidi: i.midi, policy, fretted: !!i.string && !MODS[mod].fretless, input: source, name: nname });
     const wn = (x) => i.written === undefined ? nname(x) : nname(writtenMidi(i, x)); failEl('That was ' + wn(midi) + ', the note is ' + wn(i.midi) + '. ' + where, e.id + '>' + wn(midi)); // transposing winds: both names in the written key the prompt uses
   }
   // onNote's hands-together branch: the stage machine lives in src/core/hands-together-stage.js (pure, table-tested); this applies its verdict to the UI.
@@ -2080,7 +2080,7 @@ import { register as registerPathway } from './ui/pathway.js';
   // does not try to filter samples itself.
   let rangeTest = null;
   // The coach line a mod shows before Start; Cancel puts it back so a stopped test never leaves its "Sing your..." instruction behind.
-  const idleCoachLine = () => S.judged ? 'Welcome back. You are on level ' + S.level + ': ' + D().name + '. Press Start.' : 'Press Start. Level ' + S.level + ': ' + D().name + '.';
+  const idleCoachLine = () => t(S.judged ? 'coach.idleBack' : 'coach.idle', { level: S.level, name: D().name });
   function handleRangeTest(action, fr) {
     if (action === 'start') { rangeTest = { stage: 'low', samples: [], curMidi: null, curSince: 0 }; coach('Sing your lowest comfortable note and hold it, then press "Got it -- now the highest".'); return; }
     if (!rangeTest) return;
@@ -2479,7 +2479,8 @@ import { register as registerPathway } from './ui/pathway.js';
   // overriding the OS setting either way (see src/styles.css).
   function applyTheme(t) { if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t); else document.documentElement.removeAttribute('data-theme'); }
   $('optTheme').addEventListener('change', function () { DB.prefs.theme = this.value; applyTheme(this.value); applyAccent(); save(); });
-  $('optLocale').addEventListener('change', function () { DB.prefs.locale = LOCALES.some(l => l.code === this.value) ? this.value : 'en'; applyLocale(DB.prefs.locale); updateNavInstrumentLabel(); showAll(); refreshModelPack(); save(); });
+  // The idle coach line was written in the old language; rewrite it (only it: a live session's line is left as is).
+  $('optLocale').addEventListener('change', function () { const idle = $('coach').textContent === idleCoachLine(); DB.prefs.locale = LOCALES.some(l => l.code === this.value) ? this.value : 'en'; applyLocale(DB.prefs.locale); if (idle) $('coach').textContent = idleCoachLine(); updateNavInstrumentLabel(); showAll(); refreshModelPack(); save(); });
   function applyNoteNaming() { DB.prefs.noteNaming = { system: $('optNoteSystem').value, accidentals: $('optAccidentals').value }; setNoteNaming(DB.prefs.noteNaming); save(); showAll(); }
   $('optNoteSystem').addEventListener('change', applyNoteNaming); $('optAccidentals').addEventListener('change', applyNoteNaming);
 

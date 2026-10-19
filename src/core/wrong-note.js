@@ -1,3 +1,6 @@
+import { t } from './i18n.js';
+import { pcKeyFor } from './pckeys.js';
+
 // Pure wording for a wrong plucked or keyed note: which way to move. No DOM, no state.
 //
 // `fretted` is true for an item on a string of a fretted instrument (one fret is one
@@ -5,20 +8,39 @@
 // octave policy (src/core/judge.js): 'exact' judges the octave too, so the real distance is
 // worth stating; 'fold' and 'nearest-octave' judge the note name only, so the nearest note of
 // that name is the right advice.
-export function wrongNoteHint({ heardMidi, targetMidi, policy, fretted }) {
+const WHITE_PCS = [0, 2, 4, 5, 7, 9, 11];
+const isWhite = (m) => WHITE_PCS.indexOf(((m % 12) + 12) % 12) >= 0;
+const SHARP_NAMES = ['C', 'C♯', 'D', 'D♯', 'E', 'F', 'F♯', 'G', 'G♯', 'A', 'A♯', 'B'];
+
+// `input` is how the wrong note arrived ('computer-key' names the key to press); `name` turns a
+// MIDI note into the page's note name (app.js passes nname so sharps/flats follow the learner's
+// setting). `fretted` and `policy` as before. On a drawn keyboard the learner counts WHITE keys,
+// never semitones: a gap of 2 semitones between two white keys is one white key away.
+export function wrongNoteHint({ heardMidi, targetMidi, policy, fretted, input, name }) {
   const gap = targetMidi - heardMidi;
   const n = Math.abs(gap);
   if (policy !== 'exact') {
     // Same fold the app used before this module: the shorter way round the 12 note names.
     let d = ((gap % 12) + 12) % 12; if (d > 6) d -= 12;
-    return 'Go ' + (d > 0 ? 'higher' : 'lower') + '.';
+    return t(d > 0 ? 'wrongNote.higher' : 'wrongNote.lower');
   }
-  if (n === 12) return 'Right note, wrong octave: go one octave ' + (gap < 0 ? 'down' : 'up') + '.';
-  if (!fretted) return 'Go ' + n + ' key' + (n > 1 ? 's' : '') + ' to the ' + (gap < 0 ? 'left' : 'right') + '.';
+  if (n === 12) return t(gap < 0 ? 'wrongNote.octaveDown' : 'wrongNote.octaveUp');
+  if (!fretted) {
+    const dir = t(gap < 0 ? 'wrongNote.left' : 'wrongNote.right');
+    let text;
+    if (!isWhite(targetMidi)) text = t('wrongNote.black', { name: (name || ((m) => SHARP_NAMES[((m % 12) + 12) % 12]))(targetMidi), dir: dir });
+    else {
+      let whites = 0;
+      for (let m = Math.min(heardMidi, targetMidi); m <= Math.max(heardMidi, targetMidi); m++) if (isWhite(m) && m !== heardMidi) whites++;
+      text = whites === 1 ? t('wrongNote.white.one', { dir: dir }) : t('wrongNote.white.other', { count: whites <= 10 ? t('wrongNote.num.' + whites) : String(whites), dir: dir });
+    }
+    const key = input === 'computer-key' ? pcKeyFor(targetMidi) : undefined;
+    return key ? text + ' ' + t('wrongNote.press', { key: key.toUpperCase() }) : text;
+  }
   // Fretted: a fret count only means something within an octave; beyond it, just the direction,
   // by the sign of the gap (never the folded one, which points the wrong way for 7..11).
-  if (n > 12) return 'Go ' + (gap > 0 ? 'higher' : 'lower') + '.';
-  return 'Go ' + n + ' fret' + (n > 1 ? 's' : '') + ' ' + (gap > 0 ? 'higher' : 'lower') + '.';
+  if (n > 12) return t(gap > 0 ? 'wrongNote.higher' : 'wrongNote.lower');
+  return t(n > 1 ? 'wrongNote.frets.other' : 'wrongNote.frets.one', { n: n, dir: t(gap > 0 ? 'wrongNote.up' : 'wrongNote.down') });
 }
 
 // A transposing wind item carries `written` (what the prompt and staff show) beside `midi` (what
