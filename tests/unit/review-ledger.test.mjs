@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { isReviewCurrent } from '../../src/instruments/review.js';
+import { isReviewCurrent, instrumentUnreviewed } from '../../src/instruments/review.js';
+import { INSTRUMENTS, byId } from '../../src/instruments/index.js';
 import { LEDGER, contentRev, itemReview } from '../../src/instruments/review-ledger.js';
 
 const x = { a: 1, b: [1, 2, 3] };
@@ -47,4 +48,21 @@ test('the shipped ledger has no fabricated reviews: every entry is fully attribu
     assert.ok(typeof entry.reviewedAt === 'string' && entry.reviewedAt.length > 0, id + ': missing reviewedAt');
     assert.ok(typeof entry.reviewedRev === 'string' && entry.reviewedRev.length > 0, id + ': missing reviewedRev');
   }
+});
+
+test('every ledger entry id names an item of a real instrument and has a well-formed review date', () => {
+  assert.ok(INSTRUMENTS.length > 0);
+  for (const [id, entry] of Object.entries(LEDGER)) {
+    assert.ok(byId[id.split('.')[0]], id + ': first segment is not a real instrument id');
+    assert.match(entry.reviewedAt, /^\d{4}-\d{2}-\d{2}$/, id + ': reviewedAt must be YYYY-MM-DD');
+  }
+});
+
+test('instrumentUnreviewed: true for every record whose provenance is null, false once a real review is on file', () => {
+  const nulls = INSTRUMENTS.filter(r => r.provenance === null);
+  assert.ok(nulls.length > 0);
+  nulls.forEach(r => assert.equal(instrumentUnreviewed(r), true, r.id));
+  assert.equal(instrumentUnreviewed({ ...nulls[0], provenance: { reference: 'Book 1', reviewedBy: 'A. Reviewer', reviewedAt: '2026-09-24' } }), false);
+  assert.equal(instrumentUnreviewed({ ...nulls[0], provenance: { reference: 'Book 1', reviewedBy: null, reviewedAt: null } }), true);
+  assert.equal(instrumentUnreviewed(undefined), false, 'no record (ear, rhythm) has nothing to label');
 });

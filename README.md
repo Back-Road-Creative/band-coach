@@ -590,6 +590,8 @@ In Learn and Rehearse, a **"How to play this"** button under the current step ex
 "How to play it" diagram and description shown elsewhere in the app, for the lesson's instrument
 and the step's first note, using the saved capo, tuning, left-handed setting and harmonica key.
 It shows the "Not yet checked by a player" line for an instrument no musician has reviewed yet.
+The "How this one works" line under every instrument's name shows the same label for an instrument
+no musician has reviewed yet, read from the same record field.
 Escape, or pressing the button again, collapses it and returns focus to the button. It is hidden
 in Check, the no-help attempt, same as the notation and fingering line it sits beside, and it
 only appears for an instrument the "How to play it" panel can draw — so it does not appear for

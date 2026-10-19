@@ -56,7 +56,7 @@ import { layoutPercussionMeasure } from './notation/percussion.js';
 import { songFor, KBD_SONG_SKILL_MAP } from './instruments/kbd-songs.js';
 import { buildMods } from './instruments/mods.js';
 import { itemReview, contentRev } from './instruments/review-ledger.js';
-import { isReviewCurrent } from './instruments/review.js';
+import { isReviewCurrent, instrumentUnreviewed } from './instruments/review.js';
 import { starterSongs } from './song/starter/index.js';
 import { pathwayState } from './core/pathway.js';
 import { reviewItems as kbdPathwayOutcomes, outcomeReviewed } from './instruments/kbd-pathway.js';
@@ -2041,7 +2041,7 @@ import { register as registerPathway } from './ui/pathway.js';
   function showAll() {
     const tool = !!TOOLS[mod];
     applyAccent();
-    $('helpText').innerHTML = ''; const st = document.createElement('strong'); st.textContent = 'How this one works: '; $('helpText').appendChild(st); $('helpText').appendChild(document.createTextNode((MODS[mod] || TOOLS[mod]).help));
+    $('helpText').innerHTML = ''; const st = document.createElement('strong'); st.textContent = 'How this one works: '; $('helpText').appendChild(st); $('helpText').appendChild(document.createTextNode((MODS[mod] || TOOLS[mod]).help)); if (instrumentUnreviewed(instrumentById[mod])) { const rv = document.createElement('span'); rv.setAttribute('role', 'note'); rv.className = 'small'; rv.textContent = ' ' + t('review.unreviewed'); $('helpText').appendChild(rv); }
     document.querySelectorAll('.side .card, .side .stats, #playBtn, #resetBtn').forEach(el => { el.style.display = tool && !(mod === 'capture' && el.id === 'feedbackCard') ? 'none' : ''; }); $('tapPad').hidden = mod !== 'rhy'; $('timeFill').parentElement.style.visibility = tool || mod === 'rhy' || (MODS[mod] && MODS[mod].kit) ? 'hidden' : 'visible'; // capture's own messages ('Nothing captured yet.') need the feedback card; .hidden still hides it while empty
     if (tool) { $('prompt').textContent = ''; $('hint').textContent = mod === 'tuner' ? 'One open string at a time.' : 'One note at a time.'; $('choices').hidden = true; $('replayBtn').hidden = true; $('showMeBtn').hidden = true; $('howPeekHost').hidden = true; return; }
     const d = D(); $('levelNum').textContent = 'Level ' + S.level; $('levelName').textContent = customOn ? 'Your captured melody' : d.name; $('limitOut').textContent = d.task === 'bar' || mod === 'rhy' || MODS[mod].kit ? (d.bpm || 72) + ' bpm' : (d.limit || 8) + ' s per answer';

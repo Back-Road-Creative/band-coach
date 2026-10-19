@@ -15,6 +15,12 @@ export function isReviewed(provenance) {
     && typeof provenance.reviewedAt === 'string' && provenance.reviewedAt.length > 0;
 }
 
+// Should an instrument's teaching text carry the "not yet checked" label?
+// Reads the same provenance field the README badge and the Fingerings panel
+// read, so no list of instruments lives anywhere else. A missing record
+// (ear training, rhythm: no instrument file) has nothing to label.
+export function instrumentUnreviewed(rec) { return !!rec && !isReviewed(rec.provenance); }
+
 // Is a review still trustworthy, or has the content it approved moved on
 // since? schema.js's provenance carries an optional contentRev (the
 // curriculum's current revision) and reviewedRev (the revision a review
