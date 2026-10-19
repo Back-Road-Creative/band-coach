@@ -558,3 +558,38 @@ test('A06 desktop 1280x800 at device scale 2: the same, on a sharp screen', asyn
 test('A06 desktop 1024x640: the keyboard and kit are where they are drawn, and every key answers a click', async (t) => {
   await playViewport(t, { width: 1024, height: 640, mobile: false, deviceScaleFactor: 1 }, { full: false });
 });
+
+// ---- A4: the drawn piano keys wear their computer letters while typing -------
+// Separate block (not part of A06's steps). Letters are the PCKEYS map as printed in the help (lowercase, so they never read as the capital note names); they
+// show only once a computer key has been used and go again when a mouse/finger takes over.
+// Canvas text is read through fillText, with the font in force at each call.
+const A4_SCRIPT = `(function () {
+  var f = CanvasRenderingContext2D.prototype.fillText, cl = CanvasRenderingContext2D.prototype.clearRect;
+  window.__a4 = [];
+  CanvasRenderingContext2D.prototype.clearRect = function () { if (this.canvas && this.canvas.id === 'cv') window.__a4 = []; return cl.apply(this, arguments); };
+  CanvasRenderingContext2D.prototype.fillText = function (t) { if (this.canvas && this.canvas.id === 'cv') window.__a4.push({ text: String(t), font: this.font }); return f.apply(this, arguments); };
+})();`;
+const A4_LETTERS = Object.keys(COMPUTER_KEYS).sort();
+const a4Drawn = (page) => page.evaluate("new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => r(window.__a4.slice()))))");
+const a4Letters = async (page) => (await a4Drawn(page)).map((d) => d.text).filter((s) => /^[a-z]$/.test(s)).sort();
+
+test('A4: piano keys show their computer letters only while the computer keyboard is the input', async (t) => {
+  await withAcceptancePage(t, { initScript: PAGE_SCRIPT + A4_SCRIPT }, async (page) => {
+    await page.setViewport({ ...VIEWPORTS.desktop, deviceScaleFactor: 1 });
+    await pickInstrument(page, 'kbd', 'Keyboard');
+    await startSession(page);
+    assert.deepEqual(await a4Letters(page), [], 'fresh keyboard, nothing typed: no computer letters on the keys');
+    await page.press('a');
+    assert.deepEqual(await a4Letters(page), A4_LETTERS, 'after a computer key: every mapped key shows its letter');
+    const px = (d) => Number(/(\d+)px/.exec(d.font)[1]);
+    const size1 = px((await a4Drawn(page)).find((d) => d.text === 'a'));
+    await page.evaluate("document.documentElement.style.fontSize = '32px'");
+    await page.waitFor("window.__a4.some(function (d) { return d.text === 'a' && /6\\\\d?px|[5-9]\\\\dpx/.test(d.font) })");
+    const size2 = px((await a4Drawn(page)).find((d) => d.text === 'a'));
+    assert.ok(size2 >= size1 * 1.8, `letters scale with the text size setting: ${size1}px at 16px root, ${size2}px at 32px`);
+    await page.evaluate("document.documentElement.style.fontSize = ''");
+    const m = await reachable(page);
+    await aimVia(page, 'click', m, keyboardProbePoints(keyboardRects(m).keys[0])[0])();
+    assert.deepEqual(await a4Letters(page), [], 'after a mouse click on a key: the letters go again');
+  });
+});
