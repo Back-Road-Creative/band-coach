@@ -2,8 +2,10 @@
 // dist/release/band-coach.html): first open, instrument sheet, keyboard chosen, Start, a wrong note, Songs,
 // Progress, Settings, then Tuner / Guitar / Drums from the sheet. Every action is a real click or key press;
 // nothing reaches through window.__coach. Live today: no sideways scroll and no console event, at every
-// config x state. Written in full but still todo (each flips by deleting its `todo` option): the four
-// checks the U units fix. Their measured values are printed so the flip is one word.
+// config x state. Written in full but still todo where the defect is measured (each flips by deleting
+// its `todo` option): the four checks the U units fix. A check is todo only at the configs where it
+// fails today (CI's summary refuses a todo that passes), so U2 is todo in landscape only and U5 in the
+// light theme only. Their measured values are printed so the flip is one word.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { withAcceptancePage } from '../helpers/browser.mjs';
@@ -77,8 +79,15 @@ async function walk(t, cfg) {
     await page.setViewport({ width: cfg.w, height: cfg.h, mobile: cfg.mobile });
     await page.cdp.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: cfg.theme }] });
     // A newcomer's first open: drop whatever the driver's own first load saved, then load again.
-    await page.evaluate("sessionStorage.setItem('__fresh', '1')");
-    await page.reload();
+    // The old page's own save can still land after the clear (measured: phone-light first-open read
+    // "Instrument: Keyboard", Start at y 258 instead of 601), so the clear is repeated until the page
+    // really is a first visit, and the walk refuses to measure a profile that is not.
+    const fresh = "!document.getElementById('picker').hidden && !/:/.test(document.getElementById('navInstrument').textContent)";
+    for (let i = 0; i < 3 && !(i && await page.evaluate(fresh)); i++) {
+      await page.evaluate("sessionStorage.setItem('__fresh', '1')");
+      await page.reload();
+    }
+    assert.ok(await page.evaluate(fresh), 'the walk starts on a first visit: instrument sheet open, no instrument named');
     if (cfg.zoom) await page.evaluate("document.documentElement.style.fontSize='20px'; dispatchEvent(new Event('resize'))");
     await snap('01-first-open');
     if (await page.evaluate("document.getElementById('picker').hidden")) await page.clickSelector('#navInstrument');
@@ -133,6 +142,9 @@ for (const cfg of CONFIGS) {
     });
 
     // ---- todo until the named U unit lands: delete `todo` to switch on ----
+    // Measured on CI run 39273798944: Start sits below the first screen only at 844x390, and the hint
+    // fails 4.5:1 only on the light theme (2.45; dark 7.41). Elsewhere these already pass, so they run live.
+    const landscape = cfg.h <= 600;
     await t.test('every control in view is at least 44x44 (U3)', { todo: 'U3' }, () => {
       const per = states.map((s) => `${s.state}=${s.m.smallControls.length}`);
       diag(`small controls per state: ${per.join(' ')}`);
@@ -140,7 +152,7 @@ for (const cfg of CONFIGS) {
       const bad = states.filter((s) => s.m.smallControls.length).map((s) => `${s.state}: ${s.m.smallControls.join('; ')}`);
       assert.deepEqual(bad, []);
     });
-    await t.test('Start is on the first screen at first paint (U2)', { todo: 'U2' }, () => {
+    await t.test('Start is on the first screen at first paint (U2)', { todo: landscape ? 'U2' : false }, () => {
       const first = states[0].m, b = first.playBtn;
       diag(`Start box at first paint: ${JSON.stringify(b)} (viewport height ${first.vh})`);
       assert.ok(b, 'Start is visible at first paint');
@@ -151,7 +163,7 @@ for (const cfg of CONFIGS) {
       const bad = states.filter((s) => s.m.ellipsis.length).map((s) => `${s.state}: ${s.m.ellipsis.join('; ')}`);
       assert.deepEqual(bad, []);
     });
-    await t.test('hint text contrast is at least 4.5:1 (U5)', { todo: 'U5' }, () => {
+    await t.test('hint text contrast is at least 4.5:1 (U5)', { todo: cfg.theme === 'light' ? 'U5' : false }, () => {
       diag(`hint contrast per state: ${states.map((s) => `${s.state}=${s.m.hint ? s.m.hint.ratio : 'none'}`).join(' ')}`);
       const bad = states.filter((s) => s.m.hint && s.m.hint.ratio < 4.5).map((s) => `${s.state}: ${s.m.hint.ratio} (${s.m.hint.fg} on ${s.m.hint.bg})`);
       assert.deepEqual(bad, []);
