@@ -41,7 +41,7 @@ function canonical(v) {
   if (v && typeof v === 'object') return '{' + Object.keys(v).sort().map(k => JSON.stringify(k) + ':' + canonical(v[k])).join(',') + '}';
   return JSON.stringify(v === undefined ? null : v);
 }
-export function contentHash(song) {
+function contentHash(song) {
   const { id, ...rest } = song;
   const text = canonical(rest);
   let h = 0x811c9dc5;
@@ -98,7 +98,7 @@ export function createLibrary(store) {
     // atomically. A collision retries with the next suffix; any other
     // failure propagates with nothing stored (store.runTx rolls back the
     // whole attempt).
-    async add(song, { now } = {}) {
+    async add(song, { now, dedupe = false } = {}) {
       if (!Number.isFinite(now)) {
         throw new Error('add() requires a numeric `now` timestamp');
       }
@@ -107,14 +107,18 @@ export function createLibrary(store) {
       if (byteLength(serialized) > MAX_SONG_BYTES) {
         throw new Error('song "' + normalized.title + '" is too large to store (over 5 MB)');
       }
-      // Identical content already stored (hash match, then a full compare so a hash
-      // collision can never swallow a different song) -> hand back the existing id.
-      const hash = contentHash(normalized);
-      const want = canonical({ ...normalized, id: undefined });
-      for (const meta of await this.list()) {
-        if (meta.contentHash !== undefined && meta.contentHash !== hash) continue;
-        const have = await store.get(songKey(meta.id));
-        if (have && canonical({ ...have, id: undefined }) === want) return meta.id;
+      // A restore (importAll) passes dedupe: identical content already stored
+      // (hash match, then a full compare so a hash collision can never swallow a
+      // different song) hands back the existing id. A plain add never dedupes:
+      // a fresh pick or "Save a copy" is the learner asking for a second entry.
+      if (dedupe) {
+        const hash = contentHash(normalized);
+        const want = canonical({ ...normalized, id: undefined });
+        for (const meta of await this.list()) {
+          if (meta.contentHash !== undefined && meta.contentHash !== hash) continue;
+          const have = await store.get(songKey(meta.id));
+          if (have && canonical({ ...have, id: undefined }) === want) return meta.id;
+        }
       }
       let id = normalized.id;
       let n = 2;
@@ -207,7 +211,7 @@ export function createLibrary(store) {
       let skipped = 0;
       for (const song of songs) {
         const before = new Set((await this.list()).map(m => m.id));
-        const id = await this.add(song, { now: Date.now() });
+        const id = await this.add(song, { now: Date.now(), dedupe: true });
         if (before.has(id)) skipped++;
         ids.push(id);
       }

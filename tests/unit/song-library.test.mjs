@@ -353,13 +353,22 @@ test('add: ids that are not starter ids are kept, and update keeps a copy\'s id 
 
 // ---- content dedupe (D9) ----
 
-test('add: the same song twice keeps one copy and returns the existing id', async () => {
+// Only a restore dedupes. A fresh pick of the same file, or the editor's
+// "Save a copy" under the same title, is the learner asking for a second entry.
+test('add: the same song twice is two entries; add never dedupes', async () => {
   const library = createLibrary(memoryStore());
   const first = await library.add(song('a'), { now: 1 });
   const again = await library.add(song('a'), { now: 2 });
-  const otherId = await library.add(song('zzz', { title: 'Song a' }), { now: 3 });
-  assert.equal(again, first);
-  assert.equal(otherId, first, 'a different id with identical content is still the same song');
+  assert.notEqual(again, first);
+  assert.equal((await library.list()).length, 2);
+});
+
+test('importAll: a backup song identical to one stored under another id is skipped', async () => {
+  const library = createLibrary(memoryStore());
+  const first = await library.add(song('a'), { now: 1 });
+  const r = await library.importAll([song('zzz', { title: 'Song a' })]);
+  assert.equal(r.skipped, 1);
+  assert.deepEqual(r.ids, [first], 'a different id with identical content is still the same song');
   assert.equal((await library.list()).length, 1);
 });
 
