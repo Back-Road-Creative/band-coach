@@ -34,6 +34,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { withAcceptancePage, effectiveWaitMs } from '../helpers/browser.mjs';
+import { MIC_BLOCKED_ERROR } from '../helpers/console-allowlist.mjs';
 import { quietRoom, learnerPlaying, writeFixture, RECORDER_SCRIPT } from '../fixtures/acceptance/mic-journey.mjs';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -49,8 +50,8 @@ const fixtureFile = (name) => (files ||= { quiet: writeFixture('quiet-room', qui
 
 // A learner on the release file with the microphone allowed: instrument, "Set
 // up input", then Connect, all real clicks.
-async function learner(t, fixture, fn) {
-  await withAcceptancePage(t, { fakeAudioFile: fixtureFile(fixture), initScript: RECORDER_SCRIPT }, async (page) => {
+async function learner(t, fixture, fn, allowConsole = []) {
+  await withAcceptancePage(t, { fakeAudioFile: fixtureFile(fixture), initScript: RECORDER_SCRIPT, allowConsole }, async (page) => {
     await page.grant(['microphone']);
     await page.clickSelector('#picker button[data-mod="gtr"]');
     await page.clickSelector('#setupBtn');
@@ -277,7 +278,7 @@ test('T6 microphone blocked after connecting, then allowed: Connect listens agai
     assert.equal(page.audio.contexts().length, 1, 'still one AudioContext');
     await page.audio.waitForRunning();
     assert.ok(page.audio.running().length > 0, 'and it is running');
-  });
+  }, [MIC_BLOCKED_ERROR]);
 });
 
 test('T7 microphone allowed again after a blocked check: the old "blocked" message does not stay', async (t) => {
@@ -290,7 +291,7 @@ test('T7 microphone allowed again after a blocked check: the old "blocked" messa
     await page.waitFor("document.getElementById('ioBtn').hidden");
     await assertListening(page, 'listening after Allow');
     assert.doesNotMatch(await page.evaluate("document.getElementById('calibrateResult').textContent"), /blocked/, 'the stale blocked message is gone');
-  });
+  }, [MIC_BLOCKED_ERROR]);
 });
 
 test('T7b control: connected again with no block, the room result stays', async (t) => {

@@ -12,6 +12,7 @@ import { fileURLToPath } from 'node:url';
 import {
   launchPage, browserArgs, findAcceptanceBrowser, acceptanceHtmlPath, withAcceptancePage, effectiveWaitMs,
 } from '../helpers/browser.mjs';
+import { MIC_BLOCKED_ERROR } from '../helpers/console-allowlist.mjs';
 
 const fixture = (name) => fileURLToPath(new URL(`../fixtures/acceptance/${name}`, import.meta.url));
 const DRIVER = fixture('driver-fixture.html');
@@ -308,4 +309,36 @@ test('withAcceptancePage: a passing test writes no artifacts and still closes it
   assert.ok(!existsSync(join(artifactRoot, 'ok.test.mjs')), 'nothing written for a pass');
   assert.ok(!existsSync(profileDir), 'the browser profile was removed, so the browser was closed');
   rmSync(artifactRoot, { recursive: true, force: true });
+});
+
+test('withAcceptancePage: a journey that ends with a console warning fails, naming the text and the test', async () => {
+  const artifactRoot = mkdtempSync(join(tmpdir(), 'bc-art-'));
+  await assert.rejects(
+    () => withAcceptancePage({ filePath: '/x/noisy.test.mjs', name: 'noisy journey', diagnostic() {} }, { htmlPath: DRIVER, artifactRoot }, async (page) => {
+      await page.evaluate("console.warn('stray warning x')");
+    }),
+    /noisy journey[\s\S]*console\.warn: stray warning x/,
+  );
+  rmSync(artifactRoot, { recursive: true, force: true });
+});
+
+test('withAcceptancePage: allowConsole excuses one journey only; the next journey with the same noise still fails', async () => {
+  const artifactRoot = mkdtempSync(join(tmpdir(), 'bc-art-'));
+  const noisy = async (page) => { await page.evaluate("console.error('[mic:connect] NotAllowedError: Permission denied')"); };
+  const t = (name) => ({ filePath: '/x/leak.test.mjs', name, diagnostic() {} });
+  await withAcceptancePage(t('allowed'), { htmlPath: DRIVER, artifactRoot, allowConsole: [MIC_BLOCKED_ERROR] }, noisy);
+  await assert.rejects(() => withAcceptancePage(t('other'), { htmlPath: DRIVER, artifactRoot }, noisy), /other[\s\S]*NotAllowedError/);
+  rmSync(artifactRoot, { recursive: true, force: true });
+});
+
+test('consoleViolations: errors, log entries, exceptions and non-local requests count; the allowlist alone excuses', async () => {
+  const { consoleViolations } = await import('../helpers/console-allowlist.mjs');
+  const page = {
+    consoleErrors: ['e'], consoleWarnings: ['w'], exceptions: ['x'],
+    logEntries: [{ level: 'info', text: 'fine' }, { level: 'warning', text: 'l' }],
+    requestDetails: [{ url: 'file:///a.html' }, { url: 'data:,x' }, { url: 'blob:y' }, { url: 'https://example.com/z' }],
+  };
+  assert.equal(consoleViolations(page, []).length, 5);
+  assert.deepEqual(consoleViolations({ ...page, consoleErrors: [], consoleWarnings: [], exceptions: [], logEntries: [], requestDetails: [] }, []), []);
+  assert.equal(consoleViolations(page, [{ pattern: /^network request: https:/ }]).length, 4);
 });

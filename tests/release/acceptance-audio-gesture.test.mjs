@@ -8,8 +8,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { withAcceptancePage } from '../helpers/browser.mjs';
-
-const AUDIO_WARNING = /AudioContext was not allowed to start/i;
+import { AUDIO_WARNING } from '../helpers/console-allowlist.mjs';
 
 const audioWarnings = (page) =>
   [...page.consoleErrors, ...page.consoleWarnings, ...page.logEntries.map((e) => `${e.level}: ${e.text}`)].filter((m) => AUDIO_WARNING.test(m));

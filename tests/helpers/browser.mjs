@@ -2,6 +2,7 @@
 // Node 22 built-ins (global WebSocket + fetch, node:child_process, node:fs,
 // node:os). No npm dependency — see site-headlessmode/scripts/preview-overflow.mjs
 // for the precedent this borrows its connection pattern from.
+import { ALLOWED, consoleViolations } from './console-allowlist.mjs';
 import { spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdtempSync, rmSync, existsSync, readdirSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
@@ -1290,11 +1291,14 @@ async function writeFailureArtifacts(t, page, err, artifactRoot) {
 // the evidence is written and the ORIGINAL error rethrown. `opts` are
 // launchPage's plus `htmlPath` and `artifactRoot` (default dist/test-artifacts).
 export async function withAcceptancePage(t, opts, fn) {
-  const { htmlPath = acceptanceHtmlPath(), artifactRoot = fileURLToPath(new URL('../../dist/test-artifacts', import.meta.url)), ...launchOpts } = opts || {};
+  const { htmlPath = acceptanceHtmlPath(), allowConsole = [], artifactRoot = fileURLToPath(new URL('../../dist/test-artifacts', import.meta.url)), ...launchOpts } = opts || {};
   const page = await launchPage(htmlPath, { ...launchOpts, acceptance: true });
   try {
     reportIdentity(t, page.identity);
-    return await fn(page);
+    const result = await fn(page);
+    const noise = consoleViolations(page, [...ALLOWED, ...allowConsole]);
+    if (noise.length) throw new Error(`acceptance journey "${t.name || 'unnamed'}" ended with console noise (allow it only in tests/helpers/console-allowlist.mjs):\n  ${noise.join('\n  ')}`);
+    return result;
   } catch (err) {
     try {
       await writeFailureArtifacts(t, page, err, artifactRoot);

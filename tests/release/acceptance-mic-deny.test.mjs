@@ -5,6 +5,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { withAcceptancePage } from '../helpers/browser.mjs';
+import { MIC_BLOCKED_ERROR } from '../helpers/console-allowlist.mjs';
 
 // Picks the Tuner (it listens through the microphone) and presses Connect, the
 // way a learner does: instrument button, "Set up input", then Connect.
@@ -18,7 +19,7 @@ const readIo = (page) =>
   page.evaluate("({ text: document.getElementById('ioText').textContent, dot: document.getElementById('ioDot').className, connectShown: !document.getElementById('ioBtn').hidden })");
 
 test('a microphone the browser has blocked: Connect says it was blocked and nothing is listening', async (t) => {
-  await withAcceptancePage(t, {}, async (page) => {
+  await withAcceptancePage(t, { allowConsole: [MIC_BLOCKED_ERROR] }, async (page) => {
     await page.deny(['microphone']);
     await chooseTunerAndConnect(page);
     await page.waitFor("/blocked/i.test(document.getElementById('ioText').textContent)");
