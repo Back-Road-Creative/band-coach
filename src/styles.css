@@ -50,10 +50,10 @@
   * { box-sizing: border-box; }
   [hidden] { display: none !important; }
   html, body { background: var(--ground); }
-  body { color: var(--text); font-family: var(--body); font-size: 16px; line-height: 1.45; padding-inline: 16px; padding-block: 20px 40px; }
+  body { color: var(--text); font-family: var(--body); font-size: 1rem; line-height: 1.45; padding-inline: 16px; padding-block: 20px 40px; }
   .wrap { max-width: 1080px; margin-inline: auto; display: flex; flex-direction: column; gap: 16px; }
   header { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 12px 24px; }
-  h1 { font: 700 44px/1 var(--display); margin: 0; letter-spacing: .02em; text-transform: uppercase; }
+  h1 { font: 700 2.75rem/1 var(--display); margin: 0; letter-spacing: .02em; text-transform: uppercase; }
   /* R10 P1: one accent on first paint -- COACH reads --accent-display, the
      Start button's colour darkened only as far as the 3:1 large-text minimum
      needs (src/app.js accentDisplayFor), not --accent-ink's 4.5:1 navy. */
@@ -66,12 +66,12 @@
      too wide to share the dot's line, so flex-wrap moved the whole item
      down and stranded the dot alone above it. flex-basis lets the text wrap
      normally beside the dot instead of as a unit below it. */
-  #ioText { color: var(--muted); font-size: 14px; max-width: 46ch; flex: 1 1 200px; min-width: 0; }
+  #ioText { color: var(--muted); font-size: 0.875rem; max-width: 46ch; flex: 1 1 200px; min-width: 0; }
   /* R10 P6: one radius (8px) for every bordered surface except the picker's
      own 4px instrument-colour edge, which stays as the one deliberate
      exception. */
-  button, select { font: 600 15px var(--body); color: var(--text); background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 9px 14px; cursor: pointer; }
-  select { padding: 6px 8px; font-size: 14px; max-width: 100%; }
+  button, select { font: 600 0.9375rem var(--body); color: var(--text); background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 9px 14px; cursor: pointer; }
+  select { padding: 6px 8px; font-size: 0.875rem; max-width: 100%; }
   button:hover { border-color: var(--muted); }
   button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible, label.file-label:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   /* F2: nav activation programmatically focuses the destination's heading
@@ -79,8 +79,8 @@
      target, so they should never show a focus ring of their own. */
   [tabindex="-1"]:focus { outline: none; }
   button.primary { background: var(--accent); border-color: var(--accent); color: #06101d; }
-  button.big { font: 700 22px var(--display); letter-spacing: .06em; text-transform: uppercase; padding: 12px 22px; }
-  button.small { padding: 5px 10px; font-size: 13px; }
+  button.big { font: 700 1.375rem var(--display); letter-spacing: .06em; text-transform: uppercase; padding: 12px 22px; }
+  button.small { padding: 5px 10px; font-size: 0.8125rem; }
   a { color: var(--accent-ink); }
 
   /* P2a: the one always-visible way to reach the three destinations
@@ -105,7 +105,7 @@
      measured against journey-first-visit.test.mjs's #playBtn-in-first-
      screen contract, which this must not break. */
   .main-nav { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
-  .main-nav button { flex: none; text-align: center; overflow: visible; text-overflow: clip; white-space: normal; overflow-wrap: break-word; padding: 6px 8px; font-size: 13px; line-height: 1.15; }
+  .main-nav button { flex: none; text-align: center; overflow: visible; text-overflow: clip; white-space: normal; overflow-wrap: break-word; padding: 6px 8px; font-size: 0.8125rem; line-height: 1.15; }
   .main-nav button[data-route="instrument"] { grid-column: 1 / 3; }
   .main-nav button[data-route="settings"] { grid-column: 3; }
   .main-nav button[aria-current="page"] { background: var(--text); color: var(--ground); border-color: var(--text); }
@@ -113,7 +113,7 @@
   .picker { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-start; }
   .picker button { border-left: 4px solid var(--c, var(--line)); }
   .picker button[aria-pressed="true"] { background: var(--text); color: var(--ground); border-color: var(--text); border-left-color: var(--c); }
-  .picker small { display: block; font: 500 12px var(--body); color: var(--muted); }
+  .picker small { display: block; font: 500 0.75rem var(--body); color: var(--muted); }
   .picker button[aria-pressed="true"] small { color: var(--press-muted); }
   /* Tools tier (U3): Tuner/Capture a melody plus the two pseudo-mods (Ear
      training quick drill, Rhythm reading) sit one visual step quieter than
@@ -129,10 +129,10 @@
   /* Sentence case, not the old uppercase TOOLS heading: plain text naming
      what the group is, not what is inside it -- the buttons themselves
      already say that. */
-  .picker-tools-label { font: 600 15px var(--body); color: var(--muted); flex-basis: 100%; }
-  .picker-tools button { border-left-color: var(--line); padding: 6px 10px; font-size: 13px; }
+  .picker-tools-label { font: 600 0.9375rem var(--body); color: var(--muted); flex-basis: 100%; }
+  .picker-tools button { border-left-color: var(--line); padding: 6px 10px; font-size: 0.8125rem; }
   .picker-tools button[aria-pressed="true"] { border-left-color: var(--c); }
-  .picker-tools small { font-size: 11px; }
+  .picker-tools small { font-size: 0.6875rem; }
   /* U2: the two genuine variant families (Bass + 5-string bass, Ukulele +
      low-G + baritone) render as one flex item -- the parent button, always
      visible and independently selectable, plus a small <details> beside it
@@ -158,12 +158,12 @@
      growing the text or the row's visual weight. It stays a block (not
      flex): text-overflow draws no ellipsis on a flex container, so the
      shut label would stop mid-letter. */
-  .picker-variant-group > .variant-toggle > summary { cursor: pointer; list-style: none; font: 500 11px var(--body); color: var(--muted); display: block; line-height: 24px; min-height: 24px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .picker-variant-group > .variant-toggle > summary { cursor: pointer; list-style: none; font: 500 0.6875rem var(--body); color: var(--muted); display: block; line-height: 24px; min-height: 24px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .picker-variant-group > .variant-toggle > summary::-webkit-details-marker { display: none; }
   .picker-variant-group > .variant-toggle > summary::before { content: '\25b8  '; }
   .picker-variant-group > .variant-toggle[open] > summary::before { content: '\25be  '; }
   .picker-variant-group > .variant-toggle > .variant-buttons { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; padding-left: 10px; border-left: 2px solid var(--line); }
-  .picker-variant-group > .variant-toggle > .variant-buttons button { padding: 6px 10px; font-size: 13px; }
+  .picker-variant-group > .variant-toggle > .variant-buttons button { padding: 6px 10px; font-size: 0.8125rem; }
   /* R10 P9: one 8px scale (8 inside a group, 16 between groups, 24 between
      sections) instead of ad hoc numbers -- 18px between the stage and the
      side rail rounds down to the 16px "between groups" step. */
@@ -287,7 +287,7 @@
      above. */
   .how-inline { display: flex; flex-direction: column; gap: 6px; }
   .how-inline-body { overflow-x: auto; max-width: 100%; }
-  .how-inline-badge { color: var(--warn); font-size: 13px; margin: 0; }
+  .how-inline-badge { color: var(--warn); font-size: 0.8125rem; margin: 0; }
   .how-inline-desc { margin: 0; }
   /* Trainer peek (C1a): the SAME how-inline toggle/body, dropped right
      under the hint text beside the active note instead of under a Songs
@@ -298,18 +298,18 @@
   /* */
   .panel-editor { display: flex; flex-direction: column; gap: 12px; max-width: 100%; }
   .panel-editor .editor-record { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-  .panel-editor .editor-record input[type="text"] { font: 600 15px var(--body); color: var(--text); background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; min-width: 10ch; }
-  .panel-editor .editor-status { color: var(--muted); font-size: 14px; }
+  .panel-editor .editor-record input[type="text"] { font: 600 0.9375rem var(--body); color: var(--text); background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; min-width: 10ch; }
+  .panel-editor .editor-status { color: var(--muted); font-size: 0.875rem; }
   .panel-editor .editor-check { background: var(--panel-2); border: 1px solid var(--warn); border-radius: 8px; padding: 12px; }
   .panel-editor .editor-check ul { margin: 6px 0; padding-left: 20px; }
   .panel-editor .editor-say { color: var(--good); min-height: 1.2em; }
   .panel-editor .editor-say.no { color: var(--bad); }
   .panel-editor .editor-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-  .panel-editor .editor-toolbar input[type="number"] { width: 6ch; font: 600 15px var(--body); color: var(--text); background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; }
-  .panel-editor .editor-toolbar label { color: var(--muted); font-size: 13px; }
+  .panel-editor .editor-toolbar input[type="number"] { width: 6ch; font: 600 0.9375rem var(--body); color: var(--text); background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; }
+  .panel-editor .editor-toolbar label { color: var(--muted); font-size: 0.8125rem; }
   .panel-editor .editor-canvas { background: #f6f3ea; border-radius: 8px; width: auto; height: auto; aspect-ratio: auto; max-width: 100%; touch-action: manipulation; }
   .panel-editor button:disabled, .panel-editor input:disabled, .panel-editor select:disabled { opacity: .45; cursor: not-allowed; }
-  @media (max-width: 480px) { .panel-editor .editor-toolbar button, .panel-editor .editor-toolbar input { font-size: 13px; padding: 7px 10px; } }
+  @media (max-width: 480px) { .panel-editor .editor-toolbar button, .panel-editor .editor-toolbar input { font-size: 0.8125rem; padding: 7px 10px; } }
   /* */
   .panel-learn-checklist { margin: 6px 0; padding-left: 20px; color: var(--warn); }
   .panel-learn-confidence-strip { display: flex; flex-wrap: wrap; gap: 2px; padding: 8px; background: var(--panel-2); border-radius: 8px; }
@@ -324,15 +324,15 @@
   .panel-songs-bpm { width: 5em; }
   .panel-songs-meter { position: relative; height: 10px; border-radius: 5px; background: var(--panel-2); overflow: hidden; }
   .panel-songs-meter-fill { height: 100%; width: 0%; background: var(--good); transition: width .05s linear; }
-  .panel-songs-beat { min-height: 1.2em; font: 700 20px var(--body); }
+  .panel-songs-beat { min-height: 1.2em; font: 700 1.25rem var(--body); }
   .panel-songs-record-btn { align-self: flex-start; }
   /* */
   /* */
   .panel-ear .ear-exercises { display: flex; flex-wrap: wrap; gap: 8px; margin-block: 10px; }
-  .panel-ear .ear-status { color: var(--muted); font-size: 14px; }
-  .panel-ear .ear-prompt { font: 700 18px var(--display); letter-spacing: .02em; }
+  .panel-ear .ear-status { color: var(--muted); font-size: 0.875rem; }
+  .panel-ear .ear-prompt { font: 700 1.125rem var(--display); letter-spacing: .02em; }
   .panel-ear .ear-controls, .panel-ear .ear-choices, .panel-ear .ear-note-entry { display: flex; flex-wrap: wrap; gap: 8px; margin-block: 8px; }
-  .panel-ear .ear-note-entry button { padding: 6px 9px; font-size: 13px; }
+  .panel-ear .ear-note-entry button { padding: 6px 9px; font-size: 0.8125rem; }
   .panel-ear .ear-progress { color: var(--muted); }
   .panel-ear .ear-feedback { font-weight: 700; min-height: 1.4em; }
   .panel-ear .ear-feedback.ok { color: var(--good); }
@@ -345,14 +345,14 @@
   .panel-theory-tabs button[aria-selected="true"] { background: var(--accent); border-color: var(--accent); color: #06101d; }
   .panel-theory-tabpanel { display: flex; flex-direction: column; gap: 10px; }
   .panel-theory-tabpanel label { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-  .panel-theory-question { font: 700 22px/1.3 var(--display); text-wrap: balance; }
+  .panel-theory-question { font: 700 1.375rem/1.3 var(--display); text-wrap: balance; }
   .panel-theory-choices { display: flex; flex-wrap: wrap; gap: 8px; }
   .panel-theory-choice.panel-theory-correct { background: var(--good); border-color: var(--good); color: #06101d; }
   .panel-theory-choice.panel-theory-wrong { background: var(--bad); border-color: var(--bad); color: #06101d; }
   .panel-theory-feedback.panel-theory-ok { color: var(--good); }
   .panel-theory-feedback.panel-theory-no { color: var(--bad); }
   .panel-theory-fretboard, .panel-theory-keyboard { border-collapse: collapse; }
-  .panel-theory-fretboard td, .panel-theory-fretboard th, .panel-theory-keyboard td { border: 1px solid var(--line); padding: 4px 8px; text-align: center; font-size: 13px; min-width: 22px; }
+  .panel-theory-fretboard td, .panel-theory-fretboard th, .panel-theory-keyboard td { border: 1px solid var(--line); padding: 4px 8px; text-align: center; font-size: 0.8125rem; min-width: 22px; }
   .panel-theory-fretboard td[data-degree] { background: var(--panel-2); color: var(--accent-ink); font-weight: 700; }
   .panel-theory-key-white { background: var(--text); color: var(--ground); }
   .panel-theory-key-black { background: #06101d; color: var(--text); }
@@ -362,74 +362,74 @@
   /* */
   /* */
   .panel-history { display: flex; flex-direction: column; gap: 14px; max-width: 640px; }
-  .panel-history h2 { font: 700 26px var(--display); margin: 0; }
-  .panel-history h3 { font: 700 16px var(--display); color: var(--muted); margin: 6px 0 0; }
-  .panel-history label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 4px; }
-  .panel-history input[type="text"], .panel-history input[type="number"], #challengeTitleInput, .panel-history select, .panel-history textarea { width: 100%; font: 500 15px var(--body); color: var(--text); background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; }
+  .panel-history h2 { font: 700 1.625rem var(--display); margin: 0; }
+  .panel-history h3 { font: 700 1rem var(--display); color: var(--muted); margin: 6px 0 0; }
+  .panel-history label { display: block; font-size: 0.8125rem; color: var(--muted); margin-bottom: 4px; }
+  .panel-history input[type="text"], .panel-history input[type="number"], #challengeTitleInput, .panel-history select, .panel-history textarea { width: 100%; font: 500 0.9375rem var(--body); color: var(--text); background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; }
   .panel-history ul { list-style: none; margin: 4px 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
-  .panel-history ul li { display: flex; gap: 6px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; font-size: 13px; }
+  .panel-history ul li { display: flex; gap: 6px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; font-size: 0.8125rem; }
   .history-instrument { border: 1px solid var(--line); border-radius: 8px; padding: 10px; margin-top: 8px; }
   .history-spark { color: var(--accent-ink); margin-top: 4px; }
-  #historyCopyStatus { color: var(--muted); font-size: 14px; min-height: 1.2em; }
+  #historyCopyStatus { color: var(--muted); font-size: 0.875rem; min-height: 1.2em; }
   /* slot:css:w-history */
   /* */
   /* */
   .panel-fingerings { display: flex; flex-direction: column; gap: 12px; max-width: 100%; }
   .panel-fingerings .fing-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-  .panel-fingerings .fing-desc { font-size: 15px; color: var(--text); background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+  .panel-fingerings .fing-desc { font-size: 0.9375rem; color: var(--text); background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
   .panel-fingerings .fing-range-wrap { display: flex; flex-direction: column; gap: 4px; }
   .panel-fingerings .fing-range { position: relative; height: 10px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; }
   .panel-fingerings .fing-range-fill { position: absolute; inset: 0; width: 0; background: transparent; }
   .panel-fingerings .fing-range-marker { position: absolute; top: -3px; width: 4px; height: 16px; background: #f3c52f; border-radius: 2px; transform: translateX(-2px); }
-  .panel-fingerings .fing-range-labels { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); }
+  .panel-fingerings .fing-range-labels { display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--muted); }
   .panel-fingerings .fing-notes { display: flex; gap: 4px; overflow-x: auto; padding-bottom: 4px; max-width: 100%; }
-  .panel-fingerings .fing-note-btn { flex: none; padding: 6px 8px; font-size: 13px; }
+  .panel-fingerings .fing-note-btn { flex: none; padding: 6px 8px; font-size: 0.8125rem; }
   .panel-fingerings .fing-note-btn[aria-pressed="true"] { background: #f3c52f; border-color: #f3c52f; color: #06101d; }
   .panel-fingerings .fing-diagram-host, .how-inline .fing-diagram-host { overflow-x: auto; }
   .panel-fingerings .fing-fretboard, .how-inline .fing-fretboard { display: flex; flex-direction: column; gap: 2px; min-width: max-content; }
   .panel-fingerings .fing-string, .how-inline .fing-string { display: flex; align-items: center; gap: 2px; }
-  .panel-fingerings .fing-string-label, .how-inline .fing-string-label { width: 3.2em; flex: none; font-size: 12px; color: var(--muted); }
-  .panel-fingerings .fing-fret, .how-inline .fing-fret { display: inline-flex; align-items: center; justify-content: center; width: 1.6em; height: 1.6em; border: 1px solid var(--line); font-size: 14px; color: var(--accent-ink); }
+  .panel-fingerings .fing-string-label, .how-inline .fing-string-label { width: 3.2em; flex: none; font-size: 0.75rem; color: var(--muted); }
+  .panel-fingerings .fing-fret, .how-inline .fing-fret { display: inline-flex; align-items: center; justify-content: center; width: 1.6em; height: 1.6em; border: 1px solid var(--line); font-size: 0.875rem; color: var(--accent-ink); }
   .panel-fingerings .fing-fret.fing-hit, .how-inline .fing-fret.fing-hit { background: #f3c52f; color: #06101d; border-color: #f3c52f; }
   .panel-fingerings .fing-fingerboard, .how-inline .fing-fingerboard { display: flex; flex-direction: column; gap: 6px; min-width: max-content; }
   .panel-fingerings .fing-fboard-string, .how-inline .fing-fboard-string { display: flex; align-items: center; gap: 6px; }
   .panel-fingerings .fing-fboard-track, .how-inline .fing-fboard-track { position: relative; width: 12em; height: 6px; background: var(--panel-2); border-radius: 4px; border: 1px solid var(--line); }
   .panel-fingerings .fing-fboard-marker, .how-inline .fing-fboard-marker { position: absolute; top: -4px; width: 12px; height: 14px; border-radius: 50%; background: #f3c52f; transform: translateX(-6px); }
   .panel-fingerings .fing-brass, .how-inline .fing-brass { display: flex; align-items: center; gap: 8px; }
-  .panel-fingerings .fing-valve, .how-inline .fing-valve { display: inline-flex; align-items: center; justify-content: center; width: 2.4em; height: 2.4em; border-radius: 50%; border: 2px solid var(--line); font: 700 16px var(--display); }
+  .panel-fingerings .fing-valve, .how-inline .fing-valve { display: inline-flex; align-items: center; justify-content: center; width: 2.4em; height: 2.4em; border-radius: 50%; border: 2px solid var(--line); font: 700 1rem var(--display); }
   .panel-fingerings .fing-valve.fing-hit, .how-inline .fing-valve.fing-hit { background: #f3c52f; border-color: #f3c52f; color: #06101d; }
-  .panel-fingerings .fing-slide-pos, .how-inline .fing-slide-pos { font: 700 18px var(--display); }
-  .panel-fingerings .fing-warn, .how-inline .fing-warn { color: var(--warn); font-size: 13px; margin: 4px 0 0; }
+  .panel-fingerings .fing-slide-pos, .how-inline .fing-slide-pos { font: 700 1.125rem var(--display); }
+  .panel-fingerings .fing-warn, .how-inline .fing-warn { color: var(--warn); font-size: 0.8125rem; margin: 4px 0 0; }
   .panel-fingerings .fing-harmonica, .how-inline .fing-harmonica { display: flex; gap: 4px; flex-wrap: wrap; }
-  .panel-fingerings .fing-hole, .how-inline .fing-hole { display: flex; flex-direction: column; align-items: center; justify-content: center; width: 2.6em; height: 2.6em; border-radius: 50%; border: 2px solid var(--line); font-size: 13px; }
+  .panel-fingerings .fing-hole, .how-inline .fing-hole { display: flex; flex-direction: column; align-items: center; justify-content: center; width: 2.6em; height: 2.6em; border-radius: 50%; border: 2px solid var(--line); font-size: 0.8125rem; }
   .panel-fingerings .fing-hole.fing-hit, .how-inline .fing-hole.fing-hit { background: #f3c52f; border-color: #f3c52f; color: #06101d; }
-  .panel-fingerings .fing-hole small, .how-inline .fing-hole small { font-size: 10px; }
+  .panel-fingerings .fing-hole small, .how-inline .fing-hole small { font-size: 0.625rem; }
   .panel-fingerings .fing-recorder, .how-inline .fing-recorder { display: flex; flex-direction: column; align-items: center; gap: 4px; }
-  .panel-fingerings .fing-recorder-hole, .how-inline .fing-recorder-hole { display: inline-flex; align-items: center; justify-content: center; width: 1.8em; height: 1.8em; border-radius: 50%; border: 2px solid var(--line); font-size: 12px; }
+  .panel-fingerings .fing-recorder-hole, .how-inline .fing-recorder-hole { display: inline-flex; align-items: center; justify-content: center; width: 1.8em; height: 1.8em; border-radius: 50%; border: 2px solid var(--line); font-size: 0.75rem; }
   .panel-fingerings .fing-recorder-hole.fing-hit, .how-inline .fing-recorder-hole.fing-hit { background: var(--muted); }
   .panel-fingerings .fing-recorder-hole.fing-half, .how-inline .fing-recorder-hole.fing-half { background: linear-gradient(90deg, var(--muted) 50%, transparent 50%); }
   .panel-fingerings .fing-keyed-woodwind, .how-inline .fing-keyed-woodwind { display: flex; flex-direction: column; gap: 6px; max-width: 60ch; }
-  .panel-fingerings .fing-keyed-keys, .how-inline .fing-keyed-keys { margin: 0; font-size: 15px; }
+  .panel-fingerings .fing-keyed-keys, .how-inline .fing-keyed-keys { margin: 0; font-size: 0.9375rem; }
   .panel-fingerings .fing-unavailable, .how-inline .fing-unavailable { color: var(--muted); margin: 0; }
-  .panel-fingerings .fing-review-badge { color: var(--warn); font-size: 13px; margin: 0 0 8px; }
+  .panel-fingerings .fing-review-badge { color: var(--warn); font-size: 0.8125rem; margin: 0 0 8px; }
   /* B(C11a): the kbd hand-off's own unreviewed note, next to its button in
      #modOpts -- same warn colour/size as fing-review-badge above, but that
      class is scoped to .panel-fingerings only (see its own comment there). */
-  #modOpts [role="note"] { color: var(--warn); font-size: 13px; }
+  #modOpts [role="note"] { color: var(--warn); font-size: 0.8125rem; }
   .panel-playalong { display: flex; flex-direction: column; gap: 12px; }
   .panel-playalong .pa-intro { color: var(--muted); max-width: 64ch; margin: 0; }
-  .panel-playalong .pa-note { color: var(--muted); font-size: 13px; margin: 0; }
+  .panel-playalong .pa-note { color: var(--muted); font-size: 0.8125rem; margin: 0; }
   .panel-playalong .pa-error { color: var(--bad); }
-  .panel-playalong .pa-filename { color: var(--muted); font-size: 13px; }
+  .panel-playalong .pa-filename { color: var(--muted); font-size: 0.8125rem; }
   .panel-playalong .pa-progress { display: flex; align-items: center; gap: 10px; }
   .panel-playalong .pa-progress-track { flex: 1 1 auto; height: 8px; border-radius: 4px; background: var(--ground); border: 1px solid var(--line); overflow: hidden; }
   .panel-playalong .pa-progress-fill { height: 100%; width: 0; background: var(--accent); }
   .panel-playalong .pa-facts { gap: 8px; }
-  .panel-playalong .pa-facts .stat { font-size: 14px; padding: 6px 10px; }
+  .panel-playalong .pa-facts .stat { font-size: 0.875rem; padding: 6px 10px; }
   .panel-playalong .pa-timeline { position: relative; height: 64px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; touch-action: none; cursor: crosshair; }
   .panel-playalong .pa-beat-tick, .panel-playalong .pa-bar-tick { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--line); }
   .panel-playalong .pa-bar-tick { background: var(--muted); width: 2px; }
-  .panel-playalong .pa-chord { position: absolute; top: 4px; font: 600 12px var(--body); color: var(--text); background: var(--panel-2); border: 1px solid var(--line); border-radius: 4px; padding: 2px 5px; white-space: nowrap; overflow: hidden; }
+  .panel-playalong .pa-chord { position: absolute; top: 4px; font: 600 0.75rem var(--body); color: var(--text); background: var(--panel-2); border: 1px solid var(--line); border-radius: 4px; padding: 2px 5px; white-space: nowrap; overflow: hidden; }
   .panel-playalong .pa-chord-unsure { color: var(--muted); font-style: italic; }
   .panel-playalong .pa-loop-region { position: absolute; top: 0; bottom: 0; background: color-mix(in srgb, var(--accent) 25%, transparent); border-inline: 2px solid var(--accent); }
   .panel-playalong .pa-playhead-row { align-items: center; gap: 8px; }
@@ -443,9 +443,9 @@
   .panel-pathway .pathway-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
   .panel-pathway .pathway-steps li { border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; }
   .panel-pathway .pathway-steps li.pathway-current { border-color: var(--good); border-width: 2px; }
-  .panel-pathway .pathway-here { color: var(--good); font-size: 13px; }
-  .panel-pathway .pathway-wait { color: var(--warn); font-size: 13px; }
-  .panel-pathway .pathway-unreviewed { color: var(--warn); font-size: 13px; }
+  .panel-pathway .pathway-here { color: var(--good); font-size: 0.8125rem; }
+  .panel-pathway .pathway-wait { color: var(--warn); font-size: 0.8125rem; }
+  .panel-pathway .pathway-unreviewed { color: var(--warn); font-size: 0.8125rem; }
   /* */
   /* slot:css:w-fixes */
   /* */
@@ -473,7 +473,7 @@
   .stage { position: relative; background: linear-gradient(#0d111c, #05070c); border: 1px solid var(--line); border-radius: 8px; padding: 8px; display: flex; flex-direction: column; gap: 8px; color: var(--text); color-scheme: dark; --ground: #0a0d14; --panel: #121726; --panel-2: #1a2033; --line: #2a3350; --text: #e9edf6; --muted: #93a0bd; --accent: #2f93ee; --accent-ink: #2f93ee; --good: #5be08a; --warn: #f3c52f; --bad: #ff6b5e; --good-ink: #000; --warn-ink: #000; --bad-ink: #000; --muted-ink: #000; }
   /* R10 P3: sentence case -- uppercase display type stays only on the h1
      wordmark and the Start button. */
-  #prompt { font: 700 40px/1.05 var(--display); text-wrap: balance; min-height: 1.1em; }
+  #prompt { font: 700 2.5rem/1.05 var(--display); text-wrap: balance; min-height: 1.1em; }
   #prompt b { color: var(--accent-ink); font-weight: 700; }
   #hint { color: var(--muted); min-height: 1.45em; }
   .timebar { height: 6px; border-radius: 3px; background: var(--ground); border: 1px solid var(--line); overflow: hidden; }
@@ -484,75 +484,75 @@
   .choices button { flex: 1 1 140px; }
   .choices button.right { background: var(--good); border-color: var(--good); color: #04130a; }
   .choices button.wrong { background: var(--bad); border-color: var(--bad); color: #1b0502; }
-  #tapPad { font: 700 26px var(--display); padding: 26px; width: 100%; border: 2px dashed var(--line); background: var(--panel); }
+  #tapPad { font: 700 1.625rem var(--display); padding: 26px; width: 100%; border: 2px dashed var(--line); background: var(--panel); }
   #tapPad.down { background: var(--accent); color: #06101d; }
   .stage-tools { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 
   .break { position: absolute; inset: 12px 12px auto 12px; z-index: 3; background: #0a0d14f5; border: 1px solid var(--accent); border-radius: 10px; padding: 18px; display: flex; flex-direction: column; gap: 10px; }
-  .break h2 { font: 700 30px/1.05 var(--display); margin: 0; text-wrap: balance; }
+  .break h2 { font: 700 1.875rem/1.05 var(--display); margin: 0; text-wrap: balance; }
   .break p { margin: 0; color: var(--muted); max-width: 54ch; }
-  #breakClock { font: 700 44px/1 var(--display); font-variant-numeric: tabular-nums; color: var(--accent); }
+  #breakClock { font: 700 2.75rem/1 var(--display); font-variant-numeric: tabular-nums; color: var(--accent); }
   .row { display: flex; flex-wrap: wrap; gap: 8px; }
 
   .side { display: flex; flex-direction: column; gap: 16px; }
   .card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; }
   /* R10 P2: sentence case, not letter-spaced uppercase -- "8 s per answer"
      read as "8 S PER ANSWER", which makes the unit unreadable. */
-  .eyebrow { font: 600 13px var(--body); color: var(--muted); }
+  .eyebrow { font: 600 0.8125rem var(--body); color: var(--muted); }
   .level-row { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
-  #levelName { font: 700 28px/1.1 var(--display); margin-top: 4px; text-wrap: balance; }
+  #levelName { font: 700 1.75rem/1.1 var(--display); margin-top: 4px; text-wrap: balance; }
   .meterbox { height: 12px; border-radius: 6px; background: var(--ground); border: 1px solid var(--line); margin-block: 10px 8px; overflow: hidden; }
   .meterbox.thin { height: 10px; margin-block: 8px; }
   #readyFill, #energyFill, #micLevelFill, #practiceLevelFill { height: 100%; width: 0; background: var(--good); transition: width .1s, background .25s; }
   .mic-meter { width: 90px; margin-block: 0; flex: none; }
   .practice-meter { display: flex; align-items: center; gap: 8px; color: var(--muted); }
   .practice-meter[hidden] { display: none; }
-  #calibrateResult { font-size: 13px; color: var(--muted); }
+  #calibrateResult { font-size: 0.8125rem; color: var(--muted); }
   .setup-sheet { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 14px; margin-top: -4px; }
   /* A label and its select wrap as one unit, so on a phone a label never ends a row away from its own select. */
   .setup-pair { display: inline-flex; align-items: center; gap: 10px; max-width: 100%; } .setup-pair:has(> select[hidden]) { display: none; } .setup-pair select { min-width: 0; }
   #coach { font-weight: 500; min-height: 2.9em; }
-  #sessLine { font-size: 14px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  #sessLine { font-size: 0.875rem; color: var(--muted); font-variant-numeric: tabular-nums; }
   #feedback { min-height: 2.9em; font-weight: 600; }
   #feedback.ok { color: var(--good); } #feedback.no { color: var(--bad); }
   .stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
   .stat { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
-  .stat b { display: block; font: 700 26px/1.1 var(--display); font-variant-numeric: tabular-nums; }
-  .stat span { font-size: 12px; color: var(--muted); }
+  .stat b { display: block; font: 700 1.625rem/1.1 var(--display); font-variant-numeric: tabular-nums; }
+  .stat span { font-size: 0.75rem; color: var(--muted); }
   .weak ul { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
-  .weak li { display: flex; justify-content: space-between; gap: 10px; font-size: 14px; }
+  .weak li { display: flex; justify-content: space-between; gap: 10px; font-size: 0.875rem; }
   .weak li span:last-child { font-variant-numeric: tabular-nums; color: var(--muted); }
   .weak .none { color: var(--muted); }
-  .opts { min-width: 0; max-width: 100%; display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; color: var(--muted); font-size: 14px; }
+  .opts { min-width: 0; max-width: 100%; display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; color: var(--muted); font-size: 0.875rem; }
   /* wrap + shrink so a select never pushes the page sideways at ~200% page zoom (a ~195px layout) */
   .opts label { display: flex; flex-wrap: wrap; gap: 7px; align-items: center; cursor: pointer; max-width: 100%; }
   .opts select { max-width: 100%; }
   .opts input { accent-color: var(--accent); width: 16px; height: 16px; }
   .file-label { display: inline-flex; align-items: center; }
   /* a file picker is a <label>, so the button look (button, button.small) never reached it */
-  label.small.file-label { font: 600 13px var(--body); color: var(--text); background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 5px 10px; cursor: pointer; }
+  label.small.file-label { font: 600 0.8125rem var(--body); color: var(--text); background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 5px 10px; cursor: pointer; }
   label.small.file-label:hover { border-color: var(--muted); }
-  .backup-nudge { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; justify-content: space-between; background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 8px 12px; font-size: 13px; color: var(--muted); }
+  .backup-nudge { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; justify-content: space-between; background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 8px 12px; font-size: 0.8125rem; color: var(--muted); }
   button.danger { border-color: var(--bad); color: var(--bad); }
   button.danger:hover { background: var(--bad); color: #1a0a08; }
   .settings-view { display: flex; flex-direction: column; gap: 18px; max-width: 640px; margin: 0 auto; }
-  .settings-view h2 { font: 700 28px/1.1 var(--display); margin: 0; }
+  .settings-view h2 { font: 700 1.75rem/1.1 var(--display); margin: 0; }
   .settings-group { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; display: flex; flex-direction: column; align-items: flex-start; gap: 10px; }
-  .settings-group h3 { font: 600 13px var(--body); color: var(--muted); margin: 0; }
+  .settings-group h3 { font: 600 0.8125rem var(--body); color: var(--muted); margin: 0; }
   /* wrap + shrink so a long label (Spanish) or a wide <select> option never pushes the page sideways at 320px */
   .settings-group label { display: flex; flex-wrap: wrap; gap: 7px; align-items: center; cursor: pointer; max-width: 100%; }
   .settings-group select { max-width: 100%; }
   .settings-group input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px; }
-  .settings-group p { color: var(--muted); font-size: 14px; margin: 0; max-width: 64ch; }
+  .settings-group p { color: var(--muted); font-size: 0.875rem; margin: 0; max-width: 64ch; }
   .settings-group p strong { color: var(--text); font-weight: 600; }
-  #settingsSay { color: var(--muted); font-size: 14px; margin: 0; min-height: 1.2em; }
+  #settingsSay { color: var(--muted); font-size: 0.875rem; margin: 0; min-height: 1.2em; }
   /* Mirrors #settingsSay's failed-save wording but lives on the main practice
      screen (writeDB() in src/app.js writes both) so a learner who never opens
      Settings still sees a save that did not land. Collapses to nothing when
      empty rather than reserving space like #settingsSay -- it sits above the
      exercise stage, where an always-present empty line would push the stage
      down on every load. */
-  #mainSay { color: var(--bad); font-size: 14px; margin: 0 0 8px; }
+  #mainSay { color: var(--bad); font-size: 0.875rem; margin: 0 0 8px; }
   #mainSay:empty { display: none; margin: 0; }
   /* Q6-1: the playing surface, the feedback line and End session on one phone screen.
      Placed after every base rule they override (same specificity, so source order decides).
@@ -575,11 +575,11 @@
     @media (max-width: 360px) {
       #feedback { min-height: 4.4em; }
       /* 320x568 drum kit in a session: the whole set (End session down to the canvas) must span no more than the window (F3), so text sizes and gaps shrink here only; #coach keeps its 14px. */
-      #prompt { font-size: 24px; }
-      #levelName { font-size: 20px; }
-      #hint { font-size: 13px; line-height: 1.2; }
+      #prompt { font-size: 1.5rem; }
+      #levelName { font-size: 1.25rem; }
+      #hint { font-size: 0.8125rem; line-height: 1.2; }
       #coach { line-height: 1.25; }
-      .eyebrow { font-size: 11px; line-height: 1.1; }
+      .eyebrow { font-size: 0.6875rem; line-height: 1.1; }
       .card { padding: 4px 10px; }
       .main { gap: 3px; }
       .stage { gap: 2px; }
@@ -591,11 +591,11 @@
     /* A fretted or microphone instrument (its stage shows "How to play this") puts the prompt and the whole drawing on the first screen at 390x844, with the setup sheet open or shut. Its extra rows (How to play this, the input level) move below the drawing; the hint, the setup sheet, the level card and the drawing take a little less room. Visual order only; DOM and Tab order unchanged. Keyboard and kit never match :has() here, so their fit is untouched. */
     .main:has(#howPeekHost:not([hidden])) .stage > #howPeekHost, .main:has(#howPeekHost:not([hidden])) .stage > #practiceMeter { order: 1; margin: 0; }
     .main:has(#howPeekHost:not([hidden])) .stage > .stage-tools { order: 2; }
-    .main:has(#howPeekHost:not([hidden])) .stage > #hint { font-size: 13px; line-height: 1.2; min-height: 0; }
+    .main:has(#howPeekHost:not([hidden])) .stage > #hint { font-size: 0.8125rem; line-height: 1.2; min-height: 0; }
     .main:has(#howPeekHost:not([hidden])) .stage > #cv { aspect-ratio: 16 / 6; }
-    .main:has(#howPeekHost:not([hidden])) .stage > #prompt { font-size: 32px; }
-    .main:has(#howPeekHost:not([hidden])) #levelName { font-size: 20px; }
-    .main:has(#howPeekHost:not([hidden])) #coach { font-size: 13px; line-height: 1.25; min-height: 0; }
+    .main:has(#howPeekHost:not([hidden])) .stage > #prompt { font-size: 2rem; }
+    .main:has(#howPeekHost:not([hidden])) #levelName { font-size: 1.25rem; }
+    .main:has(#howPeekHost:not([hidden])) #coach { font-size: 0.8125rem; line-height: 1.25; min-height: 0; }
     .main:has(#howPeekHost:not([hidden])) #feedbackCard > .eyebrow { display: none; }
     body:has(#howPeekHost:not([hidden])) .setup-sheet { padding: 6px 10px; gap: 6px 10px; margin-top: 0; }
     body:has(#howPeekHost:not([hidden])) .setup-sheet label[for="micDeviceSelect"] { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); }
@@ -621,20 +621,20 @@
   }
   @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
   .visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
-  #verFooter { color: var(--muted); font-size: 12px; text-align: center; padding-top: 4px; }
+  #verFooter { color: var(--muted); font-size: 0.75rem; text-align: center; padding-top: 4px; }
   #verFooter:empty { display: none; }
-  .update-check { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; color: var(--muted); font-size: 12px; }
+  .update-check { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; color: var(--muted); font-size: 0.75rem; }
   .update-check-help { margin: 0; max-width: 46ch; }
   /* Store shell (store/preload.js sets the attribute; an attribute, not a class, because the dead-class check only sees src): updates arrive through the Store and the shell blocks the network, so both web-only groups would fail every time. */
   html[data-shell="store"] .settings-group:has(#updateCheckBtn), html[data-shell="store"] .settings-group:has(#modelPackBtn) { display: none; }
   .update-check a { color: var(--accent-ink); }
   .ledger-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; margin: 8px 0; }
   .ledger-cell { aspect-ratio: 1; border-radius: 3px; background: color-mix(in srgb, var(--accent) var(--ledger-shade, 0%), var(--panel-2)); border: 1px solid var(--line); }
-  .ledger-weekdays { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; margin-top: 8px; color: var(--muted); font-size: 12px; text-align: center; }
+  .ledger-weekdays { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; margin-top: 8px; color: var(--muted); font-size: 0.75rem; text-align: center; }
   .ledger-cell-met { outline: 2px solid var(--text); outline-offset: -2px; } /* --text, not --accent: on a full-shade cell an accent outline vanishes into the fill */
-  .ledger-legend { color: var(--muted); font-size: 13px; margin: 0; }
+  .ledger-legend { color: var(--muted); font-size: 0.8125rem; margin: 0; }
   .ledger-cell-unknown { background: repeating-linear-gradient(45deg, var(--panel-2), var(--panel-2) 4px, var(--line) 4px, var(--line) 8px); }
-  .ledger-truncated-note { color: var(--muted); font-size: 13px; }
+  .ledger-truncated-note { color: var(--muted); font-size: 0.8125rem; }
 
   /* Printing has three modes. Page print (G3): keep only the notation/content area, plain
      black-on-white -- nav, setup, tabs, the side rail, buttons and help text are app chrome with
@@ -665,5 +665,5 @@
     body.printing-song .songs-print-sheet, body.printing-song .songs-print-sheet * { visibility: visible; }
     body.printing-song .songs-print-sheet { display: block; position: absolute; top: 0; left: 0; width: 100%; color: #000; background: #fff; }
   }
-  .panel-songs-rate { color: var(--muted); font-size: 13px; margin: 0; }
+  .panel-songs-rate { color: var(--muted); font-size: 0.8125rem; margin: 0; }
 .midi-details pre { white-space: pre-wrap; overflow-wrap: anywhere; max-width: 100%; }
