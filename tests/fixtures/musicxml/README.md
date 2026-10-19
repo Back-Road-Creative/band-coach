@@ -84,3 +84,10 @@ builds a `.mxl` archive itself (same minimal zip writer already used by
 synthetic but the MusicXML *content* being read through the zip/container.xml
 path is the same real file. This is noted plainly in that test, not claimed
 as a real `.mxl` produced by notation software.
+
+## `tutorial-chopin-prelude.mxl`
+
+The compressed form of `tutorial-chopin-prelude.musicxml` (same bytes inside),
+for the `.mxl` import test (`tests/release/acceptance-song-imports.test.mjs`).
+Built by zipping the `.musicxml` with the standard `META-INF/container.xml`
+pointing at it as the root file (deflate, 2,289 bytes).
