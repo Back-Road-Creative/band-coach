@@ -1446,7 +1446,7 @@ import { register as registerPathway } from './ui/pathway.js';
       S.grooveBpm = tempoLadder({ bpm: groove.bpm, passed: passed });
       const tend = result.summary.tendency;
       const feel = tend === 'steady' ? 'right on it' : tend === 'rushing' ? 'a little early overall' : tend === 'dragging' ? 'a little late overall' : 'not enough to tell';
-      say(passed ? 'Clean take at ' + groove.bpm + ' bpm, ' + feel + '. Next: ' + S.grooveBpm + ' bpm.' : (tend === 'rushing' ? 'You are rushing it — coming in early.' : tend === 'dragging' ? 'You are dragging — coming in late.' : 'Not quite on the beat yet.') + ' Staying at ' + S.grooveBpm + ' bpm.', passed ? 'ok' : 'no');
+      say(passed ? 'Clean take at ' + groove.bpm + ' beats a minute, ' + feel + '. Next: ' + S.grooveBpm + ' beats a minute.' : (tend === 'rushing' ? 'You are rushing it — coming in early.' : tend === 'dragging' ? 'You are dragging — coming in late.' : 'Not quite on the beat yet.') + ' Staying at ' + S.grooveBpm + ' beats a minute.', passed ? 'ok' : 'no');
       task.idx = task.els.length; finishTask(); nextTaskAt = now() + 0.4; save();
     }
   }
@@ -2050,7 +2050,7 @@ import { register as registerPathway } from './ui/pathway.js';
     $('helpText').innerHTML = ''; const st = document.createElement('strong'); st.textContent = 'How this one works: '; $('helpText').appendChild(st); $('helpText').appendChild(document.createTextNode((MODS[mod] || TOOLS[mod]).help)); if (instrumentUnreviewed(instrumentById[mod])) { const rv = document.createElement('span'); rv.setAttribute('role', 'note'); rv.className = 'small'; rv.textContent = ' ' + t('review.unreviewed'); $('helpText').appendChild(rv); }
     document.querySelectorAll('.side .card, .side .stats, #playBtn, #resetBtn').forEach(el => { el.style.display = tool && !(mod === 'capture' && el.id === 'feedbackCard') ? 'none' : ''; }); $('tapPad').hidden = mod !== 'rhy'; $('timeFill').parentElement.style.visibility = tool || mod === 'rhy' || (MODS[mod] && MODS[mod].kit) ? 'hidden' : 'visible'; // capture's own messages ('Nothing captured yet.') need the feedback card; .hidden still hides it while empty
     if (tool) { $('prompt').textContent = ''; $('hint').textContent = mod === 'tuner' ? 'One open string at a time.' : 'One note at a time.'; $('choices').hidden = true; $('replayBtn').hidden = true; $('showMeBtn').hidden = true; $('howPeekHost').hidden = true; return; }
-    const d = D(); $('levelNum').textContent = 'Level ' + S.level; $('levelName').textContent = customOn ? 'Your captured melody' : d.name; $('limitOut').textContent = d.task === 'bar' || mod === 'rhy' || MODS[mod].kit ? (d.bpm || 72) + ' bpm' : (d.limit || 8) + ' s per answer';
+    const d = D(); $('levelNum').textContent = 'Level ' + S.level; $('levelName').textContent = customOn ? 'Your captured melody' : d.name; $('limitOut').textContent = d.task === 'bar' || mod === 'rhy' || MODS[mod].kit ? (d.bpm || 72) + ' beats a minute' : (d.limit || 8) + ' seconds to answer';
     const pct = Math.round(S.ready * 100); $('readyFill').style.width = pct + '%'; $('readyFill').style.background = S.ready < 0.25 ? 'var(--bad)' : S.ready < 0.6 ? 'var(--warn)' : 'var(--good)'; $('readyBar').setAttribute('aria-valuenow', pct);
     const e = sess ? 1 - sess.F : 1, ep = Math.round(e * 100); $('energyFill').style.width = ep + '%'; $('energyFill').style.background = e < 0.4 ? 'var(--bad)' : e < 0.65 ? 'var(--warn)' : 'var(--good)'; $('energyBar').setAttribute('aria-valuenow', ep);
     const ds = dayStreak(), lastS = DB.sessions.filter(x => x.mod === mod).slice(-1)[0];
@@ -2209,7 +2209,7 @@ import { register as registerPathway } from './ui/pathway.js';
       btn('capDrill', 'Drill the notes', () => { if (!cap.notes.length) { say('Nothing captured yet.', 'no'); return; } DB.custom = cap.notes.map(n => n.m).slice(0, 300); save(); const to = $('capTo').value; setMod(to); customOn = true; renderOpts(); showAll(); coach('Your captured tune is loaded: ' + DB.custom.length + ' notes, four at a time. Each group repeats until it is clean. Press Start.'); });
     }
     if (MODS[mod] && DB.custom && DB.custom.length && hasMasteryScheme(mod)) chk('optCustom', 'Practise my captured melody (' + DB.custom.length + ' notes)', customOn, v => { customOn = v; chunk = 0; task = null; showAll(); });
-    if (groovable(mod)) chk('optGroove', 'Play in time (metronome, ' + (S.grooveBpm || 80) + ' bpm)', grooveOn, v => { grooveOn = v; task = null; groove = null; showAll(); });
+    if (groovable(mod)) chk('optGroove', 'Play in time (metronome, ' + (S.grooveBpm || 80) + ' beats a minute)', grooveOn, v => { grooveOn = v; task = null; groove = null; showAll(); });
   }
 
   // ---------- inputs ----------

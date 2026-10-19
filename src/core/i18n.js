@@ -99,7 +99,7 @@ export const en = {
   // data-i18n="id" attribute on the element; the same English text is also
   // left sitting in src/index.html so the page still reads correctly before
   // that startup call runs, or if JS never runs at all.
-  'app.subtitle': 'One coach, many instruments. It teaches where things are, then the moves between them, picks every next exercise from your own results, and watches your energy so practice stays fresh.',
+  'app.subtitle': 'One coach, many instruments, picking each next exercise from your own results.',
   'nav.label': 'Main',
   'nav.practice': 'Practice',
   'nav.songs': 'Songs',
@@ -315,7 +315,7 @@ export const es = {
   'modelPack.failed': 'La descarga no terminó, así que no se guardó nada. Inténtalo de nuevo.',
   'modelPack.noStorage': 'Este navegador no puede guardar descargas, así que el paquete de modelo no está disponible aquí.',
 
-  'app.subtitle': 'Un entrenador, muchos instrumentos. Te enseña dónde están las cosas, luego los movimientos entre ellas, elige cada siguiente ejercicio según tus propios resultados y vigila tu energía para que la práctica se mantenga fresca.',
+  'app.subtitle': 'Un entrenador, muchos instrumentos, que elige cada siguiente ejercicio según tus propios resultados.',
   'nav.label': 'Principal',
   'nav.practice': 'Práctica',
   'nav.songs': 'Canciones',
