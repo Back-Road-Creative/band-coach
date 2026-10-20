@@ -35,7 +35,7 @@ test('beat.mid: real format-1 drum loop, 120 ppq, SMPTE-offset meta, 390 velocit
   // MetaMessage('key_signature', key='C') -> sf=0, mi=0 -> C major.
   // The SMPTE-offset meta event (0x54) on the same track must be safely
   // ignored rather than rejected or mistaken for SMPTE-based *division*.
-  assert.equal(song.title, 'untitled');
+  assert.equal(song.title, 'beat'); // the file's own track name is the generic 'untitled', so the file name wins
   assert.equal(song.bpm, 100);
   assert.deepEqual(song.metre, { num: 4, den: 4 });
   assert.deepEqual(song.key, { tonic: 0, mode: 'major' });
