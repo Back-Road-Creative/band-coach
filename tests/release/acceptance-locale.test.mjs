@@ -61,9 +61,6 @@ export const SCREENS = [
 // Screens known to leave English behind: name -> English strings (key: text).
 // A screen absent here is asserted clean.
 export const KNOWN_LEFTOVERS = {
-  Practice: ['songs.hands.label: "Hands"', 'pathway.open: "Your keyboard path"', 'pathway.title: "Your keyboard path"'],
-  Songs: ['songs.addRow: "Add a song"', 'nav.songs: "Songs"'],
-  'Instrument picker': ['picker.tools: "Tools"'],
 };
 
 test('the sweep detector sees English: an en table value is flagged, its Spanish value is not', () => {

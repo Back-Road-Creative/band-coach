@@ -115,8 +115,8 @@ import { register as registerPathway } from './ui/pathway.js';
   // lives here; the English text is left in the HTML too as the pre-JS/no-JS
   // fallback, and this only overwrites it with the identical string today.
   function applyStaticLabels(root) { root.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.getAttribute('data-i18n')); }); }
-  // Language pick (Settings > Language, DB.prefs.locale): switches t(), <html lang>, the static labels and the nav landmark name. Dynamic text picks the new language up the next time it is drawn.
-  function applyLocale(code) { setLocale(code); document.documentElement.lang = code; applyStaticLabels(document); $('mainNav').setAttribute('aria-label', t('nav.label')); }
+  // Language pick (Settings > Language, DB.prefs.locale): switches t(), <html lang>, the static labels and the nav landmark name. Text drawn once (the options list, the instrument sheet) is redrawn by the language control's handler; the rest picks the new language up the next time it is drawn.
+  function applyLocale(code) { setLocale(code); document.documentElement.lang = code; applyStaticLabels(document); $('mainNav').setAttribute('aria-label', t('nav.label')); $('playBtn').textContent = t(!sess ? 'stage.start' : paused ? 'stage.resume' : 'stage.pause'); }
   const deafWindow = createDeafWindow({ now: () => performance.now() });
   // ---------- accessibility: wake lock, dialog focus, reduced motion ----------
   const wakeLock = createWakeLock();
@@ -1991,7 +1991,7 @@ import { register as registerPathway } from './ui/pathway.js';
     // Start is a choice of the instrument on screen: shut the sheet and own the label, so the exercise is on screen.
     pickerAsSheet = true; setInstrumentSheetOpen(false); updateNavInstrumentLabel();
     diagInputFrames = []; diagLastState = null; diagSince = null; diagShown = null; // a new sitting starts the mic diagnosis afresh
-    playing = true; paused = false; $('playBtn').textContent = 'Pause'; $('endBtn').hidden = false; coach(msg); showAll(); wakeLock.acquire();
+    playing = true; paused = false; $('playBtn').textContent = t('stage.pause'); $('endBtn').hidden = false; coach(msg); showAll(); wakeLock.acquire();
   }
   // logSession(): a panel (e.g. a song lesson) logs its own practice as a
   // DB.sessions row the same way endSession() below logs a built-in drill's
@@ -2022,7 +2022,7 @@ import { register as registerPathway } from './ui/pathway.js';
       let up = null, low = null, lowR = 1; Object.keys(S.item).forEach(id => { const cur = S.item[id], r1 = retrievability(cur, modelNow), r0 = retrievability(sess.m0[id] || cur, modelNow), g0 = r1 - r0; if (up === null || g0 > up.g) up = { id: id, g: g0 }; if (cur.reps >= 3 && (low === null || r1 < lowR)) { low = id; lowR = r1; } });
       line = 'Session done: ' + Math.round(min * 10) / 10 + ' min, ' + Math.round(100 * sess.ok / sess.judged) + '% right, best streak ' + sess.bestStreak + ', level ' + sess.from + ' to ' + S.level + '.' + (up && up.g > 0.05 ? ' Most improved: ' + inf(up.id).short + '.' : '') + (low ? ' Next time starts with extra ' + inf(low).short + '.' : ''); }
     if (sess.judged >= 8 && Date.now() - lastBackupAt > 7 * 86400000) showBackupNudge('You have been practicing a while. Save a backup, just in case.');
-    sess = null; playing = false; paused = false; task = null; bar = null; breakTrap.deactivate(); $('breakCard').hidden = true; $('playBtn').textContent = 'Start'; $('endBtn').hidden = true; $('choices').hidden = true; $('prompt').textContent = ''; $('hint').textContent = ''; say(''); $('timeFill').style.width = '0%'; $('showMeBtn').hidden = true; $('howPeekHost').hidden = true; coach(line); save(); showAll(); wakeLock.release();
+    sess = null; playing = false; paused = false; task = null; bar = null; breakTrap.deactivate(); $('breakCard').hidden = true; $('playBtn').textContent = t('stage.start'); $('endBtn').hidden = true; $('choices').hidden = true; $('prompt').textContent = ''; $('hint').textContent = ''; say(''); $('timeFill').style.width = '0%'; $('showMeBtn').hidden = true; $('howPeekHost').hidden = true; coach(line); save(); showAll(); wakeLock.release();
   }
   const BREAKS = {
     user: ['Paused', 'Take your time. A pause of 90 seconds or more counts as a break and resets your energy.', 0], away: ['You stepped away', 'Nothing came in for a while, so I paused. The exercise you left does not count against you.', 0], hidden: ['Paused', 'The page was hidden, so I stopped the clock. Nothing was counted while you were gone.', 0],
@@ -2037,11 +2037,11 @@ import { register as registerPathway } from './ui/pathway.js';
     // chose (sess.target, captured by the caller above before it is zeroed)
     // instead of BREAKS.target's generic fallback string.
     let title = b[0]; if (kind === 'target' && mins) title = 'That is today\'s ' + mins + ' minutes';
-    $('breakTitle').textContent = title; $('breakWhy').textContent = why; $('breakClock').hidden = !b[2]; $('snoozeBtn').hidden = !(kind === 'tired' || kind === 'long'); $('breakCard').hidden = false; $('playBtn').textContent = 'Resume'; task = null; bar = null; save(); showAll(); breakTrap.activate($('playBtn'));
+    $('breakTitle').textContent = title; $('breakWhy').textContent = why; $('breakClock').hidden = !b[2]; $('snoozeBtn').hidden = !(kind === 'tired' || kind === 'long'); $('breakCard').hidden = false; $('playBtn').textContent = t('stage.resume'); task = null; bar = null; save(); showAll(); breakTrap.activate($('playBtn'));
   }
   function tickBreak() { if (!pauseInfo || !pauseInfo.secs) return; const left = Math.max(0, pauseInfo.secs - (Date.now() - pauseInfo.at) / 1000); $('breakClock').textContent = left > 0 ? Math.floor(left / 60) + ':' + ('0' + Math.floor(left % 60)).slice(-2) : 'Ready when you are'; }
   function resume() {
-    const gone = pauseInfo ? (Date.now() - pauseInfo.at) / 1000 : 0; paused = false; playing = true; breakTrap.deactivate(); $('breakCard').hidden = true; $('playBtn').textContent = 'Pause'; ensureAudio(); task = null; lastInputAt = now();
+    const gone = pauseInfo ? (Date.now() - pauseInfo.at) / 1000 : 0; paused = false; playing = true; breakTrap.deactivate(); $('breakCard').hidden = true; $('playBtn').textContent = t('stage.pause'); ensureAudio(); task = null; lastInputAt = now();
     if (gone >= 90) { sess.breaks++; sess.sinceBreak = 0; sess.w30 = []; sess.best30 = 0; sess.rts = []; sess.bestRt = null; sess.tiredFor = 0; sess.failRun = 0; sess.warm = 3; coach('Welcome back after ' + (Math.round(gone / 6) / 10) + ' minutes. That counts as a real break, so your energy is reset. Three easy ones to warm back up.'); } else coach('Resuming level ' + S.level + '.');
     if (MODS[mod] && (MODS[mod].input === 'pluck' || MODS[mod].input === 'sustain') && !micReady && micHideReleased) coach($('coach').textContent + ' Your microphone was released while the page was hidden. Press Connect microphone to let me hear you again.'); // README: hiding the tab releases the mic; coming back does not reopen it
     pauseInfo = null; showAll();
@@ -2145,7 +2145,7 @@ import { register as registerPathway } from './ui/pathway.js';
     // not merely offered) at least once, or an earlier both-hands record
     // grandfathering it open. A lock note and a "before you start" prep line
     // for each hand ride along beside it.
-    if (mod === 'kbd') sel('optKbdHands', 'Hands', { both: ['Both'], right: ['Right only'], left: ['Left only'] }, mod === 'kbd' && D().task === 'hands' && !D().timed ? effectiveHands(DB.prefs.kbdHands, bothUnlocked(S)) : DB.prefs.kbdHands, v => { DB.prefs.kbdHands = v; task = null; save(); });
+    if (mod === 'kbd') sel('optKbdHands', t('songs.hands.label'), { both: ['Both'], right: ['Right only'], left: ['Left only'] }, mod === 'kbd' && D().task === 'hands' && !D().timed ? effectiveHands(DB.prefs.kbdHands, bothUnlocked(S)) : DB.prefs.kbdHands, v => { DB.prefs.kbdHands = v; task = null; save(); });
     if (mod === 'kbd' && D().task === 'hands' && !D().timed) {
       if (!bothUnlocked(S)) {
         const o = document.querySelector('#optKbdHands option[value="both"]'); if (o) o.disabled = true;
@@ -2509,7 +2509,7 @@ import { register as registerPathway } from './ui/pathway.js';
   function applyTheme(t) { if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t); else document.documentElement.removeAttribute('data-theme'); }
   $('optTheme').addEventListener('change', function () { DB.prefs.theme = this.value; applyTheme(this.value); applyAccent(); save(); });
   // The idle coach line was written in the old language; rewrite it (only it: a live session's line is left as is).
-  $('optLocale').addEventListener('change', function () { const idle = $('coach').textContent === idleCoachLine(); DB.prefs.locale = LOCALES.some(l => l.code === this.value) ? this.value : 'en'; applyLocale(DB.prefs.locale); if (idle) $('coach').textContent = idleCoachLine(); updateNavInstrumentLabel(); showAll(); refreshModelPack(); save(); });
+  $('optLocale').addEventListener('change', function () { const idle = $('coach').textContent === idleCoachLine(); DB.prefs.locale = LOCALES.some(l => l.code === this.value) ? this.value : 'en'; applyLocale(DB.prefs.locale); if (idle) $('coach').textContent = idleCoachLine(); rebuildPicker(); updateNavInstrumentLabel(); renderOpts(); showAll(); refreshModelPack(); save(); });
   function applyNoteNaming() { DB.prefs.noteNaming = { system: $('optNoteSystem').value, accidentals: $('optAccidentals').value }; setNoteNaming(DB.prefs.noteNaming); save(); showAll(); }
   $('optNoteSystem').addEventListener('change', applyNoteNaming); $('optAccidentals').addEventListener('change', applyNoteNaming);
 
@@ -2587,10 +2587,13 @@ import { register as registerPathway } from './ui/pathway.js';
   function focusNavInstrument() { const b = $('navInstrument'); if (b) b.focus(); }
   // A tool panel (Ear training / How to play it / Music theory) opened from the sheet announces itself the way the nav screens do (F2): focus lands on its heading.
   function focusPanelHeading() { const h = $('panelHost').querySelector('h2'); if (h) { if (!h.hasAttribute('tabindex')) h.tabIndex = -1; h.focus(); } else focusNavInstrument(); }
+  // Locale switch: the sheet's labels are written once by buildPicker, so redraw it and put the pressed state back (setMod/openPanel only ever set it, never rebuild).
+  function rebuildPicker() { const box = $('picker'), on = box.querySelector('button[aria-pressed="true"]'), key = on && (on.dataset.mod ? 'mod' : 'panel'), id = on && (on.dataset.mod || on.dataset.panel); box.replaceChildren(); buildPicker(); if (on) box.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset[key] === id))); }
   function buildPicker() {
     const box = $('picker'), instrumentIds = MOD_IDS.filter(m => TOOL_MOD_IDS.indexOf(m) < 0), toolIds = TOOL_MOD_IDS.concat(Object.keys(TOOLS)), children = variantChildrenByParent();
     // Escape closes the sheet from anywhere inside it and puts focus back on the nav Instrument button (the other dismissible surfaces -- panels, the break card -- already do).
-    box.addEventListener('keydown', ev => { if (ev.key === 'Escape' && !ev.defaultPrevented && !box.hidden) { ev.preventDefault(); setInstrumentSheetOpen(false); focusNavInstrument(); } });
+    if (!box.dataset.escWired) box.addEventListener('keydown', ev => { if (ev.key === 'Escape' && !ev.defaultPrevented && !box.hidden) { ev.preventDefault(); setInstrumentSheetOpen(false); focusNavInstrument(); } });
+    box.dataset.escWired = '1';
     // Each variant family renders as ONE top-level control (the parent
     // button, always visible and independently selectable -- e.g. "Ukulele"
     // still reaches mod 'uke') plus a quiet <details> disclosure beside it
@@ -2617,7 +2620,7 @@ import { register as registerPathway } from './ui/pathway.js';
       // Same "build the label from the data" rule as the tools summary
       // below: naming the variants by hand would go stale the first time
       // one is renamed or a third is added.
-      const summary = document.createElement('summary'); const full = 'Variants: ' + kids.map(v => MODS[v].name).join(', '); const fullSpan = document.createElement('span'); fullSpan.className = 'variant-full'; fullSpan.textContent = full; const moreSpan = document.createElement('span'); moreSpan.className = 'variant-more'; moreSpan.textContent = t('picker.more'); summary.append(fullSpan, moreSpan); summary.title = full; toggle.appendChild(summary); // phone: CSS shows the short "More…" chip instead of the clipped list
+      const summary = document.createElement('summary'); const full = 'Variants: ' + kids.map(v => MODS[v].name).join(', '); const fullSpan = document.createElement('span'); fullSpan.className = 'variant-full'; fullSpan.textContent = full; const moreSpan = document.createElement('span'); moreSpan.className = 'variant-more'; const moreSeen = document.createElement('span'); moreSeen.setAttribute('aria-hidden', 'true'); moreSeen.textContent = t('picker.more'); const moreName = document.createElement('span'); moreName.className = 'visually-hidden'; moreName.textContent = t('picker.moreFor', { instrument: MODS[m].name }); moreSpan.append(moreSeen, moreName); summary.append(fullSpan, moreSpan); summary.title = full; toggle.appendChild(summary); // phone: CSS shows the short "More…" chip instead of the clipped list
       const list = document.createElement('div'); list.className = 'variant-buttons';
       kids.forEach(v => list.appendChild(buildPickerButton(v, MODS[v])));
       toggle.appendChild(list);

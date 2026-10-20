@@ -308,7 +308,8 @@ test('U6: at phone width the picker fits the page and no label is cut off', asyn
         scrollHeight: p.scrollHeight, clientHeight: p.clientHeight,
         ellipsed: labels.map(e => e.innerText.trim()).filter(s => s.endsWith('…') && s !== 'More…'),
         clipped: labels.filter(e => e.scrollWidth > e.clientWidth + 1).map(e => e.innerText.trim()),
-        chips: [...p.querySelectorAll('.variant-toggle > summary')].filter(vis).map(e => e.innerText.trim()),
+        // what a sighted learner sees on the chip: the visually-hidden instrument name (screen readers only, see acceptance-picker-more-chip) is left out
+        chips: [...p.querySelectorAll('.variant-toggle > summary')].filter(vis).map(e => [...e.querySelectorAll('.variant-more > [aria-hidden]')].map(x => x.innerText.trim()).join('') || e.innerText.trim()),
       };
     })())`));
     assert.equal(r.scrollHeight, r.clientHeight, 'the picker has no inner scroll area');
