@@ -711,6 +711,9 @@ import { register as registerPathway } from './ui/pathway.js';
   // it stays directly reachable, and shutting the whole sheet on top of
   // that would hide it two levels deep behind two different controls.
   let hasSavedMod = false;
+  // One question first: true once the learner has answered "which instrument?" (a saved choice at boot, a pick, or a test's setMod). Until then no instrument is written to storage (a changed setting still is) and Start, the level name and the coach line stay hidden. `booting` marks the boot-time setMod(mod) as the default, not an answer.
+  let instrumentChosen = false, booting = true;
+  function revealStage() { ['playBtn', 'levelName', 'coach'].forEach(id => { const el = $(id); if (el) el.hidden = false; }); }
   // P2b-1: once true, #picker behaves as a sheet that shuts itself after
   // every instrument pick, not just the always-visible first-run list. It
   // starts equal to hasSavedMod (a returning learner's sheet is already
@@ -797,7 +800,8 @@ import { register as registerPathway } from './ui/pathway.js';
   // every retry after it.
   function writeDB() {
     if (MODS[mod]) DB.mods[mod] = S = sanitizeModel(mod, S, modelNow);
-    const candidate = JSON.stringify(DB);
+    // Before the instrument question is answered, a setting the learner changed is stored, but not the boot-time default instrument, so the next visit still asks.
+    const candidate = JSON.stringify(instrumentChosen ? DB : Object.assign({}, DB, { prefs: Object.assign({}, DB.prefs, { mod: null }) }));
     const result = store.blocked ? { ok: false } : safeSet(store.storage, KEY, candidate);
     if (result.ok) { lastStored = candidate; if (saveFailedShown) { saveFailedShown = false; $('settingsSay').textContent = ''; $('mainSay').textContent = ''; } }
     else { saveFailedShown = true; $('settingsSay').textContent = t('storage.saveFailed'); $('mainSay').textContent = t('storage.saveFailed'); }
@@ -1680,7 +1684,7 @@ import { register as registerPathway } from './ui/pathway.js';
   // `offScale` (a reading beyond +-50 cents) draws a triangle pointing off
   // the edge instead of the round dot -- shape, not just colour, marks it,
   // since the dot would otherwise just clamp silently to the rail.
-  function gauge(x, y, w, cents, label, offScale) { g.fillStyle = '#05070c'; rr(x, y, w, 16, 8); g.fill(); g.fillStyle = '#5be08a55'; g.fillRect(x + w * 0.5 - w * 0.06, y, w * 0.12, 16); g.strokeStyle = '#e9edf6'; g.lineWidth = 2; g.beginPath(); g.moveTo(x + w / 2, y - 5); g.lineTo(x + w / 2, y + 21); g.stroke(); if (cents !== null) { const px = x + w / 2 + clamp(cents / 50, -1, 1) * w / 2; g.fillStyle = Math.abs(cents) < 10 ? '#5be08a' : Math.abs(cents) < 30 ? '#f3c52f' : '#ff6b5e'; if (offScale) { const dir = cents > 0 ? 1 : -1; g.beginPath(); g.moveTo(px, y + 8 - 10); g.lineTo(px + dir * 13, y + 8); g.lineTo(px, y + 8 + 10); g.closePath(); g.fill(); } else { g.beginPath(); g.arc(px, y + 8, 11, 0, 7); g.fill(); } } const fs = Math.max(13 * cssK(), cv.width * 0.017); g.fillStyle = '#93a0bd'; font(fs, 600); g.textAlign = 'left'; g.fillText('flat', x, y + 22 + fs); g.textAlign = 'right'; g.fillText('sharp', x + w, y + 22 + fs); g.textAlign = 'center'; g.fillStyle = '#e9edf6'; font(fs * 1.25, 700); const maxW = 2 * Math.min(x + w / 2, cv.width - x - w / 2) - 8; let lines = [label || '']; if (g.measureText(lines[0]).width > maxW && lines[0].includes(' ')) { const wd = lines[0].split(' '); let best = null; for (let i = 1; i < wd.length; i++) { const two = [wd.slice(0, i).join(' '), wd.slice(i).join(' ')], m = Math.max(g.measureText(two[0]).width, g.measureText(two[1]).width); if (!best || m < best.m) best = { two, m }; } lines = best.two; } const lw = Math.max(...lines.map(l => g.measureText(l).width)); if (lw > maxW) font(fs * 1.25 * maxW / lw, 700); lines.forEach((l, i) => g.fillText(l, x + w / 2, y - 14 - (lines.length - 1 - i) * fs * 1.45)); }
+  function gauge(x, y, w, cents, label, offScale) { g.fillStyle = '#05070c'; rr(x, y, w, 16, 8); g.fill(); g.fillStyle = '#5be08a55'; g.fillRect(x + w * 0.5 - w * 0.06, y, w * 0.12, 16); g.strokeStyle = '#e9edf6'; g.lineWidth = 2; g.beginPath(); g.moveTo(x + w / 2, y - 5); g.lineTo(x + w / 2, y + 21); g.stroke(); if (cents !== null) { const px = x + w / 2 + clamp(cents / 50, -1, 1) * w / 2; g.fillStyle = Math.abs(cents) < 10 ? '#5be08a' : Math.abs(cents) < 30 ? '#f3c52f' : '#ff6b5e'; if (offScale) { const dir = cents > 0 ? 1 : -1; g.beginPath(); g.moveTo(px, y + 8 - 10); g.lineTo(px + dir * 13, y + 8); g.lineTo(px, y + 8 + 10); g.closePath(); g.fill(); } else { g.beginPath(); g.arc(px, y + 8, 11, 0, 7); g.fill(); } } const fs = Math.max(13 * cssK(), cv.width * 0.017); g.fillStyle = '#93a0bd'; font(fs, 600); g.textAlign = 'left'; g.fillText('flat', x, y + 22 + fs); g.textAlign = 'right'; g.fillText('sharp', x + w, y + 22 + fs); g.textAlign = 'center'; g.fillStyle = '#e9edf6'; font(fs * 1.25, 700); const maxW = Math.min(2 * Math.min(x + w / 2, cv.width - x - w / 2) - 8, w); let lines = [label || '']; if (g.measureText(lines[0]).width > maxW && lines[0].includes(' ')) { lines = []; let cur = ''; label.split(' ').forEach(wd => { const tryLn = cur ? cur + ' ' + wd : wd; if (cur && g.measureText(tryLn).width > maxW) { lines.push(cur); cur = wd; } else cur = tryLn; }); lines.push(cur); } const lw = Math.max(...lines.map(l => g.measureText(l).width)); if (lw > maxW) font(fs * 1.25 * maxW / lw, 700); lines.forEach((l, i) => g.fillText(l, x + w / 2, y - 14 - (lines.length - 1 - i) * fs * 1.45)); }
   function liveCents(target, exact) { if (!heard || !heard.freq) return null; let c = (heard.midi - target) * 100; if (!exact) c = ((c + 600) % 1200 + 1200) % 1200 - 600; return c; }
   function drawVoice(e, W, H) {
     const VKd = Object.assign({}, VOICE_KINDS, DB.prefs.voiceRange ? { mine: ['My range (found by test)', tonicFromRange(exerciseRangeFor(DB.prefs.voiceRange)).tonic] } : {}), base = (VKd[DB.prefs.voice] || VKd.low)[1], rows = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], y = d => H * 0.9 - (H * 0.8) * d / 12;
@@ -1748,11 +1752,23 @@ import { register as registerPathway } from './ui/pathway.js';
       g.save(); g.translate(x0, y0); g.scale(sc, sc); g.strokeStyle = '#c9ced9'; g.fillStyle = '#e9edf6'; g.lineWidth = 1.5 / sc; drawPrimitives(g, bar.staff, {}); g.restore();
       bar.onsets.forEach((o, i) => { const x = x0 + (bar.noteX[i] || 0) * sc; if (o.flam) { g.fillStyle = '#93a0bd'; font(11 * sc, 700); g.textAlign = 'center'; g.fillText('flam', x, y0 + 10 * sc); } if (!bar.judged || !o.res) return; const bad = o.res.some(r => r.dt === undefined), off = Math.max(...o.res.map(r => Math.abs(r.dt || 0))); g.fillStyle = bad ? '#ff6b5e' : off > 0.05 ? '#f3c52f' : '#5be08a'; g.beginPath(); g.arc(x, y0 + 122 * sc, 5 * sc, 0, 7); g.fill(); }); }
     // the layout is a unit square stretched to the box (x by width, y by height); circles stay round, sized by the shorter side
-    kitLayout().forEach(p => { const x = box.x + spreadX(p.x) * bw, y = box.y + p.y * bh, rr = p.r * m, flash = kitFlash.piece === p.id && performance.now() - kitFlash.at < 160, lit = flash || (pre && want[p.id]);
-      g.beginPath(); g.arc(x, y, rr, 0, 7); g.fillStyle = flash ? '#f3c52f' : lit ? '#f08a4b' : p.shape === 'cymbal' ? '#2a3140' : '#1b2130'; g.fill(); g.strokeStyle = want[p.id] ? '#f08a4b' : '#93a0bd'; g.lineWidth = want[p.id] ? 3 : 1.5; g.stroke();
-      const nm = KIT_DRAW_NAMES[p.id], fs = Math.max(13, m * 0.05), key = KIT.find(k => k.id === p.id).key.toUpperCase(); font(fs, 700); const tw = g.measureText(nm[0]).width, inside = tw + 6 <= rr * 2 && !nm[1] && !nm[2], left = nm[2] === 'l';
-      // a name that does not fit in its circle is written beside it (to the right), never squeezed or overlapping its neighbours
-      g.fillStyle = inside && lit ? '#05070c' : '#e9edf6'; if (inside) { g.textAlign = 'center'; g.fillText(nm[0], x, y - fs * 0.05); kitLabels.push({ id: p.id, x: x - tw / 2, y: y - fs * 1.05, w: tw, h: fs * 1.2 }); } else { const lx = left ? x - rr - 5 : x + rr + 5; g.textAlign = left ? 'right' : 'left'; g.fillText(nm[0], lx, y - (nm[1] ? 1 : -fs * 0.35)); let lw = tw; if (nm[1]) { font(Math.max(11, fs * 0.85), 400); g.fillText(nm[1], lx, y + fs * 0.95); lw = Math.max(tw, g.measureText(nm[1]).width); } kitLabels.push({ id: p.id, x: left ? lx - lw : lx, y: y - fs * 1.05, w: lw, h: nm[1] ? fs * 2.2 : fs * 1.2 }); }
+    const pcs = kitLayout().map(p => { const flash = kitFlash.piece === p.id && performance.now() - kitFlash.at < 160, rr = p.r * m; return { p, x: box.x + spreadX(p.x) * bw, y: box.y + p.y * bh, rr, lit: flash || (pre && want[p.id]), flash }; });
+    pcs.forEach(({ p, x, y, rr, lit, flash }) => { g.beginPath(); g.arc(x, y, rr, 0, 7); g.fillStyle = flash ? '#f3c52f' : lit ? '#f08a4b' : p.shape === 'cymbal' ? '#2a3140' : '#1b2130'; g.fill(); g.strokeStyle = want[p.id] ? '#f08a4b' : '#93a0bd'; g.lineWidth = want[p.id] ? 3 : 1.5; g.stroke(); });
+    // Names go on after every circle is down. A name that fits is written inside its circle; any other tries its own side, the opposite side, then under and over the circle, and takes the first spot that touches no other name, no other piece and not the canvas edge; with none free it loses its second line (closed/pedal/open) and tries again, so two names never run into each other on a phone-width kit.
+    const placed = [], hit = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+    pcs.forEach(({ p, x, y, rr, lit }) => {
+      const nm = KIT_DRAW_NAMES[p.id], fs = Math.max(13, m * 0.05), key = KIT.find(k => k.id === p.id).key.toUpperCase(); font(fs, 700); const tw = g.measureText(nm[0]).width, inside = tw + 6 <= rr * 2 && !nm[1] && !nm[2]; let sw = 0; if (nm[1]) { font(Math.max(11, fs * 0.85), 400); sw = g.measureText(nm[1]).width; font(fs, 700); }
+      g.fillStyle = inside && lit ? '#05070c' : '#e9edf6';
+      if (inside) { g.textAlign = 'center'; g.fillText(nm[0], x, y - fs * 0.05); const r = { id: p.id, x: x - tw / 2, y: y - fs * 1.05, w: tw, h: fs * 1.2 }; kitLabels.push(r); placed.push(r); }
+      else {
+        const side = (dir, two) => { const lw = two ? Math.max(tw, sw) : tw, lx = dir < 0 ? x - rr - 5 : x + rr + 5; return { ax: lx, al: dir < 0 ? 'right' : 'left', by: y - (two ? 1 : -fs * 0.35), two, r: { id: p.id, x: dir < 0 ? lx - lw : lx, y: y - fs * 1.05, w: lw, h: two ? fs * 2.2 : fs * 1.2 } }; };
+        const stack = (dir, two) => { const lw = two ? Math.max(tw, sw) : tw, by = dir > 0 ? y + rr + fs * 1.05 : y - rr - 4 - (two ? fs * 0.95 : 0); return { ax: x, al: 'center', by, two, r: { id: p.id, x: x - lw / 2, y: by - fs * 1.05, w: lw, h: two ? fs * 2.2 : fs * 1.2 } }; };
+        const dir = nm[2] === 'l' ? -1 : 1, free = c => c.r.x >= 0 && c.r.x + c.r.w <= W && c.r.y >= 0 && c.r.y + c.r.h <= H && !placed.some(q => hit({ x: c.r.x - 9, y: c.r.y - 2, w: c.r.w + 18, h: c.r.h + 4 }, q)) && !pcs.some(o => o.p !== p && hit(c.r, { x: o.x - o.rr, y: o.y - o.rr, w: o.rr * 2, h: o.rr * 2 }));
+        let pick = null; for (const two of nm[1] ? [true, false] : [false]) { pick = [side(dir, two), side(-dir, two), stack(1, two), stack(-1, two)].find(free); if (pick) break; }
+        if (!pick) pick = side(dir, !!nm[1]);
+        g.textAlign = pick.al; g.fillText(nm[0], pick.ax, pick.by); if (pick.two) { font(Math.max(11, fs * 0.85), 400); g.fillText(nm[1], pick.ax, pick.by + fs * 0.95 + 1); }
+        kitLabels.push(pick.r); placed.push(pick.r);
+      }
       font(Math.max(11, m * 0.034), 700); g.textAlign = 'center'; g.fillStyle = lit ? '#05070c' : '#f3c52f'; g.fillText(key, x, inside ? y + rr - Math.max(4, m * 0.012) : y + 4); });
   }
   function drawBar2(W, H) {
@@ -1931,7 +1947,10 @@ import { register as registerPathway } from './ui/pathway.js';
   // pauses/resumes or ends and restarts a session mid-visit is not told the
   // same "next step" line over and over -- see the returning-learner test.
   let pathwayLineShown = false;
+  // Start before any instrument was chosen: open the sheet and put focus on its first button instead of starting (or closing it).
+  function askInstrumentFirst() { if (instrumentChosen) return false; setInstrumentSheetOpen(true); const b = document.querySelector('#picker button'); if (b) b.focus(); return true; }
   function startSession() {
+    if (askInstrumentFirst()) return;
     document.body.classList.add('practising'); refreshModelClock(); ensureAudio(); sess = newSession(); recent = []; streak = 0; errCount = 0; task = null; lastItem = null; lastInputAt = now(); chunk = 0; say('');
     // Session length E7c: the learner's own choice (DB.prefs.sessionMinutes,
     // 0 meaning no limit) sets today's target before the tired check below,
@@ -2037,15 +2056,15 @@ import { register as registerPathway } from './ui/pathway.js';
   // it as a background. See src/styles.css for which selectors read which.
   function themeIsLight() { return DB.prefs.theme === 'light' || (DB.prefs.theme !== 'dark' && matchMedia('(prefers-color-scheme: light)').matches); }
   function accentInkFor(hex) { if (!themeIsLight()) return hex; const n = parseInt(hex.slice(1), 16), r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255, lin = c => { c /= 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }, lum = (rr, gg, bb) => 0.2126 * lin(rr) + 0.7152 * lin(gg) + 0.0722 * lin(bb), gl = 0.929, l = lum(r, g, b); return (Math.max(l, gl) + 0.05) / (Math.min(l, gl) + 0.05) >= 4.5 ? hex : '#' + [r, g, b].map(c => Math.round(c * 0.45).toString(16).padStart(2, '0')).join(''); }
-  // --accent-display is the same brand colour for the 44px wordmark, which is
-  // WCAG large text (3:1, not 4.5:1). It is darkened only as far as it takes
-  // to reach 3:1, so COACH stays a near match for the Start button instead of
-  // dropping to --accent-ink's navy (R10 P1).
-  function accentDisplayFor(hex) { if (!themeIsLight()) return hex; const n = parseInt(hex.slice(1), 16), c0 = [(n >> 16) & 255, (n >> 8) & 255, n & 255], lin = c => { c /= 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }, lum = ([r, g, b]) => 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b), gl = 0.929; for (let k = 1; k > 0; k -= 0.02) { const c = c0.map(v => Math.round(v * k)); if ((gl + 0.05) / (lum(c) + 0.05) >= 3) return '#' + c.map(v => v.toString(16).padStart(2, '0')).join(''); } return '#000000'; }
+  // --accent-display is the same brand colour for the 44px wordmark. It is
+  // darkened only as far as it takes to reach 4.5:1 (U10; the large-text 3:1
+  // left the light wordmark at 3.12), searched in small steps so COACH stays
+  // a near match for the Start button instead of dropping to --accent-ink's navy (R10 P1).
+  function accentDisplayFor(hex) { if (!themeIsLight()) return hex; const n = parseInt(hex.slice(1), 16), c0 = [(n >> 16) & 255, (n >> 8) & 255, n & 255], lin = c => { c /= 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }, lum = ([r, g, b]) => 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b), gl = 0.929; for (let k = 1; k > 0; k -= 0.02) { const c = c0.map(v => Math.round(v * k)); if ((gl + 0.05) / (lum(c) + 0.05) >= 4.5) return '#' + c.map(v => v.toString(16).padStart(2, '0')).join(''); } return '#000000'; }
   // The three accent properties on <html>; also re-run by the Theme control, since the light theme darkens the ink and a switch must not keep the old one.
   function applyAccent() { const accentRaw = (MODS[mod] || TOOLS[mod]).color === '#e9edf6' ? '#9fb4d8' : (MODS[mod] || TOOLS[mod]).color, st = document.documentElement.style; st.setProperty('--accent', accentRaw); st.setProperty('--accent-ink', accentInkFor(accentRaw)); st.setProperty('--accent-display', accentDisplayFor(accentRaw)); }
   function showAll() {
-    const tool = !!TOOLS[mod];
+    const tool = !!TOOLS[mod]; $('prompt').hidden = tool;
     applyAccent();
     $('helpText').innerHTML = ''; const st = document.createElement('strong'); st.textContent = 'How this one works: '; $('helpText').appendChild(st); $('helpText').appendChild(document.createTextNode((MODS[mod] || TOOLS[mod]).help)); if (instrumentUnreviewed(instrumentById[mod])) { const rv = document.createElement('span'); rv.setAttribute('role', 'note'); rv.className = 'small'; rv.textContent = ' ' + t('review.unreviewed'); $('helpText').appendChild(rv); }
     document.querySelectorAll('.side .card, .side .stats, #playBtn, #resetBtn').forEach(el => { el.style.display = tool && !(mod === 'capture' && el.id === 'feedbackCard') ? 'none' : ''; }); $('tapPad').hidden = mod !== 'rhy'; $('timeFill').parentElement.style.visibility = tool || mod === 'rhy' || (MODS[mod] && MODS[mod].kit) ? 'hidden' : 'visible'; // capture's own messages ('Nothing captured yet.') need the feedback card; .hidden still hides it while empty
@@ -2333,6 +2352,7 @@ import { register as registerPathway } from './ui/pathway.js';
   function connectMic() { openMic().then(ioRefresh).catch(e => { recordError('mic:connect', e); ioState('off', micErrorMessage(e)); }); }
   // Start on a mic instrument asks for the mic FIRST (the browser's own prompt), then begins: an exercise that cannot hear only ever says "Time." and "You stepped away". Blocked or unavailable: say so and do not start.
   function startAfterMic() {
+    if (askInstrumentFirst()) return;
     if (!needsMic() || micReady) { startSession(); return; }
     const m = mod, blocked = e => { recordError('mic:start', e); const msg = e && e.name === 'NotAllowedError' ? 'The microphone was blocked, so I could not start. Press "Set up input", then "Connect microphone", and allow it in your browser.' : micErrorMessage(e); ioState('off', msg); if (mod === m) coach(msg); };
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { const msg = 'This browser cannot open a microphone here. Open the standalone copy in Chrome.'; ioState('off', msg); coach(msg); return; }
@@ -2506,7 +2526,7 @@ import { register as registerPathway } from './ui/pathway.js';
     // pressed. The canvas's own "PRESS START" and the picker's pressed state
     // are enough; #prompt stays empty until a real exercise names one.
     $('prompt').textContent = ''; $('hint').textContent = ''; $('choices').hidden = true; say(''); if (MODS[m]) coach(idleCoachLine());
-    renderOpts(); ioRefresh(); showAll(); save();
+    renderOpts(); ioRefresh(); showAll(); if (!booting) instrumentChosen = true; if (instrumentChosen) { revealStage(); save(); }
   }
   // Two visual tiers inside the one #picker container (kept as a single id
   // so every existing `#picker button` selector -- setMod's aria-pressed
@@ -2898,7 +2918,7 @@ import { register as registerPathway } from './ui/pathway.js';
     updateNavState();
   }
   // A boot step that throws used to leave a blank or half-wired page with no word to the learner; say so, with the error text, instead (and record it, so the error log, console and release gate see the failed boot too).
-  try { loadDB(); applyLocale(DB.prefs.locale); if (!Array.isArray(DB.custom)) DB.custom = []; $('optNames').checked = DB.prefs.names; $('optTheme').value = DB.prefs.theme; $('optLocale').value = DB.prefs.locale; applyTheme(DB.prefs.theme); $('optNoteSystem').value = DB.prefs.noteNaming.system; $('optAccidentals').value = DB.prefs.noteNaming.accidentals; buildPicker(); pickerAsSheet = hasSavedMod; setInstrumentSheetOpen(!hasSavedMod); buildNav(); setMod(mod); requestAnimationFrame(frame);
+  try { loadDB(); applyLocale(DB.prefs.locale); if (!Array.isArray(DB.custom)) DB.custom = []; $('optNames').checked = DB.prefs.names; $('optTheme').value = DB.prefs.theme; $('optLocale').value = DB.prefs.locale; applyTheme(DB.prefs.theme); $('optNoteSystem').value = DB.prefs.noteNaming.system; $('optAccidentals').value = DB.prefs.noteNaming.accidentals; buildPicker(); pickerAsSheet = hasSavedMod; instrumentChosen = hasSavedMod; setInstrumentSheetOpen(!hasSavedMod); buildNav(); setMod(mod); booting = false; requestAnimationFrame(frame);
     if (store.blocked) { saveFailedShown = true; $('settingsSay').textContent = t('storage.saveFailed'); $('mainSay').textContent = t('storage.saveFailed'); }
   } catch (e) { recordError('boot', e); const p = document.createElement('div'); p.id = 'bootFailed'; p.setAttribute('role', 'alert'); p.style.cssText = 'padding:12px;margin:8px;border:2px solid #c0392b;background:#fff;color:#111'; p.textContent = t('boot.failed', { error: (e && e.message) || String(e) }); document.body.insertBefore(p, document.body.firstChild); }
   const hook = !__DEBUG_HOOK__ ? null : { state: () => S, db: () => DB, sess: () => sess, task: () => task, cur: cur, note: onNote, answer: answer, tap: onTap, bar: () => bar, playing: () => playing, setMod: setMod, testSource: testSource, heard: () => heard, yin: yin, cap: () => cap, tuner: () => tunerState, tunerLock: () => tunerLock, deaf: () => deafWindow.isDeaf(), deafUntil: () => deafWindow.until(), exportProgress: doExportProgress, importProgress: doImportProgress, audioNow: audioNow, modelNow: () => modelNow, plan: () => sessionPlan, planProgress: () => planProgress,
@@ -2908,7 +2928,7 @@ import { register as registerPathway } from './ui/pathway.js';
   //   if (__DEBUG_HOOK__) Object.assign(hook, { … });
   if (__DEBUG_HOOK__) Object.assign(hook, { errors: getErrors });
   // startWithoutMic(): a session on the frames a test injects, with no live mic (Start opens one first; the fake device's tone would mix in).
-  if (__DEBUG_HOOK__) Object.assign(hook, { startWithoutMic: startSession });
+  if (__DEBUG_HOOK__) Object.assign(hook, { startWithoutMic: () => { instrumentChosen = true; revealStage(); startSession(); } });
   if (__DEBUG_HOOK__) Object.assign(hook, { pitchFrame: (fr, dt) => onPitch(fr, dt) });
   if (__DEBUG_HOOK__) Object.assign(hook, { testPluck: testPluck, pitchWorkletActive: () => !!pitchWorkletNode });
   if (__DEBUG_HOOK__) Object.assign(hook, { testDrumHit: testDrumHit });

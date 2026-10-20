@@ -4,7 +4,7 @@
 // nothing reaches through window.__coach. Live today: no sideways scroll and no console event, at every
 // config x state. Written in full but still todo where the defect is measured (each flips by deleting
 // its `todo` option): the four checks the U units fix. A check is todo only at the configs where it
-// fails today (CI's summary refuses a todo that passes), so U5 is todo in the light theme only (U2 has landed). Their measured values are printed so the flip is one word.
+// fails today (CI's summary refuses a todo that passes), U2 and U5 have landed. Their measured values are printed so the flip is one word.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { withAcceptancePage } from '../helpers/browser.mjs';
@@ -150,10 +150,11 @@ for (const cfg of CONFIGS) {
       const bad = states.filter((s) => s.m.smallControls.length).map((s) => `${s.state}: ${s.m.smallControls.join('; ')}`);
       assert.deepEqual(bad, []);
     });
-    await t.test('Start is on the first screen at first paint (U2)', () => {
-      const first = states[0].m, b = first.playBtn;
-      diag(`Start box at first paint: ${JSON.stringify(b)} (viewport height ${first.vh})`);
-      assert.ok(b, 'Start is visible at first paint');
+    // One question first: Start is hidden until an instrument is chosen, so it is measured right after the choice.
+    await t.test('Start is on the first screen once an instrument is chosen (U2)', () => {
+      const first = states.find((s) => s.state === '03a-keyboard-chosen').m, b = first.playBtn;
+      diag(`Start box after the choice: ${JSON.stringify(b)} (viewport height ${first.vh})`);
+      assert.ok(b, 'Start is visible once an instrument is chosen');
       assert.ok(b.y >= 0 && b.y + b.h <= first.vh, `Start spans y ${b.y}..${b.y + b.h}, below the ${first.vh}px first screen`);
     });
     await t.test('no control label ends in an ellipsis (U6)', { todo: 'U6' }, () => {
@@ -161,7 +162,7 @@ for (const cfg of CONFIGS) {
       const bad = states.filter((s) => s.m.ellipsis.length).map((s) => `${s.state}: ${s.m.ellipsis.join('; ')}`);
       assert.deepEqual(bad, []);
     });
-    await t.test('hint text contrast is at least 4.5:1 (U5)', { todo: cfg.theme === 'light' ? 'U5' : false }, () => {
+    await t.test('hint text contrast is at least 4.5:1 (U5)', () => {
       diag(`hint contrast per state: ${states.map((s) => `${s.state}=${s.m.hint ? s.m.hint.ratio : 'none'}`).join(' ')}`);
       const bad = states.filter((s) => s.m.hint && s.m.hint.ratio < 4.5).map((s) => `${s.state}: ${s.m.hint.ratio} (${s.m.hint.fg} on ${s.m.hint.bg})`);
       assert.deepEqual(bad, []);

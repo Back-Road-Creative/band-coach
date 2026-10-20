@@ -11,7 +11,7 @@ import { chooseFile } from '../helpers/file-chooser.mjs';
 
 const FX = new URL('../fixtures/', import.meta.url).pathname;
 const CASES = [
-  { format: '.mid', file: FX + 'midi/beat.mid', title: 'untitled' },
+  { format: '.mid', file: FX + 'midi/beat.mid', title: 'beat' },
   { format: '.musicxml', file: FX + 'musicxml/tutorial-chopin-prelude.musicxml', title: 'tutorial-chopin-prelude' },
   { format: '.mxl', file: FX + 'musicxml/tutorial-chopin-prelude.mxl', title: 'tutorial-chopin-prelude' },
   { format: '.gp5', file: FX + 'gp5/Voices.gp5', title: 'Voices' },

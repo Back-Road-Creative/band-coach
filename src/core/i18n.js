@@ -118,6 +118,8 @@ export const en = {
   'settings.modelPack': 'Model pack',
   'settings.how': 'How this works',
   'songs.addRow': 'Add a song',
+  'history.startFirst': 'Start your first session',
+  'songs.forTeachers': 'For teachers',
   // A9: the collapsible <summary> wrapping the song list, Carry-on banner
   // and Assignments (challenges/band packs) so opening a song puts its
   // lesson in the first screen instead of below the whole library -- see
@@ -334,6 +336,8 @@ export const es = {
   'settings.modelPack': 'Paquete de modelo',
   'settings.how': 'Cómo funciona',
   'songs.addRow': 'Añadir una canción',
+  'history.startFirst': 'Empezar tu primera sesión',
+  'songs.forTeachers': 'Para profesores',
   'songs.libraryToggle': 'Tu biblioteca de canciones',
   'songs.sheetDownload': 'Descargar partitura (SVG)',
   'songs.sheetDesc': 'Partitura para {instrument}, parte 1.',
