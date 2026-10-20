@@ -97,3 +97,26 @@ test('Español: the practice level card shows the Spanish level name, no English
     assert.equal(name, levelEs['C, D and E'], 'level 1 of the keyboard');
   });
 });
+
+test('Español: the session-start coach line is Spanish (long-day note and warm-up), not the English literals', async (t) => {
+  const seed = "(() => { const d = new Date(), k = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); localStorage.setItem('bandcoach.v1', JSON.stringify({ prefs: { mod: 'kbd', locale: 'es' }, mods: { kbd: { level: 1, judged: 10 } }, sessions: [{ d: k, mod: 'kbd', min: 50, a1: 0.8, a2: 0.8 }] })); })();";
+  await withAcceptancePage(t, { initScript: seed }, async (page) => {
+    assert.equal(await page.evaluate('document.documentElement.lang'), 'es');
+    // click and read in one tick: the 45-minute cap warning (also tested below) replaces this line a frame later
+    const line = await page.evaluate("(() => { document.getElementById('playBtn').click(); return document.getElementById('coach').textContent; })()");
+    assert.match(line, /Ya llevas 50 minutos hoy/, line);
+    assert.match(line, /Primero un breve calentamiento/, line);
+    assert.ok(!/You already have|First a short warm-up/.test(line), 'English literal still shown: ' + line);
+  });
+});
+
+test('Español: the 45-minute cap warning is Spanish', async (t) => {
+  const seed = "(() => { const d = new Date(), k = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); localStorage.setItem('bandcoach.v1', JSON.stringify({ prefs: { mod: 'kbd', locale: 'es' }, sessions: [{ d: k, mod: 'kbd', min: 50, a1: 0.8, a2: 0.8 }] })); })();";
+  await withAcceptancePage(t, { initScript: seed }, async (page) => {
+    await page.clickSelector('#playBtn');
+    await page.evaluate("new Promise(r => { const f = () => /45|minutos/.test(document.getElementById('coach').textContent) && !/Ya llevas/.test(document.getElementById('coach').textContent) ? r() : setTimeout(f, 50); f(); })");
+    const line = await page.evaluate("document.getElementById('coach').textContent");
+    assert.match(line, /45 minutos de práctica hoy/, line);
+    assert.ok(!/minutes of practice today/.test(line), 'English literal still shown: ' + line);
+  });
+});

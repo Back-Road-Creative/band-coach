@@ -294,6 +294,17 @@ export const en = {
   'songs.say.savedSongs': 'Saved "{title}". Open the Songs panel to practice it.',
   'songs.say.savedRecord': 'Saved "{title}". Open Record a tune to fix it up.',
   'songs.say.savedPlayAlong': 'Saved "{title}". Open Play Along to use this recording.',
+  // coach.*: coach/hint lines app.js builds around level moves and session start
+  'coach.levelUp': 'Level up. Next: {name}.{added}{note}',
+  'coach.levelUpNew': ' New: {list}.',
+  'coach.fastPace': ' You keep clearing levels cleanly, so I am speeding up the pace.',
+  'coach.warmPrefix': 'Warm-up, does not count. ',
+  'coach.capturedMelody': 'Your captured melody: {count} notes, four at a time. Warm-up, does not count.',
+  'coach.tiredCap': 'Your last three sessions each ended weaker than they started, which is what tired practice looks like. Today is capped at {minutes} minutes. ',
+  'coach.longDay': 'You already have {minutes} minutes in today. Keep this one short. ',
+  'coach.warmUpTail': ' First a short warm-up through what you know; it does not count.',
+  'coach.welcomePath': 'Welcome back. Next on your keyboard path: {text}',
+  'coach.dayCap': 'That is 45 minutes of practice today across your instruments. Skill settles in while you rest, so more today buys little. Finish this level bar and call it.',
 };
 
 // Spanish (es). MACHINE-TRANSLATED first pass -- every en key has an entry
@@ -532,6 +543,16 @@ export const es = {
   'songs.say.savedSongs': 'Se guardó "{title}". Abre el panel Canciones para practicarla.',
   'songs.say.savedRecord': 'Se guardó "{title}". Abre Record a tune para arreglarla.',
   'songs.say.savedPlayAlong': 'Se guardó "{title}". Abre Play Along para usar esta grabación.',
+  'coach.levelUp': 'Subes de nivel. Siguiente: {name}.{added}{note}',
+  'coach.levelUpNew': ' Nuevo: {list}.',
+  'coach.fastPace': ' Superas los niveles sin fallos, así que acelero el ritmo.',
+  'coach.warmPrefix': 'Calentamiento, no cuenta. ',
+  'coach.capturedMelody': 'Tu melodía capturada: {count} notas, de cuatro en cuatro. Calentamiento, no cuenta.',
+  'coach.tiredCap': 'Tus últimas tres sesiones terminaron peor de lo que empezaron, que es lo que pasa cuando se practica cansado. Hoy el límite es de {minutes} minutos. ',
+  'coach.longDay': 'Ya llevas {minutes} minutos hoy. Que esta sea corta. ',
+  'coach.warmUpTail': ' Primero un breve calentamiento con lo que ya sabes; no cuenta.',
+  'coach.welcomePath': 'Te damos la bienvenida de nuevo. Lo siguiente en tu camino de teclado: {text}',
+  'coach.dayCap': 'Son 45 minutos de práctica hoy entre todos tus instrumentos. Las habilidades se asientan mientras descansas, así que más hoy sirve de poco. Termina este compás del nivel y déjalo.',
 };
 
 export const LOCALES = [{ code: 'en', name: 'English' }, { code: 'es', name: 'Español' }];

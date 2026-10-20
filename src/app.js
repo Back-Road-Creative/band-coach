@@ -21,7 +21,7 @@ import { resolveAppVersion, DEV_VERSION } from './core/version.js';
 import { loadPack, packStatus, createIndexedDBStore, packManifestUrl, DEFAULT_MODEL_PACK } from './core/model-pack.js';
 import { checkForUpdate, FALLBACK_DOWNLOAD_URL } from './core/update-check.js';
 import { setNoteNaming, name as noteNameFor } from './core/note-names.js';
-import { t, en, setLocale, LOCALES } from './core/i18n.js';
+import { t, t as tl, en, setLocale, LOCALES } from './core/i18n.js';
 import { levelLabel, levelNumLabel } from './core/level-names.js';
 import { micErrorMessage } from './core/mic-error.js';
 import { CLEF_PATHS } from './notation/glyphs.js';
@@ -851,8 +851,8 @@ import { register as registerPathway } from './ui/pathway.js';
   function flipBothUnlockIfNeeded() { const o = document.querySelector('#optKbdHands option[value="both"]'); if (o) o.disabled = false; const lk = $('kbdBothLock'); if (lk) lk.remove(); if (DB.prefs.kbdHands === 'both') $('optKbdHands').value = 'both'; }
   function credit(id, q, from, warm, rt, outcome) {
     // A warm-up task is told "does not count" (see the hint text set at task
-    // render: `t.warm ? 'Warm-up, does not count. ' : ''`, and the startSession()
-    // coach message "First a short warm-up through what you know; it does not
+    // render: `t.warm ? t('coach.warmPrefix') : ''`, and the startSession()
+    // coach message coach.warmUpTail, "... it does not
     // count."), so it must not touch the spaced-repetition model either: no
     // S.item/S.trans write, and no S.judged/S.ready/session counters below.
     if (warm) return;
@@ -889,9 +889,9 @@ import { register as registerPathway } from './ui/pathway.js';
       if (hold) { S.ready = 1; coach('Holding at this level: ' + inf(hold).short + ' is at ' + Math.round(holdR * 100) + '%. It needs ' + Math.round(S.gate * 100) + '% before we move on, so expect more of it.'); }
       else {
         const clean = recent.length >= 12 && mean(recent) >= 0.95; S.fast = clean ? S.fast + 1 : 0; let note = '';
-        if (S.fast >= 3) { S.gain = Math.min(0.09, S.gain * 1.15); S.fast = 0; note = ' You keep clearing levels cleanly, so I am speeding up the pace.'; }
+        if (S.fast >= 3) { S.gain = Math.min(0.09, S.gain * 1.15); S.fast = 0; note = t('coach.fastPace'); }
         S.promo = { at: S.judged, level: S.level + 1 }; S.level++; S.ready = 0.2; const d = D();
-        coach('Level up. Next: ' + lvName(d.name) + '.' + (d.add ? ' New: ' + d.add.map(id => inf(id).short).join(', ') + '.' : '') + note);
+        coach(t('coach.levelUp', { name: lvName(d.name), added: d.add ? t('coach.levelUpNew', { list: d.add.map(id => inf(id).short).join(', ') }) : '', note: note }));
         // B(C11a): a level move can put the kbd hand-off button in or out of
         // view (songFor(S.level) reads the new level), and renderOpts is
         // otherwise only called from setMod/tool buttons -- without this a
@@ -1067,6 +1067,7 @@ import { register as registerPathway } from './ui/pathway.js';
     if (mod === 'voice') { const tonic = e.info.tonic; if (t.ref === 'target') t.els.forEach((el, k) => tone(el.info.midi, at + k * 0.8, 0.75)); else { tone(tonic, at, 0.9); } }
     else if (MODS[mod].staff && $('optRef') && $('optRef').checked) t.els.forEach((el, k) => tone(el.info.midi, at + k * 0.8, 0.75));
   }
+    // t is the task in present(); tl is the i18n t() imported under another name for this function.
   function present() {
     const t = task, M = MODS[mod], e = cur(); t.t0 = now(); if (e) e.t0 = now(); held = []; holdFor = 0; holdCents = []; wrongFor = 0; if (!heard || (heard.rms !== 0 && heard.rms < releaseFloor(gates))) released = true; // an exact-0 frame is a capture dropout, not quiet (as in the quiet rule below)
     $('choices').hidden = t.kind !== 'ear'; $('replayBtn').hidden = !(t.kind === 'ear' || mod === 'voice'); $('showMeBtn').hidden = t.kind === 'ear' || t.kind === 'bar' || t.kind === 'bar2' || t.kind === 'kit';
@@ -1077,7 +1078,7 @@ import { register as registerPathway } from './ui/pathway.js';
     else if (t.kind === 'kit') { p = 'Read it, then <b>play it</b>'; h = (t.kit.bar.tip ? t.kit.bar.tip + ' ' : '') + 'Listen for the count-in, then play the bar on the drums it shows.'; startKitBar(); }
     else if (t.kind === 'groove') { p = 'Play ' + t.els.map(el => promptFor(el.info, el.reveal)).join(' → ') + ' — <b>in time</b>'; h = 'Four clicks to count in, then play each note on the beat.'; startGroove(); }
     else { const verb = mod === 'voice' ? 'Sing' : 'Play'; p = verb + ' ' + t.els.map((el, k) => (k === t.idx ? '<b>' : '') + promptFor(el.info, el.reveal) + (k === t.idx ? '</b>' : '')).join(' → '); if (t.kind === 'hold') p = (mod === 'voice' ? 'Hold ' : 'Hold ') + '<b>' + e.info.label + '</b> for two seconds'; h = hintFor(e); playRef(t); }
-    $('prompt').innerHTML = p; $('hint').textContent = (t.warm ? 'Warm-up, does not count. ' : '') + h; updateDesc(); updateHowPeek();
+    $('prompt').innerHTML = p; $('hint').textContent = (t.warm ? tl('coach.warmPrefix') : '') + h; updateDesc(); updateHowPeek();
   }
   function hintFor(e) {
     const i = e.info;
@@ -1107,7 +1108,7 @@ import { register as registerPathway } from './ui/pathway.js';
     if (MODS[mod].staff) return t('hint.staffNote', { label: i.label });
     return e.reveal ? 'New key: it is lit up this time.' : '';
   }
-  function refreshPrompt() { if (!task || task.kind === 'ear' || task.kind === 'bar' || task.kind === 'hold') return; const verb = mod === 'voice' ? 'Sing' : 'Play'; $('prompt').innerHTML = verb + ' ' + task.els.map((el, k) => (k === task.idx ? '<b>' : '') + promptFor(el.info, el.reveal) + (k === task.idx ? '</b>' : '')).join(' → '); const e = cur(); if (e) $('hint').textContent = (task.warm ? 'Warm-up, does not count. ' : '') + hintFor(e); updateDesc(); updateHowPeek(); }
+  function refreshPrompt() { if (!task || task.kind === 'ear' || task.kind === 'bar' || task.kind === 'hold') return; const verb = mod === 'voice' ? 'Sing' : 'Play'; $('prompt').innerHTML = verb + ' ' + task.els.map((el, k) => (k === task.idx ? '<b>' : '') + promptFor(el.info, el.reveal) + (k === task.idx ? '</b>' : '')).join(' → '); const e = cur(); if (e) $('hint').textContent = (task.warm ? t('coach.warmPrefix') : '') + hintFor(e); updateDesc(); updateHowPeek(); }
   // text mirror of the canvas for the visually-hidden #cvDesc element (unit 7.7 item 1):
   // revealed mirrors the current element's own reveal/failed flag, never invents one.
   function updateDesc() { const el = $('cvDesc'); if (!el) return; if (task && task.kind === 'groove') { el.textContent = 'Play in time: ' + task.els.map(x => promptFor(x.info, x.reveal)).join(', ') + '. Four clicks to count in, then play each note on the beat.'; return; } const e = cur(); const revealed = task && task.kind === 'ear' ? !!task.revealed : !!(e && (e.reveal || e.failed)); el.textContent = task && task.kind === 'kit' ? 'Drum kit, ' + task.kit.name + ': ' + task.kit.bar.hits.map(h => (h.flam ? 'a flam on ' : '') + h.pieces.map(kitName).join(' with ')).join(', then ') + '. Play it after the count-in.' : describeTask(task, { revealed: revealed, fretless: !!MODS[mod].fretless }); }
@@ -1475,7 +1476,7 @@ import { register as registerPathway } from './ui/pathway.js';
     }
     if (sess.sinceBreak > 25 * 60 && Date.now() > sess.snoozeUntil) { takeBreak('long'); return; }
     if (sess.target && sess.active > sess.target * 60) { const mins = sess.target; sess.target = 0; takeBreak('target', mins); return; }
-    if (!sess.capWarned && todayMinutes() >= 45) { sess.capWarned = true; coach('That is 45 minutes of practice today across your instruments. Skill settles in while you rest, so more today buys little. Finish this level bar and call it.'); }
+    if (!sess.capWarned && todayMinutes() >= 45) { sess.capWarned = true; coach(t('coach.dayCap')); }
   }
   let lastFrame = 0, lastPitchAt = 0, listenOnsetDetector = null;
   // Drum-kit mic path: a persistent onset detector and classifier (both
@@ -1964,17 +1965,16 @@ import { register as registerPathway } from './ui/pathway.js';
     // 0 meaning no limit) sets today's target before the tired check below,
     // so tiredPattern()'s 15-minute cap only tightens it, never loosens it.
     sess.target = DB.prefs.sessionMinutes || 0;
-    let msg = customOn ? 'Your captured melody: ' + DB.custom.length + ' notes, four at a time. Warm-up, does not count.' : lvNum(S.level) + ': ' + lvName(D().name) + '.'; if (tiredPattern()) { sess.target = sess.target ? Math.min(sess.target, 15) : 15; msg = 'Your last three sessions each ended weaker than they started, which is what tired practice looks like. Today is capped at ' + sess.target + ' minutes. ' + msg; } else if (todayMinutes() >= 45) msg = 'You already have ' + Math.round(todayMinutes()) + ' minutes in today. Keep this one short. ' + msg;
-    if (S.judged > 5 && !customOn) { sess.warm = 4; msg += ' First a short warm-up through what you know; it does not count.'; }
+    let msg = customOn ? t('coach.capturedMelody', { count: DB.custom.length }) : lvNum(S.level) + ': ' + lvName(D().name) + '.'; if (tiredPattern()) { sess.target = sess.target ? Math.min(sess.target, 15) : 15; msg = t('coach.tiredCap', { minutes: sess.target }) + msg; } else if (todayMinutes() >= 45) msg = t('coach.longDay', { minutes: Math.round(todayMinutes()) }) + msg;
+    if (S.judged > 5 && !customOn) { sess.warm = 4; msg += t('coach.warmUpTail'); }
     // A returning keyboard learner (a prior kbd session logged on an earlier
     // day) is told, once per page load, which keyboard-path step comes next
-    // (src/core/pathway.js's pathwayState) -- plain English literals plus
-    // the one existing t('review.unreviewed') key, so no new i18n key is
-    // needed for this.
+    // (src/core/pathway.js's pathwayState) -- t('coach.welcomePath') plus
+    // the existing t('review.unreviewed') key.
     if (mod === 'kbd' && !pathwayLineShown && DB.sessions.some(r => r && r.mod === 'kbd' && r.d < today())) {
       const ps = pathwayState({ events: DB.events, sessions: DB.sessions, midiProof: midiPortInputs.some(i => midiHeard.has(i)), level: S.level, now: modelNow });
       const outcome = kbdPathwayOutcomes().find(o => o.value.step === ps.step);
-      if (outcome) msg = 'Welcome back. Next on your keyboard path: ' + outcome.value.text + (outcomeReviewed(outcome.id) ? '' : ' ' + t('review.unreviewed')) + ' ' + msg;
+      if (outcome) msg = t('coach.welcomePath', { text: outcome.value.text }) + (outcomeReviewed(outcome.id) ? '' : ' ' + t('review.unreviewed')) + ' ' + msg;
       pathwayLineShown = true;
     }
     // Plan this sitting (review what's due, the weakest active skill, apply it, check it,
