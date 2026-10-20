@@ -2,8 +2,8 @@
 // four things from drifting, none of which a PR run can exercise (no PR run
 // executes release.yml; the first run of any edit is the next `v*` tag):
 //   - its time budget is at least ci.yml's, because it runs the same work;
-//   - the gate is the last step before publish, so the published file is the
-//     one the gate built and tested;
+//   - the release lane runs once (npm test's posttest) and the published file
+//     is byte-for-byte the file it tested;
 //   - the browser version is recorded;
 //   - a failed or cancelled run keeps dist/test-artifacts/.
 // No YAML parser is installed, so the steps are split by indentation.
@@ -64,22 +64,29 @@ test('T1 the tag run budget is at least ci.yml budget, which runs the same work'
   assert.ok(rel[0] >= Math.max(...ci), `release.yml allows ${rel[0]} min but ci.yml allows ${Math.max(...ci)} min for the same suite and gate runs; a later ci.yml rise must be followed here`);
 });
 
-test('T2 the workflow keeps its name and tag trigger and has no manual trigger', () => {
+test('T2 the workflow keeps its name and tag trigger; its manual trigger is a dry run (release-dry-run.test.mjs pins the guards)', () => {
   assert.match(release, /^name: release$/m, 'release-consistency.yml fires on workflow_run of "release"');
   assert.match(release, /tags:\s*\n\s*- 'v\*'/, 'release.yml should run on v* tags');
-  // release-consistency.yml treats every successful "release" run as a published tag, so a manual trigger needs its own guards first.
-  assert.doesNotMatch(release, /workflow_dispatch/, 'a manual trigger would let a run that published nothing read as a release');
+  assert.match(release, /^  workflow_dispatch:/m, 'a dispatch run exercises the release path without a tag');
 });
 
-test('T3 the gate is the last step before publish', () => {
+test('T3 the release lane runs once, as npm test\'s posttest, and the file it tested is the file published', () => {
   const tests = all.map((s, i) => [s, i]).filter(([s]) => /\bnpm test\b/.test(s.run));
-  const gates = all.map((s, i) => [s, i]).filter(([s]) => /\bnpm run gate\b/.test(s.run));
   assert.equal(tests.length, 1, `expected one npm test step, found ${tests.length}`);
-  assert.equal(gates.length, 1, `expected one npm run gate step, found ${gates.length}`);
-  for (const [s] of [tests[0], gates[0]]) assert.match(s.text, /\n\s+env:\s*\n\s+CI: true\b/, `"${s.run}" must run with CI: true`);
-  const pub = named('publish GitHub release');
-  assert.ok(tests[0][1] < gates[0][1], 'the gate must come after npm test');
-  assert.equal(pub, gates[0][1] + 1, `publish is step ${pub}, the gate is step ${gates[0][1]}: no step may run between them`);
+  const pkg = JSON.parse(readFileSync(fileURLToPath(new URL('../../package.json', import.meta.url)), 'utf8'));
+  assert.equal(pkg.scripts.posttest, 'npm run gate', 'npm test must run the release lane as posttest, or release.yml would not run it at all');
+  assert.equal(pkg.scripts.gate, 'npm run test:release');
+  assert.match(pkg.scripts['test:release'], /^node build\/build\.mjs --release && node --test "tests\/release\/\*\.test\.mjs"$/, 'the lane builds dist/release/band-coach.html and then tests that file');
+  const lane = all.filter((s) => /\bnpm run (gate|test:release|test:all)\b|tests\/release\/\*|build\.mjs --release/.test(s.run) && s.name !== 'prove the downloaded release file');
+  assert.equal(lane.length, 0, `only npm test's posttest may run the release lane; also found: ${lane.map((s) => s.run).join(' | ')}`);
+  assert.match(tests[0][0].text, /\n\s+env:\s*\n\s+CI: true\b/, '"npm test" must run with CI: true');
+  const rec = tests[0][1] + 1;
+  assert.match(all[rec].run, /sha256sum dist\/release\/band-coach\.html > "\$RUNNER_TEMP\/tested\.sha256"/, 'the step right after npm test records the hash of the file the lane tested');
+  const pubAt = named('publish GitHub release');
+  assert.equal(pubAt, rec + 1, `publish is step ${pubAt}, the record is step ${rec}: no step may run between them`);
+  const pub = all[pubAt].run;
+  const check = pub.indexOf('sha256sum -c "$RUNNER_TEMP/tested.sha256"');
+  assert.ok(check >= 0 && check < pub.indexOf('gh release create'), 'publish verifies the recorded hash before gh release create');
 });
 
 test('T4 publish uploads the gate file and nothing else creates a release', () => {
