@@ -1,8 +1,9 @@
 // W4, Windows lane: acceptance A02 (sound starts because a learner asked for it,
 // and not before) on a real Windows Chrome under its normal autoplay policy.
-// The same steps as tests/release/acceptance-audio-gesture.test.mjs steps 1 and 3:
+// The same steps as tests/release/acceptance-audio-gesture.test.mjs steps 1, 3 and 4:
 // after the load settle no sound is running and no "AudioContext was not allowed
-// to start" message has been raised; then a real mouse click on Start makes
+// to start" message has been raised; then a real click on the Keyboard instrument
+// (a first visit asks for one before Start shows) and a real mouse click on Start make
 // exactly one AudioContext run, the button says Pause, and still no warning and
 // no exception. "Sound started" comes from the browser's WebAudio domain, not
 // from the page.
@@ -16,6 +17,9 @@ export async function run(page) {
   // Two frames and half a second, as in A02, so a warning raised late in boot is reported as load's.
   await page.evaluate('new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(r, 500))))');
   const load = { running: page.audio.running().length, warnings: warningsOf(page) };
+  // A first visit asks for the instrument before Start shows (#512): answer it with a real click, as A02 does.
+  await page.clickSelector('#picker button[data-mod="kbd"]');
+  await page.waitFor("!document.getElementById('playBtn').hidden");
   const labelBefore = await label(page);
   await page.clickSelector('#playBtn');
   // A click that starts no sound, or a button that never says Pause, is the finding: these waits
