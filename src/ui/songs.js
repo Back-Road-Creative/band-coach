@@ -672,7 +672,9 @@ function mountSongsPanel(hostEl, api) {
   libraryDetails.appendChild(intro);
   libraryDetails.appendChild(carryOnBtn);
   libraryDetails.appendChild(listSection);
-  libraryDetails.appendChild(assignmentsSection);
+  // Teacher tools (challenge list, export, band pack) sit in their own closed disclosure under the list, so a first visit leads with the songs and Add a song.
+  const teachersDetails = el('details', { class: 'panel-songs-teachers' }, [el('summary', { text: t('songs.forTeachers') }), assignmentsSection]);
+  libraryDetails.appendChild(teachersDetails);
 
   // P3-9: the hidden sheet Print draws a song's notation into, appended to hostEl once (not
   // to songHeaderSection, which songHeader() below clears on every open song -- same reasoning
@@ -828,6 +830,7 @@ function mountSongsPanel(hostEl, api) {
     const progress = progressStore.get() || {};
     const passedCount = challenge.songs.filter((s) => progress[s.id]).length;
     challengeSection.hidden = false;
+    teachersDetails.open = true; // a loaded challenge is the thing the learner just asked for
     challengeSection.innerHTML = '';
     challengeSection.appendChild(el('h3', { text: challenge.title }));
     if (challenge.from) challengeSection.appendChild(el('p', { text: 'From: ' + challenge.from }));
