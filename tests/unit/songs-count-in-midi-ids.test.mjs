@@ -83,3 +83,19 @@ test('withStoredIds: a song whose id collided in the library is reconciled to th
   assert.equal(reconciled[0].title, 'Collides', 'nothing else about the song changed');
   assert.equal(reconciled[1].id, 'song-9', 'a song with no collision keeps its own id, same object shape');
 });
+
+test('alreadyInLibraryNote: says in plain words how many imported songs were already in the library, in both languages', async () => {
+  const { alreadyInLibraryNote } = await import('../../src/ui/songs.js');
+  const { setLocale } = await import('../../src/core/i18n.js');
+  const songs = [{ id: 'a' }, { id: 'b' }, { id: 'c' }];
+  try {
+    setLocale('en');
+    assert.equal(alreadyInLibraryNote(songs, ['a', 'b', 'c']), '', 'nothing collided: nothing to say');
+    assert.match(alreadyInLibraryNote(songs, ['a-2', 'b', 'c']), /^1 song was already in your library/);
+    assert.match(alreadyInLibraryNote(songs, ['a-2', 'b-2', 'c']), /^2 songs were already in your library/);
+    setLocale('es');
+    const es2 = alreadyInLibraryNote(songs, ['a-2', 'b-2', 'c']);
+    assert.match(es2, /^2 canciones ya estaban en tu biblioteca/);
+    assert.match(alreadyInLibraryNote(songs, ['a-2', 'b', 'c']), /^1 canción ya estaba en tu biblioteca/);
+  } finally { setLocale('en'); }
+});
