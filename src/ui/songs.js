@@ -64,7 +64,7 @@ import { exportMusicXml } from '../song/export-musicxml.js';
 import { exportAbc } from '../song/export-abc.js';
 import { makeEvent, isIndependentOk } from '../core/learning-events.js';
 import { t } from '../core/i18n.js';
-import { classifyAddFile, ADD_ACCEPT, ADD_HELP_LINE, UNSUPPORTED_MESSAGE } from './songs/add-source.js';
+import { classifyAddFile, ADD_ACCEPT, ADD_HELP_LINE } from './songs/add-source.js';
 import { createRecordDoor, transcribeAudioFile, refuseNoNotes } from './songs/record-door.js';
 import { renderReview, makeHandoffs } from './songs/review.js';
 import { requestOpenInEditor } from './editor.js';
@@ -585,7 +585,7 @@ function mountSongsPanel(hostEl, api) {
       door.cancel();
       analysing = false;
       addSongCancelBtn.hidden = true;
-      say('Stopped. Nothing was saved.');
+      say(t('songs.say.stopped'));
     },
   });
 
@@ -741,9 +741,9 @@ function mountSongsPanel(hostEl, api) {
       box.innerHTML = '';
       box.appendChild(el('span', { text: 'Remove "' + meta.title + '" for good? ' }));
       const yes = el('button', { type: 'button', class: 'panel-songs-remove-yes', text: 'Yes, remove it', onclick: async () => {
-        try { await library.remove(libraryId); } catch (e) { say('The song could not be removed: ' + (e && e.message ? e.message : String(e)), 'no'); return; }
+        try { await library.remove(libraryId); } catch (e) { say(t('songs.say.removeFailed', { reason: e && e.message ? e.message : String(e) }), 'no'); return; }
         const ledger = songStatusLedger(); delete ledger[libraryId]; statusStore.set(ledger);
-        say('Removed "' + meta.title + '".', 'ok');
+        say(t('songs.say.removed', { title: meta.title }), 'ok');
         await refreshList(); renderCarryOn();
       } });
       const keep = el('button', { type: 'button', class: 'panel-songs-remove-keep', text: 'Keep it', onclick: idle });
@@ -764,7 +764,7 @@ function mountSongsPanel(hostEl, api) {
       text: songOrMeta.title,
       onclick: async () => {
         const song = libraryId ? await library.get(libraryId) : songOrMeta;
-        if (!song) { say('That song could not be found any more.', 'no'); return; }
+        if (!song) { say(t('songs.say.notFound'), 'no'); return; }
         openSong(song, libraryId);
       },
     });
@@ -811,12 +811,12 @@ function mountSongsPanel(hostEl, api) {
         title: 'Save "' + songOrMeta.title + '" as ' + format.label,
         onclick: async () => {
           const song = libraryId ? await library.get(libraryId) : songOrMeta;
-          if (!song) { say('That song could not be found any more.', 'no'); return; }
+          if (!song) { say(t('songs.say.notFound'), 'no'); return; }
           let data;
           try {
             data = format.build(song);
           } catch (e) {
-            say('That song could not be saved as ' + format.label + ': ' + (e && e.message ? e.message : String(e)), 'no');
+            say(t('songs.say.saveAsFailed', { format: format.label, reason: e && e.message ? e.message : String(e) }), 'no');
             return;
           }
           const fileBase = (song.title || 'song').replace(/[^\w.-]+/g, '_') || 'song';
@@ -1027,7 +1027,7 @@ function mountSongsPanel(hostEl, api) {
       onclick: () => {
         const rec = libraryId && libraryId === lastAudioRecSongId ? lastAudioRec : null;
         const opened = addSongHandoffs.openPlayalongPanel(rec);
-        if (!opened) say('Open Play Along to use this recording.');
+        if (!opened) say(t('songs.say.openPlayAlong'));
       },
     });
   }
@@ -1057,10 +1057,10 @@ function mountSongsPanel(hostEl, api) {
         try {
           downloadBandPackOf(song.title, [song], fileBase + '.bandpack');
         } catch (e) {
-          say('That song could not be shared: ' + (e && e.message ? e.message : String(e)), 'no');
+          say(t('songs.say.shareFailed', { reason: e && e.message ? e.message : String(e) }), 'no');
           return;
         }
-        say('Shared "' + song.title + '" as ' + fileBase + '.bandpack.', 'ok');
+        say(t('songs.say.shared', { title: song.title, file: fileBase + '.bandpack' }), 'ok');
       },
     });
   }
@@ -1071,7 +1071,7 @@ function mountSongsPanel(hostEl, api) {
       type: 'button', class: 'panel-songs-action-copy', text: 'Save a copy',
       onclick: async () => {
         await saveCopyOf(song);
-        say('Saved a copy: ' + song.title + ' (copy)');
+        say(t('songs.say.copySaved', { title: song.title }));
       },
     });
   }
@@ -1175,7 +1175,7 @@ function mountSongsPanel(hostEl, api) {
     const bars = songBarCount(song);
     if (bars <= MAX_SONG_BARS) return false;
     songHeaderSection.hidden = true; practiceSection.hidden = true; practiceSection.innerHTML = ''; libraryDetails.open = true;
-    say('"' + song.title + '" is too long to open (about ' + bars + ' bars, the limit is ' + MAX_SONG_BARS + '). Remove it from your list and add a corrected file.', 'no');
+    say(t('songs.say.tooLong', { title: song.title, bars: bars, max: MAX_SONG_BARS }), 'no');
     return true;
   }
 
@@ -1337,7 +1337,7 @@ function mountSongsPanel(hostEl, api) {
     // same tempo curve throughout.
     practice = { song: arrangedSong, baseSong: song, partId, instrument, instrumentId, plan, arrangement, results: resumeEntry ? resumeEntry.tail.slice() : [], stepIndex: resumeEntry ? resumeEntry.stepIndex : 0, repair: null, interlude: null, transferNote: null, recording: false, countingIn: false, countInTimer: null, playedEvents: [], recordStartSec: 0, stop: null, loopTransport: null, loopTransportStepIndex: null, clock: createSongClock(arrangedSong), mode, assistance, hands, lastCheckVerdict: null, lessonKey: lessonKeyValue, resumeRate: resumeEntry ? resumeEntry.rate : null, returnTo: opts.returnTo || null };
     currentPractice = practice;
-    if (resumeEntry) say('Picking up where you left off.', 'ok');
+    if (resumeEntry) say(t('songs.say.resume'), 'ok');
     saveLesson();
     renderPractice();
     // A9: focus moves to the lesson's own heading exactly once, here --
@@ -2027,7 +2027,7 @@ function mountSongsPanel(hostEl, api) {
   }
 
   function listenMic(onsetsOnly) {
-    api.openMic().catch(() => say('The microphone was blocked. Allow microphone access, or switch to the keyboard.', 'no'));
+    api.openMic().catch(() => say(t('songs.say.micBlocked'), 'no'));
     let onset;
     // The played event still being sounded, so a sustained instrument's
     // hold/tune rules (src/song/lesson.js) have something real to judge
@@ -2245,7 +2245,7 @@ function mountSongsPanel(hostEl, api) {
     // a miss keeps it -- try again, same isolated notes.
   function advanceRepair(passed, result, elapsedMs) {
     const repairStep = practice.repair.step;
-    sayVerdict(passed ? 'Good. Back to the phrase.' : (firstCorrection(result, repairStep.passRule) || 'Not quite yet — try that again.'), passed ? 'ok' : 'no');
+    sayVerdict(passed ? t('songs.say.verdictGood') : (firstCorrection(result, repairStep.passRule) || t('songs.say.verdictRetry')), passed ? 'ok' : 'no');
     if (result) {
       practice.lastHeat = barHeat(practice.song, result.matches);
       practice.lastHeatBars = repairStep.bars;
@@ -2321,8 +2321,8 @@ function mountSongsPanel(hostEl, api) {
     // ONE thing to work on next.
     const correction = !passed && result ? firstCorrection(result, step.passRule) : null;
     sayVerdict(passed
-      ? 'Nice. ' + (result ? result.hitCount + ' of ' + result.judgedCount + ' notes.' : '')
-      : correction || 'Not quite yet — try that again.', passed ? 'ok' : 'no');
+      ? (result ? t('songs.say.verdictNiceNotes', { hit: result.hitCount, judged: result.judgedCount }) : t('songs.say.verdictNice'))
+      : correction || t('songs.say.verdictRetry'), passed ? 'ok' : 'no');
     if (result) {
       practice.lastHeat = barHeat(practice.song, result.matches);
       practice.lastHeatBars = step.bars;
@@ -2428,7 +2428,7 @@ function mountSongsPanel(hostEl, api) {
     try {
       storedId = await library.add(song, { now: Date.now() });
     } catch (e) {
-      say('The song could not be saved: ' + (e && e.message ? e.message : String(e)), 'no');
+      say(t('songs.say.songSaveFailed', { reason: e && e.message ? e.message : String(e) }), 'no');
       return;
     }
     if (destroyed || door.generation() !== gen) return;
@@ -2473,7 +2473,7 @@ function mountSongsPanel(hostEl, api) {
   }
 
   async function importAudioFile(file) {
-    say('Working it out…');
+    say(t('songs.say.working'));
     // P3-5: Cancel shows only for this branch -- decodeAudioData is the
     // one real async gap in this pipeline, long enough on a real
     // recording for a learner to change their mind mid-way. `gen` is this
@@ -2494,7 +2494,7 @@ function mountSongsPanel(hostEl, api) {
       analysing = false;
       addSongCancelBtn.hidden = true;
       if (destroyed || e.cancelled) return; // Cancel/leaving already said its own piece
-      say('That recording could not be read.', 'no');
+      say(t('songs.say.recordingUnreadable'), 'no');
       return;
     }
     analysing = false;
@@ -2503,7 +2503,7 @@ function mountSongsPanel(hostEl, api) {
     if (refuseNoNotes(song, say, 'file')) return;
     const warnings = (report && report.needsCheck) || [];
     const { ok, errors } = validateSong(song);
-    if (!ok) { say('That recording did not turn into a usable song: ' + errors.join('; '), 'no'); return; }
+    if (!ok) { say(t('songs.say.recordingUnusable', { reasons: errors.join('; ') }), 'no'); return; }
     // Never save an analysis that outlived Cancel or leaving Songs: notes
     // exist by now, but this attempt is no longer the current one.
     if (destroyed || door.generation() !== gen) return;
@@ -2511,7 +2511,7 @@ function mountSongsPanel(hostEl, api) {
     try {
       storedId = await library.add(song, { now: Date.now() });
     } catch (e) {
-      say('The song could not be saved: ' + (e && e.message ? e.message : String(e)), 'no');
+      say(t('songs.say.songSaveFailed', { reason: e && e.message ? e.message : String(e) }), 'no');
       return;
     }
     if (destroyed || door.generation() !== gen) return;
@@ -2538,7 +2538,7 @@ function mountSongsPanel(hostEl, api) {
     try {
       storedIds = await addAllToLibrary(pack.songs);
     } catch (e) {
-      say('The band pack could not be fully saved: ' + (e && e.message ? e.message : String(e)), 'no');
+      say(t('songs.say.packPartial', { reason: e && e.message ? e.message : String(e) }), 'no');
       return;
     }
     // D2: a song whose id collided with one already in the library was
@@ -2548,7 +2548,7 @@ function mountSongsPanel(hostEl, api) {
     const packIn = pack.songs;
     pack.songs = withStoredIds(pack.songs, storedIds);
     const packDup = alreadyInLibraryNote(packIn, storedIds);
-    say('Added ' + pack.songs.length + ' song' + (pack.songs.length === 1 ? '' : 's') + ' from band pack "' + pack.name + '".' + (packDup ? ' ' + packDup : ''), 'ok');
+    say(t(pack.songs.length === 1 ? 'songs.say.packAddedOne' : 'songs.say.packAddedMany', { count: pack.songs.length, name: pack.name, note: packDup ? ' ' + packDup : '' }), 'ok');
     // Part assignments, read-only: one line per song that carries one,
     // "<title>: <member> plays <part name>, ...". A song with no
     // assignment (pack.parts[i] is null) gets no line at all.
@@ -2570,14 +2570,14 @@ function mountSongsPanel(hostEl, api) {
       const text = await readFile(file, route);
       challenge = parseChallenge(text);
     } catch (e) {
-      say('That file could not be read: ' + (e && e.message ? e.message : String(e)), 'no');
+      say(t('songs.say.fileUnreadable', { reason: e && e.message ? e.message : String(e) }), 'no');
       return;
     }
     let storedIds;
     try {
       storedIds = await addAllToLibrary(challenge.songs);
     } catch (e) {
-      say('The challenge could not be fully saved: ' + (e && e.message ? e.message : String(e)), 'no');
+      say(t('songs.say.challengePartial', { reason: e && e.message ? e.message : String(e) }), 'no');
       return;
     }
     // D2: reconcile any collision-reassigned id BEFORE renderChallenge()
@@ -2586,7 +2586,7 @@ function mountSongsPanel(hostEl, api) {
     // actually stored, not the id the file happened to carry.
     const challengeDup = alreadyInLibraryNote(challenge.songs, storedIds);
     challenge.songs = withStoredIds(challenge.songs, storedIds);
-    say('Added the "' + challenge.title + '" challenge (' + challenge.songs.length + ' song' + (challenge.songs.length === 1 ? '' : 's') + ').' + (challengeDup ? ' ' + challengeDup : ''), 'ok');
+    say(t(challenge.songs.length === 1 ? 'songs.say.challengeAddedOne' : 'songs.say.challengeAddedMany', { title: challenge.title, count: challenge.songs.length, note: challengeDup ? ' ' + challengeDup : '' }), 'ok');
     renderChallenge(challenge);
     await refreshList();
     // The challenge list sits under the whole library, far below the message: bring it on screen (guarded like the song-heading scroll).
@@ -2607,33 +2607,33 @@ function mountSongsPanel(hostEl, api) {
       if (!importer) throw new Error('no importer for file kind "' + route.kind + '"');
       ({ song, warnings } = importer(data, { fileName: file.name }));
     } catch (e) {
-      say('That file could not be read: ' + (e && e.message ? e.message : String(e)), 'no');
+      say(t('songs.say.fileUnreadable', { reason: e && e.message ? e.message : String(e) }), 'no');
       return;
     }
     if (!song || !Array.isArray(song.parts) || !song.parts.some((p) => p.notes && p.notes.length)) {
-      say('That file has no notes in it, so nothing was added. Pick a tune file (an .abc, MIDI or MusicXML file).', 'no');
+      say(t('songs.say.fileNoNotes'), 'no');
       return;
     }
     const { ok, errors } = validateSong(song);
     if (!ok) {
-      say('That file did not turn into a usable song: ' + errors.join('; '), 'no');
+      say(t('songs.say.fileUnusable', { reasons: errors.join('; ') }), 'no');
       return;
     }
     let storedId;
     try {
       storedId = await library.add(song, { now: Date.now() });
     } catch (e) {
-      say('The song could not be saved: ' + (e && e.message ? e.message : String(e)), 'no');
+      say(t('songs.say.songSaveFailed', { reason: e && e.message ? e.message : String(e) }), 'no');
       return;
     }
     // D2: a single import mentions the stored id in its own message only
     // when it actually changed (a same-titled song already in the library) --
     // nothing else here reads song.id afterward, so there is no other place
     // to reconcile.
-    const idNote = storedId !== song.id ? ' (saved as "' + storedId + '", because "' + song.id + '" was already in your songs)' : '';
+    const idNote = storedId !== song.id ? ' ' + t('songs.say.idNote', { newId: storedId, oldId: song.id }) : '';
     warnings = (warnings || []).map(plainImportWarning);
-    if (warnings.length) say('Added "' + song.title + '". ' + warnings.join(' ') + idNote, 'ok');
-    else say('Added "' + song.title + '" to your songs.' + idNote, 'ok');
+    if (warnings.length) say(t('songs.say.addedWarn', { title: song.title, warnings: warnings.join(' '), note: idNote }), 'ok');
+    else say(t('songs.say.added', { title: song.title, note: idNote }), 'ok');
     // E6c: what changed to fit the KEYBOARD specifically -- a single-song
     // notation import only (never the audio/band-pack/challenge branches
     // above), and only shown for kbd; silent for every other instrument
@@ -2666,7 +2666,7 @@ function mountSongsPanel(hostEl, api) {
     // reads/imports (classified.route), unchanged from before.
     const classified = classifyAddFile(file.name, file.type);
     if (classified.kind === 'unknown') {
-      say(UNSUPPORTED_MESSAGE, 'no');
+      say(t('songs.say.unsupported'), 'no');
       return;
     }
     const route = classified.route;
@@ -2752,7 +2752,7 @@ function mountSongsPanel(hostEl, api) {
       const addState = api.store(ADD_STATE_STORE_ID).get();
       if (addState && addState.interrupted) {
         api.store(ADD_STATE_STORE_ID).set(null);
-        say('Your last recording was stopped before it finished. Nothing was saved.');
+        say(t('songs.say.lastStopped'));
       }
     },
     hide() {

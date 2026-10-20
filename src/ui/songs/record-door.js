@@ -16,6 +16,7 @@ import { rangeForInstrument } from '../../audio/range.js';
 import { validateSong } from '../../song/model.js';
 import { createTakeAccumulator } from '../../audio/take-recorder.js';
 import { el } from '../dom.js';
+import { t } from '../../core/i18n.js';
 
 // Same tail-of-buffer polling interval as src/ui/playalong.js's own "Record a
 // take" capture (startRecordingCapture) -- copied here, not imported, since
@@ -35,14 +36,10 @@ function titleFromFileName(fileName) {
 
 // One rule for both doors (mic take and audio file): a transcription with no notes is refused with a
 // plain reason, never saved as an empty Draft. Says it through the caller's `say` and returns true.
-const NO_NOTES_ADVICE = {
-  take: 'Try again a little closer to the mic, or drop a recording instead.',
-  file: 'Try a different recording, or record one with the mic.',
-};
 export function refuseNoNotes(song, say, door = 'take') {
   const notes = song && song.parts && song.parts[0] ? song.parts[0].notes : [];
   if (notes && notes.length) return false;
-  say(`Nothing was heard clearly enough to turn into notes. ${NO_NOTES_ADVICE[door]}`, 'no');
+  say(t(door === 'file' ? 'songs.say.noNotesFile' : 'songs.say.noNotesTake'), 'no');
   return true;
 }
 
@@ -236,18 +233,18 @@ export function createRecordDoor(api, { onTake, say, onStart } = {}) {
     counting = true;
     recordBtn.disabled = true;
     if (typeof onStart === 'function') onStart();
-    say('Getting the microphone ready…');
+    say(t('songs.say.micGetting'));
     try { await api.openMic(); }
     catch (e) {
       counting = false;
       recordBtn.disabled = false;
-      say('The microphone is not available. You can drop a recording instead.');
+      say(t('songs.say.micUnavailable'));
       return;
     }
     recordBtn.textContent = 'Counting in…';
     recordBtn.disabled = false;
     bpmInput.disabled = true;
-    say('Get ready…');
+    say(t('songs.say.getReady'));
     startMeterLoop();
     const bpm = clampBpm(bpmInput.value);
     const spb = 60 / bpm;
@@ -270,11 +267,11 @@ export function createRecordDoor(api, { onTake, say, onStart } = {}) {
     try { await recorder.start(); }
     catch (e) {
       resetMicUi();
-      say('The microphone is not available. You can drop a recording instead.');
+      say(t('songs.say.micUnavailable'));
       return;
     }
     recording = true;
-    say('Recording…');
+    say(t('songs.say.recording'));
     recordBtn.textContent = 'Stop';
     recordBtn.disabled = false;
     // Same accumulator/polling pattern as src/ui/playalong.js's
@@ -325,7 +322,7 @@ export function createRecordDoor(api, { onTake, say, onStart } = {}) {
     // worked out -- the same guard editor.js's Listen carried before P3-12
     // moved recording here; re-enabled in the finally once the take landed.
     recordBtn.disabled = true;
-    say('Working it out…');
+    say(t('songs.say.working'));
     // One task yield so the browser actually paints "Working it out…" before
     // transcribe() -- synchronous CPU work -- runs; without it the status
     // text would be overwritten by the very same task (same precedent as
@@ -335,11 +332,11 @@ export function createRecordDoor(api, { onTake, say, onStart } = {}) {
       const { song, report } = transcribe(frames, { title: 'My recording' });
       if (refuseNoNotes(song, say)) return;
       const { ok, errors } = validateSong(song);
-      if (!ok) { say('That recording did not turn into a usable song: ' + errors.join('; ')); return; }
+      if (!ok) { say(t('songs.say.recordingUnusable', { reasons: errors.join('; ') })); return; }
       await onTake(song, (report && report.needsCheck) || [], rec);
     } catch (e) {
       if (typeof api.recordError === 'function') api.recordError('learn:mic', e);
-      say('That recording could not be analysed. Try again, or drop a recording instead.');
+      say(t('songs.say.recordingNotAnalysed'));
     } finally {
       recordBtn.disabled = false;
     }
