@@ -77,6 +77,12 @@ async function walk(t, cfg) {
       states.push({ state, m, events: ev });
     };
     await page.setViewport({ width: cfg.w, height: cfg.h, mobile: cfg.mobile });
+    // Phone configs are a touch screen: headless mobile emulation alone does not match (pointer: coarse), so the
+    // 44px rules in the coarse-pointer CSS block would never apply. Turn on touch emulation and prove it took.
+    if (cfg.mobile) {
+      await page.cdp.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
+      states.coarse = await page.evaluate("matchMedia('(pointer: coarse)').matches");
+    }
     await page.cdp.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: cfg.theme }] });
     // A newcomer's first open: the profile is brand new, so no reload or clearing is needed (and none is done).
     assert.equal(await page.evaluate('window.__walkStartStorage'), 0, 'the walk starts on a truly fresh profile: no saved data before the app ran');
@@ -124,6 +130,7 @@ for (const cfg of CONFIGS) {
   test(`newcomer walk: ${cfg.name} (${cfg.w}x${cfg.h})`, async (t) => {
     const states = await walk(t, cfg);
     assert.equal(states.length, 11, 'every state of the walk was reached');
+    if (cfg.mobile) assert.equal(states.coarse, true, 'phone configs match (pointer: coarse), so the touch-target rules are really exercised');
     const diag = (s) => t.diagnostic(`${cfg.name}: ${s}`);
 
     await t.test('no sideways scroll in any state', () => {
@@ -138,7 +145,9 @@ for (const cfg of CONFIGS) {
     // ---- todo until the named U unit lands: delete `todo` to switch on ----
     // Measured on CI run 39273798944: Start sits below the first screen only at 844x390, and the hint
     // fails 4.5:1 only on the light theme (2.45; dark 7.41). Elsewhere these already pass, so they run live.
-    await t.test('every control in view is at least 44x44 (U3)', { todo: 'U3' }, () => {
+    // Touch-only check: the 44px rule is a coarse-pointer rule, so laptop (mouse) configs do not register it
+    // (a skip would make build/ci-summary.mjs refuse the release block).
+    if (cfg.mobile) await t.test('every control in view is at least 44x44 (U3)', () => {
       const per = states.map((s) => `${s.state}=${s.m.smallControls.length}`);
       diag(`small controls per state: ${per.join(' ')}`);
       for (const s of states) if (s.m.smallControls.length) diag(`  ${s.state}: ${s.m.smallControls.join('; ')}`);

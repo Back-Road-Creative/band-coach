@@ -28,7 +28,9 @@ jobs:
   check:
     # A failed release run has nothing to check; waiting out the budget here
     # would only bury the real failure under a "never published" message.
-    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    # Only a tag-push run of release.yml published anything; a dispatch dry run
+    # of it also concludes success but has no release to check.
+    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
