@@ -147,7 +147,9 @@ jobs:
         run: |
           set +e
           echo test:release > "$RUNNER_TEMP/selection.txt"
-          npm run test:release 2>&1 | tee "$RUNNER_TEMP/suite.log"
+          # Update-check acceptance also opens the development HTML. This
+          # isolated job must build it rather than inherit another job's dist/.
+          { npm run build && npm run test:release; } 2>&1 | tee "$RUNNER_TEMP/suite.log"
           rc=${PIPESTATUS[0]}; echo "$rc" > "$RUNNER_TEMP/suite.rc"; exit "$rc"
       - name: summarise the job
         if: always()

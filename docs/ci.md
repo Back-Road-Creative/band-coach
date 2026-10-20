@@ -16,6 +16,11 @@ keeps `ci-summary.mjs`'s rejection of retries, skips and incomplete acceptance
 results. Local `npm test` and the full weekly browser runs keep their existing
 pretest/posttest behavior.
 
+Release acceptance builds both development and release HTML in its own
+checkout: the update-check tests deliberately inspect both variants. A shell
+regression executes the actual workflow command with an isolated npm fixture
+and verifies that a failed prerequisite stops acceptance and reports failure.
+
 When all development families are selected, CI builds explicitly and runs
 `npm --ignore-scripts test`. This invokes the native development command once,
 preserving its file concurrency across families while suppressing its release

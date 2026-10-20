@@ -110,6 +110,35 @@ test('one final test check always evaluates all selected job results', () => {
   assert.match(body, /node build\/ci-plan\.mjs aggregate/);
   for (const name of ['plan', 'development', 'release']) assert.match(body, new RegExp(`needs\\.${name}\\.result`));
 });
+test('release shell builds its development fixture in isolation and stops on build failure', (t) => {
+  const body = job('release');
+  const suite = body.split('      - id: suite\n')[1].split('      - name: summarise')[0];
+  const script = suite.split('        run: |\n')[1].replace(/^          /gm, '');
+  const dir = mkdtempSync(join(tmpdir(), 'bc-release-prerequisite-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const npm = join(dir, 'npm');
+  writeFileSync(npm, `#!/bin/bash
+if [ "$*" = "run build" ]; then
+  [ "\${FAIL_BUILD:-0}" = 0 ] || exit 71
+  touch "$RUNNER_TEMP/development-html"
+elif [ "$*" = "run test:release" ]; then
+  touch "$RUNNER_TEMP/release-started"
+  [ -f "$RUNNER_TEMP/development-html" ] || exit 72
+else
+  exit 73
+fi
+`, { mode: 0o755 });
+  for (const fail of ['0', '1']) {
+    for (const file of ['development-html', 'release-started']) rmSync(join(dir, file), { force: true });
+    const run = spawnSync('bash', ['-c', script], {
+      cwd: dir, env: { ...process.env, PATH: `${dir}:${process.env.PATH}`, RUNNER_TEMP: dir, FAIL_BUILD: fail },
+      encoding: 'utf8', timeout: 15000,
+    });
+    assert.equal(run.status, fail === '0' ? 0 : 71, run.stderr);
+    assert.equal(existsSync(join(dir, 'release-started')), fail === '0');
+    assert.equal(readFileSync(join(dir, 'suite.rc'), 'utf8').trim(), fail === '0' ? '0' : '71');
+  }
+});
 test('no new paid runner, cache, or summary artifacts are introduced', () => {
   assert.equal((workflow.match(/runs-on:/g) || []).length, 4);
   assert.equal((workflow.match(/runs-on: ubuntu-latest/g) || []).length, 4);
