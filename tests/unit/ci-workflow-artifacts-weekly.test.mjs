@@ -43,8 +43,14 @@ function stepList(text) {
   return body.split(/^ {6}- /m).slice(1).map((s) => s.replace(/\s+/g, ' ').trim());
 }
 
+function worker(name) {
+  const m = new RegExp(`^  ${name}:\\n([\\s\\S]*?)(?=^  [a-z][\\w-]*:|$(?![\\s\\S]))`, 'm').exec(ci());
+  assert.ok(m, `missing ${name}`);
+  return m[1];
+}
+
 test('ci uploads failure evidence as its last step, on failure or cancel', () => {
-  const list = stepList(ci());
+  const list = stepList(worker('development'));
   const last = list[list.length - 1];
   assert.match(last, /\buses: actions\/upload-artifact@[0-9a-f]{40}\b/, 'the last ci step must be actions/upload-artifact pinned to a commit SHA');
   assert.match(last, /if: failure\(\) \|\| cancelled\(\)/, 'upload only when the run failed or was cancelled');
@@ -53,7 +59,7 @@ test('ci uploads failure evidence as its last step, on failure or cancel', () =>
 });
 
 test('the artifact name is unique to the run and attempt, and retention is short', () => {
-  const last = stepList(ci()).pop();
+  const last = stepList(worker('release')).pop();
   const name = /with: name: (.+?) path:/.exec(last);
   assert.ok(name, 'the upload step needs a name');
   assert.match(name[1], /github\.run_id/, 'the name must carry the run id');
@@ -73,12 +79,8 @@ test('ci records the Chrome version in the step summary, after locating it', () 
   assert.ok(summary < text.indexOf('npm ci'), 'record the browser before the suite installs and runs');
 });
 
-test('ci timeout is at least 30 minutes, with the measured durations cited', () => {
-  const text = ci();
-  const m = /timeout-minutes:\s*(\d+)/.exec(text);
-  assert.ok(m && Number(m[1]) >= 30, `timeout-minutes is ${m && m[1]}; passing runs took 12.9-15.0 min on 2026-10-02 with the acceptance lane still to add`);
-  assert.doesNotMatch(text, /8m21s/, 'the header must not keep the stale 2026-09-28 duration claim');
-  assert.match(text, /12\.9-15\.0/, 'the header comment must cite the measured 12.9-15.0 minute runs');
+test('each test worker retains its 30 minute timeout', () => {
+  for (const name of ['development', 'release']) assert.match(worker(name), /timeout-minutes: 30/);
 });
 
 test('ci.yml has no schedule or workflow_dispatch trigger', () => {
@@ -108,11 +110,13 @@ test('the weekly workflow has its own concurrency group and read-only permission
   assert.match(text, /timeout-minutes:\s*(?:[3-9]\d|\d{3,})\b/, 'the weekly job needs the same >= 30 minute budget');
 });
 
-test('the weekly workflow runs exactly ci.yml\'s test-job steps', () => {
-  const a = steps(ci());
-  const b = steps(weekly(), 'test');
-  assert.ok(a.length > 200, 'ci steps were not extracted');
-  assert.equal(b, a, 'the weekly steps must be identical to ci.yml\'s so the weekly run proves what a PR run proves');
+test('the weekly workflow retains full npm test coverage and the same strict release summary', () => {
+  const body = steps(weekly(), 'test');
+  assert.match(body, /npm test/);
+  assert.match(body, /node build\/ci-summary\.mjs/);
+  const pkg = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8'));
+  assert.equal(pkg.scripts.posttest, 'npm run gate');
+  assert.equal(pkg.scripts.gate, 'npm run test:release');
 });
 
 // The run summary (build/ci-summary.mjs) and the two exact exit codes it reads.
@@ -170,13 +174,15 @@ test('the run summary is uploaded on every run, named by run and attempt', () =>
   assert.ok(days && Number(days[1]) >= 1 && Number(days[1]) <= 14, 'short retention (1-14)');
 });
 
-test('the failure upload is still last, and there are exactly two uploads', () => {
-  const list = codeSteps();
-  const ups = uploads(list);
-  assert.equal(ups.length, 2, 'the run summary and the failure evidence, nothing else');
-  assert.equal(list[list.length - 1], ups[1], 'the failure upload stays the last step');
-  assert.match(ups[1], /if: failure\(\) \|\| cancelled\(\)/);
-  assert.ok(list.indexOf(ups[0]) < list.indexOf(ups[1]));
+test('one aggregate summary and failure-only worker evidence keep storage bounded', () => {
+  const ups = uploads(codeSteps());
+  assert.equal(ups.length, 3, 'one aggregate summary and one failure bundle per worker');
+  for (const name of ['development', 'release']) {
+    const last = stepList(worker(name)).pop();
+    assert.match(last, /if: failure\(\) \|\| cancelled\(\)/);
+    assert.match(last, /retention-days: 1/);
+    assert.ok(last.includes(`name: test-artifacts-${name}-`));
+  }
 });
 
 // The weekly alert: a red Monday run used to be visible only on the Actions tab,
@@ -257,9 +263,9 @@ test('the Chrome beta job installs beta and proves it before running the same st
   // (what the unchanged `locate Chrome` step finds), then fail the job unless that
   // browser calls itself a beta, so the leg cannot quietly test stable.
   assert.match(install, /apt-get install -y "\$RUNNER_TEMP\/chrome-beta\.deb" sudo ln -sf \/usr\/bin\/google-chrome-beta \/usr\/local\/bin\/google-chrome \/usr\/local\/bin\/google-chrome --version \| tee -a "\$GITHUB_STEP_SUMMARY" \| \/bin\/grep -qi beta$/, 'install the beta .deb, link it as google-chrome, then `google-chrome --version | ... | grep -qi beta` last');
-  const code = codeSteps();
+  const code = bodySteps(noComments(jobBody(weekly(), 'test')));
   const norm = (arr) => arr.join(' | ').replace(/run-summary-beta-/g, 'run-summary-').replace(/test-artifacts-beta-/g, 'test-artifacts-');
-  assert.equal(norm(rest), code.join(' | '), 'after the install step, test-beta runs exactly ci.yml\'s steps (artifact names aside)');
+  assert.equal(norm(rest), code.join(' | '), 'after the install step, beta runs the stable weekly steps (artifact names aside)');
 });
 
 test('the two test jobs never upload the same artifact name, and no new action is introduced', () => {

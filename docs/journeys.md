@@ -230,7 +230,7 @@ Four end-to-end keyboard-learner journeys, each driven start to finish through r
 only -- clicks, a real MIDI message over a fake port, a real `KeyboardEvent`, a real `change`
 event -- never `window.__coach` to drive a step (only to read state no real entry point can be
 asked for: the audio clock, the recording's own start time, a mastery item's numbers). Proof:
-`node --test --test-concurrency=1 tests/characterization/kbd-journey-scenarios.test.mjs`.
+`node --test tests/characterization/kbd-journey-*.test.mjs` (one file per journey, so they run in parallel; the shared setup is `tests/characterization/kbd-journey-shared.mjs`).
 
 1. **First visit with a MIDI keyboard.** setup -> lesson -> song -> check -> return, all through
    real clicks and real MIDI notes, ending in a clean Check-mode play of the whole piece.

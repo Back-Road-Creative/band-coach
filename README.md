@@ -198,8 +198,9 @@ Needs Node 22+. `pretest` runs the build first, so tests always see a fresh `dis
 and `posttest` runs the release gate (`npm run gate`) so a plain `npm test` also proves the release
 file downloads cleanly. Tests use only Node built-ins plus `esbuild` (the one build-time dependency).
 
-Each family of tests also has its own script, so one can be run alone (every one except
-`test:release` expects a fresh dev build first: `npm run build`):
+Each family of tests also has its own script, so one can be run alone. Every script builds what its
+family needs first (`tests/families.json` declares it, and a unit test checks the scripts agree), so none
+needs a separate `npm run build`; a test that opens a page whose file is missing fails at once, naming it:
 
 | script | runs | drives a browser |
 |---|---|---|
@@ -208,7 +209,7 @@ Each family of tests also has its own script, so one can be run alone (every one
 | `npm run test:char` | `tests/characterization/*.test.mjs` | every file |
 | `npm run test:root` | `tests/*.test.mjs` | no |
 | `npm run test:browser` | `tests/characterization/*.test.mjs` plus `tests/build/pages-offline.test.mjs`: the files whose whole job is to drive the page | yes |
-| `npm run test:release` | builds `dist/release/band-coach.html`, then `tests/release/*.test.mjs` (`npm run gate` is an alias) | every file |
+| `npm run test:release` | builds the dev build, then `dist/release/band-coach.html` (one release test opens the dev build; a dev build clears `dist/`, so it goes first), then `tests/release/*.test.mjs` (`npm run gate` is an alias) | every file |
 | `npm run test:all` | build, then every family above in `npm test`'s order, then `test:release` | |
 
 `npm test` is unchanged: `pretest` (build), every family in one run, `posttest` (`npm run gate`).
@@ -283,7 +284,7 @@ throws, naming what to install or set, rather than fall back to the shell.
 When `retryFlaky` discards an attempt and a later one passes, the run still prints a
 `retryFlaky: ... discarded attempt N` line to stderr, so a second-try pass is visible.
 
-`npm test` caps how many test files (and therefore how many Chromiums) run at
+`npm test`, `npm run test:release` and `npm run stage` cap how many test files (and therefore how many Chromiums) run at
 once: a quiet box keeps node's own default (one less than the core count), but
 past that the cap backs off as the box's load average climbs, so the suite
 can't launch more browsers than the machine can actually boot in time
@@ -293,7 +294,7 @@ the real-time audio tests. If a box is loaded by something the load
 average doesn't capture, set `BAND_COACH_TEST_CONCURRENCY` to force a lower
 number.
 
-The `test` script computes that cap with a `$(...)` command substitution, so it
+Each of them computes that cap with a `$(...)` command substitution, so it
 needs a POSIX shell. That covers Linux, macOS and WSL, which is everything this
 repo and its CI actually run on. In a bare Windows `cmd.exe` it will not expand:
 run `node --test` yourself with an explicit `--test-concurrency=<n>`, or set
@@ -962,7 +963,7 @@ check the whole piece, return a day later -- is proven end to end by four real b
 (a first MIDI visit, a computer-keys-only attempt that never passes the check, a next-day recheck
 that reads back as retained, and reaching Both hands together at level 13 through real "Skip ahead"
 clicks and a real Hands-selector change): `docs/journeys.md`'s "Keyboard pathway close-out" section,
-proof `node --test --test-concurrency=1 tests/characterization/kbd-journey-scenarios.test.mjs`. That
+proof `node --test tests/characterization/kbd-journey-*.test.mjs` (one file per journey, so they run in parallel; the shared setup is `tests/characterization/kbd-journey-shared.mjs`). That
 section also records a finding worth knowing before reading Progress's own numbers: the first time
 a learner passes a song's Check mode, "Passed on your own" counts every judged step of that
 walkthrough, not just the one whole-piece row the pathway itself is watching for.
