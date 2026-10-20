@@ -350,8 +350,8 @@ above are read from the string tables in `src/core/i18n.js` (`t(id, params)`) ra
 hardcoded. Settings > Language switches the app between English and Español (the choice is saved
 with your other preferences, travels in a backup, and is applied at startup before the first
 screen; `<html lang>` follows it). What is translated: the nav bar, page headings and static
-labels, the keyboard help, the Start/Pause button, the instrument sheet (redrawn the moment the language changes), the Songs and keyboard-path screens' titles and buttons, the Songs panel's status messages (`songs.say.*`; panel names such as "Play Along" stay English, as on screen), and the backup/restore/update messages. Everything not yet routed
-through `t()` -- most of the exercise prompts, coach lines, song and lesson text and some
+labels, the keyboard help, the Start/Pause button, the instrument sheet (redrawn the moment the language changes), the Songs and keyboard-path screens' titles and buttons, the Songs panel's status messages (`songs.say.*`; panel names such as "Play Along" stay English, as on screen), the backup/restore/update messages, and the coach lines around a level-up and a session start (`coach.*`: the level-up note, the warm-up and long-day notes, the 45-minute cap). Everything not yet routed
+through `t()` -- most of the exercise prompts, the remaining coach lines, song and lesson text and some
 Settings labels -- stays in English whichever language is picked. The Spanish table is a
 machine-translated first pass that has not yet been reviewed by a native speaker; a unit test
 fails if any English string lacks a Spanish one. `src/index.html`'s own
@@ -963,7 +963,7 @@ check the whole piece, return a day later -- is proven end to end by four real b
 (a first MIDI visit, a computer-keys-only attempt that never passes the check, a next-day recheck
 that reads back as retained, and reaching Both hands together at level 13 through real "Skip ahead"
 clicks and a real Hands-selector change): `docs/journeys.md`'s "Keyboard pathway close-out" section,
-proof `node --test --test-concurrency=1 tests/characterization/kbd-journey-scenarios.test.mjs`. That
+proof `node --test tests/characterization/kbd-journey-*.test.mjs` (one file per journey, so they run in parallel; the shared setup is `tests/characterization/kbd-journey-shared.mjs`). That
 section also records a finding worth knowing before reading Progress's own numbers: the first time
 a learner passes a song's Check mode, "Passed on your own" counts every judged step of that
 walkthrough, not just the one whole-piece row the pathway itself is watching for.
