@@ -636,6 +636,15 @@
     body:has(#howPeekHost:not([hidden])) .setup-sheet .setup-pair:has(> #micDeviceSelect) { flex: 1 1 0; min-width: 0; }
     body:has(#howPeekHost:not([hidden])) .setup-sheet #micDeviceSelect { flex: 1 1 0; min-width: 0; }
     body:has(#howPeekHost:not([hidden])) #calibrateResult { flex: 1 1 100%; line-height: 1.2; }
+    /* 320px wide: the keyboard and the kit canvas bleed 20px into the page margin on each side, so the canvas is ~314px, not ~274. The 24px tap floor needs it: the right-hand row has 8 white keys, a black key is 0.64 of a white key's width, and 24px takes a 312.5px canvas. Taller too: black keys are 0.167 of the height (24px needs 144px) and the kit in a bar draws the open hi-hat at 0.08 of 0.62 of the height (24px needs 242px). That much kit canvas must still leave End session, the objective, the feedback and the canvas inside one window, so on the kit the hint moves below the canvas and the two labels that repeat what is already on screen (the card's "Instant feedback" eyebrow, the level name that the objective's first words give) are dropped. Visual only; DOM order is unchanged. */
+    @media (max-width: 360px) {
+      #cv.kbd, #cv.kit { margin-inline: -20px; width: calc(100% + 40px); max-width: none; }
+      #cv.kbd { aspect-ratio: 16 / 7.5; }
+      #cv.kit { aspect-ratio: 16 / 12.3; }
+      .stage:has(> #cv.kit) > #hint { order: 9; }
+      .main:has(#cv.kit) #feedbackCard > .eyebrow { display: none; }
+      .main:has(#cv.kit) #levelName { display: none; }
+    }
     /* Show = Staff on the keyboard needs room for the grand staff above keys that stay at the 24px tap floor. */
     #cv.staffkbd { aspect-ratio: 16 / 10; }
   }
