@@ -10,6 +10,7 @@ import { KBD_SONG_SKILL_MAP } from '../instruments/kbd-songs.js';
 import { due } from '../core/srs.js';
 import { itemLabel } from './history/item-label.js';
 import { sanitizeHistoryStore } from './history/store.js';
+import { t } from '../core/i18n.js';
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const pct = (x) => Math.round((typeof x === 'number' && isFinite(x) ? x : 0) * 100) + '%';
@@ -111,11 +112,14 @@ export function registerHistory(panels) {
           <p>What your practice has looked like, in plain numbers — no account, nothing sent anywhere.</p>
           <div class="history-summary" id="historySummary"></div>
           <div class="history-retention" id="historyRetention"></div>
-          <h3>Practice calendar</h3>
-          <label for="historyGoalInput">Daily minutes goal</label>
-          <input type="number" id="historyGoalInput" min="5" max="120" step="1">
-          <p id="historyGoalStreak"></p>
-          <div id="historyCalendar"></div>
+          <div><button type="button" class="primary" id="historyStartBtn" hidden>${esc(t('history.startFirst'))}</button></div>
+          <div class="history-calendar-group" id="historyCalendarGroup">
+            <h3>Practice calendar</h3>
+            <label for="historyGoalInput">Daily minutes goal</label>
+            <input type="number" id="historyGoalInput" min="5" max="120" step="1">
+            <p id="historyGoalStreak"></p>
+            <div id="historyCalendar"></div>
+          </div>
           <h3>By instrument</h3>
           <div id="historyInstruments"></div>
           <h3>Items to know</h3>
@@ -146,6 +150,7 @@ export function registerHistory(panels) {
       const copyText = el.querySelector('#historyCopyText');
       const printBtn = el.querySelector('#historyPrintBtn');
       const printReport = el.querySelector('#historyPrintReport');
+      const startBtn = el.querySelector('#historyStartBtn');
 
       function renderItemsFor(modId, db, now) {
         const box = el.querySelector('#historyItems');
@@ -188,6 +193,10 @@ export function registerHistory(panels) {
           ? `<p>Tries with help: ${ev.withHelp} · Passed on your own: ${ev.independent} · Retained on a later check: ${ev.retained} · Applied in a song: ${ev.applied}</p>`
           : '<p>No checks recorded yet — nothing here is counted as retained.</p>';
 
+        // Nothing logged yet: offer the way to make the first session instead of an empty calendar and goal box.
+        const empty = !s.totalSessions;
+        startBtn.hidden = !empty;
+        el.querySelector('#historyCalendarGroup').hidden = empty;
         const l = ledger(db.sessions, { now, goalMin: store.goalMin });
         el.querySelector('#historyCalendar').innerHTML = calendarHtml(l);
         el.querySelector('#historyGoalStreak').textContent = l.goalStreak > 0
@@ -223,6 +232,14 @@ export function registerHistory(panels) {
         if (current) modSelect.value = current;
         if (current) renderItemsFor(current, db, now); else el.querySelector('#historyItems').innerHTML = '<p>Nothing practised yet.</p>';
       }
+
+      // Same path as a person's own taps: go to Practice (the nav button closes this panel), then press Start.
+      startBtn.addEventListener('click', () => {
+        const nav = document.querySelector('#mainNav button[data-route="practice"]');
+        if (nav) nav.click();
+        const play = document.getElementById('playBtn');
+        if (play) play.click();
+      });
 
       modSelect.addEventListener('change', () => renderItemsFor(modSelect.value, api.db(), Date.now()));
 

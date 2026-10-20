@@ -200,7 +200,9 @@
      training, How to play it and Music theory each now have a plain home
      (nav bar, the Songs panel's own Add-a-song row, or the instrument
      sheet's Tools group) -- no picker-row disclosure left to style here. */
-  .panel-host { margin-top: 18px; }
+  .panel-host { margin-top: 0; }
+  .panel-say:empty { display: none; }
+  .panel-songs-teachers > summary { cursor: pointer; font-weight: 700; margin-top: 8px; }
   /* */
   /* */
   /* slot:css:w-songs */
@@ -535,7 +537,7 @@
   .backup-nudge { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; justify-content: space-between; background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 8px 12px; font-size: 0.8125rem; color: var(--muted); }
   button.danger { border-color: var(--bad); color: var(--bad); }
   button.danger:hover { background: var(--bad); color: #1a0a08; }
-  .settings-view { display: flex; flex-direction: column; gap: 18px; max-width: 640px; margin: 0 auto; }
+  .settings-view { display: flex; flex-direction: column; gap: 18px; max-width: 640px; margin: 0; }
   .settings-view h2 { font: 700 1.75rem/1.1 var(--display); margin: 0; }
   .settings-group { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; display: flex; flex-direction: column; align-items: flex-start; gap: 10px; }
   .settings-group h3 { font: 600 0.8125rem var(--body); color: var(--muted); margin: 0; }
