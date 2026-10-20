@@ -1,29 +1,7 @@
 name: ci
 
-# A PR branch is proven by its `pull_request` run; `main` is proven by its own
-# push run, which is what the autoland barrier reads on the integration head.
-# Triggering push on every branch as well ran the whole suite TWICE per push,
-# and because a push and a pull_request carry different `github.ref` the
-# concurrency group below could not collapse them -- the two runs simply raced
-# for the same shared box and lost to the then 10-minute job timeout.
-#
-# The job timeout is a budget over the MEASURED suite, not a target: ten
-# passing runs on 2026-10-02 took 12.9-15.0 min on ubuntu-latest (14.7, 15.0,
-# 14.3, 14.8, 14.9, 14.8, 14.9, 14.7, 12.9, 14.8). Those runs ran the whole
-# release lane twice (every tests/release/ file, acceptance-* included, once as
-# a first gate step and again as posttest), so the budget is 30 min. The first
-# step now runs only gate.test.mjs and the full lane runs once, as posttest; the
-# new duration is measured on a run, not claimed here.
-# Earlier, three PR runs launched together were cancelled at 10m06s with
-# nothing failing. tests/unit/ci-workflow-no-duplicate-run.test.mjs and
-# ci-workflow-artifacts-weekly.test.mjs pin the headroom. A failed or
-# cancelled run uploads dist/test-artifacts/ so its screenshots and logs
-# survive. build/ci-summary.mjs turns the two step logs into a READY / NOT
-# READY verdict and a run-summary artifact (retries, skips and cancellations
-# in the release lane are visible, not hidden behind a green job). The weekly
-# run on a fresh browser is a separate file (weekly-current-browser.yml):
-# bin/autoland.py counts every ci.yml run on a commit whatever its event, so
-# a scheduled run here would feed the merge barrier.
+# Independent development and release jobs, then one required `test` verdict.
+# Standard hosted jobs run only in public repositories. No paid runner/cache.
 on:
   push:
     branches: [main]
@@ -37,12 +15,30 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  test:
+  plan:
+    if: github.event.repository.private == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      plan: ${{ steps.select.outputs.plan }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 2
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+      - id: select
+        run: node build/ci-plan.mjs plan
+
+  development:
+    needs: plan
+    if: github.event.repository.private == false && fromJSON(needs.plan.outputs.plan).development[0] != null
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    outputs:
+      report: ${{ steps.report.outputs.report }}
     steps:
-      # Depth 2: on a pull_request run HEAD is GitHub's merge commit, and HEAD^1
-      # (the base) is what build/ci-select.mjs diffs against.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 2
@@ -59,11 +55,7 @@ jobs:
       - name: record Chrome version
         run: '"$CHROME_BIN" --version >> "$GITHUB_STEP_SUMMARY"'
       - run: npm ci
-      # Cheap and decisive first (about 5 s): the size budget and the smoke checks
-      # must not wait behind the browser suite. Only gate.test.mjs runs here; the
-      # whole release lane runs once, as the suite step's posttest. Each of the two
-      # steps keeps its exact exit code and log in $RUNNER_TEMP (outside dist/,
-      # which pretest's dev build deletes) for build/ci-summary.mjs.
+      # Cheap size/smoke gate first; each job owns its own dist/ and logs.
       - id: gate
         name: release size budget and smoke checks
         shell: bash
@@ -73,43 +65,129 @@ jobs:
           set +e
           { node build/build.mjs --release && node --test tests/release/gate.test.mjs; } 2>&1 | tee "$RUNNER_TEMP/gate.log"
           rc=${PIPESTATUS[0]}; echo "$rc" > "$RUNNER_TEMP/gate.rc"; exit "$rc"
-      # A pull_request runs only the test families its changed files select
-      # (build/ci-select.mjs + tests/families.json; unknown or empty selects
-      # everything) and records the selection in $RUNNER_TEMP/selection.txt so
-      # build/ci-summary.mjs can tell "release lane intentionally not run" from
-      # "release lane missing". A push to main always runs the full `npm test`.
       - id: suite
-        name: test families, then the release lane when selected
+        name: selected development families
         shell: bash
         env:
           CI: true
+          SELECTED: ${{ join(fromJSON(needs.plan.outputs.plan).development, ' ') }}
         run: |
           set +e
-          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
-            sel=$(node build/ci-select.mjs --base HEAD^1)
-            echo "$sel" > "$RUNNER_TEMP/selection.txt"
-            {
-              echo "selected test families: $sel"
-              npm run build || exit 1
-              fail=0
-              for s in $sel; do npm run "$s" || fail=1; done
-              exit "$fail"
-            } 2>&1 | tee "$RUNNER_TEMP/suite.log"
-            rc=${PIPESTATUS[0]}
-          else
-            npm test 2>&1 | tee "$RUNNER_TEMP/suite.log"
-            rc=${PIPESTATUS[0]}
-          fi
-          echo "$rc" > "$RUNNER_TEMP/suite.rc"; exit "$rc"
-      # NOT READY (a retry, skip, cancel or passing todo with a reason in the
-      # release lane, or no release block at all) fails this step even when the
-      # suite step went green.
-      - name: summarise the run
+          echo "$SELECTED" > "$RUNNER_TEMP/selection.txt"
+          {
+            npm run build || exit 1
+            fail=0
+            if [ "$SELECTED" = "test:root test:build test:char test:unit" ]; then
+              # Keep file scheduling across all development families. The
+              # explicit build above replaces pretest; release has its own job.
+              npm --ignore-scripts test || fail=1
+            else
+              for family in $SELECTED; do npm run "$family" || fail=1; done
+            fi
+            exit "$fail"
+          } 2>&1 | tee "$RUNNER_TEMP/suite.log"
+          rc=${PIPESTATUS[0]}; echo "$rc" > "$RUNNER_TEMP/suite.rc"; exit "$rc"
+      - name: summarise the job
         if: always()
         env:
           GATE_OUTCOME: ${{ steps.gate.outcome }}
           SUITE_OUTCOME: ${{ steps.suite.outcome }}
         run: node build/ci-summary.mjs
+      - id: report
+        if: always()
+        run: node build/ci-plan.mjs report
+      - name: keep failure evidence
+        if: failure() || cancelled()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: test-artifacts-development-${{ github.run_id }}-${{ github.run_attempt }}
+          path: dist/test-artifacts/
+          if-no-files-found: ignore
+          retention-days: 1
+
+  release:
+    needs: plan
+    if: github.event.repository.private == false && fromJSON(needs.plan.outputs.plan).release
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      report: ${{ steps.report.outputs.report }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 2
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+      # One commit, one candidate: the release footer's date is the commit's, not
+      # the wall clock (build/build.mjs reads SOURCE_DATE_EPOCH). On a pull_request
+      # run the checked-out commit is GitHub's merge commit.
+      - name: pin the build date to the commit
+        run: echo "SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)" >> "$GITHUB_ENV"
+      - name: locate Chrome
+        run: echo "CHROME_BIN=$(which google-chrome)" >> "$GITHUB_ENV"
+      - name: record Chrome version
+        run: '"$CHROME_BIN" --version >> "$GITHUB_STEP_SUMMARY"'
+      - run: npm ci
+      # Cheap size/smoke gate first; each job owns its own dist/ and logs.
+      - id: gate
+        name: release size budget and smoke checks
+        shell: bash
+        env:
+          CI: true
+        run: |
+          set +e
+          { node build/build.mjs --release && node --test tests/release/gate.test.mjs; } 2>&1 | tee "$RUNNER_TEMP/gate.log"
+          rc=${PIPESTATUS[0]}; echo "$rc" > "$RUNNER_TEMP/gate.rc"; exit "$rc"
+      - id: suite
+        name: selected release acceptance
+        shell: bash
+        env:
+          CI: true
+        run: |
+          set +e
+          echo test:release > "$RUNNER_TEMP/selection.txt"
+          # Update-check acceptance also opens the development HTML. This
+          # isolated job must build it rather than inherit another job's dist/.
+          { npm run build && npm run test:release; } 2>&1 | tee "$RUNNER_TEMP/suite.log"
+          rc=${PIPESTATUS[0]}; echo "$rc" > "$RUNNER_TEMP/suite.rc"; exit "$rc"
+      - name: summarise the job
+        if: always()
+        env:
+          GATE_OUTCOME: ${{ steps.gate.outcome }}
+          SUITE_OUTCOME: ${{ steps.suite.outcome }}
+        run: node build/ci-summary.mjs
+      - id: report
+        if: always()
+        run: node build/ci-plan.mjs report
+      - name: keep failure evidence
+        if: failure() || cancelled()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: test-artifacts-release-${{ github.run_id }}-${{ github.run_attempt }}
+          path: dist/test-artifacts/
+          if-no-files-found: ignore
+          retention-days: 1
+
+  test:
+    needs: [plan, development, release]
+    if: always() && github.event.repository.private == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+      - name: require every selected job and candidate report
+        env:
+          PLAN: ${{ needs.plan.outputs.plan }}
+          PLAN_RESULT: ${{ needs.plan.result }}
+          DEVELOPMENT_RESULT: ${{ needs.development.result }}
+          RELEASE_RESULT: ${{ needs.release.result }}
+          DEVELOPMENT_REPORT: ${{ needs.development.outputs.report }}
+          RELEASE_REPORT: ${{ needs.release.outputs.report }}
+        run: node build/ci-plan.mjs aggregate
       - name: keep the run summary
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -117,12 +195,4 @@ jobs:
           name: run-summary-${{ github.run_id }}-${{ github.run_attempt }}
           path: dist/test-artifacts/run-summary.json
           if-no-files-found: error
-          retention-days: 7
-      - name: keep failure evidence
-        if: failure() || cancelled()
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: test-artifacts-${{ github.run_id }}-${{ github.run_attempt }}
-          path: dist/test-artifacts/
-          if-no-files-found: ignore
           retention-days: 7

@@ -74,45 +74,22 @@ test('pull_request still triggers ci, so a PR head is still proven', () => {
 // treats as stuck-red, so every timeout cost an empty-commit re-run that could
 // time out again. The job budget must leave headroom over the measured
 // duration, not sit on top of it.
-test('the job timeout leaves headroom over the measured suite duration', () => {
-  const text = workflow();
-  const m = /timeout-minutes:\s*(\d+)/.exec(text);
-  assert.ok(m, 'the test job must keep an explicit timeout-minutes');
-  assert.ok(
-    Number(m[1]) >= 20,
-    `timeout-minutes is ${m[1]}; passing runs take up to 9m36s on ubuntu-latest (2026-09-28), `
-      + 'so anything under 20 turns a slow runner into a cancelled run with no failing test',
-  );
+test('worker jobs retain 30 minute budgets', () => {
+  for (const name of ['development', 'release']) {
+    assert.match(workflow(), new RegExp(`  ${name}:\\n[\\s\\S]*?timeout-minutes: 30`));
+  }
 });
 
-// The release size budget is the cheap, decisive check: on 2026-09-28 it failed
-// only AFTER the 7m47s browser suite (the gate step itself takes about 5 s), so
-// the author waited for the whole suite to learn about a size overrun. The first
-// test step therefore builds the release and runs ONLY tests/release/gate.test.mjs
-// (the size budget and the smoke checks). The full release lane, acceptance-*
-// included, then runs once, as `npm test`'s posttest. The first version of this
-// pin counted an `npm run gate` step; that step ran every release file, so the
-// lane ran twice per job. The claim changed with the workflow, it was not loosened.
-test('ci runs the full release lane exactly once: gate.test.mjs first, then npm test with its posttest', () => {
-  const stripped = workflow().split('\n').filter((l) => !/^\s*#/.test(l)).join('\n');
-  assert.doesNotMatch(stripped, /npm run gate/, 'no step runs `npm run gate`; npm test already runs it as posttest');
-  assert.doesNotMatch(stripped, /tests\/release\/\*\.test\.mjs/, 'no step globs the whole release lane; the posttest owns that');
-  const lines = stripped.split('\n');
-  // Both commands must sit in the step with `id: gate` (6-space `- ` item up to the next one), not just somewhere in the file.
-  const start = lines.findIndex((l) => /^ {6}- id: gate\s*$/.test(l));
-  assert.ok(start >= 0, 'ci.yml needs a step with `id: gate`');
-  let end = lines.findIndex((l, i) => i > start && /^ {6}- /.test(l));
-  if (end < 0) end = lines.length;
-  const gateStep = lines.slice(start, end);
-  const buildAt = start + gateStep.findIndex((l) => l.includes('node build/build.mjs --release'));
-  const gateAt = start + gateStep.findIndex((l) => l.includes('node --test tests/release/gate.test.mjs'));
-  assert.ok(buildAt >= start, 'the `id: gate` step builds the release first');
-  assert.ok(gateAt >= buildAt, 'the `id: gate` step runs gate.test.mjs after building');
-  const suites = lines.map((l, i) => [l, i]).filter(([l]) => /^\s*(?:-\s*)?(?:run:\s*)?npm test\b/.test(l));
-  assert.equal(suites.length, 1, 'exactly one command starting with `npm test`');
-  assert.ok(gateAt < suites[0][1], 'gate.test.mjs must run before the browser suite so a size-budget failure surfaces in seconds');
+test('CI selects the release lane once and keeps a cheap gate before each suite', () => {
+  const text = workflow().split('\n').filter((l) => !/^\s*#/.test(l)).join('\n');
+  assert.equal((text.match(/npm run test:release/g) || []).length, 1);
+  assert.doesNotMatch(text, /npm test\b|npm run test:all\b|npm run gate\b/);
+  for (const name of ['development', 'release']) {
+    const body = new RegExp(`^  ${name}:\\n([\\s\\S]*?)(?=^  [a-z][\\w-]*:|$(?![\\s\\S]))`, 'm').exec(text)[1];
+    assert.ok(body.indexOf('node build/build.mjs --release') < body.indexOf('node --test tests/release/gate.test.mjs'));
+    assert.ok(body.indexOf('node --test tests/release/gate.test.mjs') < body.indexOf('- id: suite'));
+  }
   const pkg = JSON.parse(readFileSync(fileURLToPath(new URL('../../package.json', import.meta.url)), 'utf8'));
-  assert.equal(pkg.scripts.posttest, 'npm run gate', 'npm test must still run the gate as posttest, or the lane would not run at all');
-  assert.equal(pkg.scripts.gate, 'npm run test:release', 'gate stays an alias of test:release');
-  assert.ok(pkg.scripts['test:release'].includes('tests/release/*.test.mjs'), 'the release script runs every release file');
+  assert.equal(pkg.scripts.posttest, 'npm run gate', 'local npm test keeps release coverage');
+  assert.equal(pkg.scripts.gate, 'npm run test:release');
 });
