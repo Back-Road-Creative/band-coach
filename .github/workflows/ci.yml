@@ -77,7 +77,13 @@ jobs:
           {
             npm run build || exit 1
             fail=0
-            for family in $SELECTED; do npm run "$family" || fail=1; done
+            if [ "$SELECTED" = "test:root test:build test:char test:unit" ]; then
+              # Keep file scheduling across all development families. The
+              # explicit build above replaces pretest; release has its own job.
+              npm --ignore-scripts test || fail=1
+            else
+              for family in $SELECTED; do npm run "$family" || fail=1; done
+            fi
             exit "$fail"
           } 2>&1 | tee "$RUNNER_TEMP/suite.log"
           rc=${PIPESTATUS[0]}; echo "$rc" > "$RUNNER_TEMP/suite.rc"; exit "$rc"

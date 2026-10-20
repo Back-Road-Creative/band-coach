@@ -84,6 +84,25 @@ test('development and release wait only for the plan and use separate hosted job
     assert.match(body, /github\.event\.repository\.private == false/);
   }
 });
+test('full development coverage keeps one native runner without its release posttest', (t) => {
+  assert.match(job('development'), /npm --ignore-scripts test/);
+  const pkg = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8'));
+  assert.equal(pkg.scripts.pretest, 'npm run build', 'update the explicit CI build if pretest gains another prerequisite');
+  const dir = mkdtempSync(join(tmpdir(), 'bc-npm-hooks-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  writeFileSync(join(dir, 'package.json'), JSON.stringify({ scripts: {
+    pretest: 'node -e "process.exit(91)"',
+    test: 'node -e "console.log(\'DEVELOPMENT_RAN\')"',
+    posttest: 'node -e "process.exit(92)"',
+  } }));
+  const env = { ...process.env };
+  delete env.NODE_TEST_CONTEXT;
+  const run = spawnSync('npm', ['--ignore-scripts', 'test'], {
+    cwd: dir, env, encoding: 'utf8', timeout: 15000,
+  });
+  assert.equal(run.status, 0, run.stderr);
+  assert.match(run.stdout, /DEVELOPMENT_RAN/);
+});
 test('one final test check always evaluates all selected job results', () => {
   const body = job('test');
   assert.match(body, /needs: \[plan, development, release\]/);

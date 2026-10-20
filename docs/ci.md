@@ -16,6 +16,12 @@ keeps `ci-summary.mjs`'s rejection of retries, skips and incomplete acceptance
 results. Local `npm test` and the full weekly browser runs keep their existing
 pretest/posttest behavior.
 
+When all development families are selected, CI builds explicitly and runs
+`npm --ignore-scripts test`. This invokes the native development command once,
+preserving its file concurrency across families while suppressing its release
+posttest. A real npm fixture verifies that the main test runs and the hooks do
+not. Narrow selections keep their existing family commands.
+
 All four jobs use standard `ubuntu-latest` and refuse to start when repository
 visibility is private. This workflow adds no paid runner, cache service or
 billing setting. The two workers send compact reports through job outputs; only
