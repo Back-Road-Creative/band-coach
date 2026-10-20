@@ -22,6 +22,7 @@ import { loadPack, packStatus, createIndexedDBStore, packManifestUrl, DEFAULT_MO
 import { checkForUpdate, FALLBACK_DOWNLOAD_URL } from './core/update-check.js';
 import { setNoteNaming, name as noteNameFor } from './core/note-names.js';
 import { t, en, setLocale, LOCALES } from './core/i18n.js';
+import { levelLabel, levelNumLabel } from './core/level-names.js';
 import { micErrorMessage } from './core/mic-error.js';
 import { CLEF_PATHS } from './notation/glyphs.js';
 import { yin } from './audio/yin.js';
@@ -560,6 +561,8 @@ import { register as registerPathway } from './ui/pathway.js';
 
   // K4: "Everything, faster (k)" anchors on the last level WITHOUT a `stage`
   // (level 15/16 carry one) so appending a staged level never re-anchors it.
+  // Level names stay English in the records; shown through the active language (src/core/level-names.js).
+  const lvName = n => levelLabel(n, DB && DB.prefs && DB.prefs.locale), lvNum = n => levelNumLabel(n, DB && DB.prefs && DB.prefs.locale);
   function levelDef(mod, L) { const T = MODS[mod].levels; if (L <= T.length) return T[L - 1]; const k = L - T.length, unstaged = T.filter(x => !x.stage), last = unstaged.length ? unstaged[unstaged.length - 1] : T[T.length - 1]; return { name: 'Everything, faster (' + k + ')', task: 'mix', limit: Math.max(2.5, (last.limit || 8) - 0.75 * k), bpm: Math.min(120, (last.bpm || 72) + 6 * k), fast: true }; }
   function activeItems(mod, L) { const T = MODS[mod].levels, out = []; for (let i = 0; i < Math.min(L, T.length); i++) (T[i].add || []).forEach(id => out.push(id)); return out; }
   // what an item id means
@@ -888,7 +891,7 @@ import { register as registerPathway } from './ui/pathway.js';
         const clean = recent.length >= 12 && mean(recent) >= 0.95; S.fast = clean ? S.fast + 1 : 0; let note = '';
         if (S.fast >= 3) { S.gain = Math.min(0.09, S.gain * 1.15); S.fast = 0; note = ' You keep clearing levels cleanly, so I am speeding up the pace.'; }
         S.promo = { at: S.judged, level: S.level + 1 }; S.level++; S.ready = 0.2; const d = D();
-        coach('Level up. Next: ' + d.name + '.' + (d.add ? ' New: ' + d.add.map(id => inf(id).short).join(', ') + '.' : '') + note);
+        coach('Level up. Next: ' + lvName(d.name) + '.' + (d.add ? ' New: ' + d.add.map(id => inf(id).short).join(', ') + '.' : '') + note);
         // B(C11a): a level move can put the kbd hand-off button in or out of
         // view (songFor(S.level) reads the new level), and renderOpts is
         // otherwise only called from setMod/tool buttons -- without this a
@@ -1009,10 +1012,10 @@ import { register as registerPathway } from './ui/pathway.js';
     }
     else if (kind === 'kit') {
       const L = d.bars ? d : M.levels[S.tick % M.levels.length], b = L.bars[S.tick % L.bars.length]; S.tick++;
-      t.kit = { metre: L.metre, bpm: d.bars ? L.bpm : L.bpm + 6 * (S.level - M.levels.length), swing: L.swing || 0, bar: b, name: L.name }; t.els = [{ id: 'kit', info: { label: L.name }, failed: false, t0: 0, rt: 0, reveal: false }];
+      t.kit = { metre: L.metre, bpm: d.bars ? L.bpm : L.bpm + 6 * (S.level - M.levels.length), swing: L.swing || 0, bar: b, name: L.name }; t.els = [{ id: 'kit', info: { label: lvName(L.name) }, failed: false, t0: 0, rt: 0, reveal: false }];
     }
     else if (kind === 'bar2') {
-      const variants = d.bars || [[['qr']]], cells = variants[S.tick % variants.length]; S.tick++; t.rCells = cells; t.els = [{ id: 'bar2', info: { label: d.name }, failed: false, t0: 0, rt: 0, reveal: false }];
+      const variants = d.bars || [[['qr']]], cells = variants[S.tick % variants.length]; S.tick++; t.rCells = cells; t.els = [{ id: 'bar2', info: { label: lvName(d.name) }, failed: false, t0: 0, rt: 0, reveal: false }];
     }
   }
   function buildLevelTask() {
@@ -1961,7 +1964,7 @@ import { register as registerPathway } from './ui/pathway.js';
     // 0 meaning no limit) sets today's target before the tired check below,
     // so tiredPattern()'s 15-minute cap only tightens it, never loosens it.
     sess.target = DB.prefs.sessionMinutes || 0;
-    let msg = customOn ? 'Your captured melody: ' + DB.custom.length + ' notes, four at a time. Warm-up, does not count.' : 'Level ' + S.level + ': ' + D().name + '.'; if (tiredPattern()) { sess.target = sess.target ? Math.min(sess.target, 15) : 15; msg = 'Your last three sessions each ended weaker than they started, which is what tired practice looks like. Today is capped at ' + sess.target + ' minutes. ' + msg; } else if (todayMinutes() >= 45) msg = 'You already have ' + Math.round(todayMinutes()) + ' minutes in today. Keep this one short. ' + msg;
+    let msg = customOn ? 'Your captured melody: ' + DB.custom.length + ' notes, four at a time. Warm-up, does not count.' : lvNum(S.level) + ': ' + lvName(D().name) + '.'; if (tiredPattern()) { sess.target = sess.target ? Math.min(sess.target, 15) : 15; msg = 'Your last three sessions each ended weaker than they started, which is what tired practice looks like. Today is capped at ' + sess.target + ' minutes. ' + msg; } else if (todayMinutes() >= 45) msg = 'You already have ' + Math.round(todayMinutes()) + ' minutes in today. Keep this one short. ' + msg;
     if (S.judged > 5 && !customOn) { sess.warm = 4; msg += ' First a short warm-up through what you know; it does not count.'; }
     // A returning keyboard learner (a prior kbd session logged on an earlier
     // day) is told, once per page load, which keyboard-path step comes next
@@ -2074,7 +2077,7 @@ import { register as registerPathway } from './ui/pathway.js';
     $('helpText').innerHTML = ''; const st = document.createElement('strong'); st.textContent = 'How this one works: '; $('helpText').appendChild(st); $('helpText').appendChild(document.createTextNode((MODS[mod] || TOOLS[mod]).help)); if (instrumentUnreviewed(instrumentById[mod])) { const rv = document.createElement('span'); rv.setAttribute('role', 'note'); rv.className = 'small'; rv.textContent = ' ' + t('review.unreviewed'); $('helpText').appendChild(rv); }
     document.querySelectorAll('.side .card, .side .stats, #playBtn, #resetBtn').forEach(el => { el.style.display = tool && !(mod === 'capture' && el.id === 'feedbackCard') ? 'none' : ''; }); $('tapPad').hidden = mod !== 'rhy'; $('timeFill').parentElement.style.visibility = tool || mod === 'rhy' || (MODS[mod] && MODS[mod].kit) ? 'hidden' : 'visible'; // capture's own messages ('Nothing captured yet.') need the feedback card; .hidden still hides it while empty
     if (tool) { $('prompt').textContent = ''; $('hint').textContent = mod === 'tuner' ? 'One open string at a time.' : 'One note at a time.'; $('choices').hidden = true; $('replayBtn').hidden = true; $('showMeBtn').hidden = true; $('howPeekHost').hidden = true; return; }
-    const d = D(); $('levelNum').textContent = 'Level ' + S.level; $('levelName').textContent = customOn ? 'Your captured melody' : d.name; $('limitOut').textContent = d.task === 'bar' || mod === 'rhy' || MODS[mod].kit ? (d.bpm || 72) + ' beats a minute' : (d.limit || 8) + ' seconds to answer';
+    const d = D(); $('levelNum').textContent = lvNum(S.level); $('levelName').textContent = lvName(customOn ? 'Your captured melody' : d.name); $('limitOut').textContent = d.task === 'bar' || mod === 'rhy' || MODS[mod].kit ? (d.bpm || 72) + ' beats a minute' : (d.limit || 8) + ' seconds to answer';
     const pct = Math.round(S.ready * 100); $('readyFill').style.width = pct + '%'; $('readyFill').style.background = S.ready < 0.25 ? 'var(--bad)' : S.ready < 0.6 ? 'var(--warn)' : 'var(--good)'; $('readyBar').setAttribute('aria-valuenow', pct);
     const e = sess ? 1 - sess.F : 1, ep = Math.round(e * 100); $('energyFill').style.width = ep + '%'; $('energyFill').style.background = e < 0.4 ? 'var(--bad)' : e < 0.65 ? 'var(--warn)' : 'var(--good)'; $('energyBar').setAttribute('aria-valuenow', ep);
     const ds = dayStreak(), lastS = DB.sessions.filter(x => x.mod === mod).slice(-1)[0];
@@ -2108,7 +2111,7 @@ import { register as registerPathway } from './ui/pathway.js';
   // does not try to filter samples itself.
   let rangeTest = null;
   // The coach line a mod shows before Start; Cancel puts it back so a stopped test never leaves its "Sing your..." instruction behind.
-  const idleCoachLine = () => t(S.judged ? 'coach.idleBack' : 'coach.idle', { level: S.level, name: D().name });
+  const idleCoachLine = () => t(S.judged ? 'coach.idleBack' : 'coach.idle', { level: S.level, name: lvName(D().name) });
   function handleRangeTest(action, fr) {
     if (action === 'start') { rangeTest = { stage: 'low', samples: [], curMidi: null, curSince: 0 }; coach('Sing your lowest comfortable note and hold it, then press "Got it -- now the highest".'); return; }
     if (!rangeTest) return;
