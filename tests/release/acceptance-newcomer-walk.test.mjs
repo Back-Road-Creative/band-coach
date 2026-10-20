@@ -146,7 +146,7 @@ for (const cfg of CONFIGS) {
     // Measured on CI run 39273798944: Start sits below the first screen only at 844x390, and the hint
     // fails 4.5:1 only on the light theme (2.45; dark 7.41). Elsewhere these already pass, so they run live.
     // Touch-only check: the 44px rule is a coarse-pointer rule, so laptop (mouse) configs skip it.
-    await t.test('every control in view is at least 44x44 (U3)', { skip: cfg.mobile ? false : 'mouse config: 44px rule is touch-only', todo: cfg.mobile ? 'U3: only #optNames (the names checkbox on Settings) is left, measured 16x16' : false }, () => {
+    await t.test('every control in view is at least 44x44 (U3)', { skip: cfg.mobile ? false : 'mouse config: 44px rule is touch-only' }, () => {
       const per = states.map((s) => `${s.state}=${s.m.smallControls.length}`);
       diag(`small controls per state: ${per.join(' ')}`);
       for (const s of states) if (s.m.smallControls.length) diag(`  ${s.state}: ${s.m.smallControls.join('; ')}`);
