@@ -136,6 +136,23 @@ The `e4b6fb5` section above is kept as it stood at `4f0f210`. Four statements in
 | Unresolved limitations | As `09f7c35`: step time estimates untimed; README check 2 (notes from a real keyboard) is human-only; the offline update check is not covered. |
 | Reviewer / date | _unsigned_ |
 
+## Candidate: `3d60d1a` for v1.10.0, 2026-10-20
+
+| Field | Value |
+|---|---|
+| Commit | `3d60d1ab37f31d2aed0f17dfb69630e598122f18` (`origin/main`, 2026-10-20, after the 1.10.0 bump #540 and the stage fix #541; 330 commits since `v1.9.0`). Supersedes `e504c75`. |
+| Last published release | `v1.9.0`, tagged 2026-09-24; this candidate is not tagged yet |
+| Candidate artifact | `npm run stage` at `3d60d1a` (clean tree, `SOURCE_DATE_EPOCH` = commit time): `dist/release/band-coach.html` sha256 `1fd8a52eedc549da73d73a6a0e1b92c944364a47897e82cbd1658d7eb0a0da4e`, 680,137 bytes, staged to `D:\band-coach.html` for the hand run. The same build at `895a00f` gave the same bytes. Pages and the Store package wrap this same file. |
+| Platforms | As README 'Browser and device support': headless Chromium in CI on every commit; windowed Chrome on Windows only through the Windows lane below and the hand check; Firefox and Safari untested; phone sizes emulated only, real phones untested. |
+| Inputs | As README 'Browser and device support': computer keys, on-screen keys, a stubbed MIDI keyboard and a fake microphone in CI; real MIDI keyboards, e-kits and instruments through a real microphone untested beyond the hardware of the last hand run. |
+| Content | As README 'Beginner pathway status': every row's content review is provisional (no reviewer yet). |
+| Dependencies | Node v22.22.2; `npm ci` clean; `npm audit`: found 0 vulnerabilities. axe-core 4.14.0. Electron store bump #494 held until after the tag. |
+| Automated checks | CI green on `3d60d1a` (main run 39506681985; jobs plan, development 118917311823, release 118917311981, test 118925182350 all success): development suites 3904 tests (3903 pass, 0 fail, 1 skipped); release block 340 tests (340 pass, 0 fail, 0 todo, 0 skipped). Stage evidence (`D:\band-coach.html.evidence.json`): `# pass 340 # fail 0 # todo 0 # skipped 0`, commit `3d60d1a`, dirty false, ran 2026-10-20T23:27:22Z. The release files include the newcomer walk, contrast, offline, update-check and 1.9.0 upgrade tests. Two earlier local stage runs at this commit failed only under box load (a 411 ms frame stall; seven 20 s timeouts at load 42); the passing run used `BAND_COACH_TEST_CONCURRENCY=3`. |
+| Windows lane | Run on Windows (Chrome/155.0.8059.84, Node v24.19.0) against the staged bytes (sha256 `1fd8a52e…` checked by the lane), lane scripts at `2a8a99c` (branch `fix/win-lane-choose-instrument`: W2 and W4 choose an instrument before Start, as #512 now asks; the lane at `3d60d1a` reported both BLOCKED on the hidden Start button). Report sha256 `c646324b…` (`bc-logs/cand-3d60d1ab/winlane2.json`). W1 PASS (clean profile: no console error, warning or exception; one request). W2 PASS (progress survives a reload). W4 PASS (no sound on load; one click on Start runs exactly one AudioContext and the button says Pause). W5 PASS (Connect with no device names the outcome). W3 **device-only: post-deploy — the update check compares with the published version.json, which says 1.9.0 until the v1.10.0 tag deploys Pages; before deploy the 1.10.0 build correctly says "You're running the latest version (1.9.0)" naming the published version. Re-run W3 (or README step 6's version line) after deploy.** |
+| Manual runs | **device-only: README "Before announcing a release: a five-minute human check" steps 2, 3, 4, 7 and 8 need a real MIDI keyboard, a microphone and instrument, speakers and a phone; run on `D:\band-coach.html` (sha256 `1fd8a52e…`) naming the machine, browser version, hardware, time taken and verdict.** |
+| Unresolved limitations | Step time estimates are untimed. README check 2 (notes from a real keyboard) is human-only. The release-suite browser cap reads the load once at the start, so a box that fills during a local run can fail timing-sensitive tests that pass in CI. |
+| Reviewer / date | _unsigned_ |
+
 ## D2 / E9 evidence ledger
 
 What the automated suite proves for each interaction, device and accessibility dimension, and
