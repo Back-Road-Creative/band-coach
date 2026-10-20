@@ -62,3 +62,31 @@ test('F8 fallback parity: a same-pitch re-pluck re-fires through the non-worklet
     'both identical-pitch attacks should have been credited as separate note events, proving fr.onset now reaches onPitch through listen() too'
   );
 });
+
+// #515 CI: the fallback path's frame level is the RMS of the analyser's whole rolling window (4096
+// samples, ~90 ms), most of which is still the old ring when the onset hop lands, so a full-strength
+// re-pluck 500 ms on read only ~20% louder than the ring envelope and lost the comparison on CI's
+// timing. 350 ms on (about eighth notes at 86 bpm) the window read 0.218 against an envelope of 0.221
+// while the re-pluck's own audio read 0.447, so this gap failed in 2 of 3 runs without the fix and 0
+// of 5 with it. (300 ms on, src/audio/onset.js raises no onset at all; that is the detector's limit.)
+test('F8 fallback parity: a quick same-strength re-pluck 350 ms later is heard through listen()', async (t) => {
+  const page = await launchPage(htmlPath, { initScript: disableAudioWorkletScript });
+  t.after(() => page.close());
+
+  await page.evaluate("window.__coach.setMod('gtr')");
+  await page.evaluate("document.getElementById('playBtn').click()");
+  await page.waitFor('window.__coach.task()');
+  const info = await page.evaluate('window.__coach.cur().info');
+  await page.evaluate(`
+    (function () {
+      const t = window.__coach.task();
+      t.els.push(Object.assign({}, t.els[0]));
+    })()
+  `);
+
+  await page.evaluate(`window.__coach.testPluck(${midiToFreq(info.midi)}, [0, 350])`);
+  assert.equal(await page.evaluate('window.__coach.pitchWorkletActive()'), false, 'the worklet must be unavailable for this test to prove anything about the fallback');
+
+  await page.waitFor('window.__coach.task() && window.__coach.task().done', 8000);
+  assert.equal(await page.evaluate('window.__coach.task().idx'), 2, 'the second pluck is a new note event');
+});

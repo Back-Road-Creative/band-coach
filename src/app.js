@@ -1248,7 +1248,7 @@ import { register as registerPathway } from './ui/pathway.js';
       // F8: an onset detector (src/audio/onset.js) catches a re-pluck of the
       // SAME note on a still-ringing string, which the RMS-drop/pitch-change
       // release check below can never see on its own.
-      if (fr.onset && fr.rms > ringPrev) { released = true; stableN = 0; } // Q10d-3: an onset no louder than the ring it lands on is the ring dipping and returning
+      if (fr.onset && Math.max(fr.rms, fr.onsetRms || 0) > ringPrev) { released = true; stableN = 0; } // Q10d-3: an onset no louder than the ring it lands on is the ring dipping and returning
       if (e.info.kind === 'chord') { if (fr.rms < gates.chord || !fr.chroma) { holdFor = 0; return; } const j = judgeChord({ chroma: fr.chroma, targetPcs: e.info.pcs }); e.score = j.score; if (j.ok) { holdFor += dt; if (holdFor > 0.18) passEl(undefined, e.info.label + ': that rings true.'); } else holdFor = 0; if (fr.rms > 0.02) lastInputAt = now(); return; }
       if (fr.rms < gates.note || !fr.freq) { stableN++; if (fr.rms !== 0) { if (fr.rms < releaseFloor(gates)) { if (quietSeen) quietFor += dt; quietSeen = true; if (quietFor >= QUIET_RELEASE_SEC) { released = true; ringEnv = 0; } } else { quietSeen = false; quietFor = 0; } } stableMidi = -1; return; } quietSeen = false; quietFor = 0; // an exact-0 rms frame is a capture dropout (with the browser's processing off, a live mic's silence is not 0.0; a device-level gate can still send zeros): it holds the quiet clock
       const m = Math.round(fr.midi); if (m === stableMidi) stableN++; else { stableMidi = m; stableN = 1; }
@@ -1511,13 +1511,17 @@ import { register as registerPathway } from './ui/pathway.js';
     if (!listenOnsetDetector) listenOnsetDetector = createOnsetDetector({ sampleRate: actx.sampleRate, frameSize: HOP, hop: HOP });
     const newSamples = Math.max(0, Math.min(anTime.fftSize, Math.round((dt || 0.05) * actx.sampleRate)));
     const nHops = Math.floor(newSamples / HOP);
-    let onset = false;
+    // Q10d-3 on this path: r.rms is the whole ~90ms window, mostly the old ring when an attack has just
+    // landed, so the onset carries its own level -- the RMS from its hop to now -- for onPitch to weigh
+    // against the ring envelope (a full-strength re-pluck 300ms on read below the envelope otherwise).
+    let onset = false, onsetFrom = -1;
     for (let c = nHops - 1; c >= 0; c--) {
       const end = buf.length - c * HOP;
       const chunk = buf.subarray(end - HOP, end);
-      if (listenOnsetDetector.push(chunk).onset) onset = true;
+      if (listenOnsetDetector.push(chunk).onset) { onset = true; onsetFrom = end - HOP; }
     }
-    const fr = { rms: r.rms, freq: r.freq && r.clarity > 0.8 ? r.freq : 0, clarity: r.clarity, onset: onset }; if (fr.freq) fr.midi = fmidi(fr.freq);
+    let onsetRms = 0; if (onset) { let sq = 0; for (let i = onsetFrom; i < buf.length; i++) sq += buf[i] * buf[i]; onsetRms = Math.sqrt(sq / (buf.length - onsetFrom)); }
+    const fr = { rms: r.rms, freq: r.freq && r.clarity > 0.8 ? r.freq : 0, clarity: r.clarity, onset: onset, onsetRms: onsetRms }; if (fr.freq) fr.midi = fmidi(fr.freq);
     if (task && cur() && cur().info.kind === 'chord') { const db = new Float32Array(anFreq.frequencyBinCount); anFreq.getFloatFrequencyData(db); fr.chroma = chroma(db, actx.sampleRate); }
     meterUpdate(fr.rms);
     try { onPitch(fr, dt); } catch (e) { errCount++; recordError('onPitch', e); }
