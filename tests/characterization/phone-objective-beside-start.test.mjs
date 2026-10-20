@@ -14,6 +14,8 @@ test('phone: level, progress and objective sit right after Start, inside the fir
   const page = await launchPage(HTML_PATH);
   t.after(() => page.close());
   await page.setViewport({ width: 390, height: 844, mobile: true });
+  // One question first: Start appears once an instrument is chosen.
+  await page.clickSelector('#picker button[data-mod="kbd"]');
   const start = await rectOf(page, '#playBtn');
   assertInFirstScreen(start, 844, 'Start');
   for (const sel of ['#levelNum', '#readyBar']) {
