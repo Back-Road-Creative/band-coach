@@ -104,7 +104,7 @@ const PAGE_SCRIPT = `(function () {
   window.__q3cText = [];
   proto.clearRect = function () { if (this.canvas && this.canvas.id === 'cv') window.__q3cText = []; return clearRect.apply(this, arguments); };
   proto.fillText = function (text, x, y) {
-    if (this.canvas && this.canvas.id === 'cv') { var m = this.getTransform(); window.__q3cText.push({ text: String(text), x: m.a * x + m.c * y + m.e, y: m.b * x + m.d * y + m.f, align: this.textAlign }); }
+    if (this.canvas && this.canvas.id === 'cv') { var m = this.getTransform(); window.__q3cText.push({ text: String(text), x: m.a * x + m.c * y + m.e, y: m.b * x + m.d * y + m.f, align: this.textAlign, w: this.measureText(String(text)).width * m.a, font: this.font }); }
     return fillText.apply(this, arguments);
   };
   var inputs = [];
@@ -590,5 +590,48 @@ test('A4: piano keys show their computer letters only while the computer keyboar
     const m = await reachable(page);
     await aimVia(page, 'click', m, keyboardProbePoints(keyboardRects(m).keys[0])[0])();
     assert.deepEqual(await a4Letters(page), [], 'after a mouse click on a key: the letters go again');
+  });
+});
+
+// ---- Phone width: what the canvas writes must not run into other writing or into a button ------------------
+// The drawn text rectangle is its baseline y (ascent about 0.8 of the font size, descent 0.2) and its
+// measured width, placed by the alignment the canvas used. Pieces' single key letters sit inside their own
+// circles, so only the names are compared with each other.
+const textRect = (tx) => {
+  const fs = parseFloat(/(\d+(?:\.\d+)?)px/.exec(tx.font)[1]);
+  const x = tx.align === 'center' ? tx.x - tx.w / 2 : tx.align === 'right' ? tx.x - tx.w : tx.x;
+  return { text: tx.text, x, y: tx.y - fs * 0.8, w: tx.w, h: fs };
+};
+const overlaps = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+
+test('A06 phone 390x844: no two drum names run into each other, and the tuner text keeps off the note buttons', async (t) => {
+  await withAcceptancePage(t, { initScript: PAGE_SCRIPT }, async (page) => {
+    await page.setViewport({ width: 390, height: 844, mobile: true });
+    await pickInstrument(page, 'drum-kit', 'Drum kit');
+    await page.evaluate('new Promise((r) => setTimeout(r, 500))');
+    const kit = (await page.evaluate('window.__q3c.texts()')).filter((x) => !/^[A-Z]$/.test(x.text) && x.text !== 'PRESS START').map(textRect);
+    assert.ok(kit.length >= 13, `the kit wrote its ten names, three with a second line (${kit.length} lines seen)`);
+    const hits = [];
+    for (let i = 0; i < kit.length; i++) for (let j = i + 1; j < kit.length; j++) if (overlaps(kit[i], kit[j])) hits.push(`"${kit[i].text}" and "${kit[j].text}"`);
+    assert.deepEqual(hits, [], 'drum names that overlap on the kit');
+
+    await pickInstrument(page, 'tuner', 'Tuner');
+    await page.evaluate('new Promise((r) => setTimeout(r, 500))');
+    const all = await page.evaluate('window.__q3c.texts()');
+    const cv = await page.evaluate('({ W: document.getElementById("cv").width, H: document.getElementById("cv").height })');
+    const notes = all.filter((x) => x.text === '\u266a');
+    assert.ok(notes.length >= 4, `a note button per string (${notes.length} seen)`);
+    // A button is the column the note glyphs sit in, down the height of its string's row (src/app.js drawTuner:
+    // rows start at 0.1H, 0.8H / n apart, 8 px shorter than their slot; the column ends 2 px short of 0.43W).
+    const n = notes.length, edge = cv.W * 0.43 - 2;
+    const buttons = notes.map((g, i) => { const y = cv.H * 0.1 + i * (cv.H * 0.8 / n), h = cv.H * 0.8 / n - 8; return { x: 2 * g.x - edge, y: y + 2, w: edge - (2 * g.x - edge), h: h - 4 }; });
+    const words = all.filter((x) => x.text !== '\u266a' && !/^String \d/.test(x.text)).map(textRect);
+    assert.ok(words.some((w) => /microphone|input/.test(w.text)), 'the tuner says what to do next');
+    const bad = [];
+    for (const w of words) for (const b of buttons) if (overlaps(w, b)) bad.push(`"${w.text}"`);
+    assert.deepEqual([...new Set(bad)], [], 'tuner text that runs under a note button');
+    for (const w of words) assert.ok(w.x >= 0 && w.x + w.w <= cv.W, `"${w.text}" stays inside the canvas`);
+    // The tuner has no question to show, so the empty question line above it takes no room.
+    assert.ok((await page.evaluate("document.getElementById('prompt').getBoundingClientRect().height")) < 4, 'no empty band above the tuner');
   });
 });

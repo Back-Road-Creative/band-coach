@@ -55,8 +55,8 @@
   header { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 12px 24px; }
   h1 { font: 700 2.75rem/1 var(--display); margin: 0; letter-spacing: .02em; text-transform: uppercase; }
   /* R10 P1: one accent on first paint -- COACH reads --accent-display, the
-     Start button's colour darkened only as far as the 3:1 large-text minimum
-     needs (src/app.js accentDisplayFor), not --accent-ink's 4.5:1 navy. */
+     Start button's colour darkened only as far as 4.5:1 needs (U10;
+     src/app.js accentDisplayFor), not --accent-ink's navy. */
   h1 span { color: var(--accent-display, var(--accent)); }
   .sub { color: var(--muted); margin: 6px 0 0; max-width: 64ch; }
   .io { display: flex; align-items: flex-start; gap: 10px; flex-wrap: wrap; }
@@ -73,7 +73,7 @@
   button, select { font: 600 0.9375rem var(--body); color: var(--text); background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 9px 14px; cursor: pointer; }
   select { padding: 6px 8px; font-size: 0.875rem; max-width: 100%; }
   button:hover { border-color: var(--muted); }
-  button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible, label.file-label:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible, label.file-label:focus-visible { outline: 2px solid var(--accent-ink); outline-offset: 2px; }
   /* F2: nav activation programmatically focuses the destination's heading
      (src/app.js's focusDestination()) -- these are never a real click
      target, so they should never show a focus ring of their own. */
@@ -470,7 +470,7 @@
      var(--text)` here, using the pinned value above, gives every such
      descendant a correct inherited colour with no per-selector enumeration
      either. */
-  .stage { position: relative; background: linear-gradient(#0d111c, #05070c); border: 1px solid var(--line); border-radius: 8px; padding: 8px; display: flex; flex-direction: column; gap: 8px; color: var(--text); color-scheme: dark; --ground: #0a0d14; --panel: #121726; --panel-2: #1a2033; --line: #2a3350; --text: #e9edf6; --muted: #93a0bd; --accent: #2f93ee; --accent-ink: #2f93ee; --good: #5be08a; --warn: #f3c52f; --bad: #ff6b5e; --good-ink: #000; --warn-ink: #000; --bad-ink: #000; --muted-ink: #000; }
+  .stage { position: relative; background: linear-gradient(#0d111c, #05070c) #0a0d14; border: 1px solid var(--line); border-radius: 8px; padding: 8px; display: flex; flex-direction: column; gap: 8px; color: var(--text); color-scheme: dark; --ground: #0a0d14; --panel: #121726; --panel-2: #1a2033; --line: #2a3350; --text: #e9edf6; --muted: #93a0bd; --accent: #2f93ee; --accent-ink: #2f93ee; --good: #5be08a; --warn: #f3c52f; --bad: #ff6b5e; --good-ink: #000; --warn-ink: #000; --bad-ink: #000; --muted-ink: #000; }
   /* R10 P3: sentence case -- uppercase display type stays only on the h1
      wordmark and the Start button. */
   #prompt { font: 700 2.5rem/1.05 var(--display); text-wrap: balance; min-height: 1.1em; }
