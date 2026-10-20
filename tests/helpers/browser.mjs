@@ -1315,3 +1315,22 @@ export async function withAcceptancePage(t, opts, fn) {
     await page.close();
   }
 }
+
+// Waits for a DOM state INSIDE the page, as one awaited promise: the
+// expression is checked once now and again on every DOM mutation, so the wait
+// ends the moment the app renders the state, however starved the box is. The
+// Node-side page.waitFor() instead polls over DevTools every 50 ms against a
+// fixed 20 s budget, which a run with nine browsers at once could exhaust
+// before the song list had rendered. The only bound here is a hang guard
+// (DOM_WAIT_HANG_GUARD_MS) so a state that never arrives still ends the file with a
+// clear error rather than hanging it; it is not the wait's budget.
+const DOM_WAIT_HANG_GUARD_MS = 300000;
+export async function waitForDom(page, expression) {
+  await page.evaluate(`new Promise((resolve, reject) => {
+    const ok = () => { try { return Boolean(${expression}); } catch (e) { return false; } };
+    if (ok()) return resolve(true);
+    const mo = new MutationObserver(() => { if (ok()) { mo.disconnect(); clearTimeout(guard); resolve(true); } });
+    const guard = setTimeout(() => { mo.disconnect(); reject(new Error('waitForDom: state never rendered: ' + ${JSON.stringify(expression)})); }, ${DOM_WAIT_HANG_GUARD_MS});
+    mo.observe(document.documentElement, { childList: true, subtree: true, characterData: true, attributes: true });
+  })`);
+}
