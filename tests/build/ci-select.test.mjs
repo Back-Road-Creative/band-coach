@@ -9,6 +9,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { globToRegExp, selectFamilies } from '../../build/ci-select.mjs';
+import { DEFAULT_TEST_CMD as STAGE_TEST_CMD } from '../../build/stage.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const manifest = JSON.parse(readFileSync(join(root, 'tests/families.json'), 'utf8'));
@@ -85,4 +86,25 @@ test('package.json: gate is an alias of test:release; npm test keeps its pre/pos
     assert.ok(pkg.scripts['test:all'].includes(`"${g}"`), `test:all runs ${g}`);
   }
   assert.ok(pkg.scripts['test:all'].includes('test:release'), 'test:all ends with the release family');
+});
+
+// Every `node --test` run of files that launch Chromium goes through the same
+// load-aware cap (tests/helpers/browser.mjs, tests/unit/test-concurrency.test.mjs).
+// test:release once ran without it: node's default of cores-1 release files at
+// once, each booting its own browser, on a box already at load ~70 of 12 cores.
+// `coverage` runs node --test too but is not yet capped: listed, not exempted
+// silently, so a new uncapped script still fails here.
+const CAP = '--test-concurrency=$(node tests/helpers/browser.mjs)';
+const UNCAPPED_FOLLOW_UP = ['coverage'];
+
+test('every node --test script uses the load-aware concurrency cap', () => {
+  const runs = Object.entries(pkg.scripts).filter(([name, s]) => s.includes('node --test') && !UNCAPPED_FOLLOW_UP.includes(name));
+  assert.ok(runs.some(([name]) => name === 'test:release'), 'test:release runs node --test');
+  for (const [name, s] of runs) {
+    for (const seg of s.split('&&').filter((x) => x.includes('node --test'))) {
+      assert.ok(seg.includes(CAP), `${name}: "${seg.trim()}" must pass ${CAP}`);
+    }
+  }
+  // npm run stage runs the release files itself before copying the build out.
+  assert.ok(STAGE_TEST_CMD.includes(CAP), `build/stage.mjs DEFAULT_TEST_CMD must pass ${CAP}`);
 });

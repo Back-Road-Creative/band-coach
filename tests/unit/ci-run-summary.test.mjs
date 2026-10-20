@@ -46,7 +46,7 @@ function live(file, extra = []) {
 // script`, `> command`, a blank line, all on stdout.
 const banner = (script, command) => `\n> toy@1.0.0 ${script}\n> ${command}\n\n`;
 const MAIN_CMD = 'node --test --test-concurrency=$(node tests/helpers/browser.mjs) "tests/*.test.mjs" "tests/build/*.test.mjs"';
-const REL_CMD = 'node build/build.mjs && node build/build.mjs --release && node --test "tests/release/*.test.mjs"';
+const REL_CMD = 'node build/build.mjs && node build/build.mjs --release && node --test --test-concurrency=$(node tests/helpers/browser.mjs) "tests/release/*.test.mjs"';
 const suiteLog = (main, release) =>
   banner('pretest', 'npm run build') + banner('build', 'node build/build.mjs') + 'built\n'
   + banner('test', MAIN_CMD) + main
@@ -429,8 +429,8 @@ test('C15b local shape: `npm run gate` directly has no posttest banner before th
 // by a real npm. A nested `npm run build` inside that script prints its own
 // banner between the gate banner and the release TAP, so the release block
 // would be named after the build and the CI summary would find no release
-// block (band-coach#537, run 39473639493). The toy's build is a stub; the
-// script string is not.
+// block (band-coach#537, run 39473639493). The toy's build and the cap helper
+// the script calls are stubs; the script string is not.
 test('C15c the real test:release, run by real npm, leaves the release block named by its own banner', async () => {
   const real = JSON.parse(readFileSync(fileURLToPath(new URL('../../package.json', import.meta.url)), 'utf8')).scripts['test:release'];
   const dir = toyPackage();
@@ -441,6 +441,9 @@ test('C15c the real test:release, run by real npm, leaves the release block name
   writeFileSync(join(dir, 'package.json'), JSON.stringify(pkg));
   mkdirSync(join(dir, 'build'), { recursive: true });
   writeFileSync(join(dir, 'build/build.mjs'), "console.log(process.argv.includes('--release') ? 'release build' : 'dev build');\n");
+  // The script's load-aware cap calls this helper; the toy's prints a fixed cap.
+  mkdirSync(join(dir, 'tests/helpers'), { recursive: true });
+  writeFileSync(join(dir, 'tests/helpers/browser.mjs'), 'console.log(2);\n');
   const { text, status } = await npmRun(dir, ['run', 'gate', '--ignore-scripts=false']);
   assert.equal(status, 0, text);
   const s = judge({ suiteLog: text, gateLog: undefined, gateRc: null });
