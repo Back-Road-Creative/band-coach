@@ -46,7 +46,7 @@ function live(file, extra = []) {
 // script`, `> command`, a blank line, all on stdout.
 const banner = (script, command) => `\n> toy@1.0.0 ${script}\n> ${command}\n\n`;
 const MAIN_CMD = 'node --test --test-concurrency=$(node tests/helpers/browser.mjs) "tests/*.test.mjs" "tests/build/*.test.mjs"';
-const REL_CMD = 'npm run build && node build/build.mjs --release && node --test "tests/release/*.test.mjs"';
+const REL_CMD = 'node build/build.mjs && node build/build.mjs --release && node --test "tests/release/*.test.mjs"';
 const suiteLog = (main, release) =>
   banner('pretest', 'npm run build') + banner('build', 'node build/build.mjs') + 'built\n'
   + banner('test', MAIN_CMD) + main
@@ -423,4 +423,28 @@ test('C15b local shape: `npm run gate` directly has no posttest banner before th
   assert.equal(s.release.length, 1, text);
   assert.equal(s.release[0].summary.tests, 3);
   assert.deepEqual(s.release[0].summary, { ...lastCounts(text), duration_ms: s.release[0].summary.duration_ms });
+});
+
+// C15c holds the parser to the REAL package.json's test:release, verbatim, run
+// by a real npm. A nested `npm run build` inside that script prints its own
+// banner between the gate banner and the release TAP, so the release block
+// would be named after the build and the CI summary would find no release
+// block (band-coach#537, run 39473639493). The toy's build is a stub; the
+// script string is not.
+test('C15c the real test:release, run by real npm, leaves the release block named by its own banner', async () => {
+  const real = JSON.parse(readFileSync(fileURLToPath(new URL('../../package.json', import.meta.url)), 'utf8')).scripts['test:release'];
+  const dir = toyPackage();
+  const pkg = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'));
+  pkg.scripts.build = 'node build/build.mjs';
+  pkg.scripts.gate = 'npm run test:release';
+  pkg.scripts['test:release'] = real;
+  writeFileSync(join(dir, 'package.json'), JSON.stringify(pkg));
+  mkdirSync(join(dir, 'build'), { recursive: true });
+  writeFileSync(join(dir, 'build/build.mjs'), "console.log(process.argv.includes('--release') ? 'release build' : 'dev build');\n");
+  const { text, status } = await npmRun(dir, ['run', 'gate', '--ignore-scripts=false']);
+  assert.equal(status, 0, text);
+  const s = judge({ suiteLog: text, gateLog: undefined, gateRc: null });
+  assert.equal(s.release.length, 1, `no release block in the real script's npm output:\n${text}`);
+  assert.equal(s.release[0].banner.script, 'test:release');
+  assert.equal(s.release[0].summary.tests, 3);
 });
