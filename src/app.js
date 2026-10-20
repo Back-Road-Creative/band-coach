@@ -27,7 +27,7 @@ import { CLEF_PATHS } from './notation/glyphs.js';
 import { yin } from './audio/yin.js';
 import { createPitchNode } from './audio/pitch-worklet.js';
 //
-import { gatesFor, meterLevel, releaseFloor, classifyRoomCheck, ROOM_CHECK_VERSION, MIN_FLOOR, QUIET_RELEASE_SEC } from './audio/levels.js';
+import { gatesFor, meterLevel, releaseFloor, classifyRoomCheck, ROOM_CHECK_VERSION, MIN_FLOOR, QUIET_RELEASE_SEC, ringBefore } from './audio/levels.js';
 import { diagnoseInput, stepDiagnosis } from './audio/input-diagnosis.js';
 import { createOnsetDetector } from './audio/onset.js';
 import { createDrumClassifier } from './audio/drum-classify.js';
@@ -1045,6 +1045,7 @@ import { register as registerPathway } from './ui/pathway.js';
   const coach = t => { $('coach').textContent = t; if (!$('settingsView').hidden) $('settingsSay').textContent = t; };
   const cur = () => task && task.els[task.idx];
   let pressed = {}, heard = null, held = [], holdFor = 0, holdCents = [], wrongFor = 0, lastFired = -1, stableN = 0, stableMidi = -1, released = true, flashBad = -1e12, flashGood = -1e12;
+  let ringEnv = 0; // Q10d-3: decaying loudest recent pluck level; an onset below it is the ring wobbling, not a new pluck
   let quietFor = 0, quietSeen = false; // Q10d-2: delivered quiet time (dt, not frames) toward releasing a ringing pluck; the first quiet frame starts the clock
   // Field report: a strummed chord on a single-note item clears no gate the
   // app judges (see src/audio/input-diagnosis.js), so onPitch's early
@@ -1064,10 +1065,10 @@ import { register as registerPathway } from './ui/pathway.js';
     else if (MODS[mod].staff && $('optRef') && $('optRef').checked) t.els.forEach((el, k) => tone(el.info.midi, at + k * 0.8, 0.75));
   }
   function present() {
-    const t = task, M = MODS[mod], e = cur(); t.t0 = now(); if (e) e.t0 = now(); held = []; holdFor = 0; holdCents = []; wrongFor = 0; if (!(heard && heard.rms >= releaseFloor(gates))) released = true;
+    const t = task, M = MODS[mod], e = cur(); t.t0 = now(); if (e) e.t0 = now(); held = []; holdFor = 0; holdCents = []; wrongFor = 0; if (!heard || (heard.rms !== 0 && heard.rms < releaseFloor(gates))) released = true; // an exact-0 frame is a capture dropout, not quiet (as in the quiet rule below)
     $('choices').hidden = t.kind !== 'ear'; $('replayBtn').hidden = !(t.kind === 'ear' || mod === 'voice'); $('showMeBtn').hidden = t.kind === 'ear' || t.kind === 'bar' || t.kind === 'bar2' || t.kind === 'kit';
     let p = '', h = '';
-    if (t.kind === 'ear') { p = e.info.kind === 'interval' ? 'Which <b>interval</b>?' : 'Which <b>chord</b>?'; h = 'Listen, then choose. Number keys work too.'; const box = $('choices'); box.innerHTML = ''; t.choices.forEach((id, k) => { const b = document.createElement('button'); b.type = 'button'; b.id = 'ch-' + id; b.textContent = (k + 1) + '. ' + inf(id).label; b.addEventListener('click', () => { b.blur(); answer(id); }); box.appendChild(b); }); playRef(t); }
+    if (t.kind === 'ear') { p = e.info.kind === 'interval' ? 'Which <b>interval</b>?' : 'Which <b>chord</b>?'; h = 'Listen, then choose. Number keys work too.'; const box = $('choices'); box.innerHTML = ''; t.choices.forEach((id, k) => { const b = document.createElement('button'); b.type = 'button'; b.id = 'ch-' + id; b.textContent = (k + 1) + '. ' + inf(id).label; b.addEventListener('click', () => { b.blur(); answer(id, 'screen-tap'); }); box.appendChild(b); }); playRef(t); }
     else if (t.kind === 'bar') { p = 'Read it, then <b>tap it</b>'; h = 'Four clicks to get ready, then tap the bar in time.'; startBar(); }
     else if (t.kind === 'bar2') { p = 'Read it, then <b>tap it</b>'; h = 'Listen for the count-in, then tap the bar (or bars) in time.'; startBar2(); }
     else if (t.kind === 'kit') { p = 'Read it, then <b>play it</b>'; h = (t.kit.bar.tip ? t.kit.bar.tip + ' ' : '') + 'Listen for the count-in, then play the bar on the drums it shows.'; startKitBar(); }
@@ -1220,15 +1221,15 @@ import { register as registerPathway } from './ui/pathway.js';
     if (!playing || !task || task.done) return; const e = cur(); if (!e || !e.pair) return;
     applyHandsVerdict(stepHandsTogether(handsCtx(e), { type: 'off', midi: midi, source: source }));
   }
-  function answer(id) {
-    lastInputAt = now(); if (!playing || !task || task.kind !== 'ear' || task.done) return; const e = cur(), right = id === e.id; e.rt = now() - e.t0; e.q = right ? timeQ(e.rt, task.limit) : 0; task.revealed = true; updateDesc();
+  function answer(id, input) {
+    lastInputAt = now(); if (!playing || !task || task.kind !== 'ear' || task.done) return; const e = cur(), right = id === e.id; if (typeof input === 'string') e.input = input; e.rt = now() - e.t0; e.q = right ? timeQ(e.rt, task.limit) : 0; task.revealed = true; updateDesc();
     const b = $('ch-' + id); if (b) b.className = right ? 'right' : 'wrong'; const rb = $('ch-' + e.id); if (rb) rb.className = 'right';
     if (right) say(e.info.label + ': yes.', 'ok'); else if (id === 'timeout') { say('Time. That was a ' + e.info.label.toLowerCase() + '. Listen again as it replays.', 'no'); playRef(task); } else { S.conf[e.id + '>' + id] = (S.conf[e.id + '>' + id] || 0) + 1; say('That was a ' + e.info.label.toLowerCase() + ', not a ' + inf(id).label.toLowerCase() + '. Listen again as it replays.', 'no'); playRef(task); }
     task.idx = 1; finishTask();
   }
   // microphone frames: plucked instruments fire note events, voices and winds are judged on a held pitch
   function onPitch(fr, dt) {
-    heard = fr; if (deafWindow.isDeaf()) return; const M = MODS[mod]; if (!playing || !task || task.done) return; const e = cur(); if (!e) return;
+    const ringPrev = ringBefore(ringEnv, dt); ringEnv = Math.max(fr.rms, ringPrev); heard = fr; if (deafWindow.isDeaf()) return; const M = MODS[mod]; if (!playing || !task || task.done) return; const e = cur(); if (!e) return;
     // Field-report fix: on a single-note item, tell the learner WHY nothing
     // is being judged instead of leaving them with silence. Skipped on a
     // chord item, where hearing more than one pitch class is the point, not
@@ -1251,9 +1252,9 @@ import { register as registerPathway } from './ui/pathway.js';
       // F8: an onset detector (src/audio/onset.js) catches a re-pluck of the
       // SAME note on a still-ringing string, which the RMS-drop/pitch-change
       // release check below can never see on its own.
-      if (fr.onset) { released = true; stableN = 0; }
+      if (fr.onset && Math.max(fr.rms, fr.onsetRms || 0) > ringPrev) { released = true; stableN = 0; } // Q10d-3: an onset no louder than the ring it lands on is the ring dipping and returning
       if (e.info.kind === 'chord') { if (fr.rms < gates.chord || !fr.chroma) { holdFor = 0; return; } const j = judgeChord({ chroma: fr.chroma, targetPcs: e.info.pcs }); e.score = j.score; if (j.ok) { holdFor += dt; if (holdFor > 0.18) passEl(undefined, e.info.label + ': that rings true.'); } else holdFor = 0; if (fr.rms > 0.02) lastInputAt = now(); return; }
-      if (fr.rms < gates.note || !fr.freq) { stableN++; if (fr.rms !== 0) { if (fr.rms < releaseFloor(gates)) { if (quietSeen) quietFor += dt; quietSeen = true; if (quietFor >= QUIET_RELEASE_SEC) released = true; } else { quietSeen = false; quietFor = 0; } } stableMidi = -1; return; } quietSeen = false; quietFor = 0; // an exact-0 rms frame is a capture dropout (with the browser's processing off, a live mic's silence is not 0.0; a device-level gate can still send zeros): it holds the quiet clock
+      if (fr.rms < gates.note || !fr.freq) { stableN++; if (fr.rms !== 0) { if (fr.rms < releaseFloor(gates)) { if (quietSeen) quietFor += dt; quietSeen = true; if (quietFor >= QUIET_RELEASE_SEC) { released = true; ringEnv = 0; } } else { quietSeen = false; quietFor = 0; } } stableMidi = -1; return; } quietSeen = false; quietFor = 0; // an exact-0 rms frame is a capture dropout (with the browser's processing off, a live mic's silence is not 0.0; a device-level gate can still send zeros): it holds the quiet clock
       const m = Math.round(fr.midi); if (m === stableMidi) stableN++; else { stableMidi = m; stableN = 1; }
       if (stableN === 3 && (released || m !== lastFired)) { lastFired = m; released = false; onNote(m, false, 'mic'); }
       return;
@@ -1514,13 +1515,17 @@ import { register as registerPathway } from './ui/pathway.js';
     if (!listenOnsetDetector) listenOnsetDetector = createOnsetDetector({ sampleRate: actx.sampleRate, frameSize: HOP, hop: HOP });
     const newSamples = Math.max(0, Math.min(anTime.fftSize, Math.round((dt || 0.05) * actx.sampleRate)));
     const nHops = Math.floor(newSamples / HOP);
-    let onset = false;
+    // Q10d-3 on this path: r.rms is the whole ~90ms window, mostly the old ring when an attack has just
+    // landed, so the onset carries its own level -- the RMS from its hop to now -- for onPitch to weigh
+    // against the ring envelope (a full-strength re-pluck 300ms on read below the envelope otherwise).
+    let onset = false, onsetFrom = -1;
     for (let c = nHops - 1; c >= 0; c--) {
       const end = buf.length - c * HOP;
       const chunk = buf.subarray(end - HOP, end);
-      if (listenOnsetDetector.push(chunk).onset) onset = true;
+      if (listenOnsetDetector.push(chunk).onset) { onset = true; onsetFrom = end - HOP; }
     }
-    const fr = { rms: r.rms, freq: r.freq && r.clarity > 0.8 ? r.freq : 0, clarity: r.clarity, onset: onset }; if (fr.freq) fr.midi = fmidi(fr.freq);
+    let onsetRms = 0; if (onset) { let sq = 0; for (let i = onsetFrom; i < buf.length; i++) sq += buf[i] * buf[i]; onsetRms = Math.sqrt(sq / (buf.length - onsetFrom)); }
+    const fr = { rms: r.rms, freq: r.freq && r.clarity > 0.8 ? r.freq : 0, clarity: r.clarity, onset: onset, onsetRms: onsetRms }; if (fr.freq) fr.midi = fmidi(fr.freq);
     if (task && cur() && cur().info.kind === 'chord') { const db = new Float32Array(anFreq.frequencyBinCount); anFreq.getFloatFrequencyData(db); fr.chroma = chroma(db, actx.sampleRate); }
     meterUpdate(fr.rms);
     try { onPitch(fr, dt); } catch (e) { errCount++; recordError('onPitch', e); }
@@ -2453,7 +2458,7 @@ import { register as registerPathway } from './ui/pathway.js';
     if (ev.repeat || ev.ctrlKey || ev.metaKey || ev.altKey) return; const tag = ev.target.tagName; if (tag === 'SELECT' || tag === 'TEXTAREA' || (tag === 'INPUT' && ev.target.type !== 'checkbox') || ev.target.isContentEditable) return;
     if (mod === 'rhy' && (ev.key === ' ' || ev.key.length === 1)) { if (tag === 'BUTTON' && ev.key === ' ' && ev.target.id !== 'tapPad') return; ev.preventDefault(); ensureAudio(); onTap(ev); return; }
     if (MODS[mod] && MODS[mod].kit && KIT_KEYS[ev.key.toLowerCase()]) { ev.preventDefault(); ensureAudio(); onHit(KIT_KEYS[ev.key.toLowerCase()], tapAudioTime(ev), 'key'); return; }
-    if (mod === 'ear' && task && task.choices && /^[1-9]$/.test(ev.key)) { const id = task.choices[+ev.key - 1]; if (id) answer(id); return; }
+    if (mod === 'ear' && task && task.choices && /^[1-9]$/.test(ev.key)) { const id = task.choices[+ev.key - 1]; if (id) answer(id, 'computer-key'); return; }
     if (mod === 'kbd' && PCKEYS[ev.key.toLowerCase()] !== undefined) { ev.preventDefault(); ensureAudio(); const m = PCKEYS[ev.key.toLowerCase()]; noteState.noteOn('computer-key', 0, m); tone(m, now() + 0.01, 0.5, 0.15); onNote(m, true, 'computer-key'); }
   });
   // The keydown above has no matching note-off, so a computer key held down

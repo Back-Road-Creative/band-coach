@@ -53,14 +53,15 @@ const MEASURE = `(() => {
 })()`;
 
 
-// The app re-saves its state as the page unloads, so clearing storage then reloading hands back the old
-// profile. This runs at the start of the NEXT load (after that save, before the app's own scripts) instead.
-const FRESH_PROFILE_ON_NEXT_LOAD = "if (sessionStorage.getItem('__fresh')) { sessionStorage.removeItem('__fresh'); localStorage.clear(); }\n";
+// launchPage gives every walk a brand-new browser profile (its own user-data-dir), so the FIRST document is
+// already a first visit. This records what storage held at the very start of that document, before any app
+// script ran, so the walk can prove it began fresh instead of reloading until it looked fresh.
+const RECORD_STORAGE_AT_START = "window.__walkStartStorage = (function () { try { return localStorage.length; } catch (e) { return -1; } })();\n";
 
 // Walks one config; returns [{ state, m, events }] (m = the page measured after the state settled).
 async function walk(t, cfg) {
   const states = [];
-  await withAcceptancePage(t, { initScript: FRESH_PROFILE_ON_NEXT_LOAD }, async (page) => {
+  await withAcceptancePage(t, { initScript: RECORD_STORAGE_AT_START }, async (page) => {
     const events = [];
     page.cdp.on((m) => {
       if (m.method === 'Runtime.consoleAPICalled') events.push({ kind: 'console.' + m.params.type, text: m.params.args.map((a) => a.value ?? a.description ?? '').join(' ').slice(0, 300) });
@@ -77,15 +78,9 @@ async function walk(t, cfg) {
     };
     await page.setViewport({ width: cfg.w, height: cfg.h, mobile: cfg.mobile });
     await page.cdp.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: cfg.theme }] });
-    // A newcomer's first open: drop whatever the driver's own first load saved, then load again.
-    // The old page's own save can still land after the clear (measured: phone-light first-open read
-    // "Instrument: Keyboard", Start at y 258 instead of 601), so the clear is repeated until the page
-    // really is a first visit, and the walk refuses to measure a profile that is not.
+    // A newcomer's first open: the profile is brand new, so no reload or clearing is needed (and none is done).
+    assert.equal(await page.evaluate('window.__walkStartStorage'), 0, 'the walk starts on a truly fresh profile: no saved data before the app ran');
     const fresh = "!document.getElementById('picker').hidden && !/:/.test(document.getElementById('navInstrument').textContent)";
-    for (let i = 0; i < 3 && !(i && await page.evaluate(fresh)); i++) {
-      await page.evaluate("sessionStorage.setItem('__fresh', '1')");
-      await page.reload();
-    }
     assert.ok(await page.evaluate(fresh), 'the walk starts on a first visit: instrument sheet open, no instrument named');
     if (cfg.zoom) await page.evaluate("document.documentElement.style.fontSize='20px'; dispatchEvent(new Event('resize'))");
     await snap('01-first-open');
