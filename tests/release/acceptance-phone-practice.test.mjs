@@ -471,3 +471,55 @@ test('U2 compact header: short and practising phones put Start and the canvas on
     });
   }
 });
+
+// ---- U3 / D17: every focusable control is a 44 px target on a coarse pointer ----------------------------
+// Touch emulation makes Chrome report (pointer: coarse), so this is the phone a learner holds. For each screen the
+// learner can reach by tapping, every visible focusable control's smaller dimension is read as the hit area a
+// finger gets (a checkbox counts the label it sits in, since tapping the label toggles it).
+const TOUCH_MIN = 44;
+const TOUCH_READ = `(() => {
+  const vis = (e) => { for (let n = e; n && n !== document.body; n = n.parentElement) { const s = getComputedStyle(n); if (s.display === 'none' || s.visibility === 'hidden' || n.hidden) return false; if (n.tagName === 'DETAILS' && !n.open && n !== e && e.tagName !== 'SUMMARY') return false; } const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
+  const out = [];
+  for (const e of document.querySelectorAll('button, select, summary, a[href], input:not([type=hidden]):not([type=file]), textarea, [tabindex]:not([tabindex="-1"])')) {
+    if (e.disabled || !vis(e) || e.classList.contains('visually-hidden') || e.id === 'cv') continue;
+    let r = e.getBoundingClientRect();
+    if (e.type === 'checkbox' || e.type === 'radio') { const l = e.closest('label') || (e.id && document.querySelector('label[for="' + e.id + '"]')); if (l) { const lr = l.getBoundingClientRect(); r = { width: Math.max(r.width, lr.width), height: Math.max(r.height, lr.height) }; } }
+    const small = Math.min(r.width, r.height);
+    if (small < ${TOUCH_MIN} - 0.5) out.push((e.id ? '#' + e.id : e.tagName.toLowerCase() + (e.className ? '.' + String(e.className).split(' ')[0] : '')) + ' ' + (e.textContent || e.getAttribute('aria-label') || '').trim().slice(0, 24) + ' ' + r.width.toFixed(0) + 'x' + r.height.toFixed(0));
+  }
+  return out;
+})()`;
+async function tapSel(page, sel) {
+  const c = await page.evaluate(`(() => { const e = document.querySelector(${JSON.stringify(sel)}); e.scrollIntoView({ block: 'center' }); const r = e.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; })()`);
+  await page.tap(c[0], c[1]);
+  await raf(page);
+}
+test('U3 touch targets: every focusable control is at least 44 px in its smaller dimension on a phone', async (t) => {
+  await withAcceptancePage(t, {}, async (page) => {
+    for (const [name, width, height, dsf] of [['390x844', 390, 844, 3], ['320x568', 320, 568, 2]]) {
+      await t.test(`${name} coarse pointer`, async () => {
+        await page.setViewport({ width, height, mobile: true, deviceScaleFactor: dsf });
+        await page.cdp.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 }); // what makes Chrome report a finger: (pointer: coarse)
+        await page.reload();
+        await page.waitFor("document.getElementById('playBtn') !== null");
+        await raf(page);
+        assert.equal(await page.evaluate("matchMedia('(pointer: coarse)').matches"), true, 'the emulated phone reports a coarse pointer');
+        const misses = [];
+        const sweep = async (screen) => { for (const m of await page.evaluate(TOUCH_READ)) if (!misses.some((x) => x.endsWith(`: ${m}`))) misses.push(`${screen}: ${m}`); }; // a control shown on several screens is named once
+        await tapSel(page, '[data-route=instrument]');
+        await sweep('practice with the instrument sheet');
+        await tapSel(page, '#setupBtn');
+        await sweep('input setup sheet');
+        await tapSel(page, '[data-route=settings]');
+        await sweep('settings');
+        await tapSel(page, '[data-route=songs]');
+        await page.waitFor("!document.getElementById('panelHost').hidden && document.getElementById('panelHost').children.length > 0");
+        await sweep('songs');
+        await tapSel(page, '[data-route=progress]');
+        await raf(page);
+        await sweep('progress');
+        assert.deepEqual(misses, [], `${name}: ${misses.length} control(s) under ${TOUCH_MIN} px in their smaller dimension`);
+      });
+    }
+  });
+});
