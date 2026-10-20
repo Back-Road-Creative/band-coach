@@ -453,6 +453,10 @@ export function htmlTarget(htmlPath, { windows = process.platform === 'win32' } 
  * extra simulated boundaries for the identity block. Callers that leave them
  * out get exactly the launch they always had.
  *
+ * `options.offlineFromStart`, if true, puts the page's network offline over CDP
+ * before the first navigation, so the very first boot is an offline one.
+ * Default off.
+ *
  * `options.headed` opens a visible window (no headless flag) and
  * `options.windowPosition` ('x,y') places it; `htmlPath` may be a Windows path
  * or a `file:` URL (see "WINDOWS LANE" above).
@@ -753,6 +757,7 @@ async function launchPageOnce(htmlPath, options = {}) {
   await send('Network.enable');
   await send('Page.enable');
   await send('DOM.enable');
+  if (options.offlineFromStart) await send('Network.emulateNetworkConditions', { offline: true, latency: 0, downloadThroughput: -1, uploadThroughput: -1 });
   if (acceptance) {
     // The browser's own log (the AudioContext warning is a Log entry, not a
     // console call) and WebAudio, both before navigation so boot is covered.
