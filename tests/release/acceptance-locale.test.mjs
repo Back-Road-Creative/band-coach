@@ -10,6 +10,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { withAcceptancePage } from '../helpers/browser.mjs';
 import { en, es } from '../../src/core/i18n.js';
+import { es as levelEs } from '../../src/core/level-names.js';
 
 // English table values the screens may show that are not translatable
 // sentences, with the reason. (A value identical in en and es never matches
@@ -83,3 +84,16 @@ test('Español: every main screen shows exactly the pinned English leftovers (no
 for (const [name, list] of Object.entries(KNOWN_LEFTOVERS)) {
   test.todo(`${name} in Español still shows English: ${list.join(' | ')}`);
 }
+
+test('Español: the practice level card shows the Spanish level name, no English level name', async (t) => {
+  await withAcceptancePage(t, { initScript: "localStorage.setItem('bandcoach.v1', JSON.stringify({ prefs: { mod: 'kbd' } }));" }, async (page) => {
+    await page.clickSelector('#mainNav button[data-route="settings"]');
+    await page.evaluate("(() => { const s = document.getElementById('optLocale'); s.value = 'es'; s.dispatchEvent(new Event('change', { bubbles: true })); })()");
+    await page.clickSelector('#mainNav button[data-route="practice"]');
+    const num = await page.evaluate("document.getElementById('levelNum').textContent");
+    const name = await page.evaluate("document.getElementById('levelName').textContent");
+    assert.match(num, /^Nivel \d+$/);
+    assert.ok(!Object.keys(levelEs).includes(name), `levelName still English: ${name}`);
+    assert.equal(name, levelEs['C, D and E'], 'level 1 of the keyboard');
+  });
+});

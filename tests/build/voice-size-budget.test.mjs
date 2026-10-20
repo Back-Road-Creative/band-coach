@@ -100,7 +100,13 @@ test('the voices budget fails loudly if its module is renamed away', async () =>
 // leak fix), +336 (Pages CSP), +1,483 (storage blocked), +2,931 (error notice
 // and Copy diagnostics), about 5.1KB in all. 1.15MB leaves about 21KB past that
 // and still leaves no room for a media library.
-const TOTAL_BUDGET_BYTES = 1.15 * 1024 * 1024;
+// Raised again to 1.2MB (2026-10-20), measured the same way: main (d219cf6f
+// plus the variant-names fix) built to 1,202,536 bytes, 3,326 under. The
+// Spanish units of plan v4 (D21) add translated text, which has no comments
+// to cut: L2 (level names) measured 1,210,823 at its head, +8,287. L3 (Songs
+// status messages, 46 keys in two languages) and L4 (coach lines) come next.
+// 1.2MB leaves about 47KB past L2 and still no room for a media library.
+const TOTAL_BUDGET_BYTES = 1.2 * 1024 * 1024;
 
 test('the built single-file app stays under its total size ceiling', async () => {
   const outDir = mkdtempSync(join(tmpdir(), 'band-coach-total-budget-'));
