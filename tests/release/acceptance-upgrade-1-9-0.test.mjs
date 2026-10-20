@@ -44,7 +44,7 @@ test('Upgrade A: a real 1.9.0 backup restores through the Restore control, and s
     await setLocalStorageItem(page, KEY, PRIOR);
     await page.reload();
     assert.equal(await dataTheme(page), 'dark', 'control: the profile it starts from is dark');
-    assert.equal(await levelOf(page, 'gtr'), 'Level 4', 'control: the profile it starts from is at Level 4 on guitar');
+    assert.equal(await levelOf(page, 'gtr'), 'Nivel 4', 'control: the profile it starts from is at Level 4 on guitar, shown in its Spanish');
 
     await go(page, 'settings');
     const dialogs = [];
