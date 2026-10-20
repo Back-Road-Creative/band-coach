@@ -90,6 +90,16 @@ test('package.json: gate is an alias of test:release; npm test keeps its pre/pos
 
 // Every `node --test` run of files that launch Chromium goes through the same
 // load-aware cap (tests/helpers/browser.mjs, tests/unit/test-concurrency.test.mjs).
+// tests/release opens both pages: the release one, and dist/band-coach.html for the
+// README step 6 dev-build case. Stage once built only the release page, so on a
+// clean checkout it failed that case (and on an old checkout it tested a stale dev
+// page). Every script that runs the release files builds both first.
+test('package.json: stage and test:release build the dev page and the release page before the release files', () => {
+  for (const name of ['stage', 'test:release']) {
+    assert.ok(pkg.scripts[name].startsWith('node build/build.mjs && node build/build.mjs --release && '), `${name}: ${pkg.scripts[name]}`);
+  }
+});
+
 // test:release once ran without it: node's default of cores-1 release files at
 // once, each booting its own browser, on a box already at load ~70 of 12 cores.
 // `coverage` runs node --test too but is not yet capped: listed, not exempted
