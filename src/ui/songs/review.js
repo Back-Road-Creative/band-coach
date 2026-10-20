@@ -10,6 +10,7 @@ import { requestOpenInEditor } from '../editor.js';
 import { requestPlayalongRecording } from '../playalong.js';
 import { uncertainNotesText, playbackPlanFor } from './review-playback.js';
 import { el } from '../dom.js';
+import { t } from '../../core/i18n.js';
 
 // Pure decision behind renderReview()'s "Practise this" button: a song whose
 // transcription still has unresolved check items (warnings, from
@@ -182,7 +183,7 @@ export function renderReview(resultEl, { song, warnings, audioRec, api, onPracti
   practiseBtn.addEventListener('click', () => {
     if (!gate.allowed) return;
     const opened = onPractise(song.id, partId, null);
-    if (!opened) say('Saved "' + song.title + '". Open the Songs panel to practice it.');
+    if (!opened) say(t('songs.say.savedSongs', { title: song.title }));
   });
   resultEl.appendChild(practiseBtn);
   if (!gate.allowed) resultEl.appendChild(el('p', { class: 'panel-learn-practise-gate-reason', text: gate.reason }));
@@ -196,7 +197,7 @@ export function renderReview(resultEl, { song, warnings, audioRec, api, onPracti
   const fixItUpBtn = el('button', { type: 'button', class: 'panel-learn-fixitup-btn', text: 'Edit notes' });
   fixItUpBtn.addEventListener('click', () => {
     const opened = onEditNotes(song.id, warnings);
-    if (!opened) say('Saved "' + song.title + '". Open Record a tune to fix it up.');
+    if (!opened) say(t('songs.say.savedRecord', { title: song.title }));
   });
   resultEl.appendChild(fixItUpBtn);
 
@@ -208,7 +209,7 @@ export function renderReview(resultEl, { song, warnings, audioRec, api, onPracti
     const playAlongBtn = el('button', { type: 'button', class: 'panel-learn-playalong-btn', text: 'Play along with this recording' });
     playAlongBtn.addEventListener('click', () => {
       const opened = onPlayAlong(audioRec);
-      if (!opened) say('Saved "' + song.title + '". Open Play Along to use this recording.');
+      if (!opened) say(t('songs.say.savedPlayAlong', { title: song.title }));
     });
     resultEl.appendChild(playAlongBtn);
   }

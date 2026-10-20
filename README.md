@@ -349,7 +349,7 @@ above are read from the string tables in `src/core/i18n.js` (`t(id, params)`) ra
 hardcoded. Settings > Language switches the app between English and Español (the choice is saved
 with your other preferences, travels in a backup, and is applied at startup before the first
 screen; `<html lang>` follows it). What is translated: the nav bar, page headings and static
-labels, the keyboard help, the Start/Pause button, the instrument sheet (redrawn the moment the language changes), the Songs and keyboard-path screens' titles and buttons, and the backup/restore/update messages. Everything not yet routed
+labels, the keyboard help, the Start/Pause button, the instrument sheet (redrawn the moment the language changes), the Songs and keyboard-path screens' titles and buttons, the Songs panel's status messages (`songs.say.*`; panel names such as "Play Along" stay English, as on screen), and the backup/restore/update messages. Everything not yet routed
 through `t()` -- most of the exercise prompts, coach lines, song and lesson text and some
 Settings labels -- stays in English whichever language is picked. The Spanish table is a
 machine-translated first pass that has not yet been reviewed by a native speaker; a unit test
@@ -1693,7 +1693,7 @@ release.
   measured and not required. While a session runs, the playing surface, the feedback line and End
   session (with the objective, on a narrow window) are on one screen at: 320x568: keyboard one
   scroll position, drum kit one scroll position; 390x844: keyboard no scrolling after Start, drum
-  kit one scroll position; 844x390: keyboard no scrolling after Start, drum kit no scrolling after Start;
+  kit no scrolling after Start (the feedback shows over the level card, so no slot is held under it); 844x390: keyboard no scrolling after Start, drum kit no scrolling after Start;
   640x400: keyboard one scroll position, drum kit one scroll position. (On a screen 600 px tall or less the
   tagline is hidden and the menu is one row; while a session runs on a phone the tagline is hidden, and on a
   wide short screen the playing surface sits beside Start/End and the feedback. All of it returns at End.) A fretted or microphone

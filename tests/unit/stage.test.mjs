@@ -68,3 +68,27 @@ test('stage writes the bytes itself rather than calling copyFileSync, which EPER
   assert.doesNotMatch(code, /copyFileSync|copyFile\(/);
   assert.match(code, /writeFileSync\(to, data\)/);
 });
+
+// A skipped row is not a pass: CI's ci-summary fails the release block on any
+// skip, so stage must refuse the same way. node --test prints `# skipped 0`
+// when nothing was skipped, so an absent line is unreadable and refuses too.
+function fakeRun(dir, summary) {
+  const script = join(dir, 'fake.mjs');
+  writeFileSync(script, `console.log(${JSON.stringify(summary)});`);
+  return `${process.execPath} ${script}`;
+}
+for (const [name, summary, re] of [
+  ['skipped 1', '# pass 1\n# fail 0\n# todo 0\n# skipped 1', /1 release test\(s\) were skipped; a skipped row is not a pass/],
+  ['no skipped line', '# pass 1\n# fail 0\n# todo 0', /an unreadable number of release test\(s\) were skipped/],
+]) {
+  test(`stage refuses to copy and writes nothing when the release run reports ${name}`, () => {
+    const src = tmp(); const dst = tmp();
+    try {
+      const from = join(src, 'band-coach.html');
+      writeFileSync(from, 'x');
+      assert.throws(() => stage({ from, dir: dst, testCmd: fakeRun(src, summary) }), re);
+      assert.equal(existsSync(join(dst, 'band-coach.html')), false);
+      assert.equal(existsSync(join(dst, 'band-coach.html.evidence.json')), false);
+    } finally { rmSync(src, { recursive: true }); rmSync(dst, { recursive: true }); }
+  });
+}

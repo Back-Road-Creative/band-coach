@@ -8,7 +8,7 @@
 //   BC_STAGE_DIR=/some/dir npm run stage
 //
 // The copy happens only after the release files (node --test, load-capped) have run
-// against that exact file with fail = 0 and todo = 0; a refusal prints why and
+// against that exact file with fail = 0, todo = 0 and skipped = 0; a refusal prints why and
 // leaves the destination untouched. A passing stage also writes
 // <file>.evidence.json beside the copy (sha256, bytes, commit, dirty, passLine,
 // ranAt) for the acceptance record's Automated row to quote.
@@ -53,7 +53,8 @@ export function stage({ from = DEFAULT_FROM, dir = process.env.BC_STAGE_DIR || D
   const sum = parseSummary(out);
   if (run.status !== 0 || sum.pass === null || sum.fail === null || sum.fail > 0) throw new Error(`stage: refusing to copy, the release tests did not pass (exit ${run.status}, ${sum.fail ?? '?'} failed)`);
   if (sum.todo === null || sum.todo > 0) throw new Error(`stage: refusing to copy, ${sum.todo ?? 'an unreadable number of'} release test(s) are todo; a todo row is not a pass`);
-  const passLine = `# pass ${sum.pass} # fail ${sum.fail} # todo ${sum.todo} # skipped ${sum.skipped ?? 0}`;
+  if (sum.skipped === null || sum.skipped > 0) throw new Error(`stage: refusing to copy, ${sum.skipped ?? 'an unreadable number of'} release test(s) were skipped; a skipped row is not a pass`);
+  const passLine = `# pass ${sum.pass} # fail ${sum.fail} # todo ${sum.todo} # skipped ${sum.skipped}`;
   const commit = git(['rev-parse', 'HEAD']);
   const dirty = git(['status', '--porcelain']) !== '';
   // Read then write, never copyFileSync: the Windows drive mounts (/mnt/d is

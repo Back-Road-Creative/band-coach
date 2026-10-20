@@ -80,11 +80,11 @@ test('Phone (390x844): Songs and Progress start within 24px of the status row', 
   });
 });
 
-// Measured 81.6px at 390x844 mid-session: the strip is the feedback card's reserved slot (hidden, kept in the layout
-// so the first feedback never moves the canvas under a finger). Moving it under the stage clears the strip but pushes
-// the feedback off the first screen (acceptance-phone-practice T2: feedback at y 900 in an 844 window), and shrinking
-// the slot makes the canvas jump (T4). Both are existing contracts, so this stays a todo until the slot is redesigned.
-test('Phone (390x844) mid-session: no dead strip over 24px between the level card and the stage', { todo: 'the strip is the feedback card reserved slot (T2/T4 of acceptance-phone-practice); see comment' }, async (t) => {
+// Was 81.6px at 390x844 mid-session: the feedback card's reserved slot (hidden, kept in the layout so the first feedback
+// never moves the canvas). Now the feedback card shares the level card's grid cell and shows OVER it, so no slot is
+// reserved and no strip is left; the cell is as tall as the taller of the two, so the canvas still does not move
+// (acceptance-phone-practice T4) and the feedback stays on the first screen (T2).
+test('Phone (390x844) mid-session: no dead strip over 24px between the level card and the stage', async (t) => {
   await withAcceptancePage(t, { initScript: seed }, async (page) => {
     await page.setViewport(PHONE);
     await go(page, 'practice');
