@@ -634,6 +634,10 @@ export async function retryOnBootDeadline(launch, { attempts = 3 } = {}) {
 }
 
 export function launchPage(htmlPath, options = {}) {
+  // A file that is not there can never boot: say so now, before any browser starts and outside
+  // the boot retry (three 60 s attempts ending BOOT_DEADLINE told nobody the build was missing).
+  const { file } = htmlTarget(htmlPath);
+  if (!existsSync(file)) return Promise.reject(new Error(`the page to open does not exist: ${file}. Build it first with \`npm run build\` (dev build, dist/band-coach.html) or \`node build/build.mjs --release\` (dist/release/band-coach.html).`));
   return retryOnBootDeadline(() => launchPageOnce(htmlPath, options));
 }
 
