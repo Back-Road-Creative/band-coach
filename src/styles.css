@@ -159,6 +159,7 @@
      flex): text-overflow draws no ellipsis on a flex container, so the
      shut label would stop mid-letter. */
   .picker-variant-group > .variant-toggle > summary { cursor: pointer; list-style: none; font: 500 0.6875rem var(--body); color: var(--muted); display: block; line-height: 24px; min-height: 24px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .picker-variant-group > .variant-toggle .variant-more { display: none; }
   .picker-variant-group > .variant-toggle > summary::-webkit-details-marker { display: none; }
   .picker-variant-group > .variant-toggle > summary::before { content: '\25b8  '; }
   .picker-variant-group > .variant-toggle[open] > summary::before { content: '\25be  '; }
@@ -192,7 +193,19 @@
        buttons stay individually focusable, so axe's scrollable-region-
        focusable rule is satisfied without adding a tabindex to #picker
        itself. */
-    #picker { max-height: 40vh; overflow-y: auto; }
+    /* U6: the page scrolls, not a 40vh box inside it; the variant list (clipped
+       with an ellipsis on desktop) becomes a short "More…" chip, never cut. */
+    #picker { max-height: none; overflow: visible; }
+    .picker-variant-group > .variant-toggle { width: auto; min-width: 0; }
+    .picker-variant-group > .variant-toggle > summary { overflow: visible; text-overflow: clip; }
+    .picker-variant-group > .variant-toggle .variant-full { display: none; }
+    .picker-variant-group { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 4px; }
+    #picker { gap: 6px 8px; }
+    .picker-tools { margin-top: 4px; padding-top: 6px; gap: 4px 6px; }
+    .picker-tools-label { flex-basis: auto; }
+    .picker button { padding-block: 6px; }
+    .picker-variant-group > .variant-toggle .variant-more { display: inline; }
+    .picker-variant-group > .variant-toggle > summary { display: inline-block; padding: 0 10px; border: 1px solid var(--line); border-radius: 12px; }
   }
 
   /* feature panels */

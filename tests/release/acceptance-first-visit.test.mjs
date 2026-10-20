@@ -290,3 +290,30 @@ test('first visit asks one question: nothing stored, no Start, until an instrume
     assert.deepEqual(page.exceptions, [], 'no uncaught exceptions');
   });
 });
+
+// U6: on a phone the instrument picker is part of the page, not a small box
+// with its own scrollbar, and no label is cut off. The variant lists sit behind
+// a short "More" chip (a deliberate label, the one text allowed to end in an
+// ellipsis); every other visible label is whole, neither ending in "…" nor
+// clipped by the CSS.
+test('U6: at phone width the picker fits the page and no label is cut off', async (t) => {
+  await withAcceptancePage(t, {}, async (page) => {
+    await page.setViewport({ width: 390, height: 844, mobile: true });
+    await page.waitFor("!document.getElementById('picker').hidden");
+    const r = JSON.parse(await page.evaluate(`JSON.stringify((() => {
+      const p = document.getElementById('picker');
+      const vis = (e) => { const b = e.getBoundingClientRect(); return b.width > 0 && b.height > 0 && getComputedStyle(e).visibility !== 'hidden'; };
+      const labels = [...p.querySelectorAll('button, summary, small, .picker-tools-label')].filter(vis);
+      return {
+        scrollHeight: p.scrollHeight, clientHeight: p.clientHeight,
+        ellipsed: labels.map(e => e.innerText.trim()).filter(s => s.endsWith('…') && s !== 'More…'),
+        clipped: labels.filter(e => e.scrollWidth > e.clientWidth + 1).map(e => e.innerText.trim()),
+        chips: [...p.querySelectorAll('.variant-toggle > summary')].filter(vis).map(e => e.innerText.trim()),
+      };
+    })())`));
+    assert.equal(r.scrollHeight, r.clientHeight, 'the picker has no inner scroll area');
+    assert.deepEqual(r.ellipsed, [], 'no label ends in an ellipsis');
+    assert.deepEqual(r.clipped, [], 'no label is clipped');
+    assert.ok(r.chips.length > 0 && r.chips.every((c) => c === 'More'), `variant chips read "More" (got ${JSON.stringify(r.chips)})`);
+  });
+});
