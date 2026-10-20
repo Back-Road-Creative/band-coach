@@ -52,21 +52,20 @@ test('a shortened variant summary still names every variant for hover and screen
   }
 });
 
-// text-overflow only draws its "..." on a block container. The summary was
-// display:flex (for the 24px tap target), so the clipped label stopped
-// mid-letter with no sign that more variants were listed.
-test('a clipped variant summary ends in an ellipsis and keeps a 24px tap target', async () => {
+// U6: a long variant list wraps onto more lines instead of being cut off
+// with an ellipsis, and every line keeps the 24px tap-target rhythm.
+test('a long variant summary wraps whole, never clipped, and keeps a 24px tap target', async () => {
   const page = await launchPage(HTML_PATH);
   try {
     const rows = JSON.parse(await page.evaluate(`JSON.stringify([...document.querySelectorAll('#picker .variant-toggle > summary')].map(s => {
       const cs = getComputedStyle(s);
-      return { text: s.textContent, display: cs.display, textOverflow: cs.textOverflow, clipped: s.scrollWidth > s.clientWidth, h: s.getBoundingClientRect().height };
+      return { text: s.textContent, display: cs.display, clipped: s.scrollWidth > s.clientWidth, h: s.getBoundingClientRect().height };
     }))`));
     assert.ok(rows.length > 0, 'no variant summaries rendered');
-    assert.ok(rows.some(r => r.clipped), 'expected at least one summary to be clipped');
+    assert.ok(rows.some(r => r.h > 24), 'expected at least one long summary to wrap onto a second line');
     for (const r of rows) {
-      assert.equal(r.textOverflow, 'ellipsis', `${r.text}: text-overflow`);
-      assert.ok(!/flex|grid/.test(r.display), `${r.text}: display ${r.display} stops text-overflow drawing the ellipsis`);
+      assert.ok(!r.clipped, `${r.text}: label is clipped`);
+      assert.ok(!/…$/.test(r.text.trim()), `${r.text}: label ends in an ellipsis`);
       assert.ok(r.h >= 24, `${r.text}: tap target ${r.h}px is under 24px`);
     }
   } finally {
