@@ -146,9 +146,9 @@
   .picker-variant-group { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
   /* width 0 + min-width 100%: the shut disclosure takes the parent button's
      width instead of widening the item to its one-line list of names (Wind
-     and brass lists 11), which pushed whole rows apart. The summary cuts off
-     with an ellipsis; its title and its text (read in full by screen readers)
-     still name every variant. Opened, it may take the room it needs. */
+     and brass lists 11), which pushed whole rows apart. The summary wraps
+     onto as many lines as the names need, never cut off (U6): the learner
+     always reads which variants exist. Opened, it may take the room it needs. */
   .picker-variant-group > .variant-toggle { margin: 0; width: 0; min-width: 100%; }
   .picker-variant-group > .variant-toggle[open] { width: auto; }
   /* WCAG 2.5.8 (2.2 AA) needs a 24x24 CSS px tap target -- the 11px text
@@ -156,9 +156,8 @@
      every variant-toggle summary at first load). A 24px line-height keeps
      the same 11px label, vertically centred, inside a taller box instead of
      growing the text or the row's visual weight. It stays a block (not
-     flex): text-overflow draws no ellipsis on a flex container, so the
-     shut label would stop mid-letter. */
-  .picker-variant-group > .variant-toggle > summary { cursor: pointer; list-style: none; font: 500 0.6875rem var(--body); color: var(--muted); display: block; line-height: 24px; min-height: 24px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+     flex), so a wrapped second line stays an ordinary line of text. */
+  .picker-variant-group > .variant-toggle > summary { cursor: pointer; list-style: none; font: 500 0.6875rem var(--body); color: var(--muted); display: block; line-height: 24px; min-height: 24px; overflow-wrap: anywhere; }
   .picker-variant-group > .variant-toggle .variant-more { display: none; }
   .picker-variant-group > .variant-toggle > summary::-webkit-details-marker { display: none; }
   .picker-variant-group > .variant-toggle > summary::before { content: '\25b8  '; }
@@ -197,7 +196,7 @@
        with an ellipsis on desktop) becomes a short "More…" chip, never cut. */
     #picker { max-height: none; overflow: visible; }
     .picker-variant-group > .variant-toggle { width: auto; min-width: 0; }
-    .picker-variant-group > .variant-toggle > summary { overflow: visible; text-overflow: clip; }
+    .picker-variant-group > .variant-toggle > summary { white-space: nowrap; }
     .picker-variant-group > .variant-toggle .variant-full { display: none; }
     .picker-variant-group { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 4px; }
     #picker { gap: 6px 8px; }
@@ -647,6 +646,21 @@
     }
     /* Show = Staff on the keyboard needs room for the grand staff above keys that stay at the 24px tap floor. */
     #cv.staffkbd { aspect-ratio: 16 / 10; }
+  }
+  /* U8b: on a phone the feedback card shares the level card's grid cell (row 2 of the single column; Start is pinned to row 1),
+     so no separate slot is reserved under it and there is no dead strip mid-session. The cell is as tall as the level card,
+     so the canvas never moves when feedback first appears or changes. In a session the level card puts #coach (the objective,
+     which must stay readable) last, so its other parts (level, progress bar, the two buttons) fill the top of the card; the
+     feedback card sits on top of them (align-self:start) and they go opacity 0 while feedback shows. Opacity, never display or
+     visibility: size, screen-reader content and tab stops stay, and the buttons return on top while focus is inside the card. */
+  @media (max-width: 600px) and (min-height: 501px) {
+    .main > .side > .row:first-child { grid-row: 1; }
+    .main > .side > #levelCard, .main > .side > #feedbackCard { grid-row: 2; grid-column: 1; }
+    .main > .side > #feedbackCard { z-index: 1; align-self: start; }
+    .main:has(#endBtn:not([hidden])) > .side > #levelCard { display: flex; flex-direction: column; }
+    .main:has(#endBtn:not([hidden])) > .side > #levelCard > #coach { order: 1; }
+    .main:has(#feedbackCard:not([hidden])) > .side > #levelCard:not(:focus-within) > :not(#coach) { opacity: 0; }
+    .main > .side > #levelCard:focus-within { position: relative; z-index: 2; }
   }
   @media (orientation: landscape) and (max-height: 500px) {
     .main { grid-template-columns: max-content minmax(0, 1fr); gap: 6px; }

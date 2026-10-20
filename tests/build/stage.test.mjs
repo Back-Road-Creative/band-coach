@@ -1,5 +1,5 @@
 // stage.mjs copies the release file only after the release tests pass with
-// no failures and no todo rows, and leaves an evidence file beside the copy.
+// no failures, no todo rows and no skipped tests, and leaves an evidence file beside the copy.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync, existsSync, readFileSync, readdirSync } from 'node:fs';

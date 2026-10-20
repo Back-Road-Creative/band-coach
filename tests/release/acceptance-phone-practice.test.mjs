@@ -11,6 +11,7 @@
 //       24, with target-offset minOffset 24): a 24 x 24 box passes; a smaller one needs its centre 12 px from every
 //       other target's tap area and 24 px from the centre of every other target that is under 24. #playBtn and
 //       #endBtn are at least 24 x 24. 44 px is a product goal, written as a diagnostic, never asserted.
+//   T1b the same check at 320x568 at 1x, 3x and 2x with a 20 px browser text size (boundary variants, below).
 //   T2  fit: the playing surface (#cv), the feedback (#feedback) and End session (#endBtn), plus the objective
 //       (#coach) where it sits between them, are on one screen (NO_SCROLL) or on one screen after ONE scroll
 //       (ONE_SCROLL). POLICY below says which, per size and instrument, and the README says the same words;
@@ -56,7 +57,7 @@ const NO_SCROLL = 'NO_SCROLL', ONE_SCROLL = 'ONE_SCROLL';
 const POLICY_TEXT = { [NO_SCROLL]: 'no scrolling after Start', [ONE_SCROLL]: 'one scroll position' };
 const SIZES = [
   { name: '320x568', vp: { width: 320, height: 568, mobile: true, deviceScaleFactor: 2 }, keyboard: ONE_SCROLL, kit: ONE_SCROLL },
-  { name: '390x844', vp: { width: 390, height: 844, mobile: true, deviceScaleFactor: 3 }, keyboard: NO_SCROLL, kit: ONE_SCROLL },
+  { name: '390x844', vp: { width: 390, height: 844, mobile: true, deviceScaleFactor: 3 }, keyboard: NO_SCROLL, kit: NO_SCROLL },
   { name: '844x390', vp: { width: 844, height: 390, mobile: true, deviceScaleFactor: 3 }, keyboard: NO_SCROLL, kit: NO_SCROLL },
   { name: '640x400', vp: { width: 640, height: 400, mobile: false, deviceScaleFactor: 2 }, keyboard: ONE_SCROLL, kit: ONE_SCROLL },
 ];
@@ -429,6 +430,42 @@ test('A06 phone sizes: a learner sees and plays the keyboard and kit, and sees w
   await withAcceptancePage(t, { initScript: PAGE_SCRIPT }, async (page) => {
     for (const size of SIZES) await runSize(t, page, size);
     await runDesktop(t, page);
+  });
+});
+
+// T1 boundary variants at the smallest phone: the 24 px target check at other device pixel ratios and at a larger
+// browser text size (Page.setFontSizes, as acceptance-text-size.test.mjs does). Only the drawn-target read for the
+// keyboard, the kit and the kit in a bar; the smallest target's size is printed in each.
+const T1_VARIANTS = [
+  { name: '320x568@1x', dsf: 1, font: 16 },
+  { name: '320x568@3x', dsf: 3, font: 16 },
+  { name: '320x568@2x, 20px text', dsf: 2, font: 20 },
+];
+test('T1 320x568 drawn targets pass 24 px at 1x, 3x and large browser text', async (t) => {
+  await withAcceptancePage(t, { initScript: PAGE_SCRIPT }, async (page) => {
+    for (const v of T1_VARIANTS) {
+      await t.test(v.name, async (st) => {
+        await page.cdp.send('Page.setFontSizes', { fontSizes: { standard: v.font } });
+        await page.setViewport({ width: 320, height: 568, mobile: true, deviceScaleFactor: v.dsf });
+        await page.reload();
+        await page.waitFor("document.getElementById('playBtn') !== null");
+        await raf(page);
+        await setTheme(page, 'light');
+        const smallest = async (kind, inBar) => { const m = await settledMetrics(page); return Math.min(...targetSizes(m, { kind, inBar }).map((x) => Math.min(x.w, x.h))); };
+        const note = async (what, kind, inBar) => st.diagnostic(`${v.name} ${what}: smallest target ${(await smallest(kind, inBar)).toFixed(3)} px`);
+        await pickInstrument(page, 'kbd', 'Keyboard');
+        await note('keyboard', 'keyboard', false);
+        await checkTargets(page, st, `${v.name} keyboard`, 'keyboard', false);
+        await pickInstrument(page, 'drum-kit', 'Drum kit');
+        await wheelTo(page, 0);
+        await note('kit', 'kit', false);
+        await checkTargets(page, st, `${v.name} kit`, 'kit', false);
+        await startSession(page);
+        await note('kit in a bar', 'kit', true);
+        await checkTargets(page, st, `${v.name} kit in a bar`, 'kit', true);
+        assert.deepEqual(page.exceptions, [], `${v.name}: no uncaught exceptions`);
+      });
+    }
   });
 });
 
