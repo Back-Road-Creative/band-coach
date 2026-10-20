@@ -121,7 +121,7 @@ test('a recording opened from Add a song is reviewed inside Songs', async (t) =>
   assert.ok(noteCount > 0, 'at least one note was transcribed: ' + noteCount);
 });
 
-test('a score opened from Add a song is reviewed, and Practise this starts the lesson', async (t) => {
+test('a score opened from Add a song is reviewed, and Practice this starts the lesson', async (t) => {
   const dir = mkdtempSync(join(tmpdir(), 'band-coach-add-song-'));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   const abcPath = join(dir, 'tune.abc');
@@ -139,12 +139,12 @@ test('a score opened from Add a song is reviewed, and Practise this starts the l
   assert.equal(title, 'Add A Song Test');
 
   await page.evaluate(
-    "Array.from(document.querySelectorAll('.panel-learn-practise-btn')).find(b => b.textContent === 'Practise this').click()",
+    "Array.from(document.querySelectorAll('.panel-learn-practise-btn')).find(b => b.textContent === 'Practice this').click()",
   );
   await page.waitFor("document.querySelector('.panel-songs-practice h3')");
 
   const practiceTitle = await page.evaluate("document.querySelector('.panel-songs-practice h3').textContent");
-  assert.equal(practiceTitle, title, 'Practise this opens the same song\'s lesson');
+  assert.equal(practiceTitle, title, 'Practice this opens the same song\'s lesson');
 });
 
 test('an unsupported file names what Add a song accepts', async (t) => {

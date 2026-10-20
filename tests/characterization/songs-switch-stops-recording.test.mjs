@@ -84,7 +84,7 @@ test('opening a different song while recording stops the old song\'s listener, i
     "Array.from(document.querySelectorAll('.panel-songs-row button')).find(b => b.textContent === 'Switch Target').click()"
   );
   await page.waitFor(
-    "Array.from(document.querySelectorAll('.panel-songs-practice button')).some(b => b.textContent === 'Practise: Part A')"
+    "Array.from(document.querySelectorAll('.panel-songs-practice button')).some(b => b.textContent === 'Practice: Part A')"
   );
 
   // No Stop button is left anywhere -- but with the old listener still

@@ -98,7 +98,7 @@ test('A08: the day away, visit by visit: waiting, a rhythm that retains by the 2
     await skipAhead(page);
     let p = await pathway(page);
     assert.deepEqual([p.step, p.aria, p.wait, p.retained], ['return', 'step', true, false], 'V1: waiting for the day to pass');
-    assert.match(await progress(page), /Retained on a later check: 0/);
+    assert.match(await progress(page), /Remembered on a later try: 0/);
 
     // V2, 21 h: the pathway still says wait, but a rhythm passed again 21 h after the first counts as retained in Progress.
     await visit(page, 2); await skipAhead(page); await plugIn(page);
@@ -110,7 +110,7 @@ test('A08: the day away, visit by visit: waiting, a rhythm that retains by the 2
     await openMaryFromLibrary(page);
     await page.clickSelector('.panel-songs-mode button[data-mode="check"]');
     await passRhythm(page);
-    assert.match(await progress(page), /Retained on a later check: 1/, 'V2: Progress counts it (20 h rule)');
+    assert.match(await progress(page), /Remembered on a later try: 1/, 'V2: Progress counts it (20 h rule)');
 
     // V3, 25 h, nothing played since: time alone is not retention. V4: the recheck button opens Mary in Check and a pass is logged.
     await visit(page, 3); await skipAhead(page); await plugIn(page);
@@ -129,7 +129,7 @@ test('A08: the day away, visit by visit: waiting, a rhythm that retains by the 2
     await visit(page, 4);
     p = await pathway(page);
     assert.deepEqual([p.step, p.retained, p.action], ['return', false, 'Check Mary Had a Little Lamb in Songs'], 'V4b: still asks for the recheck');
-    assert.match(await progress(page), /Retained on a later check: 1/);
+    assert.match(await progress(page), /Remembered on a later try: 1/);
 
     // V5: Mary was rechecked a day later: retained, and a different song is offered for transfer.
     await visit(page, 5); await skipAhead(page);

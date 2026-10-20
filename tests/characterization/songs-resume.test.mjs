@@ -122,7 +122,7 @@ test('switching instrument starts the same song fresh', async (t) => {
   assert.deepEqual(page.exceptions, []);
 });
 
-test('Practise again always starts at the first step', async (t) => {
+test('Practice again always starts at the first step', async (t) => {
   const dir = mkdtempSync(join(tmpdir(), 'band-coach-song-resume-'));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   const challengePath = join(dir, 'challenge.json');
@@ -167,14 +167,14 @@ test('Practise again always starts at the first step', async (t) => {
     await page.waitFor("document.querySelector('.panel-songs-practice h4') || document.querySelector('.panel-songs-practice p')");
   }
   await page.waitFor(
-    "Array.from(document.querySelectorAll('.panel-songs-practice button')).some(b => b.textContent === 'Practise again')"
+    "Array.from(document.querySelectorAll('.panel-songs-practice button')).some(b => b.textContent === 'Practice again')"
   );
   await page.evaluate(
-    "Array.from(document.querySelectorAll('.panel-songs-practice button')).find(b => b.textContent === 'Practise again').click()"
+    "Array.from(document.querySelectorAll('.panel-songs-practice button')).find(b => b.textContent === 'Practice again').click()"
   );
   await page.waitFor("document.querySelector('.panel-songs-practice h4')");
   const stepTitle = await page.evaluate("document.querySelector('.panel-songs-practice h4').textContent");
-  assert.ok(stepTitle.startsWith('Listen'), '"Practise again" always starts fresh: ' + stepTitle);
+  assert.ok(stepTitle.startsWith('Listen'), '"Practice again" always starts fresh: ' + stepTitle);
 
   assert.deepEqual(page.exceptions, []);
 });

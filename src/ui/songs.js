@@ -597,7 +597,7 @@ function mountSongsPanel(hostEl, api) {
   // activation of Songs can focus this heading instead of dropping focus to
   // <body>.
   const heading = el('h2', { text: 'Songs', id: 'songsHeading', tabindex: '-1' });
-  const intro = el('p', { class: 'panel-songs-intro', text: 'Pick a tune to practise, or add your own from a file.' });
+  const intro = el('p', { class: 'panel-songs-intro', text: 'Pick a tune to practice, or add your own from a file.' });
 
   // "Carry on: <title>" (P5-3): shown above the list, only while no lesson
   // is open, only for the most recent saved place still short of the last
@@ -1189,7 +1189,7 @@ function mountSongsPanel(hostEl, api) {
       const partList = el('ul', {});
       song.parts.forEach((part) => {
         const li = el('li', {}, [
-          el('button', { type: 'button', text: 'Practise: ' + part.name, onclick: () => startPractice(song, part.id) }),
+          el('button', { type: 'button', text: 'Practice: ' + part.name, onclick: () => startPractice(song, part.id) }),
         ]);
         partList.appendChild(li);
       });
@@ -1201,7 +1201,7 @@ function mountSongsPanel(hostEl, api) {
     } else if (song.parts.length === 1) {
       startPractice(song, song.parts[0].id);
     } else {
-      practiceSection.appendChild(el('p', { text: 'This song has no notes to practise yet.' }));
+      practiceSection.appendChild(el('p', { text: 'This song has no notes to practice yet.' }));
       practiceHeadingEl.focus();
     }
   }
@@ -1237,7 +1237,7 @@ function mountSongsPanel(hostEl, api) {
     const instrument = instrumentOverride || api.instrument(instrumentId);
     if (!instrument) {
       practiceSection.innerHTML = '';
-      practiceSection.appendChild(el('p', { text: 'Pick an instrument on the main screen first, then come back here to practise.' }));
+      practiceSection.appendChild(el('p', { text: 'Pick an instrument on the main screen first, then come back here to practice.' }));
       return;
     }
     const saved = store.get();
@@ -1478,7 +1478,7 @@ function mountSongsPanel(hostEl, api) {
     // (restart(), above) -- a second run started from the keyboard
     // hand-off must still end with "Back to practice" (C11a), and a
     // second Check run must still be a Check.
-    practiceSection.appendChild(el('button', { type: 'button', text: 'Practise again', onclick: () => restart(practice.mode, true) }));
+    practiceSection.appendChild(el('button', { type: 'button', text: 'Practice again', onclick: () => restart(practice.mode, true) }));
     practiceSection.appendChild(el('button', {
       type: 'button', text: 'Back to songs',
       onclick: () => { practice = null; currentPractice = null; practiceSection.hidden = true; libraryDetails.open = true; },
@@ -1755,7 +1755,7 @@ function mountSongsPanel(hostEl, api) {
     const { plan, stepIndex } = practice;
     if (!plan.steps.length && plan.fit && plan.fit.unplayable.length) {
       // Every note skipped on this instrument: nothing to play, so say so -- never the "played it" end screen or a passed mark. (A part with no notes at all still finishes at once, as before.)
-      practiceSection.appendChild(el('p', { text: 'None of this part\'s notes can be played on ' + practice.instrument.name + ', so there is nothing to practise here. Pick another instrument from "Play it on…".' }));
+      practiceSection.appendChild(el('p', { text: 'None of this part\'s notes can be played on ' + practice.instrument.name + ', so there is nothing to practice here. Pick another instrument from "Play it on…".' }));
       practiceSection.appendChild(renderPlayItOn(practice.song, practice.partId, practice.instrumentId)); // the way out the message promises
       practiceSection.appendChild(el('button', { type: 'button', text: 'Back to songs', onclick: () => { practice = null; currentPractice = null; practiceSection.hidden = true; libraryDetails.open = true; } }));
       return;

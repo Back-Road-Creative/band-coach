@@ -82,15 +82,15 @@ function weeklyReportHtml(w, api) {
     ? w.perInstrument
         .map((m) => `<li>${esc((api.instrument(m.mod) || {}).name || m.mod)}: ${m.minutes} min across ${m.sessions} session${m.sessions === 1 ? '' : 's'}</li>`)
         .join('')
-    : '<li>Nothing practised this week.</li>';
+    : '<li>Nothing practiced this week.</li>';
   const truncatedNote = w.truncated
     ? '<p>Some earlier days this week are not shown because the practice log only keeps the most recent sessions — those days are unknown, not zero.</p>'
     : '';
   return `
     <h1>${esc(w.name)}'s week in Band Coach</h1>
     <p>${esc(w.weekStart)} to ${esc(w.weekEnd)}</p>
-    <p>${w.totalMinutes} minute${w.totalMinutes === 1 ? '' : 's'} total, practised on ${w.daysPractised} of 7 days, hit the ${w.goalMin}-minute goal on ${w.daysGoalMet} day${w.daysGoalMet === 1 ? '' : 's'}.</p>
-    <h2>What was practised</h2>
+    <p>${w.totalMinutes} minute${w.totalMinutes === 1 ? '' : 's'} total, practiced on ${w.daysPractised} of 7 days, hit the ${w.goalMin}-minute goal on ${w.daysGoalMet} day${w.daysGoalMet === 1 ? '' : 's'}.</p>
+    <h2>What was practiced</h2>
     <ul>${instRows}</ul>
     ${truncatedNote}
   `;
@@ -155,7 +155,7 @@ export function registerHistory(panels) {
       function renderItemsFor(modId, db, now) {
         const box = el.querySelector('#historyItems');
         const items = practicedItems(db.mods && db.mods[modId]);
-        if (!items.length) { box.innerHTML = '<p>Nothing practised yet on this instrument.</p>'; return; }
+        if (!items.length) { box.innerHTML = '<p>Nothing practiced yet on this instrument.</p>'; return; }
         const ranked = due(items, now);
         const weakest = ranked[0];
         const strongest = ranked[ranked.length - 1];
@@ -190,8 +190,8 @@ export function registerHistory(panels) {
         const ev = summarizeEvents(db.events || [], { skillMap: KBD_SONG_SKILL_MAP, skillMapInstrument: 'kbd' });
         const checkedCount = ev.withHelp + ev.independent + ev.introduced;
         el.querySelector('#historyRetention').innerHTML = checkedCount
-          ? `<p>Tries with help: ${ev.withHelp} · Passed on your own: ${ev.independent} · Retained on a later check: ${ev.retained} · Applied in a song: ${ev.applied}</p>`
-          : '<p>No checks recorded yet — nothing here is counted as retained.</p>';
+          ? `<p>Tries with help: ${ev.withHelp} · Passed on your own: ${ev.independent} · Remembered on a later try: ${ev.retained} · Applied in a song: ${ev.applied}</p>`
+          : '<p>Not tried again later yet, so nothing here counts as remembered.</p>';
 
         // Nothing logged yet: offer the way to make the first session instead of an empty calendar and goal box.
         const empty = !s.totalSessions;
@@ -226,11 +226,11 @@ export function registerHistory(panels) {
           Object.keys(db.mods || {}).filter((m) => practicedItems(db.mods[m]).length),
         )));
         const current = modSelect.value && modIds.indexOf(modSelect.value) >= 0 ? modSelect.value : (modIds.indexOf(api.mod()) >= 0 ? api.mod() : modIds[0]);
-        modSelect.hidden = !modIds.length; // nothing practised: no instrument to pick, so no empty box
+        modSelect.hidden = !modIds.length; // nothing practiced: no instrument to pick, so no empty box
         el.querySelector('label[for="historyModSelect"]').hidden = !modIds.length;
         modSelect.innerHTML = modIds.map((m) => `<option value="${esc(m)}">${esc((api.instrument(m) || {}).name || m)}</option>`).join('');
         if (current) modSelect.value = current;
-        if (current) renderItemsFor(current, db, now); else el.querySelector('#historyItems').innerHTML = '<p>Nothing practised yet.</p>';
+        if (current) renderItemsFor(current, db, now); else el.querySelector('#historyItems').innerHTML = '<p>Nothing practiced yet.</p>';
       }
 
       // Same path as a person's own taps: go to Practice (the nav button closes this panel), then press Start.

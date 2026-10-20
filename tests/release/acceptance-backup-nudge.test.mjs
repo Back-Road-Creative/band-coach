@@ -29,7 +29,7 @@ async function startKeyboard(page) {
   await page.clickSelector('#playBtn');
 }
 
-test('a first session too short to log does not claim "practising a while"', async (t) => {
+test('a first session too short to log does not claim "practicing a while"', async (t) => {
   await withAcceptancePage(t, { initScript: WATCH }, async (page) => {
     await startKeyboard(page);
     await playAnswers(page, 1);

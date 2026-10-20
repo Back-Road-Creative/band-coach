@@ -586,7 +586,7 @@ test('T5: a computer-key whole-piece pass never counts; a MIDI one does, and Pro
 
         // "Practise again" keeps the mode (src/ui/songs.js restart()) --
         // walk to 'whole' again and this time pass it on a real MIDI note.
-        await clickButtonNamed(page, 'Practise again');
+        await clickButtonNamed(page, 'Practice again');
         await page.waitFor("document.querySelector('.panel-songs-practice h4')");
         await walkToStep(page, PLAN_A, 'whole');
 

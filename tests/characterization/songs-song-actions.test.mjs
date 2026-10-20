@@ -45,7 +45,7 @@ test('an open song shows one row of named actions', async (t) => {
   assert.deepEqual(actionTexts, ['Edit notes', 'Play along', 'Export', 'Share', 'Save a copy', 'Print', 'Download sheet (SVG)']);
 
   const practiceVisible = await page.evaluate("document.querySelector('.panel-songs-practice').hidden === false");
-  assert.ok(practiceVisible, 'the practise section is visible below the action row');
+  assert.ok(practiceVisible, 'the practice section is visible below the action row');
 });
 
 test('format buttons appear only inside Export', async (t) => {
