@@ -56,7 +56,7 @@ const NO_SCROLL = 'NO_SCROLL', ONE_SCROLL = 'ONE_SCROLL';
 const POLICY_TEXT = { [NO_SCROLL]: 'no scrolling after Start', [ONE_SCROLL]: 'one scroll position' };
 const SIZES = [
   { name: '320x568', vp: { width: 320, height: 568, mobile: true, deviceScaleFactor: 2 }, keyboard: ONE_SCROLL, kit: ONE_SCROLL },
-  { name: '390x844', vp: { width: 390, height: 844, mobile: true, deviceScaleFactor: 3 }, keyboard: NO_SCROLL, kit: ONE_SCROLL },
+  { name: '390x844', vp: { width: 390, height: 844, mobile: true, deviceScaleFactor: 3 }, keyboard: NO_SCROLL, kit: NO_SCROLL },
   { name: '844x390', vp: { width: 844, height: 390, mobile: true, deviceScaleFactor: 3 }, keyboard: NO_SCROLL, kit: NO_SCROLL },
   { name: '640x400', vp: { width: 640, height: 400, mobile: false, deviceScaleFactor: 2 }, keyboard: ONE_SCROLL, kit: ONE_SCROLL },
 ];

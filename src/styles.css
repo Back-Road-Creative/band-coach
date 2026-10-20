@@ -639,6 +639,21 @@
     /* Show = Staff on the keyboard needs room for the grand staff above keys that stay at the 24px tap floor. */
     #cv.staffkbd { aspect-ratio: 16 / 10; }
   }
+  /* U8b: on a phone the feedback card shares the level card's grid cell (row 2 of the single column; Start is pinned to row 1),
+     so no separate slot is reserved under it and there is no dead strip mid-session. The cell is as tall as the level card,
+     so the canvas never moves when feedback first appears or changes. In a session the level card puts #coach (the objective,
+     which must stay readable) last, so its other parts (level, progress bar, the two buttons) fill the top of the card; the
+     feedback card sits on top of them (align-self:start) and they go opacity 0 while feedback shows. Opacity, never display or
+     visibility: size, screen-reader content and tab stops stay, and the buttons return on top while focus is inside the card. */
+  @media (max-width: 600px) and (min-height: 501px) {
+    .main > .side > .row:first-child { grid-row: 1; }
+    .main > .side > #levelCard, .main > .side > #feedbackCard { grid-row: 2; grid-column: 1; }
+    .main > .side > #feedbackCard { z-index: 1; align-self: start; }
+    .main:has(#endBtn:not([hidden])) > .side > #levelCard { display: flex; flex-direction: column; }
+    .main:has(#endBtn:not([hidden])) > .side > #levelCard > #coach { order: 1; }
+    .main:has(#feedbackCard:not([hidden])) > .side > #levelCard:not(:focus-within) > :not(#coach) { opacity: 0; }
+    .main > .side > #levelCard:focus-within { position: relative; z-index: 2; }
+  }
   @media (orientation: landscape) and (max-height: 500px) {
     .main { grid-template-columns: max-content minmax(0, 1fr); gap: 6px; }
     .main > *, .main > .side > * { grid-column: 1 / -1; }
