@@ -283,7 +283,7 @@ throws, naming what to install or set, rather than fall back to the shell.
 When `retryFlaky` discards an attempt and a later one passes, the run still prints a
 `retryFlaky: ... discarded attempt N` line to stderr, so a second-try pass is visible.
 
-`npm test` caps how many test files (and therefore how many Chromiums) run at
+`npm test`, `npm run test:release` and `npm run stage` cap how many test files (and therefore how many Chromiums) run at
 once: a quiet box keeps node's own default (one less than the core count), but
 past that the cap backs off as the box's load average climbs, so the suite
 can't launch more browsers than the machine can actually boot in time
@@ -293,7 +293,7 @@ the real-time audio tests. If a box is loaded by something the load
 average doesn't capture, set `BAND_COACH_TEST_CONCURRENCY` to force a lower
 number.
 
-The `test` script computes that cap with a `$(...)` command substitution, so it
+Each of them computes that cap with a `$(...)` command substitution, so it
 needs a POSIX shell. That covers Linux, macOS and WSL, which is everything this
 repo and its CI actually run on. In a bare Windows `cmd.exe` it will not expand:
 run `node --test` yourself with an explicit `--test-concurrency=<n>`, or set

@@ -7,7 +7,7 @@
 //                                     /mnt/d, the Windows D: drive under WSL)
 //   BC_STAGE_DIR=/some/dir npm run stage
 //
-// The copy happens only after `node --test "tests/release/*.test.mjs"` has run
+// The copy happens only after the release files (node --test, load-capped) have run
 // against that exact file with fail = 0 and todo = 0; a refusal prints why and
 // leaves the destination untouched. A passing stage also writes
 // <file>.evidence.json beside the copy (sha256, bytes, commit, dirty, passLine,
@@ -26,7 +26,7 @@ import { spawnSync } from 'node:child_process';
 const here = dirname(fileURLToPath(import.meta.url));
 export const DEFAULT_FROM = join(here, '..', 'dist', 'release', 'band-coach.html');
 export const DEFAULT_DIR = '/mnt/d';
-export const DEFAULT_TEST_CMD = 'node --test "tests/release/*.test.mjs"';
+export const DEFAULT_TEST_CMD = 'node --test --test-concurrency=$(node tests/helpers/browser.mjs) "tests/release/*.test.mjs"';
 const root = join(here, '..');
 
 // Reads the node test summary (tap `# pass 3` or spec `ℹ pass 3`); null when absent.
