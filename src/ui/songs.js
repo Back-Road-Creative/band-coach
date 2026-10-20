@@ -525,7 +525,7 @@ function mountSongsPanel(hostEl, api) {
   let destroyed = false;
   let analysing = false;
   const addSongToggleBtn = el('button', {
-    type: 'button', text: 'Add a song', 'aria-expanded': 'false',
+    type: 'button', text: t('songs.addRow'), 'aria-expanded': 'false',
     onclick: () => toggleAddSong(),
   });
   const addSongRow = el('div', { class: 'add-song-row', role: 'group', 'aria-label': t('songs.addRow') }, [addSongToggleBtn]);
@@ -605,7 +605,7 @@ function mountSongsPanel(hostEl, api) {
   // F2 (src/app.js's focusDestination()): id + tabindex so a real nav
   // activation of Songs can focus this heading instead of dropping focus to
   // <body>.
-  const heading = el('h2', { text: 'Songs', id: 'songsHeading', tabindex: '-1' });
+  const heading = el('h2', { text: t('nav.songs'), id: 'songsHeading', tabindex: '-1' });
   const intro = el('p', { class: 'panel-songs-intro', text: 'Pick a tune to practice, or add your own from a file.' });
 
   // "Carry on: <title>" (P5-3): shown above the list, only while no lesson
@@ -2798,7 +2798,7 @@ function mountSongsPanel(hostEl, api) {
 export function register(panels) {
   panels.register({
     id: 'songs',
-    name: 'Songs',
+    get name() { return t('nav.songs'); },
     tag: 'practice a tune',
     color: '#5be08a',
     mount: mountSongsPanel,

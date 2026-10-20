@@ -110,7 +110,7 @@ test('release.yml still runs the suite and the gate that pages and the store now
   const text = workflow('release.yml');
   const rel = job(text, 'release');
   assert.match(rel, /- run: npm test$/m);
-  assert.match(rel, /- run: npm run gate$/m);
+  assert.match(rel, /sha256sum -c "\$RUNNER_TEMP\/tested\.sha256"/, 'the release lane runs as npm test posttest; publish checks the file it tested');
   assert.match(text, /^name: release$/m, 'pages.yml and store-package.yml look the run up as release.yml');
 });
 

@@ -66,17 +66,19 @@ jobs:
       - run: npm test
         env:
           CI: true
-      # This step rebuilds the release file and tests it, so the file published
-      # next is the gate's whether or not the suite ran its posttest. Publish
-      # must follow it directly. Do not delete it without a replacement that
-      # proves the same.
-      - run: npm run gate
-        env:
-          CI: true
+      # npm test's posttest (package.json: posttest -> gate -> test:release) builds
+      # dist/release/band-coach.html and runs tests/release/* against it, so the
+      # release lane runs once, there. Record the hash of that exact file now;
+      # publish refuses to upload anything else. Nothing may run between this
+      # step, npm test and publish (tests/unit/release-workflow-budget-evidence
+      # T3 pins it). Do not add a second `npm run gate`: it only repeats the lane.
+      - name: record the hash of the file the release lane tested
+        run: sha256sum dist/release/band-coach.html > "$RUNNER_TEMP/tested.sha256"
       - name: publish GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          sha256sum -c "$RUNNER_TEMP/tested.sha256"
           gh release create "$GITHUB_REF_NAME" dist/release/band-coach.html \
             --title "Band Coach $GITHUB_REF_NAME" \
             --generate-notes
