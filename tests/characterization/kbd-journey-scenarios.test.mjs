@@ -444,7 +444,7 @@ test('journey 3: a learner returns the next day and a real recheck is retained',
   assert.equal(afterRecheck.retained, true, 'a clean recheck at or after dueAt must read as retained');
   assert.notEqual(afterRecheck.step, 'complete', 'retained alone (no transfer song played) must not reach complete');
 
-  // Ground truth for the Progress "Retained on a later check" bucket: the
+  // Ground truth for the Progress "Remembered on a later try" bucket: the
   // SAME summarizeEvents() call #historyRetention itself makes
   // (src/ui/history.js), on the SAME real events -- never a hand-predicted
   // number, for the same reason Scenario 1's independent count is not one.
@@ -453,7 +453,7 @@ test('journey 3: a learner returns the next day and a real recheck is retained',
   assert.ok(expected.retained >= 1, 'the real two-day run must log at least one retained row');
   const retention = await readRetention(page);
   assert.equal(
-    countIn(retention, 'Retained on a later check'), expected.retained,
+    countIn(retention, 'Remembered on a later try'), expected.retained,
     `Progress must count exactly what summarizeEvents agrees with (${expected.retained}): ` + retention
   );
   assert.deepEqual(page.exceptions, []);

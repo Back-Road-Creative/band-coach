@@ -129,6 +129,7 @@ test('A01: first visit on computer keys -- choose, start, play, pause, play, end
         const misses = [];
         const check = (name, fn) => { try { fn(); } catch (e) { misses.push(`${name}: ${e.message.split('\n')[0]}`); } };
         check('4a wrong key says what it heard', () => assert.match(r.wrong.text, new RegExp(`^That was [A-G][♯♭]?, the note is ${escapeRe(r.short)}\\. `), `wrong key: ${r.wrong.text}`));
+        check('4d hint counts white keys and names the computer key', () => assert.match(r.wrong.text, new RegExp(`Go one white key to the left\\. Press ${KEY_FOR[r.label].toUpperCase()}\\.$`), `wrong key: ${r.wrong.text}`));
         check('4b wrong key is a miss', () => assert.equal(r.wrong.cls, 'no', 'a wrong key is shown as a miss'));
         check('4c right key gets its own answer', () => assert.equal(r.answered, true, 'the right key after a wrong one was never answered'));
         check('5a right key recognised', () => assert.match(r.right.text, new RegExp(`^That is the one\\. ${escapeRe(r.short)}\\.$`), `right key after a miss: ${r.right.text}`));
@@ -249,5 +250,71 @@ test('control for A01: keys pressed outside a judged note are never credited', a
     const db = await stored(page);
     assert.deepEqual((db.events || []).map((e) => e.dims && e.dims.pitch), ['miss'], 'only the one note finished, logged as a miss, never a pass');
     assert.deepEqual(page.exceptions, [], 'no uncaught exceptions');
+  });
+});
+
+// One question first: a fresh profile is asked exactly one thing -- which
+// instrument -- and nothing is stored or offered until the learner answers it.
+test('first visit asks one question: nothing stored, no Start, until an instrument is chosen', async (t) => {
+  await withAcceptancePage(t, {}, async (page) => {
+    const stage = () => page.evaluate("['playBtn', 'levelName', 'coach'].map((id) => document.getElementById(id).hidden)");
+    assert.deepEqual(await stage(), [true, true, true], 'Start, the level name and the coach line are hidden before a choice');
+    // Longer than the app's 1200 ms save debounce: a boot-time save would have landed.
+    await new Promise((r) => setTimeout(r, 2000));
+    assert.equal(await page.evaluate("localStorage.getItem('bandcoach.v1')"), null, 'nothing is stored before a choice');
+
+    await page.reload();
+    assert.equal(await text(page, 'navInstrument'), 'Choose an instrument', 'a reload still asks');
+    assert.equal(await hidden(page, 'picker'), false, 'the sheet is still open after a reload');
+
+    // Start pressed anyway (a script, a stray key): refused, the question is put again.
+    await page.evaluate("document.getElementById('playBtn').click()");
+    assert.equal(await page.evaluate("document.activeElement && document.activeElement.closest('#picker') ? 'picker' : String(document.activeElement && document.activeElement.id)"), 'picker', 'focus lands in the picker');
+    assert.notEqual(await text(page, 'playBtn'), 'Pause', 'no session started');
+    assert.equal(await hidden(page, 'picker'), false, 'the sheet stays open');
+    await new Promise((r) => setTimeout(r, 1500));
+    assert.equal(await page.evaluate("localStorage.getItem('bandcoach.v1')"), null, 'still nothing stored');
+
+    // A setting the learner changes before choosing is theirs and survives a reload; the instrument question is still open.
+    await page.evaluate("const s = document.getElementById('optTheme'); s.value = 'light'; s.dispatchEvent(new Event('change'))");
+    await page.waitFor("localStorage.getItem('bandcoach.v1') !== null");
+    assert.equal(await page.evaluate("JSON.parse(localStorage.getItem('bandcoach.v1')).prefs.mod"), null, 'no instrument is stored with it');
+    await page.reload();
+    assert.equal(await page.evaluate("document.documentElement.getAttribute('data-theme')"), 'light', 'the theme choice survived the reload');
+    assert.equal(await text(page, 'navInstrument'), 'Choose an instrument', 'the question is still asked');
+    assert.deepEqual(await stage(), [true, true, true], 'Start is still hidden');
+
+    await chooseKeyboard(page);
+    assert.deepEqual(await stage(), [false, false, false], 'a choice brings Start, the level name and the coach line');
+    await page.waitFor("localStorage.getItem('bandcoach.v1') !== null");
+    assert.deepEqual(page.exceptions, [], 'no uncaught exceptions');
+  });
+});
+
+// U6: on a phone the instrument picker is part of the page, not a small box
+// with its own scrollbar, and no label is cut off. The variant lists sit behind
+// a short "More" chip (a deliberate label, the one text allowed to end in an
+// ellipsis); every other visible label is whole, neither ending in "…" nor
+// clipped by the CSS.
+test('U6: at phone width the picker fits the page and no label is cut off', async (t) => {
+  await withAcceptancePage(t, {}, async (page) => {
+    await page.setViewport({ width: 390, height: 844, mobile: true });
+    await page.waitFor("!document.getElementById('picker').hidden");
+    const r = JSON.parse(await page.evaluate(`JSON.stringify((() => {
+      const p = document.getElementById('picker');
+      const vis = (e) => { const b = e.getBoundingClientRect(); return b.width > 0 && b.height > 0 && getComputedStyle(e).visibility !== 'hidden'; };
+      const labels = [...p.querySelectorAll('button, summary, small, .picker-tools-label')].filter(vis);
+      return {
+        scrollHeight: p.scrollHeight, clientHeight: p.clientHeight,
+        ellipsed: labels.map(e => e.innerText.trim()).filter(s => s.endsWith('…') && s !== 'More…'),
+        clipped: labels.filter(e => e.scrollWidth > e.clientWidth + 1).map(e => e.innerText.trim()),
+        // what a sighted learner sees on the chip: the visually-hidden instrument name (screen readers only, see acceptance-picker-more-chip) is left out
+        chips: [...p.querySelectorAll('.variant-toggle > summary')].filter(vis).map(e => [...e.querySelectorAll('.variant-more > [aria-hidden]')].map(x => x.innerText.trim()).join('') || e.innerText.trim()),
+      };
+    })())`));
+    assert.equal(r.scrollHeight, r.clientHeight, 'the picker has no inner scroll area');
+    assert.deepEqual(r.ellipsed, [], 'no label ends in an ellipsis');
+    assert.deepEqual(r.clipped, [], 'no label is clipped');
+    assert.ok(r.chips.length > 0 && r.chips.every((c) => c === 'More'), `variant chips read "More" (got ${JSON.stringify(r.chips)})`);
   });
 });

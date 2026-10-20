@@ -81,6 +81,15 @@ export function releaseFloor(gatesArg) {
 // note is released only by an onset or a different note, never by quiet.
 export const QUIET_RELEASE_SEC = 0.1;
 
+// Q10d-3: the loudest recent level of a pluck, halving every RING_HALF_LIFE_SEC of delivered time. A fresh
+// pluck on a string that is still ringing adds energy to it, so its frame is louder than the ring was; a
+// dip and rebound in the ring itself (a clarity dropout, a stalled capture) comes back no louder. An onset
+// only releases a ringing note when its frame beats ringBefore(): the envelope decayed to now, before this
+// frame is added. Known limit: a re-pluck softer than the ring it lands on is not heard until the ring has
+// decayed or gone quiet (the quiet rule resets the envelope).
+const RING_HALF_LIFE_SEC = 0.5;
+export const ringBefore = (env, dt) => env * Math.pow(0.5, Math.max(0, dt || 0) / RING_HALF_LIFE_SEC);
+
 // Maps an RMS value onto a 0..1 dB-scaled range for a level meter. Human
 // loudness perception (and mic clipping headroom) is logarithmic, so a
 // linear RMS-to-width mapping would make everything below "shouting" look

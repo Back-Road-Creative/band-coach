@@ -349,7 +349,7 @@ above are read from the string tables in `src/core/i18n.js` (`t(id, params)`) ra
 hardcoded. Settings > Language switches the app between English and Español (the choice is saved
 with your other preferences, travels in a backup, and is applied at startup before the first
 screen; `<html lang>` follows it). What is translated: the nav bar, page headings and static
-labels, the keyboard help, and the backup/restore/update messages. Everything not yet routed
+labels, the keyboard help, the Start/Pause button, the instrument sheet (redrawn the moment the language changes), the Songs and keyboard-path screens' titles and buttons, and the backup/restore/update messages. Everything not yet routed
 through `t()` -- most of the exercise prompts, coach lines, song and lesson text and some
 Settings labels -- stays in English whichever language is picked. The Spanish table is a
 machine-translated first pass that has not yet been reviewed by a native speaker; a unit test
@@ -370,6 +370,8 @@ startup and again whenever the language is changed.
   it can still name something the app was handling. Nothing is sent anywhere.
 
 ## Progress
+
+Before any session is logged, Progress shows a **Start your first session** button (it goes to Practice and presses Start, the same as doing it by hand) and hides the empty practice calendar and goal box until there is something to show. Settings sits at the same left edge as Practice. On a phone, Songs and Progress start right under the status row.
 
 Every judged drill answer, warm-up answer and judged song step leaves one small record — which
 instrument and skill it was, whether it was independent or asked for help, which parts (pitch,
@@ -555,8 +557,8 @@ the MIDI/MusicXML/ABC download buttons only once pressed (they no longer sit on 
 Share downloads a `.bandpack` of that one song alone, and Print sends just that song's notation to
 plain paper, black on white, with nothing else on the page. A teacher challenge's title field,
 "Export as a challenge", "Share with your band" and any read-only band-pack part assignments live
-under their own **Assignments** heading below the song list, separate from a single open song's
-own actions. Importing a challenge re-opens the library if a lesson had folded it and scrolls that list into view, and a failed import's message is
+under their own **Assignments** heading, inside a closed **For teachers** disclosure below the song
+list (it opens by itself when a challenge is loaded), separate from a single open song's own actions. Importing a challenge re-opens the library if a lesson had folded it and scrolls that list into view, and a failed import's message is
 drawn in the error colour, not the success green.
 
 Reopening a song, in Learn or Rehearse, carries on from the step you left off on, at the same
@@ -1559,6 +1561,11 @@ Steps 1, 5 and 6 are also run by the Windows lane
 names a passing Windows-lane run on this exact file (the same sha256), skip those three; otherwise
 do them by hand. Steps 2, 3, 4, 7 and 8 need real hardware and a person every time.
 
+Before a build reaches the person doing the hand check, an agent has already run the automated
+release tests and the Windows lane on the exact staged file (its sha256 is recorded beside it in
+`band-coach.html.evidence.json`), so the hand check covers only the steps that need real hardware:
+2, 3, 4, 7 and 8.
+
 1. **Open the file (30s).** Double-click it. **Fail** if the page does not load, or the browser
    console (F12) shows red errors. *Skip when the record has a passing Windows-lane run for
    this file.*
@@ -1686,8 +1693,10 @@ release.
   measured and not required. While a session runs, the playing surface, the feedback line and End
   session (with the objective, on a narrow window) are on one screen at: 320x568: keyboard one
   scroll position, drum kit one scroll position; 390x844: keyboard no scrolling after Start, drum
-  kit one scroll position; 844x390: keyboard one scroll position, drum kit one scroll position;
-  640x400: keyboard one scroll position, drum kit one scroll position. A fretted or microphone
+  kit one scroll position; 844x390: keyboard no scrolling after Start, drum kit no scrolling after Start;
+  640x400: keyboard one scroll position, drum kit one scroll position. (On a screen 600 px tall or less the
+  tagline is hidden and the menu is one row; while a session runs on a phone the tagline is hidden, and on a
+  wide short screen the playing surface sits beside Start/End and the feedback. All of it returns at End.) A fretted or microphone
   instrument (guitar) is held to the same screen at 390x844 only, in
   `tests/release/acceptance-phone-fit-mic-fretted.test.mjs`: after Start, the prompt and the whole
   drawing are on the first screen with no scrolling, with "Set up input" open or shut ("How to play

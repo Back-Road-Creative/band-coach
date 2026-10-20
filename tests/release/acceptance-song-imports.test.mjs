@@ -11,7 +11,7 @@ import { chooseFile } from '../helpers/file-chooser.mjs';
 
 const FX = new URL('../fixtures/', import.meta.url).pathname;
 const CASES = [
-  { format: '.mid', file: FX + 'midi/beat.mid', title: 'untitled' },
+  { format: '.mid', file: FX + 'midi/beat.mid', title: 'beat' },
   { format: '.musicxml', file: FX + 'musicxml/tutorial-chopin-prelude.musicxml', title: 'tutorial-chopin-prelude' },
   { format: '.mxl', file: FX + 'musicxml/tutorial-chopin-prelude.mxl', title: 'tutorial-chopin-prelude' },
   { format: '.gp5', file: FX + 'gp5/Voices.gp5', title: 'Voices' },
@@ -37,7 +37,7 @@ for (const c of CASES) {
       await page.evaluate(`Array.from(document.querySelectorAll('.panel-songs-row button')).find((b) => b.textContent.trim() === ${JSON.stringify(c.title)}).click()`);
       await page.waitFor("document.querySelector('.panel-songs-action-playalong')");
       assert.equal(await page.evaluate("document.querySelector('.panel-songs-action-playalong').disabled"), false, 'Play along is enabled');
-      assert.equal(await page.evaluate("document.querySelector('.panel-songs-practice') && document.querySelector('.panel-songs-practice').textContent.includes('no notes to practise')"), false, 'the song has notes to practise');
+      assert.equal(await page.evaluate("document.querySelector('.panel-songs-practice') && document.querySelector('.panel-songs-practice').textContent.includes('no notes to practice')"), false, 'the song has notes to practice');
     });
   });
 }

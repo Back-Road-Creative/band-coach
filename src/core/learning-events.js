@@ -15,6 +15,12 @@
 export const EVENT_VERSION = 1;
 
 const SOURCES = ['drill', 'warmup', 'song', 'ear', 'theory'];
+// The input routes the app tags on a row: 'midi' (a MIDI note-on), 'mic' (a
+// note the microphone recognised), 'computer-key' (the physical keyboard),
+// 'screen' (a canvas tap or Enter/Space on the canvas) and 'screen-tap' (a
+// tap or click on an on-screen ear-training choice). Informational only:
+// validateEvent still accepts any string so legacy stored rows pass.
+export const INPUTS = new Set(['midi', 'mic', 'computer-key', 'screen', 'screen-tap']);
 const ASSISTANCE = ['none', 'shown', 'approximate', 'guided'];
 const DIM_VALUES = ['ok', 'miss', 'unassessed'];
 const HANDS = ['left', 'right', 'both'];

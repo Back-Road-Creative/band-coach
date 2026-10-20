@@ -90,10 +90,10 @@ test('P8: on a phone viewport the input status dot and its text sit on the same 
 });
 
 // P1 asks for one accent: the COACH wordmark in the Start button's colour.
-// The wordmark is 44px bold, which is WCAG "large text", so it needs 3:1
-// against the page, not the 4.5:1 that --accent-ink enforces for small text.
-// Holding it to 4.5:1 is what turned it navy beside a bright Start button.
-test('P1: in the light theme the wordmark matches Start when that colour reads at 3:1, and never drops below 3:1', async (t) => {
+// The wordmark is 44px bold, which WCAG counts as "large text" (3:1), but U10 holds it to 4.5:1 (it read
+// 3.12:1 at 3:1). accentDisplayFor darkens only as far as that takes, in small steps, so it still matches
+// Start wherever Start's own colour already reads at 4.5:1 rather than dropping to --accent-ink's navy.
+test('P1: in the light theme the wordmark matches Start when that colour reads at 4.5:1, and never drops below 4.5:1', async (t) => {
   const page = await launchPage(htmlPath);
   t.after(() => page.close());
   await page.evaluate(`(() => { const s = document.getElementById('optTheme'); s.value = 'light'; s.dispatchEvent(new Event('change')); })()`);
@@ -114,7 +114,7 @@ test('P1: in the light theme the wordmark matches Start when that colour reads a
     })()`));
   }
   for (const r of rows) {
-    assert.ok(r.wordRatio >= 3, `${r.m}: wordmark ${r.wordRatio.toFixed(2)}:1 is below 3:1`);
-    if (r.startRatio >= 3) assert.ok(r.same, `${r.m}: Start reads at ${r.startRatio.toFixed(2)}:1, so the wordmark should be the same colour`);
+    assert.ok(r.wordRatio >= 4.5, `${r.m}: wordmark ${r.wordRatio.toFixed(2)}:1 is below 4.5:1`);
+    if (r.startRatio >= 4.5) assert.ok(r.same, `${r.m}: Start reads at ${r.startRatio.toFixed(2)}:1, so the wordmark should be the same colour`);
   }
 });

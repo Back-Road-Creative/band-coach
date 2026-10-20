@@ -104,7 +104,7 @@ const PAGE_SCRIPT = `(function () {
   window.__q3cText = [];
   proto.clearRect = function () { if (this.canvas && this.canvas.id === 'cv') window.__q3cText = []; return clearRect.apply(this, arguments); };
   proto.fillText = function (text, x, y) {
-    if (this.canvas && this.canvas.id === 'cv') { var m = this.getTransform(); window.__q3cText.push({ text: String(text), x: m.a * x + m.c * y + m.e, y: m.b * x + m.d * y + m.f, align: this.textAlign }); }
+    if (this.canvas && this.canvas.id === 'cv') { var m = this.getTransform(); window.__q3cText.push({ text: String(text), x: m.a * x + m.c * y + m.e, y: m.b * x + m.d * y + m.f, align: this.textAlign, w: this.measureText(String(text)).width * m.a, font: this.font }); }
     return fillText.apply(this, arguments);
   };
   var inputs = [];
@@ -207,9 +207,21 @@ const aimVia = (page, via, m, pt) => {
 };
 
 // What the app must say about a key that was played with the target T.
-function missText(clicked, target) {
-  const st = clicked - target, n = Math.abs(st);
-  const where = n === 12 ? `Right note, wrong octave: go one octave ${st > 0 ? 'down' : 'up'}.` : `Go ${n} key${n > 1 ? 's' : ''} to the ${st > 0 ? 'left' : 'right'}.`;
+// A learner counts WHITE keys on a drawn keyboard (U4): the white keys passed on the way to the target, the target
+// included; a black target is named, not counted. A computer key also says which key to press.
+const WHITE = (m) => [0, 2, 4, 5, 7, 9, 11].includes(((m % 12) + 12) % 12);
+const WORDS = ['', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'];
+function missText(clicked, target, pressKey) {
+  const st = clicked - target, n = Math.abs(st), dir = st > 0 ? 'left' : 'right';
+  let where;
+  if (n === 12) where = `Right note, wrong octave: go one octave ${st > 0 ? 'down' : 'up'}.`;
+  else if (!WHITE(target)) where = `Go to the black key ${nm(target)}, to the ${dir}.`;
+  else {
+    let w = 0;
+    for (let m = Math.min(clicked, target); m <= Math.max(clicked, target); m++) if (WHITE(m) && m !== clicked) w++;
+    where = w === 1 ? `Go one white key to the ${dir}.` : `Go ${WORDS[w] || w} white keys to the ${dir}.`;
+  }
+  if (pressKey && n !== 12) where += ` Press ${pressKey.toUpperCase()}.`;
   return `That was ${nm(clicked)}, the note is ${nm(target)}. ${where}`;
 }
 // First try: "<T>: yes, in N s."; after a miss on the same question: "That is the one. <T>." (passEl :1137).
@@ -239,7 +251,7 @@ function keyboardFailure(where, expect, passed, res) {
 
 // One keyboard input and everything the learner would notice. `expect` is the
 // MIDI number that must be delivered, or null for "nothing may play here".
-async function keyboardInput(page, ctx, { act, expect, what }) {
+async function keyboardInput(page, ctx, { act, expect, what, computer }) {
   const target = await readTarget(page);
   const before = await feedback(page);
   const afterMiss = afterMissLine(before);
@@ -273,7 +285,7 @@ async function keyboardInput(page, ctx, { act, expect, what }) {
     await nextQuestion(6000);
     assert.match(text, passText(target, afterMiss), `${where}: the feedback for the right note${afterMiss ? ' after a miss' : ' first time'}: got "${text}", wanted ${afterMiss ? `"That is the one. ${nm(target)}."` : `"${nm(target)}: yes, in <seconds> s."`}`);
   } else {
-    const wanted = missText(expect, target);
+    const wanted = missText(expect, target, computer ? Object.keys(COMPUTER_KEYS).find((k) => COMPUTER_KEYS[k] === target) : undefined);
     assert.equal(text, wanted, `${where}: the feedback for a wrong note: got "${text}", wanted "${wanted}"`);
   }
 }
@@ -424,6 +436,7 @@ async function computerKeys(page, ctx) {
       await keyboardInput(page, `${ctx} test 6 key ${key}`, {
         expect: midi,
         what: `press ${key}${upper ? ' with Shift' : ''}`,
+        computer: true,
         act: () => () => page.press(key, upper ? { modifiers: 8 } : {}),
       });
     }
@@ -544,4 +557,81 @@ test('A06 desktop 1280x800 at device scale 2: the same, on a sharp screen', asyn
 
 test('A06 desktop 1024x640: the keyboard and kit are where they are drawn, and every key answers a click', async (t) => {
   await playViewport(t, { width: 1024, height: 640, mobile: false, deviceScaleFactor: 1 }, { full: false });
+});
+
+// ---- A4: the drawn piano keys wear their computer letters while typing -------
+// Separate block (not part of A06's steps). Letters are the PCKEYS map as printed in the help (lowercase, so they never read as the capital note names); they
+// show only once a computer key has been used and go again when a mouse/finger takes over.
+// Canvas text is read through fillText, with the font in force at each call.
+const A4_SCRIPT = `(function () {
+  var f = CanvasRenderingContext2D.prototype.fillText, cl = CanvasRenderingContext2D.prototype.clearRect;
+  window.__a4 = [];
+  CanvasRenderingContext2D.prototype.clearRect = function () { if (this.canvas && this.canvas.id === 'cv') window.__a4 = []; return cl.apply(this, arguments); };
+  CanvasRenderingContext2D.prototype.fillText = function (t) { if (this.canvas && this.canvas.id === 'cv') window.__a4.push({ text: String(t), font: this.font }); return f.apply(this, arguments); };
+})();`;
+const A4_LETTERS = Object.keys(COMPUTER_KEYS).sort();
+const a4Drawn = (page) => page.evaluate("new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => r(window.__a4.slice()))))");
+const a4Letters = async (page) => (await a4Drawn(page)).map((d) => d.text).filter((s) => /^[a-z]$/.test(s)).sort();
+
+test('A4: piano keys show their computer letters only while the computer keyboard is the input', async (t) => {
+  await withAcceptancePage(t, { initScript: PAGE_SCRIPT + A4_SCRIPT }, async (page) => {
+    await page.setViewport({ ...VIEWPORTS.desktop, deviceScaleFactor: 1 });
+    await pickInstrument(page, 'kbd', 'Keyboard');
+    await startSession(page);
+    assert.deepEqual(await a4Letters(page), [], 'fresh keyboard, nothing typed: no computer letters on the keys');
+    await page.press('a');
+    assert.deepEqual(await a4Letters(page), A4_LETTERS, 'after a computer key: every mapped key shows its letter');
+    const px = (d) => Number(/(\d+)px/.exec(d.font)[1]);
+    const size1 = px((await a4Drawn(page)).find((d) => d.text === 'a'));
+    await page.evaluate("document.documentElement.style.fontSize = '32px'");
+    const size2 = px((await a4Drawn(page)).find((d) => d.text === 'a'));
+    assert.ok(size2 >= size1 * 1.8, `letters scale with the text size setting: ${size1}px at 16px root, ${size2}px at 32px`);
+    await page.evaluate("document.documentElement.style.fontSize = ''");
+    const m = await reachable(page);
+    await aimVia(page, 'click', m, keyboardProbePoints(keyboardRects(m).keys[0])[0])();
+    assert.deepEqual(await a4Letters(page), [], 'after a mouse click on a key: the letters go again');
+  });
+});
+
+// ---- Phone width: what the canvas writes must not run into other writing or into a button ------------------
+// The drawn text rectangle is its baseline y (ascent about 0.8 of the font size, descent 0.2) and its
+// measured width, placed by the alignment the canvas used. Pieces' single key letters sit inside their own
+// circles, so only the names are compared with each other.
+const textRect = (tx) => {
+  const fs = parseFloat(/(\d+(?:\.\d+)?)px/.exec(tx.font)[1]);
+  const x = tx.align === 'center' ? tx.x - tx.w / 2 : tx.align === 'right' ? tx.x - tx.w : tx.x;
+  return { text: tx.text, x, y: tx.y - fs * 0.8, w: tx.w, h: fs };
+};
+const overlaps = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+
+test('A06 phone 390x844: no two drum names run into each other, and the tuner text keeps off the note buttons', async (t) => {
+  await withAcceptancePage(t, { initScript: PAGE_SCRIPT }, async (page) => {
+    await page.setViewport({ width: 390, height: 844, mobile: true });
+    await pickInstrument(page, 'drum-kit', 'Drum kit');
+    await page.evaluate('new Promise((r) => setTimeout(r, 500))');
+    const kit = (await page.evaluate('window.__q3c.texts()')).filter((x) => !/^[A-Z]$/.test(x.text) && x.text !== 'PRESS START').map(textRect);
+    assert.ok(kit.length >= 13, `the kit wrote its ten names, three with a second line (${kit.length} lines seen)`);
+    const hits = [];
+    for (let i = 0; i < kit.length; i++) for (let j = i + 1; j < kit.length; j++) if (overlaps(kit[i], kit[j])) hits.push(`"${kit[i].text}" and "${kit[j].text}"`);
+    assert.deepEqual(hits, [], 'drum names that overlap on the kit');
+
+    await pickInstrument(page, 'tuner', 'Tuner');
+    await page.evaluate('new Promise((r) => setTimeout(r, 500))');
+    const all = await page.evaluate('window.__q3c.texts()');
+    const cv = await page.evaluate('({ W: document.getElementById("cv").width, H: document.getElementById("cv").height })');
+    const notes = all.filter((x) => x.text === '\u266a');
+    assert.ok(notes.length >= 4, `a note button per string (${notes.length} seen)`);
+    // A button is the column the note glyphs sit in, down the height of its string's row (src/app.js drawTuner:
+    // rows start at 0.1H, 0.8H / n apart, 8 px shorter than their slot; the column ends 2 px short of 0.43W).
+    const n = notes.length, edge = cv.W * 0.43 - 2;
+    const buttons = notes.map((g, i) => { const y = cv.H * 0.1 + i * (cv.H * 0.8 / n), h = cv.H * 0.8 / n - 8; return { x: 2 * g.x - edge, y: y + 2, w: edge - (2 * g.x - edge), h: h - 4 }; });
+    const words = all.filter((x) => x.text !== '\u266a' && !/^String \d/.test(x.text)).map(textRect);
+    assert.ok(words.some((w) => /microphone|input/.test(w.text)), 'the tuner says what to do next');
+    const bad = [];
+    for (const w of words) for (const b of buttons) if (overlaps(w, b)) bad.push(`"${w.text}"`);
+    assert.deepEqual([...new Set(bad)], [], 'tuner text that runs under a note button');
+    for (const w of words) assert.ok(w.x >= 0 && w.x + w.w <= cv.W, `"${w.text}" stays inside the canvas`);
+    // The tuner has no question to show, so the empty question line above it takes no room.
+    assert.ok((await page.evaluate("document.getElementById('prompt').getBoundingClientRect().height")) < 4, 'no empty band above the tuner');
+  });
 });

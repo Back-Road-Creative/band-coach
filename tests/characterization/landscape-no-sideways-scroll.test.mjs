@@ -19,6 +19,8 @@ for (const [name, vp] of Object.entries(LANDSCAPE)) {
     const page = await launchPage(HTML_PATH);
     t.after(() => page.close());
     await page.setViewport(vp);
+    // One question first: Start appears once an instrument is chosen.
+    await page.clickSelector('#picker button[data-mod="kbd"]');
 
     const m = JSON.parse(await page.evaluate(`JSON.stringify({
       iw: innerWidth, sw: document.documentElement.scrollWidth, bw: document.body.scrollWidth,

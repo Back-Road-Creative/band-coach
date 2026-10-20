@@ -29,7 +29,7 @@ test('a saved song is listed once each time Songs opens, including after a reloa
   await page.setFileInput('#songsFileInput', abcPath);
   await page.waitFor("document.querySelector('.panel-learn-result').hidden === false", 20000);
   await page.evaluate(
-    "Array.from(document.querySelectorAll('.panel-learn-practise-btn')).find(b => b.textContent === 'Practise this').click()",
+    "Array.from(document.querySelectorAll('.panel-learn-practise-btn')).find(b => b.textContent === 'Practice this').click()",
   );
   await page.waitFor("document.querySelector('.panel-songs-practice h3')");
 

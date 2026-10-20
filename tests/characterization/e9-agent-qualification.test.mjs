@@ -55,6 +55,9 @@ test('screen-reader lesson: Start reached and pressed with real keys; the canvas
   await page.setViewport({ width: 1280, height: 800 });
   await page.cdp.send('Accessibility.enable', {});
   let presses = 0;
+  // One question first: the instrument is chosen with the keyboard too, then Start appears.
+  while (presses < 80 && !(await page.evaluate("!!(document.activeElement && document.activeElement.closest('#picker button'))"))) { await page.press('Tab'); presses++; }
+  await page.press('Enter');
   while (presses < 80 && !(await page.evaluate("document.activeElement.id === 'playBtn'"))) { await page.press('Tab'); presses++; }
   assert.equal(await page.evaluate('document.activeElement.id'), 'playBtn', `Start not reached in ${presses} Tab presses`);
   t.diagnostic(`Start reached after ${presses} Tab presses from the top of the page`);

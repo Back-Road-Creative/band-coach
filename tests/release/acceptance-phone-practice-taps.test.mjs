@@ -168,9 +168,21 @@ const keyGroups = (rects) => rects.keys.map((k) => { const pts = keyboardSampleP
 const kitGroups = (all) => all.map((p) => ({ id: p.id, pts: kitSamplePoints(p), need: 5 }));
 const aimVia = (page, m, pt) => { const c = toClient(pt, m); return () => page.tap(c.x, c.y); };
 
-function missText(clicked, target) {
-  const st = clicked - target, n = Math.abs(st);
-  const where = n === 12 ? `Right note, wrong octave: go one octave ${st > 0 ? 'down' : 'up'}.` : `Go ${n} key${n > 1 ? 's' : ''} to the ${st > 0 ? 'left' : 'right'}.`;
+// A learner counts WHITE keys on a drawn keyboard (U4): the white keys passed on the way to the target, the target
+// included; a black target is named, not counted. A computer key also says which key to press.
+const WHITE = (m) => [0, 2, 4, 5, 7, 9, 11].includes(((m % 12) + 12) % 12);
+const WORDS = ['', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'];
+function missText(clicked, target, pressKey) {
+  const st = clicked - target, n = Math.abs(st), dir = st > 0 ? 'left' : 'right';
+  let where;
+  if (n === 12) where = `Right note, wrong octave: go one octave ${st > 0 ? 'down' : 'up'}.`;
+  else if (!WHITE(target)) where = `Go to the black key ${nm(target)}, to the ${dir}.`;
+  else {
+    let w = 0;
+    for (let m = Math.min(clicked, target); m <= Math.max(clicked, target); m++) if (WHITE(m) && m !== clicked) w++;
+    where = w === 1 ? `Go one white key to the ${dir}.` : `Go ${WORDS[w] || w} white keys to the ${dir}.`;
+  }
+  if (pressKey && n !== 12) where += ` Press ${pressKey.toUpperCase()}.`;
   return `That was ${nm(clicked)}, the note is ${nm(target)}. ${where}`;
 }
 const passText = (target, afterMiss) => (afterMiss ? new RegExp(`^That is the one\\. ${nm(target)}\\.$`) : new RegExp(`^${nm(target)}: yes, in [0-9.]+ s\\.$`));

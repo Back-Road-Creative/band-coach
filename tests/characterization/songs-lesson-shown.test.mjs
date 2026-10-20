@@ -201,7 +201,7 @@ test('capture "Make it a lesson" shows the lesson for the captured tune', async 
   assert.deepEqual(page.exceptions, []);
 });
 
-test('editor "Practise this" shows the lesson for the song just saved', async (t) => {
+test('editor "Practice this" shows the lesson for the song just saved', async (t) => {
   const page = await launchPage(htmlPath);
   t.after(() => page.close());
   // A song of the learner's own (an ABC import), not a copy of a starter: this test is about
@@ -217,7 +217,7 @@ test('editor "Practise this" shows the lesson for the song just saved', async (t
   await page.evaluate("document.getElementById('editorPractiseBtn').click()");
   await page.waitFor("window.__coach.panelOpen() === 'songs'");
   await page.waitFor(headingIs('Clean Review Test'), 20000);
-  await assertLessonShown(page, 'editor Practise this');
+  await assertLessonShown(page, 'editor Practice this');
   assert.deepEqual(page.exceptions, []);
 });
 
@@ -232,14 +232,14 @@ test('review "Play it on…" card shows the lesson', async (t) => {
   assert.deepEqual(page.exceptions, []);
 });
 
-test('review "Practise this" button shows the lesson', async (t) => {
+test('review "Practice this" button shows the lesson', async (t) => {
   const page = await launchPage(htmlPath);
   t.after(() => page.close());
   await importAbc(t, page, ABC_CLEAN);
-  assert.equal(await page.evaluate("document.querySelector('.panel-learn-practise-btn').disabled"), false, 'Practise this is enabled for a clean import');
+  assert.equal(await page.evaluate("document.querySelector('.panel-learn-practise-btn').disabled"), false, 'Practice this is enabled for a clean import');
   await page.evaluate("document.querySelector('.panel-learn-practise-btn').click()");
   await page.waitFor(headingIs('Clean Review Test'), 20000);
-  await assertLessonShown(page, 'review Practise this');
+  await assertLessonShown(page, 'review Practice this');
   assert.deepEqual(page.exceptions, []);
 });
 
@@ -250,7 +250,7 @@ test('a hand-off with no instrument picked shows the "pick an instrument" senten
   await page.evaluate("window.__coach.setMod('capture')");
   await practiseFromEditor(page);
   await page.waitFor("window.__coach.panelOpen() === 'songs'");
-  const SENTENCE = 'Pick an instrument on the main screen first, then come back here to practise.';
+  const SENTENCE = 'Pick an instrument on the main screen first, then come back here to practice.';
   await page.waitFor(`Array.from(document.querySelectorAll('.panel-songs-practice p')).some(p => p.textContent === ${JSON.stringify(SENTENCE)})`, 20000);
   const s = await lessonState(page);
   assert.equal(s.hidden, false, `the sentence is not hidden (${JSON.stringify(s)})`);

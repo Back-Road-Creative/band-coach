@@ -29,8 +29,8 @@ const STEP_NAMES = {
 export function register(panels) {
   panels.register({
     id: 'pathway',
-    name: t('pathway.title'),
-    tag: t('pathway.tag'),
+    get name() { return t('pathway.title'); },
+    get tag() { return t('pathway.tag'); },
     color: '#7fb3ff',
     mount(el, api) {
       // Read the level from DB.mods.kbd, not api.mod(), because the panel

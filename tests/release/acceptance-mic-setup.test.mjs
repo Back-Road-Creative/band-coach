@@ -50,8 +50,8 @@ const fixtureFile = (name) => (files ||= { quiet: writeFixture('quiet-room', qui
 
 // A learner on the release file with the microphone allowed: instrument, "Set
 // up input", then Connect, all real clicks.
-async function learner(t, fixture, fn, allowConsole = []) {
-  await withAcceptancePage(t, { fakeAudioFile: fixtureFile(fixture), initScript: RECORDER_SCRIPT, allowConsole }, async (page) => {
+async function learner(t, fixture, fn, allowConsole = [], extraInit = '') {
+  await withAcceptancePage(t, { fakeAudioFile: fixtureFile(fixture), initScript: RECORDER_SCRIPT + extraInit, allowConsole }, async (page) => {
     await page.grant(['microphone']);
     await page.clickSelector('#picker button[data-mod="gtr"]');
     await page.clickSelector('#setupBtn');
@@ -59,6 +59,18 @@ async function learner(t, fixture, fn, allowConsole = []) {
   });
 }
 const connect = (page) => page.clickSelector('#ioBtn');
+// T4a and T5 need the first room check to still be running when the learner
+// switches input / leaves the tab. How long the driver takes to get there
+// (several round trips) varies with the machine's load, and the check's window
+// is only 1.5 s, so racing it made those tests fail on a busy box. Instead the
+// page can be told to hold: while window.__hold is true every setInterval tick
+// is dropped, as if the main thread were stalled, so the check cannot finish
+// however long the driver takes. Releasing it lets the page carry on exactly
+// as it would after a stall. The app is not touched; it just sees late ticks.
+const HOLD_TICKS = `(() => { const si = window.setInterval; window.__hold = false; window.setInterval = function (fn, ms, ...a) { return si.call(window, function () { if (window.__hold) return undefined; return fn.apply(this, arguments); }, ms, ...a); }; })();`;
+const hold = (page, on) => page.evaluate(`window.__hold = ${on}`);
+// Anything said about the room other than "checking" before page time `t`: the first check finished.
+const resultsBefore = async (page, t) => (await recorder(page)).filter((e) => isResultText(e) && e.t < t);
 
 const recorder = (page) => page.evaluate('window.__a04');
 // Waits for the first recorder entry matching `pred` (source text over `e`),
@@ -182,10 +194,12 @@ test('T3 Check my microphone pressed twice in a quiet room: the first, older che
 
 test('T4a switching input while the first check runs: the new input gets its own full check', async (t) => {
   await learner(t, 'quiet', async (page) => {
+    await hold(page, true); // the first check stays open until the switch has landed
     await connect(page);
     const checking = await until(page, 'a visible room check after Connect', `e.kind === 'result' && e.text === ${JSON.stringify(CHECKING)}`);
     const { change, value } = await switchInput(page, 'Fake Audio Input 1');
-    assert.ok(change.t - checking.t < 1000, `switch landed too late for this test: ${Math.round(change.t - checking.t)} ms into the check`);
+    assert.deepEqual(await resultsBefore(page, change.t), [], 'the first check had not finished when the switch landed');
+    await hold(page, false);
     const first = await until(page, 'a result after the switch', `${RESULT_TEXT} && e.t > ${change.t}`, 8000);
     assert.ok(first.t - change.t >= 1300, `the first result is the new input's own 1.5 s window, not the old one's: ${Math.round(first.t - change.t)} ms after the switch`);
     await holdUntil(page, change.t + 4500);
@@ -199,7 +213,7 @@ test('T4a switching input while the first check runs: the new input gets its own
     assert.equal(stored.id, value, 'saved against the input that was chosen');
     await assertListening(page, 'listening on the new input');
     assert.equal(page.audio.contexts().length, 1, 'still one AudioContext');
-  });
+  }, [], HOLD_TICKS);
 });
 
 test('T4b switching input after a floor is stored: the old floor is dropped and measured again', async (t) => {
@@ -221,11 +235,13 @@ test('T4b switching input after a floor is stored: the old floor is dropped and 
 
 test('T5 tab hidden during the check: listening stops, nothing stale is written, Connect again measures afresh', async (t) => {
   await learner(t, 'quiet', async (page) => {
+    await hold(page, true); // the check stays open until the tab has gone hidden
     await connect(page);
     const checking = await until(page, 'a visible room check after Connect', `e.kind === 'result' && e.text === ${JSON.stringify(CHECKING)}`);
     await page.background();
     const hidden = await until(page, 'the tab going hidden', "e.kind === 'visibility' && e.state === 'hidden'", 3000);
-    assert.ok(hidden.t - checking.t < 1300, `backgrounded too late: ${Math.round(hidden.t - checking.t)} ms into the check`);
+    assert.deepEqual(await resultsBefore(page, hidden.t), [], 'the check had not finished when the tab went hidden');
+    await hold(page, false);
     await sleep(2200); // hold: the check's window ends while the tab is away
     await page.foreground();
     const vis = await page.visibilityLog();
@@ -246,7 +262,7 @@ test('T5 tab hidden during the check: listening stops, nothing stale is written,
     assert.equal(page.audio.contexts().length, 1, 'still one AudioContext');
     await page.audio.waitForRunning();
     assert.ok(page.audio.running().length > 0, 'and it is running');
-  });
+  }, [], HOLD_TICKS);
 });
 
 // Shared by the two tests below: connected with a stored floor, the browser

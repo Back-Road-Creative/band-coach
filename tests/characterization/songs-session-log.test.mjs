@@ -13,7 +13,7 @@ import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { HTML_PATH } from '../helpers/html-path.mjs';
-import { launchPage } from '../helpers/browser.mjs';
+import { launchPage, waitForDom } from '../helpers/browser.mjs';
 import { playSongNoteWhenListening } from '../helpers/songs-note.mjs';
 
 const htmlPath = HTML_PATH;
@@ -53,9 +53,10 @@ test('finishing a song lesson logs a practice session with source: "song"', asyn
 
   await page.evaluate("window.__coach.setMod('kbd')");
   await page.evaluate("window.__coach.openPanel('songs')");
-  await page.waitFor("document.querySelectorAll('.panel-songs-row button').length > 0");
+  await waitForDom(page, "document.querySelectorAll('.panel-songs-row button').length > 0");
   await page.setFileInput('#songsFileInput', challengePath);
-  await page.waitFor(
+  await waitForDom(
+    page,
     "Array.from(document.querySelectorAll('.panel-songs-challenge li button')).some(b => b.textContent.includes('One Note Song'))"
   );
   await page.evaluate(

@@ -57,7 +57,7 @@ const POLICY_TEXT = { [NO_SCROLL]: 'no scrolling after Start', [ONE_SCROLL]: 'on
 const SIZES = [
   { name: '320x568', vp: { width: 320, height: 568, mobile: true, deviceScaleFactor: 2 }, keyboard: ONE_SCROLL, kit: ONE_SCROLL },
   { name: '390x844', vp: { width: 390, height: 844, mobile: true, deviceScaleFactor: 3 }, keyboard: NO_SCROLL, kit: ONE_SCROLL },
-  { name: '844x390', vp: { width: 844, height: 390, mobile: true, deviceScaleFactor: 3 }, keyboard: ONE_SCROLL, kit: ONE_SCROLL },
+  { name: '844x390', vp: { width: 844, height: 390, mobile: true, deviceScaleFactor: 3 }, keyboard: NO_SCROLL, kit: NO_SCROLL },
   { name: '640x400', vp: { width: 640, height: 400, mobile: false, deviceScaleFactor: 2 }, keyboard: ONE_SCROLL, kit: ONE_SCROLL },
 ];
 const readmeClause = (s) => `${s.name}: keyboard ${POLICY_TEXT[s.keyboard]}, drum kit ${POLICY_TEXT[s.kit]}`;
@@ -431,5 +431,95 @@ test('A06 phone sizes: a learner sees and plays the keyboard and kit, and sees w
   await withAcceptancePage(t, { initScript: PAGE_SCRIPT }, async (page) => {
     for (const size of SIZES) await runSize(t, page, size);
     await runDesktop(t, page);
+  });
+});
+
+// U2: a short phone (landscape) or a phone mid-practice gives the first screen to the prompt and the instrument:
+// the tagline goes and the nav is one row; both come back when the session ends.
+test('U2 compact header: short and practising phones put Start and the canvas on the first screen', async (t) => {
+  const vis = (page, sel) => page.evaluate(`(() => { const e = document.querySelector(${JSON.stringify(sel)}); if (!e) return false; const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0 && getComputedStyle(e).visibility !== 'hidden'; })()`);
+  const box = (page, sel) => page.evaluate(`(() => { const r = document.querySelector(${JSON.stringify(sel)}).getBoundingClientRect(); return { y: Math.round(r.top), b: Math.round(r.bottom) }; })()`);
+  for (const vp of [{ width: 844, height: 390, mobile: true, deviceScaleFactor: 3 }, { width: 390, height: 844, mobile: true, deviceScaleFactor: 3 }]) {
+    await t.test(`${vp.width}x${vp.height}`, async (st) => {
+      await withAcceptancePage(st, { initScript: PAGE_SCRIPT + "\nif (sessionStorage.getItem('__fresh')) { sessionStorage.removeItem('__fresh'); localStorage.clear(); }" }, async (page) => {
+        await page.setViewport(vp);
+        const fresh = "!document.getElementById('picker').hidden && !/:/.test(document.getElementById('navInstrument').textContent)";
+        for (let i = 0; i < 4 && !(i && await page.evaluate(fresh)); i++) { await page.evaluate("sessionStorage.setItem('__fresh', '1')"); await page.reload(); await page.waitFor("document.getElementById('playBtn') !== null"); }
+        assert.ok(await page.evaluate(fresh), 'the page is a first visit');
+        await raf(page);
+        const landscape = vp.height <= 600;
+        const p = await box(page, '#playBtn');
+        st.diagnostic(`${vp.width}x${vp.height} Start at first paint: ${JSON.stringify(p)}`);
+        assert.ok(p.y >= 0 && p.b <= vp.height, `Start spans y ${p.y}..${p.b} in a ${vp.height}px viewport`);
+        if (landscape) assert.equal(await vis(page, '.sub'), false, 'the tagline is hidden on a short screen');
+        await pickInstrument(page, 'kbd', 'Keyboard');
+        await startSession(page);
+        const c = await box(page, '#cv');
+        st.diagnostic(`${vp.width}x${vp.height} canvas after Start: ${JSON.stringify(c)}`);
+        assert.ok(c.y >= 0 && c.b <= vp.height, `canvas spans ${c.y}..${c.b} in a ${vp.height}px viewport`);
+        if (landscape) assert.ok(c.y <= 200, `canvas top is ${c.y}, expected the prompt and canvas near the top (<= 200)`);
+        assert.equal(await vis(page, '.sub'), false, 'the tagline is hidden while practising');
+        const navDuring = await box(page, '#mainNav');
+        await tapOnScreen(page, 'endBtn');
+        await page.waitFor("document.getElementById('playBtn').textContent.trim() === 'Start'");
+        await raf(page);
+        if (!landscape) assert.equal(await vis(page, '.sub'), true, 'the tagline is back after End');
+        assert.equal(await vis(page, '#mainNav'), true, 'the nav is back after End');
+        const navAfter = await box(page, '#mainNav');
+        st.diagnostic(`${vp.width}x${vp.height} nav height during ${navDuring.b - navDuring.y}, after ${navAfter.b - navAfter.y}`);
+      });
+    });
+  }
+});
+
+// ---- U3 / D17: every focusable control is a 44 px target on a coarse pointer ----------------------------
+// Touch emulation makes Chrome report (pointer: coarse), so this is the phone a learner holds. For each screen the
+// learner can reach by tapping, every visible focusable control's smaller dimension is read as the hit area a
+// finger gets (a checkbox counts the label it sits in, since tapping the label toggles it).
+const TOUCH_MIN = 44;
+const TOUCH_READ = `(() => {
+  const vis = (e) => { for (let n = e; n && n !== document.body; n = n.parentElement) { const s = getComputedStyle(n); if (s.display === 'none' || s.visibility === 'hidden' || n.hidden) return false; if (n.tagName === 'DETAILS' && !n.open && n !== e && e.tagName !== 'SUMMARY') return false; } const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
+  const out = [];
+  for (const e of document.querySelectorAll('button, select, summary, a[href], input:not([type=hidden]):not([type=file]), textarea, [tabindex]:not([tabindex="-1"])')) {
+    if (e.disabled || !vis(e) || e.classList.contains('visually-hidden') || e.id === 'cv') continue;
+    let r = e.getBoundingClientRect();
+    if (e.type === 'checkbox' || e.type === 'radio') { const l = e.closest('label') || (e.id && document.querySelector('label[for="' + e.id + '"]')); if (l) { const lr = l.getBoundingClientRect(); r = { width: Math.max(r.width, lr.width), height: Math.max(r.height, lr.height) }; } }
+    const small = Math.min(r.width, r.height);
+    if (small < ${TOUCH_MIN} - 0.5) out.push((e.id ? '#' + e.id : e.tagName.toLowerCase() + (e.className ? '.' + String(e.className).split(' ')[0] : '')) + ' ' + (e.textContent || e.getAttribute('aria-label') || '').trim().slice(0, 24) + ' ' + r.width.toFixed(0) + 'x' + r.height.toFixed(0));
+  }
+  return out;
+})()`;
+async function tapSel(page, sel) {
+  const c = await page.evaluate(`(() => { const e = document.querySelector(${JSON.stringify(sel)}); e.scrollIntoView({ block: 'center' }); const r = e.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; })()`);
+  await page.tap(c[0], c[1]);
+  await raf(page);
+}
+test('U3 touch targets: every focusable control is at least 44 px in its smaller dimension on a phone', async (t) => {
+  await withAcceptancePage(t, {}, async (page) => {
+    for (const [name, width, height, dsf] of [['390x844', 390, 844, 3], ['320x568', 320, 568, 2]]) {
+      await t.test(`${name} coarse pointer`, async () => {
+        await page.setViewport({ width, height, mobile: true, deviceScaleFactor: dsf });
+        await page.cdp.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 }); // what makes Chrome report a finger: (pointer: coarse)
+        await page.reload();
+        await page.waitFor("document.getElementById('playBtn') !== null");
+        await raf(page);
+        assert.equal(await page.evaluate("matchMedia('(pointer: coarse)').matches"), true, 'the emulated phone reports a coarse pointer');
+        const misses = [];
+        const sweep = async (screen) => { for (const m of await page.evaluate(TOUCH_READ)) if (!misses.some((x) => x.endsWith(`: ${m}`))) misses.push(`${screen}: ${m}`); }; // a control shown on several screens is named once
+        await tapSel(page, '[data-route=instrument]');
+        await sweep('practice with the instrument sheet');
+        await tapSel(page, '#setupBtn');
+        await sweep('input setup sheet');
+        await tapSel(page, '[data-route=settings]');
+        await sweep('settings');
+        await tapSel(page, '[data-route=songs]');
+        await page.waitFor("!document.getElementById('panelHost').hidden && document.getElementById('panelHost').children.length > 0");
+        await sweep('songs');
+        await tapSel(page, '[data-route=progress]');
+        await raf(page);
+        await sweep('progress');
+        assert.deepEqual(misses, [], `${name}: ${misses.length} control(s) under ${TOUCH_MIN} px in their smaller dimension`);
+      });
+    }
   });
 });

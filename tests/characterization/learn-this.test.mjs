@@ -121,7 +121,7 @@ test('a real .abc file dropped in becomes a practisable song, title + Play it on
   // Practise this -> switches to the real Songs panel, already on this
   // song's lesson (requestOpenSong() + Songs's own show()-time check).
   await page.evaluate(
-    "Array.from(document.querySelectorAll('.panel-learn-practise-btn')).find(b => b.textContent === 'Practise this').click()"
+    "Array.from(document.querySelectorAll('.panel-learn-practise-btn')).find(b => b.textContent === 'Practice this').click()"
   );
   await page.waitFor("window.__coach.panelOpen() === 'songs'");
   await page.waitFor("document.querySelector('.panel-songs-practice h3')");

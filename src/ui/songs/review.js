@@ -19,7 +19,7 @@ import { el } from '../dom.js';
 export function practiceGate(warnings) {
   const list = Array.isArray(warnings) ? warnings : [];
   if (!list.length) return { allowed: true, reason: null };
-  return { allowed: false, reason: 'Fix up the ' + list.length + ' thing' + (list.length === 1 ? '' : 's') + ' to check first, then practise.' };
+  return { allowed: false, reason: 'Fix up the ' + list.length + ' thing' + (list.length === 1 ? '' : 's') + ' to check first, then practice.' };
 }
 
 // Opening another panel from a review screen: the caller only ever has its
@@ -177,12 +177,12 @@ export function renderReview(resultEl, { song, warnings, audioRec, api, onPracti
   // button stays visible (never a dead end) but disabled, with the reason
   // spelled out in plain language right next to it.
   const gate = practiceGate(warnings);
-  const practiseBtn = el('button', { type: 'button', class: 'panel-learn-practise-btn', text: 'Practise this' });
+  const practiseBtn = el('button', { type: 'button', class: 'panel-learn-practise-btn', text: 'Practice this' });
   if (!gate.allowed) practiseBtn.disabled = true;
   practiseBtn.addEventListener('click', () => {
     if (!gate.allowed) return;
     const opened = onPractise(song.id, partId, null);
-    if (!opened) say('Saved "' + song.title + '". Open the Songs panel to practise it.');
+    if (!opened) say('Saved "' + song.title + '". Open the Songs panel to practice it.');
   });
   resultEl.appendChild(practiseBtn);
   if (!gate.allowed) resultEl.appendChild(el('p', { class: 'panel-learn-practise-gate-reason', text: gate.reason }));

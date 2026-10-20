@@ -191,7 +191,7 @@ function mountEditor(hostEl, api) {
   const checkList = el('ul');
   const ackCheckbox = el('input', { type: 'checkbox', id: 'editorAck' });
   checkBox.append(
-    el('p', { text: "Before you practise or save, check these:" }),
+    el('p', { text: "Before you practice or save, check these:" }),
     checkList,
     el('label', { for: 'editorAck' }, [ackCheckbox, document.createTextNode(" I've checked these")]),
   );
@@ -238,7 +238,7 @@ function mountEditor(hostEl, api) {
   // transcribed, so they never point at whatever was saved last time this
   // panel was open.
   const backToSongsBtn = btn('Back to songs', () => { api.openPanel('songs'); }, { id: 'editorBackToSongsBtn', hidden: 'hidden' });
-  const practiseBtn = btn('Practise this', () => { requestOpenSong(api, loadedId); api.openPanel('songs'); }, { id: 'editorPractiseBtn', hidden: 'hidden' });
+  const practiseBtn = btn('Practice this', () => { requestOpenSong(api, loadedId); api.openPanel('songs'); }, { id: 'editorPractiseBtn', hidden: 'hidden' });
   function hidePostSaveButtons() { backToSongsBtn.hidden = true; practiseBtn.hidden = true; }
   const undoBtn = btn('Undo', () => { if (!history) return; setSongState(history.undo()); render(); }, { id: 'editorUndoBtn' });
   const redoBtn = btn('Redo', () => { if (!history) return; setSongState(history.redo()); render(); }, { id: 'editorRedoBtn' });
@@ -300,7 +300,7 @@ function mountEditor(hostEl, api) {
 
   const toolbar = el('div', { class: 'editor-toolbar' }, [
     playBtn, saveBtn, saveCopyBtn, undoBtn, redoBtn, deleteBtn, splitBtn, mergeBtn, tieBtn, insertBtn,
-    el('label', { for: 'editorBpm', text: 'Tempo (bpm)' }), bpmInput,
+    el('label', { for: 'editorBpm', text: 'Tempo (beats a minute)' }), bpmInput,
     el('label', { for: 'editorMetreNum', text: 'Beats/bar' }), metreNum, metreDen,
     el('label', { for: 'editorPickup', text: 'Pickup (ticks)' }), pickupInput, pickupBtn,
     halveBtn, doubleBtn, octaveUpBtn, octaveDownBtn,

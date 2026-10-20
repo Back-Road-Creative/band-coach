@@ -164,7 +164,7 @@ function assertRefused({ review, songs, status }) {
   assert.equal(songs.length, 0, 'no empty Draft is stored');
 }
 
-test('1. a clean melody: four notes in order, nothing to check, ready to practise', async (t) => {
+test('1. a clean melody: four notes in order, nothing to check, ready to practice', async (t) => {
   await learnerPicks(t, FILE.clean, {}, ({ review, songs }) => {
     assert.equal(review.strip.length, 4, 'four notes on the strip');
     assert.deepEqual(midisOf(songs[0]), CLEAN_MIDIS, 'the stored notes are the ones played, in order');
@@ -172,8 +172,8 @@ test('1. a clean melody: four notes in order, nothing to check, ready to practis
     // Both halves of "ready" are reported together, so a failure shows which.
     const failed = [];
     try { assert.deepEqual(review.checks, [], 'nothing left to check'); } catch (e) { failed.push(e.message.split('\n')[0] + ' ' + JSON.stringify(review.checks)); }
-    try { assert.equal(review.practiseDisabled, false, `Practise is enabled (${review.reason})`); } catch (e) { failed.push(e.message.split('\n')[0]); }
-    assert.deepEqual(failed, [], 'the review is ready to practise');
+    try { assert.equal(review.practiseDisabled, false, `Practice is enabled (${review.reason})`); } catch (e) { failed.push(e.message.split('\n')[0]); }
+    assert.deepEqual(failed, [], 'the review is ready to practice');
   });
 });
 
@@ -246,7 +246,7 @@ test('8. a wrong note is stored as played, not as the one that was meant', async
   });
 });
 
-test('9. two notes at once, with "More than one note at a time" ticked: voices are flagged, practise waits', async (t) => {
+test('9. two notes at once, with "More than one note at a time" ticked: voices are flagged, practice waits', async (t) => {
   await learnerPicks(t, FILE.poly, { polyphonic: true }, ({ review }) => {
     assert.ok(review.checks.some((c) => /^I heard \d+ voices?/.test(c)), `a voices line: ${JSON.stringify(review.checks)}`);
     assert.equal(review.practiseDisabled, true);
@@ -275,24 +275,24 @@ test('10. picking the same file again gives a second review and a second song', 
 });
 
 const practiseClick = async ({ review }, page) => {
-  assert.equal(review.practiseDisabled, false, `Practise is enabled before the click (${review.reason})`);
+  assert.equal(review.practiseDisabled, false, `Practice is enabled before the click (${review.reason})`);
   await page.clickSelector('.panel-learn-practise-btn');
   await page.waitFor("document.querySelector('.panel-songs-practice h3')", 30000);
   return page.evaluate(`({ title: document.querySelector('.panel-songs-practice h3').textContent, shown: !document.querySelector('.panel-songs-practice').hidden && document.querySelector('.panel-songs-practice').offsetParent !== null })`);
 };
 
-test('11. Practise this, on a clean recording, builds the lesson for that recording', async (t) => {
+test('11. Practice this, on a clean recording, builds the lesson for that recording', async (t) => {
   await learnerPicks(t, FILE.clean, {}, async (r, page) => {
     const view = await practiseClick(r, page);
-    assert.equal(view.title, 'clean', "Practise this opens this recording's own lesson");
-    assert.equal(view.shown, true, 'the practice lesson is on screen after Practise this');
+    assert.equal(view.title, 'clean', "Practice this opens this recording's own lesson");
+    assert.equal(view.shown, true, 'the practice lesson is on screen after Practice this');
   });
 });
 
 test('11b. control: a recording with a flagged item stays blocked, and the reason counts the items', async (t) => {
   await learnerPicks(t, FILE.poly, { polyphonic: true }, ({ review }) => {
     assert.equal(review.practiseDisabled, true);
-    const m = /^Fix up the (\d+) .*, then practise\.$/.exec(review.reason || '');
+    const m = /^Fix up the (\d+) .*, then practice\.$/.exec(review.reason || '');
     assert.ok(m, `the reason: ${review.reason}`);
     assert.equal(Number(m[1]), review.checks.length, 'it counts the items listed above it');
   });

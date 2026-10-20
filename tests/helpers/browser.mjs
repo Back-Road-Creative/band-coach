@@ -453,6 +453,10 @@ export function htmlTarget(htmlPath, { windows = process.platform === 'win32' } 
  * extra simulated boundaries for the identity block. Callers that leave them
  * out get exactly the launch they always had.
  *
+ * `options.offlineFromStart`, if true, puts the page's network offline over CDP
+ * before the first navigation, so the very first boot is an offline one.
+ * Default off.
+ *
  * `options.headed` opens a visible window (no headless flag) and
  * `options.windowPosition` ('x,y') places it; `htmlPath` may be a Windows path
  * or a `file:` URL (see "WINDOWS LANE" above).
@@ -753,6 +757,7 @@ async function launchPageOnce(htmlPath, options = {}) {
   await send('Network.enable');
   await send('Page.enable');
   await send('DOM.enable');
+  if (options.offlineFromStart) await send('Network.emulateNetworkConditions', { offline: true, latency: 0, downloadThroughput: -1, uploadThroughput: -1 });
   if (acceptance) {
     // The browser's own log (the AudioContext warning is a Log entry, not a
     // console call) and WebAudio, both before navigation so boot is covered.
@@ -1309,4 +1314,23 @@ export async function withAcceptancePage(t, opts, fn) {
   } finally {
     await page.close();
   }
+}
+
+// Waits for a DOM state INSIDE the page, as one awaited promise: the
+// expression is checked once now and again on every DOM mutation, so the wait
+// ends the moment the app renders the state, however starved the box is. The
+// Node-side page.waitFor() instead polls over DevTools every 50 ms against a
+// fixed 20 s budget, which a run with nine browsers at once could exhaust
+// before the song list had rendered. The only bound here is a hang guard
+// (DOM_WAIT_HANG_GUARD_MS) so a state that never arrives still ends the file with a
+// clear error rather than hanging it; it is not the wait's budget.
+const DOM_WAIT_HANG_GUARD_MS = 300000;
+export async function waitForDom(page, expression) {
+  await page.evaluate(`new Promise((resolve, reject) => {
+    const ok = () => { try { return Boolean(${expression}); } catch (e) { return false; } };
+    if (ok()) return resolve(true);
+    const mo = new MutationObserver(() => { if (ok()) { mo.disconnect(); clearTimeout(guard); resolve(true); } });
+    const guard = setTimeout(() => { mo.disconnect(); reject(new Error('waitForDom: state never rendered: ' + ${JSON.stringify(expression)})); }, ${DOM_WAIT_HANG_GUARD_MS});
+    mo.observe(document.documentElement, { childList: true, subtree: true, characterData: true, attributes: true });
+  })`);
 }

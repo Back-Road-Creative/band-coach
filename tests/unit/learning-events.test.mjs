@@ -382,3 +382,10 @@ test('boundEvents never changes the array it was given', () => {
   assert.deepEqual(events.map((ev) => ev.id), beforeIds);
   assert.notEqual(result, events);
 });
+
+test('INPUTS lists every input route the app tags, and validateEvent still accepts any string', async () => {
+  const { INPUTS, makeEvent, validateEvent } = await import('../../src/core/learning-events.js');
+  ['screen-tap', 'computer-key', 'midi', 'mic', 'screen'].forEach((k) => assert.ok(INPUTS.has(k), k));
+  const base = { instrument: 'ear', skill: 'x', source: 'drill', assistance: 'none', dims: { pitch: 'ok' }, unassessed: [], activeMs: 1 };
+  assert.equal(validateEvent(makeEvent({ ...base, input: 'legacy-route' }, { now: 1, id: 'a' })).ok, true);
+});

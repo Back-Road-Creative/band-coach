@@ -75,6 +75,6 @@ test('a correctly-played note in a keyboard song lesson credits keyboard, not th
 
   const after = await page.evaluate("({ violin: window.__coach.db().mods.violin.ready, kbd: window.__coach.db().mods.kbd.ready })");
   assert.equal(after.violin, before.violin, 'the mod showing on the main screen (violin) must not move just because a keyboard lesson is open');
-  assert.ok(after.kbd > before.kbd, 'the instrument actually being practised (kbd) should have its readiness credited: ' + before.kbd + ' -> ' + after.kbd);
+  assert.ok(after.kbd > before.kbd, 'the instrument actually being practiced (kbd) should have its readiness credited: ' + before.kbd + ' -> ' + after.kbd);
   assert.deepEqual(page.exceptions, []);
 });

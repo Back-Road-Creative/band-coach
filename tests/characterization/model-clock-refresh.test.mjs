@@ -20,6 +20,8 @@ test('model clock (fix): starting a session re-reads the clock instead of using 
   const page = await launchPage(htmlPath);
   t.after(() => page.close());
 
+  // One question first: Start does nothing on a fresh profile until an instrument is chosen.
+  await page.evaluate("window.__coach.setMod('kbd')");
   const loadTimeModelNow = await page.evaluate('window.__coach.modelNow()');
 
   // Freeze a base "now" and jump Date.now() two days ahead of it, simulating
@@ -50,6 +52,8 @@ test('model clock (fix): the tab becoming visible again re-reads the clock, not 
   const page = await launchPage(htmlPath);
   t.after(() => page.close());
 
+  // One question first: Start does nothing on a fresh profile until an instrument is chosen.
+  await page.evaluate("window.__coach.setMod('kbd')");
   const loadTimeModelNow = await page.evaluate('window.__coach.modelNow()');
 
   const stubbedNow = await page.evaluate(`

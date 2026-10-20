@@ -69,3 +69,32 @@ test('tuner readout survives a decaying note through the silence after it (real 
     },
   );
 });
+
+// U9: the tuner's first step is a button, and its tuning follows the
+// instrument the learner already picked.
+test('idle tuner offers a Connect microphone button that follows the chosen instrument and starts the real mic flow by keyboard', async (t) => {
+  const wavPath = writeDecayWav(join(mkdtempSync(join(tmpdir(), 'band-coach-wav-')), 'a4-pluck-440hz.wav'));
+  await withAcceptancePage(
+    t,
+    { fakeAudioFile: wavPath, initScript: CANVAS_TEXT_RECORDER, simulated: ['canvas text recorder (observes only, adds no input)'] },
+    async (page) => {
+      await page.grant(['microphone']);
+      await page.evaluate("document.querySelector('#picker button[data-mod=\"violin\"]').click()");
+      await page.waitFor("document.querySelector('#picker button[data-mod=\"violin\"]').getAttribute('aria-pressed') === 'true'");
+      await page.evaluate("document.querySelector('#picker button[data-mod=\"tuner\"]').click()");
+      await page.waitFor("document.getElementById('optTune') && document.getElementById('optTune').value === 'vln'");
+      await page.waitFor("window.__bcCanvasText.filter(function (x) { return /^String \\d/.test(x); }).map(function (x) { return x.replace(/^String \\d +([A-G])\\S*.*$/, '$1'); }).join('') === 'GDAE'");
+
+      const btn = "document.querySelector('#modOpts #tunerConnect')";
+      assert.equal(await page.evaluate(`!!${btn} && !${btn}.hidden`), true, 'the idle tuner card has a visible Connect microphone button');
+      assert.match(await page.evaluate(`${btn}.textContent`), /Connect microphone/);
+
+      await page.evaluate(`${btn}.focus()`);
+      await page.press('Enter');
+      await page.waitFor("document.getElementById('ioBtn').hidden === true");
+      assert.match(await page.evaluate("document.getElementById('ioText').textContent"), /Listening/, 'the same mic flow ran');
+      assert.equal(await page.evaluate(`${btn}.hidden`), true, 'the button goes away once the mic is listening');
+      assert.deepEqual(page.exceptions, [], 'no uncaught exceptions');
+    },
+  );
+});

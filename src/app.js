@@ -27,7 +27,7 @@ import { CLEF_PATHS } from './notation/glyphs.js';
 import { yin } from './audio/yin.js';
 import { createPitchNode } from './audio/pitch-worklet.js';
 //
-import { gatesFor, meterLevel, releaseFloor, classifyRoomCheck, ROOM_CHECK_VERSION, MIN_FLOOR, QUIET_RELEASE_SEC } from './audio/levels.js';
+import { gatesFor, meterLevel, releaseFloor, classifyRoomCheck, ROOM_CHECK_VERSION, MIN_FLOOR, QUIET_RELEASE_SEC, ringBefore } from './audio/levels.js';
 import { diagnoseInput, stepDiagnosis } from './audio/input-diagnosis.js';
 import { createOnsetDetector } from './audio/onset.js';
 import { createDrumClassifier } from './audio/drum-classify.js';
@@ -115,8 +115,8 @@ import { register as registerPathway } from './ui/pathway.js';
   // lives here; the English text is left in the HTML too as the pre-JS/no-JS
   // fallback, and this only overwrites it with the identical string today.
   function applyStaticLabels(root) { root.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.getAttribute('data-i18n')); }); }
-  // Language pick (Settings > Language, DB.prefs.locale): switches t(), <html lang>, the static labels and the nav landmark name. Dynamic text picks the new language up the next time it is drawn.
-  function applyLocale(code) { setLocale(code); document.documentElement.lang = code; applyStaticLabels(document); $('mainNav').setAttribute('aria-label', t('nav.label')); }
+  // Language pick (Settings > Language, DB.prefs.locale): switches t(), <html lang>, the static labels and the nav landmark name. Text drawn once (the options list, the instrument sheet) is redrawn by the language control's handler; the rest picks the new language up the next time it is drawn.
+  function applyLocale(code) { setLocale(code); document.documentElement.lang = code; applyStaticLabels(document); $('mainNav').setAttribute('aria-label', t('nav.label')); $('playBtn').textContent = t(!sess ? 'stage.start' : paused ? 'stage.resume' : 'stage.pause'); }
   const deafWindow = createDeafWindow({ now: () => performance.now() });
   // ---------- accessibility: wake lock, dialog focus, reduced motion ----------
   const wakeLock = createWakeLock();
@@ -642,6 +642,7 @@ import { register as registerPathway } from './ui/pathway.js';
   // grouping is purely visual.
   function variantParentsFrom(mods, staticPairs) { const out = Object.assign({}, staticPairs); Object.keys(mods).forEach(id => { const p = mods[id] && mods[id].parent; if (p && p !== id && mods[p]) out[id] = p; }); return out; }
   const VARIANT_PARENTS = variantParentsFrom(MODS, { 'bass-5-string': 'bass', 'ukulele-low-g': 'uke', 'ukulele-baritone': 'uke' });
+  const TUNER_FOR = { gtr: 'gtr', bass: 'bass', uke: 'uke', violin: 'vln' }; // the tuner opens on the instrument the learner already chose, until they pick a tuning themselves
   const TUNINGS = { gtr: ['Guitar', [40, 45, 50, 55, 59, 64]], bass: ['Bass', [28, 33, 38, 43]], uke: ['Ukulele', [67, 60, 64, 69]], vln: ['Violin', [55, 62, 69, 76]], chrom: ['Any note (chromatic)', []] };
   const _info = info, _valid = validId;
   info = function (m, id, prefs) { const hk = (prefs && Number.isInteger(prefs.harpKey) && prefs.harpKey >= 0 && prefs.harpKey <= 11) ? prefs.harpKey : 0; if (id[0] === 'h') { const mm = /^h([bd])(\d+)$/.exec(id), dir = mm[1], hole = +mm[2], layout = harpLayoutFor(hk), midi = layout[hole - 1][dir === 'b' ? 'blow' : 'draw']; return { kind: 'note', midi: midi, hole: hole, dir: dir, note: nname(midi), label: (dir === 'b' ? 'Blow ' : 'Draw ') + hole + ' (' + nname(midi) + ')', short: (dir === 'b' ? 'Blow ' : 'Draw ') + hole }; } if (id[0] === 'y') { const mm = /^y(\d+)x(\d)$/.exec(id), hole = +mm[1], depth = +mm[2], layout = harpLayoutFor(hk), b = layout[hole - 1].bends.find(x => x.semitonesBent === depth), dir = b.action === 'draw' ? 'd' : 'b'; return { kind: 'note', midi: b.pitch, hole: hole, dir: dir, bend: depth, note: nname(b.pitch), label: (dir === 'b' ? 'Blow ' : 'Draw ') + hole + ' bent ' + depth + (depth === 1 ? ' semitone' : ' semitones') + ' (' + nname(b.pitch) + ')', short: (dir === 'b' ? 'Blow ' : 'Draw ') + hole + ' ↓' + depth }; } return _info(m, id, prefs); };
@@ -710,6 +711,9 @@ import { register as registerPathway } from './ui/pathway.js';
   // it stays directly reachable, and shutting the whole sheet on top of
   // that would hide it two levels deep behind two different controls.
   let hasSavedMod = false;
+  // One question first: true once the learner has answered "which instrument?" (a saved choice at boot, a pick, or a test's setMod). Until then no instrument is written to storage (a changed setting still is) and Start, the level name and the coach line stay hidden. `booting` marks the boot-time setMod(mod) as the default, not an answer.
+  let instrumentChosen = false, booting = true;
+  function revealStage() { ['playBtn', 'levelName', 'coach'].forEach(id => { const el = $(id); if (el) el.hidden = false; }); }
   // P2b-1: once true, #picker behaves as a sheet that shuts itself after
   // every instrument pick, not just the always-visible first-run list. It
   // starts equal to hasSavedMod (a returning learner's sheet is already
@@ -796,7 +800,8 @@ import { register as registerPathway } from './ui/pathway.js';
   // every retry after it.
   function writeDB() {
     if (MODS[mod]) DB.mods[mod] = S = sanitizeModel(mod, S, modelNow);
-    const candidate = JSON.stringify(DB);
+    // Before the instrument question is answered, a setting the learner changed is stored, but not the boot-time default instrument, so the next visit still asks.
+    const candidate = JSON.stringify(instrumentChosen ? DB : Object.assign({}, DB, { prefs: Object.assign({}, DB.prefs, { mod: null }) }));
     const result = store.blocked ? { ok: false } : safeSet(store.storage, KEY, candidate);
     if (result.ok) { lastStored = candidate; if (saveFailedShown) { saveFailedShown = false; $('settingsSay').textContent = ''; $('mainSay').textContent = ''; } }
     else { saveFailedShown = true; $('settingsSay').textContent = t('storage.saveFailed'); $('mainSay').textContent = t('storage.saveFailed'); }
@@ -1040,6 +1045,7 @@ import { register as registerPathway } from './ui/pathway.js';
   const coach = t => { $('coach').textContent = t; if (!$('settingsView').hidden) $('settingsSay').textContent = t; };
   const cur = () => task && task.els[task.idx];
   let pressed = {}, heard = null, held = [], holdFor = 0, holdCents = [], wrongFor = 0, lastFired = -1, stableN = 0, stableMidi = -1, released = true, flashBad = -1e12, flashGood = -1e12;
+  let ringEnv = 0; // Q10d-3: decaying loudest recent pluck level; an onset below it is the ring wobbling, not a new pluck
   let quietFor = 0, quietSeen = false; // Q10d-2: delivered quiet time (dt, not frames) toward releasing a ringing pluck; the first quiet frame starts the clock
   // Field report: a strummed chord on a single-note item clears no gate the
   // app judges (see src/audio/input-diagnosis.js), so onPitch's early
@@ -1059,10 +1065,10 @@ import { register as registerPathway } from './ui/pathway.js';
     else if (MODS[mod].staff && $('optRef') && $('optRef').checked) t.els.forEach((el, k) => tone(el.info.midi, at + k * 0.8, 0.75));
   }
   function present() {
-    const t = task, M = MODS[mod], e = cur(); t.t0 = now(); if (e) e.t0 = now(); held = []; holdFor = 0; holdCents = []; wrongFor = 0; if (!(heard && heard.rms >= releaseFloor(gates))) released = true;
+    const t = task, M = MODS[mod], e = cur(); t.t0 = now(); if (e) e.t0 = now(); held = []; holdFor = 0; holdCents = []; wrongFor = 0; if (!heard || (heard.rms !== 0 && heard.rms < releaseFloor(gates))) released = true; // an exact-0 frame is a capture dropout, not quiet (as in the quiet rule below)
     $('choices').hidden = t.kind !== 'ear'; $('replayBtn').hidden = !(t.kind === 'ear' || mod === 'voice'); $('showMeBtn').hidden = t.kind === 'ear' || t.kind === 'bar' || t.kind === 'bar2' || t.kind === 'kit';
     let p = '', h = '';
-    if (t.kind === 'ear') { p = e.info.kind === 'interval' ? 'Which <b>interval</b>?' : 'Which <b>chord</b>?'; h = 'Listen, then choose. Number keys work too.'; const box = $('choices'); box.innerHTML = ''; t.choices.forEach((id, k) => { const b = document.createElement('button'); b.type = 'button'; b.id = 'ch-' + id; b.textContent = (k + 1) + '. ' + inf(id).label; b.addEventListener('click', () => { b.blur(); answer(id); }); box.appendChild(b); }); playRef(t); }
+    if (t.kind === 'ear') { p = e.info.kind === 'interval' ? 'Which <b>interval</b>?' : 'Which <b>chord</b>?'; h = 'Listen, then choose. Number keys work too.'; const box = $('choices'); box.innerHTML = ''; t.choices.forEach((id, k) => { const b = document.createElement('button'); b.type = 'button'; b.id = 'ch-' + id; b.textContent = (k + 1) + '. ' + inf(id).label; b.addEventListener('click', () => { b.blur(); answer(id, 'screen-tap'); }); box.appendChild(b); }); playRef(t); }
     else if (t.kind === 'bar') { p = 'Read it, then <b>tap it</b>'; h = 'Four clicks to get ready, then tap the bar in time.'; startBar(); }
     else if (t.kind === 'bar2') { p = 'Read it, then <b>tap it</b>'; h = 'Listen for the count-in, then tap the bar (or bars) in time.'; startBar2(); }
     else if (t.kind === 'kit') { p = 'Read it, then <b>play it</b>'; h = (t.kit.bar.tip ? t.kit.bar.tip + ' ' : '') + 'Listen for the count-in, then play the bar on the drums it shows.'; startKitBar(); }
@@ -1174,6 +1180,7 @@ import { register as registerPathway } from './ui/pathway.js';
   // (src/ui/songs.js's advance()) -- never anything about credit, mastery or
   // pass/fail, which stay blind to it.
   function onNote(midi, exact, source) {
+    if (source) kbdTyping = source === 'computer-key'; // the keys wear their computer letters only while the computer keyboard is what is playing them
     // Songs only ever learn a route they already understand (a real
     // keyboard or a stand-in for one). 'screen' and 'mic' cannot arrive here
     // while a song is open (see openPanel()), so this gate only matters if a
@@ -1197,7 +1204,7 @@ import { register as registerPathway } from './ui/pathway.js';
     const policy = i.anywhere ? 'fold' : (OCTAVE_POLICY[mod] || 'fold');
     const judged = judgePitch({ heardMidi: midi, targetMidi: i.midi, policy });
     if (judged.ok) { passEl(undefined, undefined, undefined, source); return; }
-    const where = wrongNoteHint({ heardMidi: midi, targetMidi: i.midi, policy, fretted: !!i.string && !MODS[mod].fretless });
+    const where = wrongNoteHint({ heardMidi: midi, targetMidi: i.midi, policy, fretted: !!i.string && !MODS[mod].fretless, input: source, name: nname });
     const wn = (x) => i.written === undefined ? nname(x) : nname(writtenMidi(i, x)); failEl('That was ' + wn(midi) + ', the note is ' + wn(i.midi) + '. ' + where, e.id + '>' + wn(midi)); // transposing winds: both names in the written key the prompt uses
   }
   // onNote's hands-together branch: the stage machine lives in src/core/hands-together-stage.js (pure, table-tested); this applies its verdict to the UI.
@@ -1214,15 +1221,15 @@ import { register as registerPathway } from './ui/pathway.js';
     if (!playing || !task || task.done) return; const e = cur(); if (!e || !e.pair) return;
     applyHandsVerdict(stepHandsTogether(handsCtx(e), { type: 'off', midi: midi, source: source }));
   }
-  function answer(id) {
-    lastInputAt = now(); if (!playing || !task || task.kind !== 'ear' || task.done) return; const e = cur(), right = id === e.id; e.rt = now() - e.t0; e.q = right ? timeQ(e.rt, task.limit) : 0; task.revealed = true; updateDesc();
+  function answer(id, input) {
+    lastInputAt = now(); if (!playing || !task || task.kind !== 'ear' || task.done) return; const e = cur(), right = id === e.id; if (typeof input === 'string') e.input = input; e.rt = now() - e.t0; e.q = right ? timeQ(e.rt, task.limit) : 0; task.revealed = true; updateDesc();
     const b = $('ch-' + id); if (b) b.className = right ? 'right' : 'wrong'; const rb = $('ch-' + e.id); if (rb) rb.className = 'right';
     if (right) say(e.info.label + ': yes.', 'ok'); else if (id === 'timeout') { say('Time. That was a ' + e.info.label.toLowerCase() + '. Listen again as it replays.', 'no'); playRef(task); } else { S.conf[e.id + '>' + id] = (S.conf[e.id + '>' + id] || 0) + 1; say('That was a ' + e.info.label.toLowerCase() + ', not a ' + inf(id).label.toLowerCase() + '. Listen again as it replays.', 'no'); playRef(task); }
     task.idx = 1; finishTask();
   }
   // microphone frames: plucked instruments fire note events, voices and winds are judged on a held pitch
   function onPitch(fr, dt) {
-    heard = fr; if (deafWindow.isDeaf()) return; const M = MODS[mod]; if (!playing || !task || task.done) return; const e = cur(); if (!e) return;
+    const ringPrev = ringBefore(ringEnv, dt); ringEnv = Math.max(fr.rms, ringPrev); heard = fr; if (deafWindow.isDeaf()) return; const M = MODS[mod]; if (!playing || !task || task.done) return; const e = cur(); if (!e) return;
     // Field-report fix: on a single-note item, tell the learner WHY nothing
     // is being judged instead of leaving them with silence. Skipped on a
     // chord item, where hearing more than one pitch class is the point, not
@@ -1245,9 +1252,9 @@ import { register as registerPathway } from './ui/pathway.js';
       // F8: an onset detector (src/audio/onset.js) catches a re-pluck of the
       // SAME note on a still-ringing string, which the RMS-drop/pitch-change
       // release check below can never see on its own.
-      if (fr.onset) { released = true; stableN = 0; }
+      if (fr.onset && Math.max(fr.rms, fr.onsetRms || 0) > ringPrev) { released = true; stableN = 0; } // Q10d-3: an onset no louder than the ring it lands on is the ring dipping and returning
       if (e.info.kind === 'chord') { if (fr.rms < gates.chord || !fr.chroma) { holdFor = 0; return; } const j = judgeChord({ chroma: fr.chroma, targetPcs: e.info.pcs }); e.score = j.score; if (j.ok) { holdFor += dt; if (holdFor > 0.18) passEl(undefined, e.info.label + ': that rings true.'); } else holdFor = 0; if (fr.rms > 0.02) lastInputAt = now(); return; }
-      if (fr.rms < gates.note || !fr.freq) { stableN++; if (fr.rms !== 0) { if (fr.rms < releaseFloor(gates)) { if (quietSeen) quietFor += dt; quietSeen = true; if (quietFor >= QUIET_RELEASE_SEC) released = true; } else { quietSeen = false; quietFor = 0; } } stableMidi = -1; return; } quietSeen = false; quietFor = 0; // an exact-0 rms frame is a capture dropout (with the browser's processing off, a live mic's silence is not 0.0; a device-level gate can still send zeros): it holds the quiet clock
+      if (fr.rms < gates.note || !fr.freq) { stableN++; if (fr.rms !== 0) { if (fr.rms < releaseFloor(gates)) { if (quietSeen) quietFor += dt; quietSeen = true; if (quietFor >= QUIET_RELEASE_SEC) { released = true; ringEnv = 0; } } else { quietSeen = false; quietFor = 0; } } stableMidi = -1; return; } quietSeen = false; quietFor = 0; // an exact-0 rms frame is a capture dropout (with the browser's processing off, a live mic's silence is not 0.0; a device-level gate can still send zeros): it holds the quiet clock
       const m = Math.round(fr.midi); if (m === stableMidi) stableN++; else { stableMidi = m; stableN = 1; }
       if (stableN === 3 && (released || m !== lastFired)) { lastFired = m; released = false; onNote(m, false, 'mic'); }
       return;
@@ -1444,7 +1451,7 @@ import { register as registerPathway } from './ui/pathway.js';
       S.grooveBpm = tempoLadder({ bpm: groove.bpm, passed: passed });
       const tend = result.summary.tendency;
       const feel = tend === 'steady' ? 'right on it' : tend === 'rushing' ? 'a little early overall' : tend === 'dragging' ? 'a little late overall' : 'not enough to tell';
-      say(passed ? 'Clean take at ' + groove.bpm + ' bpm, ' + feel + '. Next: ' + S.grooveBpm + ' bpm.' : (tend === 'rushing' ? 'You are rushing it — coming in early.' : tend === 'dragging' ? 'You are dragging — coming in late.' : 'Not quite on the beat yet.') + ' Staying at ' + S.grooveBpm + ' bpm.', passed ? 'ok' : 'no');
+      say(passed ? 'Clean take at ' + groove.bpm + ' beats a minute, ' + feel + '. Next: ' + S.grooveBpm + ' beats a minute.' : (tend === 'rushing' ? 'You are rushing it — coming in early.' : tend === 'dragging' ? 'You are dragging — coming in late.' : 'Not quite on the beat yet.') + ' Staying at ' + S.grooveBpm + ' beats a minute.', passed ? 'ok' : 'no');
       task.idx = task.els.length; finishTask(); nextTaskAt = now() + 0.4; save();
     }
   }
@@ -1508,13 +1515,17 @@ import { register as registerPathway } from './ui/pathway.js';
     if (!listenOnsetDetector) listenOnsetDetector = createOnsetDetector({ sampleRate: actx.sampleRate, frameSize: HOP, hop: HOP });
     const newSamples = Math.max(0, Math.min(anTime.fftSize, Math.round((dt || 0.05) * actx.sampleRate)));
     const nHops = Math.floor(newSamples / HOP);
-    let onset = false;
+    // Q10d-3 on this path: r.rms is the whole ~90ms window, mostly the old ring when an attack has just
+    // landed, so the onset carries its own level -- the RMS from its hop to now -- for onPitch to weigh
+    // against the ring envelope (a full-strength re-pluck 300ms on read below the envelope otherwise).
+    let onset = false, onsetFrom = -1;
     for (let c = nHops - 1; c >= 0; c--) {
       const end = buf.length - c * HOP;
       const chunk = buf.subarray(end - HOP, end);
-      if (listenOnsetDetector.push(chunk).onset) onset = true;
+      if (listenOnsetDetector.push(chunk).onset) { onset = true; onsetFrom = end - HOP; }
     }
-    const fr = { rms: r.rms, freq: r.freq && r.clarity > 0.8 ? r.freq : 0, clarity: r.clarity, onset: onset }; if (fr.freq) fr.midi = fmidi(fr.freq);
+    let onsetRms = 0; if (onset) { let sq = 0; for (let i = onsetFrom; i < buf.length; i++) sq += buf[i] * buf[i]; onsetRms = Math.sqrt(sq / (buf.length - onsetFrom)); }
+    const fr = { rms: r.rms, freq: r.freq && r.clarity > 0.8 ? r.freq : 0, clarity: r.clarity, onset: onset, onsetRms: onsetRms }; if (fr.freq) fr.midi = fmidi(fr.freq);
     if (task && cur() && cur().info.kind === 'chord') { const db = new Float32Array(anFreq.frequencyBinCount); anFreq.getFloatFrequencyData(db); fr.chroma = chroma(db, actx.sampleRate); }
     meterUpdate(fr.rms);
     try { onPitch(fr, dt); } catch (e) { errCount++; recordError('onPitch', e); }
@@ -1616,7 +1627,10 @@ import { register as registerPathway } from './ui/pathway.js';
   function rr(x, y, w, h, r) { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); }
   // canvas pixels per CSS pixel (2 on a phone, 1 on a plain desktop): a size floor in canvas pixels is half as big on screen at 2, so floors are written in CSS pixels times this
   const cssK = () => cv.width / (cv.getBoundingClientRect().width || cv.width);
-  const font = (px, w) => { g.font = (w || 700) + ' ' + Math.round(px) + 'px "Barlow Condensed", Arial, sans-serif'; };
+  // the browser's text-size setting (root font size / 16), read once per draw() so canvas text grows with it like the page text does
+  const KBD_LETTERS = Object.keys(PCKEYS).reduce((a, k) => { a[PCKEYS[k]] = k; return a; }, {});
+  let rootK = 1, kbdTyping = false;
+  const font = (px, w) => { g.font = (w || 700) + ' ' + Math.round(px * rootK) + 'px "Barlow Condensed", Arial, sans-serif'; };
   const accent = () => (MODS[mod] || TOOLS[mod]).color;
   const recentPress = m => pressed[m] && performance.now() - pressed[m] < 220;
   // The [lo, hi] MIDI range the on-screen keyboard is currently drawing (used
@@ -1635,9 +1649,10 @@ import { register as registerPathway } from './ui/pathway.js';
     const isW = m => [0, 2, 4, 5, 7, 9, 11].indexOf(pc(m)) >= 0; let nW = 0; for (let m = lo; m <= hi; m++) if (isW(m)) nW++; const kw = w / nW; let i = 0; const xs = {};
     for (let m = lo; m <= hi; m++) if (isW(m)) { xs[m] = x0 + i * kw; i++; }
     const fill = (m, base) => o.target.indexOf(m) >= 0 ? accent() : o.good.indexOf(m) >= 0 ? '#5be08a' : recentPress(m) ? '#9fb4d8' : base;
+    const keyLetter = m => o.letters ? o.letters[m] : undefined; // computer letter for this key, lowercase as the help prints it
     const markFor = m => o.rhMidi === m ? 'R' : o.lhMidi === m ? 'L' : null;
-    for (let m = lo; m <= hi; m++) if (isW(m)) { rr(xs[m] + 1, y0, kw - 2, h, 4); g.fillStyle = fill(m, '#e9edf6'); g.fill(); const mk = markFor(m); if (mk) { g.fillStyle = '#06101d'; font(kw * 0.4, 800); g.textAlign = 'center'; g.fillText(mk, xs[m] + kw / 2, y0 + kw * 0.46); } keyRects.push({ m: m, x: xs[m], y: y0, w: kw, h: h, black: false, row: o.row, hand: o.hand, mark: mk }); if (o.names) { g.fillStyle = '#3a4363'; font(kw * 0.34, 600); g.textAlign = 'center'; g.fillText(nname(m) + (pc(m) === 0 ? (Math.floor(m / 12) - 1) : ''), xs[m] + kw / 2, y0 + h - kw * 0.2); } }
-    for (let m = lo; m <= hi; m++) if (!isW(m) && xs[m - 1] !== undefined) { const bx = xs[m - 1] + kw * 0.68; rr(bx, y0, kw * 0.64, h * 0.62, 3); g.fillStyle = fill(m, '#10131c'); g.fill(); g.strokeStyle = '#05070c'; g.lineWidth = 1; g.stroke(); const mk = markFor(m); if (mk) { g.fillStyle = '#e9edf6'; font(kw * 0.32, 800); g.textAlign = 'center'; g.fillText(mk, bx + kw * 0.32, y0 + h * 0.62 * 0.52); } keyRects.unshift({ m: m, x: bx, y: y0, w: kw * 0.64, h: h * 0.62, black: true, row: o.row, hand: o.hand, mark: mk }); }
+    for (let m = lo; m <= hi; m++) if (isW(m)) { rr(xs[m] + 1, y0, kw - 2, h, 4); g.fillStyle = fill(m, '#e9edf6'); g.fill(); const mk = markFor(m); if (mk) { g.fillStyle = '#06101d'; font(kw * 0.4, 800); g.textAlign = 'center'; g.fillText(mk, xs[m] + kw / 2, y0 + kw * 0.46); } { const kl = keyLetter(m); if (kl) { g.fillStyle = '#3a4363'; font(kw * 0.34, 700); g.textAlign = 'center'; g.fillText(kl, xs[m] + kw / 2, y0 + h - kw * 0.62); } } keyRects.push({ m: m, x: xs[m], y: y0, w: kw, h: h, black: false, row: o.row, hand: o.hand, mark: mk }); if (o.names) { g.fillStyle = '#3a4363'; font(kw * 0.34, 600); g.textAlign = 'center'; g.fillText(nname(m) + (pc(m) === 0 ? (Math.floor(m / 12) - 1) : ''), xs[m] + kw / 2, y0 + h - kw * 0.2); } }
+    for (let m = lo; m <= hi; m++) if (!isW(m) && xs[m - 1] !== undefined) { const bx = xs[m - 1] + kw * 0.68; rr(bx, y0, kw * 0.64, h * 0.62, 3); g.fillStyle = fill(m, '#10131c'); g.fill(); g.strokeStyle = '#05070c'; g.lineWidth = 1; g.stroke(); const mk = markFor(m); if (mk) { g.fillStyle = '#e9edf6'; font(kw * 0.32, 800); g.textAlign = 'center'; g.fillText(mk, bx + kw * 0.32, y0 + h * 0.62 * 0.52); } { const kl = keyLetter(m); if (kl) { g.fillStyle = '#9fb4d8'; font(kw * 0.3, 700); g.textAlign = 'center'; g.fillText(kl, bx + kw * 0.32, y0 + h * 0.62 * 0.9); } } keyRects.unshift({ m: m, x: bx, y: y0, w: kw * 0.64, h: h * 0.62, black: true, row: o.row, hand: o.hand, mark: mk }); }
   }
   // item D2 (Wave kbd): a full 88-key (A0-C8, MIDI 21-108) strip, drawn once
   // per frame under the rows, marking the [lo, hi] window the rows above are
@@ -1674,7 +1689,7 @@ import { register as registerPathway } from './ui/pathway.js';
   // `offScale` (a reading beyond +-50 cents) draws a triangle pointing off
   // the edge instead of the round dot -- shape, not just colour, marks it,
   // since the dot would otherwise just clamp silently to the rail.
-  function gauge(x, y, w, cents, label, offScale) { g.fillStyle = '#05070c'; rr(x, y, w, 16, 8); g.fill(); g.fillStyle = '#5be08a55'; g.fillRect(x + w * 0.5 - w * 0.06, y, w * 0.12, 16); g.strokeStyle = '#e9edf6'; g.lineWidth = 2; g.beginPath(); g.moveTo(x + w / 2, y - 5); g.lineTo(x + w / 2, y + 21); g.stroke(); if (cents !== null) { const px = x + w / 2 + clamp(cents / 50, -1, 1) * w / 2; g.fillStyle = Math.abs(cents) < 10 ? '#5be08a' : Math.abs(cents) < 30 ? '#f3c52f' : '#ff6b5e'; if (offScale) { const dir = cents > 0 ? 1 : -1; g.beginPath(); g.moveTo(px, y + 8 - 10); g.lineTo(px + dir * 13, y + 8); g.lineTo(px, y + 8 + 10); g.closePath(); g.fill(); } else { g.beginPath(); g.arc(px, y + 8, 11, 0, 7); g.fill(); } } const fs = Math.max(13 * cssK(), cv.width * 0.017); g.fillStyle = '#93a0bd'; font(fs, 600); g.textAlign = 'left'; g.fillText('flat', x, y + 22 + fs); g.textAlign = 'right'; g.fillText('sharp', x + w, y + 22 + fs); g.textAlign = 'center'; g.fillStyle = '#e9edf6'; font(fs * 1.25, 700); const maxW = 2 * Math.min(x + w / 2, cv.width - x - w / 2) - 8; let lines = [label || '']; if (g.measureText(lines[0]).width > maxW && lines[0].includes(' ')) { const wd = lines[0].split(' '); let best = null; for (let i = 1; i < wd.length; i++) { const two = [wd.slice(0, i).join(' '), wd.slice(i).join(' ')], m = Math.max(g.measureText(two[0]).width, g.measureText(two[1]).width); if (!best || m < best.m) best = { two, m }; } lines = best.two; } const lw = Math.max(...lines.map(l => g.measureText(l).width)); if (lw > maxW) font(fs * 1.25 * maxW / lw, 700); lines.forEach((l, i) => g.fillText(l, x + w / 2, y - 14 - (lines.length - 1 - i) * fs * 1.45)); }
+  function gauge(x, y, w, cents, label, offScale) { g.fillStyle = '#05070c'; rr(x, y, w, 16, 8); g.fill(); g.fillStyle = '#5be08a55'; g.fillRect(x + w * 0.5 - w * 0.06, y, w * 0.12, 16); g.strokeStyle = '#e9edf6'; g.lineWidth = 2; g.beginPath(); g.moveTo(x + w / 2, y - 5); g.lineTo(x + w / 2, y + 21); g.stroke(); if (cents !== null) { const px = x + w / 2 + clamp(cents / 50, -1, 1) * w / 2; g.fillStyle = Math.abs(cents) < 10 ? '#5be08a' : Math.abs(cents) < 30 ? '#f3c52f' : '#ff6b5e'; if (offScale) { const dir = cents > 0 ? 1 : -1; g.beginPath(); g.moveTo(px, y + 8 - 10); g.lineTo(px + dir * 13, y + 8); g.lineTo(px, y + 8 + 10); g.closePath(); g.fill(); } else { g.beginPath(); g.arc(px, y + 8, 11, 0, 7); g.fill(); } } const fs = Math.max(13 * cssK(), cv.width * 0.017); g.fillStyle = '#93a0bd'; font(fs, 600); g.textAlign = 'left'; g.fillText('flat', x, y + 22 + fs); g.textAlign = 'right'; g.fillText('sharp', x + w, y + 22 + fs); g.textAlign = 'center'; g.fillStyle = '#e9edf6'; font(fs * 1.25, 700); const maxW = Math.min(2 * Math.min(x + w / 2, cv.width - x - w / 2) - 8, w); let lines = [label || '']; if (g.measureText(lines[0]).width > maxW && lines[0].includes(' ')) { lines = []; let cur = ''; label.split(' ').forEach(wd => { const tryLn = cur ? cur + ' ' + wd : wd; if (cur && g.measureText(tryLn).width > maxW) { lines.push(cur); cur = wd; } else cur = tryLn; }); lines.push(cur); } const lw = Math.max(...lines.map(l => g.measureText(l).width)); if (lw > maxW) font(fs * 1.25 * maxW / lw, 700); lines.forEach((l, i) => g.fillText(l, x + w / 2, y - 14 - (lines.length - 1 - i) * fs * 1.45)); }
   function liveCents(target, exact) { if (!heard || !heard.freq) return null; let c = (heard.midi - target) * 100; if (!exact) c = ((c + 600) % 1200 + 1200) % 1200 - 600; return c; }
   function drawVoice(e, W, H) {
     const VKd = Object.assign({}, VOICE_KINDS, DB.prefs.voiceRange ? { mine: ['My range (found by test)', tonicFromRange(exerciseRangeFor(DB.prefs.voiceRange)).tonic] } : {}), base = (VKd[DB.prefs.voice] || VKd.low)[1], rows = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], y = d => H * 0.9 - (H * 0.8) * d / 12;
@@ -1742,11 +1757,23 @@ import { register as registerPathway } from './ui/pathway.js';
       g.save(); g.translate(x0, y0); g.scale(sc, sc); g.strokeStyle = '#c9ced9'; g.fillStyle = '#e9edf6'; g.lineWidth = 1.5 / sc; drawPrimitives(g, bar.staff, {}); g.restore();
       bar.onsets.forEach((o, i) => { const x = x0 + (bar.noteX[i] || 0) * sc; if (o.flam) { g.fillStyle = '#93a0bd'; font(11 * sc, 700); g.textAlign = 'center'; g.fillText('flam', x, y0 + 10 * sc); } if (!bar.judged || !o.res) return; const bad = o.res.some(r => r.dt === undefined), off = Math.max(...o.res.map(r => Math.abs(r.dt || 0))); g.fillStyle = bad ? '#ff6b5e' : off > 0.05 ? '#f3c52f' : '#5be08a'; g.beginPath(); g.arc(x, y0 + 122 * sc, 5 * sc, 0, 7); g.fill(); }); }
     // the layout is a unit square stretched to the box (x by width, y by height); circles stay round, sized by the shorter side
-    kitLayout().forEach(p => { const x = box.x + spreadX(p.x) * bw, y = box.y + p.y * bh, rr = p.r * m, flash = kitFlash.piece === p.id && performance.now() - kitFlash.at < 160, lit = flash || (pre && want[p.id]);
-      g.beginPath(); g.arc(x, y, rr, 0, 7); g.fillStyle = flash ? '#f3c52f' : lit ? '#f08a4b' : p.shape === 'cymbal' ? '#2a3140' : '#1b2130'; g.fill(); g.strokeStyle = want[p.id] ? '#f08a4b' : '#93a0bd'; g.lineWidth = want[p.id] ? 3 : 1.5; g.stroke();
-      const nm = KIT_DRAW_NAMES[p.id], fs = Math.max(13, m * 0.05), key = KIT.find(k => k.id === p.id).key.toUpperCase(); font(fs, 700); const tw = g.measureText(nm[0]).width, inside = tw + 6 <= rr * 2 && !nm[1] && !nm[2], left = nm[2] === 'l';
-      // a name that does not fit in its circle is written beside it (to the right), never squeezed or overlapping its neighbours
-      g.fillStyle = inside && lit ? '#05070c' : '#e9edf6'; if (inside) { g.textAlign = 'center'; g.fillText(nm[0], x, y - fs * 0.05); kitLabels.push({ id: p.id, x: x - tw / 2, y: y - fs * 1.05, w: tw, h: fs * 1.2 }); } else { const lx = left ? x - rr - 5 : x + rr + 5; g.textAlign = left ? 'right' : 'left'; g.fillText(nm[0], lx, y - (nm[1] ? 1 : -fs * 0.35)); let lw = tw; if (nm[1]) { font(Math.max(11, fs * 0.85), 400); g.fillText(nm[1], lx, y + fs * 0.95); lw = Math.max(tw, g.measureText(nm[1]).width); } kitLabels.push({ id: p.id, x: left ? lx - lw : lx, y: y - fs * 1.05, w: lw, h: nm[1] ? fs * 2.2 : fs * 1.2 }); }
+    const pcs = kitLayout().map(p => { const flash = kitFlash.piece === p.id && performance.now() - kitFlash.at < 160, rr = p.r * m; return { p, x: box.x + spreadX(p.x) * bw, y: box.y + p.y * bh, rr, lit: flash || (pre && want[p.id]), flash }; });
+    pcs.forEach(({ p, x, y, rr, lit, flash }) => { g.beginPath(); g.arc(x, y, rr, 0, 7); g.fillStyle = flash ? '#f3c52f' : lit ? '#f08a4b' : p.shape === 'cymbal' ? '#2a3140' : '#1b2130'; g.fill(); g.strokeStyle = want[p.id] ? '#f08a4b' : '#93a0bd'; g.lineWidth = want[p.id] ? 3 : 1.5; g.stroke(); });
+    // Names go on after every circle is down. A name that fits is written inside its circle; any other tries its own side, the opposite side, then under and over the circle, and takes the first spot that touches no other name, no other piece and not the canvas edge; with none free it loses its second line (closed/pedal/open) and tries again, so two names never run into each other on a phone-width kit.
+    const placed = [], hit = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+    pcs.forEach(({ p, x, y, rr, lit }) => {
+      const nm = KIT_DRAW_NAMES[p.id], fs = Math.max(13, m * 0.05), key = KIT.find(k => k.id === p.id).key.toUpperCase(); font(fs, 700); const tw = g.measureText(nm[0]).width, inside = tw + 6 <= rr * 2 && !nm[1] && !nm[2]; let sw = 0; if (nm[1]) { font(Math.max(11, fs * 0.85), 400); sw = g.measureText(nm[1]).width; font(fs, 700); }
+      g.fillStyle = inside && lit ? '#05070c' : '#e9edf6';
+      if (inside) { g.textAlign = 'center'; g.fillText(nm[0], x, y - fs * 0.05); const r = { id: p.id, x: x - tw / 2, y: y - fs * 1.05, w: tw, h: fs * 1.2 }; kitLabels.push(r); placed.push(r); }
+      else {
+        const side = (dir, two) => { const lw = two ? Math.max(tw, sw) : tw, lx = dir < 0 ? x - rr - 5 : x + rr + 5; return { ax: lx, al: dir < 0 ? 'right' : 'left', by: y - (two ? 1 : -fs * 0.35), two, r: { id: p.id, x: dir < 0 ? lx - lw : lx, y: y - fs * 1.05, w: lw, h: two ? fs * 2.2 : fs * 1.2 } }; };
+        const stack = (dir, two) => { const lw = two ? Math.max(tw, sw) : tw, by = dir > 0 ? y + rr + fs * 1.05 : y - rr - 4 - (two ? fs * 0.95 : 0); return { ax: x, al: 'center', by, two, r: { id: p.id, x: x - lw / 2, y: by - fs * 1.05, w: lw, h: two ? fs * 2.2 : fs * 1.2 } }; };
+        const dir = nm[2] === 'l' ? -1 : 1, free = c => c.r.x >= 0 && c.r.x + c.r.w <= W && c.r.y >= 0 && c.r.y + c.r.h <= H && !placed.some(q => hit({ x: c.r.x - 9, y: c.r.y - 2, w: c.r.w + 18, h: c.r.h + 4 }, q)) && !pcs.some(o => o.p !== p && hit(c.r, { x: o.x - o.rr, y: o.y - o.rr, w: o.rr * 2, h: o.rr * 2 }));
+        let pick = null; for (const two of nm[1] ? [true, false] : [false]) { pick = [side(dir, two), side(-dir, two), stack(1, two), stack(-1, two)].find(free); if (pick) break; }
+        if (!pick) pick = side(dir, !!nm[1]);
+        g.textAlign = pick.al; g.fillText(nm[0], pick.ax, pick.by); if (pick.two) { font(Math.max(11, fs * 0.85), 400); g.fillText(nm[1], pick.ax, pick.by + fs * 0.95 + 1); }
+        kitLabels.push(pick.r); placed.push(pick.r);
+      }
       font(Math.max(11, m * 0.034), 700); g.textAlign = 'center'; g.fillStyle = lit ? '#05070c' : '#f3c52f'; g.fillText(key, x, inside ? y + rr - Math.max(4, m * 0.012) : y + 4); });
   }
   function drawBar2(W, H) {
@@ -1817,10 +1844,10 @@ import { register as registerPathway } from './ui/pathway.js';
   }
   let kbdTargetDbg = []; // last keyboard target list drawn (debug hook only)
   function draw() {
-    cv.classList.toggle('staffkbd', staffBand('kbd') && mod === 'kbd'); size(); const W = cv.width, H = cv.height; g.clearRect(0, 0, W, H); rowRects = []; keyRects = []; kbdOverviewRect = null;
+    rootK = (parseFloat(getComputedStyle(document.documentElement).fontSize) || 16) / 16; cv.classList.toggle('staffkbd', staffBand('kbd') && mod === 'kbd'); size(); const W = cv.width, H = cv.height; g.clearRect(0, 0, W, H); rowRects = []; keyRects = []; kbdOverviewRect = null;
     if (TOOLS[mod]) { if (mod === 'tuner') drawTuner(W, H); else drawCapture(W, H); return; }
     const M = MODS[mod], e = playing && task && !task.done ? cur() : null, showE = e || (task && task.done ? task.els[task.els.length - 1] : null);
-    if (mod === 'kbd') { const kr = kbdRange(), sb = staffBand('kbd'), oy = sb ? H * staffBandH('kbd', H) : 0, Hk = sb ? H * (1 - staffBandH('kbd', H)) : H; const tg = []; let rhMidi = null, lhMidi = null; if (e && !(task.kind === 'groove')) { if (e.info.kind === 'chord') { if (e.reveal || e.failed) e.info.pcs.forEach(x => tg.push(60 + x)); } else if (e.info.kind === 'hands-together') { if (e.reveal || e.failed) { tg.push(e.info.ex.rh.midi, e.info.ex.lh.midi); rhMidi = e.info.ex.rh.midi; lhMidi = e.info.ex.lh.midi; } } else if (e.reveal || e.failed) tg.push(e.info.midi); } if (task && task.kind === 'groove' && !task.done) task.els.forEach(x => { if (x.info.midi && (x.reveal || x.failed)) tg.push(x.info.midi); }); kbdTargetDbg = tg; const good = performance.now() - flashGood < 300 && task ? task.els.slice(0, task.idx).map(x => x.info.midi).filter(x => x) : []; const kOpts = { target: tg, good: good, names: DB.prefs.names, rhMidi: rhMidi, lhMidi: lhMidi };
+    if (mod === 'kbd') { const kr = kbdRange(), sb = staffBand('kbd'), oy = sb ? H * staffBandH('kbd', H) : 0, Hk = sb ? H * (1 - staffBandH('kbd', H)) : H; const tg = []; let rhMidi = null, lhMidi = null; if (e && !(task.kind === 'groove')) { if (e.info.kind === 'chord') { if (e.reveal || e.failed) e.info.pcs.forEach(x => tg.push(60 + x)); } else if (e.info.kind === 'hands-together') { if (e.reveal || e.failed) { tg.push(e.info.ex.rh.midi, e.info.ex.lh.midi); rhMidi = e.info.ex.rh.midi; lhMidi = e.info.ex.lh.midi; } } else if (e.reveal || e.failed) tg.push(e.info.midi); } if (task && task.kind === 'groove' && !task.done) task.els.forEach(x => { if (x.info.midi && (x.reveal || x.failed)) tg.push(x.info.midi); }); kbdTargetDbg = tg; const good = performance.now() - flashGood < 300 && task ? task.els.slice(0, task.idx).map(x => x.info.midi).filter(x => x) : []; const kOpts = { target: tg, good: good, names: DB.prefs.names, rhMidi: rhMidi, lhMidi: lhMidi, letters: kbdTyping ? KBD_LETTERS : null };
       if (kr[0] === 48) {
         // item B2 (Wave kbd): once the octave below is unlocked (level 8+, or
         // a custom captured melody below middle C) a single 15-white-key strip
@@ -1854,7 +1881,7 @@ import { register as registerPathway } from './ui/pathway.js';
   }
 
   // ---------- tools: tuner and melody capture ----------
-  let tunerKind = 'gtr', tuned = {}, tunerState = null, tunerLock = null, cap = { on: false, notes: [], curM: -1, curN: 0, t0: 0, start: 0 }, customOn = false, chunk = 0;
+  let tunerKind = 'gtr', tunerPicked = false, tuned = {}, tunerState = null, tunerLock = null, cap = { on: false, notes: [], curM: -1, curN: 0, t0: 0, start: 0 }, customOn = false, chunk = 0;
   // dt is seconds (see the tuner's setInterval poll below), stepTuner wants ms.
   function toolPitch(fr, dt) {
     heard = fr;
@@ -1872,7 +1899,7 @@ import { register as registerPathway } from './ui/pathway.js';
     }
   }
   // The 'N notes.' label beside the Practise-on menu, kept live while listening (counts the note being held).
-  function capCount() { const l = $('capTo') && $('capTo').parentElement; if (l && l.firstChild) l.firstChild.textContent = (cap.notes.length + (cap.on && cap.curM >= 0 && cap.curN >= 2 ? 1 : 0)) + ' notes. Practise on '; }
+  function capCount() { const l = $('capTo') && $('capTo').parentElement; if (l && l.firstChild) l.firstChild.textContent = (cap.notes.length + (cap.on && cap.curM >= 0 && cap.curN >= 2 ? 1 : 0)) + ' notes. Practice on '; }
   function capStop() { if (cap.on && cap.curM >= 0 && cap.curN >= 2) cap.notes.push({ m: cap.curM, t: cap.t0 - cap.start, d: now() - cap.t0 }); cap.on = false; cap.curM = -1; const merged = []; cap.notes.forEach(n => { const l = merged[merged.length - 1]; if (l && l.m === n.m && n.t - (l.t + l.d) < 0.12) l.d = n.t + n.d - l.t; else if (n.d >= 0.09) merged.push(n); }); cap.notes = merged; renderOpts(); }
   // A tap on the row's name area toggles LOCK to that string (tap again to
   // unlock); a tap on the separate note-icon target plays the reference
@@ -1882,7 +1909,7 @@ import { register as registerPathway } from './ui/pathway.js';
     const tg = TUNINGS[tunerKind][1], n = tg.length, st = tunerState || {}; rowRects = []; playRects = [];
     const activeIdx = tunerLock !== null ? tunerLock : st.selIdx;
     if (n) tg.forEach((m, i) => { const y = H * 0.1 + i * (H * 0.8 / n), h = H * 0.8 / n - 8, ok = tuned[tunerKind + i], sel = i === activeIdx && st.phase && st.phase !== 'idle'; const playW = Math.min(Math.max(W * 0.05, 22 * cssK()), h); const rowW = W * 0.38 - playW - 10; rr(W * 0.05, y, W * 0.38, h, 8); g.fillStyle = ok ? '#5be08a' : sel ? '#2a3350' : '#121726'; g.fill(); g.fillStyle = ok ? '#04130a' : '#e9edf6'; let rowTxt = 'String ' + (n - i) + '   ' + nname(m, true) + (ok ? '   in tune' : '') + (tunerLock === i ? '   LOCKED' : ''), rfs = Math.min(H * 0.08, H * 0.34 / n); font(rfs); g.textAlign = 'left'; const rmax = W * 0.05 + rowW - W * 0.07 - 4; let rtw = g.measureText(rowTxt).width; if (ok && rtw > rmax && rfs * rmax / rtw < 9 * cssK()) { rowTxt = rowTxt.replace('   in tune', '   \u2713'); rtw = g.measureText(rowTxt).width; } if (rtw > rmax) font(rfs * rmax / rtw); g.fillText(rowTxt, W * 0.07, y + h * 0.62); g.fillStyle = '#93a0bd44'; rr(W * 0.05 + rowW + 8, y + 2, playW, h - 4, 6); g.fill(); g.fillStyle = '#e9edf6'; g.textAlign = 'center'; font(Math.min(H * 0.06, H * 0.28 / n)); g.fillText('♪', W * 0.05 + rowW + 8 + playW / 2, y + h * 0.6); rowRects.push({ x: W * 0.05, y: y, w: rowW, h: h, m: m, idx: i }); playRects.push({ x: W * 0.05 + rowW + 8, y: y + 2, w: playW, h: h - 4, m: m }); });
-    if (st.phase === 'idle' || st.midi === null || !micReady) { gauge(W * 0.45, H * 0.62, W * 0.5, null, !micReady ? 'press Set up input, then Connect microphone' : tunerLock !== null && n ? 'locked: play ' + nname(tg[tunerLock], true) : 'play one string'); return; }
+    if (st.phase === 'idle' || st.midi === null || !micReady) { gauge(W * 0.45, H * 0.62, W * 0.5, null, !micReady ? 'press Connect microphone' : tunerLock !== null && n ? 'locked: play ' + nname(tg[tunerLock], true) : 'play one string'); return; }
     const target = st.targetMidi, c = st.cents, offScale = Math.abs(c) > 50;
     const label = (Math.abs(c) <= 5 ? 'in tune' : Math.round(Math.abs(c)) + ' cents ' + (c > 0 ? 'sharp, loosen it' : 'flat, tighten it')) + (offScale ? ' (off scale)' : '');
     // Age (ms since the last confident reading) fades the readout instead of
@@ -1925,8 +1952,11 @@ import { register as registerPathway } from './ui/pathway.js';
   // pauses/resumes or ends and restarts a session mid-visit is not told the
   // same "next step" line over and over -- see the returning-learner test.
   let pathwayLineShown = false;
+  // Start before any instrument was chosen: open the sheet and put focus on its first button instead of starting (or closing it).
+  function askInstrumentFirst() { if (instrumentChosen) return false; setInstrumentSheetOpen(true); const b = document.querySelector('#picker button'); if (b) b.focus(); return true; }
   function startSession() {
-    refreshModelClock(); ensureAudio(); sess = newSession(); recent = []; streak = 0; errCount = 0; task = null; lastItem = null; lastInputAt = now(); chunk = 0; say('');
+    if (askInstrumentFirst()) return;
+    document.body.classList.add('practising'); refreshModelClock(); ensureAudio(); sess = newSession(); recent = []; streak = 0; errCount = 0; task = null; lastItem = null; lastInputAt = now(); chunk = 0; say('');
     // Session length E7c: the learner's own choice (DB.prefs.sessionMinutes,
     // 0 meaning no limit) sets today's target before the tired check below,
     // so tiredPattern()'s 15-minute cap only tightens it, never loosens it.
@@ -1961,7 +1991,7 @@ import { register as registerPathway } from './ui/pathway.js';
     // Start is a choice of the instrument on screen: shut the sheet and own the label, so the exercise is on screen.
     pickerAsSheet = true; setInstrumentSheetOpen(false); updateNavInstrumentLabel();
     diagInputFrames = []; diagLastState = null; diagSince = null; diagShown = null; // a new sitting starts the mic diagnosis afresh
-    playing = true; paused = false; $('playBtn').textContent = 'Pause'; $('endBtn').hidden = false; coach(msg); showAll(); wakeLock.acquire();
+    playing = true; paused = false; $('playBtn').textContent = t('stage.pause'); $('endBtn').hidden = false; coach(msg); showAll(); wakeLock.acquire();
   }
   // logSession(): a panel (e.g. a song lesson) logs its own practice as a
   // DB.sessions row the same way endSession() below logs a built-in drill's
@@ -1987,12 +2017,12 @@ import { register as registerPathway } from './ui/pathway.js';
     DB.events.push(ev); DB.events = boundEvents(DB.events, { skillMap: KBD_SONG_SKILL_MAP, skillMapInstrument: 'kbd' }); save();
   }
   function endSession() {
-    if (!sess) return; toneSrcs.forEach(s => { try { s.stop(); } catch (e) {} }); const min = sess.active / 60; let line = 'Session ended. Too short to log.';
+    if (!sess) return; document.body.classList.remove('practising'); toneSrcs.forEach(s => { try { s.stop(); } catch (e) {} }); const min = sess.active / 60; let line = 'Session ended. Too short to log.';
     if (sess.judged >= 8) { DB.sessions.push({ d: today(), mod: mod, min: Math.round(min * 10) / 10, acc: sess.ok / sess.judged, a1: mean(sess.first), a2: mean(sess.last), from: sess.from, to: S.level, breaks: sess.breaks }); DB.sessions = DB.sessions.slice(-60);
       let up = null, low = null, lowR = 1; Object.keys(S.item).forEach(id => { const cur = S.item[id], r1 = retrievability(cur, modelNow), r0 = retrievability(sess.m0[id] || cur, modelNow), g0 = r1 - r0; if (up === null || g0 > up.g) up = { id: id, g: g0 }; if (cur.reps >= 3 && (low === null || r1 < lowR)) { low = id; lowR = r1; } });
       line = 'Session done: ' + Math.round(min * 10) / 10 + ' min, ' + Math.round(100 * sess.ok / sess.judged) + '% right, best streak ' + sess.bestStreak + ', level ' + sess.from + ' to ' + S.level + '.' + (up && up.g > 0.05 ? ' Most improved: ' + inf(up.id).short + '.' : '') + (low ? ' Next time starts with extra ' + inf(low).short + '.' : ''); }
-    if (sess.judged >= 8 && Date.now() - lastBackupAt > 7 * 86400000) showBackupNudge('You have been practising a while. Save a backup, just in case.');
-    sess = null; playing = false; paused = false; task = null; bar = null; breakTrap.deactivate(); $('breakCard').hidden = true; $('playBtn').textContent = 'Start'; $('endBtn').hidden = true; $('choices').hidden = true; $('prompt').textContent = ''; $('hint').textContent = ''; say(''); $('timeFill').style.width = '0%'; $('showMeBtn').hidden = true; $('howPeekHost').hidden = true; coach(line); save(); showAll(); wakeLock.release();
+    if (sess.judged >= 8 && Date.now() - lastBackupAt > 7 * 86400000) showBackupNudge('You have been practicing a while. Save a backup, just in case.');
+    sess = null; playing = false; paused = false; task = null; bar = null; breakTrap.deactivate(); $('breakCard').hidden = true; $('playBtn').textContent = t('stage.start'); $('endBtn').hidden = true; $('choices').hidden = true; $('prompt').textContent = ''; $('hint').textContent = ''; say(''); $('timeFill').style.width = '0%'; $('showMeBtn').hidden = true; $('howPeekHost').hidden = true; coach(line); save(); showAll(); wakeLock.release();
   }
   const BREAKS = {
     user: ['Paused', 'Take your time. A pause of 90 seconds or more counts as a break and resets your energy.', 0], away: ['You stepped away', 'Nothing came in for a while, so I paused. The exercise you left does not count against you.', 0], hidden: ['Paused', 'The page was hidden, so I stopped the clock. Nothing was counted while you were gone.', 0],
@@ -2007,11 +2037,11 @@ import { register as registerPathway } from './ui/pathway.js';
     // chose (sess.target, captured by the caller above before it is zeroed)
     // instead of BREAKS.target's generic fallback string.
     let title = b[0]; if (kind === 'target' && mins) title = 'That is today\'s ' + mins + ' minutes';
-    $('breakTitle').textContent = title; $('breakWhy').textContent = why; $('breakClock').hidden = !b[2]; $('snoozeBtn').hidden = !(kind === 'tired' || kind === 'long'); $('breakCard').hidden = false; $('playBtn').textContent = 'Resume'; task = null; bar = null; save(); showAll(); breakTrap.activate($('playBtn'));
+    $('breakTitle').textContent = title; $('breakWhy').textContent = why; $('breakClock').hidden = !b[2]; $('snoozeBtn').hidden = !(kind === 'tired' || kind === 'long'); $('breakCard').hidden = false; $('playBtn').textContent = t('stage.resume'); task = null; bar = null; save(); showAll(); breakTrap.activate($('playBtn'));
   }
   function tickBreak() { if (!pauseInfo || !pauseInfo.secs) return; const left = Math.max(0, pauseInfo.secs - (Date.now() - pauseInfo.at) / 1000); $('breakClock').textContent = left > 0 ? Math.floor(left / 60) + ':' + ('0' + Math.floor(left % 60)).slice(-2) : 'Ready when you are'; }
   function resume() {
-    const gone = pauseInfo ? (Date.now() - pauseInfo.at) / 1000 : 0; paused = false; playing = true; breakTrap.deactivate(); $('breakCard').hidden = true; $('playBtn').textContent = 'Pause'; ensureAudio(); task = null; lastInputAt = now();
+    const gone = pauseInfo ? (Date.now() - pauseInfo.at) / 1000 : 0; paused = false; playing = true; breakTrap.deactivate(); $('breakCard').hidden = true; $('playBtn').textContent = t('stage.pause'); ensureAudio(); task = null; lastInputAt = now();
     if (gone >= 90) { sess.breaks++; sess.sinceBreak = 0; sess.w30 = []; sess.best30 = 0; sess.rts = []; sess.bestRt = null; sess.tiredFor = 0; sess.failRun = 0; sess.warm = 3; coach('Welcome back after ' + (Math.round(gone / 6) / 10) + ' minutes. That counts as a real break, so your energy is reset. Three easy ones to warm back up.'); } else coach('Resuming level ' + S.level + '.');
     if (MODS[mod] && (MODS[mod].input === 'pluck' || MODS[mod].input === 'sustain') && !micReady && micHideReleased) coach($('coach').textContent + ' Your microphone was released while the page was hidden. Press Connect microphone to let me hear you again.'); // README: hiding the tab releases the mic; coming back does not reopen it
     pauseInfo = null; showAll();
@@ -2031,20 +2061,20 @@ import { register as registerPathway } from './ui/pathway.js';
   // it as a background. See src/styles.css for which selectors read which.
   function themeIsLight() { return DB.prefs.theme === 'light' || (DB.prefs.theme !== 'dark' && matchMedia('(prefers-color-scheme: light)').matches); }
   function accentInkFor(hex) { if (!themeIsLight()) return hex; const n = parseInt(hex.slice(1), 16), r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255, lin = c => { c /= 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }, lum = (rr, gg, bb) => 0.2126 * lin(rr) + 0.7152 * lin(gg) + 0.0722 * lin(bb), gl = 0.929, l = lum(r, g, b); return (Math.max(l, gl) + 0.05) / (Math.min(l, gl) + 0.05) >= 4.5 ? hex : '#' + [r, g, b].map(c => Math.round(c * 0.45).toString(16).padStart(2, '0')).join(''); }
-  // --accent-display is the same brand colour for the 44px wordmark, which is
-  // WCAG large text (3:1, not 4.5:1). It is darkened only as far as it takes
-  // to reach 3:1, so COACH stays a near match for the Start button instead of
-  // dropping to --accent-ink's navy (R10 P1).
-  function accentDisplayFor(hex) { if (!themeIsLight()) return hex; const n = parseInt(hex.slice(1), 16), c0 = [(n >> 16) & 255, (n >> 8) & 255, n & 255], lin = c => { c /= 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }, lum = ([r, g, b]) => 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b), gl = 0.929; for (let k = 1; k > 0; k -= 0.02) { const c = c0.map(v => Math.round(v * k)); if ((gl + 0.05) / (lum(c) + 0.05) >= 3) return '#' + c.map(v => v.toString(16).padStart(2, '0')).join(''); } return '#000000'; }
+  // --accent-display is the same brand colour for the 44px wordmark. It is
+  // darkened only as far as it takes to reach 4.5:1 (U10; the large-text 3:1
+  // left the light wordmark at 3.12), searched in small steps so COACH stays
+  // a near match for the Start button instead of dropping to --accent-ink's navy (R10 P1).
+  function accentDisplayFor(hex) { if (!themeIsLight()) return hex; const n = parseInt(hex.slice(1), 16), c0 = [(n >> 16) & 255, (n >> 8) & 255, n & 255], lin = c => { c /= 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }, lum = ([r, g, b]) => 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b), gl = 0.929; for (let k = 1; k > 0; k -= 0.02) { const c = c0.map(v => Math.round(v * k)); if ((gl + 0.05) / (lum(c) + 0.05) >= 4.5) return '#' + c.map(v => v.toString(16).padStart(2, '0')).join(''); } return '#000000'; }
   // The three accent properties on <html>; also re-run by the Theme control, since the light theme darkens the ink and a switch must not keep the old one.
   function applyAccent() { const accentRaw = (MODS[mod] || TOOLS[mod]).color === '#e9edf6' ? '#9fb4d8' : (MODS[mod] || TOOLS[mod]).color, st = document.documentElement.style; st.setProperty('--accent', accentRaw); st.setProperty('--accent-ink', accentInkFor(accentRaw)); st.setProperty('--accent-display', accentDisplayFor(accentRaw)); }
   function showAll() {
-    const tool = !!TOOLS[mod];
+    const tool = !!TOOLS[mod]; $('prompt').hidden = tool;
     applyAccent();
     $('helpText').innerHTML = ''; const st = document.createElement('strong'); st.textContent = 'How this one works: '; $('helpText').appendChild(st); $('helpText').appendChild(document.createTextNode((MODS[mod] || TOOLS[mod]).help)); if (instrumentUnreviewed(instrumentById[mod])) { const rv = document.createElement('span'); rv.setAttribute('role', 'note'); rv.className = 'small'; rv.textContent = ' ' + t('review.unreviewed'); $('helpText').appendChild(rv); }
     document.querySelectorAll('.side .card, .side .stats, #playBtn, #resetBtn').forEach(el => { el.style.display = tool && !(mod === 'capture' && el.id === 'feedbackCard') ? 'none' : ''; }); $('tapPad').hidden = mod !== 'rhy'; $('timeFill').parentElement.style.visibility = tool || mod === 'rhy' || (MODS[mod] && MODS[mod].kit) ? 'hidden' : 'visible'; // capture's own messages ('Nothing captured yet.') need the feedback card; .hidden still hides it while empty
     if (tool) { $('prompt').textContent = ''; $('hint').textContent = mod === 'tuner' ? 'One open string at a time.' : 'One note at a time.'; $('choices').hidden = true; $('replayBtn').hidden = true; $('showMeBtn').hidden = true; $('howPeekHost').hidden = true; return; }
-    const d = D(); $('levelNum').textContent = 'Level ' + S.level; $('levelName').textContent = customOn ? 'Your captured melody' : d.name; $('limitOut').textContent = d.task === 'bar' || mod === 'rhy' || MODS[mod].kit ? (d.bpm || 72) + ' bpm' : (d.limit || 8) + ' s per answer';
+    const d = D(); $('levelNum').textContent = 'Level ' + S.level; $('levelName').textContent = customOn ? 'Your captured melody' : d.name; $('limitOut').textContent = d.task === 'bar' || mod === 'rhy' || MODS[mod].kit ? (d.bpm || 72) + ' beats a minute' : (d.limit || 8) + ' seconds to answer';
     const pct = Math.round(S.ready * 100); $('readyFill').style.width = pct + '%'; $('readyFill').style.background = S.ready < 0.25 ? 'var(--bad)' : S.ready < 0.6 ? 'var(--warn)' : 'var(--good)'; $('readyBar').setAttribute('aria-valuenow', pct);
     const e = sess ? 1 - sess.F : 1, ep = Math.round(e * 100); $('energyFill').style.width = ep + '%'; $('energyFill').style.background = e < 0.4 ? 'var(--bad)' : e < 0.65 ? 'var(--warn)' : 'var(--good)'; $('energyBar').setAttribute('aria-valuenow', ep);
     const ds = dayStreak(), lastS = DB.sessions.filter(x => x.mod === mod).slice(-1)[0];
@@ -2078,7 +2108,7 @@ import { register as registerPathway } from './ui/pathway.js';
   // does not try to filter samples itself.
   let rangeTest = null;
   // The coach line a mod shows before Start; Cancel puts it back so a stopped test never leaves its "Sing your..." instruction behind.
-  const idleCoachLine = () => S.judged ? 'Welcome back. You are on level ' + S.level + ': ' + D().name + '. Press Start.' : 'Press Start. Level ' + S.level + ': ' + D().name + '.';
+  const idleCoachLine = () => t(S.judged ? 'coach.idleBack' : 'coach.idle', { level: S.level, name: D().name });
   function handleRangeTest(action, fr) {
     if (action === 'start') { rangeTest = { stage: 'low', samples: [], curMidi: null, curSince: 0 }; coach('Sing your lowest comfortable note and hold it, then press "Got it -- now the highest".'); return; }
     if (!rangeTest) return;
@@ -2103,7 +2133,7 @@ import { register as registerPathway } from './ui/pathway.js';
     if (mod === 'voice' && !rangeTest) btn('optRangeStart', DB.prefs.voiceRange ? 'Find my range again' : 'Find my range', () => { handleRangeTest('start'); renderOpts(); });
     if (mod === 'voice' && rangeTest && rangeTest.stage === 'low') { btn('optRangeNext', 'Got it -- now the highest', () => { handleRangeTest('next'); renderOpts(); }, true); btn('optRangeCancel', 'Cancel', () => { handleRangeTest('cancel'); renderOpts(); }); }
     if (mod === 'voice' && rangeTest && rangeTest.stage === 'high') { btn('optRangeDone', 'Got it -- done', () => { handleRangeTest('finish'); renderOpts(); }, true); btn('optRangeCancel2', 'Cancel', () => { handleRangeTest('cancel'); renderOpts(); }); }
-    if (mod === 'tuner') { sel('optTune', 'Instrument', TUNINGS, tunerKind, v => { tunerKind = v; tunerState = null; tunerLock = null; }); btn('tuneReset', 'Start over', () => { tuned = {}; tunerLock = null; }); }
+    if (mod === 'tuner') { sel('optTune', 'Instrument', TUNINGS, tunerKind, v => { tunerKind = v; tunerPicked = true; tunerState = null; tunerLock = null; }); btn('tuneReset', 'Start over', () => { tuned = {}; tunerLock = null; }); const tc = btn('tunerConnect', t('tuner.connectMic'), () => $('ioBtn').click(), true); tc.hidden = micReady; }
     if (mod === 'harp') sel('optHarpKey', 'My harmonica is in the key of', HARP_KEY_OPTS, DB.prefs.harpKey, v => { DB.prefs.harpKey = +v; task = null; if (pitchWorkletNode) { lastWorkletRangeSent = { fmin: MODS.harp.fmin, fmax: MODS.harp.fmax }; pitchWorkletNode.port.postMessage({ type: 'range', fmin: MODS.harp.fmin, fmax: MODS.harp.fmax }); } save(); });
     // B1(3): Both/Right only/Left only for the hands-together drill (level
     // 13). Changing it clears the in-progress task so the next one is built
@@ -2115,7 +2145,7 @@ import { register as registerPathway } from './ui/pathway.js';
     // not merely offered) at least once, or an earlier both-hands record
     // grandfathering it open. A lock note and a "before you start" prep line
     // for each hand ride along beside it.
-    if (mod === 'kbd') sel('optKbdHands', 'Hands', { both: ['Both'], right: ['Right only'], left: ['Left only'] }, mod === 'kbd' && D().task === 'hands' && !D().timed ? effectiveHands(DB.prefs.kbdHands, bothUnlocked(S)) : DB.prefs.kbdHands, v => { DB.prefs.kbdHands = v; task = null; save(); });
+    if (mod === 'kbd') sel('optKbdHands', t('songs.hands.label'), { both: ['Both'], right: ['Right only'], left: ['Left only'] }, mod === 'kbd' && D().task === 'hands' && !D().timed ? effectiveHands(DB.prefs.kbdHands, bothUnlocked(S)) : DB.prefs.kbdHands, v => { DB.prefs.kbdHands = v; task = null; save(); });
     if (mod === 'kbd' && D().task === 'hands' && !D().timed) {
       if (!bothUnlocked(S)) {
         const o = document.querySelector('#optKbdHands option[value="both"]'); if (o) o.disabled = true;
@@ -2174,7 +2204,7 @@ import { register as registerPathway } from './ui/pathway.js';
     // is suggested at all.
     if (mod === 'kbd') btn('kbdPathwayBtn', t('pathway.open'), () => openPanel('pathway'));
     if (mod === 'rhy') btn('calBtn', calRun ? 'Listening for 8 taps…' : 'Calibrate timing (' + Math.round(DB.latencyMs || 0) + ' ms)', startCalibrate, false);
-    if (mod === 'capture') { btn('capGo', cap.on ? 'Stop' : 'Listen', () => { if (cap.on) capStop(); else { if (!micReady) { say('Connect your microphone first (open "Set up input", press Connect), then press Listen.', 'no'); return; } ensureAudio(); cap.on = true; cap.notes = []; cap.savedId = null; cap.start = now(); cap.curM = -1; say(''); renderOpts(); } }, true); btn('capPlay', 'Play it back', () => { if (!cap.notes.length) { say('Nothing captured yet.', 'no'); return; } ensureAudio(); const t0 = now() + 0.1; cap.notes.forEach(n => tone(n.m, t0 + n.t - (cap.notes[0] ? cap.notes[0].t : 0), Math.max(0.2, n.d))); }); const lessons = {}; MOD_IDS.filter(m => hasMasteryScheme(m)).forEach(m => { lessons[m] = [MODS[m].name]; }); sel('capTo', cap.notes.length + ' notes. Practise on', lessons, 'kbd', () => {});
+    if (mod === 'capture') { btn('capGo', cap.on ? 'Stop' : 'Listen', () => { if (cap.on) capStop(); else { if (!micReady) { say('Connect your microphone first (open "Set up input", press Connect), then press Listen.', 'no'); return; } ensureAudio(); cap.on = true; cap.notes = []; cap.savedId = null; cap.start = now(); cap.curM = -1; say(''); renderOpts(); } }, true); btn('capPlay', 'Play it back', () => { if (!cap.notes.length) { say('Nothing captured yet.', 'no'); return; } ensureAudio(); const t0 = now() + 0.1; cap.notes.forEach(n => tone(n.m, t0 + n.t - (cap.notes[0] ? cap.notes[0].t : 0), Math.max(0.2, n.d))); }); const lessons = {}; MOD_IDS.filter(m => hasMasteryScheme(m)).forEach(m => { lessons[m] = [MODS[m].name]; }); sel('capTo', cap.notes.length + ' notes. Practice on', lessons, 'kbd', () => {});
       // 'Make it a lesson': the captured tune becomes a draft Song (src/song/
       // capture.js), added to the same library the Songs panel reads, then
       // opened there -- requestOpenSong() + openPanel() is the same
@@ -2202,8 +2232,8 @@ import { register as registerPathway } from './ui/pathway.js';
       // pitch only, no timing, loaded into DB.custom.
       btn('capDrill', 'Drill the notes', () => { if (!cap.notes.length) { say('Nothing captured yet.', 'no'); return; } DB.custom = cap.notes.map(n => n.m).slice(0, 300); save(); const to = $('capTo').value; setMod(to); customOn = true; renderOpts(); showAll(); coach('Your captured tune is loaded: ' + DB.custom.length + ' notes, four at a time. Each group repeats until it is clean. Press Start.'); });
     }
-    if (MODS[mod] && DB.custom && DB.custom.length && hasMasteryScheme(mod)) chk('optCustom', 'Practise my captured melody (' + DB.custom.length + ' notes)', customOn, v => { customOn = v; chunk = 0; task = null; showAll(); });
-    if (groovable(mod)) chk('optGroove', 'Play in time (metronome, ' + (S.grooveBpm || 80) + ' bpm)', grooveOn, v => { grooveOn = v; task = null; groove = null; showAll(); });
+    if (MODS[mod] && DB.custom && DB.custom.length && hasMasteryScheme(mod)) chk('optCustom', 'Practice my captured melody (' + DB.custom.length + ' notes)', customOn, v => { customOn = v; chunk = 0; task = null; showAll(); });
+    if (groovable(mod)) chk('optGroove', 'Play in time (metronome, ' + (S.grooveBpm || 80) + ' beats a minute)', grooveOn, v => { grooveOn = v; task = null; groove = null; showAll(); });
   }
 
   // ---------- inputs ----------
@@ -2250,7 +2280,7 @@ import { register as registerPathway } from './ui/pathway.js';
     return join(heard) + (heard.length > 1 ? ' are working.' : ' is working.') + (quiet.length ? ' ' + join(quiet) + ' found. Press any key on ' + (quiet.length > 1 ? 'one' : 'it') + '.' : '');
   }
   function ioRefresh() {
-    const b = $('ioBtn'), detailsBtn = $('midiDetailsBtn');
+    const b = $('ioBtn'), detailsBtn = $('midiDetailsBtn'), tcb = $('tunerConnect'); if (tcb) tcb.hidden = micReady;
     if (needsMic()) { b.hidden = micReady; b.textContent = 'Connect microphone'; detailsBtn.hidden = true; ioState(micReady ? 'on' : '', micReady ? 'Listening through your microphone.' : 'This one listens through a microphone or audio interface.'); }
     else if (mod === 'ear') { b.hidden = true; detailsBtn.hidden = true; ioState('on', 'Nothing to connect. Turn your sound up.'); }
     else {
@@ -2327,6 +2357,7 @@ import { register as registerPathway } from './ui/pathway.js';
   function connectMic() { openMic().then(ioRefresh).catch(e => { recordError('mic:connect', e); ioState('off', micErrorMessage(e)); }); }
   // Start on a mic instrument asks for the mic FIRST (the browser's own prompt), then begins: an exercise that cannot hear only ever says "Time." and "You stepped away". Blocked or unavailable: say so and do not start.
   function startAfterMic() {
+    if (askInstrumentFirst()) return;
     if (!needsMic() || micReady) { startSession(); return; }
     const m = mod, blocked = e => { recordError('mic:start', e); const msg = e && e.name === 'NotAllowedError' ? 'The microphone was blocked, so I could not start. Press "Set up input", then "Connect microphone", and allow it in your browser.' : micErrorMessage(e); ioState('off', msg); if (mod === m) coach(msg); };
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { const msg = 'This browser cannot open a microphone here. Open the standalone copy in Chrome.'; ioState('off', msg); coach(msg); return; }
@@ -2427,7 +2458,7 @@ import { register as registerPathway } from './ui/pathway.js';
     if (ev.repeat || ev.ctrlKey || ev.metaKey || ev.altKey) return; const tag = ev.target.tagName; if (tag === 'SELECT' || tag === 'TEXTAREA' || (tag === 'INPUT' && ev.target.type !== 'checkbox') || ev.target.isContentEditable) return;
     if (mod === 'rhy' && (ev.key === ' ' || ev.key.length === 1)) { if (tag === 'BUTTON' && ev.key === ' ' && ev.target.id !== 'tapPad') return; ev.preventDefault(); ensureAudio(); onTap(ev); return; }
     if (MODS[mod] && MODS[mod].kit && KIT_KEYS[ev.key.toLowerCase()]) { ev.preventDefault(); ensureAudio(); onHit(KIT_KEYS[ev.key.toLowerCase()], tapAudioTime(ev), 'key'); return; }
-    if (mod === 'ear' && task && task.choices && /^[1-9]$/.test(ev.key)) { const id = task.choices[+ev.key - 1]; if (id) answer(id); return; }
+    if (mod === 'ear' && task && task.choices && /^[1-9]$/.test(ev.key)) { const id = task.choices[+ev.key - 1]; if (id) answer(id, 'computer-key'); return; }
     if (mod === 'kbd' && PCKEYS[ev.key.toLowerCase()] !== undefined) { ev.preventDefault(); ensureAudio(); const m = PCKEYS[ev.key.toLowerCase()]; noteState.noteOn('computer-key', 0, m); tone(m, now() + 0.01, 0.5, 0.15); onNote(m, true, 'computer-key'); }
   });
   // The keydown above has no matching note-off, so a computer key held down
@@ -2477,12 +2508,13 @@ import { register as registerPathway } from './ui/pathway.js';
   // overriding the OS setting either way (see src/styles.css).
   function applyTheme(t) { if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t); else document.documentElement.removeAttribute('data-theme'); }
   $('optTheme').addEventListener('change', function () { DB.prefs.theme = this.value; applyTheme(this.value); applyAccent(); save(); });
-  $('optLocale').addEventListener('change', function () { DB.prefs.locale = LOCALES.some(l => l.code === this.value) ? this.value : 'en'; applyLocale(DB.prefs.locale); updateNavInstrumentLabel(); showAll(); refreshModelPack(); save(); });
+  // The idle coach line was written in the old language; rewrite it (only it: a live session's line is left as is).
+  $('optLocale').addEventListener('change', function () { const idle = $('coach').textContent === idleCoachLine(); DB.prefs.locale = LOCALES.some(l => l.code === this.value) ? this.value : 'en'; applyLocale(DB.prefs.locale); if (idle) $('coach').textContent = idleCoachLine(); rebuildPicker(); updateNavInstrumentLabel(); renderOpts(); showAll(); refreshModelPack(); save(); });
   function applyNoteNaming() { DB.prefs.noteNaming = { system: $('optNoteSystem').value, accidentals: $('optAccidentals').value }; setNoteNaming(DB.prefs.noteNaming); save(); showAll(); }
   $('optNoteSystem').addEventListener('change', applyNoteNaming); $('optAccidentals').addEventListener('change', applyNoteNaming);
 
   function setMod(m) {
-    if (sess) endSession(); mod = m; if (micStream && !(TOOLS[m] || (MODS[m] && /^(pluck|sustain|mic)/.test(MODS[m].input)))) { const pm = $('practiceMeter'); if (pm) pm.hidden = true; micStream.getTracks().forEach(t => t.stop()); micStream = null; micReady = false; micGen++; } if (MODS[m]) { S = DB.mods[m]; DB.prefs.mod = m; } customOn = false; grooveOn = false; groove = null; task = null; bar = null; heard = null; cap.on = false; tunerState = null; tunerLock = null; diagInputFrames = []; diagLastState = null;
+    if (sess) endSession(); mod = m; if (micStream && !(TOOLS[m] || (MODS[m] && /^(pluck|sustain|mic)/.test(MODS[m].input)))) { const pm = $('practiceMeter'); if (pm) pm.hidden = true; micStream.getTracks().forEach(t => t.stop()); micStream = null; micReady = false; micGen++; } if (MODS[m]) { S = DB.mods[m]; DB.prefs.mod = m; } customOn = false; grooveOn = false; groove = null; task = null; bar = null; heard = null; cap.on = false; if (m === 'tuner' && !tunerPicked && TUNER_FOR[DB.prefs.mod]) tunerKind = TUNER_FOR[DB.prefs.mod]; tunerState = null; tunerLock = null; diagInputFrames = []; diagLastState = null;
     if (pitchWorkletNode && MODS[m] && MODS[m].fmin && MODS[m].fmax) { lastWorkletRangeSent = { fmin: MODS[m].fmin, fmax: MODS[m].fmax }; pitchWorkletNode.port.postMessage({ type: 'range', fmin: MODS[m].fmin, fmax: MODS[m].fmax }); }
     if (pitchWorkletNode && actx) { const neededFrameSize = frameSizeForInstrument(instrumentById[m], actx.sampleRate); if (neededFrameSize !== lastWorkletFrameSize) { lastWorkletFrameSize = neededFrameSize; pitchWorkletNode.port.postMessage({ type: 'frameSize', frameSize: neededFrameSize }); } }
     document.querySelectorAll('#picker button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.mod === m)));
@@ -2499,7 +2531,7 @@ import { register as registerPathway } from './ui/pathway.js';
     // pressed. The canvas's own "PRESS START" and the picker's pressed state
     // are enough; #prompt stays empty until a real exercise names one.
     $('prompt').textContent = ''; $('hint').textContent = ''; $('choices').hidden = true; say(''); if (MODS[m]) coach(idleCoachLine());
-    renderOpts(); ioRefresh(); showAll(); save();
+    renderOpts(); ioRefresh(); showAll(); if (!booting) instrumentChosen = true; if (instrumentChosen) { revealStage(); save(); }
   }
   // Two visual tiers inside the one #picker container (kept as a single id
   // so every existing `#picker button` selector -- setMod's aria-pressed
@@ -2555,10 +2587,13 @@ import { register as registerPathway } from './ui/pathway.js';
   function focusNavInstrument() { const b = $('navInstrument'); if (b) b.focus(); }
   // A tool panel (Ear training / How to play it / Music theory) opened from the sheet announces itself the way the nav screens do (F2): focus lands on its heading.
   function focusPanelHeading() { const h = $('panelHost').querySelector('h2'); if (h) { if (!h.hasAttribute('tabindex')) h.tabIndex = -1; h.focus(); } else focusNavInstrument(); }
+  // Locale switch: the sheet's labels are written once by buildPicker, so redraw it and put the pressed state back (setMod/openPanel only ever set it, never rebuild).
+  function rebuildPicker() { const box = $('picker'), on = box.querySelector('button[aria-pressed="true"]'), key = on && (on.dataset.mod ? 'mod' : 'panel'), id = on && (on.dataset.mod || on.dataset.panel); box.replaceChildren(); buildPicker(); if (on) box.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset[key] === id))); }
   function buildPicker() {
     const box = $('picker'), instrumentIds = MOD_IDS.filter(m => TOOL_MOD_IDS.indexOf(m) < 0), toolIds = TOOL_MOD_IDS.concat(Object.keys(TOOLS)), children = variantChildrenByParent();
     // Escape closes the sheet from anywhere inside it and puts focus back on the nav Instrument button (the other dismissible surfaces -- panels, the break card -- already do).
-    box.addEventListener('keydown', ev => { if (ev.key === 'Escape' && !ev.defaultPrevented && !box.hidden) { ev.preventDefault(); setInstrumentSheetOpen(false); focusNavInstrument(); } });
+    if (!box.dataset.escWired) box.addEventListener('keydown', ev => { if (ev.key === 'Escape' && !ev.defaultPrevented && !box.hidden) { ev.preventDefault(); setInstrumentSheetOpen(false); focusNavInstrument(); } });
+    box.dataset.escWired = '1';
     // Each variant family renders as ONE top-level control (the parent
     // button, always visible and independently selectable -- e.g. "Ukulele"
     // still reaches mod 'uke') plus a quiet <details> disclosure beside it
@@ -2585,7 +2620,7 @@ import { register as registerPathway } from './ui/pathway.js';
       // Same "build the label from the data" rule as the tools summary
       // below: naming the variants by hand would go stale the first time
       // one is renamed or a third is added.
-      const summary = document.createElement('summary'); summary.textContent = 'Variants: ' + kids.map(v => MODS[v].name).join(', '); summary.title = summary.textContent; toggle.appendChild(summary);
+      const summary = document.createElement('summary'); const full = 'Variants: ' + kids.map(v => MODS[v].name).join(', '); const fullSpan = document.createElement('span'); fullSpan.className = 'variant-full'; fullSpan.textContent = full; const moreSpan = document.createElement('span'); moreSpan.className = 'variant-more'; const moreSeen = document.createElement('span'); moreSeen.setAttribute('aria-hidden', 'true'); moreSeen.textContent = t('picker.more'); const moreName = document.createElement('span'); moreName.className = 'visually-hidden'; moreName.textContent = t('picker.moreFor', { instrument: MODS[m].name }); moreSpan.append(moreSeen, moreName); summary.append(fullSpan, moreSpan); summary.title = full; toggle.appendChild(summary); // phone: CSS shows the short "More…" chip instead of the clipped list
       const list = document.createElement('div'); list.className = 'variant-buttons';
       kids.forEach(v => list.appendChild(buildPickerButton(v, MODS[v])));
       toggle.appendChild(list);
@@ -2891,7 +2926,7 @@ import { register as registerPathway } from './ui/pathway.js';
     updateNavState();
   }
   // A boot step that throws used to leave a blank or half-wired page with no word to the learner; say so, with the error text, instead (and record it, so the error log, console and release gate see the failed boot too).
-  try { loadDB(); applyLocale(DB.prefs.locale); if (!Array.isArray(DB.custom)) DB.custom = []; $('optNames').checked = DB.prefs.names; $('optTheme').value = DB.prefs.theme; $('optLocale').value = DB.prefs.locale; applyTheme(DB.prefs.theme); $('optNoteSystem').value = DB.prefs.noteNaming.system; $('optAccidentals').value = DB.prefs.noteNaming.accidentals; buildPicker(); pickerAsSheet = hasSavedMod; setInstrumentSheetOpen(!hasSavedMod); buildNav(); setMod(mod); requestAnimationFrame(frame);
+  try { loadDB(); applyLocale(DB.prefs.locale); if (!Array.isArray(DB.custom)) DB.custom = []; $('optNames').checked = DB.prefs.names; $('optTheme').value = DB.prefs.theme; $('optLocale').value = DB.prefs.locale; applyTheme(DB.prefs.theme); $('optNoteSystem').value = DB.prefs.noteNaming.system; $('optAccidentals').value = DB.prefs.noteNaming.accidentals; buildPicker(); pickerAsSheet = hasSavedMod; instrumentChosen = hasSavedMod; setInstrumentSheetOpen(!hasSavedMod); buildNav(); setMod(mod); booting = false; requestAnimationFrame(frame);
     if (store.blocked) { saveFailedShown = true; $('settingsSay').textContent = t('storage.saveFailed'); $('mainSay').textContent = t('storage.saveFailed'); }
   } catch (e) { recordError('boot', e); const p = document.createElement('div'); p.id = 'bootFailed'; p.setAttribute('role', 'alert'); p.style.cssText = 'padding:12px;margin:8px;border:2px solid #c0392b;background:#fff;color:#111'; p.textContent = t('boot.failed', { error: (e && e.message) || String(e) }); document.body.insertBefore(p, document.body.firstChild); }
   const hook = !__DEBUG_HOOK__ ? null : { state: () => S, db: () => DB, sess: () => sess, task: () => task, cur: cur, note: onNote, answer: answer, tap: onTap, bar: () => bar, playing: () => playing, setMod: setMod, testSource: testSource, heard: () => heard, yin: yin, cap: () => cap, tuner: () => tunerState, tunerLock: () => tunerLock, deaf: () => deafWindow.isDeaf(), deafUntil: () => deafWindow.until(), exportProgress: doExportProgress, importProgress: doImportProgress, audioNow: audioNow, modelNow: () => modelNow, plan: () => sessionPlan, planProgress: () => planProgress,
@@ -2901,7 +2936,7 @@ import { register as registerPathway } from './ui/pathway.js';
   //   if (__DEBUG_HOOK__) Object.assign(hook, { … });
   if (__DEBUG_HOOK__) Object.assign(hook, { errors: getErrors });
   // startWithoutMic(): a session on the frames a test injects, with no live mic (Start opens one first; the fake device's tone would mix in).
-  if (__DEBUG_HOOK__) Object.assign(hook, { startWithoutMic: startSession });
+  if (__DEBUG_HOOK__) Object.assign(hook, { startWithoutMic: () => { instrumentChosen = true; revealStage(); startSession(); } });
   if (__DEBUG_HOOK__) Object.assign(hook, { pitchFrame: (fr, dt) => onPitch(fr, dt) });
   if (__DEBUG_HOOK__) Object.assign(hook, { testPluck: testPluck, pitchWorkletActive: () => !!pitchWorkletNode });
   if (__DEBUG_HOOK__) Object.assign(hook, { testDrumHit: testDrumHit });

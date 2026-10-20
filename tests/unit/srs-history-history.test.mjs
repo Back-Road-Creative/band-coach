@@ -80,7 +80,7 @@ test('summarize: with an earlier window present the trend still reads down', () 
   assert.equal(summarize(log, { now: NOW }).accuracyTrend.direction, 'down');
 });
 
-test('toTeacherSummary: names instruments and only adds the string/fret caveat when a mic instrument was practised', () => {
+test('toTeacherSummary: names instruments and only adds the string/fret caveat when a mic instrument was practiced', () => {
   const inst = (id) => ({ kbd: { name: 'Keyboard', input: 'midi' }, gtr: { name: 'Guitar', input: 'pluck' } })[id];
   const kbdOnly = toTeacherSummary({ sessions: [sess(0)], mods: {} }, { now: NOW, instrument: inst });
   assert.ok(kbdOnly.text.includes('- Keyboard:') && !/- kbd:/.test(kbdOnly.text));
