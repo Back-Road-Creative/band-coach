@@ -1,5 +1,6 @@
 // W2, Windows lane: README check 5 (progress survives a reload). On a fresh
-// profile the Keyboard exercises are played with real input: a mouse click on
+// profile the Keyboard exercises are played with real input: a click on the
+// Keyboard instrument (a first visit asks for one before Start shows), a mouse click on
 // Start, then the computer-key row for each note the screen asks for ("Play C"
 // is the A key, and so on), until nine are right, then a click on End session so
 // the session is logged. What the learner sees (the line under the energy bar
@@ -35,6 +36,9 @@ export async function run(page, ctx = {}) {
   const pace = ctx.paceMs ?? 900;
   const gap = ctx.settleMs ?? SAVE_GAP_MS;
   const before = await read(page);
+  // A first visit asks for the instrument before Start shows (#512): Keyboard, with a real click.
+  await page.clickSelector('#picker button[data-mod="kbd"]');
+  await page.waitFor("!document.getElementById('playBtn').hidden");
   await page.clickSelector('#playBtn');
   let done = 0;
   const seen = [];
