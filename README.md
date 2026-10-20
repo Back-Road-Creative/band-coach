@@ -165,7 +165,8 @@ npm run build
 
 That writes the same page to `dist/band-coach.html`. `npm run build -- --release` writes the
 minified one attached to each release, `dist/release/band-coach.html` (`build/build.mjs:8-9`).
-`npm run stage` builds that release file, runs `tests/release/*.test.mjs` against it, and only
+`npm run stage` builds that release file and the dev page (the release files test README step 6
+against it), runs `tests/release/*.test.mjs` against the release file, and only
 if there are no failures and no todo rows copies it to the D: drive (`/mnt/d` under WSL, or
 `BC_STAGE_DIR`) so the five-minute human check can double-click `D:\band-coach.html`. It prints
 the size and sha256 and writes `band-coach.html.evidence.json` beside the copy (sha256, bytes,

@@ -2,8 +2,10 @@
 // run from, so the person testing by hand double-clicks D:\band-coach.html
 // instead of walking a \\wsl.localhost path.
 //
-//   npm run stage                  -> builds dist/release/band-coach.html,
-//                                     copies it to $BC_STAGE_DIR (default
+//   npm run stage                  -> builds dist/band-coach.html (the dev page
+//                                     README step 6 tests) and
+//                                     dist/release/band-coach.html,
+//                                     copies the release one to $BC_STAGE_DIR (default
 //                                     /mnt/d, the Windows D: drive under WSL)
 //   BC_STAGE_DIR=/some/dir npm run stage
 //
