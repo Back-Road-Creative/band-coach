@@ -198,8 +198,9 @@ Needs Node 22+. `pretest` runs the build first, so tests always see a fresh `dis
 and `posttest` runs the release gate (`npm run gate`) so a plain `npm test` also proves the release
 file downloads cleanly. Tests use only Node built-ins plus `esbuild` (the one build-time dependency).
 
-Each family of tests also has its own script, so one can be run alone (every one except
-`test:release` expects a fresh dev build first: `npm run build`):
+Each family of tests also has its own script, so one can be run alone. Every script builds what its
+family needs first (`tests/families.json` declares it, and a unit test checks the scripts agree), so none
+needs a separate `npm run build`; a test that opens a page whose file is missing fails at once, naming it:
 
 | script | runs | drives a browser |
 |---|---|---|
@@ -208,7 +209,7 @@ Each family of tests also has its own script, so one can be run alone (every one
 | `npm run test:char` | `tests/characterization/*.test.mjs` | every file |
 | `npm run test:root` | `tests/*.test.mjs` | no |
 | `npm run test:browser` | `tests/characterization/*.test.mjs` plus `tests/build/pages-offline.test.mjs`: the files whose whole job is to drive the page | yes |
-| `npm run test:release` | builds `dist/release/band-coach.html`, then `tests/release/*.test.mjs` (`npm run gate` is an alias) | every file |
+| `npm run test:release` | builds the dev build, then `dist/release/band-coach.html` (one release test opens the dev build; a dev build clears `dist/`, so it goes first), then `tests/release/*.test.mjs` (`npm run gate` is an alias) | every file |
 | `npm run test:all` | build, then every family above in `npm test`'s order, then `test:release` | |
 
 `npm test` is unchanged: `pretest` (build), every family in one run, `posttest` (`npm run gate`).

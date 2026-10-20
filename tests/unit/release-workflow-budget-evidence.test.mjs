@@ -76,7 +76,7 @@ test('T3 the release lane runs once, as npm test\'s posttest, and the file it te
   const pkg = JSON.parse(readFileSync(fileURLToPath(new URL('../../package.json', import.meta.url)), 'utf8'));
   assert.equal(pkg.scripts.posttest, 'npm run gate', 'npm test must run the release lane as posttest, or release.yml would not run it at all');
   assert.equal(pkg.scripts.gate, 'npm run test:release');
-  assert.match(pkg.scripts['test:release'], /^node build\/build\.mjs --release && node --test --test-concurrency=\$\(node tests\/helpers\/browser\.mjs\) "tests\/release\/\*\.test\.mjs"$/, 'the lane builds dist/release/band-coach.html and then tests that file');
+  assert.match(pkg.scripts['test:release'], /^npm run build && node build\/build\.mjs --release && node --test --test-concurrency=\$\(node tests\/helpers\/browser\.mjs\) "tests\/release\/\*\.test\.mjs"$/, 'the lane builds dist/release/band-coach.html and then tests that file');
   const lane = all.filter((s) => /\bnpm run (gate|test:release|test:all)\b|tests\/release\/\*|build\.mjs --release/.test(s.run) && s.name !== 'prove the downloaded release file');
   assert.equal(lane.length, 0, `only npm test's posttest may run the release lane; also found: ${lane.map((s) => s.run).join(' | ')}`);
   assert.match(tests[0][0].text, /\n\s+env:\s*\n\s+CI: true\b/, '"npm test" must run with CI: true');

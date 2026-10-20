@@ -46,7 +46,7 @@ function live(file, extra = []) {
 // script`, `> command`, a blank line, all on stdout.
 const banner = (script, command) => `\n> toy@1.0.0 ${script}\n> ${command}\n\n`;
 const MAIN_CMD = 'node --test --test-concurrency=$(node tests/helpers/browser.mjs) "tests/*.test.mjs" "tests/build/*.test.mjs"';
-const REL_CMD = 'node build/build.mjs --release && node --test --test-concurrency=$(node tests/helpers/browser.mjs) "tests/release/*.test.mjs"';
+const REL_CMD = 'npm run build && node build/build.mjs --release && node --test --test-concurrency=$(node tests/helpers/browser.mjs) "tests/release/*.test.mjs"';
 const suiteLog = (main, release) =>
   banner('pretest', 'npm run build') + banner('build', 'node build/build.mjs') + 'built\n'
   + banner('test', MAIN_CMD) + main
