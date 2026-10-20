@@ -83,13 +83,13 @@ async function copyUpAnOctaveAndPractise(page) {
   await waitNewHeading(page);
 }
 
-test('T1: Practise this, after saving an edited copy of a starter, opens the copy', async (t) => {
+test('T1: Practice this, after saving an edited copy of a starter, opens the copy', async (t) => {
   const page = await launchPage(htmlPath);
   t.after(() => page.close());
   await page.evaluate("window.__coach.setMod('kbd')");
   await copyUpAnOctaveAndPractise(page);
-  assert.equal(await heading(page), COPY_TITLE, 'Practise this opens the learner\'s copy, not the shipped starter');
-  await assertLessonShown(page, 'Practise this on a starter copy');
+  assert.equal(await heading(page), COPY_TITLE, 'Practice this opens the learner\'s copy, not the shipped starter');
+  await assertLessonShown(page, 'Practice this on a starter copy');
   const stored = await readStore(page);
   assert.ok(stored.length >= 1, 'the copy was stored');
   assert.ok(!stored.some((s) => s.key === 'song:hot-cross-buns'), 'no stored key is song:hot-cross-buns: ' + stored.map((s) => s.key).join(', '));
@@ -146,7 +146,7 @@ test('T3: "Save a copy" on a starter stores it under its own key, and its row op
   assert.deepEqual(page.exceptions, []);
 });
 
-test('T4: Carry on, after practising a starter copy, offers the copy', async (t) => {
+test('T4: Carry on, after practicing a starter copy, offers the copy', async (t) => {
   const page = await launchPage(htmlPath);
   t.after(() => page.close());
   await page.evaluate("window.__coach.setMod('kbd')");

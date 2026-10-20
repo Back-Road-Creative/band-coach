@@ -240,7 +240,7 @@ test('Check never reads or writes the saved place; Rehearse shares Learn\'s', as
   assert.deepEqual(page.exceptions, []);
 });
 
-test('Practise again keeps returnTo', async (t) => {
+test('Practice again keeps returnTo', async (t) => {
   const dir = mkdtempSync(join(tmpdir(), 'band-coach-song-modes-'));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   const challengePath = join(dir, 'challenge.json');
@@ -274,12 +274,12 @@ test('Practise again keeps returnTo', async (t) => {
     'expected Back to practice after the first play-through'
   );
 
-  await clickButtonNamed(page, 'Practise again');
+  await clickButtonNamed(page, 'Practice again');
   await page.waitFor("document.querySelector('.panel-songs-practice h4')");
   await playOneNoteToTheEnd(page);
   assert.ok(
     await page.evaluate("Array.from(document.querySelectorAll('.panel-songs-practice button')).some(b => b.textContent === '" + en['kbd.songHandoff.back'] + "')"),
-    'expected Back to practice after Practise again'
+    'expected Back to practice after Practice again'
   );
 
   assert.deepEqual(page.exceptions, []);

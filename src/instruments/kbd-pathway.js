@@ -25,7 +25,7 @@ const NOT_YET = 'Not yet checked by a player';
 export const RETAINED_TEXT = { id: 'kbd.pathway.retained', text: 'The first song is still solid a day later.', label: NOT_YET };
 export const TRANSFER_TEXT = { id: 'kbd.pathway.transfer', text: 'Play a different song, one you have not checked yet, in Check mode.', label: NOT_YET };
 export const TRANSFER_DONE_TEXT = { id: 'kbd.pathway.transferDone', text: 'A different song is checked too.', label: NOT_YET };
-export const COMPLETE_TEXT = { id: 'kbd.pathway.complete', text: 'The first song is retained and a different song is checked too -- the keyboard pathway is complete.', label: NOT_YET };
+export const COMPLETE_TEXT = { id: 'kbd.pathway.complete', text: 'The first song is still solid and a different song is checked too -- the keyboard pathway is complete.', label: NOT_YET };
 
 // transferSongFor(level, anchorSongId, seenSongIds): the next starter song
 // the keyboard pathway can offer as a transfer check -- same "highest

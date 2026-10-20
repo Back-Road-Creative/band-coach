@@ -30,7 +30,12 @@ test('A02: no AudioContext warning on load or on tab return; a real click on Sta
     assert.deepEqual(audioWarnings(page), [], 'no AudioContext warning on tab return');
     assert.equal(page.audio.running().length, 0, 'returning to the tab does not start sound by itself');
 
-    // 3. The control a learner presses to start: Start, with a real mouse click.
+    // 3. A first visit asks for the instrument before Start shows (U1): answer it with a real click.
+    await page.clickSelector('#picker button[data-mod="kbd"]');
+    await page.waitFor("!document.getElementById('playBtn').hidden");
+    assert.deepEqual(audioWarnings(page), [], 'choosing an instrument raises no AudioContext warning');
+
+    // 4. The control a learner presses to start: Start, with a real mouse click.
     assert.equal(await page.evaluate("document.getElementById('playBtn').textContent.trim()"), 'Start');
     await page.clickSelector('#playBtn');
     await page.audio.waitForRunning();

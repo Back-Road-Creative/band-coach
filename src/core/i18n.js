@@ -99,7 +99,7 @@ export const en = {
   // data-i18n="id" attribute on the element; the same English text is also
   // left sitting in src/index.html so the page still reads correctly before
   // that startup call runs, or if JS never runs at all.
-  'app.subtitle': 'One coach, many instruments. It teaches where things are, then the moves between them, picks every next exercise from your own results, and watches your energy so practice stays fresh.',
+  'app.subtitle': 'One coach, many instruments, picking each next exercise from your own results.',
   'nav.label': 'Main',
   'nav.practice': 'Practice',
   'nav.songs': 'Songs',
@@ -118,6 +118,8 @@ export const en = {
   'settings.modelPack': 'Model pack',
   'settings.how': 'How this works',
   'songs.addRow': 'Add a song',
+  'history.startFirst': 'Start your first session',
+  'songs.forTeachers': 'For teachers',
   // A9: the collapsible <summary> wrapping the song list, Carry-on banner
   // and Assignments (challenges/band packs) so opening a song puts its
   // lesson in the first screen instead of below the whole library -- see
@@ -130,6 +132,7 @@ export const en = {
   'songs.sheetDescNoInstrument': 'Sheet music, part 1.',
   'songs.sheetError': 'That song could not be saved as a sheet: {reason}',
   'picker.tools': 'Tools',
+  'picker.more': 'More',
   'setup.button': 'Set up input',
   'setup.connect': 'Connect',
   'tuner.connectMic': 'Connect microphone',
@@ -315,7 +318,7 @@ export const es = {
   'modelPack.failed': 'La descarga no terminó, así que no se guardó nada. Inténtalo de nuevo.',
   'modelPack.noStorage': 'Este navegador no puede guardar descargas, así que el paquete de modelo no está disponible aquí.',
 
-  'app.subtitle': 'Un entrenador, muchos instrumentos. Te enseña dónde están las cosas, luego los movimientos entre ellas, elige cada siguiente ejercicio según tus propios resultados y vigila tu energía para que la práctica se mantenga fresca.',
+  'app.subtitle': 'Un entrenador, muchos instrumentos, que elige cada siguiente ejercicio según tus propios resultados.',
   'nav.label': 'Principal',
   'nav.practice': 'Práctica',
   'nav.songs': 'Canciones',
@@ -334,12 +337,15 @@ export const es = {
   'settings.modelPack': 'Paquete de modelo',
   'settings.how': 'Cómo funciona',
   'songs.addRow': 'Añadir una canción',
+  'history.startFirst': 'Empezar tu primera sesión',
+  'songs.forTeachers': 'Para profesores',
   'songs.libraryToggle': 'Tu biblioteca de canciones',
   'songs.sheetDownload': 'Descargar partitura (SVG)',
   'songs.sheetDesc': 'Partitura para {instrument}, parte 1.',
   'songs.sheetDescNoInstrument': 'Partitura, parte 1.',
   'songs.sheetError': 'No se pudo guardar esa canción como partitura: {reason}',
   'picker.tools': 'Herramientas',
+  'picker.more': 'Más',
   'setup.button': 'Configurar entrada',
   'setup.connect': 'Conectar',
   'tuner.connectMic': 'Conectar micrófono',

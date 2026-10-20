@@ -44,7 +44,7 @@ test('Progress shows passed-with-help/passed-on-your-own/retained/applied counts
   const text = await page.evaluate("document.getElementById('historyRetention').textContent");
   assert.match(text, /Tries with help:\s*1/);
   assert.match(text, /Passed on your own:\s*3/);
-  assert.match(text, /Retained on a later check:\s*1/);
+  assert.match(text, /Remembered on a later try:\s*1/);
   assert.match(text, /Applied in a song:\s*1/);
 });
 
@@ -55,8 +55,8 @@ test('Progress never claims a retained count with no checks recorded', async (t)
   await page.evaluate('window.__coach.openPanel("history")');
 
   const text = await page.evaluate("document.getElementById('historyRetention').textContent");
-  assert.match(text, /No checks recorded yet/);
-  assert.doesNotMatch(text, /Retained on a later check:\s*[1-9]/);
+  assert.match(text, /Not tried again later yet/);
+  assert.doesNotMatch(text, /Remembered on a later try:\s*[1-9]/);
 });
 
 // E5c: a keyboard drill on n64 followed by a correct hot-cross-buns song step

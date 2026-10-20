@@ -37,7 +37,7 @@ test('collapse rows: the instrument sheet itself is hidden on first paint, but n
   assert.equal(await page.evaluate("document.querySelector('#picker .picker-tools').tagName"), 'DIV', 'the tools group is a plain <div>, not a <details>');
 });
 
-test('collapse rows: no "more ways to practise" control exists anywhere', async (t) => {
+test('collapse rows: no "more ways to practice" control exists anywhere', async (t) => {
   const page = await launchPage(htmlPath);
   t.after(() => page.close());
 

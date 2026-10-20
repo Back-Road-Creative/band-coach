@@ -542,7 +542,7 @@ function transcribePolyphonic(polyphonic, opts) {
 
   const voiceCount = parts.length;
   const needsCheck = [];
-  if (tempo.confidence < 0.5) needsCheck.push('Tempo is uncertain — confirm the beat before practising to it.');
+  if (tempo.confidence < 0.5) needsCheck.push('Tempo is uncertain — confirm the beat before practicing to it.');
   if (metre.confidence < 0.3) needsCheck.push('Metre defaulted or low-confidence — check the bar lines.');
   if (key.confidence < 0.3) needsCheck.push('Key detection is low-confidence — check the key signature.');
   needsCheck.push(
@@ -601,7 +601,7 @@ export function transcribe(frames, opts = {}) {
   if (bt) { song.tempoMap = bt.tempoMap; song.swing = bt.swing; }
 
   const needsCheck = [];
-  if (tempo.confidence < 0.5) needsCheck.push("Tempo is uncertain — confirm the beat before practising to it.");
+  if (tempo.confidence < 0.5) needsCheck.push("Tempo is uncertain — confirm the beat before practicing to it.");
   if (metre.confidence < 0.3) needsCheck.push('Metre defaulted or low-confidence — check the bar lines.');
   if (key.confidence < 0.3) needsCheck.push('Key detection is low-confidence — check the key signature.');
 

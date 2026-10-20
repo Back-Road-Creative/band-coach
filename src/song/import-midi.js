@@ -358,7 +358,9 @@ export function importMidi(bytes, options = {}) {
   const bpm = ctx.bpm ?? IMPORT_DEFAULT_BPM;
   const metre = ctx.metre ?? { num: 4, den: 4 };
   const key = ctx.key ?? null;
-  const title = (tracks[0] && tracks[0].name) || (fileName ? stripExt(fileName) : null) || 'Untitled MIDI Import';
+  // A track named just "untitled" (a DAW's placeholder) is no title: name the song after its file, as record-door does.
+  const trackTitle = tracks[0] && tracks[0].name && !/^\s*untitled\s*$/i.test(tracks[0].name) ? tracks[0].name : null;
+  const title = trackTitle || (fileName ? stripExt(fileName) : null) || 'Untitled MIDI Import';
   const id = fileName ? slugify(fileName) : 'imported-midi';
 
   const song = {

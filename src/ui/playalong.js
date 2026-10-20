@@ -185,7 +185,7 @@ function mountPlayalong(el, api) {
       d.textContent = text;
       factsEl.appendChild(d);
     };
-    add(result.bpm > 0 ? Math.round(result.bpm) + ' BPM' : 'Tempo: not found');
+    add(result.bpm > 0 ? Math.round(result.bpm) + ' beats a minute' : 'Tempo: not found');
     add(isLowConfidence(result.key.confidence) ? "Key: I'm not sure" : 'Key: ' + NOTE_NAMES[result.key.tonic] + ' ' + result.key.mode);
     add(Math.abs(result.tuningCents) < 3 ? 'Tuning: standard (A440)' : 'Tuning: ' + (result.tuningCents > 0 ? '+' : '') + Math.round(result.tuningCents) + ' cents from A440');
     unsureEl.hidden = !isLowConfidence(result.confidence);

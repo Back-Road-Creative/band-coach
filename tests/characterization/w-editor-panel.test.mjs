@@ -64,7 +64,7 @@ test('opens with no record controls -- recording happens in Add a song now', asy
   assert.equal(await page.evaluate("document.getElementById('editorSaveBtn').disabled"), true, 'save is disabled before anything is transcribed');
 });
 
-test('Listen/Stop transcribes the captured frames and gates practise/save behind the needsCheck list', async (t) => {
+test('Listen/Stop transcribes the captured frames and gates practice/save behind the needsCheck list', async (t) => {
   const page = await launchPage(HTML_PATH);
   t.after(() => page.close());
 
@@ -75,7 +75,7 @@ test('Listen/Stop transcribes the captured frames and gates practise/save behind
   // read finds. The precondition names that item, so an empty list fails here
   // and says why, instead of looking like a gating bug.
   const checkLines = await page.evaluate("Array.from(document.querySelectorAll('#editorCheck li')).map((li) => li.textContent)");
-  assert.ok(checkLines.includes('Tempo is uncertain — confirm the beat before practising to it.'), 'the editor lists the uncertain-tempo item: ' + JSON.stringify(checkLines));
+  assert.ok(checkLines.includes('Tempo is uncertain — confirm the beat before practicing to it.'), 'the editor lists the uncertain-tempo item: ' + JSON.stringify(checkLines));
   assert.equal(await page.evaluate("document.getElementById('editorCheck').hidden"), false);
   assert.equal(await page.evaluate("document.getElementById('editorSaveBtn').disabled"), true, 'save stays disabled until acknowledged');
   assert.equal(await page.evaluate("document.getElementById('editorPlayBtn').disabled"), true, 'play stays disabled until acknowledged');

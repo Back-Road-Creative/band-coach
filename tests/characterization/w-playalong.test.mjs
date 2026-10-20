@@ -57,7 +57,7 @@ test('a learner opens a recording, sees its tempo/key/chords, loops a section sl
   assert.deepEqual(page.exceptions, [], 'no uncaught exceptions while opening and analysing');
   assert.equal(
     (await page.evaluate("Array.from(document.querySelectorAll('#paFacts .stat')).map(e => e.textContent).join('|')")).includes(
-      'BPM'
+      'beats a minute'
     ),
     true
   );

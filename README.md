@@ -371,6 +371,8 @@ startup and again whenever the language is changed.
 
 ## Progress
 
+Before any session is logged, Progress shows a **Start your first session** button (it goes to Practice and presses Start, the same as doing it by hand) and hides the empty practice calendar and goal box until there is something to show. Settings sits at the same left edge as Practice. On a phone, Songs and Progress start right under the status row.
+
 Every judged drill answer, warm-up answer and judged song step leaves one small record — which
 instrument and skill it was, whether it was independent or asked for help, which parts (pitch,
 timing, hold, tune) were actually checked, and how long it took — kept alongside the practice log
@@ -555,8 +557,8 @@ the MIDI/MusicXML/ABC download buttons only once pressed (they no longer sit on 
 Share downloads a `.bandpack` of that one song alone, and Print sends just that song's notation to
 plain paper, black on white, with nothing else on the page. A teacher challenge's title field,
 "Export as a challenge", "Share with your band" and any read-only band-pack part assignments live
-under their own **Assignments** heading below the song list, separate from a single open song's
-own actions. Importing a challenge re-opens the library if a lesson had folded it and scrolls that list into view, and a failed import's message is
+under their own **Assignments** heading, inside a closed **For teachers** disclosure below the song
+list (it opens by itself when a challenge is loaded), separate from a single open song's own actions. Importing a challenge re-opens the library if a lesson had folded it and scrolls that list into view, and a failed import's message is
 drawn in the error colour, not the success green.
 
 Reopening a song, in Learn or Rehearse, carries on from the step you left off on, at the same

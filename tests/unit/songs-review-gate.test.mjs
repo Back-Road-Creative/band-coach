@@ -10,7 +10,7 @@ import assert from 'node:assert/strict';
 import { practiceGate as gateFromReview } from '../../src/ui/songs/review.js';
 import { reviewGate as gateFromLedger } from '../../src/ui/songs/song-status.js';
 
-test('review.js and song-status.js give the same practise decision', () => {
+test('review.js and song-status.js give the same practice decision', () => {
   // P3-6: learn.js is gone, so the identity check went with it; the two
   // remaining copies must still agree case by case.
   for (const warnings of [[], ['Bar 2 beat 3 note unclear'], undefined]) {

@@ -4,7 +4,7 @@
 // nothing reaches through window.__coach. Live today: no sideways scroll and no console event, at every
 // config x state. Written in full but still todo where the defect is measured (each flips by deleting
 // its `todo` option): the four checks the U units fix. A check is todo only at the configs where it
-// fails today (CI's summary refuses a todo that passes), so U5 is todo in the light theme only (U2 has landed). Their measured values are printed so the flip is one word.
+// fails today (CI's summary refuses a todo that passes), U2 and U5 have landed. U6 is live on the phone widths (the picker there shows a short "More" chip) and todo elsewhere. Their measured values are printed so the flip is one word.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { withAcceptancePage } from '../helpers/browser.mjs';
@@ -53,14 +53,15 @@ const MEASURE = `(() => {
 })()`;
 
 
-// The app re-saves its state as the page unloads, so clearing storage then reloading hands back the old
-// profile. This runs at the start of the NEXT load (after that save, before the app's own scripts) instead.
-const FRESH_PROFILE_ON_NEXT_LOAD = "if (sessionStorage.getItem('__fresh')) { sessionStorage.removeItem('__fresh'); localStorage.clear(); }\n";
+// launchPage gives every walk a brand-new browser profile (its own user-data-dir), so the FIRST document is
+// already a first visit. This records what storage held at the very start of that document, before any app
+// script ran, so the walk can prove it began fresh instead of reloading until it looked fresh.
+const RECORD_STORAGE_AT_START = "window.__walkStartStorage = (function () { try { return localStorage.length; } catch (e) { return -1; } })();\n";
 
 // Walks one config; returns [{ state, m, events }] (m = the page measured after the state settled).
 async function walk(t, cfg) {
   const states = [];
-  await withAcceptancePage(t, { initScript: FRESH_PROFILE_ON_NEXT_LOAD }, async (page) => {
+  await withAcceptancePage(t, { initScript: RECORD_STORAGE_AT_START }, async (page) => {
     const events = [];
     page.cdp.on((m) => {
       if (m.method === 'Runtime.consoleAPICalled') events.push({ kind: 'console.' + m.params.type, text: m.params.args.map((a) => a.value ?? a.description ?? '').join(' ').slice(0, 300) });
@@ -77,15 +78,9 @@ async function walk(t, cfg) {
     };
     await page.setViewport({ width: cfg.w, height: cfg.h, mobile: cfg.mobile });
     await page.cdp.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: cfg.theme }] });
-    // A newcomer's first open: drop whatever the driver's own first load saved, then load again.
-    // The old page's own save can still land after the clear (measured: phone-light first-open read
-    // "Instrument: Keyboard", Start at y 258 instead of 601), so the clear is repeated until the page
-    // really is a first visit, and the walk refuses to measure a profile that is not.
+    // A newcomer's first open: the profile is brand new, so no reload or clearing is needed (and none is done).
+    assert.equal(await page.evaluate('window.__walkStartStorage'), 0, 'the walk starts on a truly fresh profile: no saved data before the app ran');
     const fresh = "!document.getElementById('picker').hidden && !/:/.test(document.getElementById('navInstrument').textContent)";
-    for (let i = 0; i < 3 && !(i && await page.evaluate(fresh)); i++) {
-      await page.evaluate("sessionStorage.setItem('__fresh', '1')");
-      await page.reload();
-    }
     assert.ok(await page.evaluate(fresh), 'the walk starts on a first visit: instrument sheet open, no instrument named');
     if (cfg.zoom) await page.evaluate("document.documentElement.style.fontSize='20px'; dispatchEvent(new Event('resize'))");
     await snap('01-first-open');
@@ -150,18 +145,19 @@ for (const cfg of CONFIGS) {
       const bad = states.filter((s) => s.m.smallControls.length).map((s) => `${s.state}: ${s.m.smallControls.join('; ')}`);
       assert.deepEqual(bad, []);
     });
-    await t.test('Start is on the first screen at first paint (U2)', () => {
-      const first = states[0].m, b = first.playBtn;
-      diag(`Start box at first paint: ${JSON.stringify(b)} (viewport height ${first.vh})`);
-      assert.ok(b, 'Start is visible at first paint');
+    // One question first: Start is hidden until an instrument is chosen, so it is measured right after the choice.
+    await t.test('Start is on the first screen once an instrument is chosen (U2)', () => {
+      const first = states.find((s) => s.state === '03a-keyboard-chosen').m, b = first.playBtn;
+      diag(`Start box after the choice: ${JSON.stringify(b)} (viewport height ${first.vh})`);
+      assert.ok(b, 'Start is visible once an instrument is chosen');
       assert.ok(b.y >= 0 && b.y + b.h <= first.vh, `Start spans y ${b.y}..${b.y + b.h}, below the ${first.vh}px first screen`);
     });
-    await t.test('no control label ends in an ellipsis (U6)', { todo: 'U6' }, () => {
+    await t.test('no control label ends in an ellipsis (U6)', { todo: cfg.w <= 600 ? false : 'U6' }, () => {
       diag(`labels ending in an ellipsis: ${states.map((s) => `${s.state}=${s.m.ellipsis.length}`).join(' ')}`);
       const bad = states.filter((s) => s.m.ellipsis.length).map((s) => `${s.state}: ${s.m.ellipsis.join('; ')}`);
       assert.deepEqual(bad, []);
     });
-    await t.test('hint text contrast is at least 4.5:1 (U5)', { todo: cfg.theme === 'light' ? 'U5' : false }, () => {
+    await t.test('hint text contrast is at least 4.5:1 (U5)', () => {
       diag(`hint contrast per state: ${states.map((s) => `${s.state}=${s.m.hint ? s.m.hint.ratio : 'none'}`).join(' ')}`);
       const bad = states.filter((s) => s.m.hint && s.m.hint.ratio < 4.5).map((s) => `${s.state}: ${s.m.hint.ratio} (${s.m.hint.fg} on ${s.m.hint.bg})`);
       assert.deepEqual(bad, []);

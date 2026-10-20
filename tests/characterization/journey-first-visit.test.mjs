@@ -27,7 +27,7 @@ test('first visit: keyboard alone reaches the first exercise, Start stays in the
 
   // Fresh first paint: no saved profile, so the instrument sheet is open.
   assert.equal(await page.evaluate("document.getElementById('picker').hidden"), false, 'a first-time visitor meets the instrument sheet open');
-  assertInFirstScreen(await rectOf(page, '#playBtn'), 844, 'fresh first paint');
+  assert.equal(await page.evaluate("document.getElementById('playBtn').hidden"), true, 'one question first: Start is not offered before an instrument is chosen');
   assert.equal(await page.evaluate('window.scrollY'), 0, 'fresh first paint should not start pre-scrolled');
   await scan(page, 'fresh first paint (instrument sheet open)');
 
@@ -57,7 +57,10 @@ test('first visit: keyboard alone reaches the first exercise, Start stays in the
 
 test('a returning learner (saved instrument) reaches Start with fewer Tab stops than a first visit, and the nav Instrument button still names the instrument', async (t) => {
   const firstVisitPage = await launchPage(htmlPath);
-  const firstVisitStops = await tabTo(firstVisitPage, '#playBtn');
+  // Start is hidden until the one question is answered, so a first visit's cost is the stops to the Keyboard button, Enter, then the stops on to Start.
+  const toChoice = await tabTo(firstVisitPage, '#picker button[data-mod="kbd"]');
+  await firstVisitPage.press('Enter');
+  const firstVisitStops = toChoice + await tabTo(firstVisitPage, '#playBtn');
   await firstVisitPage.close();
 
   const initScript = "localStorage.setItem('bandcoach.v1', JSON.stringify({ prefs: { mod: 'gtr' } }));";
