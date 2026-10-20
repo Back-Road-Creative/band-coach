@@ -41,3 +41,21 @@ for (const c of CASES) {
     });
   });
 }
+
+test('Español: removing a song says so in Spanish, not English', async (t) => {
+  await withAcceptancePage(t, {}, async (page) => {
+    await page.clickSelector('#mainNav button[data-route="settings"]');
+    await page.evaluate("(() => { const s = document.getElementById('optLocale'); s.value = 'es'; s.dispatchEvent(new Event('change', { bubbles: true })); })()");
+    await page.clickSelector('#mainNav button[data-route="songs"]');
+    await page.waitFor("document.querySelector('.add-song-row')");
+    await page.clickSelector('.add-song-row button');
+    await chooseFile(page, '#songsFileInput', FX + 'midi/beat.mid');
+    await page.waitFor("Array.from(document.querySelectorAll('.panel-songs-row button')).some((b) => b.textContent.trim() === 'beat')");
+    await page.waitFor("!!document.querySelector('.panel-songs-remove')");
+    await page.evaluate("document.querySelector('.panel-songs-remove').click()");
+    await page.waitFor("!!document.querySelector('.panel-songs-remove-yes')");
+    await page.evaluate("document.querySelector('.panel-songs-remove-yes').click()");
+    await page.waitFor("document.querySelector('.panel-songs-msg').textContent.trim() !== '' && !Array.from(document.querySelectorAll('.panel-songs-row button')).some((b) => b.textContent.trim() === 'beat')");
+    assert.equal(await page.evaluate("document.querySelector('.panel-songs-msg').textContent.trim()"), 'Se quitó "beat".');
+  });
+});
