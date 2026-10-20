@@ -249,6 +249,15 @@ export function withStoredIds(songs, storedIds) {
   return songs.map((s, i) => (storedIds[i] === s.id ? s : { ...s, id: storedIds[i] }));
 }
 
+// Plain-words sentence for a multi-song import: library.add() gave a song a
+// different id than the file carried (song-2, ...) only because that id was
+// already stored, so the learner now has a second copy; say so rather than
+// let the import look like it did nothing new. '' when nothing collided.
+export function alreadyInLibraryNote(songs, storedIds) {
+  const n = songs.filter((s, i) => storedIds[i] !== s.id).length;
+  return n === 0 ? '' : n === 1 ? t('songs.import.alreadyOne') : t('songs.import.alreadyMany', { count: n });
+}
+
 function onMidiNote(fn) {
   noteListeners.push(fn);
   return () => {
@@ -2536,8 +2545,10 @@ function mountSongsPanel(hostEl, api) {
     // reassigned (song-2, song-3, ...) by library.add() above -- reconciled
     // here so the part-assignment lines below (and anything read from
     // pack.songs after this point) name the id that is actually stored.
+    const packIn = pack.songs;
     pack.songs = withStoredIds(pack.songs, storedIds);
-    say('Added ' + pack.songs.length + ' song' + (pack.songs.length === 1 ? '' : 's') + ' from band pack "' + pack.name + '".', 'ok');
+    const packDup = alreadyInLibraryNote(packIn, storedIds);
+    say('Added ' + pack.songs.length + ' song' + (pack.songs.length === 1 ? '' : 's') + ' from band pack "' + pack.name + '".' + (packDup ? ' ' + packDup : ''), 'ok');
     // Part assignments, read-only: one line per song that carries one,
     // "<title>: <member> plays <part name>, ...". A song with no
     // assignment (pack.parts[i] is null) gets no line at all.
@@ -2573,8 +2584,9 @@ function mountSongsPanel(hostEl, api) {
     // reads challenge.songs -- its progress[s.id] lookup and each song's
     // own "Open" button (openSong(song)) must reference the id that is
     // actually stored, not the id the file happened to carry.
+    const challengeDup = alreadyInLibraryNote(challenge.songs, storedIds);
     challenge.songs = withStoredIds(challenge.songs, storedIds);
-    say('Added the "' + challenge.title + '" challenge (' + challenge.songs.length + ' song' + (challenge.songs.length === 1 ? '' : 's') + ').', 'ok');
+    say('Added the "' + challenge.title + '" challenge (' + challenge.songs.length + ' song' + (challenge.songs.length === 1 ? '' : 's') + ').' + (challengeDup ? ' ' + challengeDup : ''), 'ok');
     renderChallenge(challenge);
     await refreshList();
     // The challenge list sits under the whole library, far below the message: bring it on screen (guarded like the song-heading scroll).
