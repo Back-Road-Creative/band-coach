@@ -8,9 +8,9 @@
 // bundle", `shots` asks "what does it look like" -- forcing every build to
 // also boot a browser would slow the common case for a check most builds
 // don't need.
-import { existsSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
+import { dirname, join, basename } from 'node:path';
 import { launchPage } from '../tests/helpers/browser.mjs';
 import { build } from './build.mjs';
 
@@ -57,6 +57,82 @@ export async function captureShots({ htmlPath = HTML_PATH, outDir = OUT_DIR } = 
 }
 
 /**
+ * Writes <outDir>/shots/<id>-<idle|how|target>-<desktop|phone>.png for every
+ * instrument the picker lists, plus shots/index.html as a contact sheet, so a
+ * person or agent can check how each instrument is drawn for learning.
+ * The id list is read from the running page's own picker (tools such as ear,
+ * rhy, tuner and capture are not instruments and are left out). Needs the dev
+ * build: it drives window.__coach. Instruments with no How-to-play chart
+ * (the how panel would silently show the guitar) get no how shot and are
+ * returned in `noHow`; a target state that cannot be reached is returned in
+ * `skipped` with its reason, never dropped.
+ */
+export async function captureInstrumentShots({ htmlPath = HTML_PATH, outDir = OUT_DIR } = {}) {
+  if (!existsSync(htmlPath)) {
+    throw new Error(`${htmlPath} does not exist -- run "npm run build" first`);
+  }
+  const dir = join(outDir, 'shots');
+  mkdirSync(dir, { recursive: true });
+  const page = await launchPage(htmlPath);
+  const written = [];
+  const noHow = [];
+  const skipped = [];
+  const shotsMeta = [];
+  const settle = () => page.evaluate('new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))');
+  const snap = async (el, block, id, state, label) => {
+    await page.evaluate(`document.getElementById(${JSON.stringify(el)}).scrollIntoView({block:${JSON.stringify(block)}})`);
+    await settle();
+    const out = join(dir, `${id}-${state}-${label}.png`);
+    await page.screenshot(out);
+    written.push(out);
+    shotsMeta.push({ id, state, size: label, file: basename(out) });
+  };
+  try {
+    const ids = await page.evaluate(
+      "[...document.querySelectorAll('#picker button[data-mod]')].filter(b => !b.closest('#pickerTools')).map(b => b.dataset.mod)",
+    );
+    for (const { width, height, mobile } of SHOTS) {
+      const label = mobile ? 'phone' : 'desktop';
+      await page.setViewport({ width, height, mobile });
+      for (const id of ids) {
+        await page.evaluate(`window.__coach.setMod(${JSON.stringify(id)})`);
+        await settle();
+        await snap('cv', 'center', id, 'idle', label);
+        await page.evaluate("window.__coach.openPanel('fingerings')");
+        try {
+          const shown = await page.evaluate("document.getElementById('fingInstrument') && document.getElementById('fingInstrument').value");
+          if (shown === id) await snap('panelHost', 'start', id, 'how', label);
+          else if (!noHow.includes(id)) noHow.push(id);
+        } finally {
+          await page.evaluate('window.__coach.closePanel()');
+        }
+        try {
+          await page.evaluate('window.__coach.startWithoutMic()');
+          await page.waitFor('window.__coach.task()', 5000);
+          await snap('cv', 'center', id, 'target', label);
+        } catch (e) {
+          skipped.push({ id, state: 'target', size: label, reason: String((e && e.message) || e) || 'unknown' });
+        }
+      }
+    }
+    const esc = (v) => String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+    const sections = ids.map((id) => {
+      const figs = shotsMeta.filter((m) => m.id === id).map((m) =>
+        `<figure><img src="${esc(m.file)}" alt="${esc(`${id} ${m.state} ${m.size}`)}"><figcaption>${esc(id)} ${m.state} ${m.size}</figcaption></figure>`);
+      return `<section><h2>${esc(id)}</h2>${noHow.includes(id) ? '<p>no how panel</p>' : ''}<div style="display:flex;flex-wrap:wrap;gap:12px">${figs.join('')}</div></section>`;
+    });
+    const skippedHtml = skipped.length
+      ? `<ul>${skipped.map((s) => `<li>${esc(s.id)} ${s.state} ${s.size}: ${esc(s.reason)}</li>`).join('')}</ul>`
+      : '<p>none</p>';
+    const sheet = join(dir, 'index.html');
+    writeFileSync(sheet, `<!doctype html>\n<html><head><meta charset="utf-8"><title>Band Coach instrument shots</title><style>img{max-width:480px;border:1px solid #888}</style></head><body><h1>Instrument shots</h1>${sections.join('\n')}<h2>Skipped</h2>${skippedHtml}</body></html>\n`);
+    return { ids, written, noHow, skipped, sheet };
+  } finally {
+    await page.close();
+  }
+}
+
+/**
  * Build, then capture. This is what `npm run shots` runs, and it exists so a
  * screenshot cannot depict a stale bundle.
  *
@@ -79,6 +155,15 @@ export async function shoot({ outDir = OUT_DIR } = {}) {
 
 const isMain = process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1];
 if (isMain) {
-  const written = await shoot();
-  for (const path of written) console.log(`wrote ${path}`);
+  if (process.argv.includes('--instruments')) {
+    const htmlPath = await build({ outDir: OUT_DIR });
+    const r = await captureInstrumentShots({ htmlPath, outDir: OUT_DIR });
+    for (const path of r.written) console.log(`wrote ${path}`);
+    console.log(`wrote ${r.sheet}`);
+    console.log(`no how panel: ${r.noHow.join(', ') || 'none'}`);
+    for (const s of r.skipped) console.log(`skipped ${s.id} ${s.state} ${s.size}: ${s.reason}`);
+  } else {
+    const written = await shoot();
+    for (const path of written) console.log(`wrote ${path}`);
+  }
 }
