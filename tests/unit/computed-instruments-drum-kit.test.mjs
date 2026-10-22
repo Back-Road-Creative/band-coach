@@ -1,7 +1,7 @@
 // src/instruments/how/drum-kit.js: the drawn kit, seen from the throne. Every
 // piece in the drum-kit record gets one region inside the KIT_ASPECT x 1 frame,
-// regions do not pile on top of each other (the open-hi-hat tab sits on the
-// hi-hat disc by design), the shapes tell drums from cymbals from pedals, a
+// regions do not pile on top of each other (the open-hi-hat tab sits just
+// clear of the hi-hat disc's far edge), the shapes tell drums from cymbals from pedals, a
 // click in pixels finds the piece, and every piece has a plain-words sentence.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -35,18 +35,18 @@ test('kitLayout places every kit piece exactly once, fully inside the KIT_ASPECT
   }
 });
 
-test('no two regions touch, except the open-hi-hat tab sitting on the closed hi-hat disc', () => {
+test('no two regions touch (the open-hi-hat tab sits just clear of the hi-hat disc far edge)', () => {
   const layout = kitLayout();
   for (let i = 0; i < layout.length; i++) {
     for (let j = i + 1; j < layout.length; j++) {
-      const a = layout[i], b = layout[j], pair = [a.id, b.id].sort().join('+');
+      const a = layout[i], b = layout[j];
       const g = gap(a, b);
-      if (pair === 'hihat-closed+hihat-open') assert.ok(g < 0, 'the tab overlaps the disc');
-      else assert.ok(g > 0, a.id + ' and ' + b.id + ' touch (gap ' + g.toFixed(3) + ')');
+      assert.ok(g > 0, a.id + ' and ' + b.id + ' touch (gap ' + g.toFixed(3) + ')');
     }
   }
   const p = at(), tab = bounds(p['hihat-open']);
-  assert.ok(p['hihat-closed'].y - p['hihat-closed'].r - tab.y1 > -0.25 * p['hihat-closed'].r, 'the tab reaches less than a quarter radius into the disc');
+  const edge = p['hihat-closed'].y - p['hihat-closed'].r - tab.y1;
+  assert.ok(edge > 0 && edge < 0.5 * p['hihat-closed'].r, 'the tab sits just clear of the disc far edge (the phone tap rule wants its centre 12 px from the disc): ' + edge);
 });
 
 test('the kit reads like a real kit from the throne', () => {

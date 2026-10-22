@@ -22,8 +22,8 @@
 // drum's pedal at centre front; two rack toms side by side above it; the floor
 // tom close in on the right; the ride far right and set back. The hi-hat is one
 // pair of cymbals but closed, open and pedal are different sounds with
-// different GM notes, so it is one disc (closed), a tab on its far edge (open)
-// and its footboard (pedal): three pieces to judge, one cymbal to look at.
+// different GM notes, so it is one disc about crash size (closed), a small tab just clear of its far edge
+// (open: small, so its centre sits 12 px off the disc for the phone tap rule) and its footboard (pedal): three pieces to judge, one cymbal to look at.
 import { PIECES } from '../drum-kit.js';
 
 export const KIT_ASPECT = 1.4;
@@ -31,22 +31,21 @@ export const KIT_ASPECT = 1.4;
 const POSITIONS = {
   kick: { x: 0.70, y: 0.725, w: 0.18, h: 0.41, shape: 'pedal' },
   snare: { x: 0.465, y: 0.66, r: 0.135, shape: 'drum' },
-  'hihat-closed': { x: 0.20, y: 0.62, r: 0.115, shape: 'cymbal' },
-  'hihat-open': { x: 0.20, y: 0.427, w: 0.19, h: 0.19, shape: 'tab' },
-  'hihat-pedal': { x: 0.22, y: 0.84, w: 0.17, h: 0.17, shape: 'pedal' },
+  'hihat-closed': { x: 0.17, y: 0.62, r: 0.14, shape: 'cymbal' },
+  'hihat-open': { x: 0.17, y: 0.375, w: 0.13, h: 0.10, shape: 'tab' },
+  'hihat-pedal': { x: 0.17, y: 0.86, w: 0.15, h: 0.13, shape: 'pedal' },
   'tom-high': { x: 0.58, y: 0.32, r: 0.11, shape: 'drum' },
   'tom-mid': { x: 0.82, y: 0.32, r: 0.11, shape: 'drum' },
   'tom-floor': { x: 1.09, y: 0.66, r: 0.13, shape: 'drum' },
-  crash: { x: 0.32, y: 0.17, r: 0.14, shape: 'cymbal' },
-  ride: { x: 1.15, y: 0.28, r: 0.16, shape: 'cymbal' }
+  crash: { x: 0.30, y: 0.17, r: 0.14, shape: 'cymbal' },
+  ride: { x: 1.21, y: 0.28, r: 0.16, shape: 'cymbal' }
 };
 
 // The decoration at the bottom edge: the throne the player sits on. Not a
 // piece, not clickable. Same units as POSITIONS.
 export const THRONE = { x: 0.70, y: 0.975, w: 0.18, h: 0.05 };
 
-// Hit priority: the open-hi-hat tab sits over the closed hi-hat's disc, so it
-// is tested first; the rest do not overlap.
+// Hit priority: the open-hi-hat tab is tested first; no regions overlap.
 const HIT_ORDER = ['hihat-open', 'hihat-closed', 'hihat-pedal', 'kick', 'snare', 'tom-high', 'tom-mid', 'tom-floor', 'crash', 'ride'];
 
 // Plain-words sentences, one per piece: where it is and what plays it, for

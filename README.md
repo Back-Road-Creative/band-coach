@@ -1273,10 +1273,10 @@ the last level). The right time on the wrong drum is reported as "wrong drum",
 with the drum it wanted. A MIDI note that isn't on the kit counts as an extra
 hit, and the coach line says so.
 Every drum on the drawn kit is labelled with its name (Kick, Snare, Hi-hat, Floor tom ...), with its
-computer key as a small yellow hint (a name too long for its piece sits beside it). The shapes tell the
+computer key as a small yellow hint (a name too long for its piece sits beside it, above it or below it, never on another drum or another name, on a phone as on a desktop; the toms' names break onto two lines). The shapes tell the
 pieces apart without reading a label: drums are heads with a rim, cymbals are discs with a bell, pedals are
-footboards (the bass drum's has its shell beyond it). The hi-hat is one cymbal: tap the disc for closed (D),
-the small tab on its far edge for open (E), and the footboard below it for the pedal (C); when a bar asks for
+footboards (the bass drum's has its shell beyond it). The hi-hat is one cymbal, about the size of the crash and named once (Hi-hat): tap the disc for closed (D),
+the small tab on its far edge (marked "open") for open (E), and the small footboard below it (marked "pedal") for the pedal (C); when a bar asks for
 a closed hi-hat the footboard is outlined with a dashed line, since your left foot holds it shut. The kit keeps its shape
 (it is centred with space either side, never stretched to the full width); before you start it fills the canvas
 height, and the canvas is taller for the kit than for other instruments. Every piece, the hi-hat tab and footboard

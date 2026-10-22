@@ -618,7 +618,7 @@ test('A06 phone 390x844: no two drum names run into each other, and the tuner te
     const startText = (await page.evaluate('window.__q3c.texts()')).filter((x) => x.text === 'PRESS START').map(textRect);
     assert.ok(startText.length >= 1, 'PRESS START is drawn on the idle kit at 390x844');
     for (const p of kitRects(await canvasMetrics(page))) for (const r of startText) assert.ok(!overlaps(r, kitPieceBox(p)), `${p.id}'s box runs into the PRESS START text at 390x844`);
-    assert.ok(kit.length >= 13, `the kit wrote its ten names, three with a second line (${kit.length} lines seen)`);
+    assert.ok(kit.length >= 10, `the kit wrote its ten names, the hi-hat once with a small word each on its tab and footboard (${kit.length} lines seen)`);
     const hits = [];
     for (let i = 0; i < kit.length; i++) for (let j = i + 1; j < kit.length; j++) if (overlaps(kit[i], kit[j])) hits.push(`"${kit[i].text}" and "${kit[j].text}"`);
     assert.deepEqual(hits, [], 'drum names that overlap on the kit');

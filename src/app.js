@@ -1752,8 +1752,8 @@ import { register as registerPathway } from './ui/pathway.js';
   // rests, ties, triplet brackets, dots and the time signature, for the rhythm-vocabulary bars
   // The bar on a percussion staff (top), the kit from the throne (bottom): the bar's drums outlined, filled
   // while the count-in runs, the piece just hit flashing; after judging, a mark under each note.
-  // what each drawn piece is called on the kit (a beginner reads the name; the key letter is only a hint)
-  const KIT_DRAW_NAMES = { kick: ['Kick'], snare: ['Snare'], 'hihat-closed': ['Hi-hat', 'closed', 'l'], 'hihat-pedal': ['Hi-hat', 'pedal', 'l'], 'hihat-open': ['Hi-hat', 'open', 'l'], 'tom-floor': ['Floor tom', '', 'l'], 'tom-mid': ['Mid tom'], 'tom-high': ['High tom', '', 'l'], crash: ['Crash'], ride: ['Ride'] };
+  // what each drawn piece is called on the kit (a beginner reads the name; the key letter is only a hint). [name, second line, side it prefers (l/r/u/d), 's' for the small print of the hi-hat's tab and pedal]; the hi-hat is named once, on its disc
+  const KIT_DRAW_NAMES = { kick: ['Kick'], snare: ['Snare'], 'hihat-closed': ['Hi-hat'], 'hihat-pedal': ['pedal', '', 'r', 's'], 'hihat-open': ['open', '', 'u', 's'], 'tom-floor': ['Floor tom', '', 'l'], 'tom-mid': ['Mid', 'tom', 'u'], 'tom-high': ['High', 'tom', 'u'], crash: ['Crash'], ride: ['Ride'] };
   function drawKit(W, H) {
     const on = bar && task && task.kind === 'kit' && bar.staff, t = now(), pre = on && t < bar.playAt, want = {}, bw = W * 0.94, bh = on ? H * 0.62 : H * 0.9, box = { x: (W - bw) / 2, y: on ? H * 0.37 : (H - bh) / 2, w: bw, h: bh, s: bh };
     kitBox = box; kitLabels = []; if (on) { bar.kitBox = box; bar.onsets.forEach(o => o.pieces.forEach(p => { want[p] = 1; }));
@@ -1773,19 +1773,19 @@ import { register as registerPathway } from './ui/pathway.js';
     // Names go on after every circle is down. A name that fits is written inside its circle; any other tries its own side, the opposite side, then under and over the circle, and takes the first spot that touches no other name, no other piece and not the canvas edge; with none free it loses its second line (closed/pedal/open) and tries again, so two names never run into each other on a phone-width kit.
     const placed = [], hit = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
     pcs.forEach(({ p, x, y, rr, hw, hh, lit }) => {
-      const nm = KIT_DRAW_NAMES[p.id], fs = Math.max(13, m * 0.05), key = KIT.find(k => k.id === p.id).key.toUpperCase(); font(fs, 700); const tw = g.measureText(nm[0]).width, inside = rr > 0 && tw + 6 <= rr * 2 && !nm[1] && !nm[2]; let sw = 0; if (nm[1]) { font(Math.max(11, fs * 0.85), 400); sw = g.measureText(nm[1]).width; font(fs, 700); }
+      const nm = KIT_DRAW_NAMES[p.id], small = nm[3] === 's', fs = small ? 11 : Math.max(13, m * 0.05), key = KIT.find(k => k.id === p.id).key.toUpperCase(); font(fs, small ? 400 : 700); const tw = g.measureText(nm[0]).width, kick = p.id === 'kick', inside = (kick ? tw + 2 <= hw * 2 : rr > 0 && tw + 6 <= rr * 2) && !nm[1] && !nm[2]; let sw = 0; if (nm[1]) { font(Math.max(11, fs * 0.85), 400); sw = g.measureText(nm[1]).width; font(fs, 700); }
       g.fillStyle = inside && lit ? '#05070c' : '#e9edf6';
-      if (inside) { g.textAlign = 'center'; g.fillText(nm[0], x, y - fs * 0.05); const r = { id: p.id, x: x - tw / 2, y: y - fs * 1.05, w: tw, h: fs * 1.2 }; kitLabels.push(r); placed.push(r); }
+      if (inside) { const ny = kick ? y - fs * 0.5 : y - fs * 0.05; g.textAlign = 'center'; g.fillText(nm[0], x, ny); const r = { id: p.id, x: x - tw / 2, y: ny - fs * 1.0, w: tw, h: fs * 1.2 }; kitLabels.push(r); placed.push(r); }
       else {
         const side = (dir, two, dy = 0) => { const lw = two ? Math.max(tw, sw) : tw, lx = dir < 0 ? x - hw - 5 : x + hw + 5; return { ax: lx, al: dir < 0 ? 'right' : 'left', by: y - dy - (two ? 1 : -fs * 0.35), two, r: { id: p.id, x: dir < 0 ? lx - lw : lx, y: y - dy - fs * 1.05, w: lw, h: two ? fs * 2.2 : fs * 1.2 } }; };
         const stack = (dir, two) => { const lw = two ? Math.max(tw, sw) : tw, by = dir > 0 ? y + hh + 2 + fs * 1.05 : y - hh - 4 - (two ? fs * 0.95 : 0); return { ax: x, al: 'center', by, two, r: { id: p.id, x: x - lw / 2, y: by - fs * 1.05, w: lw, h: two ? fs * 2.2 : fs * 1.2 } }; };
         const dir = nm[2] === 'l' ? -1 : 1, free = c => c.r.x >= 0 && c.r.x + c.r.w <= W && c.r.y >= 0 && c.r.y + c.r.h <= H && !placed.some(q => hit({ x: c.r.x - 9, y: c.r.y - 2, w: c.r.w + 18, h: c.r.h + 4 }, q)) && !hit(c.r, thr) && !pcs.some(o => o.p !== p && hit(c.r, o.bb));
-        let pick = null; for (const two of nm[1] ? [true, false] : [false]) { pick = [side(dir, two), side(dir, two, fs * 0.6), side(dir, two, -fs * 0.6), side(-dir, two), stack(1, two), stack(-1, two)].find(free); if (pick) break; }
+        let pick = null; for (const two of nm[1] ? [true, false] : [false]) { const first = nm[2] === 'u' ? [stack(-1, two)] : nm[2] === 'd' ? [stack(1, two)] : []; pick = [...first, side(dir, two), side(dir, two, fs * 0.6), side(dir, two, -fs * 0.6), side(-dir, two), stack(1, two), stack(-1, two)].find(free); if (pick) break; }
         if (!pick) pick = side(dir, !!nm[1]);
         g.textAlign = pick.al; g.fillText(nm[0], pick.ax, pick.by); if (pick.two) { font(Math.max(11, fs * 0.85), 400); g.fillText(nm[1], pick.ax, pick.by + fs * 0.95 + 1); }
         kitLabels.push(pick.r); placed.push(pick.r);
       }
-      font(Math.max(11, m * 0.034), 700); g.textAlign = 'center'; g.fillStyle = lit ? '#05070c' : '#f3c52f'; g.fillText(key, x, inside ? y + hh - Math.max(4, m * 0.012) : y + 4); });
+      font(Math.max(11, m * 0.034), 700); g.textAlign = 'center'; g.fillStyle = lit ? '#05070c' : '#f3c52f'; g.fillText(key, x, kick && inside ? y + fs * 0.9 : inside ? y + hh - Math.max(4, m * 0.012) : y + 4); });
   }
   function drawBar2(W, H) {
     if (!bar || !task) return; const x0 = W * 0.1, x1 = W * 0.94, y = H * 0.48, t = now(), stem = H * 0.26, nh = H * 0.045;

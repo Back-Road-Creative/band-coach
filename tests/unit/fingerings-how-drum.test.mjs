@@ -87,7 +87,12 @@ test('drumKitDiagram draws every piece, labels it, fills the struck one and carr
     for (const id of ['snare', 'ride', 'hihat-closed']) assert.equal(piece(id).tagName, 'circle', id + ' is a circle');
     assert.equal(all(svg, n => /fing-throne/.test(n.getAttribute('class') || '')).length, 1, 'a throne mark');
     const labels = all(svg, n => n.tagName === 'text').map(t => t.textContent);
-    for (const p of drumKit.kit) assert.ok(labels.includes(p.name), 'label for ' + p.name);
+    // the hi-hat is one cymbal named once; its tab and footboard carry one small word each
+    for (const p of drumKit.kit) assert.ok(labels.includes(({ 'hihat-closed': 'Hi-hat', 'hihat-open': 'open', 'hihat-pedal': 'pedal' })[p.id] || p.name), 'label for ' + p.name);
+    assert.equal(labels.filter(l => /hi-hat/i.test(l)).length, 1, 'Hi-hat is written once');
+    assert.equal(labels.length, drumKit.kit.length, 'one label per piece');
+    // a word has to fit inside its own tab or footboard (a glyph is about 0.6 of the font size wide)
+    for (const id of ['hihat-open', 'hihat-pedal']) { const t = all(svg, n => n.tagName === 'text').find(n => n.textContent === ({ 'hihat-open': 'open', 'hihat-pedal': 'pedal' })[id]), w = Number(piece(id).getAttribute('width')); assert.ok(t.textContent.length * 0.6 * Number(t.getAttribute('font-size')) <= w, id + ' word fits its shape'); }
     // No inline colours: every colour comes from the stage's CSS variables
     // or the panel's existing highlight colour.
     for (const c of all(svg, n => n.getAttribute('style') !== undefined)) assert.doesNotMatch(c.getAttribute('style') || '', /#(?!f3c52f|06101d)[0-9a-f]{3,6}|rgb/i);

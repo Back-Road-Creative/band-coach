@@ -206,6 +206,7 @@ function svgEl(tag, attrs) {
 // filled with the panel's highlight colour. Colours come from the stage's CSS
 // variables so the dark and light themes both read; the shapes, not the colours,
 // tell a drum from a cymbal.
+const HIHAT_WORDS = { 'hihat-closed': 'Hi-hat', 'hihat-open': 'open', 'hihat-pedal': 'pedal' };
 export function drumKitDiagram(instrument, how) {
   const svg = svgEl('svg', { viewBox: '0 0 ' + 100 * KIT_ASPECT + ' 100', class: 'fing-drumkit', role: 'img', 'aria-label': how.description, width: String(320 * KIT_ASPECT), height: '320', style: 'max-width:100%;height:auto' });
   const line = 'stroke:var(--line)';
@@ -223,8 +224,9 @@ export function drumKitDiagram(instrument, how) {
         svg.appendChild(svgEl('rect', { x: String(x - p.w * 35), y: String(y + p.h * 22), width: String(p.w * 70), height: String(p.h * 20), class: 'fing-footboard', 'stroke-width': '0.5', style: 'fill:none;' + line }));
       }
     }
-    const label = svgEl('text', { x: String(x), y: String(y + 1.2), 'text-anchor': 'middle', 'font-size': '3', style: 'fill:' + (hit ? '#06101d' : 'var(--text)') });
-    label.textContent = p.name;
+    // the hi-hat is one cymbal named once, on its disc; its tab and footboard carry one small word each, set inside their own shapes
+    const part = HIHAT_WORDS[p.id], label = svgEl('text', { x: String(x), y: String(y + (part ? 0.9 : 1.2)), 'text-anchor': 'middle', 'font-size': part && p.id !== 'hihat-closed' ? '2.4' : '3', style: 'fill:' + (hit ? '#06101d' : 'var(--text)') });
+    label.textContent = part || p.name;
     svg.appendChild(label);
   });
   return svg;
