@@ -52,7 +52,7 @@ import { rangeForInstrument, FALLBACK_RANGE, frameSizeForInstrument } from './au
 import { renderVoice } from './audio/voices.js';
 import { layoutFor as harpLayoutFor } from './instruments/how/harmonica.js';
 import { pieceForMidi } from './instruments/drum-kit.js';
-import { kitLayout, pieceAt, spreadX } from './instruments/how/drum-kit.js';
+import { kitFrame, kitRegions, pieceAt, THRONE } from './instruments/how/drum-kit.js';
 import { layoutPercussionMeasure } from './notation/percussion.js';
 import { songFor, KBD_SONG_SKILL_MAP } from './instruments/kbd-songs.js';
 import { buildMods } from './instruments/mods.js';
@@ -1750,35 +1750,42 @@ import { register as registerPathway } from './ui/pathway.js';
     if (t < bar.playAt) { const left = Math.ceil((bar.playAt - t) / bar.spb); g.fillStyle = accent(); font(H * 0.22); g.textAlign = 'center'; g.fillText(String(clamp(left, 1, 4)), W * 0.5, H * 0.22); } else if (t < bar.end) { const px = X((t - bar.playAt) / bar.spb - 0); g.strokeStyle = accent(); g.lineWidth = 3; g.beginPath(); g.moveTo(px, y - H * 0.34); g.lineTo(px, y + H * 0.2); g.stroke(); bar.taps.forEach(tp => { g.fillStyle = '#93a0bd'; g.fillRect(X((tp.t - bar.playAt) / bar.spb) - 2, y + H * 0.2, 4, H * 0.06); }); }
   }
   // rests, ties, triplet brackets, dots and the time signature, for the rhythm-vocabulary bars
-  // The bar on a percussion staff (top), the kit from above (bottom): the bar's drums outlined, filled
+  // The bar on a percussion staff (top), the kit from the throne (bottom): the bar's drums outlined, filled
   // while the count-in runs, the piece just hit flashing; after judging, a mark under each note.
   // what each drawn piece is called on the kit (a beginner reads the name; the key letter is only a hint)
-  const KIT_DRAW_NAMES = { kick: ['Kick'], snare: ['Snare'], 'hihat-closed': ['Hi-hat', 'closed'], 'hihat-pedal': ['Hi-hat', 'pedal'], 'hihat-open': ['Hi-hat', 'open'], 'tom-floor': ['Floor tom', '', 'l'], 'tom-mid': ['Mid tom'], 'tom-high': ['High tom', '', 'l'], crash: ['Crash'], ride: ['Ride'] };
+  const KIT_DRAW_NAMES = { kick: ['Kick'], snare: ['Snare'], 'hihat-closed': ['Hi-hat', 'closed', 'l'], 'hihat-pedal': ['Hi-hat', 'pedal', 'l'], 'hihat-open': ['Hi-hat', 'open', 'l'], 'tom-floor': ['Floor tom', '', 'l'], 'tom-mid': ['Mid tom'], 'tom-high': ['High tom', '', 'l'], crash: ['Crash'], ride: ['Ride'] };
   function drawKit(W, H) {
-    const on = bar && task && task.kind === 'kit' && bar.staff, t = now(), pre = on && t < bar.playAt, want = {}, bw = W * 0.94, bh = on ? H * 0.62 : H * 0.9, box = { x: (W - bw) / 2, y: on ? H * 0.37 : (H - bh) / 2, w: bw, h: bh, s: bh }, m = Math.min(bw, bh);
+    const on = bar && task && task.kind === 'kit' && bar.staff, t = now(), pre = on && t < bar.playAt, want = {}, bw = W * 0.94, bh = on ? H * 0.62 : H * 0.9, box = { x: (W - bw) / 2, y: on ? H * 0.37 : (H - bh) / 2, w: bw, h: bh, s: bh };
     kitBox = box; kitLabels = []; if (on) { bar.kitBox = box; bar.onsets.forEach(o => o.pieces.forEach(p => { want[p] = 1; }));
       const sc = Math.min(W * 0.9 / 400, H * 0.33 / 130), x0 = (W - 400 * sc) / 2, y0 = H * 0.02;
       g.save(); g.translate(x0, y0); g.scale(sc, sc); g.strokeStyle = '#c9ced9'; g.fillStyle = '#e9edf6'; g.lineWidth = 1.5 / sc; drawPrimitives(g, bar.staff, {}); g.restore();
       bar.onsets.forEach((o, i) => { const x = x0 + (bar.noteX[i] || 0) * sc; if (o.flam) { g.fillStyle = '#93a0bd'; font(11 * sc, 700); g.textAlign = 'center'; g.fillText('flam', x, y0 + 10 * sc); } if (!bar.judged || !o.res) return; const bad = o.res.some(r => r.dt === undefined), off = Math.max(...o.res.map(r => Math.abs(r.dt || 0))); g.fillStyle = bad ? '#ff6b5e' : off > 0.05 ? '#f3c52f' : '#5be08a'; g.beginPath(); g.arc(x, y0 + 122 * sc, 5 * sc, 0, 7); g.fill(); }); }
-    // the layout is a unit square stretched to the box (x by width, y by height); circles stay round, sized by the shorter side
-    const pcs = kitLayout().map(p => { const flash = kitFlash.piece === p.id && performance.now() - kitFlash.at < 160, rr = p.r * m; return { p, x: box.x + spreadX(p.x) * bw, y: box.y + p.y * bh, rr, lit: flash || (pre && want[p.id]), flash }; });
-    pcs.forEach(({ p, x, y, rr, lit, flash }) => { g.beginPath(); g.arc(x, y, rr, 0, 7); g.fillStyle = flash ? '#f3c52f' : lit ? '#f08a4b' : p.shape === 'cymbal' ? '#2a3140' : '#1b2130'; g.fill(); g.strokeStyle = want[p.id] ? '#f08a4b' : '#93a0bd'; g.lineWidth = want[p.id] ? 3 : 1.5; g.stroke(); });
+    // the kit is drawn from the throne in a frame that keeps its shape inside the box (drum-kit.js): drums are heads with a rim, cymbals discs with a bell, pedals footboards, the open hi-hat a tab on the hi-hat's far edge
+    const f = kitFrame(box), m = f.h, thr = { x: f.x + (THRONE.x - THRONE.w / 2) * m, y: f.y + (THRONE.y - THRONE.h / 2) * m, w: THRONE.w * m, h: THRONE.h * m };
+    const pcs = kitRegions(box).map(r => { const flash = kitFlash.piece === r.id && performance.now() - kitFlash.at < 160, c = r.kind === 'circle', p = { id: r.id, shape: r.shape }; return { p, r, x: r.cx, y: r.cy, hw: c ? r.r : r.w / 2, hh: c ? r.r : r.h / 2, rr: c ? r.r : 0, bb: c ? { x: r.cx - r.r, y: r.cy - r.r, w: r.r * 2, h: r.r * 2 } : { x: r.x, y: r.y, w: r.w, h: r.h }, lit: flash || (pre && want[r.id]), flash, hint: r.id === 'hihat-pedal' && want['hihat-closed'] && !want['hihat-pedal'] }; });
+    g.beginPath(); g.ellipse(thr.x + thr.w / 2, thr.y + thr.h / 2, thr.w / 2, thr.h / 2, 0, 0, 7); g.fillStyle = '#1b2130'; g.fill(); g.strokeStyle = '#93a0bd'; g.lineWidth = 1; g.stroke();
+    // the tab is first in hit order and drawn last, over the hi-hat disc; a closed hi-hat wanted outlines the hi-hat pedal (dashed, never filled) because the left foot holds it shut
+    pcs.slice().reverse().forEach(({ p, r, x, y, lit, flash, hint }) => { const rc = r.kind === 'circle'; g.beginPath(); if (rc) g.arc(x, y, r.r, 0, 7); else g.rect(r.x, r.y, r.w, r.h); g.fillStyle = flash ? '#f3c52f' : lit ? '#f08a4b' : p.shape === 'cymbal' || p.shape === 'tab' ? '#2a3140' : '#1b2130'; g.fill(); const on = want[p.id] || hint; g.strokeStyle = on ? '#f08a4b' : '#93a0bd'; g.lineWidth = on ? 3 : 1.5; if (hint) g.setLineDash([6, 4]); g.stroke(); g.setLineDash([]);
+      g.strokeStyle = '#93a0bd'; g.lineWidth = 1; g.beginPath();
+      if (p.shape === 'drum') g.arc(x, y, r.r * 0.8, 0, 7); else if (p.shape === 'cymbal') g.arc(x, y, r.r * 0.3, 0, 7);
+      else if (p.id === 'kick') { g.ellipse(x, r.y + r.h * 0.22, r.w * 0.38, r.h * 0.18, 0, 0, 7); g.rect(r.x + r.w * 0.15, r.y + r.h * 0.72, r.w * 0.7, r.h * 0.2); } else if (p.id === 'hihat-pedal') { g.moveTo(r.x + 3, r.y + r.h * 0.25); g.lineTo(r.x + r.w - 3, r.y + r.h * 0.25); }
+      g.stroke(); });
     // Names go on after every circle is down. A name that fits is written inside its circle; any other tries its own side, the opposite side, then under and over the circle, and takes the first spot that touches no other name, no other piece and not the canvas edge; with none free it loses its second line (closed/pedal/open) and tries again, so two names never run into each other on a phone-width kit.
     const placed = [], hit = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
-    pcs.forEach(({ p, x, y, rr, lit }) => {
-      const nm = KIT_DRAW_NAMES[p.id], fs = Math.max(13, m * 0.05), key = KIT.find(k => k.id === p.id).key.toUpperCase(); font(fs, 700); const tw = g.measureText(nm[0]).width, inside = tw + 6 <= rr * 2 && !nm[1] && !nm[2]; let sw = 0; if (nm[1]) { font(Math.max(11, fs * 0.85), 400); sw = g.measureText(nm[1]).width; font(fs, 700); }
+    pcs.forEach(({ p, x, y, rr, hw, hh, lit }) => {
+      const nm = KIT_DRAW_NAMES[p.id], fs = Math.max(13, m * 0.05), key = KIT.find(k => k.id === p.id).key.toUpperCase(); font(fs, 700); const tw = g.measureText(nm[0]).width, inside = rr > 0 && tw + 6 <= rr * 2 && !nm[1] && !nm[2]; let sw = 0; if (nm[1]) { font(Math.max(11, fs * 0.85), 400); sw = g.measureText(nm[1]).width; font(fs, 700); }
       g.fillStyle = inside && lit ? '#05070c' : '#e9edf6';
       if (inside) { g.textAlign = 'center'; g.fillText(nm[0], x, y - fs * 0.05); const r = { id: p.id, x: x - tw / 2, y: y - fs * 1.05, w: tw, h: fs * 1.2 }; kitLabels.push(r); placed.push(r); }
       else {
-        const side = (dir, two) => { const lw = two ? Math.max(tw, sw) : tw, lx = dir < 0 ? x - rr - 5 : x + rr + 5; return { ax: lx, al: dir < 0 ? 'right' : 'left', by: y - (two ? 1 : -fs * 0.35), two, r: { id: p.id, x: dir < 0 ? lx - lw : lx, y: y - fs * 1.05, w: lw, h: two ? fs * 2.2 : fs * 1.2 } }; };
-        const stack = (dir, two) => { const lw = two ? Math.max(tw, sw) : tw, by = dir > 0 ? y + rr + fs * 1.05 : y - rr - 4 - (two ? fs * 0.95 : 0); return { ax: x, al: 'center', by, two, r: { id: p.id, x: x - lw / 2, y: by - fs * 1.05, w: lw, h: two ? fs * 2.2 : fs * 1.2 } }; };
-        const dir = nm[2] === 'l' ? -1 : 1, free = c => c.r.x >= 0 && c.r.x + c.r.w <= W && c.r.y >= 0 && c.r.y + c.r.h <= H && !placed.some(q => hit({ x: c.r.x - 9, y: c.r.y - 2, w: c.r.w + 18, h: c.r.h + 4 }, q)) && !pcs.some(o => o.p !== p && hit(c.r, { x: o.x - o.rr, y: o.y - o.rr, w: o.rr * 2, h: o.rr * 2 }));
-        let pick = null; for (const two of nm[1] ? [true, false] : [false]) { pick = [side(dir, two), side(-dir, two), stack(1, two), stack(-1, two)].find(free); if (pick) break; }
+        const side = (dir, two, dy = 0) => { const lw = two ? Math.max(tw, sw) : tw, lx = dir < 0 ? x - hw - 5 : x + hw + 5; return { ax: lx, al: dir < 0 ? 'right' : 'left', by: y - dy - (two ? 1 : -fs * 0.35), two, r: { id: p.id, x: dir < 0 ? lx - lw : lx, y: y - dy - fs * 1.05, w: lw, h: two ? fs * 2.2 : fs * 1.2 } }; };
+        const stack = (dir, two) => { const lw = two ? Math.max(tw, sw) : tw, by = dir > 0 ? y + hh + 2 + fs * 1.05 : y - hh - 4 - (two ? fs * 0.95 : 0); return { ax: x, al: 'center', by, two, r: { id: p.id, x: x - lw / 2, y: by - fs * 1.05, w: lw, h: two ? fs * 2.2 : fs * 1.2 } }; };
+        const dir = nm[2] === 'l' ? -1 : 1, free = c => c.r.x >= 0 && c.r.x + c.r.w <= W && c.r.y >= 0 && c.r.y + c.r.h <= H && !placed.some(q => hit({ x: c.r.x - 9, y: c.r.y - 2, w: c.r.w + 18, h: c.r.h + 4 }, q)) && !hit(c.r, thr) && !pcs.some(o => o.p !== p && hit(c.r, o.bb));
+        let pick = null; for (const two of nm[1] ? [true, false] : [false]) { pick = [side(dir, two), side(dir, two, fs * 0.6), side(dir, two, -fs * 0.6), side(-dir, two), stack(1, two), stack(-1, two)].find(free); if (pick) break; }
         if (!pick) pick = side(dir, !!nm[1]);
         g.textAlign = pick.al; g.fillText(nm[0], pick.ax, pick.by); if (pick.two) { font(Math.max(11, fs * 0.85), 400); g.fillText(nm[1], pick.ax, pick.by + fs * 0.95 + 1); }
         kitLabels.push(pick.r); placed.push(pick.r);
       }
-      font(Math.max(11, m * 0.034), 700); g.textAlign = 'center'; g.fillStyle = lit ? '#05070c' : '#f3c52f'; g.fillText(key, x, inside ? y + rr - Math.max(4, m * 0.012) : y + 4); });
+      font(Math.max(11, m * 0.034), 700); g.textAlign = 'center'; g.fillStyle = lit ? '#05070c' : '#f3c52f'; g.fillText(key, x, inside ? y + hh - Math.max(4, m * 0.012) : y + 4); });
   }
   function drawBar2(W, H) {
     if (!bar || !task) return; const x0 = W * 0.1, x1 = W * 0.94, y = H * 0.48, t = now(), stem = H * 0.26, nh = H * 0.045;
@@ -2469,7 +2476,7 @@ import { register as registerPathway } from './ui/pathway.js';
   // common way) never released it -- noteState is the same held-note ledger
   // MIDI note-off, window blur and tab-hidden already clear into.
   document.addEventListener('keyup', ev => { if (mod === 'kbd' && PCKEYS[ev.key.toLowerCase()] !== undefined) { const m = PCKEYS[ev.key.toLowerCase()]; noteState.noteOff('computer-key', 0, m); onNoteOff(m, 'computer-key'); } });
-  cv.addEventListener('pointerdown', ev => { const r = cv.getBoundingClientRect(), x = (ev.clientX - r.left) * cv.width / r.width, y = (ev.clientY - r.top) * cv.height / r.height; ensureAudio(); if (MODS[mod] && MODS[mod].kit && kitBox) { const p = pieceAt((x - kitBox.x) / kitBox.w, (y - kitBox.y) / kitBox.h, kitBox.w, kitBox.h); if (p) onHit(p, tapAudioTime(ev), 'click'); } if (mod === 'kbd') { const k = keyRects.find(q => x >= q.x && x <= q.x + q.w && y >= q.y && y <= q.y + q.h); if (k) { tone(k.m, now() + 0.01, 0.5, 0.15); onNote(k.m, true, 'screen'); } } if (mod === 'tuner') { const play = playRects.find(q => x >= q.x && x <= q.x + q.w && y >= q.y && y <= q.y + q.h); if (play) { tone(play.m, now() + 0.02, 1.6, 0.2); return; } const row = rowRects.find(q => x >= q.x && x <= q.x + q.w && y >= q.y && y <= q.y + q.h); if (row) tunerLock = tunerLock === row.idx ? null : row.idx; } });
+  cv.addEventListener('pointerdown', ev => { const r = cv.getBoundingClientRect(), x = (ev.clientX - r.left) * cv.width / r.width, y = (ev.clientY - r.top) * cv.height / r.height; ensureAudio(); if (MODS[mod] && MODS[mod].kit && kitBox) { const p = pieceAt(x, y, kitBox); if (p) onHit(p, tapAudioTime(ev), 'click'); } if (mod === 'kbd') { const k = keyRects.find(q => x >= q.x && x <= q.x + q.w && y >= q.y && y <= q.y + q.h); if (k) { tone(k.m, now() + 0.01, 0.5, 0.15); onNote(k.m, true, 'screen'); } } if (mod === 'tuner') { const play = playRects.find(q => x >= q.x && x <= q.x + q.w && y >= q.y && y <= q.y + q.h); if (play) { tone(play.m, now() + 0.02, 1.6, 0.2); return; } const row = rowRects.find(q => x >= q.x && x <= q.x + q.w && y >= q.y && y <= q.y + q.h); if (row) tunerLock = tunerLock === row.idx ? null : row.idx; } });
   // item 3 (Wave W, w-fixes): keyboard path onto the same canvas piano -- arrow keys move the focus cursor, Enter/Space plays the focused key.
   cv.addEventListener('keydown', ev => { if (mod !== 'kbd') return; const order = kbdOrder(); if (!order.length) return; if (ev.key === 'ArrowRight' || ev.key === 'ArrowUp') { ev.preventDefault(); kbdFocusIdx = Math.min(order.length - 1, kbdFocusIdx + 1); } else if (ev.key === 'ArrowLeft' || ev.key === 'ArrowDown') { ev.preventDefault(); kbdFocusIdx = Math.max(0, kbdFocusIdx - 1); } else if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); const k = order[Math.min(kbdFocusIdx, order.length - 1)]; if (k) { ensureAudio(); tone(k.m, now() + 0.01, 0.5, 0.15); onNote(k.m, true, 'screen'); } } });
   $('tapPad').addEventListener('pointerdown', ev => { ev.preventDefault(); ensureAudio(); onTap(ev); });

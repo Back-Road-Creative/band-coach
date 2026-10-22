@@ -68,6 +68,7 @@ import {
   keyboardProbePoints,
   keyboardSamplePoints,
   kitRects,
+  kitPieceBox,
   kitProbePoints,
   kitEmptyPoint,
   kitSamplePoints,
@@ -82,12 +83,12 @@ const WHITE_NAMES = { 48: 'C3', 50: 'D', 52: 'E', 53: 'F', 55: 'G', 57: 'A', 59:
 // The help text (kbd.help): a-k play C4 up to C5, sharps included; z-m play C3 up to B3, naturals.
 const COMPUTER_KEYS = { a: 60, w: 61, s: 62, e: 63, d: 64, f: 65, t: 66, g: 67, y: 68, h: 69, u: 70, j: 71, k: 72, z: 48, x: 50, c: 52, v: 53, b: 55, n: 57, m: 59 };
 const LEVEL1_TARGET = { C: 60, D: 62, E: 64 };
-// Drawn kit shapes (drawKit fills). Test 1 checks the key letter drawn on each piece against the literal KIT_LETTERS below
+// Drawn kit shapes, as seen from the throne (drawKit fills: drums and footboards #1b2130, cymbals and the open hi-hat's tab #2a3140). Test 1 checks the key letter drawn on each piece against the literal KIT_LETTERS below
 // (the spec's own letters, from the PIECES list in src/instruments/drum-kit.js:33-42@708aef7), so a changed letter fails test 1 first.
 // Test 9 presses the letter it reads off the canvas, so it proves the pressed key reaches the piece drawn with that letter.
 const KIT_LETTERS = { kick: 'F', snare: 'J', 'hihat-closed': 'D', 'hihat-pedal': 'C', 'hihat-open': 'E', 'tom-floor': 'K', 'tom-mid': 'I', 'tom-high': 'U', crash: 'R', ride: 'O' };
-const KIT_SHAPE = { kick: 'drum', snare: 'drum', 'hihat-closed': 'cymbal', 'hihat-pedal': 'drum', 'hihat-open': 'cymbal', 'tom-floor': 'drum', 'tom-mid': 'drum', 'tom-high': 'drum', crash: 'cymbal', ride: 'cymbal' };
-const HEX = { white: '#e9edf6', black: '#10131c', pressed: '#9fb4d8', good: '#5be08a', flash: '#f3c52f', cymbal: '#2a3140', drum: '#1b2130' };
+const KIT_SHAPE = { kick: 'pedal', snare: 'drum', 'hihat-closed': 'cymbal', 'hihat-pedal': 'pedal', 'hihat-open': 'tab', 'tom-floor': 'drum', 'tom-mid': 'drum', 'tom-high': 'drum', crash: 'cymbal', ride: 'cymbal' };
+const HEX = { white: '#e9edf6', black: '#10131c', pressed: '#9fb4d8', good: '#5be08a', flash: '#f3c52f', cymbal: '#2a3140', drum: '#1b2130', pedal: '#1b2130', tab: '#2a3140' };
 const rgb = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
 const KEY_COLOURS = { pressed: rgb(HEX.pressed), good: rgb(HEX.good) };
 const COLOUR_NAME = { pressed: `pressed (${HEX.pressed})`, good: `passed (${HEX.good})` };
@@ -350,6 +351,10 @@ async function checkKitGeometry(page, ctx, vp) {
     const ok = mine.filter((e) => colourOk(e.c, want)).length;
     if (ok < 5) disagree(`${p.id}: only ${ok} of 8 sample points inside its circle read ${want} (first reads ${rgbText(mine[0].c)})`);
   }
+  // the kit is fitted around the "PRESS START" text (drawn at the top right, outside the kit): no piece's box meets it
+  const start = texts.filter((t) => t.text === 'PRESS START').map(textRect);
+  assert.ok(start.length >= 1, `${ctx}: PRESS START is drawn on the idle kit`);
+  for (const p of all) for (const r of start) if (overlaps(r, kitPieceBox(p))) disagree(`${p.id}: its box runs into the PRESS START text (x ${r.x.toFixed(1)}-${(r.x + r.w).toFixed(1)}, y ${r.y.toFixed(1)}-${(r.y + r.h).toFixed(1)})`);
 }
 
 // ---- Navigation, the way a learner does it ----------------------------------
@@ -610,6 +615,9 @@ test('A06 phone 390x844: no two drum names run into each other, and the tuner te
     await pickInstrument(page, 'drum-kit', 'Drum kit');
     await page.evaluate('new Promise((r) => setTimeout(r, 500))');
     const kit = (await page.evaluate('window.__q3c.texts()')).filter((x) => !/^[A-Z]$/.test(x.text) && x.text !== 'PRESS START').map(textRect);
+    const startText = (await page.evaluate('window.__q3c.texts()')).filter((x) => x.text === 'PRESS START').map(textRect);
+    assert.ok(startText.length >= 1, 'PRESS START is drawn on the idle kit at 390x844');
+    for (const p of kitRects(await canvasMetrics(page))) for (const r of startText) assert.ok(!overlaps(r, kitPieceBox(p)), `${p.id}'s box runs into the PRESS START text at 390x844`);
     assert.ok(kit.length >= 13, `the kit wrote its ten names, three with a second line (${kit.length} lines seen)`);
     const hits = [];
     for (let i = 0; i < kit.length; i++) for (let j = i + 1; j < kit.length; j++) if (overlaps(kit[i], kit[j])) hits.push(`"${kit[i].text}" and "${kit[j].text}"`);
