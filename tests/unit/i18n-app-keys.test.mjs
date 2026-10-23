@@ -9,7 +9,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { en } from '../../src/core/i18n.js';
 
-const CONVERTED_FILES = ['../../src/app.js', '../../src/ui/fingerings.js', '../../src/ui/songs.js', '../../src/ui/pathway.js', '../../src/instruments/mods.js'];
+const CONVERTED_FILES = ['../../src/app.js', '../../src/ui/fingerings.js', '../../src/ui/songs.js', '../../src/ui/songs/session-helpers.js', '../../src/ui/pathway.js', '../../src/instruments/mods.js'];
 
 function idsUsedIn(relPath) {
   const path = fileURLToPath(new URL(relPath, import.meta.url));

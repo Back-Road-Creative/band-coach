@@ -7,7 +7,7 @@
 //    tests/unit/lesson-gen.test.mjs.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { applyMasteryCredit, summarizePracticeSession } from '../../src/ui/songs.js';
+import { applyMasteryCredit, summarizePracticeSession } from '../../src/ui/songs/session-helpers.js';
 import { migrateItem } from '../../src/core/srs.js';
 
 function fakeApi(db) {
