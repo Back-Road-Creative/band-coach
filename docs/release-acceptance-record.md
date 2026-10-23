@@ -95,7 +95,7 @@ The `e4b6fb5` section above is kept as it stood at `4f0f210`. Four statements in
 | Field | Value |
 |---|---|
 | Commit | `09f7c35` (main after the wave-2 PRs #378 to #409 merged; the suite ran on the same tree plus #408's one test file, src, build and package files identical). |
-| Last published release | `v1.9.0`, tagged 2026-09-24; this candidate is not tagged yet |
+| Last published release | `v1.10.0`, tagged 2026-10-22 at `7a00ca1` (the docs commit #542 on top of this candidate; the built file is the same); before it `v1.9.0`, tagged 2026-09-24 |
 | Candidate artifact | `npm run build -- --release` at `09f7c35`: `dist/release/band-coach.html` sha256 `3f5b88175da1a70858aa64d9ef31ae78c936d3ea69239a1bb29449201484a234`, 639,584 bytes, copied to `D:\band-coach.html` for the hand run. Two release builds (the tested tree and this commit) gave the same bytes. Pages and the Store package wrap this same file. |
 | Platforms | As README 'Browser and device support': headless Chromium in CI on every commit; windowed Chrome on Windows only through the Windows lane below and the hand check; Firefox and Safari untested; phone sizes emulated only, real phones untested. |
 | Inputs | As README 'Browser and device support': computer keys, on-screen keys, a stubbed MIDI keyboard and a fake microphone in CI; real MIDI keyboards, e-kits and instruments through a real microphone are untested beyond the hardware of the last hand run. |
@@ -124,7 +124,7 @@ The `e4b6fb5` section above is kept as it stood at `4f0f210`. Four statements in
 | Field | Value |
 |---|---|
 | Commit | `e504c75` (`origin/main`, 2026-10-14, after the dependency bumps #479 to #482; 272 commits since `v1.9.0`). Supersedes `09f7c35` for the hand check: that record's artifact is no longer what `main` builds. |
-| Last published release | `v1.9.0`, tagged 2026-09-24; this candidate is not tagged yet |
+| Last published release | `v1.10.0`, tagged 2026-10-22 at `7a00ca1` (the docs commit #542 on top of this candidate; the built file is the same); before it `v1.9.0`, tagged 2026-09-24 |
 | Candidate artifact | `npm run stage` at `e504c75`: `dist/release/band-coach.html` sha256 `bcf76275e75e844f4c832d19e9842f4bc861a4295a8be9f2e9fda5885fb6664a`, 651,332 bytes, staged to `D:\band-coach.html` for the hand run. Three release builds at the commit gave the same bytes. Pages and the Store package wrap this same file. |
 | Platforms | As README 'Browser and device support', unchanged from `09f7c35`: headless Chromium in CI on every commit; windowed Chrome on Windows only through the Windows lane and the hand check; Firefox and Safari untested; phone sizes emulated only, real phones untested. |
 | Inputs | As README 'Browser and device support': computer keys, on-screen keys, a stubbed MIDI keyboard and a fake microphone in CI; real MIDI keyboards, e-kits and instruments through a real microphone untested beyond the hardware of the last hand run. |
@@ -140,8 +140,8 @@ The `e4b6fb5` section above is kept as it stood at `4f0f210`. Four statements in
 
 | Field | Value |
 |---|---|
-| Commit | `3d60d1ab37f31d2aed0f17dfb69630e598122f18` (`origin/main`, 2026-10-20, after the 1.10.0 bump #540 and the stage fix #541; 330 commits since `v1.9.0`). Supersedes `e504c75`. |
-| Last published release | `v1.9.0`, tagged 2026-09-24; this candidate is not tagged yet |
+| Commit | `3d60d1ab37f31d2aed0f17dfb69630e598122f18` (`main` on 2026-10-20, after the 1.10.0 bump #540 and the stage fix #541; 330 commits since `v1.9.0`). Supersedes `e504c75`. |
+| Last published release | `v1.10.0`, tagged 2026-10-22 at `7a00ca1` (the docs commit #542 on top of this candidate; the built file is the same); before it `v1.9.0`, tagged 2026-09-24 |
 | Candidate artifact | `npm run stage` at `3d60d1a` (clean tree, `SOURCE_DATE_EPOCH` = commit time): `dist/release/band-coach.html` sha256 `1fd8a52eedc549da73d73a6a0e1b92c944364a47897e82cbd1658d7eb0a0da4e`, 680,137 bytes, staged to `D:\band-coach.html` for the hand run. The same build at `895a00f` gave the same bytes. Pages and the Store package wrap this same file. |
 | Platforms | As README 'Browser and device support': headless Chromium in CI on every commit; windowed Chrome on Windows only through the Windows lane below and the hand check; Firefox and Safari untested; phone sizes emulated only, real phones untested. |
 | Inputs | As README 'Browser and device support': computer keys, on-screen keys, a stubbed MIDI keyboard and a fake microphone in CI; real MIDI keyboards, e-kits and instruments through a real microphone untested beyond the hardware of the last hand run. |
