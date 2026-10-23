@@ -275,7 +275,7 @@ let howInlineSeq = 0;
 export function renderHowInline(container, instrument, soundingMidi, setup) {
   if (!howKindFor(instrument)) return null;
   const rangeMidi = rangeIsWrittenPitch(instrument) ? soundingMidi - instrument.transposition : soundingMidi;
-  const how = computeHow(instrument, rangeMidi, { capo: setup.capo, tuning: setup.tuning, leftHanded: setup.leftHanded, key: setup.harpKey });
+  const how = computeHow(instrument, rangeMidi, { capo: setup.capo, tuning: setup.tuning, leftHanded: setup.leftHanded, key: setup.harpKey, kit: setup.kit });
   const id = 'howInline' + (++howInlineSeq);
   const toggle = el('button', { type: 'button', className: 'how-inline-toggle', 'aria-expanded': 'false', 'aria-controls': id, text: t('howInline.button') });
   const bodyChildren = [];
@@ -458,7 +458,7 @@ export function registerFingerings(panels) {
         rangeHost.innerHTML = '';
         if (howKindFor(instrument) !== 'drum-kit') rangeHost.appendChild(rangeBar(instrument.range, midi));
         Array.from(notesHost.children).forEach(b => b.setAttribute('aria-pressed', String(Number(b.getAttribute('data-midi')) === midi)));
-        const how = computeHow(instrument, midi, { capo, tuning: tuningName, leftHanded });
+        const how = computeHow(instrument, midi, { capo, tuning: tuningName, leftHanded, kit: api.db().prefs.kit });
         diagramHost.innerHTML = '';
         diagramHost.appendChild(diagramFor(instrument, how));
         descHost.textContent = how.description;

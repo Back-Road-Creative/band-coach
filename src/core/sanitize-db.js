@@ -1,3 +1,5 @@
+import { sanitizeKitPrefs } from '../instruments/how/kit-presets.js';
+
 // sanitizeDB: the one gate between a stored or restored profile and the
 // running app. Pure: no DOM, no storage, no clock (the caller passes
 // `modelNow`). The app's instrument tables come in through `deps`, the same
@@ -71,6 +73,7 @@ export function sanitizeDB(v, defaultLatencyMs, modelNow, deps) {
   // A floor stored before the room check could abstain (no marker, or an older one) may have learned playing: drop it, so the next Connect measures again. Progress-file imports run through this too.
   d.prefs.noiseFloorV = p.noiseFloorV === ROOM_CHECK_VERSION ? ROOM_CHECK_VERSION : null; if (d.prefs.noiseFloorV === null) d.prefs.noiseFloor = null; if (d.prefs.noiseFloor === null) d.prefs.noiseFloorV = null;
   d.prefs.inputDeviceId = typeof p.inputDeviceId === 'string' && p.inputDeviceId ? p.inputDeviceId : null;
+  d.prefs.kit = sanitizeKitPrefs(p.kit);
   // Theme J1: System/Light/Dark, an unrecognised or missing saved value
   // sanitises to 'system' so a corrupt/old backup never leaves the toggle
   // stuck on nothing it can render.

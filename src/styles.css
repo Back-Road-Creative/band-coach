@@ -493,7 +493,7 @@
   .timebar { height: 6px; border-radius: 3px; background: var(--ground); border: 1px solid var(--line); overflow: hidden; }
   #timeFill { height: 100%; width: 100%; background: var(--accent); }
   canvas { display: block; width: 100%; max-width: 100%; aspect-ratio: 16 / 8.2; touch-action: manipulation; }
-  canvas.kit { aspect-ratio: 16 / 10; }
+  canvas.kit { aspect-ratio: 16 / 10; background: #05070c; }
   .choices { display: flex; flex-wrap: wrap; gap: 8px; }
   .choices button { flex: 1 1 140px; }
   .choices button.right { background: var(--good); border-color: var(--good); color: #04130a; }
@@ -737,3 +737,10 @@
   }
   .panel-songs-rate { color: var(--muted); font-size: 0.8125rem; margin: 0; }
 .midi-details pre { white-space: pre-wrap; overflow-wrap: anywhere; max-width: 100%; }
+
+  .kit-setup { flex: 1 1 100%; min-width: 0; margin: 0; border: 1px solid var(--line); border-radius: 6px; padding: 10px; }
+  .kit-setup label { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; margin-right: 12px; max-width: 100%; }
+  .kit-setup select { min-width: 0; max-width: 100%; }
+  .kit-setup p { margin: 6px 0; }
+
+  .panel-host:has(.fing-drumkit) { min-width: 0; }

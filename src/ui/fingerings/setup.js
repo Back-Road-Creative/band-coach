@@ -10,6 +10,7 @@
 
 import { alternateTuningsFor } from './how.js';
 import { tuningFor } from '../../instruments/how/fretboard.js';
+import { sanitizeKitPrefs } from '../../instruments/how/kit-presets.js';
 
 // Validates a raw fingerings store value (api.store('fingerings').get(),
 // or already-decoded JSON) against what THIS instrument currently allows —
@@ -61,6 +62,7 @@ export function instrumentSetup(instrument, { fingeringsStore, prefs } = {}) {
   // here can never hit its "unknown tuning" throw.
   const tuningMidi = setup.tuning ? tuningFor(setup.tuning) : (instrument && Array.isArray(instrument.tuning) ? instrument.tuning : null);
   return Object.assign({}, setup, {
+    ...(instrument && instrument.kit ? { kit: sanitizeKitPrefs(prefs && prefs.kit) } : {}),
     tuningMidi: tuningMidi,
     harpKey: readHarpKey(prefs),
     voiceRange: readVoiceRange(prefs)
