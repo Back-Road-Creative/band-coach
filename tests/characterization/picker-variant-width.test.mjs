@@ -72,3 +72,15 @@ test('a long variant summary wraps whole, never clipped, and keeps a 24px tap ta
     await page.close();
   }
 });
+
+test('the variant list label follows the chosen language', async () => {
+  const page = await launchPage(HTML_PATH);
+  try {
+    await page.evaluate("(() => { const s = document.getElementById('optLocale'); s.value = 'es'; s.dispatchEvent(new Event('change')); })()");
+    const titles = JSON.parse(await page.evaluate("JSON.stringify([...document.querySelectorAll('#picker .variant-toggle > summary')].map(s => s.title))"));
+    assert.ok(titles.length > 0, 'no variant summaries rendered');
+    for (const x of titles) assert.match(x, /^Variantes: /, 'Spanish label: ' + x);
+  } finally {
+    await page.close();
+  }
+});

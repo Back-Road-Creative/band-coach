@@ -1634,7 +1634,7 @@ import { register as registerPathway } from './ui/pathway.js';
   const cssK = () => cv.width / (cv.getBoundingClientRect().width || cv.width);
   // the browser's text-size setting (root font size / 16), read once per draw() so canvas text grows with it like the page text does
   const KBD_LETTERS = Object.keys(PCKEYS).reduce((a, k) => { a[PCKEYS[k]] = k; return a; }, {});
-  let rootK = 1, kbdTyping = false;
+  let rootK = 1, kbdTyping = !matchMedia('(pointer: coarse)').matches; // any machine that is not finger-driven starts with the computer letters on the keys; a touch screen shows them only once a computer key is pressed
   const font = (px, w) => { g.font = (w || 700) + ' ' + Math.round(px * rootK) + 'px "Barlow Condensed", Arial, sans-serif'; };
   const accent = () => (MODS[mod] || TOOLS[mod]).color;
   const recentPress = m => pressed[m] && performance.now() - pressed[m] < 220;
@@ -1901,7 +1901,7 @@ import { register as registerPathway } from './ui/pathway.js';
     else if (mod === 'ear') drawEar(W, H); else if (mod === 'rhy') { if (task && task.kind === 'bar2') drawBar2(W, H); else drawBar(W, H); }
     if (NOTATE_MOD_IDS.indexOf(mod) >= 0) drawNotation(e, W, H); else lastStaff = null;
     if (!reducedMotion && performance.now() - flashBad < 220) { g.strokeStyle = '#ff6b5e'; g.lineWidth = 8; g.strokeRect(4, 4, W - 8, H - 8); g.fillStyle = '#ff6b5e'; font(H * 0.06, 700); g.textAlign = 'left'; g.fillText('✗', 14, H * 0.09); } else if (!reducedMotion && performance.now() - flashGood < 220) { g.strokeStyle = '#5be08a'; g.lineWidth = 8; g.strokeRect(4, 4, W - 8, H - 8); g.fillStyle = '#5be08a'; font(H * 0.06, 700); g.textAlign = 'left'; g.fillText('✓', 14, H * 0.09); }
-    if (!playing && !(rangeTest && mod === 'voice')) { g.fillStyle = '#93a0bd'; font(H * 0.08); g.textAlign = 'right'; g.fillText(sess ? 'PAUSED' : 'PRESS START', W * 0.97, H * 0.1); }
+    if (!playing && !(rangeTest && mod === 'voice')) { g.fillStyle = '#93a0bd'; font(H * 0.08); g.textAlign = 'right'; g.fillText(sess ? t('stage.paused') : t(instrumentChosen ? 'stage.pressStart' : 'stage.pickFirst'), W * 0.97, H * 0.1); }
   }
 
   // ---------- tools: tuner and melody capture ----------
@@ -2311,7 +2311,7 @@ import { register as registerPathway } from './ui/pathway.js';
     else {
       b.hidden = midiOn; b.textContent = 'Connect MIDI'; detailsBtn.hidden = false;
       if (midiOn) { ioState('on', midiStatus()); }
-      else ioState('', mod === 'rhy' ? 'Space bar or the pad works. MIDI is optional.' : 'Screen keys and computer keys work. MIDI is optional.');
+      else ioState('', t(mod === 'rhy' ? 'io.padOptional' : 'io.keysOptional'));
     }
     if (!$('midiDetails').hidden) renderMidiDetails();
   }
@@ -2542,7 +2542,7 @@ import { register as registerPathway } from './ui/pathway.js';
     if (sess) endSession(); mod = m; if (micStream && !(TOOLS[m] || (MODS[m] && /^(pluck|sustain|mic)/.test(MODS[m].input)))) { const pm = $('practiceMeter'); if (pm) pm.hidden = true; micStream.getTracks().forEach(t => t.stop()); micStream = null; micReady = false; micGen++; } if (MODS[m]) { S = DB.mods[m]; DB.prefs.mod = m; } customOn = false; grooveOn = false; groove = null; task = null; bar = null; heard = null; cap.on = false; if (m === 'tuner' && !tunerPicked && TUNER_FOR[DB.prefs.mod]) tunerKind = TUNER_FOR[DB.prefs.mod]; tunerState = null; tunerLock = null; diagInputFrames = []; diagLastState = null;
     if (pitchWorkletNode && MODS[m] && MODS[m].fmin && MODS[m].fmax) { lastWorkletRangeSent = { fmin: MODS[m].fmin, fmax: MODS[m].fmax }; pitchWorkletNode.port.postMessage({ type: 'range', fmin: MODS[m].fmin, fmax: MODS[m].fmax }); }
     if (pitchWorkletNode && actx) { const neededFrameSize = frameSizeForInstrument(instrumentById[m], actx.sampleRate); if (neededFrameSize !== lastWorkletFrameSize) { lastWorkletFrameSize = neededFrameSize; pitchWorkletNode.port.postMessage({ type: 'frameSize', frameSize: neededFrameSize }); } }
-    document.querySelectorAll('#picker button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.mod === m)));
+    document.querySelectorAll('#picker button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.mod === m && (instrumentChosen || !booting)))); // at first boot nothing is picked, so nothing claims to be pressed
     updateNavInstrumentLabel(); cv.classList.toggle('kit', !!(MODS[m] && MODS[m].kit)); cv.classList.toggle('tuner', m === 'tuner');
     // U2: a returning learner whose saved mod is a variant (e.g.
     // 'ukulele-low-g') lands with that variant's family disclosure already
@@ -2645,7 +2645,7 @@ import { register as registerPathway } from './ui/pathway.js';
       // Same "build the label from the data" rule as the tools summary
       // below: naming the variants by hand would go stale the first time
       // one is renamed or a third is added.
-      const summary = document.createElement('summary'); const full = 'Variants: ' + kids.map(v => MODS[v].name).join(', '); const fullSpan = document.createElement('span'); fullSpan.className = 'variant-full'; fullSpan.textContent = full; const moreSpan = document.createElement('span'); moreSpan.className = 'variant-more'; const moreSeen = document.createElement('span'); moreSeen.setAttribute('aria-hidden', 'true'); moreSeen.textContent = t('picker.more'); const moreName = document.createElement('span'); moreName.className = 'visually-hidden'; moreName.textContent = t('picker.moreFor', { instrument: MODS[m].name }); moreSpan.append(moreSeen, moreName); summary.append(fullSpan, moreSpan); summary.title = full; toggle.appendChild(summary); // phone: CSS shows the short "More…" chip instead of the clipped list
+      const summary = document.createElement('summary'); const full = t('picker.variants') + ' ' + kids.map(v => MODS[v].name).join(', '); const fullSpan = document.createElement('span'); fullSpan.className = 'variant-full'; fullSpan.textContent = full; const moreSpan = document.createElement('span'); moreSpan.className = 'variant-more'; const moreSeen = document.createElement('span'); moreSeen.setAttribute('aria-hidden', 'true'); moreSeen.textContent = t('picker.more'); const moreName = document.createElement('span'); moreName.className = 'visually-hidden'; moreName.textContent = t('picker.moreFor', { instrument: MODS[m].name }); moreSpan.append(moreSeen, moreName); summary.append(fullSpan, moreSpan); summary.title = full; toggle.appendChild(summary); // phone: CSS shows the short "More…" chip instead of the clipped list
       const list = document.createElement('div'); list.className = 'variant-buttons';
       kids.forEach(v => list.appendChild(buildPickerButton(v, MODS[v])));
       toggle.appendChild(list);
@@ -2721,7 +2721,7 @@ import { register as registerPathway } from './ui/pathway.js';
   $('diagCopyBtn').addEventListener('click', async () => {
     const text = buildDiagnostics({ version: APP_VERSION, userAgent: navigator.userAgent, errors: getErrors(), capabilities: { microphone: !!navigator.mediaDevices, midi: !!navigator.requestMIDIAccess, audioWorklet: !!window.AudioWorkletNode, songStorage: !!window.indexedDB } });
     const ok = await new Promise(r => r(navigator.clipboard.writeText(text))).then(() => true, () => false);
-    $('diagCopyResult').textContent = t(ok ? 'diag.copied' : 'diag.manual'); $('diagCopyText').textContent = text;
+    $('diagCopyResult').textContent = t(ok ? 'diag.copied' : 'diag.manual'); $('diagCopyText').textContent = text; $('diagCopyText').hidden = false;
   });
 
   // ---------- check for updates: a file:// copy can never rewrite or replace itself (browser

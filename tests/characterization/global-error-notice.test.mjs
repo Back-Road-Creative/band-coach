@@ -173,3 +173,17 @@ test('a throw inside the 50 ms pitch timer is recorded as listen, announced, and
   await page.waitFor('window.__tdCalls >= 8', 10000);
   assert.equal(await page.evaluate(LISTEN_RECORDS), 6, 'a new streak is recorded again');
 });
+
+// The diagnostics group is named and explained, and its raw text stays out of sight until the learner asks for it.
+test('Settings names the diagnostics group, explains it, and shows the raw text only after Copy is pressed', async (t) => {
+  const page = await launchPage(htmlPath, { initScript: "Object.defineProperty(navigator, 'clipboard', { configurable: true, value: undefined });" });
+  t.after(() => page.close());
+  await page.evaluate("document.querySelector('#mainNav button[data-route=\"settings\"]').click()");
+  const group = "document.getElementById('diagCopyBtn').closest('.settings-group')";
+  assert.match(await page.evaluate(`${group}.querySelector('h3').textContent`), /Diagnostics/, 'the group has a heading');
+  assert.match(await page.evaluate(`${group}.querySelector('p.update-check-help').textContent`), /\S{3,}/, 'and a line saying what the button is for');
+  assert.equal(await page.evaluate("document.getElementById('diagCopyText').hidden"), true, 'the raw dump is hidden at first');
+  await page.evaluate("document.getElementById('diagCopyBtn').click()");
+  await page.waitFor("document.getElementById('diagCopyResult').textContent !== ''", 10000);
+  assert.equal(await page.evaluate("document.getElementById('diagCopyText').hidden"), false, 'and shown once the learner pressed Copy');
+});
