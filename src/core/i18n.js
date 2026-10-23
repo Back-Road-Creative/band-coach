@@ -11,6 +11,23 @@
 // is left in the string verbatim for the same reason: better a visible
 // placeholder than text that quietly loses information.
 export const en = {
+  "kit.setup": "My drum kit",
+  "kit.layout": "Layout",
+  "kit.standard": "Standard kit",
+  "kit.compact": "Compact electronic kit",
+  "kit.leftHanded": "Left-handed (mirror)",
+  "kit.visibility": "Show these pieces. Hidden pieces reappear when a lesson or diagram uses them; the beat stays the same.",
+  "kit.piece.kick": "Kick",
+  "kit.piece.snare": "Snare",
+  "kit.piece.hihat-closed": "Hi-hat closed",
+  "kit.piece.hihat-open": "Hi-hat open",
+  "kit.piece.hihat-pedal": "Hi-hat pedal",
+  "kit.piece.tom-high": "High tom",
+  "kit.piece.tom-mid": "Mid tom",
+  "kit.piece.tom-floor": "Floor tom",
+  "kit.piece.crash": "Crash",
+  "kit.piece.ride": "Ride",
+
   'wrongNote.higher': 'Go higher.',
   'wrongNote.lower': 'Go lower.',
   'wrongNote.up': 'higher',
@@ -313,6 +330,23 @@ export const en = {
 // Same order as `en` so the two tables can be read side by side. Strings the
 // app has not yet routed through t() still show in English.
 export const es = {
+  "kit.setup": "Mi batería",
+  "kit.layout": "Distribución",
+  "kit.standard": "Batería estándar",
+  "kit.compact": "Batería electrónica compacta",
+  "kit.leftHanded": "Para zurdos (reflejar)",
+  "kit.visibility": "Mostrar estas piezas. Las piezas ocultas reaparecen cuando una lección o un diagrama las usa; el ritmo no cambia.",
+  "kit.piece.kick": "Bombo",
+  "kit.piece.snare": "Caja",
+  "kit.piece.hihat-closed": "Charles cerrado",
+  "kit.piece.hihat-open": "Charles abierto",
+  "kit.piece.hihat-pedal": "Pedal del charles",
+  "kit.piece.tom-high": "Tom agudo",
+  "kit.piece.tom-mid": "Tom medio",
+  "kit.piece.tom-floor": "Tom de suelo",
+  "kit.piece.crash": "Plato crash",
+  "kit.piece.ride": "Plato ride",
+
   'wrongNote.higher': 'Ve más agudo.',
   'wrongNote.lower': 'Ve más grave.',
   'wrongNote.up': 'más agudo',

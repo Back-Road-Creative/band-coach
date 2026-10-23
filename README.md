@@ -1284,7 +1284,18 @@ a closed hi-hat the footboard is outlined with a dashed line, since your left fo
 (it is centred with space either side, never stretched to the full width); before you start it fills the canvas
 height, and the canvas is taller for the kit than for other instruments. Every piece, the hi-hat tab and footboard
 included, is at least 24 CSS px across even on a 320x568 phone with a bar showing. Where each piece sits is one
-table in `src/instruments/how/drum-kit.js`; if your kit is set up differently, that table is the one place to change.
+table in `src/instruments/how/drum-kit.js`.
+
+To match your kit, choose **Drum kit → Set up input → My drum kit**. Pick the
+standard layout or compact electronic kit, and turn on **Left-handed (mirror)**
+to swap sides. The compact preset has closer rack toms and a smaller kick tower.
+Uncheck pieces to hide them from the idle drawing. A hidden piece reappears when
+a lesson or reference diagram uses it; hiding it does not remove notes from a
+beat or change scoring. The practice drawing, click targets, How to play it and
+Songs diagrams share the saved layout. Choices survive reload and progress
+backup/restore; MIDI note assignments and computer keys stay the same.
+Preset transforms and preference validation live in
+`src/instruments/how/kit-presets.js`; custom dragging and MIDI learning are separate work.
 
 Through the microphone, `src/app.js`'s `listenDrums()` runs an onset detector
 plus `src/audio/drum-classify.js`'s band-energy classifier on every hit, and

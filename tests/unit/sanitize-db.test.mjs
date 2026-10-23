@@ -26,7 +26,7 @@ const deps = {
 };
 const run = (v) => sanitizeDB(v, 12, 1.7e12, deps);
 const INHERITED = ['constructor', 'toString', 'hasOwnProperty', 'valueOf', '__proto__', 'isPrototypeOf', '__defineGetter__'];
-const PREF_KEYS = ['mod', 'wind', 'voice', 'kbdHands', 'sessionMinutes', 'names', 'noiseFloor', 'noiseFloorV', 'inputDeviceId', 'notate', 'theme', 'locale', 'noteNaming', 'voiceRange', 'harpKey'];
+const PREF_KEYS = ['mod', 'wind', 'voice', 'kbdHands', 'kit', 'sessionMinutes', 'names', 'noiseFloor', 'noiseFloorV', 'inputDeviceId', 'notate', 'theme', 'locale', 'noteNaming', 'voiceRange', 'harpKey'];
 
 test('an inherited key is not an instrument, a wind kind or a voice', () => {
   for (const k of INHERITED) {

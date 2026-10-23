@@ -167,9 +167,9 @@ export function computeHow(instrument, midi, opts = {}) {
   if (kind === 'drum-kit') {
     const piece = pieceForMidi(midi);
     return {
-      kind, piece, layout: kitLayout(),
+      kind, piece, layout: kitLayout(opts.kit, piece ? [piece] : []),
       playable: !!piece,
-      description: piece ? describeHit(piece) : 'MIDI drum note ' + midi + ' is not one of the drums on this kit.'
+      description: piece ? describeHit(piece, opts.kit) : 'MIDI drum note ' + midi + ' is not one of the drums on this kit.'
     };
   }
 

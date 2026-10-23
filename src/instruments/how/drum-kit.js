@@ -25,6 +25,7 @@
 // different GM notes, so it is one disc about crash size (closed), a small tab just clear of its far edge
 // (open: small, so its centre sits 12 px off the disc for the phone tap rule) and its footboard (pedal): three pieces to judge, one cymbal to look at.
 import { PIECES } from '../drum-kit.js';
+import { applyKitPreset, sanitizeKitPrefs } from './kit-presets.js';
 
 export const KIT_ASPECT = 1.4;
 
@@ -65,13 +66,16 @@ const DESCRIPTIONS = {
 
 // Every piece's drawn spot, as fresh objects: { id, name, shape, x, y, r } for
 // circles, { id, name, shape, x, y, w, h } for rectangles.
-export function kitLayout() {
-  return PIECES.map(p => ({ id: p.id, name: p.name, ...POSITIONS[p.id] }));
+export function kitLayout(prefs, requiredPieces = []) {
+  return applyKitPreset(PIECES.map(p => ({ id: p.id, name: p.name, ...POSITIONS[p.id] })), KIT_ASPECT, prefs, requiredPieces);
 }
 
 // Screen-reader sentence for a piece id, or null for an unknown id.
-export function describeHit(pieceId) {
-  return Object.prototype.hasOwnProperty.call(DESCRIPTIONS, pieceId) ? DESCRIPTIONS[pieceId] : null;
+export function describeHit(pieceId, prefs) {
+  let text = Object.prototype.hasOwnProperty.call(DESCRIPTIONS, pieceId) ? DESCRIPTIONS[pieceId] : null;
+  const setup = sanitizeKitPrefs(prefs);
+  if (text && pieceId === 'kick' && setup.preset === 'compact') text = 'Kick pad: the small tower in front of you, played with your right foot on its pedal.';
+  return text && setup.leftHanded ? text.replace(/\b(left|right)\b/g, word => word === 'left' ? 'right' : 'left') : text;
 }
 
 // The kit's frame inside a pixel box { x, y, w, h }: as tall as the box lets
@@ -85,9 +89,9 @@ export function kitFrame(box) {
 // Every piece's hit region in canvas pixels, in hit-priority order (the tab
 // before the disc it sits on): { id, shape, kind: 'circle', cx, cy, r } or
 // { id, shape, kind: 'rect', x, y, w, h, cx, cy }.
-export function kitRegions(box) {
-  const f = kitFrame(box), u = f.h, at = Object.fromEntries(kitLayout().map(p => [p.id, p]));
-  return HIT_ORDER.map(id => {
+export function kitRegions(box, prefs, requiredPieces = []) {
+  const f = kitFrame(box), u = f.h, at = Object.fromEntries(kitLayout(prefs, requiredPieces).map(p => [p.id, p]));
+  return HIT_ORDER.filter(id => at[id]).map(id => {
     const p = at[id], cx = f.x + p.x * u, cy = f.y + p.y * u;
     return p.r !== undefined
       ? { id, shape: p.shape, kind: 'circle', cx, cy, r: p.r * u }
@@ -99,9 +103,9 @@ export function kitRegions(box) {
 // The first containing region in priority order wins (so the tab beats the
 // disc under it); regions otherwise do not overlap, and were two to, the
 // nearest centre would win.
-export function pieceAt(px, py, box) {
+export function pieceAt(px, py, box, prefs, requiredPieces = []) {
   let best = null, bestDist = Infinity;
-  for (const r of kitRegions(box)) {
+  for (const r of kitRegions(box, prefs, requiredPieces)) {
     const inside = r.kind === 'circle' ? Math.hypot(px - r.cx, py - r.cy) <= r.r : px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h;
     if (!inside) continue;
     if (r.shape === 'tab') return r.id;
