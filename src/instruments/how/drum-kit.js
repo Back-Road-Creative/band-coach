@@ -25,9 +25,9 @@
 // different GM notes, so it is one disc about crash size (closed), a small tab just clear of its far edge
 // (open: small, so its centre sits 12 px off the disc for the phone tap rule) and its footboard (pedal): three pieces to judge, one cymbal to look at.
 import { PIECES } from '../drum-kit.js';
-import { applyKitPreset, sanitizeKitPrefs } from './kit-presets.js';
+import { applyKitPreset, sanitizeKitPrefs, KIT_ASPECT } from './kit-presets.js';
 
-export const KIT_ASPECT = 1.4;
+export { KIT_ASPECT };
 
 const POSITIONS = {
   kick: { x: 0.70, y: 0.725, w: 0.18, h: 0.41, shape: 'pedal' },

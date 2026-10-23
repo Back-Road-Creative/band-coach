@@ -744,3 +744,9 @@
   .kit-setup p { margin: 6px 0; }
 
   .panel-host:has(.fing-drumkit) { min-width: 0; }
+
+  /* Set-up sheet kit preview: drag a piece to where it sits on your kit. */
+  #kitPreview { display: block; width: 100%; max-width: 560px; aspect-ratio: 1.4 / 1; background: #05070c; border-radius: 8px; touch-action: none; }
+  #kitPreview .kit-pc { fill: rgba(120, 170, 255, 0.35); stroke: #8fb4ff; stroke-width: 0.006; cursor: grab; }
+  #kitPreview .kit-pc.kit-hidden { opacity: 0.35; stroke-dasharray: 0.02 0.015; }
+  #kitPreview .kit-pc.kit-sel, #kitPreview .kit-pc:focus-visible { stroke: #fff; stroke-width: 0.012; outline: none; }

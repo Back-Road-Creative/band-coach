@@ -84,3 +84,27 @@ test('hidden lesson pieces reappear and clicks use the visible mirrored targets'
   await page.evaluate(`(() => { const bar = window.__coach.bar(); bar.playAt = 0; window.__coach.state().offset = 0; window.__coach.db().latencyMs = 0; const c = document.getElementById('cv'), r = c.getBoundingClientRect(); c.dispatchEvent(new PointerEvent('pointerdown', { clientX: r.left + ${snare.cx} * r.width / c.width, clientY: r.top + ${snare.cy} * r.height / c.height })); })()`);
   assert.equal(await page.evaluate('window.__coach.bar().taps.at(-1).piece'), 'kick');
 });
+
+test('dragging a piece on the set-up sheet saves it, moves the click target, and Reset restores the preset', async t => {
+  const page = await launchPage(HTML_PATH);
+  t.after(() => page.close());
+  await page.evaluate("window.__coach.setMod('drum-kit'); document.getElementById('setupBtn').click()");
+  const drag = (id, dx, dy) => page.evaluate(`(() => {
+    const svg = document.getElementById('kitPreview'), el = svg.querySelector('[data-piece="${id}"]'), b = svg.getBoundingClientRect(), e = el.getBoundingClientRect();
+    const sx = e.left + e.width / 2, sy = e.top + e.height / 2, fire = (type, x, y) => (type === 'pointerdown' ? el : svg).dispatchEvent(new PointerEvent(type, { clientX: x, clientY: y, pointerId: 1, bubbles: true }));
+    fire('pointerdown', sx, sy); fire('pointermove', sx + ${dx} * b.height, sy + ${dy} * b.height); fire('pointerup', sx + ${dx} * b.height, sy + ${dy} * b.height);
+  })()`);
+  const before = await page.evaluate("window.__coach.kitBox()");
+  const home = kitRegions(before, {}).find(r => r.id === 'snare');
+  await drag('snare', -0.2, -0.3);
+  const saved = await page.evaluate('window.__coach.db().prefs.kit');
+  assert.ok(saved.placements && saved.placements.snare, 'placement saved');
+  assert.ok(Math.abs(saved.placements.snare.x - (0.465 - 0.2)) < 0.03 && Math.abs(saved.placements.snare.y - (0.66 - 0.3)) < 0.03, JSON.stringify(saved.placements));
+  const moved = kitRegions(before, saved).find(r => r.id === 'snare');
+  assert.ok(moved.cx < home.cx && moved.cy < home.cy);
+  await page.evaluate(`(() => { const c = document.getElementById('cv'), r = c.getBoundingClientRect(); c.dispatchEvent(new PointerEvent('pointerdown', { clientX: r.left + ${moved.cx} * r.width / c.width, clientY: r.top + ${moved.cy} * r.height / c.height })); })()`);
+  await page.evaluate("document.getElementById('kitSize').value = '1.5'; document.getElementById('kitSize').dispatchEvent(new Event('input', { bubbles: true })); document.getElementById('kitSize').dispatchEvent(new Event('change', { bubbles: true }))");
+  assert.equal(await page.evaluate('window.__coach.db().prefs.kit.placements.snare.scale'), 1.5);
+  await page.evaluate("document.getElementById('kitReset').click()");
+  assert.equal(await page.evaluate("'placements' in window.__coach.db().prefs.kit"), false);
+});
