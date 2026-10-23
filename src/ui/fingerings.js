@@ -9,6 +9,7 @@ import { noteName, chromaticRange } from './fingerings/notes.js';
 import { readFingeringSetup } from './fingerings/setup.js';
 import { isReviewed } from '../instruments/review.js';
 import { t } from '../core/i18n.js';
+import { KIT_ASPECT, THRONE } from '../instruments/how/drum-kit.js';
 import { rangeIsWrittenPitch } from '../song/lesson.js';
 
 // Human-readable labels for fretboard.js's named-tuning keys (alternateTuningsFor).
@@ -197,23 +198,35 @@ function svgEl(tag, attrs) {
   return node;
 }
 
-// Drum kit, top-down (src/instruments/how/drum-kit.js's kitLayout(), unit
-// square scaled to a 100x100 viewBox): a circle per piece, cymbals as
-// thinner rings, the struck piece filled with the panel's highlight colour.
-// Colours come from the stage's CSS variables so the dark and light themes
-// both read.
+// Drum kit as seen from the throne (src/instruments/how/drum-kit.js's kitLayout(),
+// in a frame KIT_ASPECT wide and 1 tall scaled by 100): a head with a rim for
+// each drum, a disc with a bell for each cymbal, a footboard for each pedal
+// (the bass drum's also has its shell), the open hi-hat as a tab on the hi-hat's
+// far edge, and a small throne mark at the bottom edge. The struck piece is
+// filled with the panel's highlight colour. Colours come from the stage's CSS
+// variables so the dark and light themes both read; the shapes, not the colours,
+// tell a drum from a cymbal.
+const HIHAT_WORDS = { 'hihat-closed': 'Hi-hat', 'hihat-open': 'open', 'hihat-pedal': 'pedal' };
 export function drumKitDiagram(instrument, how) {
-  const svg = svgEl('svg', { viewBox: '0 0 100 100', class: 'fing-drumkit', role: 'img', 'aria-label': how.description, width: '320', height: '320', style: 'max-width:100%;height:auto' });
+  const svg = svgEl('svg', { viewBox: '0 0 ' + 100 * KIT_ASPECT + ' 100', class: 'fing-drumkit', role: 'img', 'aria-label': how.description, width: String(320 * KIT_ASPECT), height: '320', style: 'max-width:100%;height:auto' });
+  const line = 'stroke:var(--line)';
+  svg.appendChild(svgEl('ellipse', { cx: String(THRONE.x * 100), cy: String(THRONE.y * 100), rx: String(THRONE.w * 50), ry: String(THRONE.h * 50), class: 'fing-throne', style: 'fill:var(--panel-2);' + line, 'stroke-width': '0.5' }));
   how.layout.forEach(p => {
-    const hit = p.id === how.piece;
-    svg.appendChild(svgEl('circle', {
-      cx: String(p.x * 100), cy: String(p.y * 100), r: String(p.r * 100),
-      class: 'fing-drum' + (hit ? ' fing-hit' : ''), 'data-piece': p.id,
-      'stroke-width': p.shape === 'drum' ? '1.2' : '0.5',
-      style: hit ? 'fill:#f3c52f;stroke:#f3c52f' : 'fill:' + (p.shape === 'drum' ? 'var(--panel-2)' : 'none') + ';stroke:var(--line)'
-    }));
-    const label = svgEl('text', { x: String(p.x * 100), y: String(p.y * 100 + 1.2), 'text-anchor': 'middle', 'font-size': '3.4', style: 'fill:' + (hit ? '#06101d' : 'var(--text)') });
-    label.textContent = p.name;
+    const hit = p.id === how.piece, fill = hit ? 'fill:#f3c52f;stroke:#f3c52f' : 'fill:' + (p.shape === 'cymbal' ? 'none' : 'var(--panel-2)') + ';' + line;
+    const cls = 'fing-drum fing-' + p.shape + (hit ? ' fing-hit' : ''), sw = p.shape === 'cymbal' ? '0.5' : '1.2', x = p.x * 100, y = p.y * 100;
+    if (p.r !== undefined) {
+      svg.appendChild(svgEl('circle', { cx: String(x), cy: String(y), r: String(p.r * 100), class: cls, 'data-piece': p.id, 'stroke-width': sw, style: fill }));
+      svg.appendChild(svgEl('circle', { cx: String(x), cy: String(y), r: String(p.r * (p.shape === 'drum' ? 80 : 30)), class: p.shape === 'drum' ? 'fing-rim' : 'fing-bell', 'stroke-width': '0.5', style: 'fill:none;' + line }));
+    } else {
+      svg.appendChild(svgEl('rect', { x: String(x - p.w * 50), y: String(y - p.h * 50), width: String(p.w * 100), height: String(p.h * 100), rx: p.shape === 'tab' ? '2' : '1', class: cls, 'data-piece': p.id, 'stroke-width': sw, style: fill }));
+      if (p.id === 'kick') {
+        svg.appendChild(svgEl('ellipse', { cx: String(x), cy: String(y - p.h * 28), rx: String(p.w * 38), ry: String(p.h * 18), class: 'fing-shell', 'stroke-width': '0.5', style: 'fill:none;' + line }));
+        svg.appendChild(svgEl('rect', { x: String(x - p.w * 35), y: String(y + p.h * 22), width: String(p.w * 70), height: String(p.h * 20), class: 'fing-footboard', 'stroke-width': '0.5', style: 'fill:none;' + line }));
+      }
+    }
+    // the hi-hat is one cymbal named once, on its disc; its tab and footboard carry one small word each, set inside their own shapes
+    const part = HIHAT_WORDS[p.id], label = svgEl('text', { x: String(x), y: String(y + (part ? 0.9 : 1.2)), 'text-anchor': 'middle', 'font-size': part && p.id !== 'hihat-closed' ? '2.4' : '3', style: 'fill:' + (hit ? '#06101d' : 'var(--text)') });
+    label.textContent = part || p.name;
     svg.appendChild(label);
   });
   return svg;

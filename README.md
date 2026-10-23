@@ -1261,7 +1261,10 @@ detectability measurement (a synthesized inharmonic bar tone through
 `yin()`) that justified shipping it `status: 'ready'` rather than `'planned'`.
 
 The drum kit (`drum-kit`) has its own trainer. Each exercise is one bar on a
-percussion staff, with the kit drawn from above underneath it. The drums the bar
+percussion staff, with the kit drawn underneath it the way it looks from the throne: the
+hi-hat far left and low, the crash behind it, the snare (the biggest drum) front-left between your knees, the
+bass drum's pedal at centre front, the two rack toms side by side above it, the floor tom close in on the
+right, the ride far right and set back, and a small throne mark at the bottom edge. The drums the bar
 uses are outlined, and they fill in while the count-in plays. Play the bar on an
 electronic kit over MIDI, on the computer keys (F bass drum, J snare, D closed
 hi-hat, E open hi-hat, C hi-hat pedal, U/I/K high/mid/floor tom, R crash, O
@@ -1273,8 +1276,15 @@ the last level). The right time on the wrong drum is reported as "wrong drum",
 with the drum it wanted. A MIDI note that isn't on the kit counts as an extra
 hit, and the coach line says so.
 Every drum on the drawn kit is labelled with its name (Kick, Snare, Hi-hat, Floor tom ...), with its
-computer key as a small yellow hint (a name too long for its circle sits beside it); the kit is laid
-out across the full width, before you start it fills the canvas height, and the canvas is taller for the kit than for other instruments.
+computer key as a small yellow hint (a name too long for its piece sits beside it, above it or below it, never on another drum or another name, on a phone as on a desktop; the toms' names break onto two lines). The shapes tell the
+pieces apart without reading a label: drums are heads with a rim, cymbals are discs with a bell, pedals are
+footboards (the bass drum's has its shell beyond it). The hi-hat is one cymbal, about the size of the crash and named once (Hi-hat): tap the disc for closed (D),
+the small tab on its far edge (marked "open") for open (E), and the small footboard below it (marked "pedal") for the pedal (C); when a bar asks for
+a closed hi-hat the footboard is outlined with a dashed line, since your left foot holds it shut. The kit keeps its shape
+(it is centred with space either side, never stretched to the full width); before you start it fills the canvas
+height, and the canvas is taller for the kit than for other instruments. Every piece, the hi-hat tab and footboard
+included, is at least 24 CSS px across even on a 320x568 phone with a bar showing. Where each piece sits is one
+table in `src/instruments/how/drum-kit.js`; if your kit is set up differently, that table is the one place to change.
 
 Through the microphone, `src/app.js`'s `listenDrums()` runs an onset detector
 plus `src/audio/drum-classify.js`'s band-energy classifier on every hit, and
@@ -1302,7 +1312,8 @@ comes from) are:
 Stickings (which hand) are not judged, since a key, click or MIDI note only says
 which drum and when; a rudiment's sticking is shown as a tip. Keys and clicks
 sound a synthesized drum (no samples). MIDI hits do not, because an e-kit sounds
-itself. The drawing comes from `src/instruments/how/drum-kit.js`. The "How to
+itself. The drawing comes from `src/instruments/how/drum-kit.js`: the canvas, the clicks on it and the "How to
+play it" panel's diagram all use that one geometry. The "How to
 play it" panel still shows each piece with a plain-words sentence.
 
 Ready beginner brass (`trumpet-bb`, `horn-f`, `trombone`) each get their own
@@ -1707,7 +1718,7 @@ release.
   drawing are on the first screen with no scrolling, with "Set up input" open or shut ("How to play
   this" and the input level move below the drawing; the other sizes are not measured for it). Misses the layout cannot fix
   are recorded in the sizes file as `todo` rows and need a change to the drawing code: at 320x568 the
-  black keys are 20 px tall and the drum kit's hi-hat pieces are under 24 px in a bar. Real phones
+  black keys are 20 px tall. Real phones
   are untested: do not tell a learner it works on theirs.
 - **iPhone/iPad (the "Phone copy" edition):** unmeasured — see "Phone copy" above. Do not tell a
   learner it works on their phone.

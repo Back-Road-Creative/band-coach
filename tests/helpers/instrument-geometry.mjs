@@ -5,7 +5,7 @@
 // asked the app where its keys are (the debug hook's kbdKeys()/kitBox()) would
 // pass when drawing and hit-test drifted apart together. These formulas are
 // written out again here, from src/app.js and src/instruments/how/drum-kit.js
-// as of band-coach 4f0f210 (src/** is unchanged since), and checked against what
+// as of band-coach 4f0f210 (the keyboard), with the drum kit re-pinned to the throne-view drawing, and checked against what
 // the canvas really drew (the test file's helper-versus-canvas check) before any
 // click, so a bug in this file shows up as a disagreement with the picture and
 // never as a missing hit.
@@ -109,73 +109,106 @@ export function keyboardSamplePoints(key) {
 }
 
 // ---- Drum kit ------------------------------------------------------------
-// src/instruments/how/drum-kit.js POSITIONS (:19-30): the unit-square spot and
-// radius (fraction of the shorter side) of each piece; spreadX (:60) stretches x.
+// src/instruments/how/drum-kit.js POSITIONS, written out again: the kit is drawn
+// from the throne in a frame KIT_ASPECT (1.4) wide and 1 tall, every number in
+// units of the frame's height, x/y the piece's CENTRE. A circle has r, a
+// rectangle w and h. Listed in hit-priority order (the app tests the open
+// hi-hat's tab before the closed hi-hat's disc it sits on); nothing else overlaps.
+//   drum    a head with a rim ring at 0.8 r             body #1b2130
+//   cymbal  a disc with a bell ring at 0.3 r            body #2a3140
+//   pedal   a footboard (the kick's rect also holds its shell)   body #1b2130
+//   tab     the open hi-hat's tab on the hi-hat's far edge       body #2a3140
+const KIT_ASPECT = 1.4;
 const KIT_POSITIONS = {
-  kick: { x: 0.5, y: 0.78, r: 0.14 },
-  snare: { x: 0.33, y: 0.62, r: 0.1 },
-  'hihat-closed': { x: 0.13, y: 0.52, r: 0.09 },
-  'hihat-pedal': { x: 0.2, y: 0.88, r: 0.06 },
-  'hihat-open': { x: 0.13, y: 0.33, r: 0.08 },
-  'tom-floor': { x: 0.74, y: 0.62, r: 0.11 },
-  'tom-mid': { x: 0.58, y: 0.36, r: 0.08 },
-  'tom-high': { x: 0.4, y: 0.38, r: 0.08 },
-  crash: { x: 0.22, y: 0.14, r: 0.11 },
-  ride: { x: 0.8, y: 0.2, r: 0.12 },
+  'hihat-open': { kind: 'rect', shape: 'tab', x: 0.17, y: 0.375, w: 0.13, h: 0.10 },
+  'hihat-closed': { kind: 'circle', shape: 'cymbal', x: 0.17, y: 0.62, r: 0.14 },
+  'hihat-pedal': { kind: 'rect', shape: 'pedal', x: 0.17, y: 0.86, w: 0.15, h: 0.13 },
+  kick: { kind: 'rect', shape: 'pedal', x: 0.7, y: 0.725, w: 0.18, h: 0.41 },
+  snare: { kind: 'circle', shape: 'drum', x: 0.465, y: 0.66, r: 0.135 },
+  'tom-high': { kind: 'circle', shape: 'drum', x: 0.58, y: 0.32, r: 0.11 },
+  'tom-mid': { kind: 'circle', shape: 'drum', x: 0.82, y: 0.32, r: 0.11 },
+  'tom-floor': { kind: 'circle', shape: 'drum', x: 1.09, y: 0.66, r: 0.13 },
+  crash: { kind: 'circle', shape: 'cymbal', x: 0.30, y: 0.17, r: 0.14 },
+  ride: { kind: 'circle', shape: 'cymbal', x: 1.21, y: 0.28, r: 0.16 },
 };
-const spreadX = (x) => 0.07 + (x - 0.13) * (0.86 / 0.67);
 
-// drawKit (:1892): the kit's box is bw = 0.94W wide, centred; with no kit bar
-// running it is bh = 0.9H tall and vertically centred, while a kit bar is on (a
-// session with a bar) it is bh = 0.62H tall starting at 0.37H. A piece is a circle
-// of radius p.r * min(bw, bh) at (box.x + spreadX(p.x) bw, box.y + p.y bh).
+// drawKit (src/app.js :1757): the kit's OUTER box is bw = 0.94W wide, centred; with no kit
+// bar running it is bh = 0.9H tall and vertically centred, while a kit bar is on (a
+// session with a bar) it is bh = 0.62H tall starting at 0.37H. The kit itself is a frame
+// of KIT_ASPECT x 1 as tall as the box lets it be (bh, or bw / KIT_ASPECT if narrower),
+// centred in the box; a piece is at (frame.x + p.x * frame.h, frame.y + p.y * frame.h).
 export function kitBox(m, { inBar = false } = {}) {
   const W = m.width, H = m.height, w = W * 0.94, h = inBar ? H * 0.62 : H * 0.9;
   return { x: (W - w) / 2, y: inBar ? H * 0.37 : (H - h) / 2, w, h };
 }
 
-export function kitRects(m, { inBar = false } = {}) {
-  const box = kitBox(m, { inBar });
-  const side = Math.min(box.w, box.h);
-  return Object.entries(KIT_POSITIONS).map(([id, p]) => ({ id, cx: box.x + spreadX(p.x) * box.w, cy: box.y + p.y * box.h, r: p.r * side }));
+export function kitFrame(m, opts) {
+  const box = kitBox(m, opts), h = Math.min(box.h, box.w / KIT_ASPECT), w = h * KIT_ASPECT;
+  return { x: box.x + (box.w - w) / 2, y: box.y + (box.h - h) / 2, w, h };
 }
 
-const inCircle = (pt, c) => Math.hypot(pt.x - c.cx, pt.y - c.cy) <= c.r;
+// One entry per piece, in hit-priority order: { id, kind, shape, cx, cy, r } with, for a
+// rectangle, x, y, w, h too and r = half its height (the radius of the letter's room).
+export function kitRects(m, { inBar = false } = {}) {
+  const f = kitFrame(m, { inBar });
+  return Object.entries(KIT_POSITIONS).map(([id, p]) => {
+    const cx = f.x + p.x * f.h, cy = f.y + p.y * f.h;
+    if (p.kind === 'circle') return { id, kind: 'circle', shape: p.shape, cx, cy, r: p.r * f.h };
+    const w = p.w * f.h, h = p.h * f.h;
+    return { id, kind: 'rect', shape: p.shape, cx, cy, r: h / 2, x: cx - w / 2, y: cy - h / 2, w, h };
+  });
+}
 
-// Where to aim at a piece: its centre and four compass points 3 canvas px inside
-// the edge (all reach the piece), and four 3 px outside it (reach nothing). A point
-// that falls inside ANOTHER piece's circle is dropped: where two circles overlap
-// the app picks the nearest centre, and this file does not re-implement that.
+// The canvas box a piece takes (a circle's bounding square, a rectangle itself).
+export const kitPieceBox = (c) => (c.kind === 'rect' ? { x: c.x, y: c.y, w: c.w, h: c.h } : { x: c.cx - c.r, y: c.cy - c.r, w: 2 * c.r, h: 2 * c.r });
+
+const inPiece = (pt, c) => (c.kind === 'rect' ? pt.x >= c.x && pt.x <= c.x + c.w && pt.y >= c.y && pt.y <= c.y + c.h : Math.hypot(pt.x - c.cx, pt.y - c.cy) <= c.r);
+// how far a point is from a piece's shape (0 inside)
+const gapTo = (pt, c) => (c.kind === 'rect' ? Math.hypot(Math.max(c.x - pt.x, 0, pt.x - c.x - c.w), Math.max(c.y - pt.y, 0, pt.y - c.y - c.h)) : Math.max(0, Math.hypot(pt.x - c.cx, pt.y - c.cy) - c.r));
+
+// Where to aim at a piece: its centre and four compass points 3 canvas px inside the
+// edge (a rectangle: the middle of each side), all reach the piece, and four 3 px outside it
+// (reach nothing). A point inside a piece drawn over it (the tab over the hi-hat disc) is
+// dropped, and so is an "outside" point that lands inside any other piece: this file does
+// not re-implement the app's priority beyond that.
 export function kitProbePoints(piece, all) {
-  const others = all.filter((c) => c.id !== piece.id);
+  const others = all.filter((c) => c.id !== piece.id), mine = all.indexOf(piece);
   const compass = [['east', 1, 0], ['south', 0, 1], ['west', -1, 0], ['north', 0, -1]];
+  const half = (dx, dy) => (piece.kind === 'rect' ? (dx ? piece.w : piece.h) / 2 : piece.r);
   const at = (d, dx, dy) => ({ x: piece.cx + dx * d, y: piece.cy + dy * d });
   const pts = [{ label: 'centre', ...at(0, 0, 0), id: piece.id }];
-  for (const [name, dx, dy] of compass) pts.push({ label: `inside ${name} edge`, ...at(piece.r - 3, dx, dy), id: piece.id });
-  for (const [name, dx, dy] of compass) pts.push({ label: `outside ${name} edge`, ...at(piece.r + 3, dx, dy), id: null });
-  return pts.filter((p) => !others.some((o) => inCircle(p, o)));
+  for (const [name, dx, dy] of compass) pts.push({ label: `inside ${name} edge`, ...at(half(dx, dy) - 3, dx, dy), id: piece.id });
+  for (const [name, dx, dy] of compass) pts.push({ label: `outside ${name} edge`, ...at(half(dx, dy) + 3, dx, dy), id: null });
+  return pts.filter((p) => !others.some((o) => inPiece(p, o) && (p.id === null || all.indexOf(o) < mine)));
 }
 
-// One point of the kit's box no circle contains: the roomiest spot on a coarse
-// grid (greatest distance to the nearest circle's edge), so it is clear of every
-// piece and its stroke by a wide margin.
+// One point of the kit's box no piece contains: the roomiest spot on a coarse grid
+// (greatest distance to the nearest piece), so it is clear of every piece and its stroke
+// by a wide margin.
 export function kitEmptyPoint(m, opts) {
   const box = kitBox(m, opts), all = kitRects(m, opts);
   let best = null;
   for (let i = 1; i < 20; i++) {
     for (let j = 1; j < 20; j++) {
       const p = { x: box.x + (box.w * i) / 20, y: box.y + (box.h * j) / 20 };
-      const room = Math.min(...all.map((c) => Math.hypot(p.x - c.cx, p.y - c.cy) - c.r));
+      const room = Math.min(...all.map((c) => gapTo(p, c)));
       if (!best || room > best.room) best = { ...p, room };
     }
   }
   return { label: 'empty space', x: best.x, y: best.y, id: null, room: best.room };
 }
 
-// Where to read a piece's colour: eight points around it at 0.7 of its radius,
-// clear of its 1.5 px stroke.
+// Where to read a piece's colour: eight points on its own body fill, clear of its stroke,
+// the rim ring (0.8 r), the bell ring (0.3 r), the footboard and shell lines, the tab and
+// the letter. A circle: a ring at 0.6 r (a drum) or 0.65 r (a cymbal), turned 22.5 degrees
+// so no point sits on the letter's column. A rectangle: two columns near its sides, four rows.
 export function kitSamplePoints(piece) {
-  return Array.from({ length: 8 }, (_, k) => ({ x: piece.cx + 0.7 * piece.r * Math.cos((k * Math.PI) / 4), y: piece.cy + 0.7 * piece.r * Math.sin((k * Math.PI) / 4) }));
+  if (piece.kind === 'circle') {
+    const k = piece.shape === 'drum' ? 0.6 : 0.65;
+    return Array.from({ length: 8 }, (_, i) => ({ x: piece.cx + k * piece.r * Math.cos(((i + 0.5) * Math.PI) / 4), y: piece.cy + k * piece.r * Math.sin(((i + 0.5) * Math.PI) / 4) }));
+  }
+  const ys = piece.id === 'kick' ? [0.42, 0.5, 0.58, 0.66] : [0.3, 0.45, 0.6, 0.75];
+  return [0.12, 0.88].flatMap((fx) => ys.map((fy) => ({ x: piece.x + fx * piece.w, y: piece.y + fy * piece.h })));
 }
 
 // ---- Phone-size target sizes (CSS px) --------------------------------------
@@ -188,13 +221,18 @@ export function cssRect(rect, m) {
 }
 
 // Every key and kit piece as a target: id, kind, CSS width x height (a kit
-// piece's box is its diameter), centre, and the area that answers a tap (a white
-// key's area leaves out the black keys over it; a piece's is its circle).
+// piece's box is its diameter, or a rectangle's own width x height), centre, and the area
+// that answers a tap (a white key's area leaves out the black keys over it; a piece's is
+// its circle or its rectangle).
 // { kind: 'keyboard' | 'kit', inBar } picks the instrument and the kit's layout.
 export function targetSizes(m, { kind = 'keyboard', inBar = false } = {}) {
   if (kind === 'kit') {
-    const s = m.cssWidth / m.width;
-    return kitRects(m, { inBar }).map((p) => ({ id: p.id, kind: 'piece', w: 2 * p.r * s, h: 2 * p.r * s, cx: p.cx * s, cy: p.cy * (m.cssHeight / m.height), area: { circle: { cx: p.cx * s, cy: p.cy * (m.cssHeight / m.height), r: p.r * s } } }));
+    const sx = m.cssWidth / m.width, sy = m.cssHeight / m.height;
+    return kitRects(m, { inBar }).map((p) => {
+      const cx = p.cx * sx, cy = p.cy * sy;
+      if (p.kind === 'rect') return { id: p.id, kind: 'piece', w: p.w * sx, h: p.h * sy, cx, cy, area: { rects: [{ x: p.x * sx, y: p.y * sy, w: p.w * sx, h: p.h * sy }] } };
+      return { id: p.id, kind: 'piece', w: 2 * p.r * sx, h: 2 * p.r * sx, cx, cy, area: { circle: { cx, cy, r: p.r * sx } } };
+    });
   }
   const keys = keyboardRects(m).keys.map((k) => ({ k, r: cssRect(k.rect, m) }));
   return keys.map(({ k, r }) => {
