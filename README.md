@@ -177,7 +177,10 @@ Run `npm run build && npm run shots` to actually LOOK at the UI: it drives the b
 same headless Chromium the tests use and writes `dist/screenshot-desktop.png` (1440x900) and
 `dist/screenshot-phone.png` (390x844, phone viewport emulation on) — so a UI change can be checked
 visually without a human pasting an ad hoc shell command, and `tests/build/shots.test.mjs` proves
-the capability itself still works.
+the capability itself still works. `npm run shots -- --instruments` builds, then writes
+`dist/shots/<id>-<idle|how|target>-<desktop|phone>.png` for every instrument the picker lists, plus
+`dist/shots/index.html` as a contact sheet. Instruments with no How-to-play chart are listed in the
+sheet as "no how panel", and target shots that could not be reached are listed as skipped.
 
 Run `npm run review-packet -- kbd` to build a standalone, offline review packet for a real player
 to check the keyboard trainer's teaching content against a named method book -- see
