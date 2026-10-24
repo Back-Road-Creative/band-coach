@@ -19,11 +19,15 @@ const OTHER_FILE_URL = 'file://' + join(repoRoot, 'store', 'app', 'evil.html');
 // own — only a matching requestingUrl/webContentsUrl should.
 const FILE_ORIGIN_FORMS = [APP_FILE_URL, 'file://', 'file:///', 'null', undefined];
 
-test('ALLOWED_PERMISSIONS names exactly media/midi/midiSysex', () => {
-  assert.deepEqual(new Set(ALLOWED_PERMISSIONS), new Set(['media', 'midi', 'midiSysex']));
+test('ALLOWED_PERMISSIONS names exactly media/midi', () => {
+  assert.deepEqual(new Set(ALLOWED_PERMISSIONS), new Set(['media', 'midi']));
 });
 
-for (const permission of ['media', 'midi', 'midiSysex']) {
+test('denies midiSysex even from the app file (the app never requests SysEx)', () => {
+  assert.equal(isAllowed({ permission: 'midiSysex', requestingUrl: APP_FILE_URL, appFileUrl: APP_FILE_URL }), false);
+});
+
+for (const permission of ['media', 'midi']) {
   for (const requestingOrigin of FILE_ORIGIN_FORMS) {
     test(`allows ${permission} from the app's own file (origin=${String(requestingOrigin)}, via requestingUrl)`, () => {
       assert.equal(

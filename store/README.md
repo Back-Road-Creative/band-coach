@@ -26,7 +26,7 @@ no paid CI, no paid services anywhere in this path.
   `contextIsolation: true`, `nodeIntegration: false`, `sandbox: true`. Denies all navigation and
   `window.open` away from the app file. Blocks every network request (`session.webRequest`) —
   only `file:`/`blob:`/`data:` are allowed, so the app stays visibly offline. Permission handler
-  grants only `media` (microphone) and `midi`/`midiSysex`, denies everything else — see
+  grants only `media` (microphone) and `midi` (never SysEx), denies everything else — see
   "Permission decision" below. Menu: Quit, Reload, Toggle Full Screen, About.
 - `lib/permission-policy.js` — the pure allow/deny decision for `getUserMedia`/Web MIDI requests
   (no Electron import; see "Permission decision" below).
@@ -133,7 +133,7 @@ a `store-package` CI run on Windows.
 
 ## Permission decision
 
-`getUserMedia` (microphone) and `requestMIDIAccess` (MIDI, including sysex) only work if Electron's
+`getUserMedia` (microphone) and `requestMIDIAccess` (MIDI, without SysEx) only work if Electron's
 session grants them. The allow/deny decision lives in `lib/permission-policy.js` — a small pure
 function with no Electron import, `isAllowed({ permission, requestingOrigin, requestingUrl,
 webContentsUrl, appFileUrl })` — unit-tested standalone at
@@ -143,7 +143,7 @@ passing every identifying argument Electron gives those handlers.
 
 It allows a request only when:
 
-- `permission` is exactly `media`, `midi`, or `midiSysex` (never a wildcard, never any other
+- `permission` is exactly `media` or `midi` (never `midiSysex`, never a wildcard, never any other
   permission Electron might ask about — geolocation, notifications, clipboard, etc.), and
 - at least one of `requestingUrl` (from the handler's `details` object) or `webContentsUrl`
   (`webContents.getURL()`) is present, parses as a `file:` URL, and its host+path exactly match

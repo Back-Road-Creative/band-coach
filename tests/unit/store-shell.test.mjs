@@ -42,7 +42,7 @@ test('main.js installs a permission handler naming only media/midi', () => {
   assert.match(mainJs, /isAllowed\s*\(/);
 
   // The allow-list is an explicit, named set — not a wildcard or an
-  // inverted deny-list — and it names exactly media/midi/midiSysex.
+  // inverted deny-list — and it names exactly media/midi.
   const policyJs = readFileSync(join(storeRoot, 'lib', 'permission-policy.js'), 'utf8');
   const allowListMatch = policyJs.match(/ALLOWED_PERMISSIONS\s*=\s*new Set\(\[([^\]]+)\]\)/);
   assert.ok(allowListMatch, 'expected an ALLOWED_PERMISSIONS Set literal in lib/permission-policy.js');
@@ -50,7 +50,7 @@ test('main.js installs a permission handler naming only media/midi', () => {
     .split(',')
     .map(s => s.trim().replace(/^['"]|['"]$/g, ''))
     .filter(Boolean);
-  assert.deepEqual(new Set(names), new Set(['media', 'midi', 'midiSysex']));
+  assert.deepEqual(new Set(names), new Set(['media', 'midi']));
 });
 
 test('main.js denies navigation and window.open away from the app file', () => {
