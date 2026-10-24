@@ -1199,11 +1199,11 @@ import { register as registerPathway } from './ui/pathway.js';
     // then reach advance() with no route, and its row keeps `input` off
     // rather than guessed (src/ui/songs.js's advance()).
     forwardSongNote(midi, exact, undefined, (source === 'midi' || source === 'computer-key') ? source : undefined);
-    if (MODS[mod] && MODS[mod].kit) { const p = pieceForMidi(midi); if (p === null) coach('MIDI note ' + midi + ' is not one of the drums on this kit' + (playing ? ', so it counts as an extra hit.' : '.')); else if (!playing) coach(kitName(p) + ' heard -- start an exercise to see it judged.'); onHit(p, tapAudioTime(), source); return; }
     // "Calibrate timing" listens for taps, and a MIDI keyboard or drum set
     // is a tap source like the space bar: route the hit to onTap() before
-    // the not-judging message below can call it a stray note.
+    // the drum-kit branch and the not-judging message below can call it a stray note.
     if (calRun) { onTap(); return; }
+    if (MODS[mod] && MODS[mod].kit) { const p = pieceForMidi(midi); if (p === null) coach('MIDI note ' + midi + ' is not one of the drums on this kit' + (playing ? ', so it counts as an extra hit.' : '.')); else if (!playing) coach(kitName(p) + ' heard -- start an exercise to see it judged.'); onHit(p, tapAudioTime(), source); return; }
     lastInputAt = now(); pressed[midi] = performance.now();
     if (source === 'midi') { const notJudging = !playing || !task || task.done; const outOfView = !notJudging && mod === 'kbd' && (midi < kbdRange()[0] || midi > kbdRange()[1]); if (notJudging) coach(nname(midi) + ' heard' + (playing ? '.' : ' -- start an exercise to see it judged.')); else if (outOfView) coach(nname(midi) + ' heard, but that key is not drawn on screen right now.'); }
     if (!playing || !task || task.done) return; const e = cur(); if (!e) return; const i = e.info;
@@ -2245,7 +2245,7 @@ import { register as registerPathway } from './ui/pathway.js';
     // needs a suggested song), since 'setup'/'lesson' come before any song
     // is suggested at all.
     if (mod === 'kbd') btn('kbdPathwayBtn', t('pathway.open'), () => openPanel('pathway'));
-    if (mod === 'rhy') btn('calBtn', calRun ? 'Listening for 8 taps…' : 'Calibrate timing (' + Math.round(DB.latencyMs || 0) + ' ms)', startCalibrate, false);
+    if (MODS[mod] && mod !== 'ear') btn('calBtn', calRun ? 'Listening for 8 taps…' : 'Calibrate timing (' + Math.round(DB.latencyMs || 0) + ' ms)', startCalibrate, false);
     if (mod === 'capture') { btn('capGo', cap.on ? 'Stop' : 'Listen', () => { if (cap.on) capStop(); else { if (!micReady) { say('Connect your microphone first (open "Set up input", press Connect), then press Listen.', 'no'); return; } ensureAudio(); cap.on = true; cap.notes = []; cap.savedId = null; cap.start = now(); cap.curM = -1; say(''); renderOpts(); } }, true); btn('capPlay', 'Play it back', () => { if (!cap.notes.length) { say('Nothing captured yet.', 'no'); return; } ensureAudio(); const t0 = now() + 0.1; cap.notes.forEach(n => tone(n.m, t0 + n.t - (cap.notes[0] ? cap.notes[0].t : 0), Math.max(0.2, n.d))); }); const lessons = {}; MOD_IDS.filter(m => hasMasteryScheme(m)).forEach(m => { lessons[m] = [MODS[m].name]; }); sel('capTo', cap.notes.length + ' notes. Practice on', lessons, 'kbd', () => {});
       // 'Make it a lesson': the captured tune becomes a draft Song (src/song/
       // capture.js), added to the same library the Songs panel reads, then
@@ -2506,6 +2506,7 @@ import { register as registerPathway } from './ui/pathway.js';
     // A file picker is a <label> for a hidden file input (Restore a backup, Open a recording): Enter or Space opens the chooser, as a click does.
     if (ev.target.matches && ev.target.matches('label.file-label[for]') && (ev.key === 'Enter' || ev.key === ' ')) { ev.preventDefault(); const input = document.getElementById(ev.target.htmlFor); if (input) input.click(); return; }
     if (ev.repeat || ev.ctrlKey || ev.metaKey || ev.altKey) return; const tag = ev.target.tagName; if (tag === 'SELECT' || tag === 'TEXTAREA' || (tag === 'INPUT' && ev.target.type !== 'checkbox') || ev.target.isContentEditable) return;
+    if (calRun && mod !== 'rhy' && ev.key === ' ' && tag !== 'BUTTON') { ev.preventDefault(); ensureAudio(); onTap(ev); return; }
     if (mod === 'rhy' && (ev.key === ' ' || ev.key.length === 1)) { if (tag === 'BUTTON' && ev.key === ' ' && ev.target.id !== 'tapPad') return; ev.preventDefault(); ensureAudio(); onTap(ev); return; }
     if (MODS[mod] && MODS[mod].kit && KIT_KEYS[ev.key.toLowerCase()]) { ev.preventDefault(); ensureAudio(); onHit(KIT_KEYS[ev.key.toLowerCase()], tapAudioTime(ev), 'key'); return; }
     if (mod === 'ear' && task && task.choices && /^[1-9]$/.test(ev.key)) { const id = task.choices[+ev.key - 1]; if (id) answer(id, 'computer-key'); return; }

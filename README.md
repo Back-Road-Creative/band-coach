@@ -657,6 +657,7 @@ after a judged try the panel states the verdict ("Missed the D4", "Nice. 7 of 7 
 bars went well and which need another pass, plus a plain-word list (`src/ui/songs/assessed.js`)
 saying what each dimension — notes, timing, holding notes, in tune — showed, or, for one this step
 never grades (a clapped rhythm's pitch, a keyboard's fixed pitch and length), Not assessed and why.
+The strip's "Work on bar N next" line carries a "Loop bar N" button: it repeats that one bar from 60% speed and speeds up after each clean try through the Riff Repeater ladder below, and "Back to the lesson" returns (`tests/characterization/songs-loop-backing.test.mjs`).
 A drum part practises the same way, on its own kit staff instead of a pitched one, "Play it"
 sounding real drum hits, and hits heard from an e-kit's MIDI or a real kit through the microphone
 both counted; a fifth "Which drum" line reads Not assessed when the mic heard a hit but could not
@@ -674,7 +675,7 @@ playable note on the chosen instrument says so instead of passing. Each phrase's
 (`src/ui/songs/loop-backing.js`, wiring `src/audio/stretch/loop.js`'s difficulty ladder into the
 lesson): a missed attempt steps the synthesized backing's speed down, a fully clean attempt steps
 it back up, and the panel always shows the current rate in plain words ("Playing at 90% speed",
-"Full speed"). Only the synthesized backing is slowed this way — no starter or imported song
+"Full speed"). Songs also subtract the stored "Calibrate timing" offset from your played notes before judging, and a timed step shows "Timing adjusted by N ms for your setup." only when one is stored (`tests/characterization/songs-latency.test.mjs`). Only the synthesized backing is slowed this way — no starter or imported song
 carries an original recording to time-stretch, so `src/audio/stretch/wsola.js` stays wired only
 into the Play Along panel below. On a sustaining instrument (bowed, wind, free-reed or voice —
 anything without a natural decay) a practice step also checks that each note was actually held
@@ -1483,9 +1484,9 @@ integer-tick durations, so triplets and swing are exact fractions rather than ro
 Rhythm reading (`rhy`) gains eight further levels built on it, after the original ten-cell levels:
 rests, ties, dotted-eighth figures, triplets, 3/4, 6/8, swing, and two-bar phrases.
 
-Rhythm reading's "Calibrate timing" button plays eight clicks and takes a tap on each: the tap pad,
-the space bar or any letter key, or a note on a connected MIDI keyboard or drum set -- the same
-inputs the exercises judge. Each caught tap is counted on screen; four or more store the median
+The "Calibrate timing" button, on every instrument's option row (and Rhythm reading's), plays eight clicks and takes a tap on each: the tap pad,
+the space bar or any letter key on Rhythm reading (the space bar elsewhere), or a note on a connected MIDI keyboard or drum-kit pad -- the same
+inputs the exercises judge (`tests/characterization/calibrate-timing-every-instrument.test.mjs`). Songs and drills use the result. Each caught tap is counted on screen; four or more store the median
 offset as the latency allowance every later tap is judged against.
 
 ## Ear training
