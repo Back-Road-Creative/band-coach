@@ -369,7 +369,7 @@ startup and again whenever the language is changed.
   learner sees one dismissible notice (at most one per 30 seconds) instead of silence. Settings >
   "Copy diagnostics" copies the app version, browser string, recent error
   messages (links and file paths blanked, 200 characters each) and whether the microphone, MIDI,
-  AudioWorklet and song storage exist; the text is shown on screen too, so with no clipboard it can be copied by hand. It is
+  AudioWorklet and song storage exist; the text stays hidden until you press the button, then it is shown on screen too, so with no clipboard it can be copied by hand. It is
   built from that short list in `src/core/diagnostics.js`, so audio, songs, practice records and
   device ids are not included by design. An error message is whatever the browser or app wrote, so
   it can still name something the app was handling. Nothing is sent anywhere.

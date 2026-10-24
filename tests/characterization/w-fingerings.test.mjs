@@ -10,8 +10,9 @@ test('fingerings panel opens, shows a default fretboard diagram, and reacts to a
   t.after(() => page.close());
 
   // The default mod at boot (kbd) has no fingering mapping, so the panel
-  // falls back to the first instrument that does have one.
-  assert.equal(await page.evaluate("document.querySelector('#picker button[aria-pressed=\"true\"]').dataset.mod"), 'kbd');
+  // falls back to the first instrument that does have one. Nothing has been
+  // picked yet, so no picker button claims to be pressed.
+  assert.equal(await page.evaluate("document.querySelector('#picker button[aria-pressed=\"true\"]')"), null);
   await page.evaluate("window.__coach.openPanel('fingerings')");
   assert.equal(await page.evaluate('window.__coach.panelOpen()'), 'fingerings');
   assert.notEqual(await page.evaluate("document.getElementById('fingInstrument').value"), 'kbd');
@@ -298,4 +299,31 @@ test('fingerings panel: a capo typed past the 11th fret is kept as 11, not silen
   await pick('violin');
   await pick('gtr');
   assert.equal(await page.evaluate("document.getElementById('fingCapo').value"), '11');
+});
+
+// What the idle canvas says and wears (fillText is recorded so the test reads the real drawing, not the source).
+const RECORD_TEXT = "window.__ft = []; const ft = CanvasRenderingContext2D.prototype.fillText; CanvasRenderingContext2D.prototype.fillText = function (t) { window.__ft.push(String(t)); return ft.apply(this, arguments); };";
+const SAW = (s) => `window.__ft.includes(${JSON.stringify(s)})`;
+const CHOOSE_KBD = "document.querySelector('#picker button[data-mod=\"kbd\"]').click()";
+
+test('the first-run canvas asks for an instrument, then says PRESS START once one is picked', async (t) => {
+  const page = await launchPage(HTML_PATH, { initScript: RECORD_TEXT });
+  t.after(() => page.close());
+  await page.waitFor(SAW('PICK AN INSTRUMENT'), 10000);
+  assert.equal(await page.evaluate(SAW('PRESS START')), false, 'nothing is picked, so it must not say start');
+  await page.evaluate(CHOOSE_KBD);
+  await page.evaluate('window.__ft.length = 0');
+  await page.waitFor(SAW('PRESS START'), 10000);
+  assert.equal(await page.evaluate(SAW('PICK AN INSTRUMENT')), false);
+  assert.equal(await page.evaluate("document.querySelector('#picker button[data-mod=\"kbd\"]').getAttribute('aria-pressed')"), 'true');
+});
+
+test('on a touch screen the keyboard keeps its letters hidden until a computer key is pressed', async (t) => {
+  const page = await launchPage(HTML_PATH, { initScript: RECORD_TEXT + "const mm = window.matchMedia.bind(window); window.matchMedia = (q) => /pointer:\\s*coarse/.test(q) ? { matches: true, media: q, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {} } : mm(q);" });
+  t.after(() => page.close());
+  await page.evaluate(CHOOSE_KBD);
+  await page.waitFor(SAW('PRESS START'), 10000);
+  await page.evaluate('window.__ft.length = 0');
+  await page.waitFor("window.__ft.length > 20", 10000);
+  assert.equal(await page.evaluate(SAW('a')), false);
 });
