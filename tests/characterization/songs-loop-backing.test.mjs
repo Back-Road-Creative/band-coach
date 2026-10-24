@@ -162,3 +162,62 @@ test('the walk still reaches the tempo-ladder step when the page runs its short 
   assert.equal(rateText, 'Full speed');
   assert.deepEqual(page.exceptions, []);
 });
+
+const BTNS = "Array.from(document.querySelectorAll('.panel-songs-practice button'))";
+const H4 = "document.querySelector('.panel-songs-practice h4') && document.querySelector('.panel-songs-practice h4').textContent";
+
+async function getToRhythmStepBar(page, latencyMs) {
+  await page.evaluate("window.__coach.setMod('kbd')");
+  await page.evaluate('window.__coach.db().latencyMs = ' + latencyMs);
+  await page.evaluate("window.__coach.openPanel('songs')");
+  await page.waitFor("document.querySelectorAll('.panel-songs-row button').length > 0");
+  await page.evaluate("Array.from(document.querySelectorAll('.panel-songs-row button')).find(b => b.textContent === 'Hot Cross Buns').click()");
+  await page.waitFor("document.querySelector('.panel-songs-practice h4')");
+  await page.evaluate(BTNS + ".find(b => b.textContent === 'Next').click()");
+  await skipDemo(page);
+  await page.waitFor(BTNS + ".some(b => b.textContent === 'Your turn')");
+}
+
+test('the bar strip offers Loop bar 1, which loops that bar from 60% speed and returns', async (t) => {
+  const page = await launchPage(htmlPath);
+  t.after(() => page.close());
+  await getToRhythmStepBar(page, 0);
+  await page.evaluate(BTNS + ".find(b => b.textContent === 'Your turn').click()");
+  await page.waitFor(BTNS + ".some(b => b.textContent === 'Stop and check')");
+  await page.evaluate(BTNS + ".find(b => b.textContent === 'Stop and check').click()");
+  await page.waitFor(BTNS + ".some(b => b.textContent === 'Loop bar 1')");
+  assert.equal(await page.evaluate(BTNS + ".find(b => b.textContent === 'Loop bar 1').tagName"), 'BUTTON');
+  await page.evaluate(BTNS + ".find(b => b.textContent === 'Loop bar 1').click()");
+  await page.waitFor("(" + H4 + ") === 'Looping bar 1'");
+  assert.equal(await page.evaluate("document.querySelector('.panel-songs-rate').textContent"), 'Playing at 60% speed');
+  // 60 bpm: quarter = 1 s.
+  await playAttempt(page, [50, 1000, 1000]);
+  await page.waitFor("document.querySelector('.panel-songs-rate').textContent === 'Playing at 63% speed'", 8000);
+  assert.equal(await page.evaluate(H4), 'Looping bar 1');
+  await page.evaluate(BTNS + ".find(b => b.textContent === 'Back to the lesson').click()");
+  await page.waitFor("(" + H4 + ").startsWith('Clap the rhythm')");
+  // The bar loop's last verdict and bar strip belong to the loop, not to the lesson step.
+  assert.equal(await page.evaluate("!!document.querySelector('.panel-songs-verdict')"), false, 'no stale bar-loop verdict');
+  assert.equal(await page.evaluate("!!document.querySelector('.panel-songs-bar-strip')"), false, 'no stale bar-loop strip');
+  assert.deepEqual(page.exceptions, []);
+});
+
+test('Back to the lesson during a bar-loop recording stops it, so the lesson step is not judged', async (t) => {
+  const page = await launchPage(htmlPath);
+  t.after(() => page.close());
+  await getToRhythmStepBar(page, 0);
+  await page.evaluate(BTNS + ".find(b => b.textContent === 'Your turn').click()");
+  await page.waitFor(BTNS + ".some(b => b.textContent === 'Stop and check')");
+  await page.evaluate(BTNS + ".find(b => b.textContent === 'Stop and check').click()");
+  await page.waitFor(BTNS + ".some(b => b.textContent === 'Loop bar 1')");
+  await page.evaluate(BTNS + ".find(b => b.textContent === 'Loop bar 1').click()");
+  await page.waitFor("(" + H4 + ") === 'Looping bar 1'");
+  await page.evaluate(BTNS + ".find(b => b.textContent === 'Your turn').click()");
+  await page.waitFor(BTNS + ".some(b => b.textContent === 'Stop and check')");
+  await page.evaluate(BTNS + ".find(b => b.textContent === 'Back to the lesson').click()");
+  await page.waitFor("(" + H4 + ").startsWith('Clap the rhythm')");
+  const labels = await page.evaluate(BTNS + ".map(b => b.textContent)");
+  assert.ok(labels.includes('Your turn'), 'main step is idle: ' + labels);
+  assert.ok(!labels.includes('Stop and check'), 'no stale recording: ' + labels);
+  assert.deepEqual(page.exceptions, []);
+});
