@@ -2004,7 +2004,7 @@ import { register as registerPathway } from './ui/pathway.js';
     planProgress = { review: 0, weak: 0, apply: 0, check: 0 };
     // `seen`: has this learner any item record at this level yet? A fresh
     // profile's empty plan is a first sitting, not a day off (curriculum.js).
-    if (!customOn) msg += ' ' + describePlan(sessionPlan, id => inf(id).short, { seen: activeItems(mod, S.level).some(id => !!S.item[id]) });
+    if (!customOn) msg += ' ' + describePlan(sessionPlan, id => inf(id).short, { seen: activeItems(mod, S.level).some(id => !!S.item[id]), t });
     const why = describeWhy(sessionPlan, id => inf(id).short); if (why && !customOn) msg += ' ' + why;
     // The song block's own unreviewed label, matching the same test the
     // hand-off button's own note uses (renderOpts, app.js:2109 as of this
@@ -2151,8 +2151,8 @@ import { register as registerPathway } from './ui/pathway.js';
     // Session length E7c: 5/10/15 minutes or no limit, per DB.prefs.sessionMinutes
     // -- a change takes effect at the next Start, never a running session's
     // sess.target, so it cannot fire a surprise break or cancel one mid-session.
-    if (!TOOLS[mod]) sel('optSessionMinutes', 'Session length', [['none', ['No limit']], ['5', ['5 minutes']], ['10', ['10 minutes']], ['15', ['15 minutes']]] /* pairs: integer-like object keys would sort first */, DB.prefs.sessionMinutes ? String(DB.prefs.sessionMinutes) : 'none', v => { DB.prefs.sessionMinutes = v === 'none' ? null : +v; save(); });
-    if (NOTATE_MOD_IDS.indexOf(mod) >= 0) sel('optNotate', 'Show', { names: [DB.prefs.names ? 'Note names (today)' : 'Note names (off in Settings)'], staff: ['Staff'], both: [DB.prefs.names ? 'Staff and names' : 'Staff (names off in Settings)'] }, DB.prefs.notate[mod], v => { DB.prefs.notate[mod] = v; save(); });
+    if (!TOOLS[mod]) sel('optSessionMinutes', t('opt.sessionLength'), [['none', [t('opt.sessionNone')]], ['5', [t('opt.sessionMinutes', { n: 5 })]], ['10', [t('opt.sessionMinutes', { n: 10 })]], ['15', [t('opt.sessionMinutes', { n: 15 })]]] /* pairs: integer-like object keys would sort first */, DB.prefs.sessionMinutes ? String(DB.prefs.sessionMinutes) : 'none', v => { DB.prefs.sessionMinutes = v === 'none' ? null : +v; save(); });
+    if (NOTATE_MOD_IDS.indexOf(mod) >= 0) sel('optNotate', t('opt.show'), { names: [t(DB.prefs.names ? 'opt.showNames' : 'opt.showNamesOff')], staff: [t('opt.showStaff')], both: [t(DB.prefs.names ? 'opt.showBoth' : 'opt.showBothOff')] }, DB.prefs.notate[mod], v => { DB.prefs.notate[mod] = v; save(); });
     if (mod === 'wind') { sel('optWind', 'My instrument', WIND_KINDS, DB.prefs.wind, v => { DB.prefs.wind = v; task = null; save(); }); chk('optRef', 'Play me the note first', false, () => {}); }
     if (mod === 'voice') sel('optVoice', 'My range', Object.assign({}, VOICE_KINDS, DB.prefs.voiceRange ? { mine: ['My range (found by test)', tonicFromRange(exerciseRangeFor(DB.prefs.voiceRange)).tonic] } : {}), DB.prefs.voice, v => { DB.prefs.voice = v; task = null; save(); });
     if (mod === 'voice' && !rangeTest) btn('optRangeStart', DB.prefs.voiceRange ? 'Find my range again' : 'Find my range', () => { handleRangeTest('start'); renderOpts(); });
@@ -2170,7 +2170,7 @@ import { register as registerPathway } from './ui/pathway.js';
     // not merely offered) at least once, or an earlier both-hands record
     // grandfathering it open. A lock note and a "before you start" prep line
     // for each hand ride along beside it.
-    if (mod === 'kbd') sel('optKbdHands', t('songs.hands.label'), { both: ['Both'], right: ['Right only'], left: ['Left only'] }, mod === 'kbd' && D().task === 'hands' && !D().timed ? effectiveHands(DB.prefs.kbdHands, bothUnlocked(S)) : DB.prefs.kbdHands, v => { DB.prefs.kbdHands = v; task = null; save(); });
+    if (mod === 'kbd') sel('optKbdHands', t('songs.hands.label'), { both: [t('opt.handsBoth')], right: [t('opt.handsRight')], left: [t('opt.handsLeft')] }, mod === 'kbd' && D().task === 'hands' && !D().timed ? effectiveHands(DB.prefs.kbdHands, bothUnlocked(S)) : DB.prefs.kbdHands, v => { DB.prefs.kbdHands = v; task = null; save(); });
     if (mod === 'kbd' && D().task === 'hands' && !D().timed) {
       if (!bothUnlocked(S)) {
         const o = document.querySelector('#optKbdHands option[value="both"]'); if (o) o.disabled = true;
@@ -2258,7 +2258,7 @@ import { register as registerPathway } from './ui/pathway.js';
       btn('capDrill', 'Drill the notes', () => { if (!cap.notes.length) { say('Nothing captured yet.', 'no'); return; } DB.custom = cap.notes.map(n => n.m).slice(0, 300); save(); const to = $('capTo').value; setMod(to); customOn = true; renderOpts(); showAll(); coach('Your captured tune is loaded: ' + DB.custom.length + ' notes, four at a time. Each group repeats until it is clean. Press Start.'); });
     }
     if (MODS[mod] && DB.custom && DB.custom.length && hasMasteryScheme(mod)) chk('optCustom', 'Practice my captured melody (' + DB.custom.length + ' notes)', customOn, v => { customOn = v; chunk = 0; task = null; showAll(); });
-    if (groovable(mod)) chk('optGroove', 'Play in time (metronome, ' + (S.grooveBpm || 80) + ' beats a minute)', grooveOn, v => { grooveOn = v; task = null; groove = null; showAll(); });
+    if (groovable(mod)) chk('optGroove', t('opt.groove', { beats: S.grooveBpm || 80 }), grooveOn, v => { grooveOn = v; task = null; groove = null; showAll(); });
   }
 
   // ---------- inputs ----------
