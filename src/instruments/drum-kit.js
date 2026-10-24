@@ -44,8 +44,12 @@ export const PIECES = [
 
 // The piece id a MIDI note belongs to, or null when that note is not one of
 // this kit's pieces (e.g. 39, GM hand clap). schema.js guarantees a note
-// belongs to at most one piece.
-export function pieceForMidi(midi) {
+// belongs to at most one piece. `map` is an optional learned map for one
+// device, { [note]: pieceId } (see how/kit-presets.js): a note in it names
+// the piece the player taught the app, beating GM; every other note, and a
+// missing or unusable map, keeps the GM reading above.
+export function pieceForMidi(midi, map) {
+  if (map && typeof map === 'object' && !Array.isArray(map) && Number.isInteger(midi) && Object.prototype.hasOwnProperty.call(map, midi) && PIECES.some(p => p.id === map[midi])) return map[midi];
   const piece = PIECES.find(p => p.midi.includes(midi));
   return piece ? piece.id : null;
 }

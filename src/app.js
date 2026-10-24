@@ -53,6 +53,7 @@ import { renderVoice } from './audio/voices.js';
 import { layoutFor as harpLayoutFor } from './instruments/how/harmonica.js';
 import { pieceForMidi } from './instruments/drum-kit.js';
 import { renderKitSetup } from './ui/kit-setup.js';
+import { kitNoteFor } from './instruments/how/kit-presets.js';
 import { kitFrame, kitRegions, pieceAt, THRONE } from './instruments/how/drum-kit.js';
 import { layoutPercussionMeasure } from './notation/percussion.js';
 import { songFor, KBD_SONG_SKILL_MAP } from './instruments/kbd-songs.js';
@@ -2143,7 +2144,7 @@ import { register as registerPathway } from './ui/pathway.js';
   }
   function renderOpts() {
     const kitHost = $('kitSetup'); kitHost.hidden = !(MODS[mod] && MODS[mod].kit);
-    if (!kitHost.hidden) renderKitSetup(kitHost, DB.prefs.kit, prefs => { DB.prefs.kit = prefs; save(); if (panels.current() === 'fingerings') { panels.close(); openPanel('fingerings'); } });
+    if (!kitHost.hidden) renderKitSetup(kitHost, DB.prefs.kit, prefs => { DB.prefs.kit = prefs; save(); if (panels.current() === 'fingerings') { panels.close(); openPanel('fingerings'); } }, kitLearn);
     const box = $('modOpts'); box.innerHTML = ''; const sel = (id, label, opts, val, on) => { const l = document.createElement('label'); l.htmlFor = id; l.textContent = label + ' '; const s = document.createElement('select'); s.id = id; (Array.isArray(opts) ? opts : Object.keys(opts).map(k => [k, opts[k]])).forEach(([k, v]) => { const o = document.createElement('option'); o.value = k; o.textContent = v[0]; s.appendChild(o); }); s.value = val; s.addEventListener('change', () => on(s.value)); l.appendChild(s); box.appendChild(l); };
     const btn = (id, text, on, primary) => { const b = document.createElement('button'); b.type = 'button'; b.id = id; b.className = 'small' + (primary ? ' primary' : ''); b.textContent = text; b.addEventListener('click', () => { b.blur(); on(); }); box.appendChild(b); return b; };
     const chk = (id, text, val, on) => { const l = document.createElement('label'); l.htmlFor = id; const c = document.createElement('input'); c.type = 'checkbox'; c.id = id; c.checked = val; c.addEventListener('change', () => on(c.checked)); l.appendChild(c); l.appendChild(document.createTextNode(' ' + text)); box.appendChild(l); };
@@ -2366,6 +2367,10 @@ import { register as registerPathway } from './ui/pathway.js';
   // One raw MIDI message from an opened port: blink, log it for the details
   // readout, parse it (createMidiParser keeps running status per port), and
   // feed note-on/off into onNote()/the real held-note set.
+  // A pad the player taught the kit set-up sheet arrives as the General MIDI note of its piece, so every kit listener below (trainer, Songs drum practice, reference) hears the right drum. Only a kit, or Songs (a percussion part plays on the kit whatever is selected), reads a device's learned map.
+  let kitLearnSink = null;
+  const kitLearn = { listen: fn => { kitLearnSink = fn; return () => { if (kitLearnSink === fn) kitLearnSink = null; }; } };
+  const kitNote = (input, note) => (MODS[mod] && MODS[mod].kit) || panels.current() === 'songs' ? kitNoteFor(DB.prefs.kit, input.name, note) : note;
   function handleMidiMessage(input, ev) {
     const d = ev.data; if (!d || !d.length) return;
     midiBlink();
@@ -2377,7 +2382,11 @@ import { register as registerPathway } from './ui/pathway.js';
     ioRefresh();
     if (midiOutBusy) return; // the keyboard is playing a song back for the learner and echoes its own notes as input -- not the learner playing, so not judged
     let parser = midiParsers.get(input); if (!parser) { parser = createMidiParser(); midiParsers.set(input, parser); }
-    parser.feed(d).forEach(evt => { if (evt.type === 'on') { noteState.noteOn(input, evt.channel, evt.note); realMidiHeld.add(evt.note); onNote(evt.note, true, 'midi'); } else { noteState.noteOff(input, evt.channel, evt.note); if (!noteState.isHeld(evt.note)) realMidiHeld.delete(evt.note); onNoteOff(evt.note, 'midi'); } });
+    parser.feed(d).forEach(evt => {
+      if (evt.type === 'on' && kitLearnSink && kitLearnSink(input.name, evt.note)) return; // the kit set-up walk-through is learning this pad; it is not a hit
+      const note = kitNote(input, evt.note);
+      if (evt.type === 'on') { noteState.noteOn(input, evt.channel, note); realMidiHeld.add(note); onNote(note, true, 'midi'); } else { noteState.noteOff(input, evt.channel, note); if (!noteState.isHeld(note)) realMidiHeld.delete(note); onNoteOff(note, 'midi'); }
+    });
   }
   function connectMic() { openMic().then(ioRefresh).catch(e => { recordError('mic:connect', e); ioState('off', micErrorMessage(e)); }); }
   // Start on a mic instrument asks for the mic FIRST (the browser's own prompt), then begins: an exercise that cannot hear only ever says "Time." and "You stepped away". Blocked or unavailable: say so and do not start.
