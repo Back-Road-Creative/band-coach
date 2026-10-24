@@ -145,7 +145,7 @@ export function fingeringsForSlide(midi, preset, maxPosition = 7) {
 // partial 2 is the first practical note, written C4 = 60, matching
 // trumpet-bb.js's and horn-f.js's own written-pitch range comments).
 // Non-transposing bass-clef brass (euphonium, tuba — trombone.js's "bc"
-// group, app.js:110) reads concert pitch, whose open partial 2 is written
+// group, WIND_KINDS in app.js) reads concert pitch, whose open partial 2 is written
 // Bb2 (46), so its fundamental is Bb1 (34) — matching trombone.js's own
 // hand-checked open (1st position) partials, Bb2 and F3.
 export const PRESETS = {

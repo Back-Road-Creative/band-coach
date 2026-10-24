@@ -140,7 +140,7 @@ test('in a hands-together task, the right-hand and left-hand target keys carry d
 // Level 8 (and above, since later levels fold earlier ones' items into their
 // own pool) mixes notes from both octaves at random, so this can take a few
 // elements. A finished task's next one is started by the app itself, on its
-// own clock (src/app.js:1497's `nextTaskAt`), the same as
+// own clock (src/app.js's `nextTaskAt`), the same as
 // journey-practice-progress.test.mjs's driveUntilJudged() relies on -- so
 // this only ever waits for a task/cur() to (re)appear, never clicks #playBtn
 // mid-drive.
@@ -187,8 +187,8 @@ test('a real pointerdown on a lower-row key plays that key, not the wrong row', 
 
   // Phase 1: tap the target's OWN rect, in row 0 (the left-hand octave) --
   // this must play the target and pass. Once an element has been failed,
-  // passing it later reads back as neutral rather than 'ok' (passEl(),
-  // src/app.js:1205's `else` branch), so this is checked on a fresh,
+  // passing it later reads back as neutral rather than 'ok' (passEl()'s
+  // `else` branch in src/app.js), so this is checked on a fresh,
   // not-yet-failed element, before anything is tapped wrong.
   const info1 = await untilLowNoteTarget(page);
   const keys1 = await page.evaluate('window.__coach.kbdKeys()');

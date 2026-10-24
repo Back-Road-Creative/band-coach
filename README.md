@@ -1753,7 +1753,7 @@ release.
   the microphone path, end-to-end in Firefox.
 - **Safari (desktop and iOS):** untested, and Web MIDI is not available — the app detects the
   missing API and says so, falling back to on-screen keys, computer-keyboard keys and the
-  microphone rather than failing silently (`src/app.js:1289`). That fallback has not been confirmed
+  microphone rather than failing silently (`src/app.js`, the `navigator.requestMIDIAccess` check). That fallback has not been confirmed
   by hand in Safari.
 - **Phone-sized windows, emulated only** (`tests/release/acceptance-phone-practice.test.mjs` for
   sizes and fit, `tests/release/acceptance-phone-practice-taps.test.mjs` for the taps: headless

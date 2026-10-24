@@ -2,7 +2,7 @@
 //
 // Convention, confirmed against every src/instruments/*.js record with a
 // non-zero `transposition` (see each file's own header comment) and against
-// the existing src/app.js wiring (transposedMicRange, app.js:556-562):
+// the existing src/app.js wiring (transposedMicRange, now in src/instruments/mods.js):
 // sounding pitch = written pitch + transposition, so written = sounding -
 // transposition. Every note anywhere else in this app (Song notes, the
 // judge, the mic/pitch detector, MIDI playback) is SOUNDING pitch -- this

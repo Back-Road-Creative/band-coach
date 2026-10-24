@@ -78,7 +78,7 @@ test('FIXED (flaw E5): switching to the tuner tool does not write a mods.tuner k
 
   await page.evaluate("window.__coach.setMod('kbd')");
   await page.evaluate("window.__coach.setMod('tuner')");
-  // save() debounces at 1.2s (src/app.js:217).
+  // save() debounces at 1.2s (save() in src/app.js).
   await new Promise((r) => setTimeout(r, 1500));
 
   const raw = await page.evaluate("localStorage.getItem('bandcoach.v1')");

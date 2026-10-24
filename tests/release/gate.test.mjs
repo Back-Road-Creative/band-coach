@@ -59,14 +59,14 @@ function writeDecayWav(path, { freq = 440, sampleRate = 48000, toneSeconds = 0.6
 }
 
 // A fresh profile (new localStorage every launchPage()) starts at kbd level
-// 1, which only ever asks for these three notes (src/app.js:243, N(60,62,64)
+// 1, which only ever asks for these three notes (src/app.js, the kbd level-1 pool N(60,62,64)
 // under 'C, D and E'). The on-screen prompt names the target note by pitch
 // class regardless of whether it has been revealed (src/core/reveal.js
 // promptFor(): item.label is always set for a 'note' item), so a real
 // learner -- and this test -- can read '#prompt b' to know what to play
 // without any debug hook.
 const LEVEL1_NOTE_TO_MIDI = { C: 60, D: 62, E: 64 };
-// src/app.js:1226 PCKEYS: the real computer-keyboard note entry a learner
+// src/app.js PCKEYS: the real computer-keyboard note entry a learner
 // without a MIDI device uses. Only the level-1 keys are needed here.
 const LEVEL1_MIDI_TO_PCKEY = { 60: 'a', 62: 's', 64: 'd' };
 
@@ -77,7 +77,7 @@ async function readLevel1TargetMidi(page) {
   if (midi === undefined) {
     throw new Error(
       `level-1 keyboard prompt showed "${label}", not one of C/D/E -- a fresh profile should start at ` +
-        'level 1 (src/app.js:243); if that changed, this test needs updating, not loosening.'
+        'level 1 (the kbd level-1 pool in src/app.js); if that changed, this test needs updating, not loosening.'
     );
   }
   return midi;
@@ -124,14 +124,14 @@ test('release build: the tuner readout survives a decaying note through the sile
 
   // Captures fillText calls, but reset on every clearRect -- the app's
   // render loop calls clearRect(0,0,W,H) exactly once per animation frame
-  // (src/app.js:1016) before redrawing, so this array always reflects only
+  // (src/app.js render loop) before redrawing, so this array always reflects only
   // the CURRENT frame, not "was this text ever drawn, at any point in the
   // test." The old assertion here was `.some(...)` over every frame ever
   // drawn, which is exactly why it could not fail: the tuner's row list
-  // (src/app.js:1053, 'String 4   A4') names every string's OPEN pitch
+  // (src/app.js drawTuner, 'String 4   A4') names every string's OPEN pitch
   // unconditionally, every frame, tone or no tone. The text that actually
   // depends on a live detection is the big central readout drawn only while
-  // st.phase !== 'idle' (src/app.js:1054/1060), and for A4 that text is the
+  // st.phase !== 'idle' (src/app.js drawTuner), and for A4 that text is the
   // bare pitch class 'A' (nname() with no octave argument) -- distinct from
   // the row label's 'A4', so checking for exactly 'A' proves the live
   // readout, not the always-there tuning reference.
@@ -229,7 +229,7 @@ test('release build: a real key press with no debug hook plays and grades a note
   // A trusted key event from the browser's own input pipeline (CDP
   // Input.dispatchKeyEvent, isTrusted === true, delivered to the focused
   // element and up to the document), exactly the entry point the document
-  // keydown listener (src/app.js:2536-2542) reads for a learner with no MIDI
+  // keydown listener (src/app.js) reads for a learner with no MIDI
   // device and no pointer precision for the on-screen keys -- never
   // window.__coach.note().
   await page.press(key, { text: key });

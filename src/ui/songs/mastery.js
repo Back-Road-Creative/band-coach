@@ -1,7 +1,7 @@
 // Maps a MIDI note, played on a given instrument, to the SAME per-item id
 // the app's built-in drills use for that instrument's mastery store
 // (src/app.js `it(id)` / `S.item[id]`; id formats read from `info()` /
-// `validId()` at src/app.js:282-295). `src/app.js`'s "capture a melody"
+// `validId()` in src/app.js). `src/app.js`'s "capture a melody"
 // mapper `customItem()` delegates to this function so the two can never
 // drift apart again (tests/unit/w-songs-mastery.test.mjs asserts the
 // agreement directly).
@@ -51,11 +51,11 @@ function fold(x, lo, hi) {
   return v;
 }
 
-// Hand-checked against src/app.js VOICE_KINDS (app.js:277): low Do = C3
+// Hand-checked against src/app.js VOICE_KINDS: low Do = C3
 // (48), mid Do = G3 (55), high Do = C4 (60).
 const VOICE_TONIC = { low: 48, mid: 55, high: 60 };
 
-// Hand-checked against src/app.js WIND_KINDS (app.js:276): semitone offset
+// Hand-checked against src/app.js WIND_KINDS: semitone offset
 // from written pitch to concert (sounding) pitch for each transposing
 // choice, and which of them are read in the bass clef.
 const WIND_OFFSET = { c: 0, bb: -2, bbt: -14, eb: -9, ebb: -21, f: -7, bc: -19 };

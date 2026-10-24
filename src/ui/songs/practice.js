@@ -45,7 +45,7 @@ const CHORD_SPREAD_MS = 80;
 
 // A drum-name a mic hit cannot give (toms, crash, ride -- the mic's onset
 // classifier only tells kick/snare/hihat apart, see src/audio/drum-classify.js
-// and app.js's own KIT_MIC_UNNAMED, app.js:1347, which this copies) is judged
+// and app.js's own KIT_MIC_UNNAMED, which this copies) is judged
 // leniently rather than pretending the mic can name it: a mic hit on one of
 // these pieces leaves pieceOk null (below) instead of false, so it is never
 // held against the learner, only the onset timing is.

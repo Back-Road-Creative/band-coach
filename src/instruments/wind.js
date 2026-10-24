@@ -1,10 +1,10 @@
-// Extracted from src/app.js MODS.wind (app.js:86-91). Named honestly: today's
+// Extracted from src/app.js MODS.wind. Named honestly: today's
 // "wind" mod is NOT one instrument. It is a single written-pitch curriculum
-// (Wn(...) ids, app.js:56, written numbers 60-79) that gets reinterpreted at
-// judging time through a runtime preference, WIND_KINDS (app.js:110), which
+// (Wn(...) ids, written numbers 60-79) that gets reinterpreted at
+// judging time through a runtime preference, WIND_KINDS, which
 // covers seven different transposing instruments (concert, three flavours of
 // B flat, two of E flat, F, and a bass-clef group) by adding a per-instrument
-// semitone offset in info() (app.js:119). There is one MODS entry, one
+// semitone offset in info(). There is one MODS entry, one
 // curriculum, and up to seven live transpositions layered on top of it.
 // This record captures that one shared curriculum at its literal written
 // pitches (concert/treble baseline, transposition 0); the seven selectable

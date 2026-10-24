@@ -463,7 +463,7 @@ test('keyboard and accessibility journey on the release file (launch A, one page
     });
 
     await t.test('A11-6 control (launch A): the same wrong note draws the full-canvas flash', async () => {
-      // Depends on one animation frame landing inside the 220 ms the app draws the flash (app.js:1995); on a
+      // Depends on one animation frame landing inside the 220 ms the app draws the flash (flashBad in app.js's draw); on a
       // starved box that frame can be missed, which is why the earlier steps do not wait for it.
       const flash = await read(page, `window.__q62.flashes.filter((s) => s.t > ${run.wrong.t0} && s.strokeStyle === '${BAD_FLASH}').length`);
       assert.ok(flash > 0, 'without reduced motion the wrong note flashes the canvas edge');
