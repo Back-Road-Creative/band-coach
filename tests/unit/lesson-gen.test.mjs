@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { fitToInstrument, segment, buildLessonPlan, nextStep, creditFor } from '../../src/song/lesson.js';
-import { difficultyLabel } from '../../src/ui/songs.js';
+import { difficultyLabel } from '../../src/ui/songs/session-helpers.js';
 import gtr from '../../src/instruments/gtr.js';
 import bass from '../../src/instruments/bass.js';
 import harp from '../../src/instruments/harp.js';

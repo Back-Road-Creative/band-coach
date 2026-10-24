@@ -10,7 +10,7 @@ import { join } from 'node:path';
 import { HTML_PATH } from '../helpers/html-path.mjs';
 import { launchPage } from '../helpers/browser.mjs';
 import { exportMidi } from '../../src/song/export-midi.js';
-import { fidelityNoticeText } from '../../src/ui/songs.js';
+import { fidelityNoticeText } from '../../src/ui/songs/session-helpers.js';
 
 const htmlPath = HTML_PATH;
 
