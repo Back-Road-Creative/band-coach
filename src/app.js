@@ -441,7 +441,7 @@ import { register as registerPathway } from './ui/pathway.js';
     const sel = $('micDeviceSelect'); if (!sel) return;
     const wanted = DB.prefs.inputDeviceId || '';
     sel.innerHTML = '';
-    const def = document.createElement('option'); def.value = ''; def.textContent = 'Default microphone'; sel.appendChild(def);
+    const def = document.createElement('option'); def.value = ''; def.textContent = t('setup.defaultMic'); sel.appendChild(def);
     micDevices.forEach((d, i) => { const o = document.createElement('option'); o.value = d.deviceId; o.textContent = d.label || ('Microphone ' + (i + 1)); sel.appendChild(o); });
     sel.value = micDevices.some(d => d.deviceId === wanted) ? wanted : '';
   }
@@ -2322,7 +2322,7 @@ import { register as registerPathway } from './ui/pathway.js';
   }
   function ioRefresh() {
     const b = $('ioBtn'), detailsBtn = $('midiDetailsBtn'), tcb = $('tunerConnect'); if (tcb) tcb.hidden = micReady;
-    if (needsMic()) { b.hidden = micReady; b.textContent = 'Connect microphone'; detailsBtn.hidden = true; ioState(micReady ? 'on' : '', micReady ? 'Listening through your microphone.' : 'This one listens through a microphone or audio interface.'); }
+    if (needsMic()) { b.hidden = micReady; b.textContent = t('tuner.connectMic'); detailsBtn.hidden = true; ioState(micReady ? 'on' : '', micReady ? 'Listening through your microphone.' : 'This one listens through a microphone or audio interface.'); }
     else if (mod === 'ear') { b.hidden = true; detailsBtn.hidden = true; ioState('on', 'Nothing to connect. Turn your sound up.'); }
     else {
       b.hidden = midiOn; b.textContent = 'Connect MIDI'; detailsBtn.hidden = false;
@@ -2403,13 +2403,15 @@ import { register as registerPathway } from './ui/pathway.js';
       if (evt.type === 'on') { noteState.noteOn(input, evt.channel, note); realMidiHeld.add(note); onNote(note, true, 'midi'); } else { noteState.noteOff(input, evt.channel, note); if (!noteState.isHeld(note)) realMidiHeld.delete(note); onNoteOff(note, 'midi'); }
     });
   }
+  const canOpenMic = () => !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+  const NO_MIC_API_MSG = 'This browser cannot open a microphone here. Open the standalone copy in Chrome.'; // one message for Connect and Start when getUserMedia is missing
   function connectMic() { openMic().then(ioRefresh).catch(e => { recordError('mic:connect', e); ioState('off', micErrorMessage(e)); }); }
   // Start on a mic instrument asks for the mic FIRST (the browser's own prompt), then begins: an exercise that cannot hear only ever says "Time." and "You stepped away". Blocked or unavailable: say so and do not start.
   function startAfterMic() {
     if (askInstrumentFirst()) return;
     if (!needsMic() || micReady) { startSession(); return; }
     const m = mod, blocked = e => { recordError('mic:start', e); const msg = e && e.name === 'NotAllowedError' ? 'The microphone was blocked, so I could not start. Press "Set up input", then "Connect microphone", and allow it in your browser.' : micErrorMessage(e); ioState('off', msg); if (mod === m) coach(msg); };
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { const msg = 'This browser cannot open a microphone here. Open the standalone copy in Chrome.'; ioState('off', msg); coach(msg); return; }
+    if (!canOpenMic()) { const msg = NO_MIC_API_MSG; ioState('off', msg); coach(msg); return; }
     ensureAudio(); openMic().then(() => { ioRefresh(); if (!sess && mod === m) startSession(); }).catch(blocked);
   }
   function connectMidi() {
@@ -2450,7 +2452,7 @@ import { register as registerPathway } from './ui/pathway.js';
           // only, see listenDrums()) rather than leaving Connect a dead end.
           // A kit whose e-kit IS found never reaches here, so this can never
           // fight real MIDI note-ons for the same tap.
-          if (!connected.length && MODS[mod] && MODS[mod].input === 'mic+midi' && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) openMic().then(ioRefresh).catch(() => ioState('off', 'No MIDI device found, and the microphone was blocked. Allow it, or plug in a kit.'));
+          if (!connected.length && MODS[mod] && MODS[mod].input === 'mic+midi' && canOpenMic()) openMic().then(ioRefresh).catch(() => ioState('off', 'No MIDI device found, and the microphone was blocked. Allow it, or plug in a kit.'));
           else if (!connected.length) ioState('off', 'No MIDI device is plugged in. Plug it in and it will be picked up. Screen and computer keys still work as practice, not proof a real keyboard works.');
           else if (!midiOn) ioState('off', 'Another program may be using this keyboard. Close it and press Connect again.');
         });
@@ -2466,13 +2468,13 @@ import { register as registerPathway } from './ui/pathway.js';
   }
   $('ioBtn').addEventListener('click', () => {
     ensureAudio();
-    if (needsMic()) { if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { ioState('off', 'This browser cannot open a microphone here. Open the standalone copy in Chrome.'); return; } connectMic(); return; }
+    if (needsMic()) { if (!canOpenMic()) { ioState('off', NO_MIC_API_MSG); return; } connectMic(); return; }
     if (!navigator.requestMIDIAccess) {
       // A drum kit still has the mic to fall back on even when this browser
       // cannot read MIDI at all (needsMic() stays false for 'mic+midi' so an
       // e-kit is tried FIRST; see the empty-inputs branch below for the same
       // fallback when MIDI is readable but nothing is plugged in).
-      if (MODS[mod] && MODS[mod].input === 'mic+midi' && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) { connectMic(); return; }
+      if (MODS[mod] && MODS[mod].input === 'mic+midi' && canOpenMic()) { connectMic(); return; }
       ioState('off', 'This browser cannot read MIDI. Use Chrome or Edge. Screen and computer keys still work as practice, not proof a real keyboard works.'); return;
     }
     connectMidi();
