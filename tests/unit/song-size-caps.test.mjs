@@ -157,3 +157,22 @@ test('checkFileSize never blocks a file whose size it cannot read', () => {
   assert.equal(route.checkFileSize({ name: 'x' }, 'midi'), null);
   assert.equal(route.checkFileSize(null, 'midi'), null);
 });
+
+test('checkFileSize caps an audio file at 100 MB: the cap passes, one byte over is refused', () => {
+  const cap = 100 * MB;
+  assert.equal(route.checkFileSize({ name: 'a.wav', size: cap }, 'audio'), null);
+  const msg = route.checkFileSize({ name: 'a.wav', size: cap + 1 }, 'audio');
+  assert.equal(typeof msg, 'string');
+  assert.match(msg, /limit is 100 MB/);
+  assert.match(msg, /smaller/i);
+});
+
+test('transcribeAudioFile refuses an oversized audio file before reading or decoding it', async () => {
+  const { transcribeAudioFile } = await import('../../src/ui/songs/record-door.js');
+  let read = 0, decoded = 0;
+  const file = { name: 'big.wav', size: 100 * MB + 1, arrayBuffer: async () => { read++; return new ArrayBuffer(8); } };
+  const api = { audio: () => ({ decodeAudioData: async () => { decoded++; return {}; } }) };
+  await assert.rejects(() => transcribeAudioFile(file, api), /limit is 100 MB/);
+  assert.equal(read, 0, 'arrayBuffer must not run');
+  assert.equal(decoded, 0, 'decodeAudioData must not run');
+});
