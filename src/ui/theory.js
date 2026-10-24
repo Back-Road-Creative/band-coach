@@ -3,6 +3,7 @@
 // instrument) and a Transpose tab (written vs concert pitch). Wiring note:
 // every fact comes from src/core/theory/* -- this file only builds DOM and
 // wires it to that pure layer plus panelApi (src/app.js).
+import { el } from './dom.js';
 import { spelledName } from '../core/note-names.js';
 import { ALL_KEYS, findKey, signatureFor } from '../core/theory/keys.js';
 import { scale, scaleTypes, majorScale, naturalMinorScale, scaleOnInstrument } from '../core/theory/scales.js';
@@ -31,19 +32,6 @@ const VOICING_INSTRUMENTS = [
   { id: 'bass', label: 'Bass' },
   { id: 'uke', label: 'Ukulele' },
 ];
-
-function el(tag, attrs, children) {
-  const node = document.createElement(tag);
-  if (attrs) {
-    Object.keys(attrs).forEach((k) => {
-      if (k === 'text') node.textContent = attrs[k];
-      else if (k === 'html') node.innerHTML = attrs[k];
-      else node.setAttribute(k, attrs[k]);
-    });
-  }
-  (children || []).forEach((c) => c && node.appendChild(c));
-  return node;
-}
 
 function option(value, label) {
   return el('option', { value }, [document.createTextNode(label)]);

@@ -3,6 +3,7 @@
 // worker, a save/print path with no <canvas> in reach). Geometry mirrors draw-canvas.js
 // primitive-for-primitive; keep the two in sync by hand when either changes.
 
+import { escapeXml } from '../core/escape.js';
 import { CLEF_PATHS, ACCIDENTAL_PATHS, REST_PATHS, FILLED_RESTS } from './glyphs.js';
 
 const CLEF_GLYPH = { treble: '\u{1D11E}', bass: '\u{1D122}', alto: '\u{1D121}', tenor: '\u{1D121}', percussion: '\u{1D125}' };
@@ -16,16 +17,6 @@ const ACCIDENTAL_FALLBACK = { '#': '#', b: 'b', '': 'n' };
 // base falls back to quarter.
 const REST_GLYPH = { 4: '\u{1D13B}', 2: '\u{1D13C}', 1: '\u{1D13D}', 0.5: '\u{1D13E}', 0.25: '\u{1D13F}', 0.125: '\u{1D140}' };
 const REST_LETTER_FALLBACK = { 4: 'W', 2: 'H', 1: 'Q', 0.5: 'E', 0.25: 'S', 0.125: 'T' };
-
-// Escapes the five characters XML text content and quoted attribute values reserve.
-export function escapeXML(text) {
-  return String(text)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&apos;');
-}
 
 // Draws a glyphs.js vector path as a <g><path>, translated to (x, y): filled for a solid
 // shape (the whole/half rest blocks), stroked otherwise. Falls back to a Unicode music-font
@@ -45,7 +36,7 @@ function svgLine(x1, y1, x2, y2) {
 }
 
 function svgText(text, x, y) {
-  return `<text x="${x}" y="${y}" fill="black">${escapeXML(text)}</text>`;
+  return `<text x="${x}" y="${y}" fill="black">${escapeXml(text)}</text>`;
 }
 
 const DRAWERS = {
@@ -106,8 +97,8 @@ function svgBody(primitives, theme) {
 function svgA11y(opts) {
   const ids = [];
   let inner = '';
-  if (opts.title) { ids.push('svg-title'); inner += `<title id="svg-title">${escapeXML(opts.title)}</title>`; }
-  if (opts.desc) { ids.push('svg-desc'); inner += `<desc id="svg-desc">${escapeXML(opts.desc)}</desc>`; }
+  if (opts.title) { ids.push('svg-title'); inner += `<title id="svg-title">${escapeXml(opts.title)}</title>`; }
+  if (opts.desc) { ids.push('svg-desc'); inner += `<desc id="svg-desc">${escapeXml(opts.desc)}</desc>`; }
   return { attrs: ids.length ? ` role="img" aria-labelledby="${ids.join(' ')}"` : '', inner };
 }
 

@@ -15,6 +15,7 @@
 // for the round-trip proof against every starter song.
 
 import { TICKS_PER_QUARTER, barsOf, partRange } from './model.js';
+import { escapeXml } from '../core/escape.js';
 import { spellMidi } from '../notation/spell.js';
 
 // Same letter -> natural pitch-class table as import-common.js's STEP_PC
@@ -42,15 +43,6 @@ const BASE_TYPES = [
   ['half', TICKS_PER_QUARTER * 2],
   ['whole', TICKS_PER_QUARTER * 4],
 ];
-
-function escapeXml(str) {
-  return String(str)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&apos;');
-}
 
 function typeForDuration(dur) {
   for (const [name, base] of BASE_TYPES) {
