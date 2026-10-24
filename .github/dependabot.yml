@@ -1,16 +1,35 @@
 # Keeps the SHA-pinned actions and both npm trees (the app and the Store
 # packager) current. Weekly, so a pin is never more than a week behind.
+# Routine bumps arrive as one PR per ecosystem; npm majors stay separate PRs.
 version: 2
 updates:
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "weekly"
+    groups:
+      actions:
+        patterns:
+          - "*"
   - package-ecosystem: "npm"
     directory: "/"
     schedule:
       interval: "weekly"
+    groups:
+      npm-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
   - package-ecosystem: "npm"
     directory: "/store"
     schedule:
       interval: "weekly"
+    groups:
+      store-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
