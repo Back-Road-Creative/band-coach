@@ -4,6 +4,7 @@
 // per-exercise level that adapts to how the learner is doing. All timing and
 // leveling maths lives in src/ui/ear/state.js so it can be unit-tested
 // without a browser; this file is just DOM wiring.
+import { el } from './dom.js';
 import { EAR_EXERCISES, makeQuestion, checkAnswer } from '../core/ear/index.js';
 import { SCALE_FAMILIES } from '../core/ear/scales-modes.js';
 import { beatsText } from '../core/ear/rhythm-dictation.js';
@@ -67,17 +68,6 @@ function expectedText(exerciseId, answer) {
   if (exerciseId === 'rhythm-dictation' || exerciseId === 'song-rhythm') return beatsText(answer);
   if (exerciseId === 'melodic-dictation' || exerciseId === 'song-dictation' || exerciseId === 'sing-back') return answer.map(noteName).join(', ');
   return Array.isArray(answer) ? answer.join(', ') : choiceLabel(exerciseId, answer);
-}
-
-function el(tag, attrs, children) {
-  const node = document.createElement(tag);
-  Object.entries(attrs || {}).forEach(([k, v]) => {
-    if (k === 'text') node.textContent = v;
-    else if (k === 'html') node.innerHTML = v;
-    else node.setAttribute(k, v);
-  });
-  (children || []).forEach((c) => node.appendChild(c));
-  return node;
 }
 
 function loadStore(api) {

@@ -18,6 +18,8 @@
 // call `weeklyReport(DB, { now, learnerName, goalMin })` for the printable
 // weekly report (src/ui/history.js turns it into markup and prints it).
 
+import { escapeHtml } from './escape.js';
+
 const DAY_MS = 86400000;
 const clamp = (x, lo, hi) => Math.min(hi, Math.max(lo, x));
 const mean = (xs) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0);
@@ -314,8 +316,6 @@ export function weeklyReport(db, { now, learnerName, goalMin = 15 } = {}) {
     truncated: l.truncated,
   };
 }
-
-const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 const HONEST_LIMITS = 'This report is judged by microphone: accuracy tracks the note that sounded, not which string or fret produced it, so string and fret choices are not verified.';
 
