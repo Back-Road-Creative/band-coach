@@ -43,16 +43,26 @@ test('a row below 1e12 or an invalid row throws', () => {
   assert.throws(() => seedEvent({ deltaMs: 0, skill: '' }), /not a valid event/);
 });
 
-// Runs the init script as a page would see it: a global with window, location, localStorage and its own Date.
+// Runs the init script as a page would see it: a global with window, location, a Storage whose methods live on the
+// prototype (as in Chrome, where the init script patches them), localStorage behind a getter that counts how often it is
+// reached, and its own Date. `reads` is what the page's first storage read would see; `touches` counts reaches into
+// window.localStorage, which the script must not make while the document is still being created.
 function runInit(src, { protocol = 'file:', top = true, name = '' } = {}) {
   const writes = {};
-  const sandbox = { location: { protocol }, localStorage: { setItem: (k, v) => { writes[k] = v; } }, name };
+  let touches = 0;
+  function Storage() {}
+  Storage.prototype.setItem = function (k, v) { writes[k] = v; };
+  Storage.prototype.getItem = function (k) { return k in writes ? writes[k] : null; };
+  const ls = new Storage();
+  const sandbox = { location: { protocol }, Storage, name };
+  Object.defineProperty(sandbox, 'localStorage', { get() { touches++; return ls; } });
   sandbox.window = sandbox;
   sandbox.top = top ? sandbox : {};
   const ctx = vm.createContext(sandbox);
   const realNow = vm.runInContext('Date.now', ctx);
   vm.runInContext(src, ctx);
-  return { ctx, writes, patched: vm.runInContext('Date.now', ctx) !== realNow, now: () => vm.runInContext('Date.now()', ctx), name: () => sandbox.name };
+  const atCreation = { writes: { ...writes }, touches };
+  return { ctx, writes, atCreation, read: (k) => ls.getItem(k), patched: vm.runInContext('Date.now', ctx) !== realNow, now: () => vm.runInContext('Date.now()', ctx), name: () => sandbox.name };
 }
 
 test('the init script does nothing outside a top-level file page', () => {
@@ -72,15 +82,35 @@ test('visit n reads its own offset, writes its own seed and bumps the visit coun
   assert.equal(first.name(), 'q4b2.visit=1');
   assert.ok(first.patched);
   assert.ok(Math.abs(first.now() - (SEED_T0 + 19 * HOUR)) < 5000, 'visit 1 reads SEED_T0 + 19 h');
+  first.read('bandcoach.v1');
   assert.deepEqual(noIds(JSON.parse(first.writes['bandcoach.v1'])), noIds(profileOf(seedS1())));
   const second = runInit(src, { name: 'q4b2.visit=1' });
   assert.equal(second.name(), 'q4b2.visit=2');
   assert.ok(Math.abs(second.now() - (SEED_T0 + 25 * HOUR)) < 5000, 'visit 2 reads SEED_T0 + 25 h');
+  second.read('bandcoach.v1');
   assert.deepEqual(second.writes, {}, 'a visit with no events leaves the app\'s own saved profile alone');
   const third = runInit(src, { name: 'q4b2.visit=2' });
   assert.ok(Math.abs(third.now() - (SEED_T0 + 21 * HOUR)) < 5000);
+  third.read('bandcoach.v1');
   assert.deepEqual(noIds(JSON.parse(third.writes['bandcoach.v1'])), noIds(profileOf(seedS2())));
   const past = runInit(src, { name: 'q4b2.visit=9' });
   assert.ok(Math.abs(past.now() - (SEED_T0 + 21 * HOUR)) < 5000, 'a visit past the schedule repeats the last one');
   assert.equal(past.name(), 'q4b2.visit=10');
+});
+
+// Why the seed waits for the page: under load, Chrome loses the saved profile of the PREVIOUS document when a script reads
+// or writes localStorage while the next document is still being created. The reload that follows the first write then
+// hands the app an older profile or an empty one (A08's "Remembered on a later try: 0"). 40 reloads on a box with 16 busy
+// processes lost 18 to 25 of them with a document-start read or write and none when the page's own first access did it.
+test('the seed is written at the page\'s first storage access, never while the document is being created', () => {
+  const src = profileScheduleInit([{ offsetMs: 19 * HOUR, events: seedS1() }]);
+  const r = runInit(src);
+  assert.equal(r.atCreation.touches, 0, 'window.localStorage is not reached while the document is created');
+  assert.deepEqual(r.atCreation.writes, {}, 'nothing is written while the document is created');
+  const seen = r.read('bandcoach.v1');
+  assert.deepEqual(noIds(JSON.parse(seen)), noIds(profileOf(seedS1())), 'the first read already sees the seeded profile');
+  const w = runInit(src);
+  w.ctx.Storage.prototype.setItem.call(w.ctx.localStorage, 'other', '1');
+  assert.deepEqual(noIds(JSON.parse(w.writes['bandcoach.v1'])), noIds(profileOf(seedS1())), 'a first write seeds the profile too');
+  assert.equal(w.writes.other, '1');
 });
