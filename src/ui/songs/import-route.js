@@ -43,13 +43,13 @@ import { importGp5 } from '../../song/import-gp5.js';
 import { MAX_BAND_PACK_BYTES } from '../../song/band-pack.js';
 import { MAX_IMPORT_BYTES } from '../../core/progress-file.js';
 
-const MB = 1048576, MAX_NOTATION_BYTES = 16 * MB, MAX_CHALLENGE_BYTES = 5 * MB; // the challenge cap matches parseChallenge's
+const MB = 1048576, MAX_NOTATION_BYTES = 16 * MB, MAX_CHALLENGE_BYTES = 5 * MB, MAX_AUDIO_BYTES = 100 * MB; // the challenge cap matches parseChallenge's; audio: ~10 min of 44.1 kHz stereo 16-bit WAV, and decoding holds it as 32-bit floats (about 2x)
 
-// Refusal text for a file too big to read, or null. `kind`: a routed kind or 'backup'.
+// Refusal text for a file too big to read, or null. `kind`: a routed kind, 'backup' or 'audio'.
 export function checkFileSize(file, kind) {
   const size = file && file.size;
   if (!Number.isFinite(size)) return null;
-  const limit = { backup: MAX_IMPORT_BYTES, 'band-pack': MAX_BAND_PACK_BYTES, challenge: MAX_CHALLENGE_BYTES }[kind] || MAX_NOTATION_BYTES;
+  const limit = { backup: MAX_IMPORT_BYTES, 'band-pack': MAX_BAND_PACK_BYTES, challenge: MAX_CHALLENGE_BYTES, audio: MAX_AUDIO_BYTES }[kind] || MAX_NOTATION_BYTES;
   return size <= limit ? null : 'This file is ' + Math.ceil(size / MB) + ' MB; the limit is ' + Math.floor(limit / MB) + ' MB. Pick a smaller file.';
 }
 

@@ -17,6 +17,7 @@ import { validateSong } from '../../song/model.js';
 import { createTakeAccumulator } from '../../audio/take-recorder.js';
 import { el } from '../dom.js';
 import { t } from '../../core/i18n.js';
+import { checkFileSize } from './import-route.js';
 
 // Same tail-of-buffer polling interval as src/ui/playalong.js's own "Record a
 // take" capture (startRecordingCapture) -- copied here, not imported, since
@@ -66,6 +67,8 @@ export async function transcribeAudioFile(file, api, opts = {}) {
   const isStale = typeof opts.isStale === 'function' ? opts.isStale : null;
   const actx = typeof api.audio === 'function' ? api.audio() : null;
   if (!actx) throw new Error('audio is not available');
+  const tooBig = checkFileSize(file, 'audio'); // before the whole file is read into memory
+  if (tooBig) throw new Error(tooBig);
   const audioBuffer = await actx.decodeAudioData(await file.arrayBuffer());
   if (isStale && isStale()) { const cancelled = new Error('cancelled'); cancelled.cancelled = true; throw cancelled; }
   const channels = [];

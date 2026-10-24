@@ -24,6 +24,7 @@ import { createTransport } from '../audio/stretch/loop.js';
 import { mixToMono, formatTime, makeCancellableProgress, AnalysisCancelledError } from './playalong/audio-prep.js';
 import { chordSegments, isLowConfidence, clampLoopSelection } from './playalong/timeline.js';
 import { createTakeAccumulator } from '../audio/take-recorder.js';
+import { checkFileSize } from './songs/import-route.js';
 
 // How often the mic-capture timer reads the analyser during "Record a take"
 // (src/ui/editor/record.js polls the same AnalyserNode on the same kind of
@@ -434,6 +435,8 @@ function mountPlayalong(el, api) {
     try {
       const actx = api.audio();
       if (!actx) throw new Error('audio is not available');
+      const tooBig = checkFileSize(file, 'audio'); // before the whole file is read into memory
+      if (tooBig) { resetForNewFile(); fileNameEl.textContent = file.name; errorEl.textContent = tooBig; errorEl.hidden = false; return; }
       const arrayBuffer = await file.arrayBuffer();
       const audioBuffer = await actx.decodeAudioData(arrayBuffer);
       const channels = [];
