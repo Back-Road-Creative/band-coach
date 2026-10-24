@@ -1634,7 +1634,7 @@ import { register as registerPathway } from './ui/pathway.js';
   const cssK = () => cv.width / (cv.getBoundingClientRect().width || cv.width);
   // the browser's text-size setting (root font size / 16), read once per draw() so canvas text grows with it like the page text does
   const KBD_LETTERS = Object.keys(PCKEYS).reduce((a, k) => { a[PCKEYS[k]] = k; return a; }, {});
-  let rootK = 1, kbdTyping = !matchMedia('(pointer: coarse)').matches; // any machine that is not finger-driven starts with the computer letters on the keys; a touch screen shows them only once a computer key is pressed
+  let rootK = 1, kbdTyping = false;
   const font = (px, w) => { g.font = (w || 700) + ' ' + Math.round(px * rootK) + 'px "Barlow Condensed", Arial, sans-serif'; };
   const accent = () => (MODS[mod] || TOOLS[mod]).color;
   const recentPress = m => pressed[m] && performance.now() - pressed[m] < 220;
@@ -2534,7 +2534,7 @@ import { register as registerPathway } from './ui/pathway.js';
   function applyTheme(t) { if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t); else document.documentElement.removeAttribute('data-theme'); }
   $('optTheme').addEventListener('change', function () { DB.prefs.theme = this.value; applyTheme(this.value); applyAccent(); save(); });
   // The idle coach line was written in the old language; rewrite it (only it: a live session's line is left as is).
-  $('optLocale').addEventListener('change', function () { const idle = $('coach').textContent === idleCoachLine(); DB.prefs.locale = LOCALES.some(l => l.code === this.value) ? this.value : 'en'; applyLocale(DB.prefs.locale); if (idle) $('coach').textContent = idleCoachLine(); rebuildPicker(); updateNavInstrumentLabel(); renderOpts(); showAll(); refreshModelPack(); save(); });
+  $('optLocale').addEventListener('change', function () { const idle = $('coach').textContent === idleCoachLine(); DB.prefs.locale = LOCALES.some(l => l.code === this.value) ? this.value : 'en'; applyLocale(DB.prefs.locale); if (idle) $('coach').textContent = idleCoachLine(); rebuildPicker(); updateNavInstrumentLabel(); renderOpts(); ioRefresh(); showAll(); refreshModelPack(); save(); });
   function applyNoteNaming() { DB.prefs.noteNaming = { system: $('optNoteSystem').value, accidentals: $('optAccidentals').value }; setNoteNaming(DB.prefs.noteNaming); save(); showAll(); }
   $('optNoteSystem').addEventListener('change', applyNoteNaming); $('optAccidentals').addEventListener('change', applyNoteNaming);
 

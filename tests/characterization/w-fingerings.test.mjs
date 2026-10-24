@@ -318,14 +318,6 @@ test('the first-run canvas asks for an instrument, then says PRESS START once on
   assert.equal(await page.evaluate("document.querySelector('#picker button[data-mod=\"kbd\"]').getAttribute('aria-pressed')"), 'true');
 });
 
-test('off a touch screen the keyboard wears its computer letters from the start, in lowercase', async (t) => {
-  const page = await launchPage(HTML_PATH, { initScript: RECORD_TEXT });
-  t.after(() => page.close());
-  await page.evaluate(CHOOSE_KBD);
-  await page.evaluate('window.__ft.length = 0');
-  await page.waitFor(['a', 's', 'd', 'f', 'j'].map(SAW).join(' && '), 10000); // lowercase, as the help prints them
-});
-
 test('on a touch screen the keyboard keeps its letters hidden until a computer key is pressed', async (t) => {
   const page = await launchPage(HTML_PATH, { initScript: RECORD_TEXT + "const mm = window.matchMedia.bind(window); window.matchMedia = (q) => /pointer:\\s*coarse/.test(q) ? { matches: true, media: q, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {} } : mm(q);" });
   t.after(() => page.close());
