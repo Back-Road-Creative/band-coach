@@ -1294,8 +1294,17 @@ a lesson or reference diagram uses it; hiding it does not remove notes from a
 beat or change scoring. The practice drawing, click targets, How to play it and
 Songs diagrams share the saved layout. Choices survive reload and progress
 backup/restore; MIDI note assignments and computer keys stay the same.
-Preset transforms and preference validation live in
-`src/instruments/how/kit-presets.js`; custom dragging and MIDI learning are separate work.
+
+To place pieces where they sit on your own kit, drag them in the small kit
+picture on the same sheet (or select one and use the arrow keys), and use
+**Size of the selected piece** to make it bigger or smaller (80% to 160%).
+**Reset to preset** puts every piece back. Hidden pieces show dimmed in the
+picture so you can still place them. The custom positions are saved with your
+other kit choices (`placements` in the saved kit preferences), survive
+backup/restore, and drive the practice drawing, the click targets, How to play it
+and the Songs diagrams. A position outside the kit's frame is dropped on load.
+Preset transforms, placement validation and preference validation live in
+`src/instruments/how/kit-presets.js`; MIDI learning is separate work.
 
 Through the microphone, `src/app.js`'s `listenDrums()` runs an onset detector
 plus `src/audio/drum-classify.js`'s band-energy classifier on every hit, and

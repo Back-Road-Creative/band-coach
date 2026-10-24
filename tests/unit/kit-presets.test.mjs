@@ -5,6 +5,7 @@ import { computeHow } from '../../src/ui/fingerings/how.js';
 import { instrumentSetup } from '../../src/ui/fingerings/setup.js';
 import drumKit from '../../src/instruments/drum-kit.js';
 import { sanitizeDB } from '../../src/core/sanitize-db.js';
+import { sanitizeKitPrefs } from '../../src/instruments/how/kit-presets.js';
 
 test('left-handed kits mirror every hit region and the teaching directions', () => {
   const right = kitLayout(), left = kitLayout({ leftHanded: true });
@@ -59,4 +60,34 @@ test('How to play and Songs use the same saved kit layout, including the selecte
   assert.ok(how.layout.some(p => p.id === 'ride'));
   assert.ok(!how.layout.some(p => p.id === 'crash'));
   assert.match(how.description, /on your left/);
+});
+
+test('placements keep valid offsets, drop out-of-frame or unknown ones, and are omitted when empty', () => {
+  const ok = { snare: { x: 0.5, y: 0.5, scale: 1.2 }, ride: { x: 1.3, y: 0.2, scale: 1 } };
+  assert.deepEqual(sanitizeKitPrefs({ placements: JSON.parse(JSON.stringify(ok)) }).placements, ok);
+  const bad = sanitizeKitPrefs({ placements: { snare: { x: 2.5, y: 0.5 }, kick: { x: 0.5, y: -0.1 }, crash: { x: 'a', y: 0.3 }, __proto__: { x: 0.5, y: 0.5 }, constructor: { x: 0.5, y: 0.5 }, nope: { x: 0.5, y: 0.5 }, ride: { x: 0.9, y: 0.4, scale: 40 }, 'tom-mid': { x: 0.9, y: 0.4 }, 'tom-high': null } });
+  assert.deepEqual(bad.placements, { ride: { x: 0.9, y: 0.4, scale: 1.6 }, 'tom-mid': { x: 0.9, y: 0.4, scale: 1 } });
+  for (const raw of [{}, { placements: {} }, { placements: [] }, { placements: 'x' }, { placements: { snare: { x: 9, y: 9 } } }]) assert.equal('placements' in sanitizeKitPrefs(raw), false);
+});
+
+test('a placed piece moves and resizes in the layout, mirrors with left-handed, and the hit test follows it', () => {
+  const placements = { snare: { x: 0.3, y: 0.4, scale: 1.5 } };
+  const find = (opts, id = 'snare') => kitLayout(opts).find(p => p.id === id);
+  assert.deepEqual([find({ placements }).x, find({ placements }).y], [0.3, 0.4]);
+  assert.ok(Math.abs(find({ placements }).r - find({}).r * 1.5) < 1e-9);
+  assert.ok(Math.abs(find({ placements, leftHanded: true }).x - (KIT_ASPECT - 0.3)) < 1e-9);
+  const kick = find({ placements: { kick: { x: 0.7, y: 0.7, scale: 0.8 } } }, 'kick');
+  assert.ok(Math.abs(kick.w - find({}, 'kick').w * 0.8) < 1e-9 && Math.abs(kick.h - find({}, 'kick').h * 0.8) < 1e-9);
+  const box = { x: 0, y: 0, w: 560, h: 400 }, opts = { placements };
+  const moved = kitRegions(box, opts).find(r => r.id === 'snare'), home = kitRegions(box).find(r => r.id === 'snare');
+  assert.equal(pieceAt(moved.cx, moved.cy, box, opts), 'snare');
+  assert.notEqual(pieceAt(home.cx, home.cy, box, opts), 'snare');
+});
+
+test('profile restore keeps valid placements and drops bad ones', () => {
+  const deps = { MODS: { kbd: {} }, MOD_IDS: ['kbd'], WIND_KINDS: {}, VOICE_KINDS: {}, LOCALES: [], NOTATE_MOD_IDS: [], sanitizeModel: x => x, sanitizePanelData: () => ({}), skillMap: {} };
+  const run = kit => sanitizeDB({ prefs: { kit } }, 0, 0, deps).prefs.kit;
+  const placements = { snare: { x: 0.5, y: 0.5, scale: 1 } };
+  assert.deepEqual(run({ placements: JSON.parse(JSON.stringify(placements)) }).placements, placements);
+  assert.equal('placements' in run({ placements: { snare: { x: 5, y: 5 } } }), false);
 });
