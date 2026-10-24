@@ -62,9 +62,11 @@ export function renderKitSetup(host, raw, onChange) {
   const toFrame = ev => { const b = svg.getBoundingClientRect(), u = b.height || 1; return [(ev.clientX - b.left) / u, (ev.clientY - b.top) / u]; };
   svg.addEventListener('pointermove', ev => { if (!drag || ev.pointerId !== drag.pointer) return; const [x, y] = toFrame(ev); move(drag.id, x, y, false); });
   const end = ev => { if (!drag || ev.pointerId !== drag.pointer) return; const [x, y] = toFrame(ev), id = drag.id; drag = null; move(id, x, y, true); };
-  svg.addEventListener('pointerup', end); svg.addEventListener('pointercancel', end);
+  // A cancelled gesture carries no usable position (clientX/Y are 0): keep the last move and save it.
+  const cancel = ev => { if (!drag || ev.pointerId !== drag.pointer) return; drag = null; onChange(prefs); };
+  svg.addEventListener('pointerup', end); svg.addEventListener('pointercancel', cancel);
   size.addEventListener('input', () => { const cur = prefs.placements && prefs.placements[sel], q = kitLayout(prefs, [sel]).find(o => o.id === sel); prefs = sanitizeKitPrefs({ ...prefs, placements: { ...prefs.placements, [sel]: { x: cur ? cur.x : mirror(q.x), y: cur ? cur.y : q.y, scale: Number(size.value) } } }); draw(); });
   size.addEventListener('change', () => onChange(prefs));
   reset.addEventListener('click', () => { const { placements, ...rest } = prefs; prefs = sanitizeKitPrefs(rest); size.value = 1; draw(); onChange(prefs); });
-  svgReady = true; draw();
+  svgReady = true; draw(); pick(sel);
 }

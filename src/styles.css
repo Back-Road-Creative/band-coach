@@ -746,7 +746,7 @@
   .panel-host:has(.fing-drumkit) { min-width: 0; }
 
   /* Set-up sheet kit preview: drag a piece to where it sits on your kit. */
-  #kitPreview { display: block; width: 100%; max-width: 560px; aspect-ratio: 1.4 / 1; background: #05070c; border-radius: 8px; touch-action: none; }
-  #kitPreview .kit-pc { fill: rgba(120, 170, 255, 0.35); stroke: #8fb4ff; stroke-width: 0.006; cursor: grab; }
+  #kitPreview { display: block; width: 100%; max-width: 560px; aspect-ratio: 1.4 / 1; background: var(--ground); border: 1px solid var(--line); border-radius: 8px; touch-action: none; }
+  #kitPreview .kit-pc { fill: color-mix(in srgb, var(--accent) 35%, transparent); stroke: var(--accent); stroke-width: 0.006; cursor: grab; }
   #kitPreview .kit-pc.kit-hidden { opacity: 0.35; stroke-dasharray: 0.02 0.015; }
-  #kitPreview .kit-pc.kit-sel, #kitPreview .kit-pc:focus-visible { stroke: #fff; stroke-width: 0.012; outline: none; }
+  #kitPreview .kit-pc.kit-sel, #kitPreview .kit-pc:focus-visible { stroke: var(--text); stroke-width: 0.012; outline: none; }

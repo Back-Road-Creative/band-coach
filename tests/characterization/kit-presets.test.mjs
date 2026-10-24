@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { launchPage } from '../helpers/browser.mjs';
 import { HTML_PATH } from '../helpers/html-path.mjs';
-import { kitRegions } from '../../src/instruments/how/drum-kit.js';
+import { kitRegions, pieceAt } from '../../src/instruments/how/drum-kit.js';
 
 test('kit setup updates the canvas and reference, survives reload, and stays instrument-specific', async t => {
   const page = await launchPage(HTML_PATH);
@@ -88,7 +88,9 @@ test('hidden lesson pieces reappear and clicks use the visible mirrored targets'
 test('dragging a piece on the set-up sheet saves it, moves the click target, and Reset restores the preset', async t => {
   const page = await launchPage(HTML_PATH);
   t.after(() => page.close());
-  await page.evaluate("window.__coach.setMod('drum-kit'); document.getElementById('setupBtn').click()");
+  await page.evaluate("window.__coach.setMod('drum-kit')");
+  await page.waitFor('window.__coach.kitBox()');
+  await page.evaluate("document.getElementById('setupBtn').click()");
   const drag = (id, dx, dy) => page.evaluate(`(() => {
     const svg = document.getElementById('kitPreview'), el = svg.querySelector('[data-piece="${id}"]'), b = svg.getBoundingClientRect(), e = el.getBoundingClientRect();
     const sx = e.left + e.width / 2, sy = e.top + e.height / 2, fire = (type, x, y) => (type === 'pointerdown' ? el : svg).dispatchEvent(new PointerEvent(type, { clientX: x, clientY: y, pointerId: 1, bubbles: true }));
@@ -102,9 +104,26 @@ test('dragging a piece on the set-up sheet saves it, moves the click target, and
   assert.ok(Math.abs(saved.placements.snare.x - (0.465 - 0.2)) < 0.03 && Math.abs(saved.placements.snare.y - (0.66 - 0.3)) < 0.03, JSON.stringify(saved.placements));
   const moved = kitRegions(before, saved).find(r => r.id === 'snare');
   assert.ok(moved.cx < home.cx && moved.cy < home.cy);
-  await page.evaluate(`(() => { const c = document.getElementById('cv'), r = c.getBoundingClientRect(); c.dispatchEvent(new PointerEvent('pointerdown', { clientX: r.left + ${moved.cx} * r.width / c.width, clientY: r.top + ${moved.cy} * r.height / c.height })); })()`);
+  assert.equal(pieceAt(moved.cx, moved.cy, before, saved), 'snare', 'the click target followed the drag');
+  assert.notEqual(pieceAt(home.cx, home.cy, before, saved), 'snare');
   await page.evaluate("document.getElementById('kitSize').value = '1.5'; document.getElementById('kitSize').dispatchEvent(new Event('input', { bubbles: true })); document.getElementById('kitSize').dispatchEvent(new Event('change', { bubbles: true }))");
   assert.equal(await page.evaluate('window.__coach.db().prefs.kit.placements.snare.scale'), 1.5);
   await page.evaluate("document.getElementById('kitReset').click()");
   assert.equal(await page.evaluate("'placements' in window.__coach.db().prefs.kit"), false);
+});
+
+test('a cancelled drag keeps the piece where it was last moved, and the size slider opens on the first piece\'s saved scale', async t => {
+  const page = await launchPage(HTML_PATH);
+  t.after(() => page.close());
+  await page.evaluate("window.__coach.db().prefs.kit = { placements: { kick: { x: 0.5, y: 0.5, scale: 1.3 } } }; window.__coach.setMod('drum-kit')");
+  await page.waitFor('window.__coach.kitBox()');
+  await page.evaluate("document.getElementById('setupBtn').click()");
+  assert.equal(await page.evaluate("document.getElementById('kitSize').value"), '1.3');
+  await page.evaluate(`(() => {
+    const svg = document.getElementById('kitPreview'), el = svg.querySelector('[data-piece="snare"]'), b = svg.getBoundingClientRect(), e = el.getBoundingClientRect();
+    const sx = e.left + e.width / 2, sy = e.top + e.height / 2, fire = (type, x, y) => (type === 'pointerdown' ? el : svg).dispatchEvent(new PointerEvent(type, { clientX: x, clientY: y, pointerId: 1, bubbles: true }));
+    fire('pointerdown', sx, sy); fire('pointermove', sx - 0.2 * b.height, sy - 0.2 * b.height); fire('pointercancel', 0, 0);
+  })()`);
+  const p = await page.evaluate('window.__coach.db().prefs.kit.placements.snare');
+  assert.ok(p.x > 0.1 && p.y > 0.1, 'cancel must not land at the corner: ' + JSON.stringify(p));
 });

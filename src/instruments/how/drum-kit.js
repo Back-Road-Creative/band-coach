@@ -46,7 +46,7 @@ const POSITIONS = {
 // piece, not clickable. Same units as POSITIONS.
 export const THRONE = { x: 0.70, y: 0.975, w: 0.18, h: 0.05 };
 
-// Hit priority: the open-hi-hat tab is tested first; no regions overlap.
+// Region order in kitRegions(): the open-hi-hat tab first, so pieceAt() returns it before the disc under it. Placed pieces may overlap; the nearest centre then wins.
 const HIT_ORDER = ['hihat-open', 'hihat-closed', 'hihat-pedal', 'kick', 'snare', 'tom-high', 'tom-mid', 'tom-floor', 'crash', 'ride'];
 
 // Plain-words sentences, one per piece: where it is and what plays it, for
