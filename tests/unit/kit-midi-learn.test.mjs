@@ -81,3 +81,12 @@ test('every piece can be learned and the set-up sheet strings exist in both lang
   for (const k of keys) { assert.ok(en[k], 'en ' + k); assert.ok(es[k], 'es ' + k); }
   assert.ok(PIECES.every(p => en['kit.piece.' + p.id]));
 });
+
+test('the finish line has a singular form in both languages', () => {
+  for (const [lang, table] of [['en', en], ['es', es]]) {
+    assert.ok(table['kit.learnDone.one'], lang + ' kit.learnDone.one');
+    assert.ok(!table['kit.learnDone.one'].includes('{count}'), lang + ' singular names no count');
+    assert.ok(table['kit.learnDone.one'].includes('{device}'), lang + ' singular names the device');
+  }
+  assert.ok(/\b1 pad\b/.test(en['kit.learnDone.one']) && !/pads/.test(en['kit.learnDone.one']));
+});

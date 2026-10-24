@@ -54,3 +54,30 @@ test('a learned note plays its piece, other devices keep the GM map, and an unse
   await midiNoteOn(page, 'p2', 38);
   assert.match(await coach(page), /Snare heard/, 'another device falls back to GM');
 });
+
+test('the walk-through skips pieces hidden on the set-up sheet', async t => {
+  const page = await launchPage(HTML_PATH, { initScript: FAKE_MIDI_INIT });
+  t.after(() => page.close());
+  await page.evaluate("window.__coach.db().prefs.kit = { hiddenPieces: ['snare', 'hihat-pedal', 'hihat-open', 'tom-floor', 'tom-mid', 'tom-high', 'crash', 'ride'] }; window.__coach.setMod('drum-kit')");
+  await connectFakeMidi(page, 'p1', 'XKORCE Kit');
+  await page.evaluate("document.getElementById('setupBtn').click()");
+  await page.evaluate("document.getElementById('kitLearn').click()");
+  assert.match(await prompt(page), /Kick/);
+  await midiNoteOn(page, 'p1', 60);
+  assert.match(await prompt(page), /Hi-hat closed/, 'snare is hidden, so the walk-through goes straight on');
+  await midiNoteOn(page, 'p1', 61);
+  assert.equal(await page.evaluate("document.getElementById('kitLearnStop') .hidden"), true, 'the walk-through ended after the last shown piece');
+  assert.deepEqual(await page.evaluate('window.__coach.db().prefs.kit.midiMaps["XKORCE Kit"]'), { 60: 'kick', 61: 'hihat-closed' });
+});
+
+test('learning a single pad reads "1 pad", not "1 pads"', async t => {
+  const page = await launchPage(HTML_PATH, { initScript: FAKE_MIDI_INIT });
+  t.after(() => page.close());
+  await page.evaluate("window.__coach.setMod('drum-kit')");
+  await connectFakeMidi(page, 'p1', 'XKORCE Kit');
+  await page.evaluate("document.getElementById('setupBtn').click()");
+  await page.evaluate("document.getElementById('kitLearn').click()");
+  await midiNoteOn(page, 'p1', 60);
+  await page.evaluate("document.getElementById('kitLearnStop').click()");
+  assert.equal(await prompt(page), 'Learned 1 pad on XKORCE Kit.');
+});

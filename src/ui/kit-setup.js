@@ -83,17 +83,20 @@ export function renderKitSetup(host, raw, onChange, learn) {
   const forgetBtn = button('kitLearnForget', t('kit.learnForget'), () => { finish(); status.textContent = ''; const { midiMaps, ...rest } = prefs; prefs = sanitizeKitPrefs(rest); syncLearn(); onChange(prefs); });
   host.appendChild(status);
   function syncLearn() { skipBtn.hidden = stopBtn.hidden = !run; startBtn.hidden = !!run; forgetBtn.hidden = !!run || !prefs.midiMaps; }
-  function prompt() { pick(PIECES[run.i].id); status.textContent = t('kit.learnPrompt', { piece: t('kit.piece.' + PIECES[run.i].id) }); }
-  function advance() { if (!run) return; run.i++; if (run.i >= PIECES.length) finish(); else prompt(); }
+  function prompt() { pick(run.pieces[run.i].id); status.textContent = t('kit.learnPrompt', { piece: t('kit.piece.' + run.pieces[run.i].id) }); }
+  function advance() { if (!run) return; run.i++; if (run.i >= run.pieces.length) finish(); else prompt(); }
   function finish() {
     if (!run) return;
     const done = run; run = null; stopLearning = null; done.off();
-    status.textContent = done.count ? t('kit.learnDone', { count: done.count, device: done.device }) : '';
+    status.textContent = done.count ? t(done.count === 1 ? 'kit.learnDone.one' : 'kit.learnDone', { count: done.count, device: done.device }) : '';
     syncLearn();
   }
   function begin() {
     if (!learn || run) return;
-    run = { i: 0, count: 0, device: null, off: null };
+    // Pieces hidden on this sheet are not on the player's kit, so the walk-through does not ask for them.
+    const pieces = PIECES.filter(p => !prefs.hiddenPieces.includes(p.id));
+    if (!pieces.length) return;
+    run = { i: 0, count: 0, device: null, off: null, pieces };
     stopLearning = finish;
     run.off = learn.listen((device, note) => {
       // The sheet closed or this render was replaced: hand the note back to the app.
@@ -102,7 +105,7 @@ export function renderKitSetup(host, raw, onChange, learn) {
       if (!key) return false;
       if (run.device === null) run.device = key; else if (key !== run.device) return false;
       const maps = prefs.midiMaps || {};
-      save({ midiMaps: { ...maps, [key]: learnPad(maps[key], PIECES[run.i].id, note) } });
+      save({ midiMaps: { ...maps, [key]: learnPad(maps[key], run.pieces[run.i].id, note) } });
       run.count++; advance(); return true;
     });
     prompt(); syncLearn();
