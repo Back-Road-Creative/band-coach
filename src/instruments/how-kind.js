@@ -39,5 +39,6 @@ export function howKindFor(instrument) {
   if (KEYED_WOODWIND_CHART_BY_ID[instrument.id]) return 'keyed-woodwind';
   if (instrument.family === 'voice') return 'voice';
   if (instrument.family === 'keys') return 'keyboard'; // kbd: two rows of keys, the same as the practice canvas
+  if (instrument.id === 'mallet-percussion') return 'mallet'; // bell/xylophone bars: the same bar rows as the practice canvas
   return null;
 }

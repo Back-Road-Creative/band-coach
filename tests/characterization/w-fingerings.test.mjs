@@ -62,7 +62,7 @@ test('fingerings panel opens, shows a default fretboard diagram, and reacts to a
   assert.ok(options.includes('tin-whistle'));
   assert.ok(options.includes('kbd'));
   assert.ok(!options.includes('wind'));
-  assert.ok(!options.includes('mallet-percussion'));
+  assert.ok(options.includes('mallet-percussion'));
 
   // Bowed instruments are fretless: switching to violin draws a plain
   // fingerboard with no fret grid, never `.fing-fretboard`.

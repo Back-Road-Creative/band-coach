@@ -187,9 +187,10 @@ export function buildMods() {
   ];
   // Mallet percussion (bells/glockenspiel): not fretted, so it does not
   // reuse stringLevels/drawFret like the six mic instruments above it. It
-  // reuses MODS.kbd's own note-group shape instead (N() item ids, same
-  // rendering via drawKeys in draw() in src/app.js) because a bell/xylophone bar
-  // row IS a keyboard layout -- see src/instruments/mallet-percussion.js
+  // reuses MODS.kbd's own note-group shape (N() item ids, one MIDI note per
+  // item) but draws bars, not piano keys: drawBars in draw() in src/app.js
+  // (naturals in front, accidentals raised behind, shorter as they rise;
+  // geometry in src/instruments/how/mallet.js) -- see src/instruments/mallet-percussion.js
   // for the range choice and the mic-detectability measurement behind
   // status: 'ready'.
   const malletRange = rangeForInstrument(instrumentById['mallet-percussion']);

@@ -14,7 +14,7 @@ import { howKindFor } from './how-kind.js';
 
 // howKindFor()'s return values that are a formula computed at play time --
 // always correct for any note in range, nothing typed to get wrong.
-const COMPUTED_CHART_KINDS = new Set(['fretboard', 'fingerboard', 'brass-valves', 'brass-slide', 'harmonica', 'keyboard']);
+const COMPUTED_CHART_KINDS = new Set(['fretboard', 'fingerboard', 'brass-valves', 'brass-slide', 'harmonica', 'keyboard', 'mallet']);
 
 // howKindFor()'s return values backed by a typed lookup table (or, for
 // drum-kit, a drawn layout) that a musician has not necessarily checked.
@@ -26,7 +26,7 @@ const TYPED_CHART_KINDS = new Set(['drum-kit', 'keyed-woodwind', 'recorder', 'wh
 
 function chartFor(rec) {
   const kind = howKindFor(rec);
-  if (!kind || kind === 'voice') return 'none'; // voice/wind-picker/mallets: no diagram at all
+  if (!kind || kind === 'voice') return 'none'; // voice and the wind-picker: no diagram at all
   if (COMPUTED_CHART_KINDS.has(kind)) return 'computed';
   if (TYPED_CHART_KINDS.has(kind)) return isReviewed(rec.provenance) ? 'typed-reviewed' : 'typed-unreviewed';
   return 'none';

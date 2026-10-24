@@ -604,8 +604,9 @@ no musician has reviewed yet, read from the same record field.
 Escape, or pressing the button again, collapses it and returns focus to the button. It is hidden
 in Check, the no-help attempt, same as the notation and fingering line it sits beside, and it
 only appears for an instrument the "How to play it" panel can draw — so it does not appear for
-the wind-and-brass picker or mallet percussion. For the keyboard it draws the same two rows as the
-practice keyboard.
+the wind-and-brass picker. For the keyboard it draws the same two rows as the
+practice keyboard; for mallet percussion it is not shown under the exercise (the canvas already is the bars) but
+the How panel and the Songs view draw the bars.
 
 Opening the editor screen (via a song's own **Edit notes**) shows its own row: **Edit
 notes**, **Play along**, **Export**, **Share**, **Save a copy** — Edit notes opens *any* song,
@@ -889,9 +890,9 @@ which `src/instruments/how/*.js` chart (if any) `howKindFor()` (`src/instruments
 (`src/ui/fingerings/how.js`) picks for it, and whether that chart is a typed lookup table a
 musician has not yet checked (`src/instruments/how/keyed-woodwind.js` and
 `src/instruments/how/recorder-whistle.js`'s own "NEEDS A MUSICIAN'S CHECK" headers) or a formula
-computed at runtime (fretboard, fingerboard, brass, harmonica, keyboard — no per-note table to get wrong).
+computed at runtime (fretboard, fingerboard, brass, harmonica, keyboard, mallet bars — no per-note table to get wrong).
 "None" means the instrument has no fingering/how panel at all (voice, the generic
-wind-and-brass picker, and mallet percussion): a learner still gets a curriculum and mic-matched
+wind-and-brass picker): a learner still gets a curriculum and mic-matched
 pitch detection, just no diagram.
 
 | Instrument | Status | Curriculum | Fingering/how chart | Chart reviewed | Content reviewed |
@@ -922,7 +923,7 @@ pitch detection, just no diagram.
 | Descant recorder | ready | yes | recorder chart | no -- unchecked | provisional (no reviewer yet) |
 | Tin whistle (D) | ready | yes | whistle chart | no -- unchecked | provisional (no reviewer yet) |
 | Oboe | ready | yes | keyed-woodwind chart | no -- unchecked | provisional (no reviewer yet) |
-| Mallet percussion (bells) | ready | yes | none | n/a | provisional (no reviewer yet) |
+| Mallet percussion (bells) | ready | yes | computed | n/a | provisional (no reviewer yet) |
 | Drum kit | ready | yes | drum kit (drawn) | no -- unchecked (drawn layout) | provisional (no reviewer yet) |
 
 "Content reviewed" comes straight from each record's own `provenance` field
@@ -1020,8 +1021,8 @@ and (like Show me) it logs the attempt with assistance "shown" once you play the
 main "How to play it" panel, opening this toggle never ends the running session or the current
 task: it expands the diagram right where you are, instead of switching screens. It is hidden under
 the same conditions Show me is (ear training, rhythm reading, drum kit), and for a note the panel
-has no diagram for at all (the wind picker and mallet percussion). It is also not shown on the
-keyboard, because the practice drawing already is the keyboard.
+has no diagram for at all (the wind picker). It is also not shown on the
+keyboard or mallet percussion, because the practice drawing already is the keys or bars.
 
 ## Piano hands together
 
@@ -1262,10 +1263,15 @@ that once made a fretted play-along's short notes hold the mic deaf well past th
 silently swallowing whatever the learner played next — `tests/unit/voices.test.mjs` guards
 against that regression directly on the rendered buffer length.
 
-Ready mallet percussion (`mallet-percussion`, "bells"/glockenspiel) reuses
-`MODS.kbd`'s own keyboard rendering (`drawKeys()`) rather than the
-fretted/plucked instruments' fretboard diagram — a bell/xylophone bar row is
-a keyboard layout, not a fretboard — and MODS input `'pluck'` (3 stable
+Ready mallet percussion (`mallet-percussion`, "bells"/glockenspiel) draws a
+bar row (`drawBars()`, geometry in `src/instruments/how/mallet.js`): the
+natural notes as bars in front, each sharp or flat a shorter bar raised
+behind and centred between its neighbours, bars getting shorter as the pitch
+rises. A phone-width screen shows two rows (C4–B4 over C5–C6) so every bar stays
+wide enough to read. It is not a piano keyboard and not a fretboard, it can
+show the treble staff (Show: Staff), and "How to play it" draws the same bars
+with the picked one filled (no sticking marks: nothing in the data backs a hand
+choice). It uses MODS input `'pluck'` (3 stable
 frames plus onset re-strike detection) rather than `'sustain'`, since a
 struck bar does not ring long enough to hold a steady pitch. Its
 `src/instruments/mallet-percussion.js` record documents the mic

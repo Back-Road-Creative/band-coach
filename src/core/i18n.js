@@ -300,6 +300,11 @@ export const en = {
   'how.keyboard.outside': '{note} is outside the keys drawn here ({low} to {high}).',
   'how.keyboard.left': 'left-hand',
   'how.keyboard.right': 'right-hand',
+  // Mallet "How to play it" text: which bar, front or raised back row.
+  'how.mallet.front': '{note}: the highlighted bar in the front row (the natural notes).',
+  'how.mallet.back': '{note}: the highlighted bar in the raised back row (the sharps and flats).',
+  'how.mallet.outside': '{note} is outside the bars drawn here ({low} to {high}).',
+  'hint.newBar': 'New bar: it is lit up this time.',
   // "Your keyboard path" panel (P2), src/ui/pathway.js: the button that
   // opens it, the panel's own title/tag/current-step marker, the five
   // step names src/core/pathway.js's pathwayState steps through, and the
@@ -727,6 +732,11 @@ export const es = {
   'how.keyboard.outside': '{note} queda fuera de las teclas dibujadas ({low} a {high}).',
   'how.keyboard.left': 'mano izquierda',
   'how.keyboard.right': 'mano derecha',
+  // Texto de «Cómo tocarlo» de las láminas: qué lámina, en la fila delantera o en la trasera elevada.
+  'how.mallet.front': '{note}: la lámina resaltada de la fila delantera (las notas naturales).',
+  'how.mallet.back': '{note}: la lámina resaltada de la fila trasera elevada (los sostenidos y bemoles).',
+  'how.mallet.outside': '{note} queda fuera de las láminas dibujadas ({low} a {high}).',
+  'hint.newBar': 'Lámina nueva: se ilumina esta vez.',
   'pathway.open': 'Tu camino con el teclado',
   'pathway.title': 'Tu camino con el teclado',
   'pathway.tag': 'Camino',

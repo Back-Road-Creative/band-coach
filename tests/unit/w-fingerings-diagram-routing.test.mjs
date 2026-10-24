@@ -51,3 +51,9 @@ test('a keyboard computeHow() routes to the keyboard diagram', async () => {
   const kbd = (await import('../../src/instruments/kbd.js')).default;
   assert.equal(diagramKindFor(computeHow(kbd, 60)), 'keyboard');
 });
+
+test('a mallet computeHow() routes to the mallet diagram', async () => {
+  const { computeHow } = await import('../../src/ui/fingerings/how.js');
+  const mallet = (await import('../../src/instruments/mallet-percussion.js')).default;
+  assert.equal(diagramKindFor(computeHow(mallet, 60)), 'mallet');
+});
