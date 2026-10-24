@@ -1158,8 +1158,8 @@ import { register as registerPathway } from './ui/pathway.js';
     if (task.idx >= task.els.length) finishTask(); else { cur().t0 = now(); refreshPrompt(); }
   }
   function failEl(msg, confKey) { const e = cur(); if (!e) return; if (!e.failed) { e.failed = true; e.reveal = true; } if (confKey) S.conf[confKey] = (S.conf[confKey] || 0) + 1; flashBad = performance.now(); say(msg, 'no'); updateDesc(); }
-  let finishTask = function () {
-    task.done = true; let from = lastItem, anyFail = false;
+  function finishTask() {
+    const t = task; task.done = true; let from = lastItem, anyFail = false;
     // One learning-event row per judged element (plan 6.4), warm-up
     // included -- a warm-up still tells a later reader what was practised,
     // it just never touches the SRS model (see credit()'s `warm` early
@@ -1172,7 +1172,8 @@ import { register as registerPathway } from './ui/pathway.js';
     // passEl calls (microphone rows, never a kbd note).
     task.els.forEach(e => { credit(e.id, e.q || 0, from, task.warm, e.rt, gradeOutcome({ helped: !!e.helped, failed: !!e.failed, assistance: e.assistance || null, q: e.q || 0 })); logEvent(makeEvent({ instrument: mod, skill: e.id, source: task.warm ? 'warmup' : 'drill', assistance: e.helped ? 'shown' : (e.assistance || 'none'), dims: { pitch: e.q > 0 ? 'ok' : 'miss' }, unassessed: [], activeMs: Math.round((e.rt || 0) * 1000), bpmTarget: null, bpmActual: null, hands: e.info.kind === 'hands-together' ? handsModeFromId(e.id) : undefined, input: e.input }, { now: modelNow })); from = e.id; if (!(e.q > 0)) anyFail = true; });
     lastItem = from; nextTaskAt = now() + (anyFail ? 1.5 : 0.7); if (task.kind === 'ear') nextTaskAt = now() + (anyFail ? 2.6 : 1.1); save(); showAll();
-  };
+    if (t.onDone) t.onDone(); // a captured-melody chunk advances (or repeats) once its rows are logged
+  }
   // a played note (MIDI key, screen key, or a plucked note the microphone
   // recognised); `source` is 'midi' for a real MIDI note-on, 'computer-key'
   // for the physical-keyboard keydown branch, 'screen' for a canvas tap or
@@ -1980,7 +1981,6 @@ import { register as registerPathway } from './ui/pathway.js';
     }
     return buildLevelTask();
   }
-  const _finish = finishTask; finishTask = function () { const t = task; _finish(); if (t && t.onDone) t.onDone(); };
 
   // ---------- sessions, pauses and breaks ----------
   const today = () => { const d = new Date(); return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2); };
