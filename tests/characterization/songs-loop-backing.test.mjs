@@ -198,3 +198,23 @@ test('the bar strip offers Loop bar 1, which loops that bar from 60% speed and r
   await page.waitFor("(" + H4 + ").startsWith('Clap the rhythm')");
   assert.deepEqual(page.exceptions, []);
 });
+
+test('Back to the lesson during a bar-loop recording stops it, so the lesson step is not judged', async (t) => {
+  const page = await launchPage(htmlPath);
+  t.after(() => page.close());
+  await getToRhythmStepBar(page, 0);
+  await page.evaluate(BTNS + ".find(b => b.textContent === 'Your turn').click()");
+  await page.waitFor(BTNS + ".some(b => b.textContent === 'Stop and check')");
+  await page.evaluate(BTNS + ".find(b => b.textContent === 'Stop and check').click()");
+  await page.waitFor(BTNS + ".some(b => b.textContent === 'Loop bar 1')");
+  await page.evaluate(BTNS + ".find(b => b.textContent === 'Loop bar 1').click()");
+  await page.waitFor("(" + H4 + ") === 'Looping bar 1'");
+  await page.evaluate(BTNS + ".find(b => b.textContent === 'Your turn').click()");
+  await page.waitFor(BTNS + ".some(b => b.textContent === 'Stop and check')");
+  await page.evaluate(BTNS + ".find(b => b.textContent === 'Back to the lesson').click()");
+  await page.waitFor("(" + H4 + ").startsWith('Clap the rhythm')");
+  const labels = await page.evaluate(BTNS + ".map(b => b.textContent)");
+  assert.ok(labels.includes('Your turn'), 'main step is idle: ' + labels);
+  assert.ok(!labels.includes('Stop and check'), 'no stale recording: ' + labels);
+  assert.deepEqual(page.exceptions, []);
+});
