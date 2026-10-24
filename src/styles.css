@@ -257,6 +257,12 @@
      keyboard or harmonica step. */
   .panel-songs-fingering { color: var(--muted); }
   .panel-songs-practice button { align-self: flex-start; }
+  .panel-songs-transport { display: flex; flex-wrap: wrap; gap: 5px; }
+  /* F14: on a phone the transport (Play it / Your turn / Next) is fixed to the bottom of the screen while a lesson is open (it only exists inside the lesson section); the section's bottom padding leaves room so nothing hides under it, and the inset keeps it clear of a home bar or notch. */
+  @media (max-width: 600px) {
+    .panel-songs-transport { position: fixed; left: 0; right: 0; bottom: 0; z-index: 5; box-sizing: border-box; min-height: 56px; padding: 6px 12px calc(6px + env(safe-area-inset-bottom)); background: var(--panel); border-top: 1px solid var(--line); }
+    .panel-songs-practice { padding-bottom: calc(56px + 12px + env(safe-area-inset-bottom)); }
+  }
   .panel-songs-count { color: var(--muted); }
   .panel-songs-play-on-list { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
   .panel-songs-instrument-btn { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 6px 10px; }

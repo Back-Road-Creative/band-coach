@@ -1423,11 +1423,14 @@ function mountSongsPanel(hostEl, api) {
   }
 
   function renderStepTransport(step) {
+    // One .panel-songs-transport row holds the buttons so a phone can keep it on screen (styles.css, F14).
+    const bar = el('div', { class: 'panel-songs-transport' });
+    practiceSection.appendChild(bar);
     // "Play it" (the demo) is Learn-only -- Rehearse and Check are both
     // meant to be played without hearing it first.
     if (practice.mode === 'learn') {
       const playBtn = el('button', { type: 'button', text: t('songs.step.play'), onclick: () => playPhrase(step) });
-      practiceSection.appendChild(playBtn);
+      bar.appendChild(playBtn);
     }
 
     // "Play it for me": plays this part to the MIDI keyboard the learner picked in the io strip. Only once an
@@ -1436,7 +1439,7 @@ function mountSongsPanel(hostEl, api) {
       const song = practice.song, partIndex = Math.max(0, song.parts.findIndex((p) => p.id === practice.partId));
       const label = () => (api.midiOut.playing() ? t('songs.playForMeStop') : t('songs.playForMe'));
       const forMeBtn = el('button', { type: 'button', class: 'panel-songs-play-for-me', text: label(), onclick: () => { if (api.midiOut.playing()) api.midiOut.stop(); else api.midiOut.play(song, partIndex, () => { forMeBtn.textContent = label(); }); forMeBtn.textContent = label(); } });
-      practiceSection.appendChild(forMeBtn);
+      bar.appendChild(forMeBtn);
     }
 
     const split = handSplit(step);
@@ -1450,19 +1453,19 @@ function mountSongsPanel(hostEl, api) {
         class: 'panel-songs-hands-rest',
         text: practice.hands === 'left' ? t('songs.hands.restLeft') : t('songs.hands.restRight'),
       }));
-      practiceSection.appendChild(el('button', { type: 'button', text: t('songs.step.next'), onclick: () => advance(true, null, 0, { unassessed: true }) }));
+      bar.appendChild(el('button', { type: 'button', text: t('songs.step.next'), onclick: () => advance(true, null, 0, { unassessed: true }) }));
     } else if (step.passRule) {
       const recordBtn = el('button', {
         type: 'button',
         text: practice.recording ? t('songs.step.stopCheck') : t('songs.step.yourTurn'),
         onclick: () => (practice.recording ? finishRecording(step) : startRecording(step)),
       });
-      practiceSection.appendChild(recordBtn);
+      bar.appendChild(recordBtn);
       countEl = el('p', { class: 'panel-songs-count', text: countLabel() });
       practiceSection.appendChild(countEl);
       appendLatencyLine(step);
     } else {
-      practiceSection.appendChild(el('button', { type: 'button', text: t('songs.step.next'), onclick: () => advance(true, null) }));
+      bar.appendChild(el('button', { type: 'button', text: t('songs.step.next'), onclick: () => advance(true, null) }));
     }
   }
 
