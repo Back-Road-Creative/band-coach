@@ -460,12 +460,12 @@ export const en = {
   'level.limitSeconds': '{n} seconds to answer',
   'level.limitBeats': '{n} beats a minute',
   'level.progressAria': 'Progress to next level',
-  // coach.*: coach/hint lines app.js builds around level moves and session start
   'songs.latency': 'Timing adjusted by {ms} ms for your setup.',
   'songs.loopBar': 'Loop bar {bar}',
   'songs.loopBar.title': 'Looping bar {bar}',
   'songs.loopBar.body': 'Just this bar, again and again. It starts slow and speeds up each time you play it cleanly.',
   'songs.loopBar.back': 'Back to the lesson',
+  // coach.*: coach/hint lines app.js builds around level moves and session start
   'coach.levelUp': 'Level up. Next: {name}.{added}{note}',
   'coach.levelUpNew': ' New: {list}.',
   'coach.fastPace': ' You keep clearing levels cleanly, so I am speeding up the pace.',

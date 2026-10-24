@@ -196,6 +196,9 @@ test('the bar strip offers Loop bar 1, which loops that bar from 60% speed and r
   assert.equal(await page.evaluate(H4), 'Looping bar 1');
   await page.evaluate(BTNS + ".find(b => b.textContent === 'Back to the lesson').click()");
   await page.waitFor("(" + H4 + ").startsWith('Clap the rhythm')");
+  // The bar loop's last verdict and bar strip belong to the loop, not to the lesson step.
+  assert.equal(await page.evaluate("!!document.querySelector('.panel-songs-verdict')"), false, 'no stale bar-loop verdict');
+  assert.equal(await page.evaluate("!!document.querySelector('.panel-songs-bar-strip')"), false, 'no stale bar-loop strip');
   assert.deepEqual(page.exceptions, []);
 });
 

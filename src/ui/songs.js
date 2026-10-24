@@ -1663,7 +1663,7 @@ function mountSongsPanel(hostEl, api) {
     if (practice.lastAssessed) {
       practiceSection.appendChild(renderAssessedList(practice.lastAssessed));
     }
-    if (isLoop) practiceSection.appendChild(el('button', { type: 'button', text: t('songs.loopBar.back'), onclick: () => { stopRecording(); practice.repair = null; practice.playedEvents = []; renderPractice(); } }));
+    if (isLoop) practiceSection.appendChild(el('button', { type: 'button', text: t('songs.loopBar.back'), onclick: () => { stopRecording(); practice.repair = null; practice.playedEvents = []; practice.lastHeat = practice.lastHeatBars = practice.lastAssessed = practice.lastVerdict = null; renderPractice(); } }));
   }
 
   // One small chip per bar of `heat` that falls inside `stepBars` (the just-
