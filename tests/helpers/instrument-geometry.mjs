@@ -27,7 +27,7 @@ export async function canvasMetrics(page) {
 }
 
 // Canvas pixel -> client (CSS) pixel: the inverse of the pointerdown listener's
-// `(clientX - r.left) * cv.width / r.width` (src/app.js:2548).
+// `(clientX - r.left) * cv.width / r.width` (the canvas pointerdown listener in src/app.js).
 export function toClient(pt, m) {
   return { x: m.left + (pt.x * m.cssWidth) / m.width, y: m.top + (pt.y * m.cssHeight) / m.height };
 }
@@ -99,7 +99,7 @@ export function keyboardProbePoints(key) {
 // its centred name, the black keys above and the 4 px focus outline), one point in
 // the upper part of a black key at 0.2 of its width from the left. Not its centre:
 // a black key's centre is the boundary between two white keys, and the focus
-// outline (a 4 px #ffd23f frame drawn inside ONE key, src/app.js:1989, on the
+// outline (a 4 px #ffd23f frame drawn inside ONE key, drawn by src/app.js, on the
 // lowest key until an arrow key moves it) runs along that boundary. At least 8
 // canvas px from any key edge.
 export function keyboardSamplePoints(key) {

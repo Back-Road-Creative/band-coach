@@ -15,7 +15,7 @@ var input = document.getElementById('file');
   input.addEventListener(n, function (e) { __picks.push(e.type + ':' + (input.files[0] ? input.files[0].name : '') + (e.isTrusted ? '' : ':synthetic')); });
 });
 input.addEventListener('cancel', function () { __cancels++; });
-// Shaped like the app's backup-restore handler (src/app.js:2755-2758): take the
+// Shaped like the app's backup-restore handler in src/app.js: take the
 // file, clear the value, then ask before going on.
 var restore = document.getElementById('restore');
 restore.addEventListener('change', function () {

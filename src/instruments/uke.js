@@ -1,6 +1,6 @@
-// Extracted from src/app.js: tuning at MODS.uke.tuning (app.js:79, high-G re-entrant
+// Extracted from src/app.js: tuning at MODS.uke.tuning (high-G re-entrant
 // GCEA [67,60,64,69]) and the 16-level curriculum built by stringLevels(tuning,
-// ['G','C','E','A'], 7, ['C','Am','F','G7']) at app.js:108 (naming logic app.js:57-66).
+// ['G','C','E','A'], 7, ['C','Am','F','G7']) in app.js's MODS table (naming logic: stringLevels' level names).
 // Range: low is the lowest-pitched open string, C (60); high is the 7th fret on the
 // high-G string (67+7=74). Tuning is kept in the app's own played order (string 4
 // down to string 1: G, C, E, A) rather than sorted low-to-high, because standard

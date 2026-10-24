@@ -8,7 +8,7 @@ import { GRADE, review, migrateItem } from '../../core/srs.js';
 // Cents deviation of a detected frequency from the nearest equal-tempered
 // semitone `midi` -- positive is sharp, negative is flat. Pure (no DOM, no
 // AudioContext), the same maths src/app.js's own live tuner uses (fmidi =
-// 69 + 12*log2(f/440), app.js:91), just expressed as an offset from a given
+// 69 + 12*log2(f/440), app.js's fmidi), just expressed as an offset from a given
 // target rather than rounded to the nearest note itself.
 export function centsFromFreq(freq, midi) {
   const fractionalMidi = 69 + 12 * Math.log2(freq / 440);

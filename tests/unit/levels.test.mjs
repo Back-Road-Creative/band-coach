@@ -99,7 +99,7 @@ test('meterLevel increases monotonically with rms', () => {
   assert.ok(b < c);
 });
 
-// ---------- releaseFloor (VERIFIED DEFECT 2: src/app.js:650's hard-coded
+// ---------- releaseFloor (VERIFIED DEFECT 2: src/app.js's old hard-coded
 // 0.006 release RMS ignored the calibrated gates entirely) ----------
 
 test('releaseFloor is 0.75 x the default pitch gate (0.003) at the uncalibrated default gates', () => {

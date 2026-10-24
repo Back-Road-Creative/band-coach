@@ -1,5 +1,5 @@
 // Second field-report defect: the AudioWorklet path has always fed onPitch
-// an onset flag (src/audio/pitch-worklet.js -> src/app.js:113), but the
+// an onset flag (src/audio/pitch-worklet.js -> src/app.js's worklet message handler), but the
 // setInterval(listen, 50) fallback used on any browser where the worklet
 // fails to load never set fr.onset at all — so `if (fr.onset)` in onPitch's
 // pluck branch (the F8 re-pluck detector) was permanently dead whenever the
