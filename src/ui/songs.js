@@ -1828,7 +1828,7 @@ function mountSongsPanel(hostEl, api) {
       lastDrumT = t;
       // Same "split the analyser's newest audio into small hops and push
       // each one, oldest first" technique as app.js's own listenDrums()
-      // (app.js:1528-1569) -- the analyser's window is a ROLLING read of
+      // (its drum-capture loop) -- the analyser's window is a ROLLING read of
       // its newest samples, so only the hops new since the last tick may
       // be pushed, or drum-capture.js's onset detector would see the
       // same audio more than once.

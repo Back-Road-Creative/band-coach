@@ -86,14 +86,14 @@ test('computer-key input is never gated by the deaf window, even though it also 
   await page.evaluate("document.getElementById('playBtn').click()");
   await page.waitFor('window.__coach.task()');
 
-  // Level 1 pool is C/D/E (60/62/64); PCKEYS (src/app.js:580) maps them to a/s/d.
+  // Level 1 pool is C/D/E (60/62/64); PCKEYS (src/app.js keydown handler) maps them to a/s/d.
   const keyMap = { 60: 'a', 62: 's', 64: 'd' };
   const midi = await page.evaluate('window.__coach.cur().info.midi');
   const key = keyMap[midi];
   assert.ok(key, `level-1 kbd target ${midi} should be one of C/D/E`);
 
   // A real computer-key press goes through the SAME handler that plays a
-  // tone (src/app.js:581, `tone(...); onNote(...)`), so the deaf window
+  // tone (src/app.js keydown handler, `tone(...); onNote(...)`), so the deaf window
   // does open here too. But onNote() is called directly, not through the
   // mic loop, so the answer must still be credited immediately.
   await page.evaluate(`document.dispatchEvent(new KeyboardEvent('keydown', { key: '${key}' }))`);

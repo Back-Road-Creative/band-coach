@@ -6,7 +6,7 @@
 // createPitchNode), so src/app.js's ensurePitchWorklet() ends up holding a
 // pitchWorkletNode that LOOKS healthy but whose process() never ran, so its
 // port never posts a single message. Because pitchWorkletNode is non-null,
-// listen()'s own setInterval fallback (src/app.js:944-945) stands down
+// listen()'s own setInterval fallback (`setInterval(listen, 50)` in src/app.js) stands down
 // forever -- the one path that would have kept working is switched off by
 // exactly the failure it exists to cover. A 'processorerror' event is not a
 // usable signal here either (measured against the actual broken build:

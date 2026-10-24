@@ -1,5 +1,5 @@
 // Streaming onset + classify loop for a Songs drum step's microphone path
-// (P4-12). This is src/app.js's listenDrums() (app.js:1528-1573) turned into
+// (P4-12). This is src/app.js's listenDrums() turned into
 // a pure, DOM/AudioContext-free function: same DRUM_FRAME/DRUM_HOP, the same
 // onset-detector overrides (~100 ms of flux history instead of ~1 s, a
 // 0.0005 RMS minFlux floor), the same REL_JUMP-style energy guard, the same

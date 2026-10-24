@@ -105,7 +105,7 @@ function candidateShifts(instrument) {
 
 // Every src/instruments/*.js record with a non-zero `transposition` stores
 // its `range` in one of two conventions (confirmed against each file's own
-// header comment and src/app.js's transposedMicRange, app.js:556-562):
+// header comment and src/app.js's transposedMicRange, now in src/instruments/mods.js):
 //   - a genuine key-transposing instrument (clarinet-bb, trumpet-bb,
 //     sax-alto-eb, sax-tenor-bb, horn-f) is transposed by an interval other
 //     than a whole octave, and its `range` is WRITTEN pitch -- what the
@@ -401,7 +401,7 @@ const LADDER_FRACTIONS = [0.6, 0.75, 0.9, 1.0];
 // level) -- the plan calls stricter-at-higher-rungs optional, and a flat
 // number is the simplest thing that could work; revisit with real usage.
 export const HOLD_MIN_DURATION_SCORE = 0.6; // at least 6 of 10 matched notes must land in practice.js's own default 0.6-1.5x duration-ratio band -- neither a stab nor an overheld drone should read as "held it"
-export const TUNE_MAX_MEAN_ABS_CENTS = 40; // mean pitch error under 40 cents, comfortably inside a semitone (100 cents) with room to spare -- close to the +/-45 cents app.js's own live-tuner drill (src/app.js:1055) already treats as "in tune"
+export const TUNE_MAX_MEAN_ABS_CENTS = 40; // mean pitch error under 40 cents, comfortably inside a semitone (100 cents) with room to spare -- close to the +/-45 cents app.js's own live-tuner drill (src/app.js, the tuner drill's in-tune test) already treats as "in tune"
 
 // Adds the two sustain-only pass conditions to `passRule` when `instrument`
 // belongs to a sustaining family; returns `passRule` completely unchanged

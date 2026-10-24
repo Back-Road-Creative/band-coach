@@ -73,7 +73,7 @@ export function releaseFloor(gatesArg) {
 // 135 ms, max 470 ms at load 43), so three frames can span almost no time. Replay over the p1c/p1q
 // capture logs: this rule alone took the after-pass strays from 6/42 to 4/42 and from 35/42 to 27/42.
 // A frame whose rms is exactly 0 is a capture dropout, not quiet (openMic turns echo cancellation, noise
-// suppression and auto gain off, src/app.js:351, so with the browser's processing off a live mic's silence
+// suppression and auto gain off, src/app.js openMic(), so with the browser's processing off a live mic's silence
 // carries a noise floor, not 0.0): it holds the clock, neither adding to it nor resetting it. A dropout's
 // length is unbounded, so no fixed time could outrun it; a p3 run delivered 10 zero frames in 1.6 ms of
 // wall time that counted 0.104 s. Known limit: an OS- or device-level noise gate (some Bluetooth headsets,

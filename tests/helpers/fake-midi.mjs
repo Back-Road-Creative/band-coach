@@ -2,7 +2,7 @@
 // runs (see tests/helpers/browser.mjs launchPage()'s `initScript`, and
 // tests/characterization/a11y-wake-lock.test.mjs for the pattern this
 // borrows). It mirrors the real Web MIDI shape closely enough that
-// src/app.js's real `ioBtn` click handler (src/app.js:1114+) can be
+// src/app.js's real `ioBtn` click handler (src/app.js) can be
 // exercised end to end, rather than only through the debug hook.
 //
 // Page-side handles a test drives through the exported helper functions

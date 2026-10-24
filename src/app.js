@@ -2024,8 +2024,7 @@ import { register as registerPathway } from './ui/pathway.js';
     if (!customOn) msg += ' ' + describePlan(sessionPlan, id => inf(id).short, { seen: activeItems(mod, S.level).some(id => !!S.item[id]), t });
     const why = describeWhy(sessionPlan, id => inf(id).short); if (why && !customOn) msg += ' ' + why;
     // The song block's own unreviewed label, matching the same test the
-    // hand-off button's own note uses (renderOpts, app.js:2109 as of this
-    // writing) -- the suggestion is teaching content no player has checked,
+    // hand-off button's own note uses (renderOpts) -- the suggestion is teaching content no player has checked,
     // so it is never claimed reviewed just because it appears in the plan.
     if (!customOn && mod === 'kbd' && sessionPlan.some(b => b.kind === 'song')) { const entry = songFor(S.level); if (entry && !isReviewCurrent(itemReview(entry.id, contentRev(entry)))) { const s = starterSongs.find(x => x.id === entry.songId); msg += ' ' + (s ? s.title : entry.songId) + ': ' + t('review.unreviewed'); } }
     // Start is a choice of the instrument on screen: shut the sheet and own the label, so the exercise is on screen.

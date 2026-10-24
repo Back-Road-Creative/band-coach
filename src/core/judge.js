@@ -22,7 +22,7 @@ import { INSTRUMENTS } from '../instruments/index.js';
 const pc = (m) => ((Math.round(m) % 12) + 12) % 12;
 
 // instrument id -> its default octave policy. Read from band-coach.html's
-// MODS table (src/app.js:67-140, orig L229-267 area covers the ids this maps).
+// MODS table (src/app.js, covers the ids this maps).
 // Derived, never restated: the instrument record is the one home for octave policy.
 export const OCTAVE_POLICY = Object.fromEntries(
   INSTRUMENTS.filter((r) => r.status === 'ready').map((r) => [r.id, r.octavePolicy]),
