@@ -39,13 +39,11 @@ The single-run baseline is 23m52s in the test/release step of run 39444905392
 (2026-10-20): development took 17m41s and release 6m10s. Parallel scheduling
 could remove about six minutes of serial waiting, before setup overhead.
 Measure the new workflow before claiming that saving. The slowest worker plus
-setup and final aggregation sets the new lower bound. Four keyboard journeys
-in one characterization file remain serial; separating those scenarios is a
-further opportunity, requiring its own behavior-preserving test review.
-That follow-up must update the README's existing four-journey proof command
-alongside the tests, preserve every assertion and real browser interaction, and
-keep the existing load-aware file concurrency cap. Do not replace the journeys
-with skips, shorter timeouts, or a one-session concurrency override.
+setup and final aggregation sets the new lower bound.
+The four keyboard journeys are already one file each
+(`tests/characterization/kbd-journey-*.test.mjs`), so they run in parallel under
+the existing load-aware file concurrency cap. Do not replace journeys with
+skips, shorter timeouts, or a one-session concurrency override.
 
 Validate planning, failure handling, coverage and workflow contracts offline:
 
