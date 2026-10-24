@@ -979,8 +979,9 @@ The "How to play it" panel's fretted-instrument diagrams (guitar, bass, ukulele,
 banjo) can show a capo, a named alternate tuning where one is defined, and a left-handed
 mirrored diagram; bowed fretless instruments (violin, viola, cello, double bass) get the
 left-handed mirror only, since they have no capo or fret-based tuning to switch. The controls
-appear only for instrument kinds that make sense for them and reset to standard/no-capo/
-right-handed whenever a different instrument is picked.
+appear only for instrument kinds that make sense for them. Each instrument keeps its own setup:
+picking a different instrument loads that instrument's remembered capo, tuning and handedness
+(standard, no capo, right-handed until you change them), never the previous instrument's.
 
 - Capo: a number input, counting frets from the capo, not the physical nut — a capo becomes the
   new "open string" position (`src/instruments/how/fretboard.js`'s own rule). A note that falls
@@ -995,11 +996,16 @@ right-handed whenever a different instrument is picked.
   `leftHanded` option); the underlying pitches, strings and frets never change, only the
   drawing order.
 
-This choice is session-only: it lives in the fingerings panel's own module state, not in the
-app's saved-preferences database (`src/app.js`'s `DB.prefs`), so it resets on reload. Wiring a
-persistent capo/tuning/handedness preference into that database is a follow-up, not part of this
-change. Mirroring the trainer's own fretboard canvas (the practice view drawn in `src/app.js`,
-separate from this reference panel) and capo-aware trainer tasks are also out of scope here.
+The choices are remembered per instrument across reloads. Every change is saved to
+`api.store('fingerings')`, which `src/app.js`'s `store(id)` keeps in `DB.panels.fingerings` (not
+`DB.prefs`), shaped `{ byInstrument: { [instrumentId]: { capo, tuning, leftHanded } } }`. When
+read back, `src/ui/fingerings/setup.js`'s `readFingeringSetup` re-checks each field against what
+that instrument allows today and replaces any field that fails with its default (capo 0,
+standard tuning, right-handed): a capo outside 0-11, a tuning the instrument does not offer, or a
+corrupt entry. The same saved setup is what Songs arranges a song for and what a drill's "How to
+play this" peek draws (`instrumentSetup()` in the same file). Mirroring the trainer's own
+fretboard canvas (the practice view drawn in `src/app.js`, separate from this reference panel)
+and capo-aware trainer tasks are still out of scope.
 
 ## Show me: asking for help
 
