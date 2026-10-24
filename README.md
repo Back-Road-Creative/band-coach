@@ -1304,7 +1304,21 @@ other kit choices (`placements` in the saved kit preferences), survive
 backup/restore, and drive the practice drawing, the click targets, How to play it
 and the Songs diagrams. A position outside the kit's frame is dropped on load.
 Preset transforms, placement validation and preference validation live in
-`src/instruments/how/kit-presets.js`; MIDI learning is separate work.
+`src/instruments/how/kit-presets.js`.
+
+To teach the app which note each pad sends, connect your electronic kit under
+**Set up input**, then press **Hit each pad** on the same sheet. It lights each
+piece in turn (the prompt names it) and saves the note that arrives; **Skip this
+one** leaves a piece as it was and **Stop** ends early. The notes are saved per
+MIDI device name (`midiMaps` in the saved kit preferences, up to 8 devices), so a
+second kit does not inherit the first one's pads, and they survive progress
+backup/restore. A learned note overrides the General MIDI note for that device
+only: a device with no learned pads, and any note you have not taught it, keep
+the General MIDI reading, and a note nobody has seen is still an "extra note".
+**Forget learned pads** clears every learned map. `pieceForMidi(note, map)` in
+`src/instruments/drum-kit.js` takes the optional map; `src/app.js` reads a
+learned note as the General MIDI note of its piece before the trainer, Songs
+drum practice and reference hear it, and only while a kit or Songs is in front.
 
 Through the microphone, `src/app.js`'s `listenDrums()` runs an onset detector
 plus `src/audio/drum-classify.js`'s band-energy classifier on every hit, and

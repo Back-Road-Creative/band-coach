@@ -1,9 +1,12 @@
 import { PIECES } from '../instruments/drum-kit.js';
 import { kitLayout } from '../instruments/how/drum-kit.js';
-import { sanitizeKitPrefs, KIT_ASPECT, PLACE_SCALE } from '../instruments/how/kit-presets.js';
+import { sanitizeKitPrefs, learnPad, deviceKey, KIT_ASPECT, PLACE_SCALE } from '../instruments/how/kit-presets.js';
 import { t } from '../core/i18n.js';
 
-export function renderKitSetup(host, raw, onChange) {
+// `learn` is { listen(fn) -> stop }: while listening, each MIDI note-on arrives as fn(deviceName, note), and fn returns true when the walk-through used the note (so the app does not also judge it as a hit).
+let stopLearning = null;
+export function renderKitSetup(host, raw, onChange, learn) {
+  if (stopLearning) stopLearning();
   host.replaceChildren();
   let prefs = sanitizeKitPrefs(raw), svgReady = false;
   const save = patch => { prefs = sanitizeKitPrefs({ ...prefs, ...patch }); if (svgReady) draw(); onChange(prefs); };
@@ -69,4 +72,43 @@ export function renderKitSetup(host, raw, onChange) {
   size.addEventListener('change', () => onChange(prefs));
   reset.addEventListener('click', () => { const { placements, ...rest } = prefs; prefs = sanitizeKitPrefs(rest); size.value = 1; draw(); onChange(prefs); });
   svgReady = true; draw(); pick(sel);
+  // "Hit each pad": light each piece in turn and save the note the pad sends, per device name. The GM map stays the default for any note not learned.
+  const hint = document.createElement('p'); hint.className = 'small'; hint.textContent = t('kit.learnHint'); host.appendChild(hint);
+  const button = (id, text, on) => { const b = document.createElement('button'); b.type = 'button'; b.id = id; b.className = 'small'; b.textContent = text; b.addEventListener('click', on); host.appendChild(b); return b; };
+  const status = document.createElement('p'); status.id = 'kitLearnStatus'; status.className = 'small'; status.setAttribute('role', 'status');
+  let run = null;
+  const startBtn = button('kitLearn', t('kit.learn'), () => begin());
+  const skipBtn = button('kitLearnSkip', t('kit.learnSkip'), () => advance());
+  const stopBtn = button('kitLearnStop', t('kit.learnStop'), () => finish());
+  const forgetBtn = button('kitLearnForget', t('kit.learnForget'), () => { finish(); status.textContent = ''; const { midiMaps, ...rest } = prefs; prefs = sanitizeKitPrefs(rest); syncLearn(); onChange(prefs); });
+  host.appendChild(status);
+  function syncLearn() { skipBtn.hidden = stopBtn.hidden = !run; startBtn.hidden = !!run; forgetBtn.hidden = !!run || !prefs.midiMaps; }
+  function prompt() { pick(run.pieces[run.i].id); status.textContent = t('kit.learnPrompt', { piece: t('kit.piece.' + run.pieces[run.i].id) }); }
+  function advance() { if (!run) return; run.i++; if (run.i >= run.pieces.length) finish(); else prompt(); }
+  function finish() {
+    if (!run) return;
+    const done = run; run = null; stopLearning = null; done.off();
+    status.textContent = done.count ? t(done.count === 1 ? 'kit.learnDone.one' : 'kit.learnDone', { count: done.count, device: done.device }) : '';
+    syncLearn();
+  }
+  function begin() {
+    if (!learn || run) return;
+    // Pieces hidden on this sheet are not on the player's kit, so the walk-through does not ask for them.
+    const pieces = PIECES.filter(p => !prefs.hiddenPieces.includes(p.id));
+    if (!pieces.length) return;
+    run = { i: 0, count: 0, device: null, off: null, pieces };
+    stopLearning = finish;
+    run.off = learn.listen((device, note) => {
+      // The sheet closed or this render was replaced: hand the note back to the app.
+      if (!run || !host.isConnected || host.closest('[hidden]')) { finish(); return false; }
+      const key = deviceKey(device);
+      if (!key) return false;
+      if (run.device === null) run.device = key; else if (key !== run.device) return false;
+      const maps = prefs.midiMaps || {};
+      save({ midiMaps: { ...maps, [key]: learnPad(maps[key], run.pieces[run.i].id, note) } });
+      run.count++; advance(); return true;
+    });
+    prompt(); syncLearn();
+  }
+  syncLearn();
 }
