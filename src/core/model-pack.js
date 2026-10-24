@@ -30,6 +30,18 @@ const MODEL_PACK_BASE_URL = 'https://back-road-creative.github.io/band-coach/mod
 export const DEFAULT_MODEL_PACK = 'core';
 export const packManifestUrl = (name = DEFAULT_MODEL_PACK) => `${MODEL_PACK_BASE_URL}${name}/manifest.json`;
 
+// Resolves `url` against `manifestUrl`; returns the href only if it is https, the same origin and under the
+// manifest's folder (a '..' is collapsed by URL parsing before the prefix test), else null.
+function sameFolderUrl(url, manifestUrl) {
+  try {
+    if (typeof url !== 'string') return null;
+    const base = new URL(manifestUrl);
+    const u = new URL(url, base);
+    const folder = base.pathname.slice(0, base.pathname.lastIndexOf('/') + 1);
+    return u.protocol === 'https:' && u.origin === base.origin && u.pathname.startsWith(folder) && !u.username && !u.password ? u.href : null;
+  } catch (e) { return null; }
+}
+
 export async function loadPack({ manifestUrl, fetchImpl, store, digest = sha256Hex, inFlight } = {}) {
   if (typeof fetchImpl !== 'function') throw new Error('no fetch implementation was supplied to loadPack');
   if (!store) throw new Error('no store was supplied to loadPack');
@@ -51,9 +63,14 @@ export async function loadPack({ manifestUrl, fetchImpl, store, digest = sha256H
     return { name, version: cached.version, sha256: cached.sha256, bytes: cached.bytes, fromCache: true };
   }
 
+  // The manifest is the only fixed address; the file it names must be https, on the manifest's own
+  // origin and under its own folder, so a tampered manifest cannot send a learner's browser elsewhere.
+  const packUrl = sameFolderUrl(manifest.url, manifestUrl);
+  if (!packUrl) throw new Error(`the model-pack manifest for "${name}" points outside its own folder, so nothing was downloaded`);
+
   if (inFlight) inFlight.add(name);
   try {
-    const fileRes = await fetchImpl(manifest.url);
+    const fileRes = await fetchImpl(packUrl);
     if (!fileRes || !fileRes.ok) throw new Error(`could not download the model pack "${name}"`);
     const buf = await fileRes.arrayBuffer();
     const actualSha = await digest(buf);
