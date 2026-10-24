@@ -253,7 +253,8 @@ test('W4 run: a click on Start that starts no sound is a FAIL naming it, not a t
   const page = quietPage({
     audio: { running: () => [], waitForRunning: timeout('waitForRunning') },
     evaluate: async (expr) => (/playBtn/.test(expr) ? 'Start' : undefined),
-    waitFor: timeout('waitFor Pause'),
+    // Start shows once the instrument is chosen (#512); only the wait for Pause times out.
+    waitFor: async (expr) => (/Pause/.test(expr) ? timeout('waitFor Pause')() : undefined),
   });
   const v = w4.w4Verdict(await w4.run(page));
   assert.equal(v.status, 'FAIL');
@@ -269,7 +270,8 @@ test('W4 run: sound that starts but a button that never says Pause is a FAIL on 
     audio: { running: () => (clicked ? [{}] : []), waitForRunning: async () => {} },
     clickSelector: async () => { clicked = true; },
     evaluate: async (expr) => (/playBtn/.test(expr) ? 'Start' : undefined),
-    waitFor: timeout('waitFor Pause'),
+    // Start shows once the instrument is chosen (#512); only the wait for Pause times out.
+    waitFor: async (expr) => (/Pause/.test(expr) ? timeout('waitFor Pause')() : undefined),
   });
   const v = w4.w4Verdict(await w4.run(page));
   assert.equal(v.status, 'FAIL');
@@ -325,3 +327,28 @@ test('W2 run: it reads the stored value until two reads a save-delay apart agree
   assert.deepEqual(rawReads.slice(-2), ['raw:saved-late-2', 'raw:saved-late-2']);
   assert.ok(afterEnd.indexOf('read') > afterEnd.lastIndexOf(rawReads.at(-1)), 'played was read after the stored value settled');
 });
+
+// A first visit asks for the instrument before Start shows (#512), so a lane step that
+// clicks Start on a fresh profile first answers that question with a real click, the
+// same way tests/release/acceptance-audio-gesture.test.mjs does. Before this, W2 and W4
+// stopped BLOCKED on "cannot click: #playBtn is hidden" for the 1.10.0 candidate.
+const PICK_KBD = '#picker button[data-mod="kbd"]';
+for (const [file, opts] of [['w2-progress-reload.win.mjs', { paceMs: 1, settleMs: 5 }], ['w4-audio-gesture.win.mjs', undefined]]) {
+  test(`${file} run: chooses the Keyboard instrument, waits for Start to show, then clicks Start`, async () => {
+    const mod = await load(file);
+    const steps = [];
+    const page = quietPage({
+      audio: { running: () => [], waitForRunning: async () => {} },
+      clickSelector: async (sel) => { steps.push(`click ${sel}`); },
+      evaluate: async (expr) => (/getElementById\('prompt'\)/.test(expr) ? 'Play C' : /playBtn/.test(expr) ? 'Start' : /sessLine/.test(expr) ? { stored: 'x', shown: 's', ready: '1' } : undefined),
+      waitFor: async (expr) => { steps.push(`wait ${expr}`); },
+      reload: async () => {},
+    });
+    await mod.run(page, opts);
+    const pick = steps.indexOf(`click ${PICK_KBD}`);
+    const shown = steps.findIndex((s, i) => i > pick && /^wait .*playBtn.*hidden/.test(s));
+    const start = steps.indexOf('click #playBtn');
+    assert.ok(pick >= 0, `the instrument is chosen first (${steps.slice(0, 4).join(' | ')})`);
+    assert.ok(shown > pick && start > shown, `Start is clicked only after it shows (${steps.slice(0, 4).join(' | ')})`);
+  });
+}
