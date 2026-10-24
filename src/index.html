@@ -58,10 +58,10 @@
     <div class="settings-group">
       <h3 data-i18n="settings.look">Look and names</h3>
       <label for="optLocale"><span data-i18n="settings.language">Language</span> <select id="optLocale"><option value="en">English</option><option value="es">Español</option></select></label>
-      <label for="optNames"><input type="checkbox" id="optNames" checked> Show note names</label>
-      <label for="optTheme">Theme <select id="optTheme"><option value="system">Match system</option><option value="light">Light</option><option value="dark">Dark</option></select></label>
-      <label for="optNoteSystem">Note names <select id="optNoteSystem"><option value="letters">Letters (C, D, E...)</option><option value="german">German (H/B)</option><option value="solfege">Fixed do (Do, Re, Mi...)</option></select></label>
-      <label for="optAccidentals">Sharps/flats <select id="optAccidentals"><option value="mixed">Mixed (today's spelling)</option><option value="sharps">Always sharps (♯)</option><option value="flats">Always flats (♭)</option></select></label>
+      <label for="optNames"><input type="checkbox" id="optNames" checked> <span data-i18n="settings.showNames">Show note names</span></label>
+      <label for="optTheme"><span data-i18n="settings.theme">Theme</span> <select id="optTheme"><option value="system" data-i18n="settings.theme.system">Match system</option><option value="light" data-i18n="settings.theme.light">Light</option><option value="dark" data-i18n="settings.theme.dark">Dark</option></select></label>
+      <label for="optNoteSystem"><span data-i18n="settings.noteSystem">Note names</span> <select id="optNoteSystem"><option value="letters" data-i18n="settings.noteSystem.letters">Letters (C, D, E...)</option><option value="german" data-i18n="settings.noteSystem.german">German (H/B)</option><option value="solfege" data-i18n="settings.noteSystem.solfege">Fixed do (Do, Re, Mi...)</option></select></label>
+      <label for="optAccidentals"><span data-i18n="settings.accidentals">Sharps/flats</span> <select id="optAccidentals"><option value="mixed" data-i18n="settings.accidentals.mixed">Mixed (today's spelling)</option><option value="sharps" data-i18n="settings.accidentals.sharps">Always sharps (♯)</option><option value="flats" data-i18n="settings.accidentals.flats">Always flats (♭)</option></select></label>
     </div>
     <div class="settings-group">
       <h3 data-i18n="settings.backups">Backups and reset</h3>
@@ -96,7 +96,7 @@
     <div class="settings-group">
       <h3 data-i18n="settings.how">How this works</h3>
       <p id="helpText"></p>
-      <p><strong>How it decides:</strong> no dice. The next exercise is always the item or move with the biggest need (low knowledge, weak move, not seen lately), so the same results always give the same lesson. Knowledge fades if you stay away, so old material comes back.</p>
+      <p><strong data-i18n="settings.decides">How it decides:</strong> <span data-i18n="settings.decidesBody">no dice. The next exercise is always the item or move with the biggest need (low knowledge, weak move, not seen lately), so the same results always give the same lesson. Knowledge fades if you stay away, so old material comes back.</span></p>
     </div>
   </section>
 
