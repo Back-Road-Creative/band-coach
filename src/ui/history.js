@@ -13,6 +13,13 @@ import { sanitizeHistoryStore } from './history/store.js';
 import { t } from '../core/i18n.js';
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+// "1 session" / "3 sessions": the caller picks the one/many key pair, the number rides along as {n}.
+const plural = (n, one, many) => t(n === 1 ? one : many, { n });
+const sessionsText = (n) => plural(n, 'history.sessionOne', 'history.sessionMany');
+const daysText = (n) => plural(n, 'history.dayOne', 'history.dayMany');
+const minutesText = (n) => plural(n, 'history.minuteOne', 'history.minuteMany');
+const WEEKDAY_KEYS = ['history.wd.sun', 'history.wd.mon', 'history.wd.tue', 'history.wd.wed', 'history.wd.thu', 'history.wd.fri', 'history.wd.sat'];
+const TREND_KEYS = { up: 'history.trend.up', down: 'history.trend.down', flat: 'history.trend.flat' };
 const pct = (x) => Math.round((typeof x === 'number' && isFinite(x) ? x : 0) * 100) + '%';
 
 /** Items this instrument has actually been practised on at least once.
@@ -59,17 +66,19 @@ function calendarHtml(l) {
       const shade = d.notKept ? 0 : ledgerShade(d.minutes, l.goalMin, maxMinutes);
       const cls = 'ledger-cell' + (d.notKept ? ' ledger-cell-unknown' : d.metGoal ? ' ledger-cell-met' : '');
       const label = d.notKept
-        ? `${d.day}: earlier sessions not kept`
-        : `${d.day}: ${d.minutes} min, ${d.sessions} session${d.sessions === 1 ? '' : 's'}${d.metGoal ? ', goal met' : ''}${d.levelChange ? ', level ' + (d.levelChange > 0 ? '+' : '') + d.levelChange : ''}`;
+        ? t('history.cal.notKept', { day: d.day })
+        : t('history.cal.day', { day: d.day, minutes: d.minutes, sessions: sessionsText(d.sessions) })
+          + (d.metGoal ? t('history.cal.goalMet') : '')
+          + (d.levelChange ? t('history.cal.level', { change: (d.levelChange > 0 ? '+' : '') + d.levelChange }) : '');
       return `<div class="${cls}" style="--ledger-shade:${shade}%" title="${esc(label)}"><span class="visually-hidden">${esc(label)}</span></div>`;
     })
     .join('');
-  const banner = l.truncated ? '<p class="ledger-truncated-note">Earlier sessions in this window were not kept — the practice log only holds the most recent sessions, so the greyed days are unknown, not zero.</p>' : '';
+  const banner = l.truncated ? `<p class="ledger-truncated-note">${esc(t('history.cal.truncated'))}</p>` : '';
   // the grid starts on whatever weekday the window opens on, so name the columns from the first cell
   const [y, m, dd] = l.days[0].day.split('-').map(Number);
   const wd = new Date(y, m - 1, dd).getDay();
-  const heads = Array.from({ length: 7 }, (_, i) => `<span class="ledger-weekday">${['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][(wd + i) % 7]}</span>`).join('');
-  return `${banner}<div class="ledger-weekdays" aria-hidden="true">${heads}</div><div class="ledger-grid" role="img" aria-label="Practice calendar, last ${l.weeks} weeks">${cells}</div><p class="ledger-legend">Newest day is the last square. An outlined square means that day reached your ${l.goalMin}-minute goal; a darker fill means more minutes.</p>`;
+  const heads = Array.from({ length: 7 }, (_, i) => `<span class="ledger-weekday">${esc(t(WEEKDAY_KEYS[(wd + i) % 7]))}</span>`).join('');
+  return `${banner}<div class="ledger-weekdays" aria-hidden="true">${heads}</div><div class="ledger-grid" role="img" aria-label="${esc(t('history.cal.aria', { weeks: l.weeks }))}">${cells}</div><p class="ledger-legend">${esc(t('history.cal.legend', { goal: l.goalMin }))}</p>`;
 }
 
 /** Renders a weeklyReport() result (src/core/history.js) into the printable
@@ -80,17 +89,17 @@ function calendarHtml(l) {
 function weeklyReportHtml(w, api) {
   const instRows = w.perInstrument.length
     ? w.perInstrument
-        .map((m) => `<li>${esc((api.instrument(m.mod) || {}).name || m.mod)}: ${m.minutes} min across ${m.sessions} session${m.sessions === 1 ? '' : 's'}</li>`)
+        .map((m) => `<li>${esc(t('history.wk.instrument', { name: (api.instrument(m.mod) || {}).name || m.mod, minutes: m.minutes, sessions: sessionsText(m.sessions) }))}</li>`)
         .join('')
-    : '<li>Nothing practiced this week.</li>';
+    : `<li>${esc(t('history.wk.none'))}</li>`;
   const truncatedNote = w.truncated
-    ? '<p>Some earlier days this week are not shown because the practice log only keeps the most recent sessions — those days are unknown, not zero.</p>'
+    ? `<p>${esc(t('history.wk.truncated'))}</p>`
     : '';
   return `
-    <h1>${esc(w.name)}'s week in Band Coach</h1>
-    <p>${esc(w.weekStart)} to ${esc(w.weekEnd)}</p>
-    <p>${w.totalMinutes} minute${w.totalMinutes === 1 ? '' : 's'} total, practiced on ${w.daysPractised} of 7 days, hit the ${w.goalMin}-minute goal on ${w.daysGoalMet} day${w.daysGoalMet === 1 ? '' : 's'}.</p>
-    <h2>What was practiced</h2>
+    <h1>${esc(t('history.wk.title', { name: w.name }))}</h1>
+    <p>${esc(t('history.wk.range', { start: w.weekStart, end: w.weekEnd }))}</p>
+    <p>${esc(t('history.wk.summary', { minutes: minutesText(w.totalMinutes), days: w.daysPractised, goal: w.goalMin, met: daysText(w.daysGoalMet) }))}</p>
+    <h2>${esc(t('history.wk.practiced'))}</h2>
     <ul>${instRows}</ul>
     ${truncatedNote}
   `;
@@ -108,35 +117,37 @@ export function registerHistory(panels) {
           <!-- F2 (src/app.js's focusDestination()): id + tabindex so a real
                nav activation of Progress can focus this heading instead of
                dropping focus to <body>. -->
-          <h2 id="historyHeading" tabindex="-1">My progress</h2>
-          <p>What your practice has looked like, in plain numbers — no account, nothing sent anywhere.</p>
+          <h2 id="historyHeading" tabindex="-1">${esc(t('history.heading'))}</h2>
+          <p>${esc(t('history.intro'))}</p>
           <div class="history-summary" id="historySummary"></div>
           <div class="history-retention" id="historyRetention"></div>
           <div><button type="button" class="primary" id="historyStartBtn" hidden>${esc(t('history.startFirst'))}</button></div>
           <div class="history-calendar-group" id="historyCalendarGroup">
-            <h3>Practice calendar</h3>
-            <label for="historyGoalInput">Daily minutes goal</label>
+            <h3>${esc(t('history.calendar'))}</h3>
+            <label for="historyGoalInput">${esc(t('history.goalLabel'))}</label>
             <input type="number" id="historyGoalInput" min="5" max="120" step="1">
             <p id="historyGoalStreak"></p>
             <div id="historyCalendar"></div>
           </div>
-          <h3>By instrument</h3>
+          <h3 id="historyInstrumentsHeading">${esc(t('history.byInstrument'))}</h3>
           <div id="historyInstruments"></div>
-          <h3>Items to know</h3>
-          <label for="historyModSelect">Look at items for</label>
-          <select id="historyModSelect"></select>
-          <div id="historyItems"></div>
-          <h3>Share a report</h3>
-          <label for="historyNameInput">Your name (optional, shown on the report)</label>
+          <div id="historyItemsGroup">
+            <h3>${esc(t('history.itemsHeading'))}</h3>
+            <label for="historyModSelect">${esc(t('history.lookAt'))}</label>
+            <select id="historyModSelect"></select>
+            <div id="historyItems"></div>
+          </div>
+          <h3>${esc(t('history.shareHeading'))}</h3>
+          <label for="historyNameInput">${esc(t('history.nameLabel'))}</label>
           <input type="text" id="historyNameInput" maxlength="60" autocomplete="off">
           <div>
-            <button type="button" id="historyCopyBtn">Copy a summary for my teacher</button>
+            <button type="button" id="historyCopyBtn">${esc(t('history.copyBtn'))}</button>
           </div>
           <p role="status" id="historyCopyStatus"></p>
-          <label for="historyCopyText" id="historyCopyTextLabel" hidden>Report text (selected — press Ctrl+C or Cmd+C)</label>
+          <label for="historyCopyText" id="historyCopyTextLabel" hidden>${esc(t('history.copyTextLabel'))}</label>
           <textarea id="historyCopyText" readonly hidden rows="8"></textarea>
           <div>
-            <button type="button" id="historyPrintBtn">Print this week's report</button>
+            <button type="button" id="historyPrintBtn">${esc(t('history.printBtn'))}</button>
           </div>
           <div class="history-print-report" id="historyPrintReport" aria-hidden="true"></div>
         </div>`;
@@ -155,15 +166,15 @@ export function registerHistory(panels) {
       function renderItemsFor(modId, db, now) {
         const box = el.querySelector('#historyItems');
         const items = practicedItems(db.mods && db.mods[modId]);
-        if (!items.length) { box.innerHTML = '<p>Nothing practiced yet on this instrument.</p>'; return; }
+        if (!items.length) { box.innerHTML = `<p>${esc(t('history.nothingInstrument'))}</p>`; return; }
         const ranked = due(items, now);
         const weakest = ranked[0];
         const strongest = ranked[ranked.length - 1];
         const dueNow = ranked.filter((x) => x.overdue).slice(0, 5);
         box.innerHTML = `
-          <p><strong>Strongest:</strong> <ul>${strongest ? itemRow(strongest) : ''}</ul></p>
-          <p><strong>Weakest:</strong> <ul>${weakest ? itemRow(weakest) : ''}</ul></p>
-          <p><strong>Due for review:</strong> ${dueNow.length ? `<ul>${dueNow.map(itemRow).join('')}</ul>` : '<span>Nothing overdue right now.</span>'}</p>`;
+          <p><strong>${esc(t('history.strongest'))}</strong> <ul>${strongest ? itemRow(strongest) : ''}</ul></p>
+          <p><strong>${esc(t('history.weakest'))}</strong> <ul>${weakest ? itemRow(weakest) : ''}</ul></p>
+          <p><strong>${esc(t('history.dueReview'))}</strong> ${dueNow.length ? `<ul>${dueNow.map(itemRow).join('')}</ul>` : `<span>${esc(t('history.nothingOverdue'))}</span>`}</p>`;
       }
 
       function render() {
@@ -175,8 +186,8 @@ export function registerHistory(panels) {
         goalInput.value = store.goalMin;
 
         el.querySelector('#historySummary').innerHTML = s.totalSessions
-          ? `<p>${s.totalSessions} session${s.totalSessions === 1 ? '' : 's'} logged. Current streak: ${s.currentStreak} day${s.currentStreak === 1 ? '' : 's'} (best ${s.bestStreak}). Accuracy is trending <strong>${esc(s.accuracyTrend.direction)}</strong>.</p>`
-          : '<p>No sessions logged yet. Practice a little and come back.</p>';
+          ? `<p>${t('history.summary', { sessions: sessionsText(s.totalSessions), streak: daysText(s.currentStreak), best: s.bestStreak, trend: '<strong>' + esc(t(TREND_KEYS[s.accuracyTrend.direction] || TREND_KEYS.flat)) + '</strong>' })}</p>`
+          : `<p>${esc(t('history.noSessions'))}</p>`;
 
         // Passed-with-help / passed-on-your-own / retained / applied come from
         // DB.events (src/core/learning-events.js summarizeEvents), a separate,
@@ -190,8 +201,8 @@ export function registerHistory(panels) {
         const ev = summarizeEvents(db.events || [], { skillMap: KBD_SONG_SKILL_MAP, skillMapInstrument: 'kbd' });
         const checkedCount = ev.withHelp + ev.independent + ev.introduced;
         el.querySelector('#historyRetention').innerHTML = checkedCount
-          ? `<p>Tries with help: ${ev.withHelp} · Passed on your own: ${ev.independent} · Remembered on a later try: ${ev.retained} · Applied in a song: ${ev.applied}</p>`
-          : '<p>Not tried again later yet, so nothing here counts as remembered.</p>';
+          ? `<p>${esc(t('history.retention', { withHelp: ev.withHelp, independent: ev.independent, remembered: ev.retained, applied: ev.applied }))}</p>`
+          : `<p>${esc(t('history.retentionNone'))}</p>`;
 
         // Nothing logged yet: offer the way to make the first session instead of an empty calendar and goal box.
         const empty = !s.totalSessions;
@@ -200,10 +211,12 @@ export function registerHistory(panels) {
         const l = ledger(db.sessions, { now, goalMin: store.goalMin });
         el.querySelector('#historyCalendar').innerHTML = calendarHtml(l);
         el.querySelector('#historyGoalStreak').textContent = l.goalStreak > 0
-          ? `Goal streak: ${l.goalStreak} day${l.goalStreak === 1 ? '' : 's'} of hitting ${l.goalMin} minutes.`
-          : `No current goal streak yet — hit ${l.goalMin} minutes today to start one.`;
+          ? t('history.goalStreak', { days: daysText(l.goalStreak), goal: l.goalMin })
+          : t('history.goalNone', { goal: l.goalMin });
 
+        // A new profile has no per-instrument rows: no heading over an empty box.
         const instBox = el.querySelector('#historyInstruments');
+        el.querySelector('#historyInstrumentsHeading').hidden = !s.perInstrument.length;
         if (!s.perInstrument.length) {
           instBox.innerHTML = '';
         } else {
@@ -214,8 +227,8 @@ export function registerHistory(panels) {
               const spark = sparkline(accHistory, Math.min(20, Math.max(1, accHistory.length)));
               return `<div class="history-instrument">
                 <h4>${esc(name)}</h4>
-                <p>${m.minutes} min across ${m.sessions} session${m.sessions === 1 ? '' : 's'}, ${pct(m.avgAccuracy)} average accuracy.</p>
-                <div class="history-spark" role="img" aria-label="Accuracy trend for ${esc(name)}, most recent ${accHistory.length} session${accHistory.length === 1 ? '' : 's'}">${sparklineSvg(spark)}</div>
+                <p>${esc(t('history.instrumentLine', { minutes: m.minutes, sessions: sessionsText(m.sessions), accuracy: pct(m.avgAccuracy) }))}</p>
+                <div class="history-spark" role="img" aria-label="${esc(t('history.sparkLabel', { name, sessions: sessionsText(accHistory.length) }))}">${sparklineSvg(spark)}</div>
               </div>`;
             })
             .join('');
@@ -226,11 +239,11 @@ export function registerHistory(panels) {
           Object.keys(db.mods || {}).filter((m) => practicedItems(db.mods[m]).length),
         )));
         const current = modSelect.value && modIds.indexOf(modSelect.value) >= 0 ? modSelect.value : (modIds.indexOf(api.mod()) >= 0 ? api.mod() : modIds[0]);
-        modSelect.hidden = !modIds.length; // nothing practiced: no instrument to pick, so no empty box
-        el.querySelector('label[for="historyModSelect"]').hidden = !modIds.length;
+        // nothing practiced: no "Items to know" heading, picker or empty box
+        el.querySelector('#historyItemsGroup').hidden = !modIds.length;
         modSelect.innerHTML = modIds.map((m) => `<option value="${esc(m)}">${esc((api.instrument(m) || {}).name || m)}</option>`).join('');
         if (current) modSelect.value = current;
-        if (current) renderItemsFor(current, db, now); else el.querySelector('#historyItems').innerHTML = '<p>Nothing practiced yet.</p>';
+        if (current) renderItemsFor(current, db, now); else el.querySelector('#historyItems').innerHTML = `<p>${esc(t('history.nothingYet'))}</p>`;
       }
 
       // Same path as a person's own taps: go to Practice (the nav button closes this panel), then press Start.
@@ -267,14 +280,14 @@ export function registerHistory(panels) {
           copyLabel.hidden = false;
           copyText.focus();
           copyText.select();
-          copyStatus.textContent = 'Could not copy automatically — the text is selected below; press Ctrl+C (or Cmd+C) to copy it.';
+          copyStatus.textContent = t('history.copyFail');
         };
         let clip;
         try { clip = window.isSecureContext && navigator.clipboard ? navigator.clipboard.writeText(text) : null; } catch (e) { clip = null; }
         if (clip && typeof clip.then === 'function') {
           clip.then(() => {
             copyText.hidden = true; copyLabel.hidden = true;
-            copyStatus.textContent = 'Copied. Paste it into an email or message.';
+            copyStatus.textContent = t('history.copied');
           }).catch(showSelected);
         } else {
           showSelected();
