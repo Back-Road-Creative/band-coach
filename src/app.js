@@ -53,6 +53,7 @@ import { renderVoice } from './audio/voices.js';
 import { layoutFor as harpLayoutFor } from './instruments/how/harmonica.js';
 import { pieceForMidi } from './instruments/drum-kit.js';
 import { renderKitSetup } from './ui/kit-setup.js';
+import { kitNoteFor } from './instruments/how/kit-presets.js';
 import { kitFrame, kitRegions, pieceAt, THRONE } from './instruments/how/drum-kit.js';
 import { layoutPercussionMeasure } from './notation/percussion.js';
 import { songFor, KBD_SONG_SKILL_MAP } from './instruments/kbd-songs.js';
@@ -1754,7 +1755,7 @@ import { register as registerPathway } from './ui/pathway.js';
   // The bar on a percussion staff (top), the kit from the throne (bottom): the bar's drums outlined, filled
   // while the count-in runs, the piece just hit flashing; after judging, a mark under each note.
   // what each drawn piece is called on the kit (a beginner reads the name; the key letter is only a hint). [name, second line, side it prefers (l/r/u/d), 's' for the small print of the hi-hat's tab and pedal]; the hi-hat is named once, on its disc
-  const KIT_DRAW_NAMES = { kick: ['Kick'], snare: ['Snare'], 'hihat-closed': ['Hi-hat'], 'hihat-pedal': ['pedal', '', 'r', 's'], 'hihat-open': ['open', '', 'u', 's'], 'tom-floor': ['Floor tom', '', 'l'], 'tom-mid': ['Mid', 'tom', 'u'], 'tom-high': ['High', 'tom', 'u'], crash: ['Crash'], ride: ['Ride'] };
+  const kitDrawNames = () => ({ kick: [tl('kit.piece.kick')], snare: [tl('kit.piece.snare')], 'hihat-closed': [tl('kit.draw.hihat')], 'hihat-pedal': [tl('kit.draw.pedal'), '', 'r', 's'], 'hihat-open': [tl('kit.draw.open'), '', 'u', 's'], 'tom-floor': [tl('kit.piece.tom-floor'), '', 'l'], 'tom-mid': [tl('kit.draw.mid1'), tl('kit.draw.mid2'), 'u'], 'tom-high': [tl('kit.draw.high1'), tl('kit.draw.high2'), 'u'], crash: [tl('kit.piece.crash')], ride: [tl('kit.piece.ride')] });
   function requiredKitPieces() { return task && task.kind === 'kit' && bar ? [...new Set(bar.onsets.flatMap(o => o.pieces))] : []; }
   function drawKit(W, H) {
     const on = bar && task && task.kind === 'kit' && bar.staff, t = now(), pre = on && t < bar.playAt, want = {}, bw = W * 0.94, bh = on ? H * 0.62 : H * 0.9, box = { x: (W - bw) / 2, y: on ? H * 0.37 : (H - bh) / 2, w: bw, h: bh, s: bh };
@@ -1773,9 +1774,9 @@ import { register as registerPathway } from './ui/pathway.js';
       else if (p.id === 'kick') { g.ellipse(x, r.y + r.h * 0.22, r.w * 0.38, r.h * 0.18, 0, 0, 7); g.rect(r.x + r.w * 0.15, r.y + r.h * 0.72, r.w * 0.7, r.h * 0.2); } else if (p.id === 'hihat-pedal') { g.moveTo(r.x + 3, r.y + r.h * 0.25); g.lineTo(r.x + r.w - 3, r.y + r.h * 0.25); }
       g.stroke(); });
     // Names go on after every circle is down. A name that fits is written inside its circle; any other tries its own side, the opposite side, then under and over the circle, and takes the first spot that touches no other name, no other piece and not the canvas edge; with none free it loses its second line (closed/pedal/open) and tries again, so two names never run into each other on a phone-width kit.
-    const placed = [], hit = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+    const drawNames = kitDrawNames(), placed = [], hit = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
     pcs.slice().sort((a, b) => Number(a.p.id === 'kick') - Number(b.p.id === 'kick')).forEach(({ p, x, y, rr, hw, hh, lit }) => {
-      const nm = KIT_DRAW_NAMES[p.id], small = nm[3] === 's', fs = small ? 11 : Math.max(13, m * 0.05), key = KIT.find(k => k.id === p.id).key.toUpperCase(); font(fs, small ? 400 : 700); const tw = g.measureText(nm[0]).width, kick = p.id === 'kick', inside = (kick ? tw + 2 <= hw * 2 : rr > 0 && tw + 6 <= rr * 2) && !nm[1] && !nm[2]; let sw = 0; if (nm[1]) { font(Math.max(11, fs * 0.85), 400); sw = g.measureText(nm[1]).width; font(fs, 700); }
+      const nm = drawNames[p.id], small = nm[3] === 's', fs = small ? 11 : Math.max(13, m * 0.05), key = KIT.find(k => k.id === p.id).key.toUpperCase(); font(fs, small ? 400 : 700); const tw = g.measureText(nm[0]).width, kick = p.id === 'kick', inside = (kick ? tw + 2 <= hw * 2 : rr > 0 && tw + 6 <= rr * 2) && !nm[1] && !nm[2]; let sw = 0; if (nm[1]) { font(Math.max(11, fs * 0.85), 400); sw = g.measureText(nm[1]).width; font(fs, 700); }
       g.fillStyle = inside && lit ? '#05070c' : '#e9edf6';
       if (inside) { const ny = kick ? y - fs * 0.5 : y - fs * 0.05; g.textAlign = 'center'; g.fillText(nm[0], x, ny); const r = { id: p.id, x: x - tw / 2, y: ny - fs * 1.0, w: tw, h: fs * 1.2 }; kitLabels.push(r); placed.push(r); }
       else {
@@ -2143,7 +2144,7 @@ import { register as registerPathway } from './ui/pathway.js';
   }
   function renderOpts() {
     const kitHost = $('kitSetup'); kitHost.hidden = !(MODS[mod] && MODS[mod].kit);
-    if (!kitHost.hidden) renderKitSetup(kitHost, DB.prefs.kit, prefs => { DB.prefs.kit = prefs; save(); if (panels.current() === 'fingerings') { panels.close(); openPanel('fingerings'); } });
+    if (!kitHost.hidden) renderKitSetup(kitHost, DB.prefs.kit, prefs => { DB.prefs.kit = prefs; save(); if (panels.current() === 'fingerings') { panels.close(); openPanel('fingerings'); } }, kitLearn);
     const box = $('modOpts'); box.innerHTML = ''; const sel = (id, label, opts, val, on) => { const l = document.createElement('label'); l.htmlFor = id; l.textContent = label + ' '; const s = document.createElement('select'); s.id = id; (Array.isArray(opts) ? opts : Object.keys(opts).map(k => [k, opts[k]])).forEach(([k, v]) => { const o = document.createElement('option'); o.value = k; o.textContent = v[0]; s.appendChild(o); }); s.value = val; s.addEventListener('change', () => on(s.value)); l.appendChild(s); box.appendChild(l); };
     const btn = (id, text, on, primary) => { const b = document.createElement('button'); b.type = 'button'; b.id = id; b.className = 'small' + (primary ? ' primary' : ''); b.textContent = text; b.addEventListener('click', () => { b.blur(); on(); }); box.appendChild(b); return b; };
     const chk = (id, text, val, on) => { const l = document.createElement('label'); l.htmlFor = id; const c = document.createElement('input'); c.type = 'checkbox'; c.id = id; c.checked = val; c.addEventListener('change', () => on(c.checked)); l.appendChild(c); l.appendChild(document.createTextNode(' ' + text)); box.appendChild(l); };
@@ -2366,6 +2367,10 @@ import { register as registerPathway } from './ui/pathway.js';
   // One raw MIDI message from an opened port: blink, log it for the details
   // readout, parse it (createMidiParser keeps running status per port), and
   // feed note-on/off into onNote()/the real held-note set.
+  // A pad the player taught the kit set-up sheet arrives as the General MIDI note of its piece, so every kit listener below (trainer, Songs drum practice, reference) hears the right drum. Only a kit, or Songs (a percussion part plays on the kit whatever is selected), reads a device's learned map.
+  let kitLearnSink = null;
+  const kitLearn = { listen: fn => { kitLearnSink = fn; return () => { if (kitLearnSink === fn) kitLearnSink = null; }; } };
+  const kitNote = (input, note) => (MODS[mod] && MODS[mod].kit) || panels.current() === 'songs' ? kitNoteFor(DB.prefs.kit, input.name, note) : note;
   function handleMidiMessage(input, ev) {
     const d = ev.data; if (!d || !d.length) return;
     midiBlink();
@@ -2377,7 +2382,11 @@ import { register as registerPathway } from './ui/pathway.js';
     ioRefresh();
     if (midiOutBusy) return; // the keyboard is playing a song back for the learner and echoes its own notes as input -- not the learner playing, so not judged
     let parser = midiParsers.get(input); if (!parser) { parser = createMidiParser(); midiParsers.set(input, parser); }
-    parser.feed(d).forEach(evt => { if (evt.type === 'on') { noteState.noteOn(input, evt.channel, evt.note); realMidiHeld.add(evt.note); onNote(evt.note, true, 'midi'); } else { noteState.noteOff(input, evt.channel, evt.note); if (!noteState.isHeld(evt.note)) realMidiHeld.delete(evt.note); onNoteOff(evt.note, 'midi'); } });
+    parser.feed(d).forEach(evt => {
+      if (evt.type === 'on' && kitLearnSink && kitLearnSink(input.name, evt.note)) return; // the kit set-up walk-through is learning this pad; it is not a hit
+      const note = kitNote(input, evt.note);
+      if (evt.type === 'on') { noteState.noteOn(input, evt.channel, note); realMidiHeld.add(note); onNote(note, true, 'midi'); } else { noteState.noteOff(input, evt.channel, note); if (!noteState.isHeld(note)) realMidiHeld.delete(note); onNoteOff(note, 'midi'); }
+    });
   }
   function connectMic() { openMic().then(ioRefresh).catch(e => { recordError('mic:connect', e); ioState('off', micErrorMessage(e)); }); }
   // Start on a mic instrument asks for the mic FIRST (the browser's own prompt), then begins: an exercise that cannot hear only ever says "Time." and "You stepped away". Blocked or unavailable: say so and do not start.

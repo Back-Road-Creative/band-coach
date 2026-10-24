@@ -196,9 +196,9 @@ function svgEl(tag, attrs) {
 // filled with the panel's highlight colour. Colours come from the stage's CSS
 // variables so the dark and light themes both read; the shapes, not the colours,
 // tell a drum from a cymbal.
-const HIHAT_WORDS = { 'hihat-closed': 'Hi-hat', 'hihat-open': 'open', 'hihat-pedal': 'pedal' };
+const hihatWords = () => ({ 'hihat-closed': t('kit.draw.hihat'), 'hihat-open': t('kit.draw.open'), 'hihat-pedal': t('kit.draw.pedal') });
 export function drumKitDiagram(instrument, how) {
-  const svg = svgEl('svg', { viewBox: '0 0 ' + 100 * KIT_ASPECT + ' 100', class: 'fing-drumkit', role: 'img', 'aria-label': how.description, width: String(320 * KIT_ASPECT), height: '320', style: 'max-width:100%;height:auto' });
+  const HIHAT_WORDS = hihatWords(), svg = svgEl('svg', { viewBox: '0 0 ' + 100 * KIT_ASPECT + ' 100', class: 'fing-drumkit', role: 'img', 'aria-label': how.description, width: String(320 * KIT_ASPECT), height: '320', style: 'max-width:100%;height:auto' });
   const line = 'stroke:var(--line)';
   svg.appendChild(svgEl('ellipse', { cx: String(THRONE.x * 100), cy: String(THRONE.y * 100), rx: String(THRONE.w * 50), ry: String(THRONE.h * 50), class: 'fing-throne', style: 'fill:var(--panel-2);' + line, 'stroke-width': '0.5' }));
   how.layout.forEach(p => {

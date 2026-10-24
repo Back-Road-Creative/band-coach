@@ -22,6 +22,8 @@
 // TRAINER_LEVELS below, and the record's curriculum is derived from them so
 // the two never drift.
 //
+import { t } from '../core/i18n.js';
+
 // `key` is the suggested computer key for each piece when the trainer takes
 // the keyboard. The keys are laid out like the kit itself, seen from the
 // throne: pieces on the left of the kit sit under the left hand (d closed
@@ -29,23 +31,29 @@
 // (j snare, u high tom, i mid tom, k floor tom, o ride), and the two pedals
 // on the keys nearest where the feet would be (f bass drum, c hi-hat pedal).
 // The keys follow where each piece sits, not which stick hits it.
+// `name` is read live from the locale tables (kit.name.<id>), so it follows the language.
+const piece = (id, midi, key) => ({ id, get name() { return t('kit.name.' + id); }, midi, key });
 export const PIECES = [
-  { id: 'kick', name: 'Bass drum', midi: [35, 36], key: 'f' },
-  { id: 'snare', name: 'Snare', midi: [38, 37, 40], key: 'j' },
-  { id: 'hihat-closed', name: 'Hi-hat (closed)', midi: [42], key: 'd' },
-  { id: 'hihat-pedal', name: 'Hi-hat (pedal)', midi: [44], key: 'c' },
-  { id: 'hihat-open', name: 'Hi-hat (open)', midi: [46], key: 'e' },
-  { id: 'tom-floor', name: 'Floor tom', midi: [41, 43], key: 'k' },
-  { id: 'tom-mid', name: 'Mid tom', midi: [45, 47], key: 'i' },
-  { id: 'tom-high', name: 'High tom', midi: [48, 50], key: 'u' },
-  { id: 'crash', name: 'Crash cymbal', midi: [49, 52, 55, 57], key: 'r' },
-  { id: 'ride', name: 'Ride cymbal', midi: [51, 53, 59], key: 'o' }
+  piece('kick', [35, 36], 'f'),
+  piece('snare', [38, 37, 40], 'j'),
+  piece('hihat-closed', [42], 'd'),
+  piece('hihat-pedal', [44], 'c'),
+  piece('hihat-open', [46], 'e'),
+  piece('tom-floor', [41, 43], 'k'),
+  piece('tom-mid', [45, 47], 'i'),
+  piece('tom-high', [48, 50], 'u'),
+  piece('crash', [49, 52, 55, 57], 'r'),
+  piece('ride', [51, 53, 59], 'o')
 ];
 
 // The piece id a MIDI note belongs to, or null when that note is not one of
 // this kit's pieces (e.g. 39, GM hand clap). schema.js guarantees a note
-// belongs to at most one piece.
-export function pieceForMidi(midi) {
+// belongs to at most one piece. `map` is an optional learned map for one
+// device, { [note]: pieceId } (see how/kit-presets.js): a note in it names
+// the piece the player taught the app, beating GM; every other note, and a
+// missing or unusable map, keeps the GM reading above.
+export function pieceForMidi(midi, map) {
+  if (map && typeof map === 'object' && !Array.isArray(map) && Number.isInteger(midi) && Object.prototype.hasOwnProperty.call(map, midi) && PIECES.some(p => p.id === map[midi])) return map[midi];
   const piece = PIECES.find(p => p.midi.includes(midi));
   return piece ? piece.id : null;
 }
