@@ -1,14 +1,15 @@
 // Beginner mallet percussion (band-classroom "bells"/glockenspiel): a
-// keyboard-layout pitched instrument, read in treble clef at concert pitch
+// chromatic bar-row pitched instrument, read in treble clef at concert pitch
 // (no transposition), heard through the microphone rather than MIDI.
 //
 // Wired into MODS['mallet-percussion'] in src/app.js: name and mic range
 // (fmin/fmax via rangeForInstrument(), src/audio/range.js) come from THIS
 // record, same one-source-of-truth pattern as mandolin.js/banjo-5-string.js.
-// The on-screen layout reuses drawKeys() -- the same function MODS.kbd's
-// on-screen piano uses -- rather than inventing new rendering: a
-// glockenspiel/xylophone bar row IS a keyboard layout, ascending chromatic
-// bars left to right, same shape as piano keys. `input` in MODS is 'pluck'
+// The on-screen layout is drawBars() in src/app.js, built on the pure
+// geometry in src/instruments/how/mallet.js (also used by the How-to-play
+// diagram): ascending chromatic bars left to right, naturals in front,
+// sharps/flats raised behind, bars shorter as they rise -- not piano keys.
+// No sticking marks: nothing in the data backs a hand choice. `input` in MODS is 'pluck'
 // (src/app.js's onPitch, ~line 591): the same struck-note timing
 // MODS.gtr/bass/uke/mandolin already use -- 3 consecutive stable-rounded-
 // midi frames fires a note, and a fresh onset (src/audio/onset.js) counts

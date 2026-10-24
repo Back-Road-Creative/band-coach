@@ -53,7 +53,7 @@ test('howKindFor picks the right module per instrument', () => {
   assert.equal(howKindFor(saxAlto), 'keyed-woodwind');
   assert.equal(howKindFor(saxTenor), 'keyed-woodwind');
   assert.equal(howKindFor(kbd), 'keyboard'); // keys family: drawn as the same two rows as the practice keyboard
-  assert.equal(howKindFor(mallet), null); // mallet percussion keeps no How kind
+  assert.equal(howKindFor(mallet), 'mallet'); // bell/xylophone bars: drawn as the same bar rows as the practice canvas
   assert.equal(howKindFor(wind), null); // an abstraction over 7 transpositions, not one real instrument
   assert.equal(howKindFor(null), null);
 });
@@ -255,5 +255,16 @@ test('keyboard: rows split at middle C, description names the key and the hand',
   const black = computeHow(kbd, 54);
   assert.match(black.description, /black key/); assert.match(black.description, /left-hand/);
   const out = computeHow(kbd, 84);
+  assert.equal(out.playable, false); assert.match(out.description, /outside/);
+});
+
+test('mallet: front-row naturals, raised back-row accidentals, two rows, outside range', () => {
+  const c4 = computeHow(mallet, 60);
+  assert.equal(c4.kind, 'mallet'); assert.equal(c4.playable, true);
+  assert.deepEqual(c4.rows, [{ lo: 60, hi: 71 }, { lo: 72, hi: 84 }]);
+  assert.match(c4.description, /C4/); assert.match(c4.description, /front row/);
+  const sharp = computeHow(mallet, 61);
+  assert.match(sharp.description, /raised/); assert.match(sharp.description, /back row/);
+  const out = computeHow(mallet, 40);
   assert.equal(out.playable, false); assert.match(out.description, /outside/);
 });

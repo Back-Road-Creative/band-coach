@@ -1388,7 +1388,7 @@ function mountSongsPanel(hostEl, api) {
       // "How to play this" (C1b): the SAME Fingerings-panel diagram/
       // description for THIS instrument and the step's earliest-starting
       // note, collapsed by default, right under the step view above --
-      // absent for an instrument with no how diagram at all (wind picker, mallet percussion), same
+      // absent for an instrument with no how diagram at all (the wind picker), same
       // guard renderHowInline itself applies. Setup is re-read here rather
       // than kept on `practice` (only two call sites, startPractice's own
       // `setup` local above is not in scope here).

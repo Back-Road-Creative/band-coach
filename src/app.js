@@ -91,6 +91,7 @@ import { createNoticeGate, buildDiagnostics } from './core/diagnostics.js';
 //
 import { registerFingerings, renderHowInline } from './ui/fingerings.js';
 import { instrumentSetup } from './ui/fingerings/setup.js';
+import { barLayout, barRows } from './instruments/how/mallet.js';
 import { keyLayout } from './instruments/how/keyboard.js';
 //
 //
@@ -558,7 +559,7 @@ import { register as registerPathway } from './ui/pathway.js';
   // already draws its own hand-built staff (drawStaff below); it is not
   // equivalent to the engine's output (task-row layout, live tuning gauge,
   // hold timer) so it is left alone rather than swapped.
-  const NOTATE_MOD_IDS = ['kbd', 'gtr', 'bass', 'uke', 'voice'];
+  const NOTATE_MOD_IDS = ['kbd', 'gtr', 'bass', 'uke', 'voice', 'mallet-percussion'];
   const WIND_KINDS = { c: ['Concert pitch: flute, oboe, violin', 0, 'treble'], bb: ['B flat: trumpet, clarinet, soprano sax', -2, 'treble'], bbt: ['B flat, octave lower: tenor sax', -14, 'treble'], eb: ['E flat: alto sax', -9, 'treble'], ebb: ['E flat, octave lower: baritone sax', -21, 'treble'], f: ['F: French horn', -7, 'treble'], bc: ['Bass clef: trombone, euphonium, tuba', -19, 'bass'] };
   const VOICE_KINDS = { low: ['Lower voice (Do = C3)', 48], mid: ['Middle voice (Do = G3)', 55], high: ['Higher voice (Do = C4)', 60] };
 
@@ -1109,6 +1110,7 @@ import { register as registerPathway } from './ui/pathway.js';
     }
     if (mod === 'voice') return task.ref === 'target' ? 'You heard the note. Sing it back in any octave and hold it.' : 'You heard Do. Find ' + i.short + ' from it.';
     if (MODS[mod].staff) return t('hint.staffNote', { label: i.label });
+    if (mod === 'mallet-percussion') return e.reveal ? t('hint.newBar') : '';
     return e.reveal ? 'New key: it is lit up this time.' : '';
   }
   function refreshPrompt() { if (!task || task.kind === 'ear' || task.kind === 'bar' || task.kind === 'hold') return; const verb = mod === 'voice' ? 'Sing' : 'Play'; $('prompt').innerHTML = verb + ' ' + task.els.map((el, k) => (k === task.idx ? '<b>' : '') + promptFor(el.info, el.reveal) + (k === task.idx ? '</b>' : '')).join(' → '); const e = cur(); if (e) $('hint').textContent = (task.warm ? t('coach.warmPrefix') : '') + hintFor(e); updateDesc(); updateHowPeek(); }
@@ -1125,13 +1127,13 @@ import { register as registerPathway } from './ui/pathway.js';
   // draw a fingering for), plus whenever the current element has no plain
   // sounding pitch (a chord or hands-together item), the mod's instrument
   // has no how diagram at all (renderHowInline returns null for the wind
-  // picker and mallet percussion), or the mod is the keyboard: the practice
-  // canvas already is the keyboard, and a shown peek would shrink it to
+  // picker), or the mod is the keyboard or mallet percussion: the practice
+  // canvas already is the keyboard (or bar row), and a shown peek would shrink it to
   // styles.css's 16/6 (#howPeekHost :has() rule) below the touch floor.
   function updateHowPeek() {
     const host = $('howPeekHost'); if (!host) return; host.textContent = '';
     const e = cur(), instrument = instrumentById[mod];
-    if (!task || task.done || !e || mod === 'kbd' || $('showMeBtn').hidden || !instrument || e.info.midi === undefined) { host.hidden = true; return; }
+    if (!task || task.done || !e || mod === 'kbd' || mod === 'mallet-percussion' || $('showMeBtn').hidden || !instrument || e.info.midi === undefined) { host.hidden = true; return; }
     const setup = instrumentSetup(instrument, { fingeringsStore: (DB.panels && DB.panels.fingerings) || null, prefs: DB.prefs });
     const rendered = renderHowInline(host, instrument, e.info.midi, setup);
     if (!rendered) { host.hidden = true; return; }
@@ -1662,6 +1664,18 @@ import { register as registerPathway } from './ui/pathway.js';
     L.whites.forEach(wk => { const m = wk.m, xm = wk.x; rr(xm + 1, y0, kw - 2, h, 4); g.fillStyle = fill(m, '#e9edf6'); g.fill(); const mk = markFor(m); if (mk) { g.fillStyle = '#06101d'; font(kw * 0.4, 800); g.textAlign = 'center'; g.fillText(mk, xm + kw / 2, y0 + kw * 0.46); } { const kl = keyLetter(m); if (kl) { g.fillStyle = '#3a4363'; font(kw * 0.34, 700); g.textAlign = 'center'; g.fillText(kl, xm + kw / 2, y0 + h - kw * 0.62); } } keyRects.push({ m: m, x: xm, y: y0, w: kw, h: h, black: false, row: o.row, hand: o.hand, mark: mk }); if (o.names) { g.fillStyle = '#3a4363'; font(L.labelPx / rootK, 600); g.textAlign = 'center'; g.fillText(nname(m) + (pc(m) === 0 ? (Math.floor(m / 12) - 1) : ''), wk.labelX, wk.labelY); } });
     L.blacks.forEach(bk => { const m = bk.m, bx = bk.x; rr(bx, y0, bk.w, bk.h, 3); g.fillStyle = fill(m, '#10131c'); g.fill(); g.strokeStyle = '#05070c'; g.lineWidth = 1; g.stroke(); const mk = markFor(m); if (mk) { g.fillStyle = '#e9edf6'; font(kw * 0.32, 800); g.textAlign = 'center'; g.fillText(mk, bx + kw * 0.32, y0 + h * 0.62 * 0.52); } { const kl = keyLetter(m); if (kl) { g.fillStyle = '#9fb4d8'; font(kw * 0.3, 700); g.textAlign = 'center'; g.fillText(kl, bx + kw * 0.32, y0 + h * 0.62 * 0.9); } } keyRects.unshift({ m: m, x: bx, y: y0, w: bk.w, h: bk.h, black: true, row: o.row, hand: o.hand, mark: mk }); });
   }
+  // Mallet percussion: a bar row, not piano keys. barLayout() (src/instruments/how/mallet.js) puts the naturals in
+  // front, each sharp/flat raised behind on the seam, bars shorter as they rise; a phone-width canvas gets two rows
+  // (C4-B4 over C5-C6) so every bar stays >= 24 CSS px wide. Pushes keyRects (debug hook only: bars are not clickable).
+  function drawBars(x0, y0, w, h, rec, o) {
+    const css = cv.getBoundingClientRect().width || cv.width, pxCss = cv.width / css, rows = barRows(rec, w / pxCss < 450), rh = h / rows.length;
+    const fill = (m, base) => o.target.indexOf(m) >= 0 ? accent() : o.good.indexOf(m) >= 0 ? '#5be08a' : recentPress(m) ? '#9fb4d8' : base;
+    rows.forEach((row, ri) => {
+      const L = barLayout(x0, y0 + ri * rh, w, rh * 0.94, row.lo, row.hi, rootK, [rec.low, rec.high]);
+      L.raised.concat(L.bars).forEach(b => { rr(b.x, b.y, b.w, b.h, 4); g.fillStyle = fill(b.m, b.black ? '#7f8fb0' : '#c4d0e6'); g.fill(); g.strokeStyle = b.black ? '#3a4668' : '#26304d'; g.lineWidth = 1.5; g.stroke(); keyRects.push({ m: b.m, x: b.x, y: b.y, w: b.w, h: b.h, black: b.black, row: ri }); });
+      if (o.names) L.bars.forEach(b => { g.fillStyle = '#26304d'; font(L.labelPx / rootK, 700); g.textAlign = 'center'; g.fillText(nname(b.m) + (pc(b.m) === 0 ? (Math.floor(b.m / 12) - 1) : ''), b.labelX, b.labelY); });
+    });
+  }
   // item D2 (Wave kbd): a full 88-key (A0-C8, MIDI 21-108) strip, drawn once
   // per frame under the rows, marking the [lo, hi] window the rows above are
   // currently showing -- so a learner sees where those one or two octaves
@@ -1899,7 +1913,7 @@ import { register as registerPathway } from './ui/pathway.js';
       drawKbdOverview(W * 0.02, oy + Hk * 0.905, W * 0.96, Hk * 0.07, kr[0], kr[1]);
       if (e && e.info.kind === 'chord') { g.fillStyle = '#e9edf6'; font(Hk * 0.11); g.textAlign = 'center'; g.fillText(e.info.sym, W / 2, oy + Hk * 0.13); } if (document.activeElement === cv) { const fi = kbdFocusInfo(); if (fi) { g.strokeStyle = '#ffd23f'; g.lineWidth = 4; g.strokeRect(fi.x + 2, fi.y + 2, fi.w - 4, fi.h - 4); } } }
     else if (M.tuning) { if (staffBand(mod)) { g.save(); g.translate(0, H * 0.42); drawFret(M, e, W, H * 0.58); g.restore(); } else drawFret(M, e, W, H); } else if (mod === 'voice') { if (staffBand(mod)) { g.save(); g.translate(0, H * 0.42); drawVoice(e, W, H * 0.58); g.restore(); } else drawVoice(e, W, H); } else if (M.staff) drawStaff(M, e, W, H); else if (mod === 'harp') drawHarp(e, W, H);
-    else if (mod === 'mallet-percussion') { const rec = instrumentById['mallet-percussion'], tg = e && e.info.kind === 'note' && (e.reveal || e.failed) ? [e.info.midi] : []; drawKeys(W * 0.03, H * 0.18, W * 0.94, H * 0.7, rec.range.low, rec.range.high, { target: tg, good: [], names: DB.prefs.names }); }
+    else if (mod === 'mallet-percussion') { const rec = instrumentById['mallet-percussion'], tg = e && e.info.kind === 'note' && (e.reveal || e.failed) ? [e.info.midi] : []; const mOpts = { target: tg, good: [], names: DB.prefs.names }; if (staffBand(mod)) { g.save(); g.translate(0, H * 0.42); drawBars(W * 0.03, H * 0.58 * 0.1, W * 0.94, H * 0.58 * 0.8, rec.range, mOpts); g.restore(); } else drawBars(W * 0.03, H * 0.18, W * 0.94, H * 0.7, rec.range, mOpts); }
     else if (M.kit) drawKit(W, H);
     else if (mod === 'ear') drawEar(W, H); else if (mod === 'rhy') { if (task && task.kind === 'bar2') drawBar2(W, H); else drawBar(W, H); }
     if (NOTATE_MOD_IDS.indexOf(mod) >= 0) drawNotation(e, W, H); else lastStaff = null;

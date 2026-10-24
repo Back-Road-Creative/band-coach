@@ -37,6 +37,9 @@ test('capabilityFor(rec) is fully derived: never hand-typed per instrument', () 
   assert.equal(kbd.chart, 'computed');
   assert.equal(kbd.practise, true);
 
+  // Mallet percussion: mic-only, but its bar diagram is a formula (same geometry as the canvas).
+  assert.equal(capabilityFor(byId['mallet-percussion']).chart, 'computed');
+
   // A keyed-woodwind record (mic-only, typed chart, provenance null):
   // accessible today, nothing checked by a musician.
   const clarinet = capabilityFor(byId['clarinet-bb']);

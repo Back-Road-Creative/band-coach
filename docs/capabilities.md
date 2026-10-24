@@ -9,10 +9,9 @@ Columns: `practise` — can a learner work a curriculum level on this instrument
 performance is actually checked: `midi` (an exact MIDI note), `mic-single-note` (the microphone's
 monophonic pitch detector, one note at a time), `tap` (rhythm-only, no pitch), or `none` (not
 assessable yet). `chart` — the "how to play it" diagram: `computed` (a formula, always correct for
-any in-range note — fretboard, fingerboard, brass valves/slide, harmonica, keyboard), `typed-unreviewed` (a
+any in-range note — fretboard, fingerboard, brass valves/slide, harmonica, keyboard, mallet bars), `typed-unreviewed` (a
 hand-typed lookup table or drawn layout no musician has checked), `typed-reviewed` (same, but
-checked — none today), or `none` (no diagram at all; voice, the wind/brass picker and
-mallet percussion give a curriculum and pitch matching with no fingering panel). `contentReviewed` —
+checked — none today), or `none` (no diagram at all; voice and the wind/brass picker give a curriculum and pitch matching with no fingering panel). `contentReviewed` —
 straight from `src/instruments/review.js`'s `isReviewed()`: has a real musician checked this
 record's curriculum against a method book, from its `provenance` field. `tier` — the maturity label
 below. A review can go stale: when `provenance.contentRev` is set, `isReviewCurrent()` only counts
@@ -66,7 +65,7 @@ been checked by a musician against a method book or teaching standard.
 | recorder-descant | Descant recorder | true | mic-single-note | typed-unreviewed | false | accessible-unvalidated |
 | tin-whistle | Tin whistle (D) | true | mic-single-note | typed-unreviewed | false | accessible-unvalidated |
 | oboe | Oboe | true | mic-single-note | typed-unreviewed | false | accessible-unvalidated |
-| mallet-percussion | Mallet percussion (bells) | true | mic-single-note | none | false | accessible-unvalidated |
+| mallet-percussion | Mallet percussion (bells) | true | mic-single-note | computed | false | accessible-unvalidated |
 | drum-kit | Drum kit | true | midi | typed-unreviewed | false | supported-untested |
 
 ## Measured detection figures

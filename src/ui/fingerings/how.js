@@ -5,7 +5,7 @@
 //
 // Wiring pass (src/ui/fingerings.js): call `howKindFor(instrument)` to know
 // whether an instrument can be shown at all (only instruments with tuning,
-// a mapped brass preset, the free-reed family, the keys family, the descant
+// a mapped brass preset, the free-reed family, the keys family, mallet percussion, the descant
 // recorder, the tin whistle, the voice family, or a drum `kit` qualify), then
 // `computeHow(instrument, midi, opts)` for the note the learner picked. `opts.key` (0-11) picks the
 // harmonica's key; `opts.maxFret` caps how many frets/positions a
@@ -27,6 +27,7 @@ import { holesFor } from '../../instruments/how/harmonica.js';
 import { fingeringFor } from '../../instruments/how/recorder-whistle.js';
 import { keyedFingeringFor } from '../../instruments/how/keyed-woodwind.js';
 import { keyboardRows, isWhiteKey } from '../../instruments/how/keyboard.js';
+import { barRows, isNaturalBar } from '../../instruments/how/mallet.js';
 import { kitLayout, describeHit } from '../../instruments/how/drum-kit.js';
 import { pieceForMidi, canonicalMidi } from '../../instruments/drum-kit.js';
 import { howKindFor, BRASS_BY_ID, KEYED_WOODWIND_CHART_BY_ID } from '../../instruments/how-kind.js';
@@ -239,6 +240,16 @@ export function computeHow(instrument, midi, opts = {}) {
       description: playable
         ? t(isWhiteKey(midi) ? 'how.keyboard.white' : 'how.keyboard.black', { note: noteName(midi), hand: t(hand === 'rh' ? 'how.keyboard.right' : 'how.keyboard.left') })
         : t('how.keyboard.outside', { note: noteName(midi), low: noteName(low), high: noteName(high) })
+    };
+  }
+
+  if (kind === 'mallet') {
+    const { low, high } = instrument.range, playable = midi >= low && midi <= high;
+    return {
+      kind, midi, rows: barRows(instrument.range, true), playable,
+      description: playable
+        ? t(isNaturalBar(midi) ? 'how.mallet.front' : 'how.mallet.back', { note: noteName(midi) })
+        : t('how.mallet.outside', { note: noteName(midi), low: noteName(low), high: noteName(high) })
     };
   }
 

@@ -12,6 +12,7 @@ import { isReviewed } from '../instruments/review.js';
 import { t } from '../core/i18n.js';
 import { KIT_ASPECT, THRONE } from '../instruments/how/drum-kit.js';
 import { keyLayout } from '../instruments/how/keyboard.js';
+import { barLayout } from '../instruments/how/mallet.js';
 import { name } from '../core/note-names.js';
 import { rangeIsWrittenPitch } from '../song/lesson.js';
 
@@ -163,6 +164,25 @@ function keyboardDiagram(instrument, how) {
   return svg;
 }
 
+// Mallet percussion: the same bar rows the practice canvas draws (barLayout() in
+// src/instruments/how/mallet.js): sharps and flats raised behind, bars shorter as they rise; the picked bar is filled.
+function malletDiagram(instrument, how) {
+  const rg = instrument.range, svg = svgEl('svg', { viewBox: '0 0 320 188', class: 'fing-mallet', role: 'img', 'aria-label': how.description, width: '320', height: '188', style: 'max-width:100%;height:auto' });
+  how.rows.forEach((row, i) => {
+    const L = barLayout(0, i * 96, 320, 92, row.lo, row.hi, 1, [rg.low, rg.high]);
+    [...L.raised, ...L.bars].forEach(b => {
+      const hit = b.m === how.midi;
+      svg.appendChild(svgEl('rect', { x: String(b.x), y: String(b.y), width: String(b.w), height: String(b.h), rx: '3', class: 'fing-bar' + (b.black ? ' fing-bar-raised' : '') + (hit ? ' fing-hit' : ''), 'data-midi': String(b.m), style: 'fill:' + (hit ? '#f3c52f' : b.black ? '#7f8fb0' : '#c4d0e6') + ';stroke:var(--line)' }));
+      if (!b.black) {
+        const label = svgEl('text', { x: String(b.labelX), y: String(b.labelY), 'font-size': String(L.labelPx), 'text-anchor': 'middle', style: 'fill:#26304d' });
+        label.textContent = name(b.m, b.m % 12 === 0);
+        svg.appendChild(label);
+      }
+    });
+  });
+  return svg;
+}
+
 // Keyed Boehm-system woodwinds (flute, clarinet, oboe, sax): the underlying
 // chart (src/instruments/how/keyed-woodwind.js) is typed prose, not a
 // structured set of key positions like a fretboard or brass valve, so there
@@ -198,7 +218,7 @@ function unavailableDiagram() {
 // was actually wrong -- is unit testable without one. An unrecognised or
 // missing `how.kind` maps to 'unavailable', never silently falling through
 // to 'voice'.
-const DIAGRAM_KINDS = ['drum-kit', 'fretboard', 'fingerboard', 'brass-valves', 'brass-slide', 'harmonica', 'recorder', 'whistle', 'keyed-woodwind', 'keyboard', 'voice'];
+const DIAGRAM_KINDS = ['drum-kit', 'fretboard', 'fingerboard', 'brass-valves', 'brass-slide', 'harmonica', 'recorder', 'whistle', 'keyed-woodwind', 'keyboard', 'mallet', 'voice'];
 export function diagramKindFor(how) {
   return (how && DIAGRAM_KINDS.includes(how.kind)) ? how.kind : 'unavailable';
 }
@@ -257,6 +277,7 @@ function diagramFor(instrument, how) {
     case 'whistle': return recorderDiagram(instrument, how);
     case 'keyed-woodwind': return keyedWoodwindDiagram(instrument, how);
     case 'keyboard': return keyboardDiagram(instrument, how);
+    case 'mallet': return malletDiagram(instrument, how);
     case 'voice': return voiceDiagram(instrument, how);
     default: return unavailableDiagram();
   }
@@ -283,7 +304,7 @@ let howInlineSeq = 0;
 // Fingerings panel gives for `instrument`/`soundingMidi`, dropped inline
 // under the current lesson step, collapsed by default. Returns null (and
 // appends nothing) when this instrument has no how diagram at all
-// (howKindFor null -- the wind picker and mallet percussion). `setup` is
+// (howKindFor null -- the wind picker). `setup` is
 // the caller's own instrumentSetup() result (capo/tuning/leftHanded/
 // harpKey), read fresh at render time rather than cached on `practice`.
 export function renderHowInline(container, instrument, soundingMidi, setup) {
