@@ -106,7 +106,12 @@ test('the voices budget fails loudly if its module is renamed away', async () =>
 // to cut: L2 (level names) measured 1,210,823 at its head, +8,287. L3 (Songs
 // status messages, 46 keys in two languages) and L4 (coach lines) come next.
 // 1.2MB leaves about 47KB past L2 and still no room for a media library.
-const TOTAL_BUDGET_BYTES = 1.2 * 1024 * 1024;
+// Raised again to 1.25MB (2026-10-24), measured the same way: main (499e03f,
+// after kit MIDI learn and the kit-name translations) built to 1,249,100
+// bytes, 9,191 under. U11 (settings and progress screens, both languages)
+// measured 1,262,945 merged onto that main, +13,845, which is 4,654 over.
+// 1.25MB leaves about 47KB past U11 and still no room for a media library.
+const TOTAL_BUDGET_BYTES = 1.25 * 1024 * 1024;
 
 test('the built single-file app stays under its total size ceiling', async () => {
   const outDir = mkdtempSync(join(tmpdir(), 'band-coach-total-budget-'));

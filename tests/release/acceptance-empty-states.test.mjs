@@ -18,6 +18,9 @@ test('Progress with no sessions: a Start control that begins a session, and no e
     await go(page, 'progress');
     assert.equal(await visible(page, '#historyCalendar'), false, 'no calendar before there is any data');
     assert.equal(await visible(page, '#historyGoalInput'), false, 'no goal box before there is any data');
+    const headings = await page.evaluate("[...document.querySelectorAll('#panelHost h3')].filter(h => h.getClientRects().length > 0).map(h => h.textContent.trim())");
+    assert.deepEqual(headings, ['Share a report'], 'no empty "By instrument" or "Items to know" headings before there is any data');
+    assert.equal(await visible(page, '#historyModSelect'), false, 'no instrument picker with nothing to look at');
     await page.waitFor("[...document.querySelectorAll('#panelHost button')].some(b => b.textContent.trim() === 'Start your first session')");
     await page.clickSelector('#historyStartBtn');
     await page.waitFor("!document.getElementById('endBtn').hidden");
@@ -35,6 +38,8 @@ test('Progress with sessions: the calendar is there and the Start control is not
     assert.match(await page.evaluate("document.getElementById('historySummary').textContent"), /1 session/);
     assert.equal(await visible(page, '#historyCalendar'), true);
     assert.equal(await visible(page, '#historyStartBtn'), false);
+    const headings = await page.evaluate("[...document.querySelectorAll('#panelHost h3')].filter(h => h.getClientRects().length > 0).map(h => h.textContent.trim())");
+    assert.ok(headings.includes('By instrument'), 'By instrument shows once there is a session: ' + headings);
   });
 });
 

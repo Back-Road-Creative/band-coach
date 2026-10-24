@@ -79,6 +79,22 @@ export function planSession({ instrumentId, level, activeIds, items, now, due, s
   return blocks;
 }
 
+// English phrases describePlan falls back to when no translator is given;
+// the same ids and text live in the `en` table of src/core/i18n.js.
+export const PLAN_PHRASES = {
+  'plan.review': '{n} to review',
+  'plan.apply': 'use it in a phrase',
+  'plan.check': 'a check',
+  'plan.song': 'play {title}',
+  'plan.songDone': 'play {title} (done today)',
+  'plan.joiner': ', then ',
+  'plan.today': 'Today: {parts}.',
+  'plan.first': "Today: your first sitting here -- play what the screen asks, and tomorrow's plan builds from it.",
+  'plan.free': 'Today: nothing new due -- free practice.',
+};
+function englishPhrase(id, params) {
+  return PLAN_PHRASES[id].replace(/\{(\w+)\}/g, (m, k) => (params && k in params ? String(params[k]) : m));
+}
 // describePlan(blocks, nameOf) -> one plain sentence for the coach line, e.g.
 // "Today: 3 to review, then G4, then use it in a phrase, then a check."
 // Reads whatever blocks planSession produced; never recomputes anything.
@@ -90,25 +106,27 @@ export function planSession({ instrumentId, level, activeIds, items, now, due, s
 // (planSession has nothing to review and no weak spot yet), so the line
 // invites them to play instead of reading as a day with nothing to do;
 // `seen` omitted or true keeps the "nothing new due" wording.
+// `opts.t(id, params)` is the caller's translator (the app passes
+// src/core/i18n.js's t); this module stays pure and never imports it. With no
+// translator the line is plain English from PLAN_PHRASES, which
+// tests/unit/describe-plan-i18n.test.mjs keeps equal to the `en` table.
 export function describePlan(blocks, nameOf, opts) {
   const list = Array.isArray(blocks) ? blocks : [];
   const name = typeof nameOf === 'function' ? nameOf : (id => String(id));
+  const say = opts && typeof opts.t === 'function' ? opts.t : englishPhrase;
   const review = list.find(b => b.kind === 'review');
   const weak = list.find(b => b.kind === 'weak');
   const apply = list.find(b => b.kind === 'apply');
   const check = list.find(b => b.kind === 'check');
   const song = list.find(b => b.kind === 'song');
   const parts = [];
-  if (review) parts.push(review.ids.length + ' to review');
+  if (review) parts.push(say('plan.review', { n: review.ids.length }));
   if (weak) parts.push(name(weak.id));
-  if (apply) parts.push('use it in a phrase');
-  if (check) parts.push('a check');
-  if (song) parts.push('play ' + song.title + (song.done ? ' (done today)' : ''));
-  if (!parts.length) {
-    if (opts && opts.seen === false) return 'Today: your first sitting here -- play what the screen asks, and tomorrow\'s plan builds from it.';
-    return 'Today: nothing new due -- free practice.';
-  }
-  return 'Today: ' + parts.join(', then ') + '.';
+  if (apply) parts.push(say('plan.apply'));
+  if (check) parts.push(say('plan.check'));
+  if (song) parts.push(say(song.done ? 'plan.songDone' : 'plan.song', { title: song.title }));
+  if (!parts.length) return say(opts && opts.seen === false ? 'plan.first' : 'plan.free');
+  return say('plan.today', { parts: parts.join(say('plan.joiner')) });
 }
 
 // describeWhy(blocks, nameOf) -> a second, separate sentence naming the
