@@ -11,8 +11,7 @@
 // tests/characterization/w-history-retained.test.mjs, not repeated here. This
 // journey only asserts that a finished session shows up in Progress at all.
 //
-// F3 (plan §0.6, src/app.js:1870 endSession(), re-grepped in this
-// worktree): a session is only pushed onto DB.sessions when
+// F3 (plan §0.6, src/app.js endSession()): a session is only pushed onto DB.sessions when
 // `sess.judged >= 8`, so the drive loop below must reach at least 8 judged
 // answers before ending the session, or Progress would show nothing new.
 import { test } from 'node:test';

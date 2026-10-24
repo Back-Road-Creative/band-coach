@@ -1,7 +1,7 @@
-// Extracted from src/app.js: tuning at MODS.gtr.tuning (app.js:77, standard EADGBE
+// Extracted from src/app.js: tuning at MODS.gtr.tuning (standard EADGBE
 // [40,45,50,55,59,64]) and the 20-level curriculum built by stringLevels(tuning,
-// ['Low E','A','D','G','B','High E'], 12, ['Em','G','C','D','Am','E','A']) at
-// app.js:106, whose level-naming logic lives at app.js:57-66. Range high (76) is
+// ['Low E','A','D','G','B','High E'], 12, ['Em','G','C','D','Am','E','A']) in
+// app.js's MODS table, whose level-naming logic lives in stringLevels. Range high (76) is
 // the 12th fret on the high E string (64+12); low (40) is the open low E.
 // Guitar is heard through a microphone (app.js MODS.gtr.input === 'pluck').
 // octavePolicy is exact: the right letter in the wrong octave is a wrong

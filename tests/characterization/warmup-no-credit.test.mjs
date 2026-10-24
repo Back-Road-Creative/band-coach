@@ -32,7 +32,7 @@ test('warm-up: a correct warm-up answer does not update S.item, but the followin
 
   await page.evaluate("window.__coach.setMod('gtr')");
   // Force startSession() down the warm-up branch: `S.judged > 5 && !customOn`
-  // (src/app.js:1531) is the only gate on sess.warm, so bump S.judged before
+  // (startSession in src/app.js) is the only gate on sess.warm, so bump S.judged before
   // pressing Start.
   await page.evaluate("window.__coach.state().judged = 10");
   await page.evaluate("document.getElementById('playBtn').click()");

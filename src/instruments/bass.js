@@ -1,7 +1,7 @@
-// Extracted from src/app.js: tuning at MODS.bass.tuning (app.js:78, standard EADG
+// Extracted from src/app.js: tuning at MODS.bass.tuning (standard EADG
 // [28,33,38,43]) and the 13-level curriculum built by stringLevels(tuning,
-// ['E','A','D','G'], 12, null) at app.js:107 (no chordSet -> no chord levels; the
-// naming logic is app.js:57-66). Range high (55) is the 12th fret on the G string
+// ['E','A','D','G'], 12, null) in app.js's MODS table (no chordSet -> no chord levels; the
+// naming logic is stringLevels' level names). Range high (55) is the 12th fret on the G string
 // (43+12); low (28) is the open E string. Mic input, any-octave name matching, so
 // octavePolicy is exact: the right letter in the wrong octave is a wrong note (the
 // mic cannot tell which string was used, so position is taught by diagram).

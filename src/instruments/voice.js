@@ -1,8 +1,8 @@
-// Extracted from src/app.js MODS.voice (app.js:80-85). Items are scale degrees
-// (0-12 semitones) added to a movable tonic chosen from VOICE_KINDS (app.js:111:
+// Extracted from src/app.js MODS.voice. Items are scale degrees
+// (0-12 semitones) added to a movable tonic chosen from VOICE_KINDS (
 // low Do=C3/48, mid Do=G3/55, high Do=C4/60). Range spans the lowest tonic plus
 // degree 0 (48) to the highest tonic plus the top degree, 12 (60+12=72). The help
-// text at app.js:80 says "Any octave counts, so sing where it is comfortable",
+// text in app.js's MODS.voice says "Any octave counts, so sing where it is comfortable",
 // which is why octavePolicy is nearest-octave rather than exact.
 export default {
   id: 'voice',
