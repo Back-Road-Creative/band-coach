@@ -70,6 +70,8 @@ export const en = {
   "kit.draw.high1": "High",
   "kit.draw.high2": "tom",
   "kit.notOnKit": "MIDI drum note {note} is not one of the drums on this kit.",
+  "kit.stick.R": "R",
+  "kit.stick.L": "L",
 
   'wrongNote.higher': 'Go higher.',
   'wrongNote.lower': 'Go lower.',
@@ -538,6 +540,8 @@ export const es = {
   "kit.draw.high1": "Tom",
   "kit.draw.high2": "agudo",
   "kit.notOnKit": "La nota de batería MIDI {note} no es una de las piezas de esta batería.",
+  "kit.stick.R": "D",
+  "kit.stick.L": "I",
 
   'wrongNote.higher': 'Ve más agudo.',
   'wrongNote.lower': 'Ve más grave.',
