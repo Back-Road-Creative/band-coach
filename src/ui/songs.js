@@ -1462,7 +1462,7 @@ function mountSongsPanel(hostEl, api) {
       });
       bar.appendChild(recordBtn);
       countEl = el('p', { class: 'panel-songs-count', text: countLabel() });
-      practiceSection.appendChild(countEl);
+      bar.appendChild(countEl);
       appendLatencyLine(step);
     } else {
       bar.appendChild(el('button', { type: 'button', text: t('songs.step.next'), onclick: () => advance(true, null) }));
