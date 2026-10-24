@@ -100,3 +100,31 @@ test('applyAttemptToTransport keeps the old hit-count-only behaviour when no pas
   assert.equal(rate, transport.getRate());
   assert.ok(rate >= 1.0, 'with no passRule, hitCount === judgedCount alone should still read as clean');
 });
+
+import { barLoopStep, BAR_LOOP_START_RATE } from '../../src/ui/songs/loop-backing.js';
+
+const LADDER = [{
+  kind: 'tempo-ladder', tempoScale: 1, phraseIndex: 0, bars: [0, 1], bpm: 100,
+  passRule: { hitRate: 0.85, maxMeanErrorMs: 100, maxExtras: 0 },
+  notes: [{ start: 0, dur: 480, midi: 60 }, { start: 480, dur: 480, midi: 62 }, { start: 1920, dur: 480, midi: 64 }, { start: 2400, dur: 480, midi: 65 }],
+}];
+
+test('barLoopStep isolates one bar of the full-speed ladder rung', () => {
+  const s = barLoopStep(LADDER, 1, [0, 1920, 3840]);
+  assert.equal(s.kind, 'bar-loop');
+  assert.deepEqual(s.bars, [1, 1]);
+  assert.equal(s.originTick, 1920);
+  assert.equal(s.bpm, 100);
+  assert.deepEqual(s.notes.map((n) => n.midi), [64, 65]);
+  assert.deepEqual(s.passRule, LADDER[0].passRule);
+});
+
+test('barLoopStep returns null for an uncovered bar or a bar with no notes', () => {
+  assert.equal(barLoopStep(LADDER, 5, [0, 1920, 3840, 5760, 7680, 9600, 11520]), null);
+  assert.equal(barLoopStep(LADDER, 1, [0, 1920, 1920]), null);
+  assert.equal(barLoopStep([{ ...LADDER[0], notes: [LADDER[0].notes[0]] }], 1, [0, 1920, 3840]), null);
+});
+
+test('the bar loop starts at the lowest ladder rung', () => {
+  assert.equal(BAR_LOOP_START_RATE, 0.6);
+});

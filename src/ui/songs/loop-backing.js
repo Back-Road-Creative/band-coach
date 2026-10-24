@@ -65,3 +65,18 @@ export function rateLabel(rate) {
   const pct = Math.round(rate * 100);
   return pct >= 100 ? 'Full speed' : 'Playing at ' + pct + '% speed';
 }
+
+// "Loop bar N": the lowest rung of the tempo ladder (first of LADDER_FRACTIONS in
+// src/song/lesson.js), where a looped bar starts before speeding up.
+export const BAR_LOOP_START_RATE = 0.6;
+
+// One bar of the full-speed ladder rung that covers it, shaped as an off-plan
+// repair step. null when no rung covers the bar or the bar holds no notes.
+export function barLoopStep(steps, bar, boundaries, bpmAt) {
+  const src = steps.find((s) => s.kind === 'tempo-ladder' && s.tempoScale === 1 && s.bars[0] <= bar && bar <= s.bars[1]);
+  const from = boundaries[bar], to = boundaries[bar + 1];
+  if (!src || !(to > from)) return null;
+  const notes = src.notes.filter((n) => n.start >= from && n.start < to);
+  if (!notes.length) return null;
+  return { kind: 'bar-loop', phraseIndex: src.phraseIndex, bars: [bar, bar], originTick: from, bpm: bpmAt ? Math.round(bpmAt(from)) : src.bpm, notes, passRule: src.passRule };
+}

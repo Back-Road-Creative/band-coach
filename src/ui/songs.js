@@ -43,7 +43,7 @@ import { createOnsetDetector } from '../audio/onset.js';
 import { rangeForInstrument } from '../audio/range.js';
 import { starterSongs } from '../song/starter/index.js';
 import { createLibrary, memoryStore, indexedDbStore } from '../song/library.js';
-import { validateSong, songBarCount, MAX_SONG_BARS } from '../song/model.js';
+import { validateSong, songBarCount, barsOf, MAX_SONG_BARS } from '../song/model.js';
 import { buildLessonPlan, nextStep, creditFor } from '../song/lesson.js';
 import { INSTRUMENTS } from '../instruments/index.js';
 import { capabilityFor } from '../instruments/capability.js';
@@ -53,7 +53,7 @@ import { createSongClock } from '../song/clock.js';
 import { phaseOf, repairFor, interludeAfter, addReview, dueReviews, dropReviews, sanitizeReviewQueue } from '../core/teaching.js';
 import { barHeat, worstBars } from '../song/bar-heat.js';
 import { dimsFromStep, assessmentLines } from './songs/assessed.js';
-import { createLoopBackingTransport, applyAttemptToTransport, backingBpm, rateLabel } from './songs/loop-backing.js';
+import { createLoopBackingTransport, applyAttemptToTransport, backingBpm, rateLabel, barLoopStep, BAR_LOOP_START_RATE } from './songs/loop-backing.js';
 import { mapMasteryKeys } from './songs/mastery.js';
 import { parseChallenge, buildChallenge } from '../song/challenge.js';
 import { writeBandPack, readBandPack } from '../song/band-pack.js';
@@ -83,7 +83,7 @@ import { lessonKey, sanitizeLessonList, sanitizeLessonEntry, rememberLesson, fin
 import { handsAvailable, stepForHands } from '../song/hand-filter.js';
 import { name as noteName } from '../core/note-names.js';
 
-import { playedEventFrom, extendHeldEvent, countInFor, pushMidiEvent, closeOpenMidiEvents, withStoredIds, alreadyInLibraryNote, difficultyLabel, fidelityNoticeText, applyMasteryCredit, summarizePracticeSession } from './songs/session-helpers.js';
+import { playedEventFrom, extendHeldEvent, countInFor, pushMidiEvent, closeOpenMidiEvents, withStoredIds, alreadyInLibraryNote, difficultyLabel, fidelityNoticeText, applyMasteryCredit, summarizePracticeSession, songLatencyMs, latencyAdjusted } from './songs/session-helpers.js';
 
 export { renderPlayItOnCards, requestOpenSong };
 
@@ -1460,6 +1460,7 @@ function mountSongsPanel(hostEl, api) {
       practiceSection.appendChild(recordBtn);
       countEl = el('p', { class: 'panel-songs-count', text: countLabel() });
       practiceSection.appendChild(countEl);
+      appendLatencyLine(step);
     } else {
       practiceSection.appendChild(el('button', { type: 'button', text: t('songs.step.next'), onclick: () => advance(true, null) }));
     }
@@ -1554,7 +1555,7 @@ function mountSongsPanel(hostEl, api) {
     // it) so they can read it while deciding what to do next.
     renderVerdict();
     if (practice.lastHeat) {
-      practiceSection.appendChild(renderBarStrip(practice.lastHeat, practice.lastHeatBars));
+      practiceSection.appendChild(renderBarStrip(practice.lastHeat, practice.lastHeatBars, practice.mode !== 'check'));
     }
     if (practice.lastAssessed) {
       practiceSection.appendChild(renderAssessedList(practice.lastAssessed));
@@ -1635,8 +1636,15 @@ function mountSongsPanel(hostEl, api) {
   // ("Fix one thing: …"), what to do ("Just these notes…"), and the same
   // play/record controls every other passRule'd step gets.
   function renderRepairStep(step) {
-    practiceSection.appendChild(el('h4', { text: repairTitle(step) }));
-    practiceSection.appendChild(el('p', { text: 'Just these notes, then back to the phrase.' }));
+    const isLoop = step.kind === 'bar-loop';
+    if (isLoop) {
+      practiceSection.appendChild(el('h4', { text: t('songs.loopBar.title', { bar: step.bars[0] + 1 }) }));
+      practiceSection.appendChild(el('p', { text: t('songs.loopBar.body') }));
+      practiceSection.appendChild(el('p', { class: 'panel-songs-rate', text: rateLabel(practice.repair.transport.getRate()) }));
+    } else {
+      practiceSection.appendChild(el('h4', { text: repairTitle(step) }));
+      practiceSection.appendChild(el('p', { text: 'Just these notes, then back to the phrase.' }));
+    }
     if (practice.mode !== 'check') {
       practiceSection.appendChild(el('button', { type: 'button', text: t('songs.step.play'), onclick: () => playPhrase(step) }));
     }
@@ -1647,13 +1655,15 @@ function mountSongsPanel(hostEl, api) {
     }));
     countEl = el('p', { class: 'panel-songs-count', text: countLabel() });
     practiceSection.appendChild(countEl);
+    appendLatencyLine(step);
     renderVerdict();
     if (practice.lastHeat) {
-      practiceSection.appendChild(renderBarStrip(practice.lastHeat, practice.lastHeatBars));
+      practiceSection.appendChild(renderBarStrip(practice.lastHeat, practice.lastHeatBars, false));
     }
     if (practice.lastAssessed) {
       practiceSection.appendChild(renderAssessedList(practice.lastAssessed));
     }
+    if (isLoop) practiceSection.appendChild(el('button', { type: 'button', text: t('songs.loopBar.back'), onclick: () => { practice.repair = null; practice.playedEvents = []; renderPractice(); } }));
   }
 
   // One small chip per bar of `heat` that falls inside `stepBars` (the just-
@@ -1661,7 +1671,7 @@ function mountSongsPanel(hostEl, api) {
   // in it, plus a "Work on bar N next" line naming the single worst bar in
   // the whole heat map (worstBars ranks a bar with nothing judged last, so
   // this always lands on a bar the learner actually played).
-  function renderBarStrip(heat, stepBars) {
+  function renderBarStrip(heat, stepBars, loopable) {
     const wrap = el('div', { class: 'panel-songs-bar-strip', 'aria-label': 'Bar-by-bar result' });
     heat
       .filter((h) => h.bar >= stepBars[0] && h.bar <= stepBars[1] && h.grade !== 'none')
@@ -1676,6 +1686,8 @@ function mountSongsPanel(hostEl, api) {
     const worst = worstBars(heat, 1)[0];
     if (worst && (worst.grade === 'miss' || worst.grade === 'shaky')) {
       wrap.appendChild(el('p', { class: 'panel-songs-bar-worst', text: 'Work on bar ' + (worst.bar + 1) + ' next.' }));
+      const loopStep = loopable ? barLoopStep(practice.plan.steps, worst.bar, barsOf(practice.song), (tk) => practice.clock.bpmAt(tk)) : null;
+      if (loopStep) wrap.appendChild(el('button', { type: 'button', class: 'panel-songs-loop-bar', text: t('songs.loopBar', { bar: worst.bar + 1 }), onclick: () => startBarLoop(loopStep) }));
     }
     return wrap;
   }
@@ -1701,8 +1713,29 @@ function mountSongsPanel(hostEl, api) {
   // finishRecording(), so a learner following a slowed-down backing is
   // judged against the tempo they actually heard, not the rung's full speed.
   function effectiveBpm(step) {
-    if (step.kind === 'tempo-ladder' && practice.loopTransport) return backingBpm(step.bpm, practice.loopTransport.getRate());
-    return step.bpm;
+    const tr = transportFor(step);
+    return tr ? backingBpm(step.bpm, tr.getRate()) : step.bpm;
+  }
+
+  // The rate-ladder transport a step plays and is judged at: the plan rung's own, or the
+  // bar loop's private one (so Loop bar never resets the rung's rate or the saved lesson rate).
+  function transportFor(step) {
+    return step.kind === 'bar-loop' ? (practice.repair && practice.repair.transport) : step.kind === 'tempo-ladder' ? practice.loopTransport : null;
+  }
+
+  // "Timing adjusted by N ms" under a timed step, only when a Calibrate-timing offset is stored.
+  function appendLatencyLine(step) {
+    const lat = songLatencyMs(api.db());
+    if (step.bpm > 0 && lat > 0) practiceSection.appendChild(el('p', { class: 'panel-songs-latency', text: t('songs.latency', { ms: Math.round(lat) }) }));
+  }
+
+  // "Loop bar N": the worst bar on its own, from the lowest ladder rung, in the off-plan repair slot.
+  function startBarLoop(step) {
+    const tr = createLoopBackingTransport();
+    tr.setRate(BAR_LOOP_START_RATE);
+    practice.repair = { step, returnTo: practice.stepIndex, transport: tr };
+    practice.lastHeat = practice.lastHeatBars = practice.lastAssessed = practice.lastVerdict = null;
+    renderPractice();
   }
 
   // Hands (H3): splits a step's notes by hand when a one-hand choice is in
@@ -1968,7 +2001,7 @@ function mountSongsPanel(hostEl, api) {
     closeOpenMidiEvents(practice.playedEvents, Math.max(0, (api.now() - practice.recordStartSec)));
     stopRecording();
     const timed = step.kind !== 'pitches';
-    const result = judgeAttempt(handSplit(step).step.notes, practice.playedEvents, {
+    const result = judgeAttempt(handSplit(step).step.notes, latencyAdjusted(practice.playedEvents, songLatencyMs(api.db())), {
       bpm: effectiveBpm(step) || practice.song.bpm,
       ticksPerQuarter: practice.song.ticksPerQuarter,
       policy: practice.instrument.octavePolicy,
@@ -1994,9 +2027,8 @@ function mountSongsPanel(hostEl, api) {
     // step.passRule here too means "clean" (speeds the rate up) requires
     // actually PASSING the step -- hitting every note while failing on
     // timing, hold/tune or an extra note is not clean.
-    if (step.kind === 'tempo-ladder' && practice.loopTransport) {
-      applyAttemptToTransport(practice.loopTransport, result, step.passRule);
-    }
+    const tr = transportFor(step);
+    if (tr) applyAttemptToTransport(tr, result, step.passRule);
     const passed = passesRule(result, step.passRule);
     // Every correctly-pitched note counts toward the trainer's own streak
     // and level-up path, not just this song's mastery record (applyMasteryCredit
@@ -2073,12 +2105,12 @@ function mountSongsPanel(hostEl, api) {
           instrument: practice.instrumentId, skill: repairStep.kind + ':' + repairStep.phraseIndex, source: 'song',
           songId: practice.song.id, partId: practice.partId, assistance: 'guided',
           dims, unassessed, activeMs: Math.max(0, Math.round(elapsedMs || 0)),
-          bpmTarget: repairStep.bpm || null, bpmActual: repairStep.bpm || null, input,
+          bpmTarget: repairStep.bpm || null, bpmActual: effectiveBpm(repairStep) || null, input,
           hands: practice.hands || undefined,
         }, { now: api.now() }));
       }
     }
-    if (passed) practice.repair = null;
+    if (passed && repairStep.kind !== 'bar-loop') practice.repair = null;
     practice.playedEvents = [];
     renderPractice();
   }

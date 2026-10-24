@@ -197,3 +197,16 @@ export function summarizePracticeSession(practice, nowSec) {
     songId: practice.song.id,
   };
 }
+
+// The stored "Calibrate timing" offset (DB.latencyMs) as Songs uses it: 0..300 ms
+// (the range sanitize-db.js saves), a missing/negative/non-number value counts as 0.
+export function songLatencyMs(db) {
+  const n = Number(db && db.latencyMs);
+  return Number.isFinite(n) ? Math.min(300, Math.max(0, n)) : 0;
+}
+
+// Played events shifted earlier by the offset, so the scorer judges when the
+// learner played, not when the speakers-to-input chain delivered it.
+export function latencyAdjusted(events, latencyMs) {
+  return latencyMs ? events.map((e) => ({ ...e, atSec: e.atSec - latencyMs / 1000 })) : events;
+}
