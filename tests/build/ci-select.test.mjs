@@ -102,13 +102,10 @@ test('package.json: stage and test:release build the dev page and the release pa
 
 // test:release once ran without it: node's default of cores-1 release files at
 // once, each booting its own browser, on a box already at load ~70 of 12 cores.
-// `coverage` runs node --test too but is not yet capped: listed, not exempted
-// silently, so a new uncapped script still fails here.
 const CAP = '--test-concurrency=$(node tests/helpers/browser.mjs)';
-const UNCAPPED_FOLLOW_UP = ['coverage'];
 
 test('every node --test script uses the load-aware concurrency cap', () => {
-  const runs = Object.entries(pkg.scripts).filter(([name, s]) => s.includes('node --test') && !UNCAPPED_FOLLOW_UP.includes(name));
+  const runs = Object.entries(pkg.scripts).filter(([name, s]) => s.includes('node --test'));
   assert.ok(runs.some(([name]) => name === 'test:release'), 'test:release runs node --test');
   for (const [name, s] of runs) {
     for (const seg of s.split('&&').filter((x) => x.includes('node --test'))) {
