@@ -1755,7 +1755,7 @@ import { register as registerPathway } from './ui/pathway.js';
   // The bar on a percussion staff (top), the kit from the throne (bottom): the bar's drums outlined, filled
   // while the count-in runs, the piece just hit flashing; after judging, a mark under each note.
   // what each drawn piece is called on the kit (a beginner reads the name; the key letter is only a hint). [name, second line, side it prefers (l/r/u/d), 's' for the small print of the hi-hat's tab and pedal]; the hi-hat is named once, on its disc
-  const KIT_DRAW_NAMES = { kick: ['Kick'], snare: ['Snare'], 'hihat-closed': ['Hi-hat'], 'hihat-pedal': ['pedal', '', 'r', 's'], 'hihat-open': ['open', '', 'u', 's'], 'tom-floor': ['Floor tom', '', 'l'], 'tom-mid': ['Mid', 'tom', 'u'], 'tom-high': ['High', 'tom', 'u'], crash: ['Crash'], ride: ['Ride'] };
+  const kitDrawNames = () => ({ kick: [tl('kit.piece.kick')], snare: [tl('kit.piece.snare')], 'hihat-closed': [tl('kit.draw.hihat')], 'hihat-pedal': [tl('kit.draw.pedal'), '', 'r', 's'], 'hihat-open': [tl('kit.draw.open'), '', 'u', 's'], 'tom-floor': [tl('kit.piece.tom-floor'), '', 'l'], 'tom-mid': [tl('kit.draw.mid1'), tl('kit.draw.mid2'), 'u'], 'tom-high': [tl('kit.draw.high1'), tl('kit.draw.high2'), 'u'], crash: [tl('kit.piece.crash')], ride: [tl('kit.piece.ride')] });
   function requiredKitPieces() { return task && task.kind === 'kit' && bar ? [...new Set(bar.onsets.flatMap(o => o.pieces))] : []; }
   function drawKit(W, H) {
     const on = bar && task && task.kind === 'kit' && bar.staff, t = now(), pre = on && t < bar.playAt, want = {}, bw = W * 0.94, bh = on ? H * 0.62 : H * 0.9, box = { x: (W - bw) / 2, y: on ? H * 0.37 : (H - bh) / 2, w: bw, h: bh, s: bh };
@@ -1774,9 +1774,9 @@ import { register as registerPathway } from './ui/pathway.js';
       else if (p.id === 'kick') { g.ellipse(x, r.y + r.h * 0.22, r.w * 0.38, r.h * 0.18, 0, 0, 7); g.rect(r.x + r.w * 0.15, r.y + r.h * 0.72, r.w * 0.7, r.h * 0.2); } else if (p.id === 'hihat-pedal') { g.moveTo(r.x + 3, r.y + r.h * 0.25); g.lineTo(r.x + r.w - 3, r.y + r.h * 0.25); }
       g.stroke(); });
     // Names go on after every circle is down. A name that fits is written inside its circle; any other tries its own side, the opposite side, then under and over the circle, and takes the first spot that touches no other name, no other piece and not the canvas edge; with none free it loses its second line (closed/pedal/open) and tries again, so two names never run into each other on a phone-width kit.
-    const placed = [], hit = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+    const drawNames = kitDrawNames(), placed = [], hit = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
     pcs.slice().sort((a, b) => Number(a.p.id === 'kick') - Number(b.p.id === 'kick')).forEach(({ p, x, y, rr, hw, hh, lit }) => {
-      const nm = KIT_DRAW_NAMES[p.id], small = nm[3] === 's', fs = small ? 11 : Math.max(13, m * 0.05), key = KIT.find(k => k.id === p.id).key.toUpperCase(); font(fs, small ? 400 : 700); const tw = g.measureText(nm[0]).width, kick = p.id === 'kick', inside = (kick ? tw + 2 <= hw * 2 : rr > 0 && tw + 6 <= rr * 2) && !nm[1] && !nm[2]; let sw = 0; if (nm[1]) { font(Math.max(11, fs * 0.85), 400); sw = g.measureText(nm[1]).width; font(fs, 700); }
+      const nm = drawNames[p.id], small = nm[3] === 's', fs = small ? 11 : Math.max(13, m * 0.05), key = KIT.find(k => k.id === p.id).key.toUpperCase(); font(fs, small ? 400 : 700); const tw = g.measureText(nm[0]).width, kick = p.id === 'kick', inside = (kick ? tw + 2 <= hw * 2 : rr > 0 && tw + 6 <= rr * 2) && !nm[1] && !nm[2]; let sw = 0; if (nm[1]) { font(Math.max(11, fs * 0.85), 400); sw = g.measureText(nm[1]).width; font(fs, 700); }
       g.fillStyle = inside && lit ? '#05070c' : '#e9edf6';
       if (inside) { const ny = kick ? y - fs * 0.5 : y - fs * 0.05; g.textAlign = 'center'; g.fillText(nm[0], x, ny); const r = { id: p.id, x: x - tw / 2, y: ny - fs * 1.0, w: tw, h: fs * 1.2 }; kitLabels.push(r); placed.push(r); }
       else {
