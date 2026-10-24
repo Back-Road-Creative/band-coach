@@ -15,9 +15,11 @@ Download this one file and double-click it:
 https://github.com/Back-Road-Creative/band-coach/releases/latest/download/band-coach.html
 
 That is the whole app — one page, nothing to install, no account, and it keeps working with the
-network off. Open it in Chrome or Edge. Chrome and Edge are the tested browsers; Firefox and Safari
-are untested (see [Browser and device support](#browser-and-device-support--what-has-actually-been-tested)).
-Settings > Language switches the app to Español, a first-pass machine translation that a native speaker has not yet reviewed. Microphone instruments ask for permission the first time;
+network off. Open it in Chrome or Edge: the automated tests run in headless Chromium and a real
+Chrome is checked by hand before a release; Firefox and Safari are untested, and Safari has no MIDI
+(see [Browser and device support](#browser-and-device-support--what-has-actually-been-tested)).
+Settings > Language switches the app to Español, a first-pass machine translation that a native
+speaker has not yet reviewed. Microphone instruments ask for permission the first time;
 a MIDI keyboard is optional. To put it away, delete the file.
 
 A **Practice / Songs / Progress / Instrument / Settings** bar sits at the top of the page at all
