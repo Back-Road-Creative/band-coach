@@ -30,6 +30,7 @@ import { kitLayout, describeHit } from '../../instruments/how/drum-kit.js';
 import { pieceForMidi, canonicalMidi } from '../../instruments/drum-kit.js';
 import { howKindFor, BRASS_BY_ID, KEYED_WOODWIND_CHART_BY_ID } from '../../instruments/how-kind.js';
 import { noteName } from './notes.js';
+import { t } from '../../core/i18n.js';
 
 // Re-exported so src/ui/fingerings.js and the tests keep importing it from here.
 export { howKindFor };
@@ -169,7 +170,7 @@ export function computeHow(instrument, midi, opts = {}) {
     return {
       kind, piece, layout: kitLayout(opts.kit, piece ? [piece] : []),
       playable: !!piece,
-      description: piece ? describeHit(piece, opts.kit) : 'MIDI drum note ' + midi + ' is not one of the drums on this kit.'
+      description: piece ? describeHit(piece, opts.kit) : t('kit.notOnKit', { note: midi })
     };
   }
 

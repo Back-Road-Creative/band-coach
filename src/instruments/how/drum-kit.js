@@ -25,6 +25,7 @@
 // different GM notes, so it is one disc about crash size (closed), a small tab just clear of its far edge
 // (open: small, so its centre sits 12 px off the disc for the phone tap rule) and its footboard (pedal): three pieces to judge, one cymbal to look at.
 import { PIECES } from '../drum-kit.js';
+import { t } from '../../core/i18n.js';
 import { applyKitPreset, sanitizeKitPrefs, KIT_ASPECT } from './kit-presets.js';
 
 export { KIT_ASPECT };
@@ -49,20 +50,8 @@ export const THRONE = { x: 0.70, y: 0.975, w: 0.18, h: 0.05 };
 // Region order in kitRegions(): the open-hi-hat tab first, so pieceAt() returns it before the disc under it. Placed pieces may overlap; the nearest centre then wins.
 const HIT_ORDER = ['hihat-open', 'hihat-closed', 'hihat-pedal', 'kick', 'snare', 'tom-high', 'tom-mid', 'tom-floor', 'crash', 'ride'];
 
-// Plain-words sentences, one per piece: where it is and what plays it, for
-// a learner who has never sat at a kit.
-const DESCRIPTIONS = {
-  kick: 'Bass drum: the big drum on the floor in front of you, played with your right foot on its pedal.',
-  snare: 'Snare drum: the drum between your knees, just left of centre; in a basic beat the left stick plays it while the right stick crosses over to the hi-hat.',
-  'hihat-closed': 'Hi-hat, closed: the pair of cymbals on your left, held shut with your left foot down on the pedal; tap the top cymbal with a stick (the right stick crosses over in a basic beat).',
-  'hihat-open': 'Hi-hat, open: the same pair of cymbals on your left, with your left foot eased up off the pedal so they ring apart; hit the top cymbal with a stick.',
-  'hihat-pedal': 'Hi-hat pedal: press the pedal by your left foot to clap the two hi-hat cymbals together, no stick needed.',
-  'tom-high': 'High tom: the smaller drum mounted above the bass drum, on the left; hit it with either stick.',
-  'tom-mid': 'Mid tom: the drum mounted above the bass drum, on the right; hit it with either stick.',
-  'tom-floor': 'Floor tom: the big drum standing on its own legs to your right; hit it with the right stick.',
-  crash: 'Crash cymbal: the cymbal up high on your left; strike its edge with a stick for a loud splash, often on the first beat of a new section.',
-  ride: 'Ride cymbal: the large cymbal on your right; tap it with the right stick to keep a steady beat.'
-};
+// Plain-words sentences, one per piece (kit.desc.<id> in the locale tables): where it is and what plays it, for
+// a learner who has never sat at a kit. The side words are {left}/{right} params, so a left-handed kit just swaps them.
 
 // Every piece's drawn spot, as fresh objects: { id, name, shape, x, y, r } for
 // circles, { id, name, shape, x, y, w, h } for rectangles.
@@ -72,10 +61,9 @@ export function kitLayout(prefs, requiredPieces = []) {
 
 // Screen-reader sentence for a piece id, or null for an unknown id.
 export function describeHit(pieceId, prefs) {
-  let text = Object.prototype.hasOwnProperty.call(DESCRIPTIONS, pieceId) ? DESCRIPTIONS[pieceId] : null;
-  const setup = sanitizeKitPrefs(prefs);
-  if (text && pieceId === 'kick' && setup.preset === 'compact') text = 'Kick pad: the small tower in front of you, played with your right foot on its pedal.';
-  return text && setup.leftHanded ? text.replace(/\b(left|right)\b/g, word => word === 'left' ? 'right' : 'left') : text;
+  if (!PIECES.some(p => p.id === pieceId)) return null;
+  const setup = sanitizeKitPrefs(prefs), sides = setup.leftHanded ? ['right', 'left'] : ['left', 'right'];
+  return t(pieceId === 'kick' && setup.preset === 'compact' ? 'kit.desc.kick-compact' : 'kit.desc.' + pieceId, { left: t('kit.side.' + sides[0]), right: t('kit.side.' + sides[1]) });
 }
 
 // The kit's frame inside a pixel box { x, y, w, h }: as tall as the box lets
