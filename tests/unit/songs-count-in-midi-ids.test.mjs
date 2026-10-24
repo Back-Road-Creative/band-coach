@@ -8,7 +8,7 @@
 //    onto the songs it shows afterward, instead of the ids the file carried.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { countInFor, pushMidiEvent, closeOpenMidiEvents, withStoredIds } from '../../src/ui/songs.js';
+import { countInFor, pushMidiEvent, closeOpenMidiEvents, withStoredIds } from '../../src/ui/songs/session-helpers.js';
 import { DEFAULT_BPM, MIN_BPM, MAX_BPM } from '../../src/ui/learn/count-in.js';
 import { createLibrary, memoryStore } from '../../src/song/library.js';
 
@@ -85,7 +85,7 @@ test('withStoredIds: a song whose id collided in the library is reconciled to th
 });
 
 test('alreadyInLibraryNote: says in plain words how many imported songs were already in the library, in both languages', async () => {
-  const { alreadyInLibraryNote } = await import('../../src/ui/songs.js');
+  const { alreadyInLibraryNote } = await import('../../src/ui/songs/session-helpers.js');
   const { setLocale } = await import('../../src/core/i18n.js');
   const songs = [{ id: 'a' }, { id: 'b' }, { id: 'c' }];
   try {

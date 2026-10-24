@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 
 import { buildLessonPlan, HOLD_MIN_DURATION_SCORE, TUNE_MAX_MEAN_ABS_CENTS } from '../../src/song/lesson.js';
 import { passesRule, holdTuneFeedback } from '../../src/ui/songs/practice.js';
-import { centsFromFreq } from '../../src/ui/songs.js';
+import { centsFromFreq } from '../../src/ui/songs/session-helpers.js';
 import cello from '../../src/instruments/cello.js';
 import gtr from '../../src/instruments/gtr.js';
 import kbd from '../../src/instruments/kbd.js';
@@ -171,7 +171,7 @@ test('centsFromFreq reads positive cents for a sharp frequency and negative for 
 });
 
 test('a mic note heard for a single tick is judged as clipped short, not skipped as unmeasured', async () => {
-  const { playedEventFrom } = await import('../../src/ui/songs.js');
+  const { playedEventFrom } = await import('../../src/ui/songs/session-helpers.js');
   const ev = playedEventFrom(261.63, 60, 1.0);
   assert.equal(ev.midi, 60);
   assert.equal(ev.atSec, 1.0);
@@ -180,7 +180,7 @@ test('a mic note heard for a single tick is judged as clipped short, not skipped
 });
 
 test('a held note that drifts sharp after its attack folds later ticks into cents, not just the onset', async () => {
-  const { playedEventFrom, extendHeldEvent } = await import('../../src/ui/songs.js');
+  const { playedEventFrom, extendHeldEvent } = await import('../../src/ui/songs/session-helpers.js');
   const inTuneFreq = 440 * Math.pow(2, (60 - 69) / 12); // midi 60, exactly in tune
   const sharpFreq = inTuneFreq * Math.pow(2, 60 / 1200); // 60 cents sharp
   const ev = playedEventFrom(inTuneFreq, 60, 1.0); // attacked in tune
