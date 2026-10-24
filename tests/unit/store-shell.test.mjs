@@ -234,8 +234,34 @@ test('store/package.json does not add electron to the root install', () => {
   assert.ok(!rootDeps.includes('electron-builder'));
 
   const storePkg = JSON.parse(readFileSync(join(storeRoot, 'package.json'), 'utf8'));
-  assert.equal(storePkg.devDependencies.electron, '44.7.0');
-  assert.equal(storePkg.devDependencies['electron-builder'], '26.15.3');
+  const storeLock = JSON.parse(readFileSync(join(storeRoot, 'package-lock.json'), 'utf8'));
+  assert.deepEqual(pinProblems(storePkg, storeLock), []);
+});
+
+// The shell's tools are pinned to exact versions and the lockfile must
+// resolve to those same versions, so a version bump is a package.json plus
+// lockfile change and never a second edit in this test.
+const EXACT_SEMVER = /^\d+\.\d+\.\d+$/;
+function pinProblems(pkg, lock) {
+  const problems = [];
+  for (const name of ['electron', 'electron-builder']) {
+    const pin = pkg.devDependencies && pkg.devDependencies[name];
+    if (!EXACT_SEMVER.test(pin || '')) problems.push(`${name}: "${pin}" is not an exact version`);
+    const rootSpec = lock.packages && lock.packages[''] && lock.packages[''].devDependencies && lock.packages[''].devDependencies[name];
+    if (rootSpec !== pin) problems.push(`${name}: lockfile root records "${rootSpec}", package.json pins "${pin}"`);
+    const resolved = lock.packages && lock.packages[`node_modules/${name}`] && lock.packages[`node_modules/${name}`].version;
+    if (resolved !== pin) problems.push(`${name}: lockfile resolves "${resolved}", package.json pins "${pin}"`);
+  }
+  return problems;
+}
+
+test('pin check flags ranges and a lockfile that resolves a different version', () => {
+  const pkg = { devDependencies: { electron: '45.0.0', 'electron-builder': '^26.15.3' } };
+  const lock = { packages: { '': { devDependencies: { electron: '45.0.0', 'electron-builder': '^26.15.3' } }, 'node_modules/electron': { version: '44.7.0' }, 'node_modules/electron-builder': { version: '26.15.3' } } };
+  const problems = pinProblems(pkg, lock);
+  assert.equal(problems.length, 3);
+  assert.match(problems.join('\n'), /electron: lockfile resolves "44.7.0"/);
+  assert.match(problems.join('\n'), /electron-builder: "\^26.15.3" is not an exact version/);
 });
 
 // The submission target may only ever package the release build: the plain

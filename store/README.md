@@ -5,6 +5,10 @@ A thin Electron desktop shell around the exact same one-file app the browser bui
 `src/`, `build/` and the root `package.json` are untouched. This folder has its own
 `package.json` so `electron` and `electron-builder` never become dependencies of the app itself.
 
+`electron` and `electron-builder` are pinned to exact versions (no `^`/`~`) in `package.json`, and
+`tests/unit/store-shell.test.mjs` checks that `package-lock.json` resolves to those same versions.
+Bump a pin by changing `package.json` and the lockfile together; the test needs no edit.
+
 **`package.json`'s `description` here is published, not internal.** electron-builder copies it
 verbatim into the appx manifest, so it is the sentence a shopper reads in the Microsoft Store
 listing — write it for them, not for whoever maintains this folder. The developer explanation is
@@ -147,7 +151,7 @@ It allows a request only when:
 
 It never trusts `requestingOrigin` alone. Per Electron's docs
 (https://www.electronjs.org/docs/latest/api/session#sessetpermissioncheckhandlerhandler,
-`electron` pinned to `44.7.0` in `package.json`), `setPermissionCheckHandler`'s third argument is
+`electron` pinned in `package.json`), `setPermissionCheckHandler`'s third argument is
 "The origin URL of the permission check", and both handlers can additionally receive a `details`
 object whose `requestingUrl` is "The last URL the requesting frame loaded." The docs do not say how
 Chromium serializes an *origin* for a `file://` page specifically (it can plausibly come through as
