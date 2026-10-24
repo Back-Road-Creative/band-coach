@@ -74,3 +74,28 @@ test('the record is ready and its curriculum is the level names, in order', () =
   const { ok, errors } = validateInstrument(rec);
   assert.equal(ok, true, errors.join('; '));
 });
+
+import { en, es } from '../../src/core/i18n.js';
+
+test('kitBar reads an optional /R or /L sticking suffix per hit, never judged data', () => {
+  const b = kitBar('ssss:S/R,S/L,S/R,S/R');
+  assert.deepEqual(b.hits.map(h => h.sticking), ['R', 'L', 'R', 'R']);
+  const bare = b.hits.map(h => { const c = { ...h }; delete c.sticking; return c; });
+  assert.deepStrictEqual(bare, kitBar('ssss:S,S,S,S').hits);
+  assert.throws(() => kitBar('q:S/X'), /unknown sticking/);
+  assert.throws(() => kitBar('q:S/'), /unknown sticking/);
+});
+
+test('only the level-6 singles, doubles and paradiddle bars carry sticking', () => {
+  const bars = TRAINER_LEVELS[5].bars, st = b => b.hits.map(h => h.sticking);
+  assert.deepEqual(st(bars[0]), ['R', 'L', 'R', 'L', 'R', 'L', 'R', 'L']);
+  assert.deepEqual(st(bars[1]), ['R', 'R', 'L', 'L', 'R', 'R', 'L', 'L', undefined, undefined]);
+  assert.deepEqual(st(bars[2]), ['R', 'L', 'R', 'R', 'L', 'R', 'L', 'L', undefined, undefined]);
+  assert.ok(bars[3].hits.every(h => !Object.hasOwn(h, 'sticking')));
+  TRAINER_LEVELS.forEach((l, i) => { if (i !== 5) l.bars.forEach(b => b.hits.forEach(h => assert.equal(Object.hasOwn(h, 'sticking'), false))); });
+});
+
+test('the sticking letters are translated (D/I in Spanish)', () => {
+  assert.equal(en['kit.stick.R'], 'R'); assert.equal(en['kit.stick.L'], 'L');
+  assert.equal(es['kit.stick.R'], 'D'); assert.equal(es['kit.stick.L'], 'I');
+});

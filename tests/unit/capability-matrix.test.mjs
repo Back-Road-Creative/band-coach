@@ -34,7 +34,7 @@ test('capabilityFor(rec) is fully derived: never hand-typed per instrument', () 
   const kbd = capabilityFor(byId.kbd);
   assert.equal(kbd.tier, 'first-release-candidate');
   assert.equal(kbd.assess, 'midi');
-  assert.equal(kbd.chart, 'none');
+  assert.equal(kbd.chart, 'computed');
   assert.equal(kbd.practise, true);
 
   // A keyed-woodwind record (mic-only, typed chart, provenance null):

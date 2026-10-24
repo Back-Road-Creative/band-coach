@@ -604,7 +604,8 @@ no musician has reviewed yet, read from the same record field.
 Escape, or pressing the button again, collapses it and returns focus to the button. It is hidden
 in Check, the no-help attempt, same as the notation and fingering line it sits beside, and it
 only appears for an instrument the "How to play it" panel can draw — so it does not appear for
-keyboard.
+the wind-and-brass picker or mallet percussion. For the keyboard it draws the same two rows as the
+practice keyboard.
 
 Opening the editor screen (via a song's own **Edit notes**) shows its own row: **Edit
 notes**, **Play along**, **Export**, **Share**, **Save a copy** — Edit notes opens *any* song,
@@ -889,14 +890,14 @@ which `src/instruments/how/*.js` chart (if any) `howKindFor()` (`src/instruments
 (`src/ui/fingerings/how.js`) picks for it, and whether that chart is a typed lookup table a
 musician has not yet checked (`src/instruments/how/keyed-woodwind.js` and
 `src/instruments/how/recorder-whistle.js`'s own "NEEDS A MUSICIAN'S CHECK" headers) or a formula
-computed at runtime (fretboard, fingerboard, brass, harmonica — no per-note table to get wrong).
-"None" means the instrument has no fingering/how panel at all (keyboard, voice, the generic
+computed at runtime (fretboard, fingerboard, brass, harmonica, keyboard — no per-note table to get wrong).
+"None" means the instrument has no fingering/how panel at all (voice, the generic
 wind-and-brass picker, and mallet percussion): a learner still gets a curriculum and mic-matched
 pitch detection, just no diagram.
 
 | Instrument | Status | Curriculum | Fingering/how chart | Chart reviewed | Content reviewed |
 | --- | --- | --- | --- | --- | --- |
-| Keyboard | ready | yes | none | n/a | provisional (no reviewer yet) |
+| Keyboard | ready | yes | keyboard (computed) | yes (formula, not a typed table) | provisional (no reviewer yet) |
 | Guitar | ready | yes | fretboard (computed) | yes (formula, not a typed table) | provisional (no reviewer yet) |
 | Bass | ready | yes | fretboard (computed) | yes (formula, not a typed table) | provisional (no reviewer yet) |
 | Ukulele | ready | yes | fretboard (computed) | yes (formula, not a typed table) | provisional (no reviewer yet) |
@@ -1014,7 +1015,8 @@ and (like Show me) it logs the attempt with assistance "shown" once you play the
 main "How to play it" panel, opening this toggle never ends the running session or the current
 task: it expands the diagram right where you are, instead of switching screens. It is hidden under
 the same conditions Show me is (ear training, rhythm reading, drum kit), and for a note the panel
-has no diagram for at all (keyboard, today's only such instrument).
+has no diagram for at all (the wind picker and mallet percussion). It is also not shown on the
+keyboard, because the practice drawing already is the keyboard.
 
 ## Piano hands together
 
@@ -1223,6 +1225,11 @@ data a real pointerdown hit-tests against. `window.__coach.kbdOverview()` (dev b
 the overview strip's own rectangle plus the `win` rectangle marking the currently-drawn range, both
 in the same canvas pixel space as `kbdKeys()`.
 
+The note-name labels on the white keys sit below the black keys at any width, sized to fit that
+band (`keyLayout()` in `src/instruments/how/keyboard.js`). The "How to play it" panel and the Songs
+"How to play this" expander draw the same two rows from the same geometry, with the picked key
+filled in.
+
 ## Reference tones sound like the instrument
 
 Every reference/example tone (the note a lesson plays for you to match or tune to) goes through
@@ -1343,8 +1350,10 @@ comes from) are:
 8. 6/8
 9. a swing ride pattern
 
-Stickings (which hand) are not judged, since a key, click or MIDI note only says
-which drum and when; a rudiment's sticking is shown as a tip. Keys and clicks
+Stickings (which hand) are never judged, since a key, click or MIDI note only
+says which drum and when. The singles, doubles and paradiddle bars show R/L
+under each note (D/I in Spanish) as guidance, and the tip still names the
+pattern; the letters are not mirrored for a left-handed kit. Keys and clicks
 sound a synthesized drum (no samples). MIDI hits do not, because an e-kit sounds
 itself. The drawing comes from `src/instruments/how/drum-kit.js`: the canvas, the clicks on it and the "How to
 play it" panel's diagram all use that one geometry. The "How to

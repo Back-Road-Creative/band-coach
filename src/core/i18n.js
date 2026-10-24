@@ -70,6 +70,8 @@ export const en = {
   "kit.draw.high1": "High",
   "kit.draw.high2": "tom",
   "kit.notOnKit": "MIDI drum note {note} is not one of the drums on this kit.",
+  "kit.stick.R": "R",
+  "kit.stick.L": "L",
 
   'wrongNote.higher': 'Go higher.',
   'wrongNote.lower': 'Go lower.',
@@ -292,6 +294,12 @@ export const en = {
   // fingering line, hidden in Check same as those views (only shows for an
   // instrument the Fingerings panel can draw, howKindFor() non-null).
   'howInline.button': 'How to play this',
+  // Keyboard "How to play it" text (src/ui/fingerings/how.js): which key, which hand's row.
+  'how.keyboard.white': '{note}: the white key marked in the {hand} row.',
+  'how.keyboard.black': '{note}: the black key marked in the {hand} row.',
+  'how.keyboard.outside': '{note} is outside the keys drawn here ({low} to {high}).',
+  'how.keyboard.left': 'left-hand',
+  'how.keyboard.right': 'right-hand',
   // "Your keyboard path" panel (P2), src/ui/pathway.js: the button that
   // opens it, the panel's own title/tag/current-step marker, the five
   // step names src/core/pathway.js's pathwayState steps through, and the
@@ -543,6 +551,8 @@ export const es = {
   "kit.draw.high1": "Tom",
   "kit.draw.high2": "agudo",
   "kit.notOnKit": "La nota de batería MIDI {note} no es una de las piezas de esta batería.",
+  "kit.stick.R": "D",
+  "kit.stick.L": "I",
 
   'wrongNote.higher': 'Ve más agudo.',
   'wrongNote.lower': 'Ve más grave.',
@@ -716,6 +726,12 @@ export const es = {
   'songs.hands.restRight': 'Aquí descansa la mano derecha. Escucha y luego pulsa Siguiente.',
   'songs.hands.restLeft': 'Aquí descansa la mano izquierda. Escucha y luego pulsa Siguiente.',
   'howInline.button': 'Cómo tocar esto',
+  // Texto de «Cómo tocarlo» del teclado (src/ui/fingerings/how.js): qué tecla y en la fila de qué mano.
+  'how.keyboard.white': '{note}: la tecla blanca marcada en la fila de la {hand}.',
+  'how.keyboard.black': '{note}: la tecla negra marcada en la fila de la {hand}.',
+  'how.keyboard.outside': '{note} queda fuera de las teclas dibujadas ({low} a {high}).',
+  'how.keyboard.left': 'mano izquierda',
+  'how.keyboard.right': 'mano derecha',
   'pathway.open': 'Tu camino con el teclado',
   'pathway.title': 'Tu camino con el teclado',
   'pathway.tag': 'Camino',
