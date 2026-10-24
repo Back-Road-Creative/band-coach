@@ -67,16 +67,20 @@ export function canonicalMidi(pieceId) {
 // A kit bar, written as space-separated 'cell:hits' steps: `cell` is a
 // src/core/rhythm.js cell id, `hits` names one entry per sounding note of
 // that cell, comma-separated. Pieces sounding together join with '+', and
-// 'FS' is a flam (two snare hits a hair apart, judged within 40 ms).
+// 'FS' is a flam (two snare hits a hair apart, judged within 40 ms). A hit may
+// end in '/R' or '/L' (right or left hand), e.g. 'S/R': guidance shown under
+// the note, never judged.
 const ALIAS = { K: 'kick', S: 'snare', H: 'hihat-closed', P: 'hihat-pedal', O: 'hihat-open', T1: 'tom-high', T2: 'tom-mid', T3: 'tom-floor', C: 'crash', R: 'ride' };
 export function kitBar(text, tip) {
   const cells = [], hits = [];
   text.split(' ').forEach(step => {
     const [cell, list] = step.split(':');
     cells.push(cell);
-    (list ? list.split(',') : []).forEach(h => {
+    (list ? list.split(',') : []).forEach(tok => {
+      const [h, stick] = tok.split('/');
+      if (stick !== undefined && stick !== 'R' && stick !== 'L') throw new Error('unknown sticking: ' + stick);
       const flam = h === 'FS', pieces = (flam ? 'S' : h).split('+').map(a => { if (!ALIAS[a]) throw new Error('unknown drum: ' + a); return ALIAS[a]; });
-      hits.push({ pieces, flam });
+      hits.push(stick ? { pieces, flam, sticking: stick } : { pieces, flam });
     });
   });
   return tip ? { cells, hits, tip } : { cells, hits };
@@ -86,14 +90,14 @@ const L = (name, metre, bpm, bars, swing) => Object.assign({ name, metre, bpm, b
 const ROCK = 'ee:H+K,H ee:H+S,H ee:H+K,H ee:H+S,H';
 // The trainer's levels, in teaching order. Stickings (R/L) and accents are
 // not judged -- a key, a click or a MIDI note says which drum and when,
-// not which hand -- so a rudiment's sticking rides along as a tip.
+// not which hand -- so sticking is shown under the notes as guidance only.
 export const TRAINER_LEVELS = [
   L('One drum at a time', '4/4', 66, ALONE.map(a => Array(4).fill('q:' + a).join(' '))),
   L('Bass drum and snare on the beat', '4/4', 70, ['q:K q:S q:K q:S', 'q:K q:K q:S q:K', 'q:K+H q:S+H q:K+H q:S+H']),
   L('Rock beat: eighths on the hi-hat', '4/4', 72, [ROCK, 'ee:H+K,H ee:H+S,H ee:H+K,H ee:H+S,H+S']),
   L('Bass drum variations', '4/4', 72, ['ee:H+K,H ee:H+S,H ee:H+K,H+K ee:H+S,H', 'ee:H+K,H+K ee:H+S,H ee:H+K,H ee:H+S,H', 'ee:H+K,H ee:H+S,H+K ee:H,H+K ee:H+S,H']),
   L('Fills around the toms', '4/4', 72, ['ee:H+K,H ee:H+S,H ee:T1,T2 ee:T3,T3', 'ee:T1,T1 ee:T2,T2 ee:T3,T3 q:C+K', 'ssss:S,S,T1,T1 ssss:T2,T2,T3,T3 ee:S,S q:C+K']),
-  L('Snare rudiments: singles, doubles, paradiddle, flam', '4/4', 60, [kitBar('ee:S,S ee:S,S ee:S,S ee:S,S', 'Single strokes: R L R L.'), kitBar('ssss:S,S,S,S ssss:S,S,S,S q:S q:S', 'Double strokes: R R L L.'), kitBar('ssss:S,S,S,S ssss:S,S,S,S q:S q:S', 'Paradiddle: R L R R, L R L L.'), kitBar('q:FS q:FS q:FS q:FS', 'Flam: a soft grace hit just before the main one, both on the snare.')]),
+  L('Snare rudiments: singles, doubles, paradiddle, flam', '4/4', 60, [kitBar('ee:S/R,S/L ee:S/R,S/L ee:S/R,S/L ee:S/R,S/L', 'Single strokes: R L R L.'), kitBar('ssss:S/R,S/R,S/L,S/L ssss:S/R,S/R,S/L,S/L q:S q:S', 'Double strokes: R R L L.'), kitBar('ssss:S/R,S/L,S/R,S/R ssss:S/L,S/R,S/L,S/L q:S q:S', 'Paradiddle: R L R R, L R L L.'), kitBar('q:FS q:FS q:FS q:FS', 'Flam: a soft grace hit just before the main one, both on the snare.')]),
   L('Three-four time', '3/4', 80, ['q:K+H q:S+H q:S+H', 'ee:K+H,H ee:S+H,H ee:S+H,H']),
   L('Six-eight time', '6/8', 72, ['e3:K+H,H,H e3:S+H,H,H', 'e3:K+H,H,K+H e3:S+H,H,H']),
   L('Swing ride pattern', '4/4', 100, ['q:R ee:R+P,R q:R ee:R+P,R', 'q:R+K ee:R+P+K,R q:R+K ee:R+P+K,R'], 1)

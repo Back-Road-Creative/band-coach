@@ -176,3 +176,36 @@ test('past the last level the mix level still builds kit bars from the curriculu
   assert.equal(await page.evaluate('window.__coach.task().kind'), 'kit');
   assert.ok(onsets.length > 0);
 });
+
+const STICK_SPY = `
+  window.__texts = [];
+  const orig = CanvasRenderingContext2D.prototype.fillText;
+  CanvasRenderingContext2D.prototype.fillText = function (s, ...r) { window.__texts.push({ s: String(s) }); return orig.call(this, s, ...r); };
+`;
+
+test('sticking is drawn under the notes and written in the text mirror', async (t) => {
+  const page = await launchPage(HTML_PATH, { initScript: STICK_SPY });
+  t.after(() => page.close());
+  await startKit(page, 6, 0);
+  await page.waitFor('window.__texts.some(x => x.s === "L")');
+  const desc = await page.evaluate("document.getElementById('cvDesc').textContent");
+  assert.ok(desc.includes('(R)'));
+  assert.equal(desc.split('(L)').length - 1, 4);
+});
+
+test('sticking never reaches the judge: every hit on the key scores the same', async (t) => {
+  const page = await launchPage(HTML_PATH);
+  t.after(() => page.close());
+  const onsets = await startKit(page, 6, 0);
+  assert.deepEqual(Object.keys(onsets[0]).sort(), ['beat', 'flam', 'pieces', 't']);
+  for (const o of onsets) await keyAt(page, KEY.snare, o.t);
+  assert.equal((await judged(page)).failed, false);
+});
+
+test('bars without sticking show no hand letters', async (t) => {
+  const page = await launchPage(HTML_PATH);
+  t.after(() => page.close());
+  await startKit(page, 1, 0);
+  const desc = await page.evaluate("document.getElementById('cvDesc').textContent");
+  assert.ok(!desc.includes('(R)') && !desc.includes('(L)'));
+});

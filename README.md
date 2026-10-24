@@ -1343,8 +1343,10 @@ comes from) are:
 8. 6/8
 9. a swing ride pattern
 
-Stickings (which hand) are not judged, since a key, click or MIDI note only says
-which drum and when; a rudiment's sticking is shown as a tip. Keys and clicks
+Stickings (which hand) are never judged, since a key, click or MIDI note only
+says which drum and when. The singles, doubles and paradiddle bars show R/L
+under each note (D/I in Spanish) as guidance, and the tip still names the
+pattern; the letters are not mirrored for a left-handed kit. Keys and clicks
 sound a synthesized drum (no samples). MIDI hits do not, because an e-kit sounds
 itself. The drawing comes from `src/instruments/how/drum-kit.js`: the canvas, the clicks on it and the "How to
 play it" panel's diagram all use that one geometry. The "How to
