@@ -354,9 +354,8 @@ above are read from the string tables in `src/core/i18n.js` (`t(id, params)`) ra
 hardcoded. Settings > Language switches the app between English and Español (the choice is saved
 with your other preferences, travels in a backup, and is applied at startup before the first
 screen; `<html lang>` follows it). What is translated: the nav bar, page headings and static
-labels, the keyboard help, the Start/Pause button, the instrument sheet (redrawn the moment the language changes), the Songs and keyboard-path screens' titles and buttons, the Songs panel's status messages (`songs.say.*`; panel names such as "Play Along" stay English, as on screen), the backup/restore/update messages, and the coach lines around a level-up and a session start (`coach.*`: the level-up note, the warm-up and long-day notes, the 45-minute cap). Everything not yet routed
-through `t()` -- most of the exercise prompts, the remaining coach lines, song and lesson text and some
-Settings labels -- stays in English whichever language is picked. The Spanish table is a
+labels, the keyboard help, the Start/Pause button, the instrument sheet (redrawn the moment the language changes), the Songs and keyboard-path screens' titles and buttons, the Songs panel's status messages (`songs.say.*`; panel names such as "Play Along" stay English, as on screen), the backup/restore/update messages, and the coach lines around a level-up and a session start (`coach.*`: the level-up note, the warm-up and long-day notes, the 45-minute cap), every label on the Settings screen, the whole Progress screen including its printable weekly report (`history.*`), the "Today: ..." plan line (`plan.*`) and the practice option rows (session length, Show, Hands, Play in time; `opt.*`). Everything not yet routed
+through `t()` -- most of the exercise prompts, the remaining coach lines, the "why" sentence after the plan line, the item names in Progress, the teacher summary text, song and lesson text -- stays in English whichever language is picked. The Spanish table is a
 machine-translated first pass that has not yet been reviewed by a native speaker; a unit test
 fails if any English string lacks a Spanish one. `src/index.html`'s own
 static labels (headings, button text, help copy `src/app.js` never rewrites at runtime) go through
@@ -376,7 +375,7 @@ startup and again whenever the language is changed.
 
 ## Progress
 
-Before any session is logged, Progress shows a **Start your first session** button (it goes to Practice and presses Start, the same as doing it by hand) and hides the empty practice calendar and goal box until there is something to show. Settings sits at the same left edge as Practice. On a phone, Songs and Progress start right under the status row.
+Before any session is logged, Progress shows a **Start your first session** button (it goes to Practice and presses Start, the same as doing it by hand) and hides the empty practice calendar and goal box, the "By instrument" heading and the "Items to know" picker until there is something to show. Settings sits at the same left edge as Practice. On a phone, Songs and Progress start right under the status row.
 
 Every judged drill answer, warm-up answer and judged song step leaves one small record — which
 instrument and skill it was, whether it was independent or asked for help, which parts (pitch,
