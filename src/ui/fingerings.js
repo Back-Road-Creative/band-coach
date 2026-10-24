@@ -3,6 +3,7 @@
 // screen readers, plus the instrument's playable range. All the musical
 // computation lives in src/ui/fingerings/how.js (pure, unit tested); this
 // file is just DOM.
+import { el } from './dom.js';
 import { INSTRUMENTS } from '../instruments/index.js';
 import { howKindFor, computeHow, defaultNoteFor, alternateTuningsFor } from './fingerings/how.js';
 import { noteName, chromaticRange } from './fingerings/notes.js';
@@ -25,28 +26,17 @@ const TUNING_LABELS = {
 // Only instruments this app can actually show a "how" diagram for.
 const PLAYABLE = INSTRUMENTS.filter(rec => howKindFor(rec));
 
-function el(tag, attrs, children) {
-  const node = document.createElement(tag);
-  Object.keys(attrs || {}).forEach(k => {
-    if (k === 'text') node.textContent = attrs[k];
-    else if (k in node && k !== 'list') node[k] = attrs[k];
-    else node.setAttribute(k, attrs[k]);
-  });
-  (children || []).forEach(c => c && node.appendChild(c));
-  return node;
-}
-
 function rangeBar(range, midi) {
   const span = Math.max(1, range.high - range.low);
   const pct = Math.min(100, Math.max(0, ((midi - range.low) / span) * 100));
-  const bar = el('div', { className: 'fing-range', role: 'img', 'aria-label': 'Playable range ' + noteName(range.low) + ' to ' + noteName(range.high) + ', current note ' + noteName(midi) });
-  bar.appendChild(el('div', { className: 'fing-range-fill', style: 'width:' + pct + '%' }));
-  bar.appendChild(el('div', { className: 'fing-range-marker', style: 'left:' + pct + '%' }));
-  const labels = el('div', { className: 'fing-range-labels' }, [
+  const bar = el('div', { class: 'fing-range', role: 'img', 'aria-label': 'Playable range ' + noteName(range.low) + ' to ' + noteName(range.high) + ', current note ' + noteName(midi) });
+  bar.appendChild(el('div', { class: 'fing-range-fill', style: 'width:' + pct + '%' }));
+  bar.appendChild(el('div', { class: 'fing-range-marker', style: 'left:' + pct + '%' }));
+  const labels = el('div', { class: 'fing-range-labels' }, [
     el('span', { text: noteName(range.low) }),
     el('span', { text: noteName(range.high) })
   ]);
-  const wrap = el('div', { className: 'fing-range-wrap' }, [bar, labels]);
+  const wrap = el('div', { class: 'fing-range-wrap' }, [bar, labels]);
   return wrap;
 }
 
@@ -64,13 +54,13 @@ function fretboardDiagram(instrument, how) {
   const tuning = how.tuning;
   const strings = tuning.length;
   const maxFret = how.maxFret;
-  const box = el('div', { className: 'fing-fretboard', role: 'img', 'aria-label': how.description });
+  const box = el('div', { class: 'fing-fretboard', role: 'img', 'aria-label': how.description });
   stringRowOrder(strings, how.leftHanded).forEach(s => {
-    const row = el('div', { className: 'fing-string' });
-    row.appendChild(el('span', { className: 'fing-string-label', text: noteName(tuning[s] + how.capo) }));
+    const row = el('div', { class: 'fing-string' });
+    row.appendChild(el('span', { class: 'fing-string-label', text: noteName(tuning[s] + how.capo) }));
     for (let f = 0; f <= maxFret; f++) {
       const hit = how.positions.find(p => p.stringIndex === s && p.fret === f);
-      row.appendChild(el('span', { className: 'fing-fret' + (hit ? ' fing-hit' : ''), text: hit ? '●' : '' }));
+      row.appendChild(el('span', { class: 'fing-fret' + (hit ? ' fing-hit' : ''), text: hit ? '●' : '' }));
     }
     box.appendChild(row);
   });
@@ -84,15 +74,15 @@ function fingerboardDiagram(instrument, how) {
   const tuning = how.tuning;
   const strings = tuning.length;
   const maxFret = how.maxFret;
-  const box = el('div', { className: 'fing-fingerboard', role: 'img', 'aria-label': how.description });
+  const box = el('div', { class: 'fing-fingerboard', role: 'img', 'aria-label': how.description });
   stringRowOrder(strings, how.leftHanded).forEach(s => {
     const hit = how.positions.find(p => p.stringIndex === s);
-    const row = el('div', { className: 'fing-fboard-string' });
-    row.appendChild(el('span', { className: 'fing-string-label', text: noteName(tuning[s]) }));
-    const track = el('div', { className: 'fing-fboard-track' });
+    const row = el('div', { class: 'fing-fboard-string' });
+    row.appendChild(el('span', { class: 'fing-string-label', text: noteName(tuning[s]) }));
+    const track = el('div', { class: 'fing-fboard-track' });
     if (hit) {
       const pct = Math.min(100, (hit.fret / Math.max(1, maxFret)) * 100);
-      track.appendChild(el('span', { className: 'fing-fboard-marker', style: 'left:' + pct + '%' }));
+      track.appendChild(el('span', { class: 'fing-fboard-marker', style: 'left:' + pct + '%' }));
     }
     row.appendChild(track);
     box.appendChild(row);
@@ -102,29 +92,29 @@ function fingerboardDiagram(instrument, how) {
 
 function brassDiagram(instrument, how) {
   const s = how.result.standard;
-  const box = el('div', { className: 'fing-brass', role: 'img', 'aria-label': how.description });
+  const box = el('div', { class: 'fing-brass', role: 'img', 'aria-label': how.description });
   if (!s) { box.appendChild(el('p', { text: 'No fingering found.' })); return box; }
   if (how.kind === 'brass-valves') {
     const engaged = s.label === 'open' ? [] : s.label.split('-').map(Number);
     const valveCount = how.hasFourthValve ? 4 : 3;
     for (let v = 1; v <= valveCount; v++) {
-      box.appendChild(el('span', { className: 'fing-valve' + (engaged.includes(v) ? ' fing-hit' : ''), text: String(v) }));
+      box.appendChild(el('span', { class: 'fing-valve' + (engaged.includes(v) ? ' fing-hit' : ''), text: String(v) }));
     }
   } else {
-    box.appendChild(el('div', { className: 'fing-slide' }, [
-      el('span', { className: 'fing-slide-pos', text: 'Position ' + s.position })
+    box.appendChild(el('div', { class: 'fing-slide' }, [
+      el('span', { class: 'fing-slide-pos', text: 'Position ' + s.position })
     ]));
   }
-  if (s.sharp || s.needsCheck) box.appendChild(el('p', { className: 'fing-warn', text: s.sharp ? 'Tends to run sharp.' : 'Unusual high partial — check pitch by ear.' }));
+  if (s.sharp || s.needsCheck) box.appendChild(el('p', { class: 'fing-warn', text: s.sharp ? 'Tends to run sharp.' : 'Unusual high partial — check pitch by ear.' }));
   return box;
 }
 
 function harmonicaDiagram(instrument, how) {
-  const box = el('div', { className: 'fing-harmonica', role: 'img', 'aria-label': how.description });
+  const box = el('div', { class: 'fing-harmonica', role: 'img', 'aria-label': how.description });
   const best = how.options[0];
   for (let hole = 1; hole <= 10; hole++) {
     const hit = best && best.hole === hole;
-    const cell = el('div', { className: 'fing-hole' + (hit ? ' fing-hit' : '') });
+    const cell = el('div', { class: 'fing-hole' + (hit ? ' fing-hit' : '') });
     cell.appendChild(el('span', { text: String(hole) }));
     if (hit) cell.appendChild(el('small', { text: best.action + (best.semitonesBent ? ' ↓' + best.semitonesBent : '') }));
     box.appendChild(cell);
@@ -133,19 +123,19 @@ function harmonicaDiagram(instrument, how) {
 }
 
 function recorderDiagram(instrument, how) {
-  const box = el('div', { className: 'fing-recorder', role: 'img', 'aria-label': how.description });
+  const box = el('div', { class: 'fing-recorder', role: 'img', 'aria-label': how.description });
   if (!how.entry) { box.appendChild(el('p', { text: 'No fingering in this chart for this note.' })); return box; }
   const hasThumb = how.instrumentKind === 'recorder';
   how.entry.holes.split('').forEach((c, i) => {
     const label = hasThumb ? (i === 0 ? 'T' : String(i)) : String(i + 1);
     const state = c === 'x' ? 'fing-hit' : c === 'h' ? 'fing-half' : '';
-    box.appendChild(el('span', { className: 'fing-recorder-hole ' + state, text: label }));
+    box.appendChild(el('span', { class: 'fing-recorder-hole ' + state, text: label }));
   });
   return box;
 }
 
 function voiceDiagram(instrument, how) {
-  return el('div', { className: 'fing-voice', role: 'img', 'aria-label': how.description }, [
+  return el('div', { class: 'fing-voice', role: 'img', 'aria-label': how.description }, [
     el('p', { text: how.playable ? 'Sing this pitch — no fingering needed.' : 'Try the nearest comfortable octave of this pitch.' })
   ]);
 }
@@ -158,13 +148,13 @@ function voiceDiagram(instrument, how) {
 // how.description (describeKeyedWoodwind in fingerings/how.js), plus a
 // standalone note for the half-hole technique when the entry flags it.
 function keyedWoodwindDiagram(instrument, how) {
-  const box = el('div', { className: 'fing-keyed-woodwind', role: 'img', 'aria-label': how.description });
+  const box = el('div', { class: 'fing-keyed-woodwind', role: 'img', 'aria-label': how.description });
   if (!how.entry) {
-    box.appendChild(el('p', { className: 'fing-keyed-keys', text: 'No fingering shown: this pitch is outside the beginner fingering chart for this instrument.' }));
+    box.appendChild(el('p', { class: 'fing-keyed-keys', text: 'No fingering shown: this pitch is outside the beginner fingering chart for this instrument.' }));
     return box;
   }
-  box.appendChild(el('p', { className: 'fing-keyed-keys', text: how.entry.keys }));
-  if (how.entry.halfHole) box.appendChild(el('p', { className: 'fing-warn', text: 'Uses the half-hole technique.' }));
+  box.appendChild(el('p', { class: 'fing-keyed-keys', text: how.entry.keys }));
+  if (how.entry.halfHole) box.appendChild(el('p', { class: 'fing-warn', text: 'Uses the half-hole technique.' }));
   return box;
 }
 
@@ -174,8 +164,8 @@ function keyedWoodwindDiagram(instrument, how) {
 // every unmatched kind (the keyed-woodwind bug: flute, clarinet, oboe and
 // both saxes fell through to "Sing this pitch", src/ui/fingerings.js history).
 function unavailableDiagram() {
-  return el('div', { className: 'fing-unavailable', role: 'img', 'aria-label': t('fingerings.unavailable') }, [
-    el('p', { className: 'fing-unavailable', text: t('fingerings.unavailable') })
+  return el('div', { class: 'fing-unavailable', role: 'img', 'aria-label': t('fingerings.unavailable') }, [
+    el('p', { class: 'fing-unavailable', text: t('fingerings.unavailable') })
   ]);
 }
 
@@ -277,19 +267,19 @@ export function renderHowInline(container, instrument, soundingMidi, setup) {
   const rangeMidi = rangeIsWrittenPitch(instrument) ? soundingMidi - instrument.transposition : soundingMidi;
   const how = computeHow(instrument, rangeMidi, { capo: setup.capo, tuning: setup.tuning, leftHanded: setup.leftHanded, key: setup.harpKey, kit: setup.kit });
   const id = 'howInline' + (++howInlineSeq);
-  const toggle = el('button', { type: 'button', className: 'how-inline-toggle', 'aria-expanded': 'false', 'aria-controls': id, text: t('howInline.button') });
+  const toggle = el('button', { type: 'button', class: 'how-inline-toggle', 'aria-expanded': 'false', 'aria-controls': id, text: t('howInline.button') });
   const bodyChildren = [];
   const badgeText = reviewText(instrument);
-  if (badgeText) bodyChildren.push(el('p', { className: 'how-inline-badge', role: 'note', text: badgeText }));
+  if (badgeText) bodyChildren.push(el('p', { class: 'how-inline-badge', role: 'note', text: badgeText }));
   bodyChildren.push(diagramFor(instrument, how));
-  bodyChildren.push(el('p', { className: 'how-inline-desc', text: how.description }));
-  const body = el('div', { id, className: 'how-inline-body', hidden: true }, bodyChildren);
+  bodyChildren.push(el('p', { class: 'how-inline-desc', text: how.description }));
+  const body = el('div', { id, class: 'how-inline-body', hidden: 'hidden' }, bodyChildren);
   toggle.addEventListener('click', () => {
     const expanded = toggle.getAttribute('aria-expanded') === 'true';
     toggle.setAttribute('aria-expanded', String(!expanded));
     body.hidden = expanded;
   });
-  const wrapper = el('div', { className: 'how-inline' }, [toggle, body]);
+  const wrapper = el('div', { class: 'how-inline' }, [toggle, body]);
   // Escape collapses THIS expander without closing the whole Songs panel --
   // panels.js's own container-level Escape listener (src/ui/panels.js) only
   // backs off when `ev.defaultPrevented`, so preventDefault() here is load-
@@ -365,34 +355,34 @@ export function registerFingerings(panels) {
       }
 
       const title = el('h2', { text: 'How to play it' });
-      const help = el('p', { className: 'small', text: 'Pick an instrument and a note to see how to play it, drawn clearly with a plain-text description underneath.' });
+      const help = el('p', { class: 'small', text: 'Pick an instrument and a note to see how to play it, drawn clearly with a plain-text description underneath.' });
       // A visible, honest flag for a record no musician has checked yet
       // (src/instruments/review.js's isReviewed) -- reference help AND the
       // "Show me" inline lesson prompt both funnel through this same panel,
       // so one badge here covers both. Every instrument in this app
       // currently qualifies (all 28 provenance fields are still null), so
       // this is visible on first load, not a rare edge case.
-      const reviewHost = el('div', { className: 'fing-review-host' });
-      const instrLabel = el('label', { htmlFor: 'fingInstrument', text: 'Instrument' });
+      const reviewHost = el('div', { class: 'fing-review-host' });
+      const instrLabel = el('label', { for: 'fingInstrument', text: 'Instrument' });
       const instrSelect = el('select', { id: 'fingInstrument' });
       PLAYABLE.forEach(rec => instrSelect.appendChild(el('option', { value: rec.id, text: rec.name })));
 
-      const capoLabel = el('label', { htmlFor: 'fingCapo', text: 'Capo' });
+      const capoLabel = el('label', { for: 'fingCapo', text: 'Capo' });
       const capoInput = el('input', { id: 'fingCapo', type: 'number', min: '0', max: '11', value: '0' });
-      const tuningLabel = el('label', { htmlFor: 'fingTuning', text: 'Tuning' });
+      const tuningLabel = el('label', { for: 'fingTuning', text: 'Tuning' });
       const tuningSelect = el('select', { id: 'fingTuning' });
-      const leftHandedLabel = el('label', { htmlFor: 'fingLeftHanded', text: 'Left-handed' });
+      const leftHandedLabel = el('label', { for: 'fingLeftHanded', text: 'Left-handed' });
       const leftHandedInput = el('input', { id: 'fingLeftHanded', type: 'checkbox' });
-      const controlsHost = el('div', { className: 'fing-row fing-how-controls' });
+      const controlsHost = el('div', { class: 'fing-row fing-how-controls' });
 
-      const rangeHost = el('div', { className: 'fing-range-host' });
-      const notesHost = el('div', { className: 'fing-notes', role: 'group', 'aria-label': 'Notes' });
-      const diagramHost = el('div', { className: 'fing-diagram-host' });
-      const descHost = el('p', { id: 'fingDesc', className: 'fing-desc' });
+      const rangeHost = el('div', { class: 'fing-range-host' });
+      const notesHost = el('div', { class: 'fing-notes', role: 'group', 'aria-label': 'Notes' });
+      const diagramHost = el('div', { class: 'fing-diagram-host' });
+      const descHost = el('p', { id: 'fingDesc', class: 'fing-desc' });
 
-      hostEl.appendChild(el('div', { className: 'panel-fingerings' }, [
+      hostEl.appendChild(el('div', { class: 'panel-fingerings' }, [
         title, help, reviewHost,
-        el('div', { className: 'fing-row' }, [instrLabel, instrSelect]),
+        el('div', { class: 'fing-row' }, [instrLabel, instrSelect]),
         controlsHost,
         rangeHost, notesHost, diagramHost, descHost
       ]));
@@ -403,7 +393,7 @@ export function registerFingerings(panels) {
         reviewHost.innerHTML = '';
         const text = reviewText(instrument);
         if (!text) return;
-        reviewHost.appendChild(el('p', { className: 'fing-review-badge', role: 'note', text }));
+        reviewHost.appendChild(el('p', { class: 'fing-review-badge', role: 'note', text }));
       }
 
       // Which of the capo/tuning/left-handed controls apply depends on the
@@ -444,7 +434,7 @@ export function registerFingerings(panels) {
           ? instrument.kit.map(p => ({ m: p.midi[0], label: p.name }))
           : chromaticRange(instrument.range.low, instrument.range.high).map(m => ({ m, label: noteName(m) }));
         choices.forEach(({ m, label }) => {
-          const btn = el('button', { type: 'button', className: 'fing-note-btn', text: label, 'data-midi': String(m), 'aria-pressed': String(m === midi) });
+          const btn = el('button', { type: 'button', class: 'fing-note-btn', text: label, 'data-midi': String(m), 'aria-pressed': String(m === midi) });
           btn.addEventListener('click', () => {
             midi = m;
             if (!isKit) { try { api.audio(); api.tone(m, api.now(), 0.6, 0.18); } catch (e) { api.recordError('fingerings:tone', e); } }

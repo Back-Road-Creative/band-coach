@@ -69,6 +69,62 @@ been checked by a musician against a method book or teaching standard.
 | mallet-percussion | Mallet percussion (bells) | true | mic-single-note | none | false | accessible-unvalidated |
 | drum-kit | Drum kit | true | midi | typed-unreviewed | false | supported-untested |
 
+## Measured detection figures
+
+What the test suite actually measures about note detection today. Every number below is printed by
+the command shown; none is typed from memory, and none comes from a real microphone, a real room or
+a real instrument. They are regression floors on synthetic input, not a validated accuracy claim.
+
+**Reproduce:** `npm run build && node --test tests/unit/multipitch.test.mjs tests/unit/eval-roundtrip.test.mjs`
+
+**Polyphonic detector, rendered audio** (`tests/unit/multipitch.test.mjs`): the two-voice
+"Hot Cross Buns" starter song is rendered to audio samples and run through the multi-pitch tracker.
+
+| Measure | Value |
+| --- | --- |
+| Precision | 0.8500 |
+| Recall | 1.0000 |
+| F1 | 0.9189 |
+| Reference notes matched | 34 of 34 |
+| Notes estimated | 40 |
+
+**Song transcription, synthetic pitch frames** (`tests/unit/eval-roundtrip.test.mjs`): each starter
+song is turned into a synthetic frame-by-frame pitch track (not audio), transcribed, and scored
+against the song's own notes. Each family row applies that family's own made-up wobble and glide
+settings; it is not a measurement of any real instrument. Mean F1 over the nine starter songs:
+
+| Rendering profile | Mean F1 |
+| --- | --- |
+| keys family | 0.848 |
+| fretted family | 0.848 |
+| bowed family | 0.808 |
+| wind family | 0.808 |
+| brass family | 0.808 |
+| free-reed family | 0.848 |
+| voice family | 0.785 |
+
+Per starter song (keys profile), F1 with matched / reference / estimated notes: Hot Cross Buns
+0.741 (10 of 17, 10 estimated); Mary Had a Little Lamb 0.791 (17 of 26, 17); Au clair de la lune
+0.842 (8 of 11, 8); Twinkle, Twinkle, Little Star 0.727 (24 of 42, 24); Frère Jacques 0.933 (28 of
+32, 28); London Bridge Is Falling Down 0.979 (23 of 24, 23); Ode to Joy (theme) 0.824 (21 of 30,
+21); Amazing Grace (New Britain) 0.824 (14 of 17, 17); Minuet in G 0.968 (30 of 32, 30).
+
+**Not measured, so no figure is given:**
+
+- Live microphone precision and recall for any instrument. The microphone tests in
+  `tests/unit/mic-*.test.mjs` check error wording and the noise-gate message, and print no
+  precision or recall. The monophonic mic path (the `mic-single-note` rows above) has no
+  precision or recall measurement.
+- Abstention (how often the detector declines to answer instead of guessing, on silence, noise or
+  a wrong note). No test counts it. The only place the code abstains by name is the room check
+  (`src/audio/levels.js`), which declines to store a noise floor when it hears playing; that has
+  pass/fail tests but no rate.
+- Drum-kit microphone input: onset-only, no pitch, no figure.
+- Anything on a real phone microphone (see Promises below).
+
+Until a measured live-microphone harness exists, read every `mic-single-note` row as practice-grade
+detection, as the First release section already says.
+
 ## First release (assumed, JP to confirm)
 
 This section is a working assumption for what "first release" targets, not a decision — **JP to

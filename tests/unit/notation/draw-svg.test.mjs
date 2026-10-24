@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { drawSVG, drawSVGRows, escapeXML } from '../../../src/notation/draw-svg.js';
+import { drawSVG, drawSVGRows } from '../../../src/notation/draw-svg.js';
 import { layoutMeasure } from '../../../src/notation/layout.js';
 import { CLEF_PATHS, ACCIDENTAL_PATHS } from '../../../src/notation/glyphs.js';
 
@@ -89,10 +89,6 @@ test('drawSVG: an unrecognized clef/accidental value falls back to a plain lette
     { type: 'accidental', x: 0, y: 0, accidental: 'nonsense' },
   ], { glyphFont: null }, { width: 50, height: 50 });
   assertWellFormedXML(svg);
-});
-
-test('escapeXML: escapes the five XML special characters', () => {
-  assert.equal(escapeXML('<a & b> "c\' d"'), '&lt;a &amp; b&gt; &quot;c&apos; d&quot;');
 });
 
 test('drawSVG: uses the same geometry as draw-canvas.js for a line primitive', () => {

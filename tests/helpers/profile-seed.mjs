@@ -87,7 +87,11 @@ export const profileOf = (events) => ({ v: 1, mods: {}, sessions: [], events, pr
 // this script wrote to localStorage at document creation was measured lost on about half
 // the reloads, while the app's own later saves were not) sees Date.now() = SEED_T0 + offsetMs + the real time elapsed since the document
 // started, and, when `events` is given, that profile written to 'bandcoach.v1' before the
-// app boots (omitted = the app keeps whatever it saved). Runs in the top frame of a file: page only.
+// app reads it (omitted = the app keeps whatever it saved). The write happens at the page's
+// FIRST storage access, not while the document is being created: under load Chrome drops the
+// previous document's saved profile when a script touches localStorage that early (a read is
+// enough), so the next reload shows an older profile or an empty one. Runs in the top frame
+// of a file: page only.
 export function profileScheduleInit(visits) {
   return `(function () {
     if (window.top !== window || location.protocol !== 'file:') return;
@@ -97,6 +101,11 @@ export function profileScheduleInit(visits) {
     var v = visits[Math.min(n, visits.length - 1)];
     var base = ${SEED_T0} + v.offsetMs, started = Date.now();
     Date.now = function () { return base + (new Date().getTime() - started); };
-    if (v.profile) localStorage.setItem('bandcoach.v1', JSON.stringify(v.profile));
+    if (v.profile) {
+      var proto = Storage.prototype, get = proto.getItem, set = proto.setItem, json = JSON.stringify(v.profile);
+      var seed = function () { proto.getItem = get; proto.setItem = set; set.call(window.localStorage, 'bandcoach.v1', json); };
+      proto.getItem = function () { seed(); return get.apply(this, arguments); };
+      proto.setItem = function () { seed(); return set.apply(this, arguments); };
+    }
   })();`;
 }
