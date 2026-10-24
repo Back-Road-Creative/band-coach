@@ -23,7 +23,7 @@
 // somehow spoofed to match.
 'use strict';
 
-const ALLOWED_PERMISSIONS = new Set(['media', 'midi', 'midiSysex']);
+const ALLOWED_PERMISSIONS = new Set(['media', 'midi']);
 
 const REMOTE_ORIGIN_RE = /^(https?|ftp|wss?):/i;
 
@@ -60,7 +60,7 @@ function isSameFile(candidate, appFileUrl) {
 
 // isAllowed decides whether ONE permission request should be granted.
 //
-// - permission: the string Electron passed ('media', 'midi', 'midiSysex', or
+// - permission: the string Electron passed ('media', 'midi', or
 //   anything else, which is always denied).
 // - requestingOrigin: setPermissionCheckHandler's third argument, if any.
 //   Used only as a remote-origin veto (see module doc comment above).
