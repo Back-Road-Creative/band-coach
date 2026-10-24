@@ -45,3 +45,9 @@ test('diagramKindFor: a missing or unrecognised how, or an unknown kind, is "una
   assert.equal(diagramKindFor({ kind: 'some-future-family' }), 'unavailable');
   assert.notEqual(diagramKindFor({ kind: 'some-future-family' }), 'voice');
 });
+
+test('a keyboard computeHow() routes to the keyboard diagram', async () => {
+  const { computeHow } = await import('../../src/ui/fingerings/how.js');
+  const kbd = (await import('../../src/instruments/kbd.js')).default;
+  assert.equal(diagramKindFor(computeHow(kbd, 60)), 'keyboard');
+});

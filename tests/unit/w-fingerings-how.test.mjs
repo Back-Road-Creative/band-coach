@@ -18,6 +18,7 @@ import harp from '../../src/instruments/harp.js';
 import voice from '../../src/instruments/voice.js';
 import kbd from '../../src/instruments/kbd.js';
 import wind from '../../src/instruments/wind.js';
+import mallet from '../../src/instruments/mallet-percussion.js';
 import trumpetBb from '../../src/instruments/trumpet-bb.js';
 import hornF from '../../src/instruments/horn-f.js';
 import trombone from '../../src/instruments/trombone.js';
@@ -51,7 +52,8 @@ test('howKindFor picks the right module per instrument', () => {
   assert.equal(howKindFor(oboe), 'keyed-woodwind');
   assert.equal(howKindFor(saxAlto), 'keyed-woodwind');
   assert.equal(howKindFor(saxTenor), 'keyed-woodwind');
-  assert.equal(howKindFor(kbd), null); // keys: obvious, no fingering module
+  assert.equal(howKindFor(kbd), 'keyboard'); // keys family: drawn as the same two rows as the practice keyboard
+  assert.equal(howKindFor(mallet), null); // mallet percussion keeps no How kind
   assert.equal(howKindFor(wind), null); // an abstraction over 7 transpositions, not one real instrument
   assert.equal(howKindFor(null), null);
 });
@@ -242,4 +244,16 @@ test('defaultNoteFor picks a note the table actually covers', () => {
   assert.equal(defaultNoteFor(recorderDescant), 72);
   // guitar's own range.low (its lowest open string) is trivially playable.
   assert.equal(defaultNoteFor(gtr), 40);
+});
+
+test('keyboard: rows split at middle C, description names the key and the hand', () => {
+  const c4 = computeHow(kbd, 60);
+  assert.equal(c4.kind, 'keyboard');
+  assert.equal(c4.playable, true);
+  assert.deepEqual(c4.rows, [{ lo: 48, hi: 59, hand: 'lh' }, { lo: 60, hi: 72, hand: 'rh' }]);
+  assert.match(c4.description, /C4/); assert.match(c4.description, /white key/); assert.match(c4.description, /right-hand/);
+  const black = computeHow(kbd, 54);
+  assert.match(black.description, /black key/); assert.match(black.description, /left-hand/);
+  const out = computeHow(kbd, 84);
+  assert.equal(out.playable, false); assert.match(out.description, /outside/);
 });

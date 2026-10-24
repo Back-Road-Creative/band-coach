@@ -91,6 +91,7 @@ import { createNoticeGate, buildDiagnostics } from './core/diagnostics.js';
 //
 import { registerFingerings, renderHowInline } from './ui/fingerings.js';
 import { instrumentSetup } from './ui/fingerings/setup.js';
+import { keyLayout } from './instruments/how/keyboard.js';
 //
 //
 import { register as registerPlayalong } from './ui/playalong.js';
@@ -1122,13 +1123,15 @@ import { register as registerPathway } from './ui/pathway.js';
   // the session and the task both survive. Hidden under the exact same
   // conditions as showMeBtn (ear/bar/bar2/kit have no single active note to
   // draw a fingering for), plus whenever the current element has no plain
-  // sounding pitch (a chord or hands-together item) or the mod's instrument
-  // has no how diagram at all (renderHowInline returns null for keyboard,
-  // today's only such instrument).
+  // sounding pitch (a chord or hands-together item), the mod's instrument
+  // has no how diagram at all (renderHowInline returns null for the wind
+  // picker and mallet percussion), or the mod is the keyboard: the practice
+  // canvas already is the keyboard, and a shown peek would shrink it to
+  // styles.css's 16/6 (#howPeekHost :has() rule) below the touch floor.
   function updateHowPeek() {
     const host = $('howPeekHost'); if (!host) return; host.textContent = '';
     const e = cur(), instrument = instrumentById[mod];
-    if (!task || task.done || !e || $('showMeBtn').hidden || !instrument || e.info.midi === undefined) { host.hidden = true; return; }
+    if (!task || task.done || !e || mod === 'kbd' || $('showMeBtn').hidden || !instrument || e.info.midi === undefined) { host.hidden = true; return; }
     const setup = instrumentSetup(instrument, { fingeringsStore: (DB.panels && DB.panels.fingerings) || null, prefs: DB.prefs });
     const rendered = renderHowInline(host, instrument, e.info.midi, setup);
     if (!rendered) { host.hidden = true; return; }
@@ -1652,13 +1655,12 @@ import { register as registerPathway } from './ui/pathway.js';
   // targets) get an "R"/"L" mark drawn on the key itself, so which hand a lit
   // target belongs to is never colour alone.
   function drawKeys(x0, y0, w, h, lo, hi, o) {
-    const isW = m => [0, 2, 4, 5, 7, 9, 11].indexOf(pc(m)) >= 0; let nW = 0; for (let m = lo; m <= hi; m++) if (isW(m)) nW++; const kw = w / nW; let i = 0; const xs = {};
-    for (let m = lo; m <= hi; m++) if (isW(m)) { xs[m] = x0 + i * kw; i++; }
+    const L = keyLayout(x0, y0, w, h, lo, hi, rootK), kw = L.kw;
     const fill = (m, base) => o.target.indexOf(m) >= 0 ? accent() : o.good.indexOf(m) >= 0 ? '#5be08a' : recentPress(m) ? '#9fb4d8' : base;
     const keyLetter = m => o.letters ? o.letters[m] : undefined; // computer letter for this key, lowercase as the help prints it
     const markFor = m => o.rhMidi === m ? 'R' : o.lhMidi === m ? 'L' : null;
-    for (let m = lo; m <= hi; m++) if (isW(m)) { rr(xs[m] + 1, y0, kw - 2, h, 4); g.fillStyle = fill(m, '#e9edf6'); g.fill(); const mk = markFor(m); if (mk) { g.fillStyle = '#06101d'; font(kw * 0.4, 800); g.textAlign = 'center'; g.fillText(mk, xs[m] + kw / 2, y0 + kw * 0.46); } { const kl = keyLetter(m); if (kl) { g.fillStyle = '#3a4363'; font(kw * 0.34, 700); g.textAlign = 'center'; g.fillText(kl, xs[m] + kw / 2, y0 + h - kw * 0.62); } } keyRects.push({ m: m, x: xs[m], y: y0, w: kw, h: h, black: false, row: o.row, hand: o.hand, mark: mk }); if (o.names) { g.fillStyle = '#3a4363'; font(kw * 0.34, 600); g.textAlign = 'center'; g.fillText(nname(m) + (pc(m) === 0 ? (Math.floor(m / 12) - 1) : ''), xs[m] + kw / 2, y0 + h - kw * 0.2); } }
-    for (let m = lo; m <= hi; m++) if (!isW(m) && xs[m - 1] !== undefined) { const bx = xs[m - 1] + kw * 0.68; rr(bx, y0, kw * 0.64, h * 0.62, 3); g.fillStyle = fill(m, '#10131c'); g.fill(); g.strokeStyle = '#05070c'; g.lineWidth = 1; g.stroke(); const mk = markFor(m); if (mk) { g.fillStyle = '#e9edf6'; font(kw * 0.32, 800); g.textAlign = 'center'; g.fillText(mk, bx + kw * 0.32, y0 + h * 0.62 * 0.52); } { const kl = keyLetter(m); if (kl) { g.fillStyle = '#9fb4d8'; font(kw * 0.3, 700); g.textAlign = 'center'; g.fillText(kl, bx + kw * 0.32, y0 + h * 0.62 * 0.9); } } keyRects.unshift({ m: m, x: bx, y: y0, w: kw * 0.64, h: h * 0.62, black: true, row: o.row, hand: o.hand, mark: mk }); }
+    L.whites.forEach(wk => { const m = wk.m, xm = wk.x; rr(xm + 1, y0, kw - 2, h, 4); g.fillStyle = fill(m, '#e9edf6'); g.fill(); const mk = markFor(m); if (mk) { g.fillStyle = '#06101d'; font(kw * 0.4, 800); g.textAlign = 'center'; g.fillText(mk, xm + kw / 2, y0 + kw * 0.46); } { const kl = keyLetter(m); if (kl) { g.fillStyle = '#3a4363'; font(kw * 0.34, 700); g.textAlign = 'center'; g.fillText(kl, xm + kw / 2, y0 + h - kw * 0.62); } } keyRects.push({ m: m, x: xm, y: y0, w: kw, h: h, black: false, row: o.row, hand: o.hand, mark: mk }); if (o.names) { g.fillStyle = '#3a4363'; font(L.labelPx / rootK, 600); g.textAlign = 'center'; g.fillText(nname(m) + (pc(m) === 0 ? (Math.floor(m / 12) - 1) : ''), wk.labelX, wk.labelY); } });
+    L.blacks.forEach(bk => { const m = bk.m, bx = bk.x; rr(bx, y0, bk.w, bk.h, 3); g.fillStyle = fill(m, '#10131c'); g.fill(); g.strokeStyle = '#05070c'; g.lineWidth = 1; g.stroke(); const mk = markFor(m); if (mk) { g.fillStyle = '#e9edf6'; font(kw * 0.32, 800); g.textAlign = 'center'; g.fillText(mk, bx + kw * 0.32, y0 + h * 0.62 * 0.52); } { const kl = keyLetter(m); if (kl) { g.fillStyle = '#9fb4d8'; font(kw * 0.3, 700); g.textAlign = 'center'; g.fillText(kl, bx + kw * 0.32, y0 + h * 0.62 * 0.9); } } keyRects.unshift({ m: m, x: bx, y: y0, w: bk.w, h: bk.h, black: true, row: o.row, hand: o.hand, mark: mk }); });
   }
   // item D2 (Wave kbd): a full 88-key (A0-C8, MIDI 21-108) strip, drawn once
   // per frame under the rows, marking the [lo, hi] window the rows above are

@@ -11,6 +11,8 @@ import { readFingeringSetup } from './fingerings/setup.js';
 import { isReviewed } from '../instruments/review.js';
 import { t } from '../core/i18n.js';
 import { KIT_ASPECT, THRONE } from '../instruments/how/drum-kit.js';
+import { keyLayout } from '../instruments/how/keyboard.js';
+import { name } from '../core/note-names.js';
 import { rangeIsWrittenPitch } from '../song/lesson.js';
 
 // Human-readable labels for fretboard.js's named-tuning keys (alternateTuningsFor).
@@ -140,6 +142,27 @@ function voiceDiagram(instrument, how) {
   ]);
 }
 
+// Keyboard: the same two rows the practice canvas draws (keyLayout() in
+// src/instruments/how/keyboard.js), left hand over right hand; the picked key is filled.
+function keyboardDiagram(instrument, how) {
+  const svg = svgEl('svg', { viewBox: '0 0 320 168', class: 'fing-keyboard', role: 'img', 'aria-label': how.description, width: '320', height: '168', style: 'max-width:100%;height:auto' });
+  how.rows.forEach((row, i) => {
+    const L = keyLayout(0, i * 88, 320, 80, row.lo, row.hi);
+    L.whites.forEach(wk => {
+      const hit = wk.m === how.midi;
+      svg.appendChild(svgEl('rect', { x: String(wk.x), y: String(wk.y), width: String(wk.w), height: String(wk.h), class: 'fing-key' + (hit ? ' fing-hit' : ''), 'data-midi': String(wk.m), style: 'fill:' + (hit ? '#f3c52f' : '#e9edf6') + ';stroke:var(--line)' }));
+      const label = svgEl('text', { x: String(wk.labelX), y: String(wk.labelY), 'font-size': String(L.labelPx), 'text-anchor': 'middle', style: 'fill:#3a4363' });
+      label.textContent = name(wk.m, wk.m % 12 === 0);
+      svg.appendChild(label);
+    });
+    L.blacks.forEach(bk => {
+      const hit = bk.m === how.midi;
+      svg.appendChild(svgEl('rect', { x: String(bk.x), y: String(bk.y), width: String(bk.w), height: String(bk.h), class: 'fing-key fing-key-black' + (hit ? ' fing-hit' : ''), 'data-midi': String(bk.m), style: 'fill:' + (hit ? '#f3c52f' : '#10131c') }));
+    });
+  });
+  return svg;
+}
+
 // Keyed Boehm-system woodwinds (flute, clarinet, oboe, sax): the underlying
 // chart (src/instruments/how/keyed-woodwind.js) is typed prose, not a
 // structured set of key positions like a fretboard or brass valve, so there
@@ -175,7 +198,7 @@ function unavailableDiagram() {
 // was actually wrong -- is unit testable without one. An unrecognised or
 // missing `how.kind` maps to 'unavailable', never silently falling through
 // to 'voice'.
-const DIAGRAM_KINDS = ['drum-kit', 'fretboard', 'fingerboard', 'brass-valves', 'brass-slide', 'harmonica', 'recorder', 'whistle', 'keyed-woodwind', 'voice'];
+const DIAGRAM_KINDS = ['drum-kit', 'fretboard', 'fingerboard', 'brass-valves', 'brass-slide', 'harmonica', 'recorder', 'whistle', 'keyed-woodwind', 'keyboard', 'voice'];
 export function diagramKindFor(how) {
   return (how && DIAGRAM_KINDS.includes(how.kind)) ? how.kind : 'unavailable';
 }
@@ -233,6 +256,7 @@ function diagramFor(instrument, how) {
     case 'recorder':
     case 'whistle': return recorderDiagram(instrument, how);
     case 'keyed-woodwind': return keyedWoodwindDiagram(instrument, how);
+    case 'keyboard': return keyboardDiagram(instrument, how);
     case 'voice': return voiceDiagram(instrument, how);
     default: return unavailableDiagram();
   }
@@ -259,7 +283,7 @@ let howInlineSeq = 0;
 // Fingerings panel gives for `instrument`/`soundingMidi`, dropped inline
 // under the current lesson step, collapsed by default. Returns null (and
 // appends nothing) when this instrument has no how diagram at all
-// (howKindFor null -- keyboard, today's only such instrument). `setup` is
+// (howKindFor null -- the wind picker and mallet percussion). `setup` is
 // the caller's own instrumentSetup() result (capo/tuning/leftHanded/
 // harpKey), read fresh at render time rather than cached on `practice`.
 export function renderHowInline(container, instrument, soundingMidi, setup) {

@@ -9,9 +9,9 @@ Columns: `practise` — can a learner work a curriculum level on this instrument
 performance is actually checked: `midi` (an exact MIDI note), `mic-single-note` (the microphone's
 monophonic pitch detector, one note at a time), `tap` (rhythm-only, no pitch), or `none` (not
 assessable yet). `chart` — the "how to play it" diagram: `computed` (a formula, always correct for
-any in-range note — fretboard, fingerboard, brass valves/slide, harmonica), `typed-unreviewed` (a
+any in-range note — fretboard, fingerboard, brass valves/slide, harmonica, keyboard), `typed-unreviewed` (a
 hand-typed lookup table or drawn layout no musician has checked), `typed-reviewed` (same, but
-checked — none today), or `none` (no diagram at all; keyboard, voice, the wind/brass picker and
+checked — none today), or `none` (no diagram at all; voice, the wind/brass picker and
 mallet percussion give a curriculum and pitch matching with no fingering panel). `contentReviewed` —
 straight from `src/instruments/review.js`'s `isReviewed()`: has a real musician checked this
 record's curriculum against a method book, from its `provenance` field. `tier` — the maturity label
@@ -40,7 +40,7 @@ been checked by a musician against a method book or teaching standard.
 
 | id | name | practise | assess | chart | contentReviewed | tier |
 | --- | --- | --- | --- | --- | --- | --- |
-| kbd | Keyboard | true | midi | none | false | first-release-candidate |
+| kbd | Keyboard | true | midi | computed | false | first-release-candidate |
 | gtr | Guitar | true | mic-single-note | computed | false | accessible-unvalidated |
 | bass | Bass | true | mic-single-note | computed | false | accessible-unvalidated |
 | uke | Ukulele | true | mic-single-note | computed | false | accessible-unvalidated |

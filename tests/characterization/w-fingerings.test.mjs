@@ -9,13 +9,18 @@ test('fingerings panel opens, shows a default fretboard diagram, and reacts to a
   const page = await launchPage(HTML_PATH);
   t.after(() => page.close());
 
-  // The default mod at boot (kbd) has no fingering mapping, so the panel
-  // falls back to the first instrument that does have one. Nothing has been
-  // picked yet, so no picker button claims to be pressed.
+  // The default mod at boot (kbd) has a keyboard How kind, so the panel opens
+  // on it. Nothing has been picked yet, so no picker button claims to be pressed.
   assert.equal(await page.evaluate("document.querySelector('#picker button[aria-pressed=\"true\"]')"), null);
   await page.evaluate("window.__coach.openPanel('fingerings')");
   assert.equal(await page.evaluate('window.__coach.panelOpen()'), 'fingerings');
-  assert.notEqual(await page.evaluate("document.getElementById('fingInstrument').value"), 'kbd');
+  assert.equal(await page.evaluate("document.getElementById('fingInstrument').value"), 'kbd');
+  assert.equal(await page.evaluate("document.querySelectorAll('.fing-keyboard').length"), 1);
+  assert.equal(await page.evaluate("document.querySelectorAll('.fing-keyboard .fing-hit').length"), 1);
+  assert.equal(await page.evaluate("document.querySelector('.fing-keyboard .fing-hit').getAttribute('data-midi')"), '48');
+  await page.evaluate("[...document.querySelectorAll('.fing-note-btn')].find(b => b.textContent === 'C4').click()");
+  assert.equal(await page.evaluate("document.querySelector('.fing-keyboard .fing-hit').getAttribute('data-midi')"), '60');
+  assert.match(await page.evaluate("document.getElementById('fingDesc').textContent"), /C4/);
 
   // Switch explicitly to guitar to pin the rest of the test down.
   await page.evaluate(`(function () {
@@ -55,8 +60,9 @@ test('fingerings panel opens, shows a default fretboard diagram, and reacts to a
   assert.ok(options.includes('voice'));
   assert.ok(options.includes('violin'));
   assert.ok(options.includes('tin-whistle'));
-  assert.ok(!options.includes('kbd'));
+  assert.ok(options.includes('kbd'));
   assert.ok(!options.includes('wind'));
+  assert.ok(!options.includes('mallet-percussion'));
 
   // Bowed instruments are fretless: switching to violin draws a plain
   // fingerboard with no fret grid, never `.fing-fretboard`.
