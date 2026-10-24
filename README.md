@@ -43,7 +43,7 @@ the Band Coach website for a pack, checks the download against its checksum, and
 browser's own storage, and the line beside the button says Not downloaded, Downloading or
 Downloaded (with the version). No model has been trained or published yet, so today pressing it
 answers "No model pack is published yet." and keeps nothing. A pack that fails to download or
-verify is never kept.
+verify is never kept, and a pack is only ever downloaded from its own folder on the Band Coach website.
 
 The app follows your system's light/dark setting automatically, or pick Light/Dark yourself from the Theme control next to "Show note names" on the Settings screen. Two more controls next to Theme let you pick how notes are named -- letters, German (H/B), or fixed-do solfege (Do, Re, Mi...) -- and whether the black keys are spelled with sharps, flats, or today's mixed spelling.
 

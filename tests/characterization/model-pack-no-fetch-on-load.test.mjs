@@ -51,7 +51,7 @@ function fakePackFetchInit({ manifestOk }) {
       window.__fetchCalls.push(url);
       if (url.endsWith('manifest.json')) {
         if (!${manifestOk}) return { ok: false, status: 404, json: async () => { throw new Error('404'); } };
-        return { ok: true, json: async () => ({ name: 'core', version: '1.0.0', bytes: 4, sha256: '${PACK_SHA}', url: 'https://example.test/model-packs/core/pack.bin' }) };
+        return { ok: true, json: async () => ({ name: 'core', version: '1.0.0', bytes: 4, sha256: '${PACK_SHA}', url: 'https://back-road-creative.github.io/band-coach/model-packs/core/pack.bin' }) };
       }
       return { ok: true, arrayBuffer: async () => new Uint8Array(${JSON.stringify(PACK_BYTES)}).buffer };
     };

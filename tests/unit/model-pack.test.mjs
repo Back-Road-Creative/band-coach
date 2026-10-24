@@ -21,6 +21,8 @@ import {
 } from '../../src/core/model-pack.js';
 
 const MANIFEST_URL = 'https://back-road-creative.github.io/band-coach/model-packs/example/manifest.json';
+const PACK_URL = 'https://back-road-creative.github.io/band-coach/model-packs/example/pack.bin';
+const PACK2_URL = 'https://back-road-creative.github.io/band-coach/model-packs/example/pack-2.bin';
 
 // A tiny fixed payload with a precomputed SHA-256, so tests never depend on
 // crypto.subtle actually running correctly to set up their own fixtures --
@@ -57,14 +59,14 @@ function bytesResponse(buf) {
 test('a fresh pack (no cache) is downloaded, verified and stored', async () => {
   const store = createMemoryStore();
   const fetchImpl = fakeFetch({
-    [MANIFEST_URL]: { response: jsonResponse({ name: 'example', version: '1.0.0', bytes: GOOD_BYTES.byteLength, sha256: GOOD_SHA, url: 'https://example.test/pack.bin' }) },
-    'https://example.test/pack.bin': { response: bytesResponse(GOOD_BYTES) },
+    [MANIFEST_URL]: { response: jsonResponse({ name: 'example', version: '1.0.0', bytes: GOOD_BYTES.byteLength, sha256: GOOD_SHA, url: PACK_URL }) },
+    [PACK_URL]: { response: bytesResponse(GOOD_BYTES) },
   });
   const result = await loadPack({ manifestUrl: MANIFEST_URL, fetchImpl, store, digest: fakeDigest(GOOD_SHA) });
   assert.equal(result.name, 'example');
   assert.equal(result.version, '1.0.0');
   assert.equal(result.fromCache, false);
-  assert.deepEqual(fetchImpl.calls, [MANIFEST_URL, 'https://example.test/pack.bin']);
+  assert.deepEqual(fetchImpl.calls, [MANIFEST_URL, PACK_URL]);
 
   const cached = await store.get('example');
   assert.ok(cached, 'the download is stored');
@@ -76,7 +78,7 @@ test('a cache hit (same version and checksum) never re-downloads the file', asyn
   const store = createMemoryStore();
   await store.set('example', { name: 'example', version: '1.0.0', sha256: GOOD_SHA, bytes: GOOD_BYTES });
   const fetchImpl = fakeFetch({
-    [MANIFEST_URL]: { response: jsonResponse({ name: 'example', version: '1.0.0', bytes: GOOD_BYTES.byteLength, sha256: GOOD_SHA, url: 'https://example.test/pack.bin' }) },
+    [MANIFEST_URL]: { response: jsonResponse({ name: 'example', version: '1.0.0', bytes: GOOD_BYTES.byteLength, sha256: GOOD_SHA, url: PACK_URL }) },
   });
   const result = await loadPack({ manifestUrl: MANIFEST_URL, fetchImpl, store, digest: fakeDigest(GOOD_SHA) });
   assert.equal(result.fromCache, true);
@@ -87,8 +89,8 @@ test('a cache hit (same version and checksum) never re-downloads the file', asyn
 test('a checksum mismatch is rejected and nothing is cached', async () => {
   const store = createMemoryStore();
   const fetchImpl = fakeFetch({
-    [MANIFEST_URL]: { response: jsonResponse({ name: 'example', version: '1.0.0', bytes: GOOD_BYTES.byteLength, sha256: GOOD_SHA, url: 'https://example.test/pack.bin' }) },
-    'https://example.test/pack.bin': { response: bytesResponse(GOOD_BYTES) },
+    [MANIFEST_URL]: { response: jsonResponse({ name: 'example', version: '1.0.0', bytes: GOOD_BYTES.byteLength, sha256: GOOD_SHA, url: PACK_URL }) },
+    [PACK_URL]: { response: bytesResponse(GOOD_BYTES) },
   });
   await assert.rejects(
     () => loadPack({ manifestUrl: MANIFEST_URL, fetchImpl, store, digest: fakeDigest(BAD_SHA) }),
@@ -103,8 +105,8 @@ test('a version bump replaces the cached copy', async () => {
   const NEW_BYTES = new TextEncoder().encode('a newer pack').buffer;
   const NEW_SHA = 'bbbb1111';
   const fetchImpl = fakeFetch({
-    [MANIFEST_URL]: { response: jsonResponse({ name: 'example', version: '2.0.0', bytes: NEW_BYTES.byteLength, sha256: NEW_SHA, url: 'https://example.test/pack-2.bin' }) },
-    'https://example.test/pack-2.bin': { response: bytesResponse(NEW_BYTES) },
+    [MANIFEST_URL]: { response: jsonResponse({ name: 'example', version: '2.0.0', bytes: NEW_BYTES.byteLength, sha256: NEW_SHA, url: PACK2_URL }) },
+    [PACK2_URL]: { response: bytesResponse(NEW_BYTES) },
   });
   const result = await loadPack({ manifestUrl: MANIFEST_URL, fetchImpl, store, digest: fakeDigest(NEW_SHA) });
   assert.equal(result.fromCache, false);
@@ -118,8 +120,8 @@ test('a network failure downloading the file leaves the previous cache intact', 
   const store = createMemoryStore();
   await store.set('example', { name: 'example', version: '1.0.0', sha256: GOOD_SHA, bytes: GOOD_BYTES });
   const fetchImpl = fakeFetch({
-    [MANIFEST_URL]: { response: jsonResponse({ name: 'example', version: '2.0.0', bytes: 99, sha256: 'cccc2222', url: 'https://example.test/pack-2.bin' }) },
-    'https://example.test/pack-2.bin': { reject: new TypeError('Failed to fetch') },
+    [MANIFEST_URL]: { response: jsonResponse({ name: 'example', version: '2.0.0', bytes: 99, sha256: 'cccc2222', url: PACK2_URL }) },
+    [PACK2_URL]: { reject: new TypeError('Failed to fetch') },
   });
   await assert.rejects(() => loadPack({ manifestUrl: MANIFEST_URL, fetchImpl, store, digest: fakeDigest('cccc2222') }));
   const cached = await store.get('example');
@@ -153,8 +155,8 @@ test('loadPack tracks in-flight downloads via the optional inFlight set, clearin
   const inFlight = new Set();
   let sawDuringDownload = false;
   const fetchImpl = fakeFetch({
-    [MANIFEST_URL]: { response: jsonResponse({ name: 'example', version: '1.0.0', bytes: GOOD_BYTES.byteLength, sha256: GOOD_SHA, url: 'https://example.test/pack.bin' }) },
-    'https://example.test/pack.bin': { response: bytesResponse(GOOD_BYTES) },
+    [MANIFEST_URL]: { response: jsonResponse({ name: 'example', version: '1.0.0', bytes: GOOD_BYTES.byteLength, sha256: GOOD_SHA, url: PACK_URL }) },
+    [PACK_URL]: { response: bytesResponse(GOOD_BYTES) },
   });
   const digest = async () => {
     sawDuringDownload = inFlight.has('example');
@@ -190,3 +192,30 @@ test('a missing or unreadable manifest rejects with code no-manifest; a bad down
   const fetchImpl = async (u) => u === 'x' ? { ok: true, json: async () => ({ name: 'n', version: '1', sha256: 'a', url: 'y' }) } : { ok: false };
   await assert.rejects(loadPack({ manifestUrl: 'x', store, fetchImpl }), (e) => e.code !== 'no-manifest');
 });
+
+// SEC-2: the manifest is the only thing fetched from a fixed address; the file it
+// points at must live on that same origin, under the manifest's own folder, over https.
+for (const [label, url] of [
+  ['another host', 'https://evil.example/band-coach/model-packs/example/pack.bin'],
+  ['plain http', 'http://back-road-creative.github.io/band-coach/model-packs/example/pack.bin'],
+  ['a data: URL', 'data:application/octet-stream;base64,AAAA'],
+  ['outside the manifest folder', 'https://back-road-creative.github.io/other/pack.bin'],
+  ['a dot-dot escape', 'https://back-road-creative.github.io/band-coach/model-packs/example/../../x.bin'],
+  ['a lookalike folder', 'https://back-road-creative.github.io/band-coach/model-packs/example-evil/pack.bin'],
+  ['no url at all', undefined],
+]) {
+  test(`a manifest whose url is ${label} is refused: only the manifest is fetched, nothing stored`, async () => {
+    const store = createMemoryStore();
+    const fetchImpl = fakeFetch({
+      [MANIFEST_URL]: { response: jsonResponse({ name: 'example', version: '1.0.0', sha256: GOOD_SHA, url }) },
+    });
+    const inFlight = new Set();
+    await assert.rejects(
+      () => loadPack({ manifestUrl: MANIFEST_URL, fetchImpl, store, digest: fakeDigest(GOOD_SHA), inFlight }),
+      (e) => e.code !== 'no-manifest' && /manifest/.test(e.message),
+    );
+    assert.deepEqual(fetchImpl.calls, [MANIFEST_URL]);
+    assert.equal(await store.get('example'), null);
+    assert.equal(inFlight.size, 0);
+  });
+}
