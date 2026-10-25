@@ -30,6 +30,9 @@ jobs:
     permissions:
       contents: write
       actions: read
+      # Only the attest step below uses these two.
+      id-token: write
+      attestations: write
     # This job runs the same two release-lane runs as ci.yml (here: the suite,
     # whose posttest runs the gate, then the gate again; ci.yml runs the gate
     # first), so its budget must stay at or above ci.yml's;
@@ -101,7 +104,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           sha256sum -c "$RUNNER_TEMP/tested.sha256"
+          # sha256sum format against the bare name, so `sha256sum -c` works in the
+          # learner's download folder.
+          (cd dist/release && sha256sum band-coach.html) > "$RUNNER_TEMP/band-coach.html.sha256"
           gh release create "$GITHUB_REF_NAME" dist/release/band-coach.html \
+            "$RUNNER_TEMP/band-coach.html.sha256" \
             --title "Band Coach $GITHUB_REF_NAME" \
             --generate-notes
       # The file a learner downloads must be the gate's file and must still pass:
@@ -119,6 +126,17 @@ jobs:
           gh release download "$GITHUB_REF_NAME" -p band-coach.html -D "$RUNNER_TEMP/published"
           cmp "$RUNNER_TEMP/published/band-coach.html" dist/release/band-coach.html
           node --test tests/release/gate.test.mjs tests/release/acceptance-first-visit.test.mjs
+          gh release download "$GITHUB_REF_NAME" -p band-coach.html.sha256 -D "$RUNNER_TEMP/published"
+          (cd "$RUNNER_TEMP/published" && sha256sum -c band-coach.html.sha256)
+      # Signed build provenance for the exact file that was published and proved;
+      # `gh attestation verify band-coach.html --repo Back-Road-Creative/band-coach`
+      # checks a download against it. Needs id-token and attestations: write,
+      # granted on this job only.
+      - name: attest build provenance of the release file
+        if: github.event_name == 'push' && github.ref_type == 'tag'
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: dist/release/band-coach.html
       # A dispatch run stops here: say what a tag run would have published.
       - name: summarise what a tag run would publish
         if: github.event_name == 'workflow_dispatch'

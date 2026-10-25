@@ -18,6 +18,14 @@ That is the whole app — one page, nothing to install, no account, and it keeps
 network off. Open it in Chrome or Edge. Microphone instruments ask for permission the first time;
 a MIDI keyboard is optional. To put it away, delete the file.
 
+To check your download is the file we published, compare its SHA-256 fingerprint with the
+`band-coach.html.sha256` file on the same release page. On Windows, run
+`Get-FileHash band-coach.html -Algorithm SHA256` in PowerShell and compare the result with the
+text in that file; on macOS or Linux, put both files in one folder and run
+`sha256sum -c band-coach.html.sha256`. With the GitHub CLI,
+`gh attestation verify band-coach.html --repo Back-Road-Creative/band-coach` checks the file's
+signed build record.
+
 A **Practice / Songs / Progress / Instrument / Settings** bar sits at the top of the page at all
 times. Practice is the instrument trainer this page opens on; Songs takes you straight to your
 saved and imported tunes; Progress takes you straight to your practice history. Pressing whichever
@@ -1582,9 +1590,9 @@ To cut a release:
 (`npm run gate` — builds `dist/release/band-coach.html` and drives it in headless Chromium to prove
 zero network calls, zero console errors, the debug hook is gone, the version is stamped, and a note
 played into a fake microphone is actually heard), then publishes that one file as `band-coach.html`
-on the GitHub release. The job fails the tag if it doesn't match `package.json`'s version, and fails
+on the GitHub release, with a `band-coach.html.sha256` checksum file beside it and a signed build-provenance attestation for the file. The job fails the tag if it doesn't match `package.json`'s version, and fails
 the gate if the file exceeds a 1.5 MB size budget. After publishing it downloads `band-coach.html`
-back from the release, byte-compares it with the gate's file, and re-runs the gate and the A01
+back from the release, byte-compares it with the gate's file, checks the published checksum file against it, and re-runs the gate and the A01
 first-visit journey on the downloaded copy (`BAND_COACH_HTML` points both at it). A failure there
 fails the run, so pages.yml and store-package.yml ship nothing and the site is not notified; the
 release itself is already public, so withdraw it as `docs/release-recovery.md` section 1 says.
