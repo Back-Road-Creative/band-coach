@@ -1578,6 +1578,8 @@ To cut a release:
 1. Bump `"version"` in `package.json`.
 2. Tag the commit `vX.Y.Z` (matching that version exactly) and push the tag.
 
+Before tagging, add that version's one-line plain-text note to `docs/release-notes.json` (`"X.Y.Z": "..."`). The Pages build copies it into `version.json`, and the Settings update check shows it under "What's new" to a learner whose copy is behind. A version with no entry simply shows no note.
+
 `.github/workflows/release.yml` does the rest: it runs the full test suite plus the release gate
 (`npm run gate` — builds `dist/release/band-coach.html` and drives it in headless Chromium to prove
 zero network calls, zero console errors, the debug hook is gone, the version is stamped, and a note

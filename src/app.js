@@ -2772,11 +2772,13 @@ import { register as registerPathway } from './ui/pathway.js';
     function appendUpdateLink(href) {
       const a = document.createElement('a'); a.href = href; a.rel = 'noopener'; a.textContent = t('update.downloadLinkText'); updResult.appendChild(a);
     }
+    // The note is network text: textContent only, never innerHTML.
+    function appendUpdateNotes(notes) { if (typeof notes !== 'string' || !notes) return; const p = document.createElement('p'); p.className = 'update-notes'; p.textContent = t('update.whatsNew') + ' ' + notes; updResult.appendChild(p); }
     function renderUpdateResult(r) {
       updResult.textContent = '';
       if (r.status === 'dev') { updResult.textContent = t('update.devBuild', { version: DEV_VERSION }); return; }
       if (r.status === 'up-to-date') { updResult.textContent = t('update.upToDate', { version: r.latestVersion }); return; }
-      if (r.status === 'behind') { updResult.textContent = t('update.behind', { version: r.latestVersion }); appendUpdateLink(r.downloadUrl); return; }
+      if (r.status === 'behind') { updResult.textContent = t('update.behind', { version: r.latestVersion }); appendUpdateLink(r.downloadUrl); appendUpdateNotes(r.notes); return; }
       updResult.textContent = t('update.error'); appendUpdateLink(r.downloadUrl);
     }
     updBtn.addEventListener('click', function () {

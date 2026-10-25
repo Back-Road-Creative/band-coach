@@ -132,3 +132,29 @@ test('the version URL is the published GitHub Pages endpoint', () => {
 function okResponse(body) {
   return { ok: true, status: 200, json: async () => body };
 }
+
+// version.json "notes" is untrusted network text that ends up on screen: only a string survives,
+// trimmed and capped, so hostile input can neither be a non-string nor flood the page.
+const BEHIND = (extra) => async () => okResponse(Object.assign({ version: '1.4.0', download: 'https://github.com/Back-Road-Creative/band-coach/releases/latest/download/band-coach.html' }, extra));
+
+test('a behind result carries the release notes when version.json has them', async () => {
+  const r = await checkForUpdate({ currentVersion: '1.3.0', fetchImpl: BEHIND({ notes: '  Spanish coach lines.  ' }) });
+  assert.equal(r.status, 'behind');
+  assert.equal(r.notes, 'Spanish coach lines.');
+});
+test('a behind result has no notes field when version.json has none', async () => {
+  const r = await checkForUpdate({ currentVersion: '1.3.0', fetchImpl: BEHIND({}) });
+  assert.equal(r.status, 'behind');
+  assert.equal('notes' in r, false);
+});
+test('notes that are not a string, or only whitespace, are dropped', async () => {
+  for (const notes of [42, null, { a: 1 }, ['x'], true, '   ']) {
+    const r = await checkForUpdate({ currentVersion: '1.3.0', fetchImpl: BEHIND({ notes }) });
+    assert.equal(r.status, 'behind');
+    assert.equal('notes' in r, false, `notes ${JSON.stringify(notes)} must be dropped`);
+  }
+});
+test('over-long notes are capped at 500 characters', async () => {
+  const r = await checkForUpdate({ currentVersion: '1.3.0', fetchImpl: BEHIND({ notes: 'x'.repeat(5000) }) });
+  assert.equal(r.notes.length, 500);
+});

@@ -44,6 +44,14 @@ function trustedDownloadUrl(raw) {
   return u.href;
 }
 
+// version.json's "notes" is untrusted network text shown on screen (via textContent): only a string, trimmed and capped.
+export const MAX_NOTES_CHARS = 500;
+function cleanNotes(raw) {
+  if (typeof raw !== 'string') return null;
+  const n = raw.trim().slice(0, MAX_NOTES_CHARS).trim();
+  return n || null;
+}
+
 // ~5s: long enough for a slow connection, short enough that a learner who
 // pressed the button gets an answer instead of a spinner that never ends.
 export const CHECK_TIMEOUT_MS = 5000;
@@ -75,7 +83,7 @@ export function compareVersions(a, b) {
 // Resolves to exactly one of:
 //   { status: 'dev' }                                     -- no request made
 //   { status: 'up-to-date', latestVersion }
-//   { status: 'behind', latestVersion, downloadUrl }
+//   { status: 'behind', latestVersion, downloadUrl, notes? }   -- notes: version.json's release note, only when a non-empty string (trimmed, capped)
 //   { status: 'error', downloadUrl }                       -- "couldn't reach"
 // NEVER throws and NEVER leaves a rejected promise: every failure mode
 // (missing fetch, offline, DNS blocked, a proxy, a non-200, malformed JSON,
@@ -111,7 +119,8 @@ export async function checkForUpdate(opts = {}) {
     const cmp = compareVersions(currentVersion, latest);
     if (cmp === null) return { status: 'error', downloadUrl: fallbackDownloadUrl };
     if (cmp >= 0) return { status: 'up-to-date', latestVersion: latest };
-    return { status: 'behind', latestVersion: latest, downloadUrl };
+    const notes = cleanNotes(data.notes);
+    return notes ? { status: 'behind', latestVersion: latest, downloadUrl, notes } : { status: 'behind', latestVersion: latest, downloadUrl };
   } catch (e) {
     return { status: 'error', downloadUrl: fallbackDownloadUrl };
   } finally {
