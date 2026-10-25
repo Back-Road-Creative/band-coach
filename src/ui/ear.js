@@ -10,6 +10,7 @@ import { SCALE_FAMILIES } from '../core/ear/scales-modes.js';
 import { beatsText } from '../core/ear/rhythm-dictation.js';
 import { name as noteNameFor } from '../core/note-names.js';
 import { t } from '../core/i18n.js';
+import { freqToMidi, referencePitch } from '../core/pitch.js';
 import { yin } from '../audio/yin.js';
 import {
   defaultExerciseState,
@@ -346,7 +347,7 @@ export function registerEar(panels) {
             const buf = new Float32Array(time.fftSize);
             time.getFloatTimeDomainData(buf);
             const r = yin(buf, actx.sampleRate, PITCH_FMIN, PITCH_FMAX, api.gates().pitch);
-            micSamples.push(r.freq && r.clarity > 0.8 ? 69 + 12 * Math.log2(r.freq / 440) : null);
+            micSamples.push(r.freq && r.clarity > 0.8 ? freqToMidi(r.freq, referencePitch()) : null);
           }, MIC_POLL_MS);
         });
         stopBtn.addEventListener('click', () => {

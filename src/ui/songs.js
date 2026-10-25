@@ -39,6 +39,7 @@
 //    held or re-attacked note is not counted twice.
 
 import { yin } from '../audio/yin.js';
+import { freqToMidi, referencePitch } from '../core/pitch.js';
 import { createOnsetDetector } from '../audio/onset.js';
 import { rangeForInstrument } from '../audio/range.js';
 import { starterSongs } from '../song/starter/index.js';
@@ -1895,7 +1896,7 @@ function mountSongsPanel(hostEl, api) {
       const r = yin(buf, audio.sampleRate, toolRange.fmin, toolRange.fmax, api.gates().pitch);
       const nowSec = api.now() - practice.recordStartSec;
       if (!o.onset) {
-        if (openEvent && r.freq && r.clarity > 0.5 && Math.round(69 + 12 * Math.log2(r.freq / 440)) === openEvent.midi) {
+        if (openEvent && r.freq && r.clarity > 0.5 && Math.round(freqToMidi(r.freq, referencePitch())) === openEvent.midi) {
           extendHeldEvent(openEvent, r.freq, openEvent.midi, nowSec);
         } else {
           openEvent = null;
@@ -1909,7 +1910,7 @@ function mountSongsPanel(hostEl, api) {
         if (onsetsOnly) { practice.playedEvents.push({ midi: null, atSec: nowSec, source: 'mic' }); updateCount(); }
         return;
       }
-      const midi = Math.round(69 + 12 * Math.log2(r.freq / 440));
+      const midi = Math.round(freqToMidi(r.freq, referencePitch()));
       const event = playedEventFrom(r.freq, midi, nowSec);
       event.source = 'mic';
       practice.playedEvents.push(event);

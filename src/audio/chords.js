@@ -23,8 +23,10 @@
 //      picked from the measured score table in chords.test.mjs, not
 //      guessed in advance.
 
+import { freqToMidi, A4_DEFAULT } from '../core/pitch.js';
+
 const pc = m => ((Math.round(m) % 12) + 12) % 12;
-const fmidi = f => 69 + 12 * Math.log2(f / 440);
+const fmidi = f => freqToMidi(f, A4_DEFAULT);
 
 // A genuine chord tone measured >=0.199 of total chroma energy across the
 // fixture set (C..Dm triads, plain and octave-spread); a note's own stray

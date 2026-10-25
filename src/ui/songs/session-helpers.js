@@ -3,6 +3,7 @@
 // unchanged from src/ui/songs.js so the panel file keeps only panel code.
 import { countInTimes, clampBpm, DEFAULT_BPM } from '../learn/count-in.js';
 import { t } from '../../core/i18n.js';
+import { freqToMidi, referencePitch } from '../../core/pitch.js';
 import { GRADE, review, migrateItem } from '../../core/srs.js';
 
 // Cents deviation of a detected frequency from the nearest equal-tempered
@@ -11,7 +12,7 @@ import { GRADE, review, migrateItem } from '../../core/srs.js';
 // 69 + 12*log2(f/440), app.js's fmidi), just expressed as an offset from a given
 // target rather than rounded to the nearest note itself.
 export function centsFromFreq(freq, midi) {
-  const fractionalMidi = 69 + 12 * Math.log2(freq / 440);
+  const fractionalMidi = freqToMidi(freq, referencePitch());
   return (fractionalMidi - midi) * 100;
 }
 

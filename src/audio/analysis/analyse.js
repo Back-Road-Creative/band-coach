@@ -6,6 +6,7 @@
 // synchronous block. Returns { bpm, beats, downbeats, key, chords, tuningCents, confidence }.
 
 import { FFTProcessor } from './fft.js';
+import { A4_DEFAULT } from '../../core/pitch.js';
 import { computeOnsetEnvelope } from './onset-envelope.js';
 import { estimateTempo, trackBeats, downbeats as estimateDownbeats } from './tempo.js';
 import { chromaFromSpectrum, estimateTuningCents, beatSynchronousChroma } from './chroma.js';
@@ -69,7 +70,7 @@ export async function analyse(pcm, sampleRate, opts = {}) {
   const sampleFrames = [];
   for (let f = 0; f < numChromaFrames; f += 4) sampleFrames.push(magStore.subarray(f * bins, (f + 1) * bins));
   const tuningCents = numChromaFrames > 0 ? estimateTuningCents(sampleFrames, sampleRate, CHROMA_FRAME_SIZE) : 0;
-  const a4 = 440 * Math.pow(2, tuningCents / 1200);
+  const a4 = A4_DEFAULT * Math.pow(2, tuningCents / 1200);
   const chromaFrames = [];
   for (let f = 0; f < numChromaFrames; f++) {
     chromaFrames.push(chromaFromSpectrum(magStore.subarray(f * bins, (f + 1) * bins), sampleRate, CHROMA_FRAME_SIZE, { a4 }));
