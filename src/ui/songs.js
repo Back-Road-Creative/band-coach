@@ -42,7 +42,7 @@ import { yin } from '../audio/yin.js';
 import { freqToMidi, referencePitch } from '../core/pitch.js';
 import { createOnsetDetector } from '../audio/onset.js';
 import { rangeForInstrument } from '../audio/range.js';
-import { starterSongs } from '../song/starter/index.js';
+import { starterSongs, starterGrooves, starterById } from '../song/starter/index.js';
 import { createLibrary, memoryStore, indexedDbStore } from '../song/library.js';
 import { validateSong, songBarCount, barsOf, MAX_SONG_BARS } from '../song/model.js';
 import { buildLessonPlan, nextStep, creditFor } from '../song/lesson.js';
@@ -540,10 +540,18 @@ function mountSongsPanel(hostEl, api) {
   // The library read is async and mount + show() each call this back to back, so
   // the saved rows are swapped only AFTER the read, in one synchronous block: an
   // overlapping call can never leave a saved song appended twice. The starter rows
-  // are built once and never replaced, so a row the learner has focused or pressed
-  // meanwhile stays in the page (and Escape still reaches the panel).
+  // are rebuilt only when the instrument changes between the drum kit (the
+  // practice grooves) and everything else (the starter tunes), so a row the
+  // learner has focused or pressed meanwhile stays in the page (and Escape
+  // still reaches the panel).
   async function refreshList() {
-    if (!listUl.firstChild) starterSongs.forEach((song) => listUl.appendChild(songRow(song, null)));
+    const kind = api.mod() === 'drum-kit' ? 'grooves' : 'tunes';
+    if (listUl.dataset.starters !== kind) {
+      listUl.dataset.starters = kind;
+      listUl.querySelectorAll('li:not([data-saved])').forEach((li) => li.remove());
+      const firstSaved = listUl.firstChild;
+      (kind === 'grooves' ? starterGrooves : starterSongs).forEach((song) => listUl.insertBefore(songRow(song, null), firstSaved));
+    }
     let saved = [];
     try { saved = await library.list(); } catch (e) { saved = []; }
     listUl.querySelectorAll('li[data-saved]').forEach((li) => li.remove());
@@ -986,7 +994,8 @@ function mountSongsPanel(hostEl, api) {
     // below once the whole piece is finished.
     libraryDetails.open = false;
 
-    songHeaderSection.appendChild(headerEditButton(song, libraryId));
+    // The editor opens built-in songs from starterSongs only, so a groove has no Edit.
+    if (!starterGrooves.includes(song)) songHeaderSection.appendChild(headerEditButton(song, libraryId));
     songHeaderSection.appendChild(headerPlayAlongButton(libraryId));
     songHeaderSection.appendChild(headerExportButton(song, libraryId));
     songHeaderSection.appendChild(headerShareButton(song));
@@ -2561,7 +2570,7 @@ function mountSongsPanel(hostEl, api) {
     // never IN the library -- library.get() alone would come back null and
     // silently drop the request, same bug renderCarryOn already had to work
     // around above. Checked first, same order renderCarryOn uses.
-    const starter = starterSongs.find((s) => s.id === req.songId);
+    const starter = starterById(req.songId);
     const song = starter || (await library.get(req.songId));
     if (!song || !song.parts.length) return;
     const partId = req.partId || song.parts[0].id;
@@ -2591,7 +2600,7 @@ function mountSongsPanel(hostEl, api) {
     const entry = lessons[0];
     if (!entry) { carryOnBtn.hidden = true; return; }
     const songId = entry.key.songId;
-    let song = starterSongs.find((s) => s.id === songId);
+    let song = starterById(songId);
     const libraryId = song ? null : songId;
     if (!song) { try { song = await library.get(songId); } catch (e) { song = null; } }
     if (!song) { carryOnBtn.hidden = true; return; }

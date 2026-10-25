@@ -294,9 +294,10 @@ test('createLibrary works end to end over indexedDbStore', async () => {
 // starterSongs). A stored song under a starter's id would sit next to the
 // shipped starter with the same id, and every starter-first lookup by id
 // (Practise this, Carry on) would open the starter instead of the copy.
-// The set here is built from starterSongs directly, not from library.js's
-// own export, so it is an independent check on what the library reserves.
-const starterIdSet = new Set(starter.starterSongs.map((s) => s.id));
+// The set here is built from starterSongs and the drum-kit starterGrooves
+// directly, not from library.js's own export, so it is an independent check
+// on what the library reserves.
+const starterIdSet = new Set([...starter.starterSongs, ...starter.starterGrooves].map((s) => s.id));
 
 test('starter ids: the module exports the set of every starter song id', () => {
   assert.ok(starter.starterSongs.length > 0);
@@ -307,7 +308,7 @@ test('starter ids: the module exports the set of every starter song id', () => {
 test('add: a song carrying a starter tune\'s id is stored under a different id, for every starter', async () => {
   const library = createLibrary(memoryStore());
   let ran = 0;
-  for (const s of starter.starterSongs) {
+  for (const s of [...starter.starterSongs, ...starter.starterGrooves]) {
     const r = await library.add(song(s.id), { now: 1 });
     ran++;
     assert.notEqual(r, s.id, 'starter "' + s.id + '": the copy must not be stored under the starter\'s id');
@@ -315,7 +316,7 @@ test('add: a song carrying a starter tune\'s id is stored under a different id, 
     assert.equal((await library.get(r)).id, r, 'the stored copy carries the id it was stored under');
     assert.equal(await library.get(s.id), null, 'nothing is stored under the starter\'s id "' + s.id + '"');
   }
-  assert.equal(ran, starter.starterSongs.length);
+  assert.equal(ran, starter.starterSongs.length + starter.starterGrooves.length);
 });
 
 test('add: two copies of the same starter get two different non-starter ids, both retrievable', async () => {

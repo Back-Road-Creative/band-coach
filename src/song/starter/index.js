@@ -19,6 +19,7 @@
 // same shape produced by src/song/model.js once that unit lands).
 
 import { parse } from './notation.js';
+import { starterGrooves } from './grooves.js';
 
 const PUBLIC_DOMAIN = 'Public domain';
 
@@ -223,7 +224,14 @@ export function build(def) {
 }
 
 export const starterSongs = starterSongDefs.map(build);
-export const starterIds = new Set(starterSongs.map((s) => s.id)); // reserved: library.add() never stores a copy under one
+export { starterGrooves };
+export const starterIds = new Set([...starterSongs, ...starterGrooves].map((s) => s.id)); // reserved: library.add() never stores a copy under one
+
+// A built-in song by id: a starter tune or a drum-kit groove (grooves.js),
+// for every path that reopens a song by id (a hand-off, Carry on).
+export function starterById(id) {
+  return starterSongs.find((s) => s.id === id) || starterGrooves.find((s) => s.id === id);
+}
 
 // True when any note in any part of `song` carries an explicit left-hand
 // tag -- i.e. the song was built from a def with an `lh` string above. The

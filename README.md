@@ -706,7 +706,11 @@ The strip's "Work on bar N next" line carries a "Loop bar N" button: it repeats 
 A drum part practises the same way, on its own kit staff instead of a pitched one, "Play it"
 sounding real drum hits, and hits heard from an e-kit's MIDI or a real kit through the microphone
 both counted; a fifth "Which drum" line reads Not assessed when the mic heard a hit but could not
-tell which drum (a tom, crash or ride) from another.
+tell which drum (a tom, crash or ride) from another. Drums struck together (bass drum and hi-hat
+on one beat) are each checked against the hit that named them. On the drum kit, Songs lists eight
+practice grooves in place of the starter tunes (`src/song/starter/grooves.js`: rock, half-time,
+waltz, four on the floor, ride, 6/8, sixteenths, and a rock beat with a fill), each four bars or
+more and taught the same way; a groove has no Edit notes (`tests/characterization/songs-drum-grooves.test.mjs`).
 A band can also share a whole set list at once as a
 **band pack**: a `.bandpack` file (`src/song/band-pack.js`, a small zip of song files plus a
 manifest) holding several songs and, optionally, who in the band plays which part of each.

@@ -106,3 +106,27 @@ test('pieceRate is null when nothing could be named, and the step can still pass
 test('MIC_UNNAMEABLE lists exactly the pieces the mic cannot name', () => {
   assert.deepEqual([...MIC_UNNAMEABLE].sort(), ['crash', 'ride', 'tom-floor', 'tom-high', 'tom-mid'].sort());
 });
+
+test('two drums struck together are each judged against their own hit', () => {
+  // A rock beat's beat one: bass drum and closed hi-hat on the same tick.
+  // Each expected piece must find the hit that named it, not share one hit.
+  const expected = [note(0, 240, 35, 'kick'), note(0, 240, 42, 'hihat-closed'), note(480, 240, 38, 'snare'), note(480, 240, 42, 'hihat-closed')];
+  const played = [
+    { piece: 'hihat-closed', atSec: 0, source: 'midi' },
+    { piece: 'kick', atSec: 0.004, source: 'midi' },
+    { piece: 'snare', atSec: 0.6, source: 'midi' },
+    { piece: 'hihat-closed', atSec: 0.6, source: 'midi' },
+  ];
+  const r = judgeAttempt(expected, played, { bpm: 100, ticksPerQuarter: TPQ, percussion: true });
+  assert.deepEqual(r.matches.map((m) => m.pieceOk), [true, true, true, true]);
+  assert.equal(r.pieceRate, 1);
+  assert.equal(r.extras.count, 0);
+  assert.equal(passesRule(r, { hitRate: 0.8, maxMeanErrorMs: 120, minPieceRate: 0.8 }), true);
+});
+
+test('a missing drum in a pair is still marked wrong', () => {
+  const expected = [note(0, 240, 35, 'kick'), note(0, 240, 42, 'hihat-closed')];
+  const played = [{ piece: 'hihat-closed', atSec: 0, source: 'midi' }];
+  const r = judgeAttempt(expected, played, { bpm: 100, ticksPerQuarter: TPQ, percussion: true });
+  assert.deepEqual(r.matches.map((m) => m.pieceOk), [false, true]);
+});
