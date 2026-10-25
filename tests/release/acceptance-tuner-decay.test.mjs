@@ -82,7 +82,7 @@ test('idle tuner offers a Connect microphone button that follows the chosen inst
       await page.evaluate("document.querySelector('#picker button[data-mod=\"violin\"]').click()");
       await page.waitFor("document.querySelector('#picker button[data-mod=\"violin\"]').getAttribute('aria-pressed') === 'true'");
       await page.evaluate("document.querySelector('#picker button[data-mod=\"tuner\"]').click()");
-      await page.waitFor("document.getElementById('optTune') && document.getElementById('optTune').value === 'vln'");
+      await page.waitFor("document.getElementById('optTune') && document.getElementById('optTune').value === 'violin'");
       await page.waitFor("window.__bcCanvasText.filter(function (x) { return /^String \\d/.test(x); }).map(function (x) { return x.replace(/^String \\d +([A-G])\\S*.*$/, '$1'); }).join('') === 'GDAE'");
 
       const btn = "document.querySelector('#modOpts #tunerConnect')";

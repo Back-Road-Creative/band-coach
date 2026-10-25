@@ -42,3 +42,15 @@ export function howKindFor(instrument) {
   if (instrument.id === 'mallet-percussion') return 'mallet'; // bell/xylophone bars: the same bar rows as the practice canvas
   return null;
 }
+
+// The tuner's instrument list, built from the instrument records: every record
+// with a non-empty `tuning` (the same test howKindFor uses to pick a string chart)
+// gets an entry keyed by its own id, [name, open-string midi]. 'chrom' (any note)
+// always comes last. Keys are record ids, so the tuner opens on the learner's
+// current instrument whenever that instrument has strings.
+export function tunerTunings(records) {
+  const out = {};
+  (records || []).forEach(r => { if (r && Array.isArray(r.tuning) && r.tuning.length > 0) out[r.id] = [r.name, r.tuning.slice()]; });
+  out.chrom = ['Any note (chromatic)', []];
+  return out;
+}
