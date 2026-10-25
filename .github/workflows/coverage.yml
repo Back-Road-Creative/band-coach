@@ -1,7 +1,7 @@
 name: coverage
 
 # Unit-test coverage of src/core, src/song and src/audio, once a week and on
-# demand, with a line-coverage floor on src/core (tests/unit/coverage-floor.mjs).
+# demand, with a line-coverage floor on each of them (tests/unit/coverage-floor.mjs).
 # A separate file from ci.yml on purpose: bin/autoland.py counts every ci.yml
 # run on a commit whatever its event, so a `schedule` trigger there would feed
 # the merge barrier. Separate from weekly-current-browser.yml too: that one runs
@@ -34,7 +34,7 @@ jobs:
       - run: npm ci
       # Some unit tests read the built page, as in ci.yml (npm test's pretest).
       - run: node build/build.mjs
-      - name: unit coverage, then the src/core floor
+      - name: unit coverage, then the per-directory floors
         run: npm run coverage
       - name: keep the lcov report
         if: always()
