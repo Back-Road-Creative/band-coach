@@ -2205,7 +2205,7 @@ function mountSongsPanel(hostEl, api) {
     const inter = interludeAfter({ prev: step, passed, next: practice.plan.steps[practice.stepIndex] || null, mode: practice.mode, unassessed: !!opts.unassessed });
     if (inter && inter.blocking) practice.interlude = inter.step;
     else if (inter && inter.review) {
-      reviewStore.set({ v: 1, items: addReview(reviewQueue(), { ...inter.review, songId: practice.song.id, partId: practice.partId, instrumentId: practice.instrumentId }, Date.now()) });
+      reviewStore.set({ v: 1, items: addReview(reviewQueue(), { ...inter.review, songId: practice.song.id, partId: practice.partId, instrumentId: practice.instrumentId, title: practice.song.title }, Date.now()) });
       practice.transferNote = t('songs.transfer.queued', { bars: (inter.review.bars[0] + 1) + '-' + (inter.review.bars[1] + 1) });
     }
     // The learner moved on from the top of this lesson, so a review queued

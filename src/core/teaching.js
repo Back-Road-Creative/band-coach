@@ -173,12 +173,14 @@ export function sanitizeReviewQueue(raw) {
   const out = [];
   for (const e of items) {
     if (!e || typeof e !== 'object') continue;
-    const { songId, partId, instrumentId, phraseIndex, bars, kind, at } = e;
+    const { songId, partId, instrumentId, phraseIndex, bars, kind, at, title } = e;
     if (typeof songId !== 'string' || typeof partId !== 'string' || typeof kind !== 'string') continue;
     if (!Array.isArray(bars) || bars.length !== 2 || !bars.every(Number.isInteger)) continue;
     if (!Number.isFinite(at)) continue;
     if (phraseIndex !== null && !Number.isInteger(phraseIndex)) continue;
-    out.push({ songId, partId, instrumentId: typeof instrumentId === 'string' ? instrumentId : null, phraseIndex, bars: [bars[0], bars[1]], kind, at });
+    // title (F5): the song's name, so the app's plan line can say which song is due
+    // without opening the song store; absent on reviews queued before it existed.
+    out.push({ songId, partId, instrumentId: typeof instrumentId === 'string' ? instrumentId : null, phraseIndex, bars: [bars[0], bars[1]], kind, at, ...(typeof title === 'string' ? { title } : {}) });
     if (out.length >= REVIEW_MAX) break;
   }
   return out;

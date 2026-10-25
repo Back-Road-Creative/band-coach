@@ -742,6 +742,9 @@ passage is instead queued for a **delayed review** (one per song and part, the l
 with save, load and the progress backup) and the lesson simply tells you so; the next time you open
 that song in a later session, its first step reminds you to play that passage through once. Check
 mode never queues a review, and neither does a step your chosen hand rests through.
+You do not have to remember to open Songs: in a later session, today's plan line names the review
+first ("Today: review Hot Cross Buns, bars 3-4, then ..."), and a **Review** button beside the
+instrument options opens that song and part at the review, on the instrument it was queued for.
 
 ## Play along with a recording
 
