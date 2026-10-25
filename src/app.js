@@ -2734,7 +2734,9 @@ import { register as registerPathway } from './ui/pathway.js';
   function showBackupNudge(text) { $('backupNudgeText').textContent = text; $('backupNudge').hidden = false; }
   function noteBackupMade(t) { lastBackupAt = t; try { localStorage.setItem(BACKUP_AT_KEY, String(t)); } catch (e) {} }
   function backupLibrary() { try { return createLibrary(indexedDbStore(indexedDB, 'bandcoach-songs')); } catch (e) { return createLibrary(memoryStore()); } }
-  async function doExportProgress() { const songs = await backupLibrary().exportAll(); return exportProgressFile(DB, { appVersion: APP_VERSION, now: Date.now, songs }); }
+  // The song store opens lazily, so a blocked or broken IndexedDB surfaces here, not in backupLibrary():
+  // the progress is still exported, and `songsMissing` lets saveBackup say the songs are not in the file.
+  async function doExportProgress() { let songs = [], songsMissing = false; try { songs = await backupLibrary().exportAll(); } catch (e) { songsMissing = true; } const env = exportProgressFile(DB, { appVersion: APP_VERSION, now: Date.now, songs }); if (songsMissing) Object.defineProperty(env, 'songsMissing', { value: true }); return env; }
   async function saveBackup() {
     const env = await doExportProgress();
     const blob = new Blob([JSON.stringify(env, null, 2)], { type: 'application/json' });
@@ -2743,7 +2745,7 @@ import { register as registerPathway } from './ui/pathway.js';
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
     noteBackupMade(Date.now()); $('backupNudge').hidden = true;
-    coach(t('backup.saved'));
+    coach(t(env.songsMissing ? 'backup.savedNoSongs' : 'backup.saved'));
   }
   async function doImportProgress(textOrChecked) {
     const result = typeof textOrChecked === 'string' ? importProgressFile(textOrChecked) : textOrChecked; // a pre-checked result: parsed once
