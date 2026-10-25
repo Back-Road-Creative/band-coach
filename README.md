@@ -283,9 +283,9 @@ commands there. CI runs the full `pretest` → `test` → `posttest` chain on ev
 request runs the families its changed files select (above).
 
 `npm run coverage` measures unit-test line coverage of `src/core`, `src/song` and `src/audio`, writes
-`coverage/lcov.info` (git-ignored) and fails if `src/core` falls below the floor in
-`tests/unit/coverage-floor.mjs` (`COVERAGE_FLOOR_PERCENT`, 98). It is not part of `npm test`; the
-weekly `coverage.yml` workflow runs it and keeps the report as an artifact.
+`coverage/lcov.info` (git-ignored) and fails if any of them falls below its floor in
+`tests/unit/coverage-floor.mjs` (`COVERAGE_FLOORS`: core 98, song 97, audio 99) or is missing from the report. It is not part of `npm test`; the
+weekly `coverage.yml` workflow runs it, keeps the report as an artifact and opens one issue when the run fails.
 
 The helper looks for a browser in this order: the `CHROME_BIN` environment
 variable, a Playwright headless-shell install under
