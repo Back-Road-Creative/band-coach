@@ -1,0 +1,58 @@
+// F10: after the first logged session the app asks the browser to keep its
+// data, and Settings says whether it is kept and about how much is stored.
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { HTML_PATH } from '../helpers/html-path.mjs';
+import { launchPage } from '../helpers/browser.mjs';
+
+const fakeStorage = (grant) =>
+  "(() => { let kept = false; window.__persistCalls = 0; const sm = { persisted: async () => kept, persist: async () => { window.__persistCalls++; kept = " + grant + "; return kept; }, estimate: async () => ({ usage: 50000, quota: 1e9 }) };" +
+  " Object.defineProperty(navigator, 'storage', { configurable: true, get: () => sm }); })();";
+const profile = (prefs) => "localStorage.setItem('bandcoach.v1', JSON.stringify({ prefs: " + JSON.stringify(prefs) + " }));";
+const status = "(() => { const n = document.getElementById('keepStatus'); return { hidden: n.hidden, text: n.textContent }; })()";
+
+async function loggedSession(page) {
+  await page.evaluate('window.__coach.startWithoutMic()');
+  await page.evaluate('window.__coach.sess().judged = 8');
+  await page.clickSelector('#endBtn');
+}
+async function openSettings(page) {
+  await page.evaluate("document.querySelector('#mainNav button[data-route=\"settings\"]').click()");
+}
+
+test('a logged session asks the browser to keep progress, and Settings says it is kept', async (t) => {
+  const page = await launchPage(HTML_PATH, { initScript: fakeStorage('true') + profile({ mod: 'kbd' }) });
+  t.after(() => page.close());
+  assert.equal(await page.evaluate('window.__persistCalls'), 0, 'nothing is asked at start-up');
+  await loggedSession(page);
+  await page.waitFor('window.__persistCalls === 1');
+  await openSettings(page);
+  await page.waitFor("!document.getElementById('keepStatus').hidden");
+  const got = await page.evaluate(status);
+  assert.match(got.text, /keeps your progress/, `got: ${JSON.stringify(got.text)}`);
+  assert.match(got.text, /49 KB/);
+  assert.deepEqual(await page.evaluate('window.__coach.errors ? window.__coach.errors() : []'), []);
+});
+
+test('a session too short to log asks nothing', async (t) => {
+  const page = await launchPage(HTML_PATH, { initScript: fakeStorage('true') + profile({ mod: 'kbd' }) });
+  t.after(() => page.close());
+  await page.evaluate('window.__coach.startWithoutMic()');
+  await page.clickSelector('#endBtn');
+  assert.equal(await page.evaluate('window.__persistCalls'), 0);
+});
+
+test('when the browser will not keep it, Settings says so and points at a backup, in Spanish too', async (t) => {
+  const page = await launchPage(HTML_PATH, { initScript: fakeStorage('false') + profile({ mod: 'kbd', locale: 'es' }) });
+  t.after(() => page.close());
+  await openSettings(page);
+  await page.waitFor("!document.getElementById('keepStatus').hidden");
+  assert.match((await page.evaluate(status)).text, /copia de seguridad/);
+});
+
+test('a browser without the storage API shows no line', async (t) => {
+  const page = await launchPage(HTML_PATH, { initScript: "Object.defineProperty(navigator, 'storage', { configurable: true, get: () => undefined });" + profile({ mod: 'kbd' }) });
+  t.after(() => page.close());
+  await openSettings(page);
+  assert.equal((await page.evaluate(status)).hidden, true);
+});
