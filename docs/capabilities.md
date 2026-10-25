@@ -78,8 +78,10 @@ yet checked". Tier names never appear in the app.
 
 ## Measured detection figures
 
-What the test suite actually measures about note detection today. Every number below is printed by
-the command shown; none is typed from memory, and none comes from a real microphone, a real room or
+What the test suite actually measures about note detection today. Every number below is generated into
+`src/core/detection-figures.json` by `node build/detection-figures.mjs`, checked against a fresh run and
+against this section by `tests/unit/detection-figures.test.mjs`, and shown in the app under Settings >
+How this works; none is typed from memory, and none comes from a real microphone, a real room or
 a real instrument. They are regression floors on synthetic input, not a validated accuracy claim.
 
 **Reproduce:** `npm run build && node --test tests/unit/multipitch.test.mjs tests/unit/eval-roundtrip.test.mjs`
@@ -110,11 +112,7 @@ settings; it is not a measurement of any real instrument. Mean F1 over the nine 
 | free-reed family | 0.848 |
 | voice family | 0.785 |
 
-Per starter song (keys profile), F1 with matched / reference / estimated notes: Hot Cross Buns
-0.741 (10 of 17, 10 estimated); Mary Had a Little Lamb 0.791 (17 of 26, 17); Au clair de la lune
-0.842 (8 of 11, 8); Twinkle, Twinkle, Little Star 0.727 (24 of 42, 24); Frère Jacques 0.933 (28 of
-32, 28); London Bridge Is Falling Down 0.979 (23 of 24, 23); Ode to Joy (theme) 0.824 (21 of 30,
-21); Amazing Grace (New Britain) 0.824 (14 of 17, 17); Minuet in G 0.968 (30 of 32, 30).
+Per starter song (keys profile), F1 with matched of reference notes and notes estimated: Hot Cross Buns 0.741 (10 of 17, 10 estimated); Mary Had a Little Lamb 0.791 (17 of 26, 17 estimated); Au clair de la lune 0.842 (8 of 11, 8 estimated); Twinkle, Twinkle, Little Star 0.727 (24 of 42, 24 estimated); Frère Jacques 0.933 (28 of 32, 28 estimated); London Bridge Is Falling Down 0.979 (23 of 24, 23 estimated); Ode to Joy (theme) 0.824 (21 of 30, 21 estimated); Amazing Grace (New Britain) 0.824 (14 of 17, 17 estimated); Minuet in G 0.968 (30 of 32, 30 estimated).
 
 **Not measured, so no figure is given:**
 
