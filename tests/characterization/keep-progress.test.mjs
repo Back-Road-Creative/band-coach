@@ -57,14 +57,14 @@ test('a browser without the storage API shows no line', async (t) => {
   assert.equal((await page.evaluate(status)).hidden, true);
 });
 
-// The line fills in after an async read, so it sits below the backup
-// controls: appearing must not move a button someone (or a test) is about to click.
-test('the kept-or-not line appearing does not move the reset, save or restore controls', async (t) => {
+// The line fills in after an async read, so it sits at the very end of
+// Settings: appearing must not move any control someone (or a test) is about to click.
+test('the kept-or-not line appearing does not move any control in Settings', async (t) => {
   const slow = "(() => { const later = (v) => new Promise((r) => setTimeout(() => r(v), 300)); const sm = { persisted: () => later(true), persist: () => later(true), estimate: () => later({ usage: 50000 }) };" +
     " Object.defineProperty(navigator, 'storage', { configurable: true, get: () => sm }); })();";
   const page = await launchPage(HTML_PATH, { initScript: slow + profile({ mod: 'kbd' }) });
   t.after(() => page.close());
-  const tops = "['resetBtn', 'backupSaveBtn'].map((id) => document.getElementById(id).getBoundingClientRect().top).concat(document.querySelector('label[for=\"backupRestoreInput\"]').getBoundingClientRect().top)";
+  const tops = "Array.from(document.querySelectorAll('#settingsView button, #settingsView select, #settingsView input, #settingsView label')).map((n) => (n.id || n.htmlFor || n.textContent.trim()) + ' ' + n.getBoundingClientRect().top)";
   await openSettings(page);
   assert.equal((await page.evaluate(status)).hidden, true, 'the line is still waiting on the browser');
   const before = await page.evaluate(tops);

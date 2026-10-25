@@ -342,7 +342,7 @@ blocking it), a plain-language status appears both on the main practice screen a
 a later save succeeds — you never have to open Settings to find out progress is not being kept. Open
 blocking it), Settings shows a plain-language status until a later save succeeds. After the first
 session long enough to log, Band Coach asks the browser to keep its data even when the device runs
-low on space (`navigator.storage.persist()`, `src/core/storage-keep.js`), and Settings says whether
+low on space (`navigator.storage.persist()`, `src/core/storage-keep.js`), and the foot of Settings says whether
 it does and about how much is stored, or that it may not and a backup is the safe copy. Open
 the Settings screen for "Save a backup", which downloads
 `band-coach-progress.json`, and "Restore a backup", which loads one back in. The backup file now
