@@ -111,7 +111,13 @@ test('the voices budget fails loudly if its module is renamed away', async () =>
 // bytes, 9,191 under. U11 (settings and progress screens, both languages)
 // measured 1,262,945 merged onto that main, +13,845, which is 4,654 over.
 // 1.25MB leaves about 47KB past U11 and still no room for a media library.
-const TOTAL_BUDGET_BYTES = 1.25 * 1024 * 1024;
+// Raised again to 1.3MB (2026-10-25), measured the same way: main (78757dc)
+// built to 1,311,845 bytes, 1,125 over, so main itself went red. #593 and
+// #594 each fit on their own base; landing together they did not. The next
+// two units measured on that main: the Install offer and copy age at
+// 1,314,438 (+2,593) and end-on-a-win at 1,314,719 (+2,874). 1.3MB leaves
+// about 51KB past main and still no room for a media library.
+const TOTAL_BUDGET_BYTES = Math.floor(1.3 * 1024 * 1024);
 
 test('the built single-file app stays under its total size ceiling', async () => {
   const outDir = mkdtempSync(join(tmpdir(), 'band-coach-total-budget-'));
