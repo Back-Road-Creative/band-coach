@@ -28,12 +28,14 @@ export const FALLBACK_RANGE = Object.freeze({ fmin: 36, fmax: 1600 });
 // range, without reopening a full octave either side -- the interval YIN's
 // autocorrelation most often mistakes a fundamental for, which is exactly
 // the failure mode narrowing the range is meant to remove.
+import { midiToFreq } from '../core/pitch.js';
+
 const MARGIN_SEMITONES = 3;
 
 // A4 = MIDI 69 = 440 Hz, the standard reference this app tunes to everywhere
 // else (see app.js's own `mfreq`/`fmidi`).
 export function midiToHz(midi) {
-  return 440 * Math.pow(2, (midi - 69) / 12);
+  return midiToFreq(midi);
 }
 
 // rec: an instrument record (src/instruments/schema.js shape) or any

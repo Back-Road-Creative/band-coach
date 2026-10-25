@@ -7,11 +7,11 @@
 // transcribe.js or the UI here -- that is a later unit's job.
 
 import { FFTProcessor } from './fft.js';
+import { midiToFreq as pitchMidiToFreq } from '../../core/pitch.js';
 
-// Standard 12-TET reference: A4 = MIDI 69 = 440 Hz.
-export function midiToFreq(midi) {
-  return 440 * Math.pow(2, (midi - 69) / 12);
-}
+// Standard 12-TET reference: A4 = MIDI 69 = 440 Hz (the one shared conversion).
+// One-argument on purpose: callers pass it straight to Array#map, which would hand the index in as a4.
+export const midiToFreq = (midi) => pitchMidiToFreq(midi);
 
 // Fractional FFT bin index for a frequency, given sampleRate/fftSize.
 function freqToBin(freq, sampleRate, fftSize) {

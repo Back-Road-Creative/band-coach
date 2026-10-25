@@ -5,9 +5,10 @@
 // `a4` option. beatSynchronousChroma folds per-frame chroma to one vector per beat for
 // key.js/chords.js.
 
+import { freqToMidi } from '../../core/pitch.js';
+
 const MIN_FREQ = 55, MAX_FREQ = 5000; // ~A1 .. well above the top of a vocal/instrument fundamental
 
-const freqToMidi = (freq, a4) => 69 + 12 * Math.log2(freq / a4);
 
 export function chromaFromSpectrum(magnitude, sampleRate, fftSize, opts = {}) {
   const a4 = opts.a4 ?? 440;

@@ -13,6 +13,7 @@ import { sanitizeKitPrefs } from '../instruments/how/kit-presets.js';
 // valid instrument and the app booted on Object's own constructor.
 import { validateEvent, boundEvents } from './learning-events.js';
 import { sanitizeNoteNaming } from './note-names.js';
+import { sanitizeA4 } from './pitch.js';
 import { ROOM_CHECK_VERSION } from '../audio/levels.js';
 import { exerciseRangeFor, tonicFromRange } from '../instruments/how/voice-range.js';
 
@@ -83,6 +84,8 @@ export function sanitizeDB(v, defaultLatencyMs, modelNow, deps) {
   // sharps, flats or mixed spelling -- unknown or missing sanitises to
   // today's default so nname() never has a pref it can't render.
   d.prefs.noteNaming = sanitizeNoteNaming(p.noteNaming);
+  // A4 tuning reference: whole Hz in 415..466 (orchestras tuned to 442 etc.), anything else is the standard 440.
+  d.prefs.a4 = sanitizeA4(p.a4);
   d.prefs.harpKey = (Number.isInteger(p.harpKey) && p.harpKey >= 0 && p.harpKey <= 11) ? p.harpKey : 0;
   // Piano hands together B1: Both/Right only/Left only, same allow-list
   // sanitising pattern as prefs.wind/prefs.voice above -- an unrecognised
