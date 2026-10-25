@@ -1,4 +1,4 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><meta name="band-coach-version" content=""><title>Band Coach</title>
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><meta name="band-coach-version" content=""><meta name="band-coach-built" content=""><title>Band Coach</title>
 <style>
 /*__BAND_COACH_CSS__*/
 </style>
@@ -88,6 +88,7 @@
         <button type="button" class="small" id="updateCheckBtn" data-i18n="rail.checkUpdates">Check for updates</button>
         <p class="update-check-help" id="updateCheckHelp" data-i18n="rail.updateHelp">Asks the Band Coach website for the latest version number. Sends nothing about your playing.</p>
         <span id="updateCheckResult" role="status"></span>
+        <p class="update-check-help" id="copyAge" hidden></p>
       </div>
     </div>
     <div class="settings-group">
@@ -103,6 +104,7 @@
       <p id="helpText"></p>
       <p><strong data-i18n="settings.decides">How it decides:</strong> <span data-i18n="settings.decidesBody">no dice. The next exercise is always the item or move with the biggest need (low knowledge, weak move, not seen lately), so the same results always give the same lesson. Knowledge fades if you stay away, so old material comes back.</span></p>
     </div>
+    <button type="button" class="small" id="installBtn" hidden data-i18n="settings.install">Install Band Coach</button>
     <p class="update-check-help" id="keepStatus" hidden></p>
   </section>
 
