@@ -224,6 +224,17 @@ export const en = {
   // provenance both count as unreviewed).
   'fingerings.unavailable': "Guidance for this instrument isn't ready here yet.",
 
+  // Metronome tool (src/ui/metronome.js).
+  'metronome.title': 'Metronome',
+  'metronome.tag': 'steady click',
+  'metronome.intro': 'A steady click to play along with. Pick a tempo and how many beats are in a bar; the first beat of each bar sounds higher.',
+  'metronome.tempo': 'Tempo (beats per minute)',
+  'metronome.tempoSlider': 'Tempo slider',
+  'metronome.beats': 'Beats per bar',
+  'metronome.start': 'Start',
+  'metronome.stop': 'Stop',
+  'metronome.noAudio': 'This browser could not start sound, so the metronome cannot click.',
+
   // Ear training screen (src/ui/ear.js): its own labels, buttons and status lines. Exercise prompts, level names and the "why" text come from src/core/ear/* and stay English.
   'ear.title': 'Ear training',
   'ear.intro': 'Listen, then answer. Each exercise has its own level that moves up after a run of right answers and down after repeated misses.',
@@ -733,6 +744,17 @@ export const es = {
   'setup.noOutput': 'Sin salida MIDI (en silencio)',
 
   'fingerings.unavailable': 'La guía para este instrumento aún no está lista aquí.',
+
+  // Herramienta de metrónomo (src/ui/metronome.js).
+  'metronome.title': 'Metrónomo',
+  'metronome.tag': 'pulso constante',
+  'metronome.intro': 'Un pulso constante para tocar encima. Elige un tempo y cuántos tiempos tiene el compás; el primer tiempo de cada compás suena más agudo.',
+  'metronome.tempo': 'Tempo (pulsos por minuto)',
+  'metronome.tempoSlider': 'Control deslizante del tempo',
+  'metronome.beats': 'Tiempos por compás',
+  'metronome.start': 'Iniciar',
+  'metronome.stop': 'Detener',
+  'metronome.noAudio': 'Este navegador no pudo iniciar el sonido, así que el metrónomo no puede sonar.',
 
   // Ear training screen (src/ui/ear.js): its own labels, buttons and status lines. Exercise prompts, level names and the "why" text come from src/core/ear/* and stay English.
   'ear.title': 'Entrenamiento auditivo',

@@ -352,6 +352,13 @@
   .panel-songs-record-btn { align-self: flex-start; }
   /* */
   /* */
+  .panel-metronome .metronome-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-block: 10px; }
+  .panel-metronome input[type=number] { width: 5em; min-height: 32px; }
+  .panel-metronome input[type=range] { flex: 1 1 140px; min-width: 0; min-height: 32px; }
+  .panel-metronome select, .panel-metronome button { min-height: 32px; min-width: 32px; }
+  .panel-metronome .metronome-dot { width: 28px; height: 28px; border-radius: 50%; background: var(--panel-2); border: 1px solid var(--line); }
+  .panel-metronome .metronome-dot.on { background: var(--good); }
+  .panel-metronome .metronome-dot.on.accent { background: var(--accent, var(--good)); box-shadow: 0 0 0 3px var(--line); }
   .panel-ear .ear-exercises { display: flex; flex-wrap: wrap; gap: 8px; margin-block: 10px; }
   .panel-ear .ear-status { color: var(--muted); font-size: 0.875rem; }
   .panel-ear .ear-prompt { font: 700 1.125rem var(--display); letter-spacing: .02em; }

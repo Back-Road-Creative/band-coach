@@ -84,6 +84,7 @@ import { register as registerEditor, __getDebugSong } from './ui/editor.js';
 //
 //
 import { registerEar, __earTestHook } from './ui/ear.js';
+import { registerMetronome } from './ui/metronome.js';
 //
 //
 import { register as registerTheory, currentLessonQuestion as theoryCurrentQuestion } from './ui/theory.js';
@@ -634,7 +635,7 @@ import { register as registerPathway } from './ui/pathway.js';
   // instrument-sheet Tools group as Tuner/Capture a melody/Interval drill/
   // Rhythm, via buildPanelToolButton() in buildPicker() below, rather than a
   // second disclosure of their own.
-  const PANEL_TOOL_IDS = ['ear', 'fingerings', 'theory'];
+  const PANEL_TOOL_IDS = ['ear', 'fingerings', 'theory', 'metronome'];
   // U2/U-parent: keyed variant id -> parent id, for the same-instrument
   // groupings the picker collapses under one parent (buildPicker()/setMod()
   // below). Two sources feed it: a hand-declared pair for the two families
@@ -2616,8 +2617,8 @@ import { register as registerPathway } from './ui/pathway.js';
   // no change there): real instruments render straight into #picker as
   // before, most prominent; TOOLS (Tuner, Capture a melody), the two
   // pseudo-mods that read as tools to a learner rather than instruments to
-  // pick up (TOOL_MOD_IDS: 'ear', 'rhy'), and the three panel tools
-  // (PANEL_TOOL_IDS: Ear training, How to play it, Music theory) render into
+  // pick up (TOOL_MOD_IDS: 'ear', 'rhy'), and the four panel tools
+  // (PANEL_TOOL_IDS: Ear training, How to play it, Music theory, Metronome) render into
   // a quieter nested .picker-tools group instead. P2b-3: this group is a
   // plain, always-visible group now, not a shut-by-default <details> -- once
   // the instrument sheet itself is open (setInstrumentSheetOpen), everything
@@ -2708,8 +2709,8 @@ import { register as registerPathway } from './ui/pathway.js';
     // P2b-3: a plain labelled group, not a <details> -- always visible the
     // moment the instrument sheet itself is open, no second disclosure a
     // learner has to find. Tuner/Capture a melody/Interval drill/Rhythm
-    // (toolIds) plus the three panel tools (PANEL_TOOL_IDS -- Ear training,
-    // How to play it, Music theory) all live here now.
+    // (toolIds) plus the four panel tools (PANEL_TOOL_IDS -- Ear training,
+    // How to play it, Music theory, Metronome) all live here now.
     const toolsGroup = document.createElement('div'); toolsGroup.className = 'picker-tools'; toolsGroup.id = 'pickerTools'; toolsGroup.setAttribute('role', 'group'); toolsGroup.setAttribute('aria-labelledby', 'pickerToolsLabel');
     const label = document.createElement('span'); label.id = 'pickerToolsLabel'; label.className = 'picker-tools-label'; label.textContent = t('picker.tools'); toolsGroup.appendChild(label);
     toolIds.forEach(m => toolsGroup.appendChild(buildPickerButton(m, MODS[m] || TOOLS[m])));
@@ -2890,6 +2891,7 @@ import { register as registerPathway } from './ui/pathway.js';
   //
   //
   registerEar(panels);
+  registerMetronome(panels);
   //
   //
   registerTheory(panels);
