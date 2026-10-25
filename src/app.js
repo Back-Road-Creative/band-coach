@@ -709,6 +709,9 @@ import { register as registerPathway } from './ui/pathway.js';
   const APP_VERSION = resolveAppVersion(versionMeta && versionMeta.content);
   const BACKUP_AT_KEY = 'bandcoach.v1.backupAt';
   let lastBackupAt = 0; try { lastBackupAt = +localStorage.getItem(BACKUP_AT_KEY) || 0; } catch (e) {}
+  // F2: string instruments whose tune-first offer was answered on this device (per device, like the backup date).
+  const TUNE_ASKED_KEY = 'bandcoach.v1.tuneAsked';
+  let tuneAsked = []; try { const a = JSON.parse(localStorage.getItem(TUNE_ASKED_KEY)); if (Array.isArray(a)) tuneAsked = a.filter(x => typeof x === 'string'); } catch (e) {}
   let DB, mod = 'kbd', S = null;
   // U5: whether a REAL prior choice exists, sampled from the raw saved
   // prefs in loadDB() before sanitizeDB's 'kbd' default papers over "nothing
@@ -2025,8 +2028,15 @@ import { register as registerPathway } from './ui/pathway.js';
   let pathwayLineShown = false;
   // Start before any instrument was chosen: open the sheet and put focus on its first button instead of starting (or closing it).
   function askInstrumentFirst() { if (instrumentChosen) return false; setInstrumentSheetOpen(true); const b = document.querySelector('#picker button'); if (b) b.focus(); return true; }
+  // F2: before the first session on a string instrument, offer to tune first. "Tune first" opens the
+  // tuner on this instrument's own strings; either answer is remembered, and practising it once ends the offer.
+  function refreshTuneFirst() { const tg = TUNINGS[mod]; $('tuneFirst').hidden = !(instrumentChosen && !sess && mod !== 'chrom' && tg && tg[1].length && !tuneAsked.includes(mod) && !DB.sessions.some(r => r && r.mod === mod)); }
+  function noteTuneAsked(m) { if (!tuneAsked.includes(m)) tuneAsked.push(m); try { localStorage.setItem(TUNE_ASKED_KEY, JSON.stringify(tuneAsked)); } catch (e) {} $('tuneFirst').hidden = true; }
+  $('tuneFirstGo').addEventListener('click', () => { const m = mod; noteTuneAsked(m); tunerKind = m; setMod('tuner'); });
+  $('tuneFirstSkip').addEventListener('click', () => noteTuneAsked(mod));
   function startSession() {
     if (askInstrumentFirst()) return;
+    $('tuneFirst').hidden = true;
     document.body.classList.add('practising'); refreshModelClock(); ensureAudio(); sess = newSession(); recent = []; streak = 0; errCount = 0; task = null; lastItem = null; lastInputAt = now(); chunk = 0; say('');
     // Session length E7c: the learner's own choice (DB.prefs.sessionMinutes,
     // 0 meaning no limit) sets today's target before the tired check below,
@@ -2615,6 +2625,7 @@ import { register as registerPathway } from './ui/pathway.js';
     // are enough; #prompt stays empty until a real exercise names one.
     $('prompt').textContent = ''; $('hint').textContent = ''; $('choices').hidden = true; say(''); if (MODS[m]) coach(idleCoachLine());
     renderOpts(); ioRefresh(); showAll(); if (!booting) instrumentChosen = true; if (instrumentChosen) { revealStage(); save(); }
+    refreshTuneFirst();
   }
   // Two visual tiers inside the one #picker container (kept as a single id
   // so every existing `#picker button` selector -- setMod's aria-pressed
