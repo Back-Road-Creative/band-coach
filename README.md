@@ -364,7 +364,7 @@ songs are left exactly as they were. An older backup made before songs were incl
 it just has no songs to bring back. Restoring a backup that holds a song you already have (identical notes and title) keeps the one copy instead of adding a "(2)" duplicate; picking a file again, or "Save a copy", still adds a second song. A backup file that is damaged or was written by a newer Band
 Coach is refused with a message explaining why (in the language you chose), before any "replace your progress" question is asked, and your current progress is left untouched. That question names the day the backup was made, so an old file picked by mistake is easy to spot, and once a restore is done Settings offers "Undo restore", which puts your progress back as it was just before (songs the backup added stay in your library). A quiet reminder appears at the end of a session long enough to be logged (8 answers or more) when you have not saved a
 backup in the last week — never after a session too short to log, since there is nothing yet to lose. If the progress saved on this device cannot be read when Band Coach opens, it says so in the same place, starts fresh and keeps the unreadable copy, so restoring a backup brings your progress back. The "My progress" panel also shows a practice calendar (minutes and
-level changes, one cell per day, for the last 8 weeks) and a daily minutes goal with a streak — the
+level changes, one cell per day, for the last 8 weeks) and a daily minutes goal, reported as a consistency record ("practiced N of the last 7 days" and "N of the last 28 days", and the same counts for days that hit the goal) rather than a streak, so a missed day lowers a count and never resets anything to zero — the
 practice log itself only keeps the most recent 60 sessions, so days older than that say "earlier
 sessions not kept" rather than a false zero. "Print this week's report" turns the last 7 days into a
 one-page, printer-friendly summary for a teacher or parent. The backup, restore and "Check for updates" messages
@@ -603,6 +603,11 @@ tempo, in 5 % steps, and is kept per song. The backing, the count-in and the jud
 A clean Check of the whole piece saves that speed as the song's best: the end screen says "Clean at
 70% speed." (or "… (up from 60%)" when it beats the last best), and the song list shows "Clean at
 70%" next to the song. Learn-mode tries never set it.
+
+After a judged try, **Hear your try** plays back what the app heard, then the target phrase. No
+sound is recorded: the try is rebuilt from the notes it caught, each at the moment you played it,
+so a wrong or late note is heard wrong or late (a pitchless clap or tap plays as a click). Starting
+another try, or moving past a Listen step, clears it.
 
 Opening any song shows one row of plain actions directly above its practise section: **Edit
 notes**, **Play along**, **Export**, **Share**, **Save a copy**, **Print** — a starter tune's Edit

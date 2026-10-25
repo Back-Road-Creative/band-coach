@@ -22,8 +22,8 @@ const sess = (offsetDays, over) => ({
 
 test('summarize on an empty log returns zeroed, well-formed output', () => {
   const s = summarize([], { now: NOW });
-  assert.equal(s.currentStreak, 0);
-  assert.equal(s.bestStreak, 0);
+  assert.equal(s.practisedLast7, 0);
+  assert.equal(s.practisedLast28, 0);
   assert.deepEqual(s.minutesPerDay, []);
   assert.deepEqual(s.minutesPerWeek, []);
   assert.deepEqual(s.perInstrument, []);
@@ -48,24 +48,22 @@ test('summarize computes minutes per day and per-instrument time', () => {
   assert.equal(kbd.maxLevel, 2);
 });
 
-test('summarize: current streak counts consecutive days back from today, breaking on a gap', () => {
+test('summarize: practised days count distinct days in the last 7, a gap day is a missed day not a reset', () => {
   const log = [sess(0), sess(1), sess(2), sess(4)]; // gap at day 3
   const s = summarize(log, { now: NOW });
-  assert.equal(s.currentStreak, 3);
-  assert.equal(s.bestStreak, 3);
+  assert.equal(s.practisedLast7, 4);
+  assert.equal(s.practisedLast28, 4);
 });
 
-test('summarize: today still silent keeps yesterday\'s run alive (same grace day as the goal streak)', () => {
-  const log = [sess(1), sess(2), sess(3)]; // nothing today yet
-  const s = summarize(log, { now: NOW });
-  assert.equal(s.currentStreak, 3);
-  assert.equal(s.bestStreak, 3);
+test('summarize: today still silent does not lose the days before it', () => {
+  const s = summarize([sess(1), sess(2), sess(3)], { now: NOW });
+  assert.equal(s.practisedLast7, 3);
 });
 
-test('summarize: a run that ended two days ago is over', () => {
-  const s = summarize([sess(2), sess(3)], { now: NOW });
-  assert.equal(s.currentStreak, 0);
-  assert.equal(s.bestStreak, 2);
+test('summarize: days older than the window are not counted in it', () => {
+  const s = summarize([sess(2), sess(3), sess(10)], { now: NOW });
+  assert.equal(s.practisedLast7, 2);
+  assert.equal(s.practisedLast28, 3);
 });
 
 test('summarize: a short history has no earlier window, so the trend is flat, not up', () => {
@@ -90,21 +88,20 @@ test('toTeacherSummary: names instruments and only adds the string/fret caveat w
   assert.ok(both.text.includes('Needs work: Guitar') && /string and fret/.test(both.text));
 });
 
-test('summarize: streaks survive a month boundary', () => {
+test('summarize: practised days survive a month boundary', () => {
   const crossNow = Date.UTC(2026, 9, 2, 12, 0, 0); // Oct 2, 2026
   const crossDay = (offset) => new Date(crossNow - offset * DAY).toISOString().slice(0, 10);
   const log = [0, 1, 2, 3].map((o) => sess(0, { d: crossDay(o) }));
   const s = summarize(log, { now: crossNow });
-  assert.equal(s.currentStreak, 4);
-  assert.equal(s.bestStreak, 4);
+  assert.equal(s.practisedLast7, 4);
 });
 
-test('summarize: streaks survive a year boundary', () => {
+test('summarize: practised days survive a year boundary', () => {
   const crossNow = Date.UTC(2027, 0, 1, 12, 0, 0); // Jan 1, 2027
   const crossDay = (offset) => new Date(crossNow - offset * DAY).toISOString().slice(0, 10);
   const log = [0, 1, 2].map((o) => sess(0, { d: crossDay(o) }));
   const s = summarize(log, { now: crossNow });
-  assert.equal(s.currentStreak, 3);
+  assert.equal(s.practisedLast7, 3);
 });
 
 test('summarize: strongest and needs-work pick highest/lowest average accuracy instrument', () => {

@@ -61,35 +61,11 @@ function validSessions(log) {
     .filter((x) => x._date && typeof x.mod === 'string');
 }
 
-function streaks(dayKeys, nowKey) {
-  const days = new Set(dayKeys);
-  let best = 0;
-  let run = 0;
-  const sorted = Array.from(days).sort();
-  let prev = null;
-  sorted.forEach((k) => {
-    if (prev !== null) {
-      const gapDays = Math.round((parseDay(k) - parseDay(prev)) / DAY_MS);
-      run = gapDays === 1 ? run + 1 : 1;
-    } else {
-      run = 1;
-    }
-    best = Math.max(best, run);
-    prev = k;
-  });
-  // current streak: consecutive days ending today, or yesterday while today is
-  // still silent (same grace day as the goal streak in ledger()).
-  let current = 0;
-  const yKey = dayKey(new Date(parseDay(nowKey).getTime() - DAY_MS));
-  const anchor = days.has(nowKey) ? nowKey : days.has(yKey) ? yKey : null;
-  if (anchor) {
-    let cursor = parseDay(anchor);
-    while (days.has(dayKey(cursor))) {
-      current++;
-      cursor = new Date(cursor.getTime() - DAY_MS);
-    }
-  }
-  return { current, best };
+// How many distinct local days in the last `span` days (today included) have
+// a session. A missed day just lowers the count; nothing resets to zero.
+function daysWithin(dayKeys, nowKey, span) {
+  const start = dayKey(new Date(parseDay(nowKey).getTime() - (span - 1) * DAY_MS));
+  return new Set(dayKeys.filter((k) => k >= start && k <= nowKey)).size;
 }
 
 /**
@@ -136,7 +112,9 @@ export function summarize(log, { now } = {}) {
     if (!needsWork || m.avgAccuracy < needsWork.avgAccuracy) needsWork = m;
   });
 
-  const { current, best } = streaks(sessions.map((s) => dayKey(s._date)), nowKey);
+  const sessionDays = sessions.map((s) => dayKey(s._date));
+  const practisedLast7 = daysWithin(sessionDays, nowKey, 7);
+  const practisedLast28 = daysWithin(sessionDays, nowKey, 28);
 
   const N = 7;
   const recentAcc = mean(sessions.slice(-N).map((s) => clamp(s.acc, 0, 1)));
@@ -155,8 +133,8 @@ export function summarize(log, { now } = {}) {
     totalSessions: sessions.length,
     minutesPerDay,
     minutesPerWeek,
-    currentStreak: current,
-    bestStreak: best,
+    practisedLast7,
+    practisedLast28,
     perInstrument,
     strongest: strongest ? { mod: strongest.mod, avgAccuracy: strongest.avgAccuracy } : null,
     needsWork: needsWork ? { mod: needsWork.mod, avgAccuracy: needsWork.avgAccuracy } : null,
@@ -246,24 +224,18 @@ export function ledger(sessions, { now, weeks = 8, goalMin = 15 } = {}) {
     });
   }
 
-  const byKey = new Map(days.map((d) => [d.day, d]));
-  const yesterdayKey = dayKey(new Date(parseDay(nowKey).getTime() - DAY_MS));
-  let anchor = null;
-  if (byKey.has(nowKey) && byKey.get(nowKey).metGoal) anchor = nowKey;
-  else if (byKey.has(yesterdayKey) && byKey.get(yesterdayKey).metGoal) anchor = yesterdayKey;
-  let goalStreak = 0;
-  if (anchor) {
-    let cursor = parseDay(anchor);
-    for (;;) {
-      const k = dayKey(cursor);
-      const cell = byKey.get(k);
-      if (!cell || !cell.metGoal) break;
-      goalStreak++;
-      cursor = new Date(cursor.getTime() - DAY_MS);
+  // Days that hit the goal in the last 7 / 28 local days, read from the raw per-day
+  // totals so they do not depend on how many weeks the calendar shows.
+  const goalDays = (span) => {
+    let n = 0;
+    for (let i = 0; i < span; i++) {
+      const info = byDay.get(dayKey(new Date(nowDate.getTime() - i * DAY_MS)));
+      if (info && info.minutes >= goalMin) n++;
     }
-  }
+    return n;
+  };
 
-  return { weeks, goalMin, days, goalStreak, truncated: days.some((d) => d.notKept) };
+  return { weeks, goalMin, days, goalDays7: goalDays(7), goalDays28: goalDays(28), truncated: days.some((d) => d.notKept) };
 }
 
 /**
@@ -338,7 +310,7 @@ export function toTeacherSummary(db, { now, learnerName, instrument } = {}) {
   const lines = [];
   lines.push(`${name}'s Band Coach progress report`);
   lines.push(`Sessions logged: ${s.totalSessions}`);
-  lines.push(`Current streak: ${s.currentStreak} day${s.currentStreak === 1 ? '' : 's'} (best: ${s.bestStreak})`);
+  lines.push(`Practiced ${s.practisedLast7} of the last 7 days, ${s.practisedLast28} of the last 28 days`);
   lines.push(`Accuracy trend: ${s.accuracyTrend.direction}`);
   lines.push('');
   lines.push('Time by instrument:');
@@ -370,7 +342,7 @@ export function toTeacherSummary(db, { now, learnerName, instrument } = {}) {
   const html = [
     '<!doctype html><html><head><meta charset="utf-8"><title>Band Coach progress report</title></head><body>',
     `<h1>${escapeHtml(name)}'s Band Coach progress report</h1>`,
-    `<p>Sessions logged: ${s.totalSessions}<br>Current streak: ${s.currentStreak} day(s) (best: ${s.bestStreak})<br>Accuracy trend: ${escapeHtml(s.accuracyTrend.direction)}</p>`,
+    `<p>Sessions logged: ${s.totalSessions}<br>Practiced ${s.practisedLast7} of the last 7 days, ${s.practisedLast28} of the last 28 days<br>Accuracy trend: ${escapeHtml(s.accuracyTrend.direction)}</p>`,
     '<table border="1" cellpadding="4"><thead><tr><th>Instrument</th><th>Minutes</th><th>Sessions</th><th>Avg accuracy</th><th>Level</th></tr></thead><tbody>',
     rows,
     '</tbody></table>',

@@ -1,6 +1,6 @@
 // A finished song lesson leaves its own row in DB.sessions, the same way a
 // built-in drill's endSession() does (fix/song-progress-contract), so
-// "today's minutes", day streak and "last session" all count song
+// "today's minutes", the practised-day counts and "last session" all count song
 // practice too. Drives the built page through a one-note custom song (a
 // teacher "challenge" import, same technique as
 // tests/characterization/songs-hold-tune.test.mjs) on keyboard, so every

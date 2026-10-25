@@ -549,7 +549,7 @@
   #sessLine { font-size: 0.875rem; color: var(--muted); font-variant-numeric: tabular-nums; }
   #feedback { min-height: 2.9em; font-weight: 600; }
   #feedback.ok { color: var(--good); } #feedback.no { color: var(--bad); }
-  .stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+  .stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
   .stat { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
   .stat b { display: block; font: 700 1.625rem/1.1 var(--display); font-variant-numeric: tabular-nums; }
   .stat span { font-size: 0.75rem; color: var(--muted); }
