@@ -38,7 +38,7 @@ test('the history panel shows a practice calendar with shaded cells and screen-r
   assert.ok(metClass >= 1, 'expected at least one day to show as goal-met (today, 20 min >= default 15)');
 });
 
-test('the daily minutes goal is editable, sanitized, and drives the goal streak line', async (t) => {
+test('the daily minutes goal is editable, sanitized, and drives the goal-days line', async (t) => {
   const page = await launchPage(HTML_PATH);
   t.after(() => page.close());
   await seed(page);
@@ -46,8 +46,8 @@ test('the daily minutes goal is editable, sanitized, and drives the goal streak 
 
   const initial = await page.evaluate("document.getElementById('historyGoalInput').value");
   assert.equal(initial, '15');
-  const initialStreak = await page.evaluate("document.getElementById('historyGoalStreak').textContent");
-  assert.match(initialStreak, /Goal streak: 1 day/);
+  const initialGoal = await page.evaluate("document.getElementById('historyGoalDays').textContent");
+  assert.match(initialGoal, /Hit 15 minutes on 1 of the last 7 days and 1 of the last 28\./);
 
   await page.evaluate(`(function () {
     const input = document.getElementById('historyGoalInput');
@@ -56,8 +56,8 @@ test('the daily minutes goal is editable, sanitized, and drives the goal streak 
   })()`);
   const clamped = await page.evaluate("document.getElementById('historyGoalInput').value");
   assert.equal(clamped, '120');
-  const streakAfterRaise = await page.evaluate("document.getElementById('historyGoalStreak').textContent");
-  assert.match(streakAfterRaise, /No current goal streak yet/);
+  const goalAfterRaise = await page.evaluate("document.getElementById('historyGoalDays').textContent");
+  assert.match(goalAfterRaise, /Hit 120 minutes on 0 of the last 7 days and 0 of the last 28\./);
 });
 
 test('the goal is remembered across a reload via DB.panels.history', async (t) => {
@@ -105,4 +105,38 @@ test('the calendar names its weekdays and says what the outline means', async (t
   const o = await page.evaluate("(() => { const c = document.querySelector('.ledger-cell-met'); const probe = (v) => { const e = document.createElement('i'); e.style.color = 'var(--' + v + ')'; c.parentNode.appendChild(e); const r = getComputedStyle(e).color; e.remove(); return r; }; return { out: getComputedStyle(c).outlineColor, text: probe('text'), accent: probe('accent') }; })()");
   assert.notEqual(o.text, o.accent, 'probe colours must differ to prove anything');
   assert.equal(o.out, o.text);
+});
+
+// D18/F9: a consistency record, never a streak. Sessions on 5 of the last 7
+// local days (a gap in the middle) read as "5 of the last 7", not a reset, and
+// no learner-facing text anywhere says "streak".
+const VISIBLE_TEXT = `(function () {
+  const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, { acceptNode: (n) => /^(SCRIPT|STYLE)$/.test(n.parentElement.tagName) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT });
+  let out = ''; while (w.nextNode()) out += w.currentNode.nodeValue + ' ';
+  return out + ' ' + [...document.querySelectorAll('[aria-label],[title]')].map((e) => (e.getAttribute('aria-label') || '') + ' ' + (e.title || '')).join(' ');
+})()`;
+
+test('Progress and the practice stage report practised days of the last 7 and 28, with no streak wording', async (t) => {
+  const page = await launchPage(HTML_PATH);
+  t.after(() => page.close());
+  await page.evaluate(`(function () {
+    const db = window.__coach.db();
+    const ymd = (off) => { const n = new Date(); n.setDate(n.getDate() - off); return n.getFullYear() + '-' + String(n.getMonth() + 1).padStart(2, '0') + '-' + String(n.getDate()).padStart(2, '0'); };
+    db.sessions = [0, 1, 3, 4, 6, 12].map((off) => ({ d: ymd(off), mod: 'kbd', min: 20, acc: 0.7, a1: 0.6, a2: 0.7, from: 1, to: 2, breaks: 0 }));
+    window.localStorage.setItem('bandcoach.v1', JSON.stringify(db));
+  })()`);
+  await page.reload();
+  await page.waitFor('window.__coach && window.__coach.db().mods.kbd', 5000);
+
+  assert.equal(await page.evaluate("document.getElementById('sStreak')"), null, 'the on-screen streak counter is gone');
+  const stage = await page.evaluate(VISIBLE_TEXT);
+  assert.doesNotMatch(stage, /streak/i, 'practice stage');
+  assert.match(await page.evaluate("document.getElementById('sessLine').textContent"), /practiced 5 of the last 7 days/);
+
+  await page.evaluate('window.__coach.openPanel("history")');
+  const summary = await page.evaluate("document.getElementById('historySummary').textContent");
+  assert.match(summary, /Practiced 5 of the last 7 days and 6 of the last 28\./);
+  assert.match(await page.evaluate("document.getElementById('historyGoalDays').textContent"), /Hit 15 minutes on 5 of the last 7 days and 6 of the last 28\./);
+  assert.doesNotMatch(await page.evaluate(VISIBLE_TEXT), /streak/i, 'progress screen');
+  assert.deepEqual(page.exceptions, []);
 });

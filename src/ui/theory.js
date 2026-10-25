@@ -166,7 +166,7 @@ export function register(panels) {
       }
 
       function renderStatus() {
-        lessonStatus.textContent = 'Level ' + lessonState.level + ' of ' + levelCount() + ' -- streak ' + lessonState.streak + '.';
+        lessonStatus.textContent = 'Level ' + lessonState.level + ' of ' + levelCount() + ' -- ' + lessonState.streak + ' right in a row toward the next level.';
       }
 
       function renderQuestion() {

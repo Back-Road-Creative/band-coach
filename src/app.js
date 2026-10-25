@@ -2062,7 +2062,7 @@ import { register as registerPathway } from './ui/pathway.js';
   const today = () => { const d = new Date(); return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2); };
   const dayKey = d => d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2);
   function todayMinutes() { const t = today(); let m = 0; DB.sessions.forEach(x => { if (x.d === t) m += x.min; }); return m + (sess ? sess.active / 60 : 0); }
-  function dayStreak() { const days = {}; DB.sessions.forEach(x => { days[x.d] = 1; }); if (sess) days[today()] = 1; let n = 0; const d = new Date(); while (days[dayKey(d)]) { n++; d.setDate(d.getDate() - 1); } return n; }
+  function practisedDays(span) { const days = {}; DB.sessions.forEach(x => { days[x.d] = 1; }); if (sess) days[today()] = 1; let n = 0; const d = new Date(); for (let i = 0; i < span; i++) { if (days[dayKey(d)]) n++; d.setDate(d.getDate() - 1); } return n; } // a missed day lowers the count, it never resets it
   const tiredPattern = () => { const l = DB.sessions.slice(-3); return l.length === 3 && l.every(x => x.min >= 20 && x.a2 < x.a1 - 0.1); };
   // pathwayLineShown: has this page load already shown the keyboard pathway's
   // "Welcome back" line? Set once startSession() shows it, so a learner who
@@ -2176,7 +2176,7 @@ import { register as registerPathway } from './ui/pathway.js';
     if (!sess) return; document.body.classList.remove('practising'); showUpdateIfIdle(); toneSrcs.forEach(s => { try { s.stop(); } catch (e) {} }); const min = sess.active / 60; let line = 'Session ended. Too short to log.';
     if (sess.judged >= 8) { DB.sessions.push({ d: today(), mod: mod, min: Math.round(min * 10) / 10, acc: sess.ok / sess.judged, a1: mean(sess.first), a2: mean(sess.last), from: sess.from, to: S.level, breaks: sess.breaks }); DB.sessions = DB.sessions.slice(-60);
       let up = null, low = null, lowR = 1; Object.keys(S.item).forEach(id => { const cur = S.item[id], r1 = retrievability(cur, modelNow), r0 = retrievability(sess.m0[id] || cur, modelNow), g0 = r1 - r0; if (up === null || g0 > up.g) up = { id: id, g: g0 }; if (cur.reps >= 3 && (low === null || r1 < lowR)) { low = id; lowR = r1; } });
-      line = 'Session done: ' + Math.round(min * 10) / 10 + ' min, ' + Math.round(100 * sess.ok / sess.judged) + '% right, best streak ' + sess.bestStreak + ', level ' + sess.from + ' to ' + S.level + '.' + (up && up.g > 0.05 ? ' Most improved: ' + inf(up.id).short + '.' : '') + (low ? ' Next time starts with extra ' + inf(low).short + '.' : ''); }
+      line = 'Session done: ' + Math.round(min * 10) / 10 + ' min, ' + Math.round(100 * sess.ok / sess.judged) + '% right, best run ' + sess.bestStreak + ' right in a row, level ' + sess.from + ' to ' + S.level + '.' + (up && up.g > 0.05 ? ' Most improved: ' + inf(up.id).short + '.' : '') + (low ? ' Next time starts with extra ' + inf(low).short + '.' : ''); }
     if (typeof wonOn === 'string') line = t('coach.endedOnWin', { name: inf(wonOn).short }) + ' ' + line;
     if (exploring) line = t('coach.exploreEnded');
     if (sess.judged >= 8 && Date.now() - lastBackupAt > 7 * 86400000) showBackupNudge(t('side.backupNudge'));
@@ -2251,12 +2251,12 @@ import { register as registerPathway } from './ui/pathway.js';
     const d = D(); $('levelNum').textContent = lvNum(S.level); $('levelName').textContent = lvName(customOn ? 'Your captured melody' : d.name); $('limitOut').textContent = d.task === 'bar' || mod === 'rhy' || MODS[mod].kit ? t('level.limitBeats', { n: d.bpm || 72 }) : t('level.limitSeconds', { n: d.limit || 8 }); $('readyBar').setAttribute('aria-label', t('level.progressAria'));
     const pct = Math.round(S.ready * 100); $('readyFill').style.width = pct + '%'; $('readyFill').style.background = S.ready < 0.25 ? 'var(--bad)' : S.ready < 0.6 ? 'var(--warn)' : 'var(--good)'; $('readyBar').setAttribute('aria-valuenow', pct);
     const e = sess ? 1 - sess.F : 1, ep = Math.round(e * 100); $('energyFill').style.width = ep + '%'; $('energyFill').style.background = e < 0.4 ? 'var(--bad)' : e < 0.65 ? 'var(--warn)' : 'var(--good)'; $('energyBar').setAttribute('aria-valuenow', ep);
-    const ds = dayStreak(), lastS = DB.sessions.filter(x => x.mod === mod).slice(-1)[0];
+    const ds = practisedDays(7), lastS = DB.sessions.filter(x => x.mod === mod).slice(-1)[0];
     // R10 P7: a full green bar read as "done" before a single minute was
     // practised today -- full means the OPPOSITE, so a full bar gets its own
     // word ahead of the minutes, never just the colour, to say so.
-    $('sessLine').textContent = (ep === 100 ? t('energy.full') + ' · ' : '') + (sess ? Math.floor(sess.active / 60) + ' min this session, ' + sess.breaks + ' break' + (sess.breaks === 1 ? '' : 's') + ' · ' : '') + Math.round(todayMinutes()) + ' min today' + (ds > 1 ? ' · ' + ds + ' days in a row' : '') + (lastS ? ' · last ' + MODS[mod].name.toLowerCase() + ' session ' + Math.round(100 * lastS.acc) + '%' : '');
-    $('sAcc').textContent = recent.length ? Math.round(100 * mean(recent)) + '%' : '0%'; $('sStreak').textContent = streak; $('sRt').textContent = sess && sess.rts.length ? median(sess.rts).toFixed(1) : '-'; $('statsBlock').hidden = !recent.length;
+    $('sessLine').textContent = (ep === 100 ? t('energy.full') + ' · ' : '') + (sess ? Math.floor(sess.active / 60) + ' min this session, ' + sess.breaks + ' break' + (sess.breaks === 1 ? '' : 's') + ' · ' : '') + Math.round(todayMinutes()) + ' min today' + (ds > 1 ? ' · practiced ' + ds + ' of the last 7 days' : '') + (lastS ? ' · last ' + MODS[mod].name.toLowerCase() + ' session ' + Math.round(100 * lastS.acc) + '%' : '');
+    $('sAcc').textContent = recent.length ? Math.round(100 * mean(recent)) + '%' : '0%'; $('sRt').textContent = sess && sess.rts.length ? median(sess.rts).toFixed(1) : '-'; $('statsBlock').hidden = !recent.length;
     const act = activeItems(mod, S.level), weakEntries = []; act.forEach(id => { const o = S.item[id]; if (o && o.reps >= 2) weakEntries.push(Object.assign({}, o, { id: 'i:' + id, label: inf(id).short })); });
     Object.keys(S.trans).forEach(k => { const o = S.trans[k], ab = k.split('>'); if (o.reps >= 2 && act.indexOf(ab[0]) >= 0 && act.indexOf(ab[1]) >= 0) weakEntries.push(Object.assign({}, o, { id: 't:' + k, label: inf(ab[0]).short + ' → ' + inf(ab[1]).short })); });
     const rows = due(weakEntries, modelNow).filter(e => e.r < 0.7);
@@ -3031,7 +3031,7 @@ import { register as registerPathway } from './ui/pathway.js';
     // guitar credits guitar even if keyboard is still showing on the main
     // screen), same as credit() does for a built-in drill (no session log
     // update, since no session runs while a panel is open). streak is
-    // global UI state (the on-screen streak counter), so it always ticks;
+    // global UI state (the run of right answers behind the level-up check), so it always ticks;
     // evaluate() reads/writes the CURRENT mod's S and D() (its own level
     // thresholds), so it only runs when instrumentId is the mod actually
     // showing -- crediting a different instrument's readiness must not

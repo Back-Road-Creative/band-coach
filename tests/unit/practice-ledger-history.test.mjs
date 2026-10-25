@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { ledger, SESSION_LOG_CAP } from '../../src/core/history.js';
+import { ledger, summarize, toTeacherSummary, SESSION_LOG_CAP } from '../../src/core/history.js';
 
 const DAY = 86400000;
 // 2026-09-19 12:00 UTC, a Saturday.
@@ -32,7 +32,8 @@ test('ledger on an empty log returns a full window of zeroed, present days', () 
     assert.equal(d.metGoal, false);
     assert.equal(d.notKept, false);
   });
-  assert.equal(l.goalStreak, 0);
+  assert.equal(l.goalDays7, 0);
+  assert.equal(l.goalDays28, 0);
 });
 
 test('ledger sums minutes, session counts and level deltas per day, leaving gap days at zero', () => {
@@ -61,38 +62,56 @@ test('ledger: a goal is met when the day\'s total minutes reach goalMin', () => 
   assert.equal(l.days.find((d) => d.day === dayStr(1)).metGoal, true);
 });
 
-test('ledger: goal streak counts consecutive met days ending today', () => {
-  const log = [sess(0, { min: 20 }), sess(1, { min: 20 }), sess(2, { min: 20 }), sess(4, { min: 20 })]; // gap at day 3
+test('ledger: goal days count days that hit the goal in the last 7 and 28 days, a gap is just a missed day', () => {
+  const log = [sess(0, { min: 20 }), sess(1, { min: 20 }), sess(2, { min: 20 }), sess(4, { min: 20 }), sess(10, { min: 20 }), sess(20, { min: 5 })]; // gap at day 3; day 20 under goal
+  const l = ledger(log, { now: NOW, weeks: 8, goalMin: 15 });
+  assert.equal(l.goalDays7, 4);
+  assert.equal(l.goalDays28, 5);
+});
+
+test('ledger: goal days do not need today or yesterday to have met the goal', () => {
+  const log = [sess(2, { min: 20 }), sess(3, { min: 20 })];
   const l = ledger(log, { now: NOW, weeks: 1, goalMin: 15 });
-  assert.equal(l.goalStreak, 3);
+  assert.equal(l.goalDays7, 2);
+  assert.equal(l.goalDays28, 2);
 });
 
-test('ledger: goal streak still counts through yesterday when today has no session yet', () => {
-  const log = [sess(1, { min: 20 }), sess(2, { min: 20 }), sess(3, { min: 20 })]; // nothing today
-  const l = ledger(log, { now: NOW, weeks: 1, goalMin: 15 });
-  assert.equal(l.goalStreak, 3);
-});
-
-test('ledger: goal streak is zero when neither today nor yesterday met the goal', () => {
-  const log = [sess(2, { min: 20 }), sess(3, { min: 20 })]; // nothing today or yesterday
-  const l = ledger(log, { now: NOW, weeks: 1, goalMin: 15 });
-  assert.equal(l.goalStreak, 0);
-});
-
-test('ledger: streaks survive a month boundary', () => {
-  const crossNow = Date.UTC(2026, 9, 2, 12, 0, 0); // Oct 2, 2026
-  const crossDay = (offset) => new Date(crossNow - offset * DAY).toISOString().slice(0, 10);
-  const log = [0, 1, 2, 3].map((o) => sess(0, { d: crossDay(o), min: 20 }));
-  const l = ledger(log, { now: crossNow, weeks: 1, goalMin: 15 });
-  assert.equal(l.goalStreak, 4);
-});
-
-test('ledger: streaks survive a year boundary', () => {
+test('ledger: goal days survive month and year boundaries', () => {
   const crossNow = Date.UTC(2027, 0, 1, 12, 0, 0); // Jan 1, 2027
   const crossDay = (offset) => new Date(crossNow - offset * DAY).toISOString().slice(0, 10);
-  const log = [0, 1, 2].map((o) => sess(0, { d: crossDay(o), min: 20 }));
+  const log = [0, 1, 2, 5].map((o) => sess(0, { d: crossDay(o), min: 20 }));
   const l = ledger(log, { now: crossNow, weeks: 1, goalMin: 15 });
-  assert.equal(l.goalStreak, 3);
+  assert.equal(l.goalDays7, 4);
+});
+
+test('summarize: practised days count the last 7 and 28 local days; a gap day is a missed day, never a reset', () => {
+  const log = [sess(0), sess(1), sess(3), sess(4), sess(6), sess(6, { mod: 'gtr' }), sess(8), sess(27), sess(28), sess(40)];
+  const s = summarize(log, { now: NOW });
+  assert.equal(s.practisedLast7, 5, 'days 0,1,3,4,6 (two sessions on day 6 are one day)');
+  assert.equal(s.practisedLast28, 7, 'adds day 8 and day 27; day 28 and 40 are outside the window');
+  assert.equal(s.currentStreak, undefined);
+  assert.equal(s.bestStreak, undefined);
+});
+
+test('summarize: practised days stay positive when today is silent or the last session was days ago', () => {
+  assert.equal(summarize([sess(2), sess(3)], { now: NOW }).practisedLast7, 2);
+  assert.equal(summarize([], { now: NOW }).practisedLast7, 0);
+  assert.equal(summarize([], { now: NOW }).practisedLast28, 0);
+});
+
+test('summarize: practised days cross a year boundary', () => {
+  const crossNow = Date.UTC(2027, 0, 1, 12, 0, 0);
+  const crossDay = (offset) => new Date(crossNow - offset * DAY).toISOString().slice(0, 10);
+  const s = summarize([0, 1, 2, 9].map((o) => sess(0, { d: crossDay(o) })), { now: crossNow });
+  assert.equal(s.practisedLast7, 3);
+  assert.equal(s.practisedLast28, 4);
+});
+
+test('toTeacherSummary: the report says practiced N of the last 7 and 28 days, with no streak wording', () => {
+  const r = toTeacherSummary({ sessions: [sess(0), sess(2), sess(9)], mods: {} }, { now: NOW });
+  assert.match(r.text, /Practiced 2 of the last 7 days, 3 of the last 28 days/);
+  assert.match(r.html, /Practiced 2 of the last 7 days, 3 of the last 28 days/);
+  assert.doesNotMatch(r.text + r.html, /streak/i);
 });
 
 test('ledger: the 60-cap edge — when the log is full and its oldest kept day falls inside the window, earlier days are marked not-kept, never a false zero', () => {

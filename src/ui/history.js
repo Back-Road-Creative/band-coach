@@ -57,7 +57,7 @@ function itemRow(entry) {
 
 /** Builds the practice calendar grid: one cell per day, shaded by minutes,
  * with a text label per cell (screen readers get the words, not the
- * shading) plus the goal streak and, when the 60-session cap has pushed
+ * shading) plus the goal-day counts and, when the 60-session cap has pushed
  * older days out of the log, an honest note instead of a false zero. */
 function calendarHtml(l) {
   const maxMinutes = Math.max(1, ...l.days.map((d) => (d.notKept ? 0 : d.minutes)));
@@ -126,7 +126,7 @@ export function registerHistory(panels) {
             <h3>${esc(t('history.calendar'))}</h3>
             <label for="historyGoalInput">${esc(t('history.goalLabel'))}</label>
             <input type="number" id="historyGoalInput" min="5" max="120" step="1">
-            <p id="historyGoalStreak"></p>
+            <p id="historyGoalDays"></p>
             <div id="historyCalendar"></div>
           </div>
           <h3 id="historyInstrumentsHeading">${esc(t('history.byInstrument'))}</h3>
@@ -186,7 +186,7 @@ export function registerHistory(panels) {
         goalInput.value = store.goalMin;
 
         el.querySelector('#historySummary').innerHTML = s.totalSessions
-          ? `<p>${t('history.summary', { sessions: sessionsText(s.totalSessions), streak: daysText(s.currentStreak), best: s.bestStreak, trend: '<strong>' + esc(t(TREND_KEYS[s.accuracyTrend.direction] || TREND_KEYS.flat)) + '</strong>' })}</p>`
+          ? `<p>${t('history.summary', { sessions: sessionsText(s.totalSessions), d7: s.practisedLast7, d28: s.practisedLast28, trend: '<strong>' + esc(t(TREND_KEYS[s.accuracyTrend.direction] || TREND_KEYS.flat)) + '</strong>' })}</p>`
           : `<p>${esc(t('history.noSessions'))}</p>`;
 
         // Passed-with-help / passed-on-your-own / retained / applied come from
@@ -210,9 +210,7 @@ export function registerHistory(panels) {
         el.querySelector('#historyCalendarGroup').hidden = empty;
         const l = ledger(db.sessions, { now, goalMin: store.goalMin });
         el.querySelector('#historyCalendar').innerHTML = calendarHtml(l);
-        el.querySelector('#historyGoalStreak').textContent = l.goalStreak > 0
-          ? t('history.goalStreak', { days: daysText(l.goalStreak), goal: l.goalMin })
-          : t('history.goalNone', { goal: l.goalMin });
+        el.querySelector('#historyGoalDays').textContent = t('history.goalDays', { goal: l.goalMin, d7: l.goalDays7, d28: l.goalDays28 });
 
         // A new profile has no per-instrument rows: no heading over an empty box.
         const instBox = el.querySelector('#historyInstruments');
