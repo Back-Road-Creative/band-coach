@@ -717,6 +717,11 @@ on one beat) are each checked against the hit that named them. On the drum kit, 
 practice grooves in place of the starter tunes (`src/song/starter/grooves.js`: rock, half-time,
 waltz, four on the floor, ride, 6/8, sixteenths, and a rock beat with a fill), each four bars or
 more and taught the same way; a groove has no Edit notes (`tests/characterization/songs-drum-grooves.test.mjs`).
+Six folk tunes (Soldier's Joy, The Irish Washerwoman, Red River Valley, Old Joe Clark, Yankee Doodle, Oh! Susanna) sit
+beside the beginner tunes, each in the key it is usually played in (`src/song/starter/folk.js`). Songs lists the songs
+that fit the chosen instrument first, and a band instrument (a trumpet, clarinet or saxophone, say) is offered concert B♭ and E♭
+versions of each tune; the songs with notes that instrument cannot play come after, marked "Some notes won't fit"
+(`startersFor` in `src/song/starter/index.js`, `tests/characterization/songs-starters-per-instrument.test.mjs`).
 A band can also share a whole set list at once as a
 **band pack**: a `.bandpack` file (`src/song/band-pack.js`, a small zip of song files plus a
 manifest) holding several songs and, optionally, who in the band plays which part of each.

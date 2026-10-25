@@ -30,7 +30,7 @@ import { createLibrary, indexedDbStore, memoryStore } from '../song/library.js';
 import { drawPrimitives } from '../notation/draw-canvas.js';
 import { layoutSong } from './editor/layout-song.js';
 import { stashWorking, restoreWorking } from './editor/working-copy.js';
-import { starterSongs } from '../song/starter/index.js';
+import { starterById } from '../song/starter/index.js';
 import { sanitizeStatusLedger, markDraft, markChecked } from './songs/song-status.js';
 import { requestOpenSong } from './songs/open-request.js';
 import { el } from './dom.js';
@@ -368,7 +368,7 @@ function mountEditor(hostEl, api) {
     // it exactly like a fresh transcription: "Save to my songs" always adds
     // a brand new entry, titled "My copy of <the starter's title>".
     if (req.starterId) {
-      const starter = starterSongs.find((s) => s.id === req.starterId);
+      const starter = starterById(req.starterId);
       if (!starter) return;
       loadSong(starter, req.needsCheck);
       loadedId = null;
