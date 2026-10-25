@@ -136,23 +136,42 @@ function missedNote(note) {
 // one stray clap never shifts every later beat, and a missed beat is a miss.
 // percussion: true for a drum step (opts.percussion, judgeAttempt below) --
 // the hit carries a `piece` (which drum), not a pitch, so this scores
-// pieceOk (pieceOkFor above) instead of pitchOk.
+// pieceOk (pieceOkFor above) instead of pitchOk. Drums struck together (bass
+// drum and hi-hat on one beat) each take the nearest hit at that onset that
+// names their own piece; a drum with no such hit falls back to the onset's
+// nearest hit, as one clap does for a chord.
 function judgeOnsets(chords, played, onsetAt, matches, extraList, bpm, ticksPerQuarter, policy, clock, percussion) {
   const times = chords.map((c) => onsetAt(c[0].start));
   const best = times.map(() => -1);
+  const claimed = times.map(() => []);
   played.forEach((ev, i) => {
     let k = -1;
     times.forEach((t, j) => { if (k === -1 || Math.abs(ev.atSec - t) < Math.abs(ev.atSec - times[k])) k = j; });
     if (k === -1) return;
+    claimed[k].push(i);
     if (best[k] === -1 || Math.abs(ev.atSec - times[k]) < Math.abs(played[best[k]].atSec - times[k])) best[k] = i;
   });
-  const used = new Set(best);
+  const hitFor = chords.map((chord, k) => chord.map(() => best[k]));
+  if (percussion) {
+    chords.forEach((chord, k) => {
+      const taken = new Set();
+      chord.forEach((note, n) => {
+        let pick = -1;
+        claimed[k].forEach((i) => {
+          if (taken.has(i) || !pieceMatches(note.piece, played[i].piece)) return;
+          if (pick === -1 || Math.abs(played[i].atSec - times[k]) < Math.abs(played[pick].atSec - times[k])) pick = i;
+        });
+        if (pick !== -1) { taken.add(pick); hitFor[k][n] = pick; }
+      });
+    });
+  }
+  const used = new Set(hitFor.flat());
   played.forEach((ev, i) => { if (!used.has(i)) extraList.push(ev); });
   // pitchOk: whether the hit also had this note's pitch (false for a clap) --
   // never part of passing, only so a caller credits pitch practice truthfully.
-  chords.forEach((chord, k) => chord.forEach((note) => {
+  chords.forEach((chord, k) => chord.forEach((note, n) => {
     if (best[k] === -1) { matches.push(missedNote(note)); return; }
-    const hit = played[best[k]];
+    const hit = played[hitFor[k][n]];
     const m = matchOneNote(note, hit, true, times[k], bpm, ticksPerQuarter, onsetAt, clock);
     if (percussion) { m.pieceOk = pieceOkFor(note, hit); }
     else { m.pitchOk = hit.midi != null && judgePitch({ heardMidi: hit.midi, targetMidi: note.midi, policy }).ok; }

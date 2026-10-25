@@ -5,9 +5,9 @@
 // (window.__coach.testDrumHit, the SAME analyser chain openMic() uses --
 // see tests/unit/drum-kit-mic.test.mjs) are heard while recording a try.
 // Drives the built page through window.__coach.openPanel('songs') and a
-// real .json challenge import (a percussion song has no place in the
-// built-in library, so it is handed in the same way a teacher's challenge
-// file is -- see tests/characterization/songs-challenge.test.mjs), then the
+// real .json challenge import (a song of its own, handed in the same way a
+// teacher's challenge file is -- see tests/characterization/songs-challenge.test.mjs;
+// the built-in grooves have songs-drum-grooves.test.mjs), then the
 // DOM, following the same pattern as tests/characterization/songs-heat.test.mjs.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
