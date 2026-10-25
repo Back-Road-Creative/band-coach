@@ -115,6 +115,9 @@
   .picker button[aria-pressed="true"] { background: var(--text); color: var(--ground); border-color: var(--text); border-left-color: var(--c); }
   .picker small { display: block; font: 500 0.75rem var(--body); color: var(--muted); }
   .picker button[aria-pressed="true"] small { color: var(--press-muted); }
+  /* FE-9: how the app checks this instrument (capabilityChipKeys). */
+  .picker .cap-chip { display: inline-block; margin-top: 3px; padding: 0 6px; border: 1px solid var(--line); border-radius: 999px; font: 500 0.6875rem var(--body); color: var(--muted); }
+  .picker button[aria-pressed="true"] .cap-chip { color: var(--press-muted); border-color: var(--press-muted); }
   /* Tools tier (U3): Tuner/Capture a melody plus the two pseudo-mods (Ear
      training quick drill, Rhythm reading) sit one visual step quieter than
      the real instruments above them -- smaller type, muted border, no

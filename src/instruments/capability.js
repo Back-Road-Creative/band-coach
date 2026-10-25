@@ -68,3 +68,15 @@ export function capabilityFor(rec) {
     tier: tierFor(rec)
   };
 }
+
+// The instrument picker's chip (src/app.js buildPickerButton): i18n keys
+// saying how a learner's playing is checked and whether the chart is
+// missing or unchecked. Speaks in what a learner gets, never a tier name.
+export function capabilityChipKeys(cap) {
+  const how = { midi: 'picker.cap.exact', 'mic-single-note': 'picker.cap.oneNote', tap: 'picker.cap.rhythm' }[cap.assess];
+  if (!how) return ['picker.cap.notChecked'];
+  if (cap.assess === 'tap') return [how];
+  if (cap.chart === 'none') return [how, 'picker.cap.noChart'];
+  if (cap.chart === 'typed-unreviewed') return [how, 'picker.cap.chartUnchecked'];
+  return [how];
+}
