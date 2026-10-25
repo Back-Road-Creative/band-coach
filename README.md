@@ -598,6 +598,12 @@ same with your foot: each press presses whichever of those buttons the step show
 part is recording, the pedal is left alone, because there it is your sustain; stop that try with
 Space or the button.
 
+**My speed** (the slider under an open song's controls) plays the song at 50–100 % of its written
+tempo, in 5 % steps, and is kept per song. The backing, the count-in and the judging all follow it.
+A clean Check of the whole piece saves that speed as the song's best: the end screen says "Clean at
+70% speed." (or "… (up from 60%)" when it beats the last best), and the song list shows "Clean at
+70%" next to the song. Learn-mode tries never set it.
+
 Opening any song shows one row of plain actions directly above its practise section: **Edit
 notes**, **Play along**, **Export**, **Share**, **Save a copy**, **Print** — a starter tune's Edit
 notes saves a copy first (starter tunes are never edited in place) and opens that. Export reveals
