@@ -49,6 +49,7 @@ import * as RHY from './core/rhythm.js';
 import { forInstrument } from './notation/for-instrument.js';
 import { drawPrimitives } from './notation/draw-canvas.js';
 import { byId as instrumentById } from './instruments/index.js';
+import { capabilityFor, capabilityChipKeys } from './instruments/capability.js';
 import { rangeForInstrument, FALLBACK_RANGE, frameSizeForInstrument } from './audio/range.js';
 import { renderVoice } from './audio/voices.js';
 import { layoutFor as harpLayoutFor } from './instruments/how/harmonica.js';
@@ -2621,7 +2622,7 @@ import { register as registerPathway } from './ui/pathway.js';
   // plain, always-visible group now, not a shut-by-default <details> -- once
   // the instrument sheet itself is open (setInstrumentSheetOpen), everything
   // inside it, tools included, is visible with no second disclosure to find.
-  function buildPickerButton(m, o) { const b = document.createElement('button'); b.type = 'button'; b.dataset.mod = m; b.style.setProperty('--c', o.color); b.setAttribute('aria-pressed', 'false'); b.appendChild(document.createTextNode(o.name)); const sm = document.createElement('small'); sm.textContent = o.tag; b.appendChild(sm); b.addEventListener('click', () => { b.blur(); closePanel(); pickerAsSheet = true; setMod(m); setInstrumentSheetOpen(false); if (document.activeElement === document.body) focusNavInstrument(); }); return b; }
+  function buildPickerButton(m, o) { const b = document.createElement('button'); b.type = 'button'; b.dataset.mod = m; b.style.setProperty('--c', o.color); b.setAttribute('aria-pressed', 'false'); b.appendChild(document.createTextNode(o.name)); const sm = document.createElement('small'); sm.textContent = o.tag; b.appendChild(sm); if (instrumentById[m]) { const chip = document.createElement('span'); chip.className = 'cap-chip'; chip.textContent = capabilityChipKeys(capabilityFor(instrumentById[m])).map(k => t(k)).join(' · '); b.appendChild(chip); } b.addEventListener('click', () => { b.blur(); closePanel(); pickerAsSheet = true; setMod(m); setInstrumentSheetOpen(false); if (document.activeElement === document.body) focusNavInstrument(); }); return b; }
   // A panel tool button (Ear training / How to play it / Music theory)
   // shares buildPickerButton's look (--c colour dot, <small> tag line) but
   // opens a registered panel instead of selecting a mod, and shuts the
