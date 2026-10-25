@@ -44,3 +44,33 @@ jobs:
           path: coverage/lcov.info
           if-no-files-found: warn
           retention-days: 30
+
+  # One issue, not one per red week. needs.coverage.result, not failure(): this
+  # job's own steps do not fail when the coverage job did. A cancelled run opens
+  # nothing. Same approach as the report job in weekly-current-browser.yml.
+  notify:
+    needs: [coverage]
+    if: always() && needs.coverage.result == 'failure'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: open or update the failing-run issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          title='weekly coverage run failing'
+          body="The weekly coverage run failed. Either unit-test coverage fell below a floor in tests/unit/coverage-floor.mjs, or the run itself broke.
+
+          Run: $RUN_URL
+
+          Open the run for the floor message, and download its lcov artifact to read the numbers per file."
+          n="$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "\"$title\" in:title" --json number,title -q ".[] | select(.title == \"$title\") | .number" | head -n1)"
+          if [ -n "$n" ]; then
+            gh issue comment "$n" --repo "$GITHUB_REPOSITORY" --body "$body"
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --body "$body"
+          fi
