@@ -2642,8 +2642,8 @@ import { register as registerPathway } from './ui/pathway.js';
   function jump(dl) { const nl = Math.max(1, S.level + dl); if (nl === S.level) { coach('You are already on level 1: ' + D().name + '. That is the easiest level.'); return; } S.level = nl; S.ready = 0.3; task = null; say(''); coach((dl < 0 ? 'Moved down' : 'Skipped ahead') + ' to level ' + S.level + ': ' + D().name + '.'); save(); if (mod === 'kbd') renderOpts(); showAll(); }
   $('easierBtn').addEventListener('click', function () { this.blur(); jump(-1); }); $('harderBtn').addEventListener('click', function () { this.blur(); jump(1); });
   $('resetBtn').addEventListener('click', function () { this.blur(); if (!confirm(t('reset.confirm', { name: MODS[mod].name }))) return; if (sess) endSession(); DB.mods[mod] = S = freshModel(); recent = []; streak = 0; coach(t('reset.progressCleared', { name: MODS[mod].name })); save(); showAll(); });
-  $('optNames').addEventListener('change', function () { DB.prefs.names = this.checked; save(); renderOpts(); });
-  $('optStand').addEventListener('change', function () { DB.prefs.stand = this.checked; save(); applyStand(); }); // F8: the prompt reads 1.5x while practising (styles.css body.stand.practising) // the practice Show labels own up to names off
+  $('optNames').addEventListener('change', function () { DB.prefs.names = this.checked; save(); renderOpts(); }); // the practice Show labels own up to names off
+  $('optStand').addEventListener('change', function () { DB.prefs.stand = this.checked; save(); applyStand(); }); // F8: the prompt reads 1.5x while practising (styles.css body.practising.stand)
   // Theme J1: 'system' removes the attribute so styles.css's own
   // prefers-color-scheme media query decides; 'light'/'dark' pin it,
   // overriding the OS setting either way (see src/styles.css).

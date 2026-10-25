@@ -466,7 +466,7 @@ export const en = {
   'diag.title': 'Diagnostics',
   'diag.help': 'If something is not working, copy this report and paste it into your message. It holds the app version, your browser and recent errors, and never your songs or recordings.',
   'settings.showNames': 'Show note names',
-  'settings.stand': 'Music stand view: a bigger prompt while practising',
+  'settings.stand': 'Music stand view: a bigger prompt while practicing',
   'settings.theme': 'Theme',
   'settings.theme.system': 'Match system',
   'settings.theme.light': 'Light',
