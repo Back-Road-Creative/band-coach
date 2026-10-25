@@ -15,6 +15,8 @@
 //   { kind: 'apply', skill }           -- that same id, marked for use in a phrase/song
 //   { kind: 'check', ids }             -- review ids + the weak id, no hints
 //   { kind: 'song', songId, title, done } -- a suggested starter song, always LAST
+//   { kind: 'songReview', songId, partId, title, bars } -- a song review queued in an
+//                                      earlier session (F5), always FIRST when present
 // `items` is S.item-shaped: a map of id -> { stability, difficulty, lastSeen,
 // reps, lapses }. `instrumentId`/`level` are now read, but only to look up
 // the song block: `songFor(level)` (optional; when it is not a function, or
@@ -23,8 +25,12 @@
 // []) -- true when some row has `d === today`, `source === 'song'`,
 // `songId` matching and `mod === instrumentId`. The song block is appended
 // even when there is nothing else to plan (no weak/apply/check), so a
-// fresh learner with no item records yet still sees it.
-export function planSession({ instrumentId, level, activeIds, items, now, due, sessions, songFor, today } = {}) {
+// fresh learner with no item records yet still sees it. `songReviews`
+// (optional) is the caller's list of song reviews already due on this
+// instrument (src/core/teaching.js dueReviews' shape plus a title); the first
+// one with a title and two bars leads the plan. nextPlanStep never serves it
+// -- the Songs panel plays it, so the drill plan is unchanged behind it.
+export function planSession({ instrumentId, level, activeIds, items, now, due, sessions, songFor, today, songReviews } = {}) {
   const ids = Array.isArray(activeIds) ? activeIds : [];
   const itemsMap = items || {};
   const blocks = [];
@@ -76,6 +82,9 @@ export function planSession({ instrumentId, level, activeIds, items, now, due, s
     }
   }
 
+  const review = (Array.isArray(songReviews) ? songReviews : []).find(r => r && typeof r.title === 'string' && r.title && Array.isArray(r.bars) && r.bars.length === 2);
+  if (review) blocks.unshift({ kind: 'songReview', songId: review.songId, partId: review.partId, title: review.title, bars: [review.bars[0], review.bars[1]] });
+
   return blocks;
 }
 
@@ -87,6 +96,7 @@ export const PLAN_PHRASES = {
   'plan.check': 'a check',
   'plan.song': 'play {title}',
   'plan.songDone': 'play {title} (done today)',
+  'plan.songReview': 'review {title}, bars {bars}',
   'plan.joiner': ', then ',
   'plan.today': 'Today: {parts}.',
   'plan.first': "Today: your first sitting here -- play what the screen asks, and tomorrow's plan builds from it.",
@@ -119,7 +129,9 @@ export function describePlan(blocks, nameOf, opts) {
   const apply = list.find(b => b.kind === 'apply');
   const check = list.find(b => b.kind === 'check');
   const song = list.find(b => b.kind === 'song');
+  const songReview = list.find(b => b.kind === 'songReview');
   const parts = [];
+  if (songReview) parts.push(say('plan.songReview', { title: songReview.title, bars: (songReview.bars[0] + 1) + '-' + (songReview.bars[1] + 1) }));
   if (review) parts.push(say('plan.review', { n: review.ids.length }));
   if (weak) parts.push(name(weak.id));
   if (apply) parts.push(say('plan.apply'));

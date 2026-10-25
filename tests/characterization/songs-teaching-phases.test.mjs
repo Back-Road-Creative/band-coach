@@ -107,6 +107,7 @@ test('transfer: with no next section the delayed review is queued and persisted'
   assert.equal(items.length, 1, JSON.stringify(items));
   assert.equal(items[0].songId.length > 0, true);
   assert.equal(items[0].partId, 'melody');
+  assert.equal(items[0].title, 'Teach Song', 'the title travels with the review so the plan line can name it');
   assert.deepEqual(items[0].bars, [0, 0]);
   assert.ok(await page.evaluate("!!document.querySelector('.panel-songs-transfer-note')"), 'the learner is told a review was saved');
   // the queue is plain JSON inside the saved db, so it survives save/load
