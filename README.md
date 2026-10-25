@@ -343,7 +343,7 @@ a later save succeeds — you never have to open Settings to find out progress i
 blocking it), Settings shows a plain-language status until a later save succeeds. Open
 the Settings screen for "Save a backup", which downloads
 `band-coach-progress.json`, and "Restore a backup", which loads one back in. The backup file now
-carries your saved songs (from the Learn and Songs panels) alongside your practice progress, so
+carries your saved songs (from the Learn and Songs panels) alongside your practice progress (if this browser will not let Band Coach read the saved songs, the backup is still saved with your progress and the message says the songs are not in it), so
 restoring one brings both back — a restore replaces your progress and songs together, and if the
 songs in the backup cannot be stored on this device, nothing changes: your current progress and
 songs are left exactly as they were. An older backup made before songs were included still restores —
@@ -371,7 +371,7 @@ startup and again whenever the language is changed.
   or microphone handler, the 50 ms pitch timer) is recorded in the in-memory error list and the
   learner sees one dismissible notice (at most one per 30 seconds) instead of silence. Settings >
   "Copy diagnostics" copies the app version, browser string, recent error
-  messages (links and file paths blanked, 200 characters each) and whether the microphone, MIDI,
+  messages (kept for this tab only, so they are still there after the reload the notice asks for; links and file paths blanked, 200 characters each) and whether the microphone, MIDI,
   AudioWorklet and song storage exist; the text stays hidden until you press the button, then it is shown on screen too, so with no clipboard it can be copied by hand. It is
   built from that short list in `src/core/diagnostics.js`, so audio, songs, practice records and
   device ids are not included by design. An error message is whatever the browser or app wrote, so
