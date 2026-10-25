@@ -9,7 +9,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { COVERAGE_FLOOR_PERCENT, lineCoverageUnder, checkFloor, prepareReportDir } from './coverage-floor.mjs';
+import { COVERAGE_FLOOR_PERCENT, COVERAGE_FLOORS, lineCoverageUnder, checkFloor, checkFloors, prepareReportDir } from './coverage-floor.mjs';
 
 const lcov = (files) => files.map(([sf, lf, lh]) => `TN:\nSF:${sf}\nDA:1,1\nLF:${lf}\nLH:${lh}\nend_of_record\n`).join('');
 
@@ -60,7 +60,7 @@ test('run as a script: exit 0 above the floor, 1 below it, 1 for a missing repor
     const script = fileURLToPath(new URL('./coverage-floor.mjs', import.meta.url));
     const good = join(dir, 'good.info');
     const bad = join(dir, 'bad.info');
-    writeFileSync(good, lcov([['src/core/a.js', 100, 100]]));
+    writeFileSync(good, lcov([['src/core/a.js', 100, 100], ['src/song/b.js', 100, 100], ['src/audio/c.js', 100, 100]]));
     writeFileSync(bad, lcov([['src/core/a.js', 100, 1]]));
     assert.equal(spawnSync(process.execPath, [script, good]).status, 0);
     const low = spawnSync(process.execPath, [script, bad], { encoding: 'utf8' });
@@ -118,4 +118,49 @@ test('the weekly coverage workflow runs on a schedule and by hand only, read-onl
   assert.match(yml, /run: node build\/build\.mjs\n[\s\S]*run: npm run coverage/, 'some unit tests read the built page, so build first');
   assert.match(yml, /uses: actions\/upload-artifact@[0-9a-f]{40} /, 'actions are pinned to a commit, as in every other workflow');
   assert.match(yml, /path: coverage\/lcov\.info/);
+});
+
+// ---- per-directory floors: src/core, src/song and src/audio ----
+// Measured on 2026-10-19 (weekly coverage run 39264331022): core 98.98%, song 97.65% (9002/9219), audio 99.45% (2519/2533).
+test('the committed floors cover core, song and audio, each a whole percentage at the measured value', () => {
+  assert.deepEqual(Object.keys(COVERAGE_FLOORS).sort(), ['src/audio', 'src/core', 'src/song']);
+  assert.equal(COVERAGE_FLOORS['src/core'], COVERAGE_FLOOR_PERCENT);
+  assert.ok(COVERAGE_FLOORS['src/song'] >= 97 && COVERAGE_FLOORS['src/song'] <= 100);
+  assert.ok(COVERAGE_FLOORS['src/audio'] >= 99 && COVERAGE_FLOORS['src/audio'] <= 100);
+  for (const f of Object.values(COVERAGE_FLOORS)) assert.ok(Number.isInteger(f));
+});
+
+const floors = { 'src/core': 90, 'src/song': 80, 'src/audio': 70 };
+const allAt = (song) => lcov([['src/core/a.js', 100, 90], ['src/song/b.js', 100, song], ['src/audio/c.js', 100, 70]]);
+
+test('checkFloors passes when every directory is at its floor', () => {
+  const r = checkFloors(allAt(80), floors);
+  assert.equal(r.ok, true);
+  assert.equal(r.message.split('\n').length, 3);
+});
+
+test('checkFloors fails when src/song is below its floor, naming the directory and numbers', () => {
+  const r = checkFloors(allAt(79), floors);
+  assert.equal(r.ok, false);
+  assert.match(r.message, /src\/song line coverage 79\.00% \(79\/100\) is below the floor of 80%/);
+});
+
+test('checkFloors fails when a directory is missing from the report, even if the others are high', () => {
+  const r = checkFloors(lcov([['src/core/a.js', 100, 100], ['src/audio/c.js', 100, 100]]), floors);
+  assert.equal(r.ok, false);
+  assert.match(r.message, /no src\/song files in the report/);
+});
+
+test('run as a script: a low src/song fails the run', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'cov-song-'));
+  try {
+    const script = fileURLToPath(new URL('./coverage-floor.mjs', import.meta.url));
+    const low = join(dir, 'low.info');
+    writeFileSync(low, lcov([['src/core/a.js', 100, 100], ['src/song/b.js', 100, 1], ['src/audio/c.js', 100, 100]]));
+    const run = spawnSync(process.execPath, [script, low], { encoding: 'utf8' });
+    assert.equal(run.status, 1);
+    assert.match(run.stdout, /src\/song/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
