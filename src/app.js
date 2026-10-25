@@ -16,7 +16,7 @@ import { PCKEYS } from './core/pckeys.js';
 import { createTeardown } from './core/session-teardown.js';
 // Merge slots: a unit in flight adds its imports by replacing ONLY its own
 // slot line, so parallel branches never edit adjacent lines.
-import { recordError, getErrors } from './core/error-log.js';
+import { recordError, getErrors, persistErrors } from './core/error-log.js';
 import { resolveAppVersion, DEV_VERSION } from './core/version.js';
 import { loadPack, packStatus, createIndexedDBStore, packManifestUrl, DEFAULT_MODEL_PACK } from './core/model-pack.js';
 import { checkForUpdate, FALLBACK_DOWNLOAD_URL } from './core/update-check.js';
@@ -93,6 +93,7 @@ import { register as registerTheory, currentLessonQuestion as theoryCurrentQuest
 //
 import { registerHistory } from './ui/history.js';
 import { createNoticeGate, buildDiagnostics } from './core/diagnostics.js';
+import { watchForUpdate } from './core/update-watch.js';
 //
 import { registerFingerings, renderHowInline } from './ui/fingerings.js';
 import { instrumentSetup } from './ui/fingerings/setup.js';
@@ -112,6 +113,8 @@ import { register as registerPathway } from './ui/pathway.js';
   'use strict';
   const $ = id => document.getElementById(id);
   const errorGate = createNoticeGate();
+  // Same-tab only: the error notice asks for a reload, and Copy diagnostics after it must still list what went wrong.
+  try { persistErrors(window.sessionStorage, 'bandcoach.v1.errors'); } catch (e) {}
   function noteFault(where, err) { try {
     recordError(where, err); if (!errorGate.allow(Date.now()) || $('errorNotice')) return;
     document.body.insertAdjacentHTML('afterbegin', '<div id="errorNotice" class="backup-nudge" role="alert"><span>' + t('error.generic') + '</span><button class="small">' + t('side.backupDismiss') + '</button></div>');
@@ -708,6 +711,9 @@ import { register as registerPathway } from './ui/pathway.js';
   const APP_VERSION = resolveAppVersion(versionMeta && versionMeta.content);
   const BACKUP_AT_KEY = 'bandcoach.v1.backupAt';
   let lastBackupAt = 0; try { lastBackupAt = +localStorage.getItem(BACKUP_AT_KEY) || 0; } catch (e) {}
+  // F2: string instruments whose tune-first offer was answered on this device (per device, like the backup date).
+  const TUNE_ASKED_KEY = 'bandcoach.v1.tuneAsked';
+  let tuneAsked = []; try { const a = JSON.parse(localStorage.getItem(TUNE_ASKED_KEY)); if (Array.isArray(a)) tuneAsked = a.filter(x => typeof x === 'string'); } catch (e) {}
   let DB, mod = 'kbd', S = null;
   // U5: whether a REAL prior choice exists, sampled from the raw saved
   // prefs in loadDB() before sanitizeDB's 'kbd' default papers over "nothing
@@ -2024,8 +2030,15 @@ import { register as registerPathway } from './ui/pathway.js';
   let pathwayLineShown = false;
   // Start before any instrument was chosen: open the sheet and put focus on its first button instead of starting (or closing it).
   function askInstrumentFirst() { if (instrumentChosen) return false; setInstrumentSheetOpen(true); const b = document.querySelector('#picker button'); if (b) b.focus(); return true; }
+  // F2: before the first session on a string instrument, offer to tune first. "Tune first" opens the
+  // tuner on this instrument's own strings; either answer is remembered, and practising it once ends the offer.
+  function refreshTuneFirst() { const tg = TUNINGS[mod]; $('tuneFirst').hidden = !(instrumentChosen && !sess && mod !== 'chrom' && tg && tg[1].length && !tuneAsked.includes(mod) && !DB.sessions.some(r => r && r.mod === mod)); }
+  function noteTuneAsked(m) { if (!tuneAsked.includes(m)) tuneAsked.push(m); try { localStorage.setItem(TUNE_ASKED_KEY, JSON.stringify(tuneAsked)); } catch (e) {} $('tuneFirst').hidden = true; }
+  $('tuneFirstGo').addEventListener('click', () => { const m = mod; noteTuneAsked(m); tunerKind = m; setMod('tuner'); });
+  $('tuneFirstSkip').addEventListener('click', () => noteTuneAsked(mod));
   function startSession() {
     if (askInstrumentFirst()) return;
+    $('tuneFirst').hidden = true;
     document.body.classList.add('practising'); refreshModelClock(); ensureAudio(); sess = newSession(); recent = []; streak = 0; errCount = 0; task = null; lastItem = null; lastInputAt = now(); chunk = 0; say('');
     // Session length E7c: the learner's own choice (DB.prefs.sessionMinutes,
     // 0 meaning no limit) sets today's target before the tired check below,
@@ -2085,7 +2098,7 @@ import { register as registerPathway } from './ui/pathway.js';
     DB.events.push(ev); DB.events = boundEvents(DB.events, { skillMap: KBD_SONG_SKILL_MAP, skillMapInstrument: 'kbd' }); save();
   }
   function endSession() {
-    if (!sess) return; document.body.classList.remove('practising'); toneSrcs.forEach(s => { try { s.stop(); } catch (e) {} }); const min = sess.active / 60; let line = 'Session ended. Too short to log.';
+    if (!sess) return; document.body.classList.remove('practising'); showUpdateIfIdle(); toneSrcs.forEach(s => { try { s.stop(); } catch (e) {} }); const min = sess.active / 60; let line = 'Session ended. Too short to log.';
     if (sess.judged >= 8) { DB.sessions.push({ d: today(), mod: mod, min: Math.round(min * 10) / 10, acc: sess.ok / sess.judged, a1: mean(sess.first), a2: mean(sess.last), from: sess.from, to: S.level, breaks: sess.breaks }); DB.sessions = DB.sessions.slice(-60);
       let up = null, low = null, lowR = 1; Object.keys(S.item).forEach(id => { const cur = S.item[id], r1 = retrievability(cur, modelNow), r0 = retrievability(sess.m0[id] || cur, modelNow), g0 = r1 - r0; if (up === null || g0 > up.g) up = { id: id, g: g0 }; if (cur.reps >= 3 && (low === null || r1 < lowR)) { low = id; lowR = r1; } });
       line = 'Session done: ' + Math.round(min * 10) / 10 + ' min, ' + Math.round(100 * sess.ok / sess.judged) + '% right, best streak ' + sess.bestStreak + ', level ' + sess.from + ' to ' + S.level + '.' + (up && up.g > 0.05 ? ' Most improved: ' + inf(up.id).short + '.' : '') + (low ? ' Next time starts with extra ' + inf(low).short + '.' : ''); }
@@ -2615,6 +2628,7 @@ import { register as registerPathway } from './ui/pathway.js';
     // are enough; #prompt stays empty until a real exercise names one.
     $('prompt').textContent = ''; $('hint').textContent = ''; $('choices').hidden = true; say(''); if (MODS[m]) coach(idleCoachLine());
     renderOpts(); ioRefresh(); showAll(); if (!booting) instrumentChosen = true; if (instrumentChosen) { revealStage(); save(); }
+    refreshTuneFirst();
   }
   // Two visual tiers inside the one #picker container (kept as a single id
   // so every existing `#picker button` selector -- setMod's aria-pressed
@@ -2731,10 +2745,15 @@ import { register as registerPathway } from './ui/pathway.js';
   // ---------- backups: a downloadable copy of the whole DB, plus the saved song library
   // (E9: db.v now feeds migrateDB; song library shares the exact store learn/songs/editor
   // panels use, same fallback-to-memory pattern as src/ui/learn.js:92-93) ----------
+  // A new version never interrupts practice: the notice waits for the session to end.
+  let updateWaiting = false;
+  function showUpdateIfIdle() { if (updateWaiting && !document.body.classList.contains('practising')) $('updateReady').hidden = false; }
   function showBackupNudge(text) { $('backupNudgeText').textContent = text; $('backupNudge').hidden = false; }
   function noteBackupMade(t) { lastBackupAt = t; try { localStorage.setItem(BACKUP_AT_KEY, String(t)); } catch (e) {} }
   function backupLibrary() { try { return createLibrary(indexedDbStore(indexedDB, 'bandcoach-songs')); } catch (e) { return createLibrary(memoryStore()); } }
-  async function doExportProgress() { const songs = await backupLibrary().exportAll(); return exportProgressFile(DB, { appVersion: APP_VERSION, now: Date.now, songs }); }
+  // The song store opens lazily, so a blocked or broken IndexedDB surfaces here, not in backupLibrary():
+  // the progress is still exported, and `songsMissing` lets saveBackup say the songs are not in the file.
+  async function doExportProgress() { let songs = [], songsMissing = false; try { songs = await backupLibrary().exportAll(); } catch (e) { songsMissing = true; } const env = exportProgressFile(DB, { appVersion: APP_VERSION, now: Date.now, songs }); if (songsMissing) Object.defineProperty(env, 'songsMissing', { value: true }); return env; }
   async function saveBackup() {
     const env = await doExportProgress();
     const blob = new Blob([JSON.stringify(env, null, 2)], { type: 'application/json' });
@@ -2743,7 +2762,7 @@ import { register as registerPathway } from './ui/pathway.js';
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
     noteBackupMade(Date.now()); $('backupNudge').hidden = true;
-    coach(t('backup.saved'));
+    coach(t(env.songsMissing ? 'backup.savedNoSongs' : 'backup.saved'));
   }
   async function doImportProgress(textOrChecked) {
     const result = typeof textOrChecked === 'string' ? importProgressFile(textOrChecked) : textOrChecked; // a pre-checked result: parsed once
@@ -2756,25 +2775,47 @@ import { register as registerPathway } from './ui/pathway.js';
       try { await backupLibrary().importAll(result.songs); }
       catch (e) { const error = en['backup.err.songsNotStored']; coach(t('backup.err.songsNotStored')); return { ok: false, error }; }
     }
-    const priorLatencyMs = DB && DB.latencyMs;
-    modelNow = Date.now(); DB = sanitizeDB(result.db, undefined, modelNow); DB.latencyMs = num(priorLatencyMs, DB.latencyMs, 0, 300); if (!Array.isArray(DB.custom)) DB.custom = [];
-    $('optNames').checked = DB.prefs.names; $('optTheme').value = DB.prefs.theme; applyTheme(DB.prefs.theme); $('optLocale').value = DB.prefs.locale; applyLocale(DB.prefs.locale); setNoteNaming(DB.prefs.noteNaming); setReferencePitch(DB.prefs.a4); $('optNoteSystem').value = DB.prefs.noteNaming.system; $('optAccidentals').value = DB.prefs.noteNaming.accidentals; $('optA4').value = DB.prefs.a4; setMod(DB.prefs.mod);
+    // The profile as it is now, current instrument included, so Undo can put it back.
+    if (MODS[mod]) DB.mods[mod] = S = sanitizeModel(mod, S, modelNow);
+    const before = JSON.parse(JSON.stringify(DB));
+    applyProfile(result.db);
     if (!writeDB()) { const error = en['backup.err.notSaved']; coach(t('backup.err.notSaved')); return { ok: false, error }; }
+    restoreUndoProfile = before; $('restoreUndo').hidden = false;
     coach(t('backup.restored'));
     return result;
   }
+  // Replaces DB, prefs, theme and mod with a restored (or un-restored) profile. The measured latency belongs to this device, so it is kept.
+  function applyProfile(db) {
+    const priorLatencyMs = DB && DB.latencyMs;
+    modelNow = Date.now(); DB = sanitizeDB(db, undefined, modelNow); DB.latencyMs = num(priorLatencyMs, DB.latencyMs, 0, 300); if (!Array.isArray(DB.custom)) DB.custom = [];
+    $('optNames').checked = DB.prefs.names; $('optTheme').value = DB.prefs.theme; applyTheme(DB.prefs.theme); $('optLocale').value = DB.prefs.locale; applyLocale(DB.prefs.locale); setNoteNaming(DB.prefs.noteNaming); setReferencePitch(DB.prefs.a4); $('optNoteSystem').value = DB.prefs.noteNaming.system; $('optAccidentals').value = DB.prefs.noteNaming.accidentals; $('optA4').value = DB.prefs.a4; setMod(DB.prefs.mod);
+  }
+  let restoreUndoProfile = null;
+  $('restoreUndoBtn').addEventListener('click', () => {
+    if (!restoreUndoProfile) return;
+    const db = restoreUndoProfile; restoreUndoProfile = null; $('restoreUndo').hidden = true;
+    applyProfile(db);
+    coach(writeDB() ? t('backup.undone') : t('storage.saveFailed'));
+  });
   $('backupSaveBtn').addEventListener('click', function () { this.blur(); saveBackup(); });
+  function restoreQuestion(exportedAt) {
+    if (exportedAt == null) return t('backup.confirmRestore');
+    let date; try { date = new Date(exportedAt).toLocaleDateString(DB.prefs.locale, { year: 'numeric', month: 'long', day: 'numeric' }); } catch (e) { return t('backup.confirmRestore'); }
+    return t('backup.confirmRestoreDated', { date });
+  }
   $('backupRestoreInput').addEventListener('change', function () {
     const file = this.files && this.files[0]; this.value = '';
     if (!file) return;
     if (checkFileSize(file, 'backup')) { coach(t('backup.err.tooLarge')); return; } // before a FileReader is built
     const reader = new FileReader();
     // Check the file before asking: a file that is not a backup is refused with the reason, and the "replace your progress" confirm is only raised for one that can be restored.
-    reader.onload = () => { const text = String(reader.result), check = importProgressFile(text); if (!check.ok) { coach(t(check.errorId)); return; } if (confirm(t('backup.confirmRestore'))) doImportProgress(check); };
+    reader.onload = () => { const text = String(reader.result), check = importProgressFile(text); if (!check.ok) { coach(t(check.errorId)); return; } if (confirm(restoreQuestion(check.exportedAt))) doImportProgress(check); };
     reader.onerror = () => coach(t('backup.readError'));
     reader.readAsText(file);
   });
   $('backupNudgeDismiss').addEventListener('click', () => { $('backupNudge').hidden = true; });
+  $('updateReload').addEventListener('click', () => location.reload());
+  try { watchForUpdate(navigator.serviceWorker, () => { updateWaiting = true; showUpdateIfIdle(); }); } catch (e) { /* no service worker here */ }
   // ---------- Copy diagnostics (src/core/diagnostics.js)
   $('diagCopyBtn').addEventListener('click', async () => {
     const text = buildDiagnostics({ version: APP_VERSION, userAgent: navigator.userAgent, errors: getErrors(), capabilities: { microphone: !!navigator.mediaDevices, midi: !!navigator.requestMIDIAccess, audioWorklet: !!window.AudioWorkletNode, songStorage: !!window.indexedDB } });

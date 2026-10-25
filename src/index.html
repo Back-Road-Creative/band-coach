@@ -70,6 +70,10 @@
       <button type="button" class="small" id="backupSaveBtn" data-i18n="rail.backupSave">Save a backup</button>
       <label class="small file-label" for="backupRestoreInput" tabindex="0" role="button" data-i18n="rail.backupRestore">Restore a backup</label>
       <input type="file" accept=".json,application/json" id="backupRestoreInput" hidden>
+      <div class="backup-nudge" id="restoreUndo" role="status" hidden>
+        <span data-i18n="backup.restored">Backup restored.</span>
+        <button type="button" class="small" id="restoreUndoBtn" data-i18n="backup.undo">Undo restore</button>
+      </div>
     </div>
     <div class="settings-group">
       <h3 data-i18n="diag.title">Diagnostics</h3>
@@ -132,6 +136,10 @@
         <button type="button" class="primary big" id="playBtn" hidden>Start</button>
         <button type="button" id="endBtn" hidden data-i18n="side.end">End session</button>
       </div>
+      <div class="backup-nudge" id="tuneFirst" role="status" hidden>
+        <span id="tuneFirstText" data-i18n="side.tuneFirst">Strings drift between sessions. Tune first? It takes about 30 seconds.</span>
+        <span><button type="button" class="small" id="tuneFirstGo" data-i18n="side.tuneFirstGo">Tune first</button> <button type="button" class="small" id="tuneFirstSkip" data-i18n="side.tuneFirstSkip">Skip</button></span>
+      </div>
       <div class="card">
         <div class="eyebrow" data-i18n="side.energyEyebrow">Your energy this session</div>
         <div class="meterbox thin" role="progressbar" aria-label="Estimated energy" aria-valuemin="0" aria-valuemax="100" id="energyBar"><div id="energyFill"></div></div>
@@ -154,6 +162,10 @@
       <div class="backup-nudge" id="backupNudge" hidden>
         <span id="backupNudgeText"></span>
         <button type="button" class="small" id="backupNudgeDismiss" data-i18n="side.backupDismiss">Dismiss</button>
+      </div>
+      <div class="backup-nudge" id="updateReady" role="status" hidden>
+        <span data-i18n="side.updateReady">A new version is ready. Reload when you finish practicing.</span>
+        <button type="button" class="small" id="updateReload" data-i18n="storage.reload">Reload</button>
       </div>
     </aside>
   </div>

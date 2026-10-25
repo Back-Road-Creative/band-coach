@@ -346,12 +346,12 @@ low on space (`navigator.storage.persist()`, `src/core/storage-keep.js`), and th
 it does and about how much is stored, or that it may not and a backup is the safe copy. Open
 the Settings screen for "Save a backup", which downloads
 `band-coach-progress.json`, and "Restore a backup", which loads one back in. The backup file now
-carries your saved songs (from the Learn and Songs panels) alongside your practice progress, so
+carries your saved songs (from the Learn and Songs panels) alongside your practice progress (if this browser will not let Band Coach read the saved songs, the backup is still saved with your progress and the message says the songs are not in it), so
 restoring one brings both back — a restore replaces your progress and songs together, and if the
 songs in the backup cannot be stored on this device, nothing changes: your current progress and
 songs are left exactly as they were. An older backup made before songs were included still restores —
 it just has no songs to bring back. Restoring a backup that holds a song you already have (identical notes and title) keeps the one copy instead of adding a "(2)" duplicate; picking a file again, or "Save a copy", still adds a second song. A backup file that is damaged or was written by a newer Band
-Coach is refused with a message explaining why (in the language you chose), before any "replace your progress" question is asked, and your current progress is left untouched. A quiet reminder appears at the end of a session long enough to be logged (8 answers or more) when you have not saved a
+Coach is refused with a message explaining why (in the language you chose), before any "replace your progress" question is asked, and your current progress is left untouched. That question names the day the backup was made, so an old file picked by mistake is easy to spot, and once a restore is done Settings offers "Undo restore", which puts your progress back as it was just before (songs the backup added stay in your library). A quiet reminder appears at the end of a session long enough to be logged (8 answers or more) when you have not saved a
 backup in the last week — never after a session too short to log, since there is nothing yet to lose. If the progress saved on this device cannot be read when Band Coach opens, it says so in the same place, starts fresh and keeps the unreadable copy, so restoring a backup brings your progress back. The "My progress" panel also shows a practice calendar (minutes and
 level changes, one cell per day, for the last 8 weeks) and a daily minutes goal with a streak — the
 practice log itself only keeps the most recent 60 sessions, so days older than that say "earlier
@@ -374,7 +374,7 @@ startup and again whenever the language is changed.
   or microphone handler, the 50 ms pitch timer) is recorded in the in-memory error list and the
   learner sees one dismissible notice (at most one per 30 seconds) instead of silence. Settings >
   "Copy diagnostics" copies the app version, browser string, recent error
-  messages (links and file paths blanked, 200 characters each) and whether the microphone, MIDI,
+  messages (kept for this tab only, so they are still there after the reload the notice asks for; links and file paths blanked, 200 characters each) and whether the microphone, MIDI,
   AudioWorklet and song storage exist; the text stays hidden until you press the button, then it is shown on screen too, so with no clipboard it can be copied by hand. It is
   built from that short list in `src/core/diagnostics.js`, so audio, songs, practice records and
   device ids are not included by design. An error message is whatever the browser or app wrote, so
@@ -560,6 +560,11 @@ flight the same way, saying so plainly on the next visit ("Your last recording w
 it finished. Nothing was saved.", shown once). Ear training, How to play it, Music theory and a Metronome (a steady click with a 30-240 tempo, 2, 3, 4 or 6 beats per bar and one Start/Stop button; the first beat of each bar sounds higher, and your tempo is remembered) get
 their own plain home the same way: a "Tools" group inside the instrument sheet, alongside
 Tuner/Capture a melody/Interval drill/Rhythm, open with no extra click once the sheet is open.
+
+Before the first session on a string instrument, the side rail offers **Tune first** (about 30
+seconds): it opens the Tuner on that instrument's own strings. **Skip** puts the offer away; either
+answer is remembered on this device (`bandcoach.v1.tuneAsked`), and an instrument already practised
+never gets it. Keyboard, voice, winds and drums have nothing to tune, so they never see it.
 
 Opening any song shows one row of plain actions directly above its practise section: **Edit
 notes**, **Play along**, **Export**, **Share**, **Save a copy**, **Print** — a starter tune's Edit
@@ -1560,6 +1565,13 @@ version, its release date and the download URL above — deliberately excluded f
 worker's precache list so it always answers with the live version, never a cached one. This is
 what lets a downloaded `band-coach.html`, which can never auto-update itself, ask whether it's
 stale.
+
+The service worker takes over a new version as soon as it installs, but an open page keeps
+running the old code until it reloads. So the page watches for that hand-over and shows a short
+bar under the rail, "A new version is ready. Reload when you finish practicing.", with a Reload
+button (`src/core/update-watch.js`). It never interrupts practice: a hand-over during a session
+waits until the session ends. A first install is not announced, and a downloaded copy
+(no service worker under `file://`) never shows it.
 
 **iPhone microphone behaviour is unmeasured.** This edition has only been proven in headless
 Chromium against a loopback test server (`tests/build/pages-offline.test.mjs`) — that it installs,

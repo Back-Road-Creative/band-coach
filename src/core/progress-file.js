@@ -88,7 +88,7 @@ function byteLength(text) {
 }
 
 /**
- * Parses and validates a backup file's text. Returns `{ ok: true, db }` or
+ * Parses and validates a backup file's text. Returns `{ ok: true, db, songs, exportedAt }` or
  * `{ ok: false, error, errorId }` — a plain-English, non-technical message either way
  * (`errorId` is the i18n key of the same message, so the app can show it translated).
  * The returned `db` is migrated but NOT sanitised; the caller must still run
@@ -123,7 +123,15 @@ export function importProgress(text) {
     return { ok: false, error: 'That backup file has a damaged song in it, so nothing was changed.', errorId: 'backup.err.damagedSong' };
   }
   const migrated = migrateEnvelope(parsed);
-  return { ok: true, db: migrate(migrated.db), songs: Array.isArray(migrated.songs) ? migrated.songs : [] };
+  return { ok: true, db: migrate(migrated.db), songs: Array.isArray(migrated.songs) ? migrated.songs : [], exportedAt: readExportedAt(parsed.exportedAt) };
+}
+
+// The day the backup was made, in ms, for the restore question; null when the
+// file has no date or one that is not a date (the question then goes without).
+function readExportedAt(value) {
+  if (typeof value !== 'string' || !value) return null;
+  const ms = Date.parse(value);
+  return Number.isFinite(ms) ? ms : null;
 }
 
 function isPlainObject(value) {
