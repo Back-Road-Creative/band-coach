@@ -159,6 +159,15 @@ export function forwardNoteAt(midi, offsetSec, exact, source) {
   forwardNote(midi, exact === undefined ? true : exact, start + offsetSec, source);
 }
 
+// Hands-free practice (src/app.js's Space/Enter keydown and its sustain
+// pedal): presses the open step's own button, exactly as a click would --
+// 'try' is "Your turn" / "Stop and check" / "Practice again", 'next' is
+// Next. True when a button was pressed. A pedal ('pedal' source) never
+// presses the try button while a keyboard part is recording: there the
+// pedal is the player's sustain, not a button.
+let handsFreeTarget = null;
+export function handsFree(kind, source) { return handsFreeTarget ? handsFreeTarget(kind, source) : false; }
+
 function onMidiNote(fn) {
   noteListeners.push(fn);
   return () => {
@@ -468,6 +477,14 @@ function mountSongsPanel(hostEl, api) {
   const songHeaderSection = el('section', { class: 'panel-songs-song-actions', hidden: 'hidden' });
 
   const practiceSection = el('section', { class: 'panel-songs-practice', hidden: 'hidden' });
+  handsFreeTarget = (kind, source) => {
+    if (practiceSection.hidden) return false;
+    if (source === 'pedal' && kind === 'try' && practice && practice.recording && practice.instrument.input === 'midi') return false;
+    const btn = practiceSection.querySelector('button[data-hands-free="' + kind + '"]');
+    if (!btn || btn.disabled) return false;
+    btn.click();
+    return true;
+  };
 
   // A9: heading/intro/Carry-on/the song list/Assignments, together, used to
   // sit ahead of practiceSection in the DOM (append order below), which put
@@ -1295,7 +1312,7 @@ function mountSongsPanel(hostEl, api) {
     // (restart(), above) -- a second run started from the keyboard
     // hand-off must still end with "Back to practice" (C11a), and a
     // second Check run must still be a Check.
-    practiceSection.appendChild(el('button', { type: 'button', text: 'Practice again', onclick: () => restart(practice.mode, true) }));
+    practiceSection.appendChild(el('button', { type: 'button', 'data-hands-free': 'try', text: 'Practice again', onclick: () => restart(practice.mode, true) }));
     practiceSection.appendChild(el('button', {
       type: 'button', text: 'Back to songs',
       onclick: () => { practice = null; currentPractice = null; practiceSection.hidden = true; libraryDetails.open = true; },
@@ -1454,10 +1471,11 @@ function mountSongsPanel(hostEl, api) {
         class: 'panel-songs-hands-rest',
         text: practice.hands === 'left' ? t('songs.hands.restLeft') : t('songs.hands.restRight'),
       }));
-      bar.appendChild(el('button', { type: 'button', text: t('songs.step.next'), onclick: () => advance(true, null, 0, { unassessed: true }) }));
+      bar.appendChild(el('button', { type: 'button', 'data-hands-free': 'next', text: t('songs.step.next'), onclick: () => advance(true, null, 0, { unassessed: true }) }));
     } else if (step.passRule) {
       const recordBtn = el('button', {
         type: 'button',
+        'data-hands-free': 'try',
         text: practice.recording ? t('songs.step.stopCheck') : t('songs.step.yourTurn'),
         onclick: () => (practice.recording ? finishRecording(step) : startRecording(step)),
       });
@@ -1466,7 +1484,7 @@ function mountSongsPanel(hostEl, api) {
       bar.appendChild(countEl);
       appendLatencyLine(step);
     } else {
-      bar.appendChild(el('button', { type: 'button', text: t('songs.step.next'), onclick: () => advance(true, null) }));
+      bar.appendChild(el('button', { type: 'button', 'data-hands-free': 'next', text: t('songs.step.next'), onclick: () => advance(true, null) }));
     }
   }
 
@@ -1631,7 +1649,7 @@ function mountSongsPanel(hostEl, api) {
       practiceSection.appendChild(el('h4', { text: t('songs.transfer.title') }));
       practiceSection.appendChild(el('p', { text: t('songs.transfer.body', { from: span(step.fromBars), to: span(step.toBars) }) }));
     }
-    practiceSection.appendChild(el('button', { type: 'button', text: t('songs.step.next'), onclick: () => { practice.interlude = null; renderPractice(); } }));
+    practiceSection.appendChild(el('button', { type: 'button', 'data-hands-free': 'next', text: t('songs.step.next'), onclick: () => { practice.interlude = null; renderPractice(); } }));
   }
 
   // A repair step (src/core/teaching.js repairFor) is a handful of notes,
@@ -1654,6 +1672,7 @@ function mountSongsPanel(hostEl, api) {
     }
     practiceSection.appendChild(el('button', {
       type: 'button',
+      'data-hands-free': 'try',
       text: practice.recording ? t('songs.step.stopCheck') : t('songs.step.yourTurn'),
       onclick: () => (practice.recording ? finishRecording(step) : startRecording(step)),
     }));
@@ -2637,6 +2656,7 @@ function mountSongsPanel(hostEl, api) {
     // document.
     destroy() {
       destroyed = true;
+      handsFreeTarget = null;
       door.destroy();
     },
   };

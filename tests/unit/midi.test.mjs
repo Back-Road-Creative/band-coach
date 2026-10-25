@@ -91,3 +91,13 @@ test('a note message missing its velocity byte is truncated, not a phantom note-
   assert.deepEqual(p.feed(new Uint8Array([0x44])), []);
   assert.deepEqual(p.feed(new Uint8Array([0x90, 0x44])), []);
 });
+
+test('control change (0xB0) is a "cc" event: a sustain pedal (CC64) down and up', () => {
+  const p = createMidiParser();
+  assert.deepEqual(p.feed(new Uint8Array([0xb0, 64, 127, 0xb3, 64, 0])), [
+    { type: 'cc', controller: 64, value: 127, channel: 0 },
+    { type: 'cc', controller: 64, value: 0, channel: 3 },
+  ]);
+  // Running status carries a control change on, the way it does a note.
+  assert.deepEqual(p.feed(new Uint8Array([64, 100])), [{ type: 'cc', controller: 64, value: 100, channel: 3 }]);
+});

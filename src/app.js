@@ -83,7 +83,7 @@ import { estimateRange, classify, exerciseRangeFor, tonicFromRange } from './ins
 //
 //
 // slot:import:w-songs
-import { register as registerSongs, forwardNote as forwardSongNote, forwardNoteAt as forwardSongNoteAt, requestOpenSong, recordStartSec as songsRecordStartSec } from './ui/songs.js';
+import { register as registerSongs, forwardNote as forwardSongNote, forwardNoteAt as forwardSongNoteAt, requestOpenSong, recordStartSec as songsRecordStartSec, handsFree as songsHandsFree } from './ui/songs.js';
 import { itemIdForMidi } from './ui/songs/mastery.js';
 import { __setDebugFrames as __editorSetDebugFrames, __isRecording as __editorIsRecording } from './ui/songs/record-door.js';
 import { register as registerEditor, __getDebugSong } from './ui/editor.js';
@@ -2539,6 +2539,14 @@ import { register as registerPathway } from './ui/pathway.js';
   let kitLearnSink = null;
   const kitLearn = { listen: fn => { kitLearnSink = fn; return () => { if (kitLearnSink === fn) kitLearnSink = null; }; } };
   const kitNote = (input, note) => (MODS[mod] && MODS[mod].kit) || panels.current() === 'songs' ? kitNoteFor(DB.prefs.kit, input.name, note) : note;
+  // A sustain pedal (CC64) is a foot button in Songs: each press (value
+  // crossing 64 going down; a half-pedal wobble while down is not a second
+  // press) presses the step's Your turn / Stop and check, else its Next.
+  const pedalDown = new Map();
+  function onPedal(input, value) {
+    const down = value >= 64, was = pedalDown.get(input); pedalDown.set(input, down);
+    if (down && !was && panels.current() === 'songs' && !songsHandsFree('try', 'pedal')) songsHandsFree('next', 'pedal');
+  }
   function handleMidiMessage(input, ev) {
     const d = ev.data; if (!d || !d.length) return;
     midiBlink();
@@ -2551,6 +2559,7 @@ import { register as registerPathway } from './ui/pathway.js';
     if (midiOutBusy) return; // the keyboard is playing a song back for the learner and echoes its own notes as input -- not the learner playing, so not judged
     let parser = midiParsers.get(input); if (!parser) { parser = createMidiParser(); midiParsers.set(input, parser); }
     parser.feed(d).forEach(evt => {
+      if (evt.type === 'cc') { if (evt.controller === 64) onPedal(input, evt.value); return; }
       if (evt.type === 'on' && kitLearnSink && kitLearnSink(input.name, evt.note)) return; // the kit set-up walk-through is learning this pad; it is not a hit
       const note = kitNote(input, evt.note);
       if (evt.type === 'on') { proofHeard(note); noteState.noteOn(input, evt.channel, note); realMidiHeld.add(note); onNote(note, true, 'midi'); } else { noteState.noteOff(input, evt.channel, note); if (!noteState.isHeld(note)) realMidiHeld.delete(note); onNoteOff(note, 'midi'); }
@@ -2660,6 +2669,8 @@ import { register as registerPathway } from './ui/pathway.js';
     // A file picker is a <label> for a hidden file input (Restore a backup, Open a recording): Enter or Space opens the chooser, as a click does.
     if (ev.target.matches && ev.target.matches('label.file-label[for]') && (ev.key === 'Enter' || ev.key === ' ')) { ev.preventDefault(); const input = document.getElementById(ev.target.htmlFor); if (input) input.click(); return; }
     if (ev.repeat || ev.ctrlKey || ev.metaKey || ev.altKey) return; const tag = ev.target.tagName; if (tag === 'SELECT' || tag === 'TEXTAREA' || (tag === 'INPUT' && ev.target.type !== 'checkbox') || ev.target.isContentEditable) return;
+    // Hands-free song practice: Space presses the open step's Your turn / Stop and check, Enter its Next. A focused control keeps its own Space/Enter.
+    if (panels.current() === 'songs' && (ev.key === ' ' || ev.key === 'Enter') && !(ev.target.closest && ev.target.closest('button, a[href], summary, input, [role="button"]')) && songsHandsFree(ev.key === ' ' ? 'try' : 'next')) { ev.preventDefault(); return; }
     if (calRun && mod !== 'rhy' && ev.key === ' ' && tag !== 'BUTTON') { ev.preventDefault(); ensureAudio(); onTap(ev); return; }
     if (mod === 'rhy' && (ev.key === ' ' || ev.key.length === 1)) { if (tag === 'BUTTON' && ev.key === ' ' && ev.target.id !== 'tapPad') return; ev.preventDefault(); ensureAudio(); onTap(ev); return; }
     if (MODS[mod] && MODS[mod].kit && KIT_KEYS[ev.key.toLowerCase()]) { ev.preventDefault(); ensureAudio(); onHit(KIT_KEYS[ev.key.toLowerCase()], tapAudioTime(ev), 'key'); return; }
