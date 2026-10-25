@@ -35,7 +35,7 @@ test('the file input accepts the supported song and challenge extensions', async
   // (src/ui/songs/add-source.js's ADD_ACCEPT), so the accept string and its
   // help line grew a .wav mention alongside the existing extensions.
   const accept = await page.evaluate("document.getElementById('songsFileInput').getAttribute('accept')");
-  assert.equal(accept, '.mid,.midi,.abc,.xml,.musicxml,.mxl,.gp,.gp5,.bandpack,.json,.wav,.mp3,.ogg,.m4a,.flac,.webm');
+  assert.equal(accept, '.mid,.midi,.abc,.xml,.musicxml,.mxl,.gp,.gp5,.gp3,.gp4,.gpx,.bandpack,.json,.wav,.mp3,.ogg,.m4a,.flac,.webm');
   const label = await page.evaluate("document.querySelector('label[for=\"songsFileInput\"]').textContent");
   assert.ok(label.includes('.mid'));
   assert.ok(label.includes('.mxl'), 'label mentions compressed MusicXML: ' + label);
