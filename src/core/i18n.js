@@ -105,6 +105,8 @@ export const en = {
   // src/core/storage.js's safeSet). Cleared the moment a later save
   // succeeds, so it never outlives the problem it describes.
   'storage.saveFailed': "Your progress just now could not be saved on this device (storage may be full, or private browsing may be blocking it). Keep playing -- I'll keep trying to save.",
+  'storage.otherTab': 'Band Coach was changed in another tab, so this tab has stopped saving to keep that newer progress safe. Reload this tab to keep going.',
+  'storage.reload': 'Reload',
   'error.generic': 'Something went wrong. Reload if practice stops. To report it: Settings > Copy diagnostics.',
   'boot.failed': 'Band Coach could not start. Reload the page; if this keeps happening, your browser may be blocking something the app needs. What went wrong: {error}',
   'backup.saved': 'Backup saved to your downloads. Keep that file somewhere safe.',
@@ -139,6 +141,7 @@ export const en = {
   'update.devBuild': 'This is a development build ({version}).',
   'update.upToDate': "You're running the latest version ({version}).",
   'update.behind': 'Version {version} is out. ',
+  'update.whatsNew': "What's new:",
   'update.error': "Couldn't reach the update server. ",
   'update.downloadLinkText': 'Download the current version',
   'mic.blocked': 'The microphone was blocked. Allow it in the browser, or open the standalone copy in Chrome.',
@@ -631,6 +634,8 @@ export const es = {
   'wrongNote.num.9': 'nueve',
   'wrongNote.num.10': 'diez',
   'storage.saveFailed': 'Tu progreso de hace un momento no se pudo guardar en este dispositivo (puede que el almacenamiento esté lleno o que la navegación privada lo esté bloqueando). Sigue tocando: seguiré intentando guardar.',
+  'storage.otherTab': 'Band Coach se cambió en otra pestaña, así que esta pestaña dejó de guardar para proteger ese progreso más reciente. Recarga esta pestaña para seguir.',
+  'storage.reload': 'Recargar',
   'error.generic': 'Algo salió mal. Recarga si la práctica se detiene. Para informar: Ajustes > Copiar diagnóstico.',
   'boot.failed': 'Band Coach no pudo iniciarse. Recarga la página; si sigue pasando, puede que tu navegador esté bloqueando algo que la app necesita. Qué falló: {error}',
   'backup.saved': 'Copia de seguridad guardada en tus descargas. Guarda ese archivo en un lugar seguro.',
@@ -656,6 +661,7 @@ export const es = {
   'update.devBuild': 'Esta es una versión de desarrollo ({version}).',
   'update.upToDate': 'Estás usando la última versión ({version}).',
   'update.behind': 'Ya está disponible la versión {version}. ',
+  'update.whatsNew': 'Novedades:',
   'update.error': 'No se pudo conectar con el servidor de actualizaciones. ',
   'update.downloadLinkText': 'Descargar la versión actual',
   'mic.blocked': 'Se bloqueó el micrófono. Permítelo en el navegador, o abre la copia independiente en Chrome.',
