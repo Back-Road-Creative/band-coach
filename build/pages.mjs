@@ -257,7 +257,14 @@ function insertBeforeLast(html, tag, addition, tailIsRight) {
  * the real build (a test, in particular) passes its own throwaway directory,
  * so no two can ever collide by construction.
  */
-export async function writePagesFiles({ releaseHtml, version, outDir = PAGES_DIR }) {
+// docs/release-notes.json: { "<version>": "one short plain-text line" }. A missing file, bad JSON or a
+// missing / non-string entry means no note -- never a build failure.
+const NOTES_FILE = join(root, 'docs', 'release-notes.json');
+function releaseNoteFor(version, notesFile) {
+  try { const n = JSON.parse(readFileSync(notesFile, 'utf8'))[version]; return typeof n === 'string' && n.trim() ? n.trim() : null; } catch (e) { return null; }
+}
+
+export async function writePagesFiles({ releaseHtml, version, outDir = PAGES_DIR, notesFile = NOTES_FILE }) {
   const pagesHtml = injectCsp(injectPwaHead(releaseHtml));
 
   rmSync(outDir, { recursive: true, force: true });
@@ -269,7 +276,7 @@ export async function writePagesFiles({ releaseHtml, version, outDir = PAGES_DIR
   writeFileSync(
     join(outDir, 'version.json'),
     JSON.stringify(
-      { version, released: new Date().toISOString(), download: DOWNLOAD_URL },
+      Object.assign({ version, released: new Date().toISOString(), download: DOWNLOAD_URL }, releaseNoteFor(version, notesFile) ? { notes: releaseNoteFor(version, notesFile) } : {}),
       null,
       2
     ) + '\n',

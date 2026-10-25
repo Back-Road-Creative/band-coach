@@ -2,7 +2,7 @@ import { judgePitch, OCTAVE_POLICY } from './core/judge.js';
 import { createDeafWindow } from './audio/deaf-window.js';
 import { exportProgress as exportProgressFile, importProgress as importProgressFile, migrate as migrateDB } from './core/progress-file.js';
 import { checkFileSize } from './ui/songs/import-route.js';
-import { safeSet, safeGet, getStorage } from './core/storage.js';
+import { safeSet, safeGet, getStorage, crossTabCheck, readRaw } from './core/storage.js';
 import { sanitizeDB as sanitizeDBCore } from './core/sanitize-db.js';
 import { createLibrary, indexedDbStore, memoryStore } from './song/library.js';
 import { captureToSong } from './song/capture.js';
@@ -772,7 +772,7 @@ import { register as registerPathway } from './ui/pathway.js';
   }
   // sanitizeDB (src/core/sanitize-db.js, with repairEventClocks): the pure gate between a stored or restored profile and the app; the tables it checks against come in here.
   function sanitizeDB(v, defaultLatencyMs, modelNow) { return sanitizeDBCore(v, defaultLatencyMs, modelNow, { MODS, MOD_IDS, WIND_KINDS, VOICE_KINDS, LOCALES, NOTATE_MOD_IDS, sanitizeModel, sanitizePanelData, skillMap: KBD_SONG_SKILL_MAP }); }
-  // The exact string this page last read from or wrote to storage. flushSave()
+  // The exact raw string this page last read from or wrote to storage (corrupt text included, never a re-serialised copy). flushSave()
   // compares against it so a page going away never clobbers a newer write made
   // by someone else in the meantime (another tab, a restored backup).
   let lastStored = null;
@@ -785,7 +785,7 @@ import { register as registerPathway } from './ui/pathway.js';
   // a corrupt record with a fresh one), except the evidence now survives.
   // Resolved once: reading window.localStorage can itself throw (see getStorage), so no other line may touch the bare global to reach the DB.
   const store = getStorage(window);
-  function loadDB() { modelNow = Date.now(); const got = safeGet(store.storage, KEY); lastStored = (got.ok && !got.corrupt && got.value !== null) ? JSON.stringify(got.value) : null; const v = (got.ok && !got.corrupt) ? migrateDB(got.value) : null; hasSavedMod = !!(v && v.prefs && MODS[v.prefs.mod] && TOOL_MOD_IDS.indexOf(v.prefs.mod) < 0); DB = sanitizeDB(v, actx ? (actx.outputLatency || actx.baseLatency || 0) * 1000 : 0, modelNow); mod = DB.prefs.mod; S = DB.mods[mod]; gates = gatesFor(DB.prefs.noiseFloor); setNoteNaming(DB.prefs.noteNaming); }
+  function loadDB() { modelNow = Date.now(); const got = safeGet(store.storage, KEY); lastStored = got.ok ? readRaw(store.storage, KEY) : null; const v = (got.ok && !got.corrupt) ? migrateDB(got.value) : null; hasSavedMod = !!(v && v.prefs && MODS[v.prefs.mod] && TOOL_MOD_IDS.indexOf(v.prefs.mod) < 0); DB = sanitizeDB(v, actx ? (actx.outputLatency || actx.baseLatency || 0) * 1000 : 0, modelNow); mod = DB.prefs.mod; S = DB.mods[mod]; gates = gatesFor(DB.prefs.noiseFloor); setNoteNaming(DB.prefs.noteNaming); }
   let saveTimer = null;
   // Tracks only whether #settingsSay currently shows OUR failed-save
   // message, so a successful save clears exactly that message and never an
@@ -805,11 +805,22 @@ import { register as registerPathway } from './ui/pathway.js';
   // VERIFIED write -- advancing it on a failed attempt would make flushSave
   // believe a write it never made had already landed, and silently skip
   // every retry after it.
+  // Set once another tab has written the DB key under us. Nothing in this page saves again: the learner reloads (the notice's button) and the new page loads the other tab's data.
+  let otherTabChanged = false;
+  function markOtherTab() {
+    if (otherTabChanged) return; otherTabChanged = true; saveFailedShown = false; if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
+    ['settingsSay', 'mainSay'].forEach(id => { const el = $(id); el.textContent = t('storage.otherTab') + ' '; const b = document.createElement('button'); b.type = 'button'; b.textContent = t('storage.reload'); b.addEventListener('click', () => location.reload()); el.appendChild(b); });
+  }
+  window.addEventListener('storage', e => { if (e.key === KEY && e.newValue !== null && e.newValue !== lastStored && (!e.storageArea || e.storageArea === store.storage)) markOtherTab(); });
   function writeDB() {
     if (MODS[mod]) DB.mods[mod] = S = sanitizeModel(mod, S, modelNow);
     // Before the instrument question is answered, a setting the learner changed is stored, but not the boot-time default instrument, so the next visit still asks.
     const candidate = JSON.stringify(instrumentChosen ? DB : Object.assign({}, DB, { prefs: Object.assign({}, DB.prefs, { mod: null }) }));
-    const result = store.blocked ? { ok: false } : safeSet(store.storage, KEY, candidate);
+    // Another tab changed the stored data since this page last saw it: writing now would silently overwrite their newer progress, so stop and offer a reload. An unreadable store is no proof either, so it counts as a failed save.
+    if (otherTabChanged) return false;
+    const seen = crossTabCheck(store.storage, KEY, lastStored);
+    if (seen === 'changed') { markOtherTab(); return false; }
+    const result = (store.blocked || seen === 'unreadable') ? { ok: false } : safeSet(store.storage, KEY, candidate);
     if (result.ok) { lastStored = candidate; if (saveFailedShown) { saveFailedShown = false; $('settingsSay').textContent = ''; $('mainSay').textContent = ''; } }
     else { saveFailedShown = true; $('settingsSay').textContent = t('storage.saveFailed'); $('mainSay').textContent = t('storage.saveFailed'); }
     return result.ok;
@@ -2761,11 +2772,13 @@ import { register as registerPathway } from './ui/pathway.js';
     function appendUpdateLink(href) {
       const a = document.createElement('a'); a.href = href; a.rel = 'noopener'; a.textContent = t('update.downloadLinkText'); updResult.appendChild(a);
     }
+    // The note is network text: textContent only, never innerHTML.
+    function appendUpdateNotes(notes) { if (typeof notes !== 'string' || !notes) return; const p = document.createElement('p'); p.className = 'update-notes'; p.textContent = t('update.whatsNew') + ' ' + notes; updResult.appendChild(p); }
     function renderUpdateResult(r) {
       updResult.textContent = '';
       if (r.status === 'dev') { updResult.textContent = t('update.devBuild', { version: DEV_VERSION }); return; }
       if (r.status === 'up-to-date') { updResult.textContent = t('update.upToDate', { version: r.latestVersion }); return; }
-      if (r.status === 'behind') { updResult.textContent = t('update.behind', { version: r.latestVersion }); appendUpdateLink(r.downloadUrl); return; }
+      if (r.status === 'behind') { updResult.textContent = t('update.behind', { version: r.latestVersion }); appendUpdateLink(r.downloadUrl); appendUpdateNotes(r.notes); return; }
       updResult.textContent = t('update.error'); appendUpdateLink(r.downloadUrl);
     }
     updBtn.addEventListener('click', function () {

@@ -138,3 +138,39 @@ test('getStorage treats a null localStorage (some browsers) the same as a throwi
   assert.equal(got.blocked, true);
   assert.equal(got.storage.getItem('anything'), null);
 });
+
+// crossTabVerdict: a second tab with an older copy of the data must not overwrite a newer write.
+import { crossTabVerdict, crossTabCheck, readRaw } from '../../src/core/storage.js';
+
+test('crossTabVerdict: storage still holds what this page last saw -> ok', () => {
+  assert.equal(crossTabVerdict('{"a":1}', '{"a":1}'), 'ok');
+});
+test('crossTabVerdict: first save (nothing stored, nothing seen) -> ok', () => {
+  assert.equal(crossTabVerdict(null, null), 'ok');
+});
+test('crossTabVerdict: another tab wrote a different value -> changed', () => {
+  assert.equal(crossTabVerdict('{"a":2}', '{"a":1}'), 'changed');
+  assert.equal(crossTabVerdict('{"a":2}', null), 'changed');
+});
+test('crossTabVerdict: key removed while this page had data -> ok (nothing to clobber)', () => {
+  assert.equal(crossTabVerdict(null, '{"a":1}'), 'ok');
+});
+test('crossTabVerdict: a storage read that threw (undefined marker) -> unreadable, never overwrite', () => {
+  assert.equal(crossTabVerdict(undefined, '{"a":1}'), 'unreadable');
+});
+test('crossTabRead: wraps getItem, mapping a throw to unreadable', () => {
+  const ok = { getItem: () => 'x' };
+  const bad = { getItem() { throw new Error('SecurityError'); } };
+  assert.equal(crossTabCheck(ok, 'k', 'x'), 'ok');
+  assert.equal(crossTabCheck(ok, 'k', 'y'), 'changed');
+  assert.equal(crossTabCheck(bad, 'k', 'x'), 'unreadable');
+});
+
+test('readRaw returns the exact text held, including a corrupt record; null when absent or unreadable', () => {
+  const s = fakeStorage(); s.setItem('k', '{ "a": 1 }');
+  assert.equal(readRaw(s, 'k'), '{ "a": 1 }');
+  s.setItem('k', '{bad');
+  assert.equal(readRaw(s, 'k'), '{bad');
+  assert.equal(readRaw(fakeStorage(), 'missing'), null);
+  assert.equal(readRaw({ getItem() { throw new Error('x'); } }, 'k'), null);
+});
