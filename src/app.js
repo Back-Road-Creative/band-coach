@@ -134,7 +134,9 @@ import { register as registerPathway } from './ui/pathway.js';
   // fallback, and this only overwrites it with the identical string today.
   function applyStaticLabels(root) { root.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.getAttribute('data-i18n')); }); }
   // Language pick (Settings > Language, DB.prefs.locale): switches t(), <html lang>, the static labels and the nav landmark name. Text drawn once (the options list, the instrument sheet) is redrawn by the language control's handler; the rest picks the new language up the next time it is drawn.
-  function applyLocale(code) { setLocale(code); document.documentElement.lang = code; applyStaticLabels(document); $('mainNav').setAttribute('aria-label', t('nav.label')); $('playBtn').textContent = t(!sess ? 'stage.start' : paused ? 'stage.resume' : 'stage.pause'); }
+  // Settings' two filled-in lines (storage kept, copy age) are set once on open, so a
+  // language switch made from Settings redoes them in the new language.
+  function applyLocale(code) { setLocale(code); document.documentElement.lang = code; applyStaticLabels(document); $('mainNav').setAttribute('aria-label', t('nav.label')); $('playBtn').textContent = t(!sess ? 'stage.start' : paused ? 'stage.resume' : 'stage.pause'); if (!$('settingsView').hidden) { refreshKeepStatus(); refreshCopyAge(); } }
   const deafWindow = createDeafWindow({ now: () => performance.now() });
   // ---------- accessibility: wake lock, dialog focus, reduced motion ----------
   const wakeLock = createWakeLock();

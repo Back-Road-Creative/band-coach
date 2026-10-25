@@ -71,3 +71,19 @@ test('the kept-or-not line appearing does not move any control in Settings', asy
   await page.waitFor("!document.getElementById('keepStatus').hidden");
   assert.deepEqual(await page.evaluate(tops), before);
 });
+
+// The line is filled once, when Settings opens, so switching the language from
+// Settings itself must redo it (and the copy-age line) in the new language.
+test('switching the language in Settings redoes the kept-or-not and copy-age lines in that language', async (t) => {
+  const page = await launchPage(HTML_PATH, { initScript: fakeStorage('false') + profile({ mod: 'kbd' }) });
+  t.after(() => page.close());
+  await openSettings(page);
+  await page.waitFor("!document.getElementById('keepStatus').hidden");
+  assert.match((await page.evaluate(status)).text, /Save a backup/);
+  const age = "document.getElementById('copyAge').hidden ? null : document.getElementById('copyAge').textContent";
+  const ageEn = await page.evaluate(age);
+  await page.evaluate("(() => { const s = document.getElementById('optLocale'); s.value = 'es'; s.dispatchEvent(new Event('change', { bubbles: true })); })()");
+  await page.waitFor("/copia de seguridad/.test(document.getElementById('keepStatus').textContent)").catch(() => {});
+  assert.match((await page.evaluate(status)).text, /copia de seguridad/);
+  if (ageEn !== null) assert.notEqual(await page.evaluate(age), ageEn, 'the copy-age line is redone in Spanish');
+});
