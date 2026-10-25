@@ -348,7 +348,7 @@ restoring one brings both back — a restore replaces your progress and songs to
 songs in the backup cannot be stored on this device, nothing changes: your current progress and
 songs are left exactly as they were. An older backup made before songs were included still restores —
 it just has no songs to bring back. Restoring a backup that holds a song you already have (identical notes and title) keeps the one copy instead of adding a "(2)" duplicate; picking a file again, or "Save a copy", still adds a second song. A backup file that is damaged or was written by a newer Band
-Coach is refused with a message explaining why (in the language you chose), before any "replace your progress" question is asked, and your current progress is left untouched. A quiet reminder appears at the end of a session long enough to be logged (8 answers or more) when you have not saved a
+Coach is refused with a message explaining why (in the language you chose), before any "replace your progress" question is asked, and your current progress is left untouched. That question names the day the backup was made, so an old file picked by mistake is easy to spot, and once a restore is done Settings offers "Undo restore", which puts your progress back as it was just before (songs the backup added stay in your library). A quiet reminder appears at the end of a session long enough to be logged (8 answers or more) when you have not saved a
 backup in the last week — never after a session too short to log, since there is nothing yet to lose. If the progress saved on this device cannot be read when Band Coach opens, it says so in the same place, starts fresh and keeps the unreadable copy, so restoring a backup brings your progress back. The "My progress" panel also shows a practice calendar (minutes and
 level changes, one cell per day, for the last 8 weeks) and a daily minutes goal with a streak — the
 practice log itself only keeps the most recent 60 sessions, so days older than that say "earlier
@@ -1562,6 +1562,13 @@ version, its release date and the download URL above — deliberately excluded f
 worker's precache list so it always answers with the live version, never a cached one. This is
 what lets a downloaded `band-coach.html`, which can never auto-update itself, ask whether it's
 stale.
+
+The service worker takes over a new version as soon as it installs, but an open page keeps
+running the old code until it reloads. So the page watches for that hand-over and shows a short
+bar under the rail, "A new version is ready. Reload when you finish practicing.", with a Reload
+button (`src/core/update-watch.js`). It never interrupts practice: a hand-over during a session
+waits until the session ends. A first install is not announced, and a downloaded copy
+(no service worker under `file://`) never shows it.
 
 **iPhone microphone behaviour is unmeasured.** This edition has only been proven in headless
 Chromium against a loopback test server (`tests/build/pages-offline.test.mjs`) — that it installs,

@@ -70,6 +70,10 @@
       <button type="button" class="small" id="backupSaveBtn" data-i18n="rail.backupSave">Save a backup</button>
       <label class="small file-label" for="backupRestoreInput" tabindex="0" role="button" data-i18n="rail.backupRestore">Restore a backup</label>
       <input type="file" accept=".json,application/json" id="backupRestoreInput" hidden>
+      <div class="backup-nudge" id="restoreUndo" role="status" hidden>
+        <span data-i18n="backup.restored">Backup restored.</span>
+        <button type="button" class="small" id="restoreUndoBtn" data-i18n="backup.undo">Undo restore</button>
+      </div>
     </div>
     <div class="settings-group">
       <h3 data-i18n="diag.title">Diagnostics</h3>
@@ -153,6 +157,10 @@
       <div class="backup-nudge" id="backupNudge" hidden>
         <span id="backupNudgeText"></span>
         <button type="button" class="small" id="backupNudgeDismiss" data-i18n="side.backupDismiss">Dismiss</button>
+      </div>
+      <div class="backup-nudge" id="updateReady" role="status" hidden>
+        <span data-i18n="side.updateReady">A new version is ready. Reload when you finish practicing.</span>
+        <button type="button" class="small" id="updateReload" data-i18n="storage.reload">Reload</button>
       </div>
     </aside>
   </div>
