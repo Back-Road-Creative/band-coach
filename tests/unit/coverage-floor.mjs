@@ -1,6 +1,7 @@
-// The src/core line-coverage floor behind `npm run coverage` (package.json).
-// Reads the lcov file the coverage run wrote and exits non-zero when the
-// src/core line coverage falls below COVERAGE_FLOOR_PERCENT. Not a *.test.mjs
+// The line-coverage floors behind `npm run coverage` (package.json).
+// Reads the lcov file the coverage run wrote and exits non-zero when the line
+// coverage of src/core, src/song or src/audio falls below its floor in
+// COVERAGE_FLOORS, or when one of those directories is missing from the report. Not a *.test.mjs
 // file on purpose: it needs a finished coverage run, so the normal test globs
 // must not pick it up. tests/unit/coverage-floor.test.mjs tests the logic.
 import { readFileSync, mkdirSync, writeFileSync } from 'node:fs';
@@ -14,6 +15,10 @@ import { fileURLToPath } from 'node:url';
 // The first weekly `npm run coverage` run prints the exact figure for the single-run command.
 // Raise it when coverage rises; never lower it to get a run green (a test pins it at 98 or more).
 export const COVERAGE_FLOOR_PERCENT = 98;
+
+// Per-directory floors. src/song and src/audio measured on the 2026-10-19 weekly run (39264331022),
+// rounded down: song 97.65% (9002 of 9219 lines), audio 99.45% (2519 of 2533). Same rules as above.
+export const COVERAGE_FLOORS = { 'src/core': COVERAGE_FLOOR_PERCENT, 'src/song': 97, 'src/audio': 99 };
 
 // Makes the report folder before the run: node does not create the folder of
 // --test-reporter-destination, so a fresh checkout would die with ENOENT. The
@@ -51,12 +56,18 @@ export function checkFloor(lcov, floor = COVERAGE_FLOOR_PERCENT, dir = 'src/core
   return { ok: true, percent, message: 'coverage floor: ' + dir + ' line coverage ' + shown + '% (' + hit + '/' + found + ') meets the floor of ' + floor + '%' };
 }
 
+// -> { ok, message }: checkFloor for every directory in `floors`; one line each, ok only if all are.
+export function checkFloors(lcov, floors = COVERAGE_FLOORS) {
+  const results = Object.entries(floors).map(([dir, floor]) => checkFloor(lcov, floor, dir));
+  return { ok: results.every((r) => r.ok), message: results.map((r) => r.message).join('\n') };
+}
+
 if (process.argv[1] === fileURLToPath(import.meta.url) && process.argv[2] === '--prepare') {
   prepareReportDir(process.argv[3] || 'coverage');
 } else if (process.argv[1] === fileURLToPath(import.meta.url)) {
   let result;
   try {
-    result = checkFloor(readFileSync(process.argv[2] || 'coverage/lcov.info', 'utf8'));
+    result = checkFloors(readFileSync(process.argv[2] || 'coverage/lcov.info', 'utf8'));
   } catch (err) {
     result = { ok: false, message: 'coverage floor: cannot read the lcov report (' + err.message + ')' };
   }
