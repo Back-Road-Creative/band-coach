@@ -601,6 +601,13 @@
   /* At 320px a third of the row is ~92px: Spanish "Canciones" does not fit between 8px paddings and broke mid-word, so the side padding shrinks here (the word, not the padding, is what a learner reads). */
   @media (max-width: 360px) { .main-nav button { padding-inline: 3px; } }
   @media (max-width: 600px) { body.practising .sub { display: none; } }
+  /* F8 focus view: while practising, the energy card and "What the coach is leaning on" fold away at every size, so
+     the instrument, the prompt, the objective (#coach), the feedback and the live stats keep the room; End clears
+     body.practising and they return.
+     With the music stand setting (body.stand, prefs.stand) the prompt reads 1.5x from a stand; zoom scales whichever
+     per-size font rule applies, so the phone sizes keep their own ratio. */
+  body.practising #energyCard, body.practising #weakCard { display: none; }
+  body.practising.stand #prompt { zoom: 1.5; }
   /* U2: practising on a short, wide screen: the stage takes the left column and Start/End, the feedback card and the
      level card stack in the right one, so the canvas is not pushed below them. */
   @media (max-height: 600px) and (min-width: 700px) {

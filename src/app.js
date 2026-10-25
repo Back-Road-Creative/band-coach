@@ -2653,6 +2653,7 @@ import { register as registerPathway } from './ui/pathway.js';
   $('easierBtn').addEventListener('click', function () { this.blur(); jump(-1); }); $('harderBtn').addEventListener('click', function () { this.blur(); jump(1); });
   $('resetBtn').addEventListener('click', function () { this.blur(); if (!confirm(t('reset.confirm', { name: MODS[mod].name }))) return; if (sess) endSession(); DB.mods[mod] = S = freshModel(); recent = []; streak = 0; coach(t('reset.progressCleared', { name: MODS[mod].name })); save(); showAll(); });
   $('optNames').addEventListener('change', function () { DB.prefs.names = this.checked; save(); renderOpts(); }); // the practice Show labels own up to names off
+  $('optStand').addEventListener('change', function () { DB.prefs.stand = this.checked; save(); applyStand(); }); // F8: the prompt reads 1.5x while practising (styles.css body.practising.stand)
   // Theme J1: 'system' removes the attribute so styles.css's own
   // prefers-color-scheme media query decides; 'light'/'dark' pin it,
   // overriding the OS setting either way (see src/styles.css).
@@ -2802,6 +2803,7 @@ import { register as registerPathway } from './ui/pathway.js';
   // panels use, same fallback-to-memory pattern as src/ui/learn.js:92-93) ----------
   // A new version never interrupts practice: the notice waits for the session to end.
   let updateWaiting = false;
+  function applyStand() { $('optStand').checked = DB.prefs.stand; document.body.classList.toggle('stand', DB.prefs.stand); }
   function showUpdateIfIdle() { if (updateWaiting && !document.body.classList.contains('practising')) $('updateReady').hidden = false; }
   function showBackupNudge(text) { $('backupNudgeText').textContent = text; $('backupNudge').hidden = false; }
   function noteBackupMade(t) { lastBackupAt = t; try { localStorage.setItem(BACKUP_AT_KEY, String(t)); } catch (e) {} }
@@ -2843,7 +2845,7 @@ import { register as registerPathway } from './ui/pathway.js';
   function applyProfile(db) {
     const priorLatencyMs = DB && DB.latencyMs;
     modelNow = Date.now(); DB = sanitizeDB(db, undefined, modelNow); DB.latencyMs = num(priorLatencyMs, DB.latencyMs, 0, 300); if (!Array.isArray(DB.custom)) DB.custom = [];
-    $('optNames').checked = DB.prefs.names; $('optTheme').value = DB.prefs.theme; applyTheme(DB.prefs.theme); $('optLocale').value = DB.prefs.locale; applyLocale(DB.prefs.locale); setNoteNaming(DB.prefs.noteNaming); setReferencePitch(DB.prefs.a4); $('optNoteSystem').value = DB.prefs.noteNaming.system; $('optAccidentals').value = DB.prefs.noteNaming.accidentals; $('optA4').value = DB.prefs.a4; setMod(DB.prefs.mod);
+    $('optNames').checked = DB.prefs.names; applyStand(); $('optTheme').value = DB.prefs.theme; applyTheme(DB.prefs.theme); $('optLocale').value = DB.prefs.locale; applyLocale(DB.prefs.locale); setNoteNaming(DB.prefs.noteNaming); setReferencePitch(DB.prefs.a4); $('optNoteSystem').value = DB.prefs.noteNaming.system; $('optAccidentals').value = DB.prefs.noteNaming.accidentals; $('optA4').value = DB.prefs.a4; setMod(DB.prefs.mod);
   }
   let restoreUndoProfile = null;
   $('restoreUndoBtn').addEventListener('click', () => {
@@ -3129,7 +3131,7 @@ import { register as registerPathway } from './ui/pathway.js';
     updateNavState();
   }
   // A boot step that throws used to leave a blank or half-wired page with no word to the learner; say so, with the error text, instead (and record it, so the error log, console and release gate see the failed boot too).
-  try { loadDB(); applyLocale(DB.prefs.locale); if (!Array.isArray(DB.custom)) DB.custom = []; $('optNames').checked = DB.prefs.names; $('optTheme').value = DB.prefs.theme; $('optLocale').value = DB.prefs.locale; applyTheme(DB.prefs.theme); $('optNoteSystem').value = DB.prefs.noteNaming.system; $('optAccidentals').value = DB.prefs.noteNaming.accidentals; $('optA4').value = DB.prefs.a4; buildPicker(); pickerAsSheet = hasSavedMod; instrumentChosen = hasSavedMod; setInstrumentSheetOpen(!hasSavedMod); buildNav(); setMod(mod); if (loadedCorrupt) showBackupNudge(t('side.dataUnreadable')); booting = false; requestAnimationFrame(frame);
+  try { loadDB(); applyLocale(DB.prefs.locale); if (!Array.isArray(DB.custom)) DB.custom = []; $('optNames').checked = DB.prefs.names; applyStand(); $('optTheme').value = DB.prefs.theme; $('optLocale').value = DB.prefs.locale; applyTheme(DB.prefs.theme); $('optNoteSystem').value = DB.prefs.noteNaming.system; $('optAccidentals').value = DB.prefs.noteNaming.accidentals; $('optA4').value = DB.prefs.a4; buildPicker(); pickerAsSheet = hasSavedMod; instrumentChosen = hasSavedMod; setInstrumentSheetOpen(!hasSavedMod); buildNav(); setMod(mod); if (loadedCorrupt) showBackupNudge(t('side.dataUnreadable')); booting = false; requestAnimationFrame(frame);
     if (store.blocked) { saveFailedShown = true; $('settingsSay').textContent = t('storage.saveFailed'); $('mainSay').textContent = t('storage.saveFailed'); }
   } catch (e) { recordError('boot', e); const p = document.createElement('div'); p.id = 'bootFailed'; p.setAttribute('role', 'alert'); p.style.cssText = 'padding:12px;margin:8px;border:2px solid #c0392b;background:#fff;color:#111'; p.textContent = t('boot.failed', { error: (e && e.message) || String(e) }); document.body.insertBefore(p, document.body.firstChild); }
   const hook = !__DEBUG_HOOK__ ? null : { state: () => S, db: () => DB, sess: () => sess, task: () => task, cur: cur, note: onNote, answer: answer, tap: onTap, bar: () => bar, playing: () => playing, setMod: setMod, testSource: testSource, heard: () => heard, yin: yin, cap: () => cap, tuner: () => tunerState, tunerLock: () => tunerLock, deaf: () => deafWindow.isDeaf(), deafUntil: () => deafWindow.until(), exportProgress: doExportProgress, importProgress: doImportProgress, audioNow: audioNow, modelNow: () => modelNow, plan: () => sessionPlan, planProgress: () => planProgress,

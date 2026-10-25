@@ -26,7 +26,7 @@ const deps = {
 };
 const run = (v) => sanitizeDB(v, 12, 1.7e12, deps);
 const INHERITED = ['constructor', 'toString', 'hasOwnProperty', 'valueOf', '__proto__', 'isPrototypeOf', '__defineGetter__'];
-const PREF_KEYS = ['mod', 'wind', 'voice', 'kbdHands', 'kit', 'sessionMinutes', 'names', 'noiseFloor', 'noiseFloorV', 'inputDeviceId', 'notate', 'theme', 'locale', 'noteNaming', 'voiceRange', 'harpKey', 'a4'];
+const PREF_KEYS = ['mod', 'wind', 'voice', 'kbdHands', 'kit', 'sessionMinutes', 'names', 'noiseFloor', 'noiseFloorV', 'inputDeviceId', 'notate', 'theme', 'locale', 'noteNaming', 'voiceRange', 'harpKey', 'a4', 'stand'];
 
 test('an inherited key is not an instrument, a wind kind or a voice', () => {
   for (const k of INHERITED) {
@@ -170,4 +170,10 @@ test('prefs.a4 keeps a whole-Hz reference in 415..466 and falls back to 440 othe
   assert.equal(run({ prefs: { a4: 466 } }).prefs.a4, 466);
   assert.equal(run({ prefs: { a4: 442.4 } }).prefs.a4, 442);
   for (const bad of [414, 467, 0, -1, NaN, Infinity, '442', null, {}, [], 'constructor']) assert.equal(run({ prefs: { a4: bad } }).prefs.a4, 440, String(bad));
+});
+
+test('the music stand view is off unless it was saved as exactly true', () => {
+  assert.equal(run({}).prefs.stand, false);
+  assert.equal(run({ prefs: { stand: true } }).prefs.stand, true);
+  ['yes', 1, 'true', null, {}].forEach((v) => assert.equal(run({ prefs: { stand: v } }).prefs.stand, false, JSON.stringify(v)));
 });

@@ -59,6 +59,7 @@
       <h3 data-i18n="settings.look">Look and names</h3>
       <label for="optLocale"><span data-i18n="settings.language">Language</span> <select id="optLocale"><option value="en">English</option><option value="es">Español</option></select></label>
       <label for="optNames"><input type="checkbox" id="optNames" checked> <span data-i18n="settings.showNames">Show note names</span></label>
+      <label for="optStand"><input type="checkbox" id="optStand"> <span data-i18n="settings.stand">Music stand view: a bigger prompt while practicing</span></label>
       <label for="optTheme"><span data-i18n="settings.theme">Theme</span> <select id="optTheme"><option value="system" data-i18n="settings.theme.system">Match system</option><option value="light" data-i18n="settings.theme.light">Light</option><option value="dark" data-i18n="settings.theme.dark">Dark</option></select></label>
       <label for="optNoteSystem"><span data-i18n="settings.noteSystem">Note names</span> <select id="optNoteSystem"><option value="letters" data-i18n="settings.noteSystem.letters">Letters (C, D, E...)</option><option value="german" data-i18n="settings.noteSystem.german">German (H/B)</option><option value="solfege" data-i18n="settings.noteSystem.solfege">Fixed do (Do, Re, Mi...)</option></select></label>
       <label for="optAccidentals"><span data-i18n="settings.accidentals">Sharps/flats</span> <select id="optAccidentals"><option value="mixed" data-i18n="settings.accidentals.mixed">Mixed (today's spelling)</option><option value="sharps" data-i18n="settings.accidentals.sharps">Always sharps (♯)</option><option value="flats" data-i18n="settings.accidentals.flats">Always flats (♭)</option></select></label>
@@ -146,7 +147,7 @@
         <span id="tuneDriftText"></span>
         <span><button type="button" class="small" id="tuneDriftGo" data-i18n="side.tuneDriftGo">Tune</button> <button type="button" class="small" id="tuneDriftSkip" data-i18n="side.tuneDriftSkip">Not now</button></span>
       </div>
-      <div class="card">
+      <div class="card" id="energyCard">
         <div class="eyebrow" data-i18n="side.energyEyebrow">Your energy this session</div>
         <div class="meterbox thin" role="progressbar" aria-label="Estimated energy" aria-valuemin="0" aria-valuemax="100" id="energyBar"><div id="energyFill"></div></div>
         <div id="sessLine">No session yet today.</div>
