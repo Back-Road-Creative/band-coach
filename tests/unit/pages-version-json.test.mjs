@@ -61,3 +61,32 @@ test("the service worker's fetch handler falls through to the network for versio
     'requests not in PRECACHE must fall through to the network, not be answered from the cache'
   );
 });
+
+// docs/release-notes.json maps a version to one plain-text line; version.json carries it only when the entry exists.
+import { writePagesFiles } from '../../build/pages.mjs';
+import { writeFileSync } from 'node:fs';
+const MIN_HTML = '<!doctype html><html><head><meta charset="utf-8"></head><body><p>x</p></body></html>';
+async function versionJsonWith(notesText, version) {
+  const dir = mkdtempSync(join(tmpdir(), 'band-coach-notes-'));
+  try {
+    const notesFile = join(dir, 'release-notes.json');
+    if (notesText !== null) writeFileSync(notesFile, notesText, 'utf8');
+    await writePagesFiles({ releaseHtml: MIN_HTML, version, outDir: join(dir, 'out'), notesFile });
+    return JSON.parse(readFileSync(join(dir, 'out', 'version.json'), 'utf8'));
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+}
+test('version.json carries notes when the notes file has an entry for that version', async () => {
+  const v = await versionJsonWith('{"1.2.3":"Fixed a thing."}', '1.2.3');
+  assert.equal(v.notes, 'Fixed a thing.');
+});
+test('version.json omits notes when there is no entry, no file, or unreadable JSON; the build does not fail', async () => {
+  assert.equal('notes' in await versionJsonWith('{"1.0.0":"Other."}', '1.2.3'), false);
+  assert.equal('notes' in await versionJsonWith(null, '1.2.3'), false);
+  assert.equal('notes' in await versionJsonWith('not json', '1.2.3'), false);
+  assert.equal('notes' in await versionJsonWith('{"1.2.3":7}', '1.2.3'), false);
+});
+test('the committed notes file has a plain-text line for the current package version', () => {
+  const notes = JSON.parse(readFileSync(join(root, 'docs', 'release-notes.json'), 'utf8'));
+  assert.equal(typeof notes[PKG.version], 'string');
+  assert.ok(notes[PKG.version].length > 0 && notes[PKG.version].length <= 500);
+});

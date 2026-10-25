@@ -346,6 +346,12 @@ test('sanitizeReviewQueue: never trusts saved data, round-trips a clean queue th
   assert.deepEqual(sanitizeReviewQueue({ items: [null, 3, { songId: 's' }, { songId: 's', partId: 'p', bars: 'no', at: 1 }] }), []);
 });
 
+test('sanitizeReviewQueue: keeps a song title for the plan line, drops one that is not a string', () => {
+  const q = addReview([], { songId: 's', partId: 'p', instrumentId: 'kbd', phraseIndex: 0, bars: [0, 1], kind: 'whole', title: 'Ode' }, 5);
+  assert.equal(sanitizeReviewQueue({ items: q })[0].title, 'Ode');
+  assert.equal('title' in sanitizeReviewQueue({ items: [{ ...q[0], title: 7 }] })[0], false);
+});
+
 import { sanitizePanelData } from '../../src/ui/panels.js';
 
 test('review queue survives the saved-db panel sanitiser (save/load/backup path)', () => {

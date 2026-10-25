@@ -13,6 +13,7 @@
 // (openMic/analysers/gates/audio/now — see src/ui/panels.js and the
 // "Wiring wave W" section of the author brief for what each one is).
 import { yin } from '../../audio/yin.js';
+import { freqToMidi, referencePitch } from '../../core/pitch.js';
 import { rangeForInstrument, FALLBACK_RANGE } from '../../audio/range.js';
 
 // Falls back to the app's generic search band (src/audio/range.js) when
@@ -28,7 +29,7 @@ const DEFAULT_FMAX = FALLBACK_RANGE.fmax;
 export function sampleFrame({ buf, sampleRate, fmin = DEFAULT_FMIN, fmax = DEFAULT_FMAX, gate, t }) {
   const r = yin(buf, sampleRate, fmin, fmax, gate);
   if (!r.freq) return null;
-  const midi = 69 + 12 * Math.log2(r.freq / 440);
+  const midi = freqToMidi(r.freq, referencePitch());
   const confidence = typeof r.clarity === 'number' ? Math.max(0, Math.min(1, r.clarity)) : 1;
   return { t, midi, rms: r.rms, confidence };
 }

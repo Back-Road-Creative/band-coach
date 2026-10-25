@@ -26,7 +26,7 @@ const deps = {
 };
 const run = (v) => sanitizeDB(v, 12, 1.7e12, deps);
 const INHERITED = ['constructor', 'toString', 'hasOwnProperty', 'valueOf', '__proto__', 'isPrototypeOf', '__defineGetter__'];
-const PREF_KEYS = ['mod', 'wind', 'voice', 'kbdHands', 'kit', 'sessionMinutes', 'names', 'noiseFloor', 'noiseFloorV', 'inputDeviceId', 'notate', 'theme', 'locale', 'noteNaming', 'voiceRange', 'harpKey'];
+const PREF_KEYS = ['mod', 'wind', 'voice', 'kbdHands', 'kit', 'sessionMinutes', 'names', 'noiseFloor', 'noiseFloorV', 'inputDeviceId', 'notate', 'theme', 'locale', 'noteNaming', 'voiceRange', 'harpKey', 'a4'];
 
 test('an inherited key is not an instrument, a wind kind or a voice', () => {
   for (const k of INHERITED) {
@@ -121,7 +121,7 @@ function garbage(r, depth = 0) {
   const leaves = [null, undefined, true, false, 0, -1, 1e308, -1e308, NaN, Infinity, '', 'x', '5', 'constructor', '__proto__', 'toString', 'kbd', 'harp', 'both', 'dark', 'en', 60, 0.5, 2, 99, [], {}];
   if (depth > 3 || r() < 0.35) return pick(leaves);
   if (r() < 0.4) return Array.from({ length: Math.floor(r() * 5) }, () => garbage(r, depth + 1));
-  const keys = ['mod', 'wind', 'voice', 'voiceRange', 'low', 'high', 'names', 'noiseFloor', 'noiseFloorV', 'inputDeviceId', 'notate', 'kbd', 'theme', 'locale', 'noteNaming', 'system', 'accidentals', 'harpKey', 'kbdHands', 'sessionMinutes', 'd', 'min', 'acc', 'source', 'songId', 'at', 'id', 'constructor', '__proto__', 'item', 'level'];
+  const keys = ['mod', 'wind', 'voice', 'voiceRange', 'low', 'high', 'names', 'noiseFloor', 'noiseFloorV', 'inputDeviceId', 'notate', 'kbd', 'theme', 'locale', 'noteNaming', 'system', 'accidentals', 'harpKey', 'a4', 'kbdHands', 'sessionMinutes', 'd', 'min', 'acc', 'source', 'songId', 'at', 'id', 'constructor', '__proto__', 'item', 'level'];
   const o = {};
   for (let i = Math.floor(r() * 6); i > 0; i--) Object.defineProperty(o, pick(keys), { value: garbage(r, depth + 1), enumerable: true, configurable: true, writable: true });
   return o;
@@ -161,4 +161,13 @@ test('seeded sweep: never throws, always the full prefs shape, stable on a secon
     assert.equal(d.v, 1);
     assert.deepEqual(JSON.parse(JSON.stringify(run(d))), JSON.parse(JSON.stringify(d)), 'a second pass changes nothing');
   }
+});
+
+test('prefs.a4 keeps a whole-Hz reference in 415..466 and falls back to 440 otherwise', () => {
+  assert.equal(run({}).prefs.a4, 440);
+  assert.equal(run({ prefs: { a4: 442 } }).prefs.a4, 442);
+  assert.equal(run({ prefs: { a4: 415 } }).prefs.a4, 415);
+  assert.equal(run({ prefs: { a4: 466 } }).prefs.a4, 466);
+  assert.equal(run({ prefs: { a4: 442.4 } }).prefs.a4, 442);
+  for (const bad of [414, 467, 0, -1, NaN, Infinity, '442', null, {}, [], 'constructor']) assert.equal(run({ prefs: { a4: bad } }).prefs.a4, 440, String(bad));
 });

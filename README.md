@@ -57,7 +57,7 @@ Downloaded (with the version). No model has been trained or published yet, so to
 answers "No model pack is published yet." and keeps nothing. A pack that fails to download or
 verify is never kept, and a pack is only ever downloaded from its own folder on the Band Coach website.
 
-The app follows your system's light/dark setting automatically, or pick Light/Dark yourself from the Theme control next to "Show note names" on the Settings screen. Two more controls next to Theme let you pick how notes are named -- letters, German (H/B), or fixed-do solfege (Do, Re, Mi...) -- and whether the black keys are spelled with sharps, flats, or today's mixed spelling.
+The app follows your system's light/dark setting automatically, or pick Light/Dark yourself from the Theme control next to "Show note names" on the Settings screen. Two more controls next to Theme let you pick how notes are named -- letters, German (H/B), or fixed-do solfege (Do, Re, Mi...) -- and whether the black keys are spelled with sharps, flats, or today's mixed spelling. A "Tuning reference (A4, Hz)" box (415 to 466, default 440) is for players whose group tunes to 442 or similar: the tuner, ear training, recording and song listening judge your playing against it, and the reference tones the app plays follow it. Analysing an audio file you load is not affected.
 
 If your microphone or keyboard is not being heard, the next two sections are the ones to read.
 Everything from "Build it from source" down is for people working on the app itself.
@@ -348,16 +348,19 @@ or re-downloading the file can lose it, since browsers do not share that storage
 save is verified by reading it back; if a save cannot be written (storage full, or private browsing
 blocking it), a plain-language status appears both on the main practice screen and in Settings, until
 a later save succeeds — you never have to open Settings to find out progress is not being kept. Open
-blocking it), Settings shows a plain-language status until a later save succeeds. Open
+blocking it), Settings shows a plain-language status until a later save succeeds. After the first
+session long enough to log, Band Coach asks the browser to keep its data even when the device runs
+low on space (`navigator.storage.persist()`, `src/core/storage-keep.js`), and the foot of Settings says whether
+it does and about how much is stored, or that it may not and a backup is the safe copy. Open
 the Settings screen for "Save a backup", which downloads
 `band-coach-progress.json`, and "Restore a backup", which loads one back in. The backup file now
-carries your saved songs (from the Learn and Songs panels) alongside your practice progress, so
+carries your saved songs (from the Learn and Songs panels) alongside your practice progress (if this browser will not let Band Coach read the saved songs, the backup is still saved with your progress and the message says the songs are not in it), so
 restoring one brings both back — a restore replaces your progress and songs together, and if the
 songs in the backup cannot be stored on this device, nothing changes: your current progress and
 songs are left exactly as they were. An older backup made before songs were included still restores —
 it just has no songs to bring back. Restoring a backup that holds a song you already have (identical notes and title) keeps the one copy instead of adding a "(2)" duplicate; picking a file again, or "Save a copy", still adds a second song. A backup file that is damaged or was written by a newer Band
-Coach is refused with a message explaining why (in the language you chose), before any "replace your progress" question is asked, and your current progress is left untouched. A quiet reminder appears at the end of a session long enough to be logged (8 answers or more) when you have not saved a
-backup in the last week — never after a session too short to log, since there is nothing yet to lose. The "My progress" panel also shows a practice calendar (minutes and
+Coach is refused with a message explaining why (in the language you chose), before any "replace your progress" question is asked, and your current progress is left untouched. That question names the day the backup was made, so an old file picked by mistake is easy to spot, and once a restore is done Settings offers "Undo restore", which puts your progress back as it was just before (songs the backup added stay in your library). A quiet reminder appears at the end of a session long enough to be logged (8 answers or more) when you have not saved a
+backup in the last week — never after a session too short to log, since there is nothing yet to lose. If the progress saved on this device cannot be read when Band Coach opens, it says so in the same place, starts fresh and keeps the unreadable copy, so restoring a backup brings your progress back. The "My progress" panel also shows a practice calendar (minutes and
 level changes, one cell per day, for the last 8 weeks) and a daily minutes goal with a streak — the
 practice log itself only keeps the most recent 60 sessions, so days older than that say "earlier
 sessions not kept" rather than a false zero. "Print this week's report" turns the last 7 days into a
@@ -365,6 +368,7 @@ one-page, printer-friendly summary for a teacher or parent. The backup, restore 
 above are read from the string tables in `src/core/i18n.js` (`t(id, params)`) rather than
 hardcoded. Settings > Language switches the app between English and Español (the choice is saved
 with your other preferences, travels in a backup, and is applied at startup before the first
+screen; `<html lang>` follows it). What is translated (each `group.*` below is a key prefix in the string tables): the app tagline and the start-up failure notice (`app.*`, `boot.*`); the nav bar and its landmark name (`nav.*`); the instrument sheet and its Tools/More headings (`picker.*`); the "Set up input" panel (`setup.*`), the input hints (`io.*`), the keyboard help and keyboard-path hand-off (`kbd.*`) and the microphone messages such as blocked or not found (`mic.*`, `audio.*` for "Sound stopped", `tuner.*`); the practice stage, its tap pad and replay button (`stage.*`), the side panel with End session and the energy readout (`side.*`, `energy.*`, `break.*`), the level card (`level.*`), the practice option rows (session length, Show, Hands, Play in time; `opt.*`), the wrong-note hints (`wrongNote.*`, `hint.*`) and the written "how to play this" charts (`how.*`, `howInline.*`, `fingerings.*`); the "Today: ..." plan line (`plan.*`) and the coach lines around a level-up and a session start (`coach.*`: the level-up note, the warm-up and long-day notes, the 45-minute cap); the reset button, its confirmation and the sidebar backup and reset controls (`reset.*`, `rail.*`), the backup/restore messages (`backup.*`), the save-failed notice (`storage.*`) and the update-check messages (`update.*`); every label on the Settings screen (`settings.*`), "Copy diagnostics" (`diag.*`), the general error notice (`error.*`) and the downloadable-model status lines (`modelPack.*`); the whole Progress screen including its printable weekly report (`history.*`) and its small stats (`stats.*`); the keyboard path (`pathway.*`); the "not yet checked by a player" review labels (`review.*`); the Ear training screen's own labels, buttons and status lines (`ear.*`; the exercise prompts, level names and "why" text stay English); the Metronome tool (`metronome.*`); and the Songs screen (`songs.*`: panel titles, buttons, modes, the hand and step wording, the import and pack messages, and the status messages under `songs.say.*`; the names of panels such as "Play Along" stay English, as on screen). That `songs.*` group is the app's own wording around songs, not the songs themselves: a song's title and notes stay as the file or the built-in list gave them, and lesson text not routed through `t()` stays English. Everything else not yet routed
 screen; `<html lang>` follows it). What is translated (each `group.*` below is a key prefix in the string tables): the app tagline and the start-up failure notice (`app.*`, `boot.*`); the nav bar and its landmark name (`nav.*`); the instrument sheet and its Tools/More headings (`picker.*`); the "Set up input" panel (`setup.*`), the input hints (`io.*`), the keyboard help and keyboard-path hand-off (`kbd.*`) and the microphone messages such as blocked or not found (`mic.*`, `audio.*` for "Sound stopped", `tuner.*`); the practice stage, its tap pad and replay button (`stage.*`), the side panel with End session and the energy readout (`side.*`, `energy.*`, `break.*`), the level card (`level.*`), the practice option rows (session length, Show, Hands, Play in time; `opt.*`), the wrong-note hints (`wrongNote.*`, `hint.*`) and the written "how to play this" charts (`how.*`, `howInline.*`, `fingerings.*`); the "Today: ..." plan line (`plan.*`) and the coach lines around a level-up and a session start (`coach.*`: the level-up note, the warm-up and long-day notes, the 45-minute cap); the reset button, its confirmation and the sidebar backup and reset controls (`reset.*`, `rail.*`), the backup/restore messages (`backup.*`), the save-failed notice (`storage.*`) and the update-check messages (`update.*`); every label on the Settings screen (`settings.*`), "Copy diagnostics" (`diag.*`), the general error notice (`error.*`) and the downloadable-model status lines (`modelPack.*`); the whole Progress screen including its printable weekly report (`history.*`) and its small stats (`stats.*`); the keyboard path (`pathway.*`); the "not yet checked by a player" review labels (`review.*`); and the Songs screen (`songs.*`: panel titles, buttons, modes, the hand and step wording, the import and pack messages, and the status messages under `songs.say.*`; the names of panels such as "Play Along" stay English, as on screen). That `songs.*` group is the app's own wording around songs, not the songs themselves: a song's title and notes stay as the file or the built-in list gave them, and lesson text not routed through `t()` stays English. Everything else not yet routed
 through `t()` -- most of the exercise prompts, the remaining coach lines, the "why" sentence after the plan line, the item names in Progress, the teacher summary text -- stays in English whichever language is picked. The Spanish table is a
 machine-translated first pass that has not yet been reviewed by a native speaker; a unit test
@@ -378,7 +382,7 @@ startup and again whenever the language is changed.
   or microphone handler, the 50 ms pitch timer) is recorded in the in-memory error list and the
   learner sees one dismissible notice (at most one per 30 seconds) instead of silence. Settings >
   "Copy diagnostics" copies the app version, browser string, recent error
-  messages (links and file paths blanked, 200 characters each) and whether the microphone, MIDI,
+  messages (kept for this tab only, so they are still there after the reload the notice asks for; links and file paths blanked, 200 characters each) and whether the microphone, MIDI,
   AudioWorklet and song storage exist; the text stays hidden until you press the button, then it is shown on screen too, so with no clipboard it can be copied by hand. It is
   built from that short list in `src/core/diagnostics.js`, so audio, songs, practice records and
   device ids are not included by design. An error message is whatever the browser or app wrote, so
@@ -561,9 +565,14 @@ says so plainly (a score file never had a recording, so its row does not say thi
 a picked audio file is being decoded and transcribed ("Stopped. Nothing was saved."), and leaving
 Songs outright mid-recording or mid-analysis stops the mic/meter and discards whatever was in
 flight the same way, saying so plainly on the next visit ("Your last recording was stopped before
-it finished. Nothing was saved.", shown once). Ear training, How to play it and Music theory get
+it finished. Nothing was saved.", shown once). Ear training, How to play it, Music theory and a Metronome (a steady click with a 30-240 tempo, 2, 3, 4 or 6 beats per bar and one Start/Stop button; the first beat of each bar sounds higher, and your tempo is remembered) get
 their own plain home the same way: a "Tools" group inside the instrument sheet, alongside
 Tuner/Capture a melody/Interval drill/Rhythm, open with no extra click once the sheet is open.
+
+Before the first session on a string instrument, the side rail offers **Tune first** (about 30
+seconds): it opens the Tuner on that instrument's own strings. **Skip** puts the offer away; either
+answer is remembered on this device (`bandcoach.v1.tuneAsked`), and an instrument already practised
+never gets it. Keyboard, voice, winds and drums have nothing to tune, so they never see it.
 
 Opening any song shows one row of plain actions directly above its practise section: **Edit
 notes**, **Play along**, **Export**, **Share**, **Save a copy**, **Print** — a starter tune's Edit
@@ -633,8 +642,9 @@ song list, and Play along has its own **Back to songs** button alongside Edit no
 The Songs panel (`src/ui/songs.js`) turns a whole tune — built in, or imported from a `.mid`,
 `.midi`, `.abc`, `.xml`, `.musicxml`, compressed `.mxl`, Guitar Pro `.gp`, Guitar Pro 5 `.gp5`, or a
 recording (`.wav`, `.mp3`, `.ogg`, `.m4a`, `.flac`, `.webm`) — into a
-step-by-step practice lesson (`src/song/lesson.js`), tracking each learner's own pass/fail record
-and crediting every correctly played note toward the same mastery store a built-in drill uses —
+step-by-step practice lesson (`src/song/lesson.js`). An older Guitar Pro file (`.gp3`, `.gp4`,
+`.gpx`) is refused with a message to export it as `.gp5`, `.gp` or MusicXML. The panel tracks each learner's own pass/fail record
+and credits every correctly played note toward the same mastery store a built-in drill uses —
 credit always lands on whichever instrument the song is actually being played on, even if a
 different instrument is showing on the main screen, and a finished lesson leaves its own row in
 the practice log (`source: "song"`) alongside built-in drill sessions. Opening (or resuming) a
@@ -748,6 +758,9 @@ passage is instead queued for a **delayed review** (one per song and part, the l
 with save, load and the progress backup) and the lesson simply tells you so; the next time you open
 that song in a later session, its first step reminds you to play that passage through once. Check
 mode never queues a review, and neither does a step your chosen hand rests through.
+You do not have to remember to open Songs: in a later session, today's plan line names the review
+first ("Today: review Hot Cross Buns, bars 3-4, then ..."), and a **Review** button beside the
+instrument options opens that song and part at the review, on the instrument it was queued for.
 
 ## Play along with a recording
 
@@ -1459,6 +1472,11 @@ A wrong-note correction on a transposing wind (microphone sustain or MIDI) names
 heard and the target in that same written key (`writtenMidi` in `src/core/wrong-note.js` maps the
 sounding pitch back), so it never says "the note is B♭" under a prompt that reads "Play C4".
 
+Four wrong notes in a row from a MIDI keyboard, all the same distance off the target, read as the
+keyboard's octave or transpose button rather than the player: the correction then says "Every note
+is landing an octave too high: check your keyboard's octave or transpose buttons." (`midiShift` in
+`src/core/wrong-note.js`). One stray note keeps the usual hint, and the computer keys never count.
+
 `src/song/feasibility.js`'s `feasibility(song, partId, instrument)` turns
 `fitToInstrument`'s own result into a plain-language badge -- "Fits as
 written", "Transposed to G", "3 notes skipped" -- never a guessed score.
@@ -1564,6 +1582,13 @@ worker's precache list so it always answers with the live version, never a cache
 what lets a downloaded `band-coach.html`, which can never auto-update itself, ask whether it's
 stale.
 
+The service worker takes over a new version as soon as it installs, but an open page keeps
+running the old code until it reloads. So the page watches for that hand-over and shows a short
+bar under the rail, "A new version is ready. Reload when you finish practicing.", with a Reload
+button (`src/core/update-watch.js`). It never interrupts practice: a hand-over during a session
+waits until the session ends. A first install is not announced, and a downloaded copy
+(no service worker under `file://`) never shows it.
+
 **iPhone microphone behaviour is unmeasured.** This edition has only been proven in headless
 Chromium against a loopback test server (`tests/build/pages-offline.test.mjs`) — that it installs,
 its service worker activates, and it renders after going offline. Whether Safari on an actual
@@ -1594,6 +1619,8 @@ To cut a release:
    run opens.
 5. Do the [five-minute human check](#before-announcing-a-release-a-five-minute-human-check) before
    announcing the release.
+
+Before tagging, add that version's one-line plain-text note to `docs/release-notes.json` (`"X.Y.Z": "..."`). The Pages build copies it into `version.json`, and the Settings update check shows it under "What's new" to a learner whose copy is behind. A version with no entry simply shows no note.
 
 `.github/workflows/release.yml` does the rest: it runs the full test suite plus the release gate
 (`npm run gate` — builds `dist/release/band-coach.html` and drives it in headless Chromium to prove

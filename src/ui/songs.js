@@ -39,6 +39,7 @@
 //    held or re-attacked note is not counted twice.
 
 import { yin } from '../audio/yin.js';
+import { freqToMidi, referencePitch } from '../core/pitch.js';
 import { createOnsetDetector } from '../audio/onset.js';
 import { rangeForInstrument } from '../audio/range.js';
 import { starterSongs } from '../song/starter/index.js';
@@ -1895,7 +1896,7 @@ function mountSongsPanel(hostEl, api) {
       const r = yin(buf, audio.sampleRate, toolRange.fmin, toolRange.fmax, api.gates().pitch);
       const nowSec = api.now() - practice.recordStartSec;
       if (!o.onset) {
-        if (openEvent && r.freq && r.clarity > 0.5 && Math.round(69 + 12 * Math.log2(r.freq / 440)) === openEvent.midi) {
+        if (openEvent && r.freq && r.clarity > 0.5 && Math.round(freqToMidi(r.freq, referencePitch())) === openEvent.midi) {
           extendHeldEvent(openEvent, r.freq, openEvent.midi, nowSec);
         } else {
           openEvent = null;
@@ -1909,7 +1910,7 @@ function mountSongsPanel(hostEl, api) {
         if (onsetsOnly) { practice.playedEvents.push({ midi: null, atSec: nowSec, source: 'mic' }); updateCount(); }
         return;
       }
-      const midi = Math.round(69 + 12 * Math.log2(r.freq / 440));
+      const midi = Math.round(freqToMidi(r.freq, referencePitch()));
       const event = playedEventFrom(r.freq, midi, nowSec);
       event.source = 'mic';
       practice.playedEvents.push(event);
@@ -2204,7 +2205,7 @@ function mountSongsPanel(hostEl, api) {
     const inter = interludeAfter({ prev: step, passed, next: practice.plan.steps[practice.stepIndex] || null, mode: practice.mode, unassessed: !!opts.unassessed });
     if (inter && inter.blocking) practice.interlude = inter.step;
     else if (inter && inter.review) {
-      reviewStore.set({ v: 1, items: addReview(reviewQueue(), { ...inter.review, songId: practice.song.id, partId: practice.partId, instrumentId: practice.instrumentId }, Date.now()) });
+      reviewStore.set({ v: 1, items: addReview(reviewQueue(), { ...inter.review, songId: practice.song.id, partId: practice.partId, instrumentId: practice.instrumentId, title: practice.song.title }, Date.now()) });
       practice.transferNote = t('songs.transfer.queued', { bars: (inter.review.bars[0] + 1) + '-' + (inter.review.bars[1] + 1) });
     }
     // The learner moved on from the top of this lesson, so a review queued
@@ -2509,6 +2510,10 @@ function mountSongsPanel(hostEl, api) {
     const classified = classifyAddFile(file.name, file.type);
     if (classified.kind === 'unknown') {
       say(t('songs.say.unsupported'), 'no');
+      return;
+    }
+    if (classified.kind === 'unsupported-gp') {
+      say(t('songs.say.unsupportedGp'), 'no');
       return;
     }
     const route = classified.route;

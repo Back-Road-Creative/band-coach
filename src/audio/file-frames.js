@@ -29,6 +29,7 @@
 import { yin } from './yin.js';
 import { createOnsetDetector } from './onset.js';
 import { FALLBACK_RANGE } from './range.js';
+import { freqToMidi } from '../core/pitch.js';
 
 // pcm: a Float32Array of mono samples (already mixed down, e.g. via
 // src/ui/playalong/audio-prep.js's mixToMono -- this module accepts either a
@@ -90,7 +91,7 @@ export function framesFromPCM(pcm, sampleRate, { fmin, fmax, gate, hopMs = 50, w
       // a run of single frames, each one shorter than minNoteMs and thrown
       // away. A millisemitone is far below the ±0.5-semitone accuracy this
       // module is judged on, so nothing meaningful is lost.
-      const midi = Math.round((69 + 12 * Math.log2(r.freq / 440)) * 1000) / 1000;
+      const midi = Math.round(freqToMidi(r.freq) * 1000) / 1000;
       const confidence = typeof r.clarity === 'number' ? Math.max(0, Math.min(1, r.clarity)) : 1;
       frames.push({ t, midi, rms: r.rms, confidence });
     }

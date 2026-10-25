@@ -162,3 +162,14 @@ test('the answer is announced via the same status live-region convention the app
 
   assert.equal(await page.evaluate("document.getElementById('updateCheckResult').getAttribute('role')"), 'status');
 });
+
+test('release notes from version.json show under the link as plain text, never as markup', async (t) => {
+  const page = await launchPage(htmlPath, {
+    initScript: fakeFetchInit(`(url) => ({ ok: true, status: 200, json: async () => ({ version: '1.4.0', notes: 'Fixed <b>bold</b> things.' }) })`, { fakeVersion: true }),
+  });
+  t.after(() => page.close());
+  await page.evaluate("document.getElementById('updateCheckBtn').click()");
+  await page.waitFor("document.querySelector('#updateCheckResult .update-notes')");
+  assert.equal(await page.evaluate("document.querySelector('#updateCheckResult .update-notes').textContent"), "What's new: Fixed <b>bold</b> things.");
+  assert.equal(await page.evaluate("document.querySelectorAll('#updateCheckResult b').length"), 0, 'markup in the note is not parsed');
+});

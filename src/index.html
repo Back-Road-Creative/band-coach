@@ -62,6 +62,7 @@
       <label for="optTheme"><span data-i18n="settings.theme">Theme</span> <select id="optTheme"><option value="system" data-i18n="settings.theme.system">Match system</option><option value="light" data-i18n="settings.theme.light">Light</option><option value="dark" data-i18n="settings.theme.dark">Dark</option></select></label>
       <label for="optNoteSystem"><span data-i18n="settings.noteSystem">Note names</span> <select id="optNoteSystem"><option value="letters" data-i18n="settings.noteSystem.letters">Letters (C, D, E...)</option><option value="german" data-i18n="settings.noteSystem.german">German (H/B)</option><option value="solfege" data-i18n="settings.noteSystem.solfege">Fixed do (Do, Re, Mi...)</option></select></label>
       <label for="optAccidentals"><span data-i18n="settings.accidentals">Sharps/flats</span> <select id="optAccidentals"><option value="mixed" data-i18n="settings.accidentals.mixed">Mixed (today's spelling)</option><option value="sharps" data-i18n="settings.accidentals.sharps">Always sharps (♯)</option><option value="flats" data-i18n="settings.accidentals.flats">Always flats (♭)</option></select></label>
+      <label for="optA4"><span data-i18n="settings.a4">Tuning reference (A4, Hz)</span> <input type="number" id="optA4" min="415" max="466" step="1" value="440" inputmode="numeric"></label>
     </div>
     <div class="settings-group">
       <h3 data-i18n="settings.backups">Backups and reset</h3>
@@ -69,6 +70,10 @@
       <button type="button" class="small" id="backupSaveBtn" data-i18n="rail.backupSave">Save a backup</button>
       <label class="small file-label" for="backupRestoreInput" tabindex="0" role="button" data-i18n="rail.backupRestore">Restore a backup</label>
       <input type="file" accept=".json,application/json" id="backupRestoreInput" hidden>
+      <div class="backup-nudge" id="restoreUndo" role="status" hidden>
+        <span data-i18n="backup.restored">Backup restored.</span>
+        <button type="button" class="small" id="restoreUndoBtn" data-i18n="backup.undo">Undo restore</button>
+      </div>
     </div>
     <div class="settings-group">
       <h3 data-i18n="diag.title">Diagnostics</h3>
@@ -98,6 +103,7 @@
       <p id="helpText"></p>
       <p><strong data-i18n="settings.decides">How it decides:</strong> <span data-i18n="settings.decidesBody">no dice. The next exercise is always the item or move with the biggest need (low knowledge, weak move, not seen lately), so the same results always give the same lesson. Knowledge fades if you stay away, so old material comes back.</span></p>
     </div>
+    <p class="update-check-help" id="keepStatus" hidden></p>
   </section>
 
   <div class="main" id="mainArea">
@@ -130,6 +136,10 @@
         <button type="button" class="primary big" id="playBtn" hidden>Start</button>
         <button type="button" id="endBtn" hidden data-i18n="side.end">End session</button>
       </div>
+      <div class="backup-nudge" id="tuneFirst" role="status" hidden>
+        <span id="tuneFirstText" data-i18n="side.tuneFirst">Strings drift between sessions. Tune first? It takes about 30 seconds.</span>
+        <span><button type="button" class="small" id="tuneFirstGo" data-i18n="side.tuneFirstGo">Tune first</button> <button type="button" class="small" id="tuneFirstSkip" data-i18n="side.tuneFirstSkip">Skip</button></span>
+      </div>
       <div class="card">
         <div class="eyebrow" data-i18n="side.energyEyebrow">Your energy this session</div>
         <div class="meterbox thin" role="progressbar" aria-label="Estimated energy" aria-valuemin="0" aria-valuemax="100" id="energyBar"><div id="energyFill"></div></div>
@@ -152,6 +162,10 @@
       <div class="backup-nudge" id="backupNudge" hidden>
         <span id="backupNudgeText"></span>
         <button type="button" class="small" id="backupNudgeDismiss" data-i18n="side.backupDismiss">Dismiss</button>
+      </div>
+      <div class="backup-nudge" id="updateReady" role="status" hidden>
+        <span data-i18n="side.updateReady">A new version is ready. Reload when you finish practicing.</span>
+        <button type="button" class="small" id="updateReload" data-i18n="storage.reload">Reload</button>
       </div>
     </aside>
   </div>

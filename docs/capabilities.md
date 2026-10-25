@@ -23,6 +23,14 @@ an educational-validation badge.** Every instrument below is `status: 'ready'` (
 `planned` record today), and every one still carries `contentReviewed: false`: nothing here has yet
 been checked by a musician against a method book or teaching standard.
 
+## In the app
+
+The instrument picker shows each instrument's `assess` and `chart` cells as a small chip, in plain words and the
+learner's language (`capabilityChipKeys()` in `src/instruments/capability.js`, i18n keys `picker.cap.*`):
+`midi` reads "Checks exact notes", `mic-single-note` "Hears one note at a time", `tap` "Checks rhythm only" and
+`none` "Not checked yet"; a `none` chart adds "No fingering chart" and a `typed-unreviewed` chart adds "Chart not
+yet checked". Tier names never appear in the app.
+
 ## Tiers
 
 - **first-release-candidate** — `status: 'ready'` and `input` is exactly `'midi'`: a complete,

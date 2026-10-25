@@ -115,6 +115,9 @@
   .picker button[aria-pressed="true"] { background: var(--text); color: var(--ground); border-color: var(--text); border-left-color: var(--c); }
   .picker small { display: block; font: 500 0.75rem var(--body); color: var(--muted); }
   .picker button[aria-pressed="true"] small { color: var(--press-muted); }
+  /* FE-9: how the app checks this instrument (capabilityChipKeys). */
+  .picker .cap-chip { display: inline-block; margin-top: 3px; padding: 0 6px; border: 1px solid var(--line); border-radius: 999px; font: 500 0.6875rem var(--body); color: var(--muted); }
+  .picker button[aria-pressed="true"] .cap-chip { color: var(--press-muted); border-color: var(--press-muted); }
   /* Tools tier (U3): Tuner/Capture a melody plus the two pseudo-mods (Ear
      training quick drill, Rhythm reading) sit one visual step quieter than
      the real instruments above them -- smaller type, muted border, no
@@ -349,6 +352,13 @@
   .panel-songs-record-btn { align-self: flex-start; }
   /* */
   /* */
+  .panel-metronome .metronome-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-block: 10px; }
+  .panel-metronome input[type=number] { width: 5em; min-height: 32px; }
+  .panel-metronome input[type=range] { flex: 1 1 140px; min-width: 0; min-height: 32px; }
+  .panel-metronome select, .panel-metronome button { min-height: 32px; min-width: 32px; }
+  .panel-metronome .metronome-dot { width: 28px; height: 28px; border-radius: 50%; background: var(--panel-2); border: 1px solid var(--line); }
+  .panel-metronome .metronome-dot.on { background: var(--good); }
+  .panel-metronome .metronome-dot.on.accent { background: var(--accent, var(--good)); box-shadow: 0 0 0 3px var(--line); }
   .panel-ear .ear-exercises { display: flex; flex-wrap: wrap; gap: 8px; margin-block: 10px; }
   .panel-ear .ear-status { color: var(--muted); font-size: 0.875rem; }
   .panel-ear .ear-prompt { font: 700 1.125rem var(--display); letter-spacing: .02em; }
@@ -564,6 +574,7 @@
   .settings-group label { display: flex; flex-wrap: wrap; gap: 7px; align-items: center; cursor: pointer; max-width: 100%; }
   .settings-group select { max-width: 100%; }
   .settings-group input[type="checkbox"] { accent-color: var(--accent); }
+  .settings-group input[type="number"] { width: 7ch; min-height: 24px; box-sizing: border-box; font: 600 0.9375rem var(--body); color: var(--text); background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; }
   .settings-group p { color: var(--muted); font-size: 0.875rem; margin: 0; max-width: 64ch; }
   .settings-group p strong { color: var(--text); font-weight: 600; }
   #settingsSay { color: var(--muted); font-size: 0.875rem; margin: 0; min-height: 1.2em; }

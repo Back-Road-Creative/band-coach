@@ -80,3 +80,28 @@ export function getStorage(win) {
   const m = new Map();
   return { storage: { getItem: k => (m.has(k) ? m.get(k) : null), setItem: (k, v) => { m.set(k, String(v)); }, removeItem: k => { m.delete(k); } }, blocked: true };
 }
+
+// Two tabs share one stored profile. `current` is what storage holds right
+// now (null = nothing, undefined = the read threw), `lastStored` is the exact
+// string this page last read or wrote. 'changed' means another tab wrote
+// something this page has not seen: saving now would silently overwrite it, so
+// the caller stops saving and asks for a reload. An empty key is nothing to
+// clobber. A read that threw is 'unreadable': no proof, so no overwrite.
+export function crossTabVerdict(current, lastStored) {
+  if (current === undefined) return 'unreadable';
+  if (current === null || current === lastStored) return 'ok';
+  return 'changed';
+}
+
+// Reads `key` from `storage` and judges it against `lastStored`.
+export function crossTabCheck(storage, key, lastStored) {
+  let cur;
+  try { cur = storage.getItem(key); } catch (e) { return 'unreadable'; }
+  return crossTabVerdict(cur === undefined ? null : cur, lastStored);
+}
+
+// The exact text storage holds under `key` (null when nothing is stored or the read threw). Compared
+// against, never parsed: a corrupt record or one with different whitespace must still equal itself.
+export function readRaw(storage, key) {
+  try { const raw = storage.getItem(key); return typeof raw === 'string' ? raw : null; } catch (e) { return null; }
+}

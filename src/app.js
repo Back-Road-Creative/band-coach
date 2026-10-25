@@ -2,7 +2,7 @@ import { judgePitch, OCTAVE_POLICY } from './core/judge.js';
 import { createDeafWindow } from './audio/deaf-window.js';
 import { exportProgress as exportProgressFile, importProgress as importProgressFile, migrate as migrateDB } from './core/progress-file.js';
 import { checkFileSize } from './ui/songs/import-route.js';
-import { safeSet, safeGet, getStorage } from './core/storage.js';
+import { safeSet, safeGet, getStorage, crossTabCheck, readRaw } from './core/storage.js';
 import { sanitizeDB as sanitizeDBCore } from './core/sanitize-db.js';
 import { createLibrary, indexedDbStore, memoryStore } from './song/library.js';
 import { captureToSong } from './song/capture.js';
@@ -16,11 +16,13 @@ import { PCKEYS } from './core/pckeys.js';
 import { createTeardown } from './core/session-teardown.js';
 // Merge slots: a unit in flight adds its imports by replacing ONLY its own
 // slot line, so parallel branches never edit adjacent lines.
-import { recordError, getErrors } from './core/error-log.js';
+import { recordError, getErrors, persistErrors } from './core/error-log.js';
 import { resolveAppVersion, DEV_VERSION } from './core/version.js';
 import { loadPack, packStatus, createIndexedDBStore, packManifestUrl, DEFAULT_MODEL_PACK } from './core/model-pack.js';
 import { checkForUpdate, FALLBACK_DOWNLOAD_URL } from './core/update-check.js';
+import { requestKeep, readKeep } from './core/storage-keep.js';
 import { setNoteNaming, name as noteNameFor } from './core/note-names.js';
+import { freqToMidi, midiToFreq, sanitizeA4, setReferencePitch, referencePitch } from './core/pitch.js';
 import { t, t as tl, en, setLocale, LOCALES } from './core/i18n.js';
 import { levelLabel, levelNumLabel } from './core/level-names.js';
 import { micErrorMessage } from './core/mic-error.js';
@@ -37,17 +39,19 @@ import { chroma, judgeChord } from './audio/chords.js';
 //
 import { makeGrid, scoreTake, tempoLadder } from './core/groove.js';
 import { stepTuner } from './core/tuner.js';
-import { wrongNoteHint, writtenMidi } from './core/wrong-note.js';
+import { wrongNoteHint, writtenMidi, midiShift, midiShiftHint, SHIFT_RUN } from './core/wrong-note.js';
 import { shouldReveal, promptFor, hintFor as coreHintFor } from './core/reveal.js';
 import { gradeOutcome } from './core/grade-outcome.js';
 import { makeEvent, validateEvent, boundEvents } from './core/learning-events.js';
 import { planSession, describePlan, describeWhy, nextPlanStep } from './core/curriculum.js';
+import { sanitizeReviewQueue } from './core/teaching.js';
 //
 import * as RHY from './core/rhythm.js';
 //
 import { forInstrument } from './notation/for-instrument.js';
 import { drawPrimitives } from './notation/draw-canvas.js';
 import { byId as instrumentById } from './instruments/index.js';
+import { capabilityFor, capabilityChipKeys } from './instruments/capability.js';
 import { rangeForInstrument, FALLBACK_RANGE, frameSizeForInstrument } from './audio/range.js';
 import { renderVoice } from './audio/voices.js';
 import { layoutFor as harpLayoutFor } from './instruments/how/harmonica.js';
@@ -58,7 +62,7 @@ import { kitFrame, kitRegions, pieceAt, THRONE } from './instruments/how/drum-ki
 import { layoutPercussionMeasure } from './notation/percussion.js';
 import { songFor, KBD_SONG_SKILL_MAP } from './instruments/kbd-songs.js';
 import { buildMods } from './instruments/mods.js';
-import { tunerTunings } from './instruments/how-kind.js';
+import { tunerTunings, howKindFor } from './instruments/how-kind.js';
 import { itemReview, contentRev } from './instruments/review-ledger.js';
 import { isReviewCurrent, instrumentUnreviewed } from './instruments/review.js';
 import { starterSongs } from './song/starter/index.js';
@@ -82,6 +86,7 @@ import { register as registerEditor, __getDebugSong } from './ui/editor.js';
 //
 //
 import { registerEar, __earTestHook } from './ui/ear.js';
+import { registerMetronome } from './ui/metronome.js';
 //
 //
 import { register as registerTheory, currentLessonQuestion as theoryCurrentQuestion } from './ui/theory.js';
@@ -89,6 +94,7 @@ import { register as registerTheory, currentLessonQuestion as theoryCurrentQuest
 //
 import { registerHistory } from './ui/history.js';
 import { createNoticeGate, buildDiagnostics } from './core/diagnostics.js';
+import { watchForUpdate } from './core/update-watch.js';
 //
 import { registerFingerings, renderHowInline } from './ui/fingerings.js';
 import { instrumentSetup } from './ui/fingerings/setup.js';
@@ -108,6 +114,8 @@ import { register as registerPathway } from './ui/pathway.js';
   'use strict';
   const $ = id => document.getElementById(id);
   const errorGate = createNoticeGate();
+  // Same-tab only: the error notice asks for a reload, and Copy diagnostics after it must still list what went wrong.
+  try { persistErrors(window.sessionStorage, 'bandcoach.v1.errors'); } catch (e) {}
   function noteFault(where, err) { try {
     recordError(where, err); if (!errorGate.allow(Date.now()) || $('errorNotice')) return;
     document.body.insertAdjacentHTML('afterbegin', '<div id="errorNotice" class="backup-nudge" role="alert"><span>' + t('error.generic') + '</span><button class="small">' + t('side.backupDismiss') + '</button></div>');
@@ -137,8 +145,8 @@ import { register as registerPathway } from './ui/pathway.js';
   const SOLFA = { 0: 'Do', 2: 'Re', 4: 'Mi', 5: 'Fa', 7: 'Sol', 9: 'La', 11: 'Ti', 12: 'high Do' };
   const pc = m => ((Math.round(m) % 12) + 12) % 12;
   const nname = (m, oct) => noteNameFor(m, oct);
-  const mfreq = m => 440 * Math.pow(2, (m - 69) / 12);
-  const fmidi = f => 69 + 12 * Math.log2(f / 440);
+  const mfreq = m => midiToFreq(m, referencePitch());
+  const fmidi = f => freqToMidi(f, referencePitch());
   const clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
   const c01 = x => clamp(x, 0, 1);
   const mean = a => a.length ? a.reduce((s, x) => s + x, 0) / a.length : 0;
@@ -632,7 +640,7 @@ import { register as registerPathway } from './ui/pathway.js';
   // instrument-sheet Tools group as Tuner/Capture a melody/Interval drill/
   // Rhythm, via buildPanelToolButton() in buildPicker() below, rather than a
   // second disclosure of their own.
-  const PANEL_TOOL_IDS = ['ear', 'fingerings', 'theory'];
+  const PANEL_TOOL_IDS = ['ear', 'fingerings', 'theory', 'metronome'];
   // U2/U-parent: keyed variant id -> parent id, for the same-instrument
   // groupings the picker collapses under one parent (buildPicker()/setMod()
   // below). Two sources feed it: a hand-declared pair for the two families
@@ -693,6 +701,10 @@ import { register as registerPathway } from './ui/pathway.js';
     return customItem(mod, probe, DB.prefs) !== null;
   }
 
+  // F5: a song review is due once it was queued before this page load -- the
+  // same "an earlier session" rule src/ui/songs.js applies with its own
+  // sessionStartedAt (src/core/teaching.js dueReviews).
+  const APP_STARTED_AT = Date.now();
   // ---------- saved state: one learner model per instrument, shared session log ----------
   const KEY = 'bandcoach.v1';
   // Read once at startup, not on every export: the build (build/build.mjs)
@@ -704,6 +716,9 @@ import { register as registerPathway } from './ui/pathway.js';
   const APP_VERSION = resolveAppVersion(versionMeta && versionMeta.content);
   const BACKUP_AT_KEY = 'bandcoach.v1.backupAt';
   let lastBackupAt = 0; try { lastBackupAt = +localStorage.getItem(BACKUP_AT_KEY) || 0; } catch (e) {}
+  // F2: string instruments whose tune-first offer was answered on this device (per device, like the backup date).
+  const TUNE_ASKED_KEY = 'bandcoach.v1.tuneAsked';
+  let tuneAsked = []; try { const a = JSON.parse(localStorage.getItem(TUNE_ASKED_KEY)); if (Array.isArray(a)) tuneAsked = a.filter(x => typeof x === 'string'); } catch (e) {}
   let DB, mod = 'kbd', S = null;
   // U5: whether a REAL prior choice exists, sampled from the raw saved
   // prefs in loadDB() before sanitizeDB's 'kbd' default papers over "nothing
@@ -772,20 +787,23 @@ import { register as registerPathway } from './ui/pathway.js';
   }
   // sanitizeDB (src/core/sanitize-db.js, with repairEventClocks): the pure gate between a stored or restored profile and the app; the tables it checks against come in here.
   function sanitizeDB(v, defaultLatencyMs, modelNow) { return sanitizeDBCore(v, defaultLatencyMs, modelNow, { MODS, MOD_IDS, WIND_KINDS, VOICE_KINDS, LOCALES, NOTATE_MOD_IDS, sanitizeModel, sanitizePanelData, skillMap: KBD_SONG_SKILL_MAP }); }
-  // The exact string this page last read from or wrote to storage. flushSave()
+  // The exact raw string this page last read from or wrote to storage (corrupt text included, never a re-serialised copy). flushSave()
   // compares against it so a page going away never clobbers a newer write made
   // by someone else in the meantime (another tab, a restored backup).
   let lastStored = null;
+  // True when this page's boot found stored text it could not parse (safeGet kept it under KEY+'.corrupt'); boot says so once.
+  let loadedCorrupt = false;
   // A missing/never-saved key is safeGet's ok:true, value:null -- migrateDB
   // handles null the same as it always has. `corrupt` (JSON.parse failed on
   // something that WAS there) also falls back to a fresh profile: the raw
   // text safeGet already preserved under KEY+'.corrupt' is this app's only
   // shot at ever recovering it, but that recovery is future work -- today
   // this is no worse than the old behaviour (sanitizeDB always papered over
-  // a corrupt record with a fresh one), except the evidence now survives.
+  // a corrupt record with a fresh one), except the evidence now survives and
+  // boot tells the learner so (side.dataUnreadable) instead of starting over in silence.
   // Resolved once: reading window.localStorage can itself throw (see getStorage), so no other line may touch the bare global to reach the DB.
   const store = getStorage(window);
-  function loadDB() { modelNow = Date.now(); const got = safeGet(store.storage, KEY); lastStored = (got.ok && !got.corrupt && got.value !== null) ? JSON.stringify(got.value) : null; const v = (got.ok && !got.corrupt) ? migrateDB(got.value) : null; hasSavedMod = !!(v && v.prefs && MODS[v.prefs.mod] && TOOL_MOD_IDS.indexOf(v.prefs.mod) < 0); DB = sanitizeDB(v, actx ? (actx.outputLatency || actx.baseLatency || 0) * 1000 : 0, modelNow); mod = DB.prefs.mod; S = DB.mods[mod]; gates = gatesFor(DB.prefs.noiseFloor); setNoteNaming(DB.prefs.noteNaming); }
+  function loadDB() { modelNow = Date.now(); const got = safeGet(store.storage, KEY); lastStored = got.ok ? readRaw(store.storage, KEY) : null; loadedCorrupt = !!(got.ok && got.corrupt); const v = (got.ok && !got.corrupt) ? migrateDB(got.value) : null; hasSavedMod = !!(v && v.prefs && MODS[v.prefs.mod] && TOOL_MOD_IDS.indexOf(v.prefs.mod) < 0); DB = sanitizeDB(v, actx ? (actx.outputLatency || actx.baseLatency || 0) * 1000 : 0, modelNow); mod = DB.prefs.mod; S = DB.mods[mod]; gates = gatesFor(DB.prefs.noiseFloor); setNoteNaming(DB.prefs.noteNaming); setReferencePitch(DB.prefs.a4); }
   let saveTimer = null;
   // Tracks only whether #settingsSay currently shows OUR failed-save
   // message, so a successful save clears exactly that message and never an
@@ -805,11 +823,22 @@ import { register as registerPathway } from './ui/pathway.js';
   // VERIFIED write -- advancing it on a failed attempt would make flushSave
   // believe a write it never made had already landed, and silently skip
   // every retry after it.
+  // Set once another tab has written the DB key under us. Nothing in this page saves again: the learner reloads (the notice's button) and the new page loads the other tab's data.
+  let otherTabChanged = false;
+  function markOtherTab() {
+    if (otherTabChanged) return; otherTabChanged = true; saveFailedShown = false; if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
+    ['settingsSay', 'mainSay'].forEach(id => { const el = $(id); el.textContent = t('storage.otherTab') + ' '; const b = document.createElement('button'); b.type = 'button'; b.textContent = t('storage.reload'); b.addEventListener('click', () => location.reload()); el.appendChild(b); });
+  }
+  window.addEventListener('storage', e => { if (e.key === KEY && e.newValue !== null && e.newValue !== lastStored && (!e.storageArea || e.storageArea === store.storage)) markOtherTab(); });
   function writeDB() {
     if (MODS[mod]) DB.mods[mod] = S = sanitizeModel(mod, S, modelNow);
     // Before the instrument question is answered, a setting the learner changed is stored, but not the boot-time default instrument, so the next visit still asks.
     const candidate = JSON.stringify(instrumentChosen ? DB : Object.assign({}, DB, { prefs: Object.assign({}, DB.prefs, { mod: null }) }));
-    const result = store.blocked ? { ok: false } : safeSet(store.storage, KEY, candidate);
+    // Another tab changed the stored data since this page last saw it: writing now would silently overwrite their newer progress, so stop and offer a reload. An unreadable store is no proof either, so it counts as a failed save.
+    if (otherTabChanged) return false;
+    const seen = crossTabCheck(store.storage, KEY, lastStored);
+    if (seen === 'changed') { markOtherTab(); return false; }
+    const result = (store.blocked || seen === 'unreadable') ? { ok: false } : safeSet(store.storage, KEY, candidate);
     if (result.ok) { lastStored = candidate; if (saveFailedShown) { saveFailedShown = false; $('settingsSay').textContent = ''; $('mainSay').textContent = ''; } }
     else { saveFailedShown = true; $('settingsSay').textContent = t('storage.saveFailed'); $('mainSay').textContent = t('storage.saveFailed'); }
     return result.ok;
@@ -1191,6 +1220,7 @@ import { register as registerPathway } from './ui/pathway.js';
   // attempt can tell a real keyboard from a stand-in the same way
   // (src/ui/songs.js's advance()) -- never anything about credit, mastery or
   // pass/fail, which stay blind to it.
+  let midiMisses = []; // F13: consecutive wrong MIDI notes, oldest first (onNote below)
   function onNote(midi, exact, source) {
     if (source) kbdTyping = source === 'computer-key'; // the keys wear their computer letters only while the computer keyboard is what is playing them
     // Songs only ever learn a route they already understand (a real
@@ -1215,8 +1245,12 @@ import { register as registerPathway } from './ui/pathway.js';
     if (i.kind !== 'note') return;
     const policy = i.anywhere ? 'fold' : (OCTAVE_POLICY[mod] || 'fold');
     const judged = judgePitch({ heardMidi: midi, targetMidi: i.midi, policy });
-    if (judged.ok) { passEl(undefined, undefined, undefined, source); return; }
-    const where = wrongNoteHint({ heardMidi: midi, targetMidi: i.midi, policy, fretted: !!i.string && !MODS[mod].fretless, input: source, name: nname });
+    if (judged.ok) { midiMisses = []; passEl(undefined, undefined, undefined, source); return; }
+    // F13: a run of MIDI misses all one distance off reads as the keyboard's octave/transpose
+    // button, not the learner (src/core/wrong-note.js midiShift); any other route breaks the run.
+    midiMisses = source === 'midi' ? midiMisses.concat([{ heardMidi: midi, targetMidi: i.midi }]).slice(-SHIFT_RUN) : [];
+    const shift = midiShift(midiMisses);
+    const where = shift ? midiShiftHint(shift) : wrongNoteHint({ heardMidi: midi, targetMidi: i.midi, policy, fretted: !!i.string && !MODS[mod].fretless, input: source, name: nname });
     const wn = (x) => i.written === undefined ? nname(x) : nname(writtenMidi(i, x)); failEl('That was ' + wn(midi) + ', the note is ' + wn(i.midi) + '. ' + where, e.id + '>' + wn(midi)); // transposing winds: both names in the written key the prompt uses
   }
   // onNote's hands-together branch: the stage machine lives in src/core/hands-together-stage.js (pure, table-tested); this applies its verdict to the UI.
@@ -1693,8 +1727,17 @@ import { register as registerPathway } from './ui/pathway.js';
     g.strokeStyle = '#e9edf6'; g.lineWidth = 2; g.strokeRect(xs[loW] + 1, y0 + 1, xs[hiW] + kw - xs[loW] - 2, h - 2);
     kbdOverviewRect = { x: x0, y: y0, w: w, h: h, lo: 21, hi: 108, win: { lo: lo, hi: hi, x: xs[loW], y: y0, w: xs[hiW] + kw - xs[loW], h: h } };
   }
+  // The board follows the player's saved capo and left-handed choice (the same
+  // instrumentSetup the "How to play it" panel reads). A capo is a fretted-guitar
+  // idea only (howKindFor === 'fretboard'), never on a fretless board. Left-handed
+  // reverses the string rows exactly as the How panel does (fretboard.js displayIndex,
+  // fingerings.js stringRowOrder): the nut stays on the left, the lowest string's row
+  // swaps with the highest's; pitches, strings and frets never change.
+  let fretViewLast = null;
   function drawFret(M, e, W, H) {
-    const ns = M.tuning.length, nf = M.frets, x0 = W * 0.15, x1 = W * 0.97, y0 = H * 0.16, y1 = H * 0.84, fx = f => f === 0 ? x0 - W * 0.035 : x0 + (x1 - x0) * ((f - 0.5) / nf), sy = s => y0 + (y1 - y0) * ((s - 1) / (ns - 1));
+    const setup = instrumentSetup(instrumentById[mod], { fingeringsStore: (DB.panels && DB.panels.fingerings) || null, prefs: DB.prefs }), lh = !!setup.leftHanded, ns = M.tuning.length, nf = M.frets, capo = !M.fretless && howKindFor(instrumentById[mod]) === 'fretboard' ? Math.min(setup.capo, nf) : 0;
+    const x0 = W * 0.15, x1 = W * 0.97, y0 = H * 0.16, y1 = H * 0.84, fx = f => f === 0 ? x0 - W * 0.035 : x0 + (x1 - x0) * ((f - 0.5) / nf), sy = s => y0 + (y1 - y0) * (((lh ? ns + 1 - s : s) - 1) / (ns - 1));
+    const fv = fretViewLast = { leftHanded: lh, capo: capo, nutX: x0, W: W, dots: [] };
     rr(x0, y0 - H * 0.05, x1 - x0, y1 - y0 + H * 0.1, 6); g.fillStyle = '#2a1c12'; g.fill();
     [3, 5, 7, 9, 12].forEach(f => { if (f > nf) return; g.fillStyle = '#ffffff22'; g.beginPath(); g.arc(fx(f), (y0 + y1) / 2 + (f === 12 ? -H * 0.12 : 0), H * 0.022, 0, 7); g.fill(); if (f === 12) { g.beginPath(); g.arc(fx(f), (y0 + y1) / 2 + H * 0.12, H * 0.022, 0, 7); g.fill(); } });
     // Fretless (bowed) fingerboards draw only the nut, not a grid of fret
@@ -1704,9 +1747,11 @@ import { register as registerPathway } from './ui/pathway.js';
     if (M.fretless) { const x = x0; g.strokeStyle = '#e9edf6'; g.lineWidth = 6; g.beginPath(); g.moveTo(x, y0 - H * 0.05); g.lineTo(x, y1 + H * 0.05); g.stroke(); }
     else for (let f = 0; f <= nf; f++) { const x = x0 + (x1 - x0) * f / nf; g.strokeStyle = f === 0 ? '#e9edf6' : '#8a8f99'; g.lineWidth = f === 0 ? 6 : 2; g.beginPath(); g.moveTo(x, y0 - H * 0.05); g.lineTo(x, y1 + H * 0.05); g.stroke(); if (f > 0) { g.fillStyle = '#93a0bd'; font(H * 0.05, 600); g.textAlign = 'center'; g.fillText(String(f), fx(f), H * 0.97); } }
     for (let s = 1; s <= ns; s++) { g.strokeStyle = '#c9ced9'; g.lineWidth = 1 + (s / ns) * 3; g.beginPath(); g.moveTo(x0 - W * 0.06, sy(s)); g.lineTo(x1, sy(s)); g.stroke(); g.fillStyle = '#93a0bd'; font(H * 0.055, 600); g.textAlign = 'right'; g.fillText(s + (DB.prefs.names ? '  ' + nname(M.tuning[ns - s]) : ''), x0 - W * 0.07, sy(s) + H * 0.02); }
-    const dot = (s, f, col, txt, a) => { g.globalAlpha = a; g.fillStyle = col; g.beginPath(); g.arc(fx(f), sy(s), H * 0.05, 0, 7); g.fill(); g.globalAlpha = 1; if (txt) { g.fillStyle = '#06101d'; font(H * 0.05); g.textAlign = 'center'; g.fillText(txt, fx(f), sy(s) + H * 0.018); } };
-    if (heard && heard.freq && MODS[mod].input === 'pluck') { const p = pc(heard.midi); for (let s = 1; s <= ns; s++) for (let f = 0; f <= nf; f++) if (pc(M.tuning[ns - s] + f) === p) dot(s, f, '#9fb4d8', '', 0.25); }
-    if (e && e.info.kind === 'note' && (e.reveal || e.failed)) { if (e.info.string) dot(e.info.string, e.info.fret, accent(), DB.prefs.names ? nname(e.info.midi) : '', 1); else for (let s = 1; s <= ns; s++) for (let f = 0; f <= nf; f++) if (pc(M.tuning[ns - s] + f) === pc(e.info.midi)) dot(s, f, accent(), '', 0.85); }
+    // capo: frets behind it (nut side) are dimmed and unplayable; the bar sits at fret `capo`
+    if (capo > 0) { const cx = fx(capo), nx = x0 - W * 0.06; g.fillStyle = '#05070c99'; g.fillRect(Math.min(nx, cx), y0 - H * 0.05, Math.abs(cx - nx), y1 - y0 + H * 0.1); g.strokeStyle = '#f3c52f'; g.lineWidth = H * 0.035; g.lineCap = 'round'; g.beginPath(); g.moveTo(cx, y0 - H * 0.04); g.lineTo(cx, y1 + H * 0.04); g.stroke(); g.lineCap = 'butt'; }
+    const dot = (s, f, col, txt, a, kind) => { fv.dots.push({ string: s, fret: f, x: fx(f), y: sy(s), kind: kind }); g.globalAlpha = a; g.fillStyle = col; g.beginPath(); g.arc(fx(f), sy(s), H * 0.05, 0, 7); g.fill(); g.globalAlpha = 1; if (txt) { g.fillStyle = '#06101d'; font(H * 0.05); g.textAlign = 'center'; g.fillText(txt, fx(f), sy(s) + H * 0.018); } };
+    if (heard && heard.freq && MODS[mod].input === 'pluck') { const p = pc(heard.midi); for (let s = 1; s <= ns; s++) for (let f = capo; f <= nf; f++) if (pc(M.tuning[ns - s] + f) === p) dot(s, f, '#9fb4d8', '', 0.25, 'hint'); }
+    if (e && e.info.kind === 'note' && (e.reveal || e.failed)) { if (e.info.string && e.info.fret >= capo) dot(e.info.string, e.info.fret, accent(), DB.prefs.names ? nname(e.info.midi) : '', 1, 'target'); else for (let s = 1; s <= ns; s++) for (let f = capo; f <= nf; f++) if (pc(M.tuning[ns - s] + f) === pc(e.info.midi)) dot(s, f, accent(), '', 0.85, 'target'); }
     if (e && e.info.kind === 'chord') { g.fillStyle = '#e9edf6'; font(H * 0.2); g.textAlign = 'center'; g.fillText(e.info.sym, W * 0.5, H * 0.56); if (typeof e.score === 'number') { g.fillStyle = '#05070c'; rr(W * 0.3, H * 0.66, W * 0.4, H * 0.04, 4); g.fill(); g.fillStyle = e.score > 0.5 ? '#5be08a' : accent(); rr(W * 0.3, H * 0.66, W * 0.4 * c01(e.score), H * 0.04, 4); g.fill(); } }
   }
   // `offScale` (a reading beyond +-50 cents) draws a triangle pointing off
@@ -1995,8 +2040,15 @@ import { register as registerPathway } from './ui/pathway.js';
   let pathwayLineShown = false;
   // Start before any instrument was chosen: open the sheet and put focus on its first button instead of starting (or closing it).
   function askInstrumentFirst() { if (instrumentChosen) return false; setInstrumentSheetOpen(true); const b = document.querySelector('#picker button'); if (b) b.focus(); return true; }
+  // F2: before the first session on a string instrument, offer to tune first. "Tune first" opens the
+  // tuner on this instrument's own strings; either answer is remembered, and practising it once ends the offer.
+  function refreshTuneFirst() { const tg = TUNINGS[mod]; $('tuneFirst').hidden = !(instrumentChosen && !sess && mod !== 'chrom' && tg && tg[1].length && !tuneAsked.includes(mod) && !DB.sessions.some(r => r && r.mod === mod)); }
+  function noteTuneAsked(m) { if (!tuneAsked.includes(m)) tuneAsked.push(m); try { localStorage.setItem(TUNE_ASKED_KEY, JSON.stringify(tuneAsked)); } catch (e) {} $('tuneFirst').hidden = true; }
+  $('tuneFirstGo').addEventListener('click', () => { const m = mod; noteTuneAsked(m); tunerKind = m; setMod('tuner'); });
+  $('tuneFirstSkip').addEventListener('click', () => noteTuneAsked(mod));
   function startSession() {
     if (askInstrumentFirst()) return;
+    $('tuneFirst').hidden = true;
     document.body.classList.add('practising'); refreshModelClock(); ensureAudio(); sess = newSession(); recent = []; streak = 0; errCount = 0; task = null; lastItem = null; lastInputAt = now(); chunk = 0; say('');
     // Session length E7c: the learner's own choice (DB.prefs.sessionMinutes,
     // 0 meaning no limit) sets today's target before the tired check below,
@@ -2017,7 +2069,7 @@ import { register as registerPathway } from './ui/pathway.js';
     // Plan this sitting (review what's due, the weakest active skill, apply it, check it,
     // and, on keyboard, a suggested starter song) -- pure, so it only needs today's active
     // ids/items/events/sessions, not anything DOM/task-shaped.
-    sessionPlan = planSession({ instrumentId: mod, level: S.level, activeIds: activeItems(mod, S.level), items: S.item, now: modelNow, due: due, sessions: DB.sessions, today: today(), songFor: mod === 'kbd' ? (lvl => { const e = songFor(lvl); if (!e) return null; const s = starterSongs.find(x => x.id === e.songId); return { songId: e.songId, title: s ? s.title : e.songId }; }) : undefined });
+    sessionPlan = planSession({ instrumentId: mod, level: S.level, activeIds: activeItems(mod, S.level), items: S.item, now: modelNow, due: due, sessions: DB.sessions, today: today(), songReviews: dueSongReviews(), songFor: mod === 'kbd' ? (lvl => { const e = songFor(lvl); if (!e) return null; const s = starterSongs.find(x => x.id === e.songId); return { songId: e.songId, title: s ? s.title : e.songId }; }) : undefined });
     planProgress = { review: 0, weak: 0, apply: 0, check: 0 };
     // `seen`: has this learner any item record at this level yet? A fresh
     // profile's empty plan is a first sitting, not a day off (curriculum.js).
@@ -2056,11 +2108,12 @@ import { register as registerPathway } from './ui/pathway.js';
     DB.events.push(ev); DB.events = boundEvents(DB.events, { skillMap: KBD_SONG_SKILL_MAP, skillMapInstrument: 'kbd' }); save();
   }
   function endSession() {
-    if (!sess) return; document.body.classList.remove('practising'); toneSrcs.forEach(s => { try { s.stop(); } catch (e) {} }); const min = sess.active / 60; let line = 'Session ended. Too short to log.';
+    if (!sess) return; document.body.classList.remove('practising'); showUpdateIfIdle(); toneSrcs.forEach(s => { try { s.stop(); } catch (e) {} }); const min = sess.active / 60; let line = 'Session ended. Too short to log.';
     if (sess.judged >= 8) { DB.sessions.push({ d: today(), mod: mod, min: Math.round(min * 10) / 10, acc: sess.ok / sess.judged, a1: mean(sess.first), a2: mean(sess.last), from: sess.from, to: S.level, breaks: sess.breaks }); DB.sessions = DB.sessions.slice(-60);
       let up = null, low = null, lowR = 1; Object.keys(S.item).forEach(id => { const cur = S.item[id], r1 = retrievability(cur, modelNow), r0 = retrievability(sess.m0[id] || cur, modelNow), g0 = r1 - r0; if (up === null || g0 > up.g) up = { id: id, g: g0 }; if (cur.reps >= 3 && (low === null || r1 < lowR)) { low = id; lowR = r1; } });
       line = 'Session done: ' + Math.round(min * 10) / 10 + ' min, ' + Math.round(100 * sess.ok / sess.judged) + '% right, best streak ' + sess.bestStreak + ', level ' + sess.from + ' to ' + S.level + '.' + (up && up.g > 0.05 ? ' Most improved: ' + inf(up.id).short + '.' : '') + (low ? ' Next time starts with extra ' + inf(low).short + '.' : ''); }
-    if (sess.judged >= 8 && Date.now() - lastBackupAt > 7 * 86400000) showBackupNudge('You have been practicing a while. Save a backup, just in case.');
+    if (sess.judged >= 8 && Date.now() - lastBackupAt > 7 * 86400000) showBackupNudge(t('side.backupNudge'));
+    if (sess.judged >= 8) askToKeep();
     sess = null; playing = false; paused = false; task = null; bar = null; breakTrap.deactivate(); $('breakCard').hidden = true; $('playBtn').textContent = t('stage.start'); $('endBtn').hidden = true; $('choices').hidden = true; $('prompt').textContent = ''; $('hint').textContent = ''; say(''); $('timeFill').style.width = '0%'; $('showMeBtn').hidden = true; $('howPeekHost').hidden = true; coach(line); save(); showAll(); wakeLock.release();
   }
   const BREAKS = {
@@ -2157,6 +2210,15 @@ import { register as registerPathway } from './ui/pathway.js';
     if (action === 'cancel') { rangeTest = null; coach(idleCoachLine()); return; }
     if (action === 'finish') { handleRangeTest('flush'); const range = estimateRange(rangeTest.samples); rangeTest = null; if (!range) { coach("I didn't catch a held note either time -- make sure the mic is connected, sing clearly and hold each note for at least half a second, then try again."); return; } const clamped = { low: clamp(range.low, 24, 96), high: clamp(range.high, 24, 96) }; DB.prefs.voiceRange = clamped; DB.prefs.voice = 'mine'; task = null; save(); const t = tonicFromRange(exerciseRangeFor(clamped)), hint = classify(clamped); coach(hint.wording + (t.stretch ? ' That is a little under an octave, so the exercises will stretch a bit past what you just sang.' : ' Exercises are set from your range now.')); return; }
   }
+  // F5: the song reviews queued for this instrument in an earlier session,
+  // newest first, each carrying a title -- the one Songs saved with it, or the
+  // starter song's for a review queued before titles were saved.
+  function dueSongReviews() {
+    return sanitizeReviewQueue(DB.panels && DB.panels['songs-review'])
+      .filter(r => r.instrumentId === mod && r.at < APP_STARTED_AT)
+      .map(r => { const s = starterSongs.find(x => x.id === r.songId); return { ...r, title: r.title || (s ? s.title : null) }; })
+      .filter(r => r.title);
+  }
   function renderOpts() {
     const kitHost = $('kitSetup'); kitHost.hidden = !(MODS[mod] && MODS[mod].kit);
     if (!kitHost.hidden) renderKitSetup(kitHost, DB.prefs.kit, prefs => { DB.prefs.kit = prefs; save(); if (panels.current() === 'fingerings') { panels.close(); openPanel('fingerings'); } }, kitLearn);
@@ -2237,6 +2299,11 @@ import { register as registerPathway } from './ui/pathway.js';
     // practice'). The map is teaching content no player has checked yet, so
     // the review label sits right beside the button rather than only in a
     // tooltip -- never claim it is reviewed when isReviewCurrent says no.
+    // F5: the song review today's plan line names first opens straight to that
+    // song and part; Songs shows the due-review line itself (src/ui/songs.js)
+    // and returns to this instrument at the lesson's end.
+    const review = dueSongReviews()[0];
+    if (review) btn('songReviewHandoff', t('plan.songReview.button', { title: review.title, bars: (review.bars[0] + 1) + '-' + (review.bars[1] + 1) }), () => { requestOpenSong(panelApi, review.songId, review.partId, mod, mod); openPanel('songs'); });
     if (mod === 'kbd') { const song = songFor(S.level); if (song) { btn('kbdSongHandoff', t('kbd.songHandoff.button'), () => { requestOpenSong(panelApi, song.songId, undefined, 'kbd', 'kbd'); openPanel('songs'); }); if (!isReviewCurrent(itemReview(song.id, contentRev(song)))) { const note = document.createElement('span'); note.setAttribute('role', 'note'); note.className = 'small'; note.textContent = t('review.unreviewed'); box.appendChild(note); } } }
     // P2: "Your keyboard path" opens a panel naming all five
     // src/core/pathway.js steps and the one action for whichever is current
@@ -2563,6 +2630,7 @@ import { register as registerPathway } from './ui/pathway.js';
   // The idle coach line was written in the old language; rewrite it (only it: a live session's line is left as is).
   $('optLocale').addEventListener('change', function () { const idle = $('coach').textContent === idleCoachLine(); DB.prefs.locale = LOCALES.some(l => l.code === this.value) ? this.value : 'en'; applyLocale(DB.prefs.locale); if (idle) $('coach').textContent = idleCoachLine(); rebuildPicker(); updateNavInstrumentLabel(); renderOpts(); ioRefresh(); showAll(); refreshModelPack(); save(); });
   function applyNoteNaming() { DB.prefs.noteNaming = { system: $('optNoteSystem').value, accidentals: $('optAccidentals').value }; setNoteNaming(DB.prefs.noteNaming); save(); showAll(); }
+  $('optA4').addEventListener('change', function () { DB.prefs.a4 = sanitizeA4(Number(this.value)); setReferencePitch(DB.prefs.a4); this.value = DB.prefs.a4; save(); });
   $('optNoteSystem').addEventListener('change', applyNoteNaming); $('optAccidentals').addEventListener('change', applyNoteNaming);
 
   function setMod(m) {
@@ -2584,6 +2652,7 @@ import { register as registerPathway } from './ui/pathway.js';
     // are enough; #prompt stays empty until a real exercise names one.
     $('prompt').textContent = ''; $('hint').textContent = ''; $('choices').hidden = true; say(''); if (MODS[m]) coach(idleCoachLine());
     renderOpts(); ioRefresh(); showAll(); if (!booting) instrumentChosen = true; if (instrumentChosen) { revealStage(); save(); }
+    refreshTuneFirst();
   }
   // Two visual tiers inside the one #picker container (kept as a single id
   // so every existing `#picker button` selector -- setMod's aria-pressed
@@ -2591,13 +2660,13 @@ import { register as registerPathway } from './ui/pathway.js';
   // no change there): real instruments render straight into #picker as
   // before, most prominent; TOOLS (Tuner, Capture a melody), the two
   // pseudo-mods that read as tools to a learner rather than instruments to
-  // pick up (TOOL_MOD_IDS: 'ear', 'rhy'), and the three panel tools
-  // (PANEL_TOOL_IDS: Ear training, How to play it, Music theory) render into
+  // pick up (TOOL_MOD_IDS: 'ear', 'rhy'), and the four panel tools
+  // (PANEL_TOOL_IDS: Ear training, How to play it, Music theory, Metronome) render into
   // a quieter nested .picker-tools group instead. P2b-3: this group is a
   // plain, always-visible group now, not a shut-by-default <details> -- once
   // the instrument sheet itself is open (setInstrumentSheetOpen), everything
   // inside it, tools included, is visible with no second disclosure to find.
-  function buildPickerButton(m, o) { const b = document.createElement('button'); b.type = 'button'; b.dataset.mod = m; b.style.setProperty('--c', o.color); b.setAttribute('aria-pressed', 'false'); b.appendChild(document.createTextNode(o.name)); const sm = document.createElement('small'); sm.textContent = o.tag; b.appendChild(sm); b.addEventListener('click', () => { b.blur(); closePanel(); pickerAsSheet = true; setMod(m); setInstrumentSheetOpen(false); if (document.activeElement === document.body) focusNavInstrument(); }); return b; }
+  function buildPickerButton(m, o) { const b = document.createElement('button'); b.type = 'button'; b.dataset.mod = m; b.style.setProperty('--c', o.color); b.setAttribute('aria-pressed', 'false'); b.appendChild(document.createTextNode(o.name)); const sm = document.createElement('small'); sm.textContent = o.tag; b.appendChild(sm); if (instrumentById[m]) { const chip = document.createElement('span'); chip.className = 'cap-chip'; chip.textContent = capabilityChipKeys(capabilityFor(instrumentById[m])).map(k => t(k)).join(' · '); b.appendChild(chip); } b.addEventListener('click', () => { b.blur(); closePanel(); pickerAsSheet = true; setMod(m); setInstrumentSheetOpen(false); if (document.activeElement === document.body) focusNavInstrument(); }); return b; }
   // A panel tool button (Ear training / How to play it / Music theory)
   // shares buildPickerButton's look (--c colour dot, <small> tag line) but
   // opens a registered panel instead of selecting a mod, and shuts the
@@ -2683,8 +2752,8 @@ import { register as registerPathway } from './ui/pathway.js';
     // P2b-3: a plain labelled group, not a <details> -- always visible the
     // moment the instrument sheet itself is open, no second disclosure a
     // learner has to find. Tuner/Capture a melody/Interval drill/Rhythm
-    // (toolIds) plus the three panel tools (PANEL_TOOL_IDS -- Ear training,
-    // How to play it, Music theory) all live here now.
+    // (toolIds) plus the four panel tools (PANEL_TOOL_IDS -- Ear training,
+    // How to play it, Music theory, Metronome) all live here now.
     const toolsGroup = document.createElement('div'); toolsGroup.className = 'picker-tools'; toolsGroup.id = 'pickerTools'; toolsGroup.setAttribute('role', 'group'); toolsGroup.setAttribute('aria-labelledby', 'pickerToolsLabel');
     const label = document.createElement('span'); label.id = 'pickerToolsLabel'; label.className = 'picker-tools-label'; label.textContent = t('picker.tools'); toolsGroup.appendChild(label);
     toolIds.forEach(m => toolsGroup.appendChild(buildPickerButton(m, MODS[m] || TOOLS[m])));
@@ -2700,10 +2769,15 @@ import { register as registerPathway } from './ui/pathway.js';
   // ---------- backups: a downloadable copy of the whole DB, plus the saved song library
   // (E9: db.v now feeds migrateDB; song library shares the exact store learn/songs/editor
   // panels use, same fallback-to-memory pattern as src/ui/learn.js:92-93) ----------
+  // A new version never interrupts practice: the notice waits for the session to end.
+  let updateWaiting = false;
+  function showUpdateIfIdle() { if (updateWaiting && !document.body.classList.contains('practising')) $('updateReady').hidden = false; }
   function showBackupNudge(text) { $('backupNudgeText').textContent = text; $('backupNudge').hidden = false; }
   function noteBackupMade(t) { lastBackupAt = t; try { localStorage.setItem(BACKUP_AT_KEY, String(t)); } catch (e) {} }
   function backupLibrary() { try { return createLibrary(indexedDbStore(indexedDB, 'bandcoach-songs')); } catch (e) { return createLibrary(memoryStore()); } }
-  async function doExportProgress() { const songs = await backupLibrary().exportAll(); return exportProgressFile(DB, { appVersion: APP_VERSION, now: Date.now, songs }); }
+  // The song store opens lazily, so a blocked or broken IndexedDB surfaces here, not in backupLibrary():
+  // the progress is still exported, and `songsMissing` lets saveBackup say the songs are not in the file.
+  async function doExportProgress() { let songs = [], songsMissing = false; try { songs = await backupLibrary().exportAll(); } catch (e) { songsMissing = true; } const env = exportProgressFile(DB, { appVersion: APP_VERSION, now: Date.now, songs }); if (songsMissing) Object.defineProperty(env, 'songsMissing', { value: true }); return env; }
   async function saveBackup() {
     const env = await doExportProgress();
     const blob = new Blob([JSON.stringify(env, null, 2)], { type: 'application/json' });
@@ -2712,7 +2786,7 @@ import { register as registerPathway } from './ui/pathway.js';
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
     noteBackupMade(Date.now()); $('backupNudge').hidden = true;
-    coach(t('backup.saved'));
+    coach(t(env.songsMissing ? 'backup.savedNoSongs' : 'backup.saved'));
   }
   async function doImportProgress(textOrChecked) {
     const result = typeof textOrChecked === 'string' ? importProgressFile(textOrChecked) : textOrChecked; // a pre-checked result: parsed once
@@ -2725,25 +2799,47 @@ import { register as registerPathway } from './ui/pathway.js';
       try { await backupLibrary().importAll(result.songs); }
       catch (e) { const error = en['backup.err.songsNotStored']; coach(t('backup.err.songsNotStored')); return { ok: false, error }; }
     }
-    const priorLatencyMs = DB && DB.latencyMs;
-    modelNow = Date.now(); DB = sanitizeDB(result.db, undefined, modelNow); DB.latencyMs = num(priorLatencyMs, DB.latencyMs, 0, 300); if (!Array.isArray(DB.custom)) DB.custom = [];
-    $('optNames').checked = DB.prefs.names; $('optTheme').value = DB.prefs.theme; applyTheme(DB.prefs.theme); $('optLocale').value = DB.prefs.locale; applyLocale(DB.prefs.locale); setNoteNaming(DB.prefs.noteNaming); $('optNoteSystem').value = DB.prefs.noteNaming.system; $('optAccidentals').value = DB.prefs.noteNaming.accidentals; setMod(DB.prefs.mod);
+    // The profile as it is now, current instrument included, so Undo can put it back.
+    if (MODS[mod]) DB.mods[mod] = S = sanitizeModel(mod, S, modelNow);
+    const before = JSON.parse(JSON.stringify(DB));
+    applyProfile(result.db);
     if (!writeDB()) { const error = en['backup.err.notSaved']; coach(t('backup.err.notSaved')); return { ok: false, error }; }
+    restoreUndoProfile = before; $('restoreUndo').hidden = false;
     coach(t('backup.restored'));
     return result;
   }
+  // Replaces DB, prefs, theme and mod with a restored (or un-restored) profile. The measured latency belongs to this device, so it is kept.
+  function applyProfile(db) {
+    const priorLatencyMs = DB && DB.latencyMs;
+    modelNow = Date.now(); DB = sanitizeDB(db, undefined, modelNow); DB.latencyMs = num(priorLatencyMs, DB.latencyMs, 0, 300); if (!Array.isArray(DB.custom)) DB.custom = [];
+    $('optNames').checked = DB.prefs.names; $('optTheme').value = DB.prefs.theme; applyTheme(DB.prefs.theme); $('optLocale').value = DB.prefs.locale; applyLocale(DB.prefs.locale); setNoteNaming(DB.prefs.noteNaming); setReferencePitch(DB.prefs.a4); $('optNoteSystem').value = DB.prefs.noteNaming.system; $('optAccidentals').value = DB.prefs.noteNaming.accidentals; $('optA4').value = DB.prefs.a4; setMod(DB.prefs.mod);
+  }
+  let restoreUndoProfile = null;
+  $('restoreUndoBtn').addEventListener('click', () => {
+    if (!restoreUndoProfile) return;
+    const db = restoreUndoProfile; restoreUndoProfile = null; $('restoreUndo').hidden = true;
+    applyProfile(db);
+    coach(writeDB() ? t('backup.undone') : t('storage.saveFailed'));
+  });
   $('backupSaveBtn').addEventListener('click', function () { this.blur(); saveBackup(); });
+  function restoreQuestion(exportedAt) {
+    if (exportedAt == null) return t('backup.confirmRestore');
+    let date; try { date = new Date(exportedAt).toLocaleDateString(DB.prefs.locale, { year: 'numeric', month: 'long', day: 'numeric' }); } catch (e) { return t('backup.confirmRestore'); }
+    return t('backup.confirmRestoreDated', { date });
+  }
   $('backupRestoreInput').addEventListener('change', function () {
     const file = this.files && this.files[0]; this.value = '';
     if (!file) return;
     if (checkFileSize(file, 'backup')) { coach(t('backup.err.tooLarge')); return; } // before a FileReader is built
     const reader = new FileReader();
     // Check the file before asking: a file that is not a backup is refused with the reason, and the "replace your progress" confirm is only raised for one that can be restored.
-    reader.onload = () => { const text = String(reader.result), check = importProgressFile(text); if (!check.ok) { coach(t(check.errorId)); return; } if (confirm(t('backup.confirmRestore'))) doImportProgress(check); };
+    reader.onload = () => { const text = String(reader.result), check = importProgressFile(text); if (!check.ok) { coach(t(check.errorId)); return; } if (confirm(restoreQuestion(check.exportedAt))) doImportProgress(check); };
     reader.onerror = () => coach(t('backup.readError'));
     reader.readAsText(file);
   });
   $('backupNudgeDismiss').addEventListener('click', () => { $('backupNudge').hidden = true; });
+  $('updateReload').addEventListener('click', () => location.reload());
+  try { watchForUpdate(navigator.serviceWorker, () => { updateWaiting = true; showUpdateIfIdle(); }); } catch (e) { /* no service worker here */ }
   // ---------- Copy diagnostics (src/core/diagnostics.js)
   $('diagCopyBtn').addEventListener('click', async () => {
     const text = buildDiagnostics({ version: APP_VERSION, userAgent: navigator.userAgent, errors: getErrors(), capabilities: { microphone: !!navigator.mediaDevices, midi: !!navigator.requestMIDIAccess, audioWorklet: !!window.AudioWorkletNode, songStorage: !!window.indexedDB } });
@@ -2761,11 +2857,13 @@ import { register as registerPathway } from './ui/pathway.js';
     function appendUpdateLink(href) {
       const a = document.createElement('a'); a.href = href; a.rel = 'noopener'; a.textContent = t('update.downloadLinkText'); updResult.appendChild(a);
     }
+    // The note is network text: textContent only, never innerHTML.
+    function appendUpdateNotes(notes) { if (typeof notes !== 'string' || !notes) return; const p = document.createElement('p'); p.className = 'update-notes'; p.textContent = t('update.whatsNew') + ' ' + notes; updResult.appendChild(p); }
     function renderUpdateResult(r) {
       updResult.textContent = '';
       if (r.status === 'dev') { updResult.textContent = t('update.devBuild', { version: DEV_VERSION }); return; }
       if (r.status === 'up-to-date') { updResult.textContent = t('update.upToDate', { version: r.latestVersion }); return; }
-      if (r.status === 'behind') { updResult.textContent = t('update.behind', { version: r.latestVersion }); appendUpdateLink(r.downloadUrl); return; }
+      if (r.status === 'behind') { updResult.textContent = t('update.behind', { version: r.latestVersion }); appendUpdateLink(r.downloadUrl); appendUpdateNotes(r.notes); return; }
       updResult.textContent = t('update.error'); appendUpdateLink(r.downloadUrl);
     }
     updBtn.addEventListener('click', function () {
@@ -2863,6 +2961,7 @@ import { register as registerPathway } from './ui/pathway.js';
   //
   //
   registerEar(panels);
+  registerMetronome(panels);
   //
   //
   registerTheory(panels);
@@ -2901,8 +3000,19 @@ import { register as registerPathway } from './ui/pathway.js';
   // it claims aria-current) that shows #settingsView instead of a panel --
   // closePanel() first so any open panel (Songs/Progress/etc) is shut the
   // same way Practice shuts it, then #settingsView replaces #mainArea.
+  // F10: once there is a logged session worth keeping, ask the browser not to clear it when space runs low (src/core/storage-keep.js); Settings reports the answer.
+  function storageManager() { try { return navigator.storage; } catch (e) { return null; } }
+  function askToKeep() { requestKeep(storageManager()).then(() => {}, () => {}); }
+  function refreshKeepStatus() {
+    const out = $('keepStatus');
+    readKeep(storageManager()).then((r) => {
+      if (!r) { out.hidden = true; return; }
+      out.textContent = !r.kept ? t('settings.keepNo') : r.kb == null ? t('settings.keepYesNoSize') : t('settings.keepYes', { kb: r.kb });
+      out.hidden = false;
+    }, () => { out.hidden = true; });
+  }
   function openSettings() {
-    closePanel();
+    closePanel(); refreshKeepStatus();
     $('mainArea').hidden = true; $('panelHost').hidden = true; $('settingsView').hidden = false;
     updateNavState();
   }
@@ -2978,7 +3088,7 @@ import { register as registerPathway } from './ui/pathway.js';
     updateNavState();
   }
   // A boot step that throws used to leave a blank or half-wired page with no word to the learner; say so, with the error text, instead (and record it, so the error log, console and release gate see the failed boot too).
-  try { loadDB(); applyLocale(DB.prefs.locale); if (!Array.isArray(DB.custom)) DB.custom = []; $('optNames').checked = DB.prefs.names; $('optTheme').value = DB.prefs.theme; $('optLocale').value = DB.prefs.locale; applyTheme(DB.prefs.theme); $('optNoteSystem').value = DB.prefs.noteNaming.system; $('optAccidentals').value = DB.prefs.noteNaming.accidentals; buildPicker(); pickerAsSheet = hasSavedMod; instrumentChosen = hasSavedMod; setInstrumentSheetOpen(!hasSavedMod); buildNav(); setMod(mod); booting = false; requestAnimationFrame(frame);
+  try { loadDB(); applyLocale(DB.prefs.locale); if (!Array.isArray(DB.custom)) DB.custom = []; $('optNames').checked = DB.prefs.names; $('optTheme').value = DB.prefs.theme; $('optLocale').value = DB.prefs.locale; applyTheme(DB.prefs.theme); $('optNoteSystem').value = DB.prefs.noteNaming.system; $('optAccidentals').value = DB.prefs.noteNaming.accidentals; $('optA4').value = DB.prefs.a4; buildPicker(); pickerAsSheet = hasSavedMod; instrumentChosen = hasSavedMod; setInstrumentSheetOpen(!hasSavedMod); buildNav(); setMod(mod); if (loadedCorrupt) showBackupNudge(t('side.dataUnreadable')); booting = false; requestAnimationFrame(frame);
     if (store.blocked) { saveFailedShown = true; $('settingsSay').textContent = t('storage.saveFailed'); $('mainSay').textContent = t('storage.saveFailed'); }
   } catch (e) { recordError('boot', e); const p = document.createElement('div'); p.id = 'bootFailed'; p.setAttribute('role', 'alert'); p.style.cssText = 'padding:12px;margin:8px;border:2px solid #c0392b;background:#fff;color:#111'; p.textContent = t('boot.failed', { error: (e && e.message) || String(e) }); document.body.insertBefore(p, document.body.firstChild); }
   const hook = !__DEBUG_HOOK__ ? null : { state: () => S, db: () => DB, sess: () => sess, task: () => task, cur: cur, note: onNote, answer: answer, tap: onTap, bar: () => bar, playing: () => playing, setMod: setMod, testSource: testSource, heard: () => heard, yin: yin, cap: () => cap, tuner: () => tunerState, tunerLock: () => tunerLock, deaf: () => deafWindow.isDeaf(), deafUntil: () => deafWindow.until(), exportProgress: doExportProgress, importProgress: doImportProgress, audioNow: audioNow, modelNow: () => modelNow, plan: () => sessionPlan, planProgress: () => planProgress,
@@ -3007,6 +3117,7 @@ import { register as registerPathway } from './ui/pathway.js';
   if (__DEBUG_HOOK__) Object.assign(hook, { judgeChord: judgeChord, chroma: chroma });
   if (__DEBUG_HOOK__) Object.assign(hook, { groove: () => groove, grooveLast: () => grooveLast, grooveBpm: () => S.grooveBpm, grooveOn: v => { grooveOn = !!v; task = null; groove = null; }, grooveInject: (midi, atAudioTime) => { const fire = () => { if (audioNow() >= atAudioTime) onNote(midi, true); else setTimeout(fire, 4); }; fire(); } });
   //
+  if (__DEBUG_HOOK__) Object.assign(hook, { fretView: () => fretViewLast });
   if (__DEBUG_HOOK__) Object.assign(hook, { kbdTarget: () => kbdTargetDbg });
   if (__DEBUG_HOOK__) Object.assign(hook, { showMe: () => $('showMeBtn').click() });
   //
