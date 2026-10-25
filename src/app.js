@@ -43,6 +43,7 @@ import { shouldReveal, promptFor, hintFor as coreHintFor } from './core/reveal.j
 import { gradeOutcome } from './core/grade-outcome.js';
 import { makeEvent, validateEvent, boundEvents } from './core/learning-events.js';
 import { planSession, describePlan, describeWhy, nextPlanStep } from './core/curriculum.js';
+import { sanitizeReviewQueue } from './core/teaching.js';
 //
 import * as RHY from './core/rhythm.js';
 //
@@ -699,6 +700,10 @@ import { register as registerPathway } from './ui/pathway.js';
     return customItem(mod, probe, DB.prefs) !== null;
   }
 
+  // F5: a song review is due once it was queued before this page load -- the
+  // same "an earlier session" rule src/ui/songs.js applies with its own
+  // sessionStartedAt (src/core/teaching.js dueReviews).
+  const APP_STARTED_AT = Date.now();
   // ---------- saved state: one learner model per instrument, shared session log ----------
   const KEY = 'bandcoach.v1';
   // Read once at startup, not on every export: the build (build/build.mjs)
@@ -710,6 +715,9 @@ import { register as registerPathway } from './ui/pathway.js';
   const APP_VERSION = resolveAppVersion(versionMeta && versionMeta.content);
   const BACKUP_AT_KEY = 'bandcoach.v1.backupAt';
   let lastBackupAt = 0; try { lastBackupAt = +localStorage.getItem(BACKUP_AT_KEY) || 0; } catch (e) {}
+  // F2: string instruments whose tune-first offer was answered on this device (per device, like the backup date).
+  const TUNE_ASKED_KEY = 'bandcoach.v1.tuneAsked';
+  let tuneAsked = []; try { const a = JSON.parse(localStorage.getItem(TUNE_ASKED_KEY)); if (Array.isArray(a)) tuneAsked = a.filter(x => typeof x === 'string'); } catch (e) {}
   let DB, mod = 'kbd', S = null;
   // U5: whether a REAL prior choice exists, sampled from the raw saved
   // prefs in loadDB() before sanitizeDB's 'kbd' default papers over "nothing
@@ -2031,8 +2039,15 @@ import { register as registerPathway } from './ui/pathway.js';
   let pathwayLineShown = false;
   // Start before any instrument was chosen: open the sheet and put focus on its first button instead of starting (or closing it).
   function askInstrumentFirst() { if (instrumentChosen) return false; setInstrumentSheetOpen(true); const b = document.querySelector('#picker button'); if (b) b.focus(); return true; }
+  // F2: before the first session on a string instrument, offer to tune first. "Tune first" opens the
+  // tuner on this instrument's own strings; either answer is remembered, and practising it once ends the offer.
+  function refreshTuneFirst() { const tg = TUNINGS[mod]; $('tuneFirst').hidden = !(instrumentChosen && !sess && mod !== 'chrom' && tg && tg[1].length && !tuneAsked.includes(mod) && !DB.sessions.some(r => r && r.mod === mod)); }
+  function noteTuneAsked(m) { if (!tuneAsked.includes(m)) tuneAsked.push(m); try { localStorage.setItem(TUNE_ASKED_KEY, JSON.stringify(tuneAsked)); } catch (e) {} $('tuneFirst').hidden = true; }
+  $('tuneFirstGo').addEventListener('click', () => { const m = mod; noteTuneAsked(m); tunerKind = m; setMod('tuner'); });
+  $('tuneFirstSkip').addEventListener('click', () => noteTuneAsked(mod));
   function startSession() {
     if (askInstrumentFirst()) return;
+    $('tuneFirst').hidden = true;
     document.body.classList.add('practising'); refreshModelClock(); ensureAudio(); sess = newSession(); recent = []; streak = 0; errCount = 0; task = null; lastItem = null; lastInputAt = now(); chunk = 0; say('');
     // Session length E7c: the learner's own choice (DB.prefs.sessionMinutes,
     // 0 meaning no limit) sets today's target before the tired check below,
@@ -2053,7 +2068,7 @@ import { register as registerPathway } from './ui/pathway.js';
     // Plan this sitting (review what's due, the weakest active skill, apply it, check it,
     // and, on keyboard, a suggested starter song) -- pure, so it only needs today's active
     // ids/items/events/sessions, not anything DOM/task-shaped.
-    sessionPlan = planSession({ instrumentId: mod, level: S.level, activeIds: activeItems(mod, S.level), items: S.item, now: modelNow, due: due, sessions: DB.sessions, today: today(), songFor: mod === 'kbd' ? (lvl => { const e = songFor(lvl); if (!e) return null; const s = starterSongs.find(x => x.id === e.songId); return { songId: e.songId, title: s ? s.title : e.songId }; }) : undefined });
+    sessionPlan = planSession({ instrumentId: mod, level: S.level, activeIds: activeItems(mod, S.level), items: S.item, now: modelNow, due: due, sessions: DB.sessions, today: today(), songReviews: dueSongReviews(), songFor: mod === 'kbd' ? (lvl => { const e = songFor(lvl); if (!e) return null; const s = starterSongs.find(x => x.id === e.songId); return { songId: e.songId, title: s ? s.title : e.songId }; }) : undefined });
     planProgress = { review: 0, weak: 0, apply: 0, check: 0 };
     // `seen`: has this learner any item record at this level yet? A fresh
     // profile's empty plan is a first sitting, not a day off (curriculum.js).
@@ -2193,6 +2208,15 @@ import { register as registerPathway } from './ui/pathway.js';
     if (action === 'cancel') { rangeTest = null; coach(idleCoachLine()); return; }
     if (action === 'finish') { handleRangeTest('flush'); const range = estimateRange(rangeTest.samples); rangeTest = null; if (!range) { coach("I didn't catch a held note either time -- make sure the mic is connected, sing clearly and hold each note for at least half a second, then try again."); return; } const clamped = { low: clamp(range.low, 24, 96), high: clamp(range.high, 24, 96) }; DB.prefs.voiceRange = clamped; DB.prefs.voice = 'mine'; task = null; save(); const t = tonicFromRange(exerciseRangeFor(clamped)), hint = classify(clamped); coach(hint.wording + (t.stretch ? ' That is a little under an octave, so the exercises will stretch a bit past what you just sang.' : ' Exercises are set from your range now.')); return; }
   }
+  // F5: the song reviews queued for this instrument in an earlier session,
+  // newest first, each carrying a title -- the one Songs saved with it, or the
+  // starter song's for a review queued before titles were saved.
+  function dueSongReviews() {
+    return sanitizeReviewQueue(DB.panels && DB.panels['songs-review'])
+      .filter(r => r.instrumentId === mod && r.at < APP_STARTED_AT)
+      .map(r => { const s = starterSongs.find(x => x.id === r.songId); return { ...r, title: r.title || (s ? s.title : null) }; })
+      .filter(r => r.title);
+  }
   function renderOpts() {
     const kitHost = $('kitSetup'); kitHost.hidden = !(MODS[mod] && MODS[mod].kit);
     if (!kitHost.hidden) renderKitSetup(kitHost, DB.prefs.kit, prefs => { DB.prefs.kit = prefs; save(); if (panels.current() === 'fingerings') { panels.close(); openPanel('fingerings'); } }, kitLearn);
@@ -2273,6 +2297,11 @@ import { register as registerPathway } from './ui/pathway.js';
     // practice'). The map is teaching content no player has checked yet, so
     // the review label sits right beside the button rather than only in a
     // tooltip -- never claim it is reviewed when isReviewCurrent says no.
+    // F5: the song review today's plan line names first opens straight to that
+    // song and part; Songs shows the due-review line itself (src/ui/songs.js)
+    // and returns to this instrument at the lesson's end.
+    const review = dueSongReviews()[0];
+    if (review) btn('songReviewHandoff', t('plan.songReview.button', { title: review.title, bars: (review.bars[0] + 1) + '-' + (review.bars[1] + 1) }), () => { requestOpenSong(panelApi, review.songId, review.partId, mod, mod); openPanel('songs'); });
     if (mod === 'kbd') { const song = songFor(S.level); if (song) { btn('kbdSongHandoff', t('kbd.songHandoff.button'), () => { requestOpenSong(panelApi, song.songId, undefined, 'kbd', 'kbd'); openPanel('songs'); }); if (!isReviewCurrent(itemReview(song.id, contentRev(song)))) { const note = document.createElement('span'); note.setAttribute('role', 'note'); note.className = 'small'; note.textContent = t('review.unreviewed'); box.appendChild(note); } } }
     // P2: "Your keyboard path" opens a panel naming all five
     // src/core/pathway.js steps and the one action for whichever is current
@@ -2621,6 +2650,7 @@ import { register as registerPathway } from './ui/pathway.js';
     // are enough; #prompt stays empty until a real exercise names one.
     $('prompt').textContent = ''; $('hint').textContent = ''; $('choices').hidden = true; say(''); if (MODS[m]) coach(idleCoachLine());
     renderOpts(); ioRefresh(); showAll(); if (!booting) instrumentChosen = true; if (instrumentChosen) { revealStage(); save(); }
+    refreshTuneFirst();
   }
   // Two visual tiers inside the one #picker container (kept as a single id
   // so every existing `#picker button` selector -- setMod's aria-pressed
