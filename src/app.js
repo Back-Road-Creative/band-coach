@@ -1690,14 +1690,16 @@ import { register as registerPathway } from './ui/pathway.js';
   // a note outside this range never lights up no matter how it arrived).
   // F18: below the canvas width where the two rows hold 44 CSS px white keys (a 320px phone), the keyboard zooms to
   // one row of as many white keys as fit at 44px (black keys stay over the 24px WCAG 2.5.8 floor), slid across C3-C5 by
-  // the Lower keys/Higher keys buttons; a target the coach shows is brought into the window (draw()'s kbd branch).
+  // the Lower keys/Higher keys buttons; a target the coach shows is brought into the window once (draw()'s kbd branch).
   const KBD_WHITES = []; for (let m = 48; m <= 72; m++) if ([0, 2, 4, 5, 7, 9, 11].indexOf(m % 12) >= 0) KBD_WHITES.push(m);
-  let kbdWinIdx = 5, kbdZoom = null; // kbdWinIdx: the zoomed window's first white key in KBD_WHITES (5 = A3, so middle C shows); kbdZoom: { idx, n } while zoomed
+  let kbdWinIdx = 5, kbdZoom = null, kbdWinTg = ''; // kbdWinIdx: the zoomed window's first white key in KBD_WHITES (5 = A3, so middle C shows); kbdZoom: { idx, n } while zoomed; kbdWinTg: the targets the window last moved for
   function kbdWindow(n, targets) {
     const max = KBD_WHITES.length - n, clampI = i => Math.max(0, Math.min(max, i)); let idx = clampI(kbdWinIdx);
     const out = m => m < KBD_WHITES[idx] || m > KBD_WHITES[idx + n - 1];
-    if (targets.length && targets.some(out)) { const at = KBD_WHITES.filter(w => w <= targets[0]).length - 1; idx = clampI(at - Math.floor((n - 1) / 2)); }
-    kbdWinIdx = idx; return { idx: idx, n: n, lo: KBD_WHITES[idx], hi: KBD_WHITES[idx + n - 1] };
+    // a newly shown target pulls the window over once; after that Lower/Higher keys still move it away
+    const tgKey = targets.join(',');
+    if (tgKey !== kbdWinTg && targets.length && targets.some(out)) { const at = KBD_WHITES.filter(w => w <= targets[0]).length - 1; idx = clampI(at - Math.floor((n - 1) / 2)); }
+    kbdWinTg = tgKey; kbdWinIdx = idx; return { idx: idx, n: n, lo: KBD_WHITES[idx], hi: KBD_WHITES[idx + n - 1] };
   }
   function syncKbdShift() {
     const z = kbdZoom, lo = $('kbdLower'), hi = $('kbdHigher');

@@ -57,6 +57,12 @@ test('a target the coach shows is brought into the zoomed window', async (t) => 
   assert.ok(target < before.lo || target > before.hi, 'the target is out of the window first: ' + target + ' ' + JSON.stringify(before));
   await page.evaluate('window.__coach.cur().reveal = true');
   await page.waitFor(`(function () { const ms = window.__coach.kbdKeys().map(q => q.m); return ms.includes(${target}); })()`);
+  // the shown target pulls the window over once; the slide buttons still move it after that (a learner who missed
+  // can go and find the octave they played), rather than the window snapping back onto the target every frame
+  await page.evaluate(`for (let i = 0; i < 6; i++) document.getElementById('${away}').click()`);
+  await page.evaluate('new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))');
+  const slid = await page.evaluate(GEO);
+  assert.ok(target < slid.lo || target > slid.hi, 'Lower/Higher keys move the window off a shown target: ' + target + ' ' + JSON.stringify(slid));
 });
 
 test('at 390x844 both rows stay, all 25 keys, with no slide buttons', async (t) => {

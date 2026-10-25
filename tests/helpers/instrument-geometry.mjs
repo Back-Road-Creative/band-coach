@@ -39,21 +39,51 @@ export function toClient(pt, m) {
 // y2 = y1 + rowH + gap, y3 = y2 + labelH. Left hand: label at y0, keys 48-59 at y1.
 // Right hand: label at y2, keys 60-72 at y3. The overview strip starts at 0.905H,
 // 0.07H tall, full row width (:1988).
+// F18, the zoomed phone row (:1958-1962): when the two rows' 8 white keys would
+// fall under 40 CSS px (rowCss / 8 < 40, rowCss = 0.96 x the canvas's CSS width,
+// so a canvas under 333.3 CSS px), the app draws ONE row of n = min(8,
+// floor(rowCss / 44)) white keys instead: span label at y0, labelH tall, keys at
+// y0 + labelH, (0.7H - labelH) tall, same x0 and rowW. The window starts on
+// white key `lo`: the app opens it at A3 (KBD_WHITES[5], :1695) and moves it by
+// Lower keys/Higher keys or onto a revealed target, so a caller that has seen
+// it move passes the span the canvas labels (zoomSpan() below).
 const WHITE_PCS = [0, 2, 4, 5, 7, 9, 11];
 const isWhite = (m) => WHITE_PCS.includes(((m % 12) + 12) % 12);
+export const KBD_WHITES = [];
+for (let n = 48; n <= 72; n++) if (isWhite(n)) KBD_WHITES.push(n);
+export const zoomWhites = (m) => (m.cssWidth * 0.96) / 8 < 40 ? Math.min(8, Math.floor((m.cssWidth * 0.96) / 44)) : 0;
 
-export function keyboardRects(m) {
+// The zoomed row's span label as the canvas drew it ("A3–F4", letters naming,
+// white keys only), from a list of drawn texts; null when no span label is drawn.
+const LETTER_PC = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
+export function zoomSpan(texts) {
+  for (const t of texts) {
+    const r = /^([A-G])(-?\d)–([A-G])(-?\d)$/.exec(t.text);
+    if (r) return { lo: (Number(r[2]) + 1) * 12 + LETTER_PC[r[1]], hi: (Number(r[4]) + 1) * 12 + LETTER_PC[r[3]], text: t.text };
+  }
+  return null;
+}
+
+export function keyboardRects(m, { lo: zoomLo = 57 } = {}) {
   const W = m.width, H = m.height;
   const x0 = W * 0.02, rowW = W * 0.96, labelH = H * 0.07, gap = H * 0.02;
-  const rowH = (H * 0.7 - 2 * labelH - gap) / 2;
-  const y0 = H * 0.18, y1 = y0 + labelH, y2 = y1 + rowH + gap, y3 = y2 + labelH;
-  const rows = [
-    { row: 0, lo: 48, hi: 59, labelY: y0, keysY: y1 },
-    { row: 1, lo: 60, hi: 72, labelY: y2, keysY: y3 },
-  ];
+  const y0 = H * 0.18, n = zoomWhites(m);
+  let rows, zoom = null;
+  if (n) {
+    const idx = Math.max(0, Math.min(KBD_WHITES.length - n, KBD_WHITES.indexOf(zoomLo)));
+    zoom = { lo: KBD_WHITES[idx], hi: KBD_WHITES[idx + n - 1], n };
+    rows = [{ row: 0, lo: zoom.lo, hi: zoom.hi, labelY: y0, keysY: y0 + labelH, rowH: H * 0.7 - labelH }];
+  } else {
+    const rowH = (H * 0.7 - 2 * labelH - gap) / 2;
+    const y1 = y0 + labelH, y2 = y1 + rowH + gap, y3 = y2 + labelH;
+    rows = [
+      { row: 0, lo: 48, hi: 59, labelY: y0, keysY: y1, rowH },
+      { row: 1, lo: 60, hi: 72, labelY: y2, keysY: y3, rowH },
+    ];
+  }
   const keys = [];
   const labelStrips = [];
-  for (const { row, lo, hi, labelY, keysY } of rows) {
+  for (const { row, lo, hi, labelY, keysY, rowH } of rows) {
     labelStrips.push({ row, rect: { x: x0, y: labelY, w: rowW, h: labelH } });
     // drawKeys (:1787-1793): kw = rowW / (white keys in the row); white key k is
     // at x0 + k*kw, full kw wide for hit-testing (drawn 1 px inset); a black key
@@ -70,12 +100,15 @@ export function keyboardRects(m) {
     }
   }
   keys.sort((a, b) => a.midi - b.midi);
-  const noHit = [
-    ...labelStrips.map((s) => ({ name: s.row === 0 ? 'left-hand label strip' : 'right-hand label strip', rect: s.rect })),
-    { name: 'gap between the rows', rect: { x: x0, y: y1 + rowH, w: rowW, h: gap } },
-    { name: 'overview strip', rect: { x: W * 0.02, y: H * 0.905, w: W * 0.96, h: H * 0.07 } },
-  ];
-  return { keys, labelStrips, noHit };
+  const overview = { name: 'overview strip', rect: { x: W * 0.02, y: H * 0.905, w: W * 0.96, h: H * 0.07 } };
+  const noHit = zoom
+    ? [{ name: 'key-span label strip', rect: labelStrips[0].rect }, overview]
+    : [
+        ...labelStrips.map((s) => ({ name: s.row === 0 ? 'left-hand label strip' : 'right-hand label strip', rect: s.rect })),
+        { name: 'gap between the rows', rect: { x: x0, y: rows[0].keysY + rows[0].rowH, w: rowW, h: gap } },
+        overview,
+      ];
+  return { keys, labelStrips, noHit, zoom };
 }
 
 // Where to aim at a key. White: the lower body, well clear of any black key. Black:

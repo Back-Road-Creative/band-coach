@@ -1250,7 +1250,8 @@ On a canvas narrower than that (~334px, so a 320px phone) the two rows would dro
 keyboard zooms instead: one row of as many white keys as fit at 44px or more (six on a 320px phone,
 black keys over 30px), labelled with the notes it spans. **Lower keys** and **Higher keys** under the
 canvas slide that window across C3–C5, and when the coach shows a target (Show me, or after a miss)
-the window moves to bring it in. The overview strip marks the zoomed window. A 390px phone and
+the window moves to bring it in, once: the buttons still slide it away afterwards, so after a miss you
+can go and find the key you played. The overview strip marks the zoomed window. A 390px phone and
 anything wider still get both rows.
 
 During a "hands together" task, the right-hand and left-hand target notes are marked with a
