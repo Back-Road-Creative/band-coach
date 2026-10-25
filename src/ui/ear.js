@@ -87,7 +87,7 @@ function loadStore(api) {
 export function registerEar(panels) {
   panels.register({
     id: 'ear',
-    name: 'Ear training',
+    get name() { return t('ear.title'); },
     tag: 'listen & answer',
     color: '#5be08a',
     mount(hostEl, api) {
