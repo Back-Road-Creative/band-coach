@@ -456,15 +456,14 @@ of a fixed number. The tired-pattern cap (three sessions in a row that each ende
 they started) still applies, but only when its 15 minutes is lower than the learner's own
 choice — see `tests/characterization/session-length-choice.test.mjs`.
 
-A "Session length" selector (No limit / 5 / 10 / 15 minutes) sits in every instrument's options
-(not the Tuner or Capture tools), saved to `prefs.sessionMinutes`; an invalid saved value (anything but 5, 10, 15 or no choice at all)
-falls back to No limit rather than a target the coach can't explain. The choice sets the new
-session's target when `src/app.js`'s `startSession` runs — a change made mid-session waits for
-the next Start, so it can neither fire a surprise break nor cancel one already showing. At the
-target, the coach pauses with "That is today's N minutes", naming the real minute count instead
-of a fixed number. The tired-pattern cap (three sessions in a row that each ended weaker than
-they started) still applies, but only when its 15 minutes is lower than the learner's own
-choice — see `tests/characterization/session-length-choice.test.mjs`.
+**End on a win.** At a tired break, a break to recover from an error, or when you press End right
+after a miss, the break card offers "End on a win: <item>", one item you already know well
+(reviewed at least three times and still at 90% or better, `mastered()` in `src/core/srs.js`).
+Playing it is a warm-up that does not count, and the session ends straight after it with
+"Ended on a win" ahead of the usual summary, so it never adds more than that one item. It is
+optional: "End session" is on the same card, and End after a right answer ends at once. Nothing is
+offered while nothing is mastered yet, or on levels that are not single notes, chords or short
+runs (ear training, drum kit, rhythm bars) — see `tests/characterization/end-on-a-win.test.mjs`.
 
 ## Turning an audio file into notes
 

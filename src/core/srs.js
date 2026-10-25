@@ -115,6 +115,25 @@ export function due(items, now, { target = 0.85 } = {}) {
 }
 
 /**
+ * F7 "end on a win": of `ids`, the item the learner knows best right now,
+ * or null when none is genuinely mastered (reviewed at least `reps` times
+ * and still at or above `min` retrievability at `now`). `items` maps id to
+ * item; ids with no record are skipped. Ties break by id.
+ */
+export function mastered(items, ids, now, { min = 0.9, reps = 3 } = {}) {
+  if (!items || !Array.isArray(ids)) return null;
+  let best = null, bestR = -1;
+  for (const id of ids) {
+    const item = items[id];
+    if (!item || num(item.reps, 0) < reps) continue;
+    const r = retrievability(item, now);
+    if (r < min) continue;
+    if (r > bestR || (r === bestR && String(id) < String(best))) { best = id; bestR = r; }
+  }
+  return best;
+}
+
+/**
  * Converts one of today's `{ m, n, last, seen }` item records into an
  * equivalent starting state under the new model, so a learner's progress
  * is preserved: `retrievability(migrateItem(old, now), now)` equals what
