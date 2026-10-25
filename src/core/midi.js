@@ -57,6 +57,7 @@ export function createMidiParser() {
       if (d1 & 0x80 || (d2 !== undefined && d2 & 0x80)) { i = at + ((d1 & 0x80) ? 0 : 1); continue; } // a status byte cut this message short -- drop it, resume at that byte
       runningStatus = status;
       if (type === NOTE_ON || type === NOTE_OFF) events.push({ type: type === NOTE_ON && d2 > 0 ? 'on' : 'off', note: d1, velocity: d2, channel: channel });
+      else if (type === CONTROL_CHANGE) events.push({ type: 'cc', controller: d1, value: d2, channel: channel }); // CC64 is the sustain pedal src/app.js reads as a hands-free button
       i = at + dataLen;
     }
     return events;

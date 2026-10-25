@@ -591,6 +591,13 @@ than 20 cents off, the side rail says so ("Your notes sound about 25 cents flat.
 opens the Tuner on that instrument's strings; **Not now** puts it away for the rest of the session.
 One sour note never triggers it, only a steady lean the same way.
 
+Song practice works hands-free. With nothing focused, **Space** presses the step's **Your turn** /
+**Stop and check** (or **Practice again** at the end) and **Enter** presses its **Next**; a focused
+button keeps its own Space and Enter. A sustain pedal on a connected MIDI keyboard (CC64) does the
+same with your foot: each press presses whichever of those buttons the step shows. While a keyboard
+part is recording, the pedal is left alone, because there it is your sustain; stop that try with
+Space or the button.
+
 Opening any song shows one row of plain actions directly above its practise section: **Edit
 notes**, **Play along**, **Export**, **Share**, **Save a copy**, **Print** — a starter tune's Edit
 notes saves a copy first (starter tunes are never edited in place) and opens that. Export reveals
