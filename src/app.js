@@ -38,7 +38,7 @@ import { chroma, judgeChord } from './audio/chords.js';
 //
 import { makeGrid, scoreTake, tempoLadder } from './core/groove.js';
 import { stepTuner } from './core/tuner.js';
-import { wrongNoteHint, writtenMidi } from './core/wrong-note.js';
+import { wrongNoteHint, writtenMidi, midiShift, midiShiftHint, SHIFT_RUN } from './core/wrong-note.js';
 import { shouldReveal, promptFor, hintFor as coreHintFor } from './core/reveal.js';
 import { gradeOutcome } from './core/grade-outcome.js';
 import { makeEvent, validateEvent, boundEvents } from './core/learning-events.js';
@@ -1219,6 +1219,7 @@ import { register as registerPathway } from './ui/pathway.js';
   // attempt can tell a real keyboard from a stand-in the same way
   // (src/ui/songs.js's advance()) -- never anything about credit, mastery or
   // pass/fail, which stay blind to it.
+  let midiMisses = []; // F13: consecutive wrong MIDI notes, oldest first (onNote below)
   function onNote(midi, exact, source) {
     if (source) kbdTyping = source === 'computer-key'; // the keys wear their computer letters only while the computer keyboard is what is playing them
     // Songs only ever learn a route they already understand (a real
@@ -1243,8 +1244,12 @@ import { register as registerPathway } from './ui/pathway.js';
     if (i.kind !== 'note') return;
     const policy = i.anywhere ? 'fold' : (OCTAVE_POLICY[mod] || 'fold');
     const judged = judgePitch({ heardMidi: midi, targetMidi: i.midi, policy });
-    if (judged.ok) { passEl(undefined, undefined, undefined, source); return; }
-    const where = wrongNoteHint({ heardMidi: midi, targetMidi: i.midi, policy, fretted: !!i.string && !MODS[mod].fretless, input: source, name: nname });
+    if (judged.ok) { midiMisses = []; passEl(undefined, undefined, undefined, source); return; }
+    // F13: a run of MIDI misses all one distance off reads as the keyboard's octave/transpose
+    // button, not the learner (src/core/wrong-note.js midiShift); any other route breaks the run.
+    midiMisses = source === 'midi' ? midiMisses.concat([{ heardMidi: midi, targetMidi: i.midi }]).slice(-SHIFT_RUN) : [];
+    const shift = midiShift(midiMisses);
+    const where = shift ? midiShiftHint(shift) : wrongNoteHint({ heardMidi: midi, targetMidi: i.midi, policy, fretted: !!i.string && !MODS[mod].fretless, input: source, name: nname });
     const wn = (x) => i.written === undefined ? nname(x) : nname(writtenMidi(i, x)); failEl('That was ' + wn(midi) + ', the note is ' + wn(i.midi) + '. ' + where, e.id + '>' + wn(midi)); // transposing winds: both names in the written key the prompt uses
   }
   // onNote's hands-together branch: the stage machine lives in src/core/hands-together-stage.js (pure, table-tested); this applies its verdict to the UI.

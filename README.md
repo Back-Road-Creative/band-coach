@@ -1461,6 +1461,11 @@ A wrong-note correction on a transposing wind (microphone sustain or MIDI) names
 heard and the target in that same written key (`writtenMidi` in `src/core/wrong-note.js` maps the
 sounding pitch back), so it never says "the note is B♭" under a prompt that reads "Play C4".
 
+Four wrong notes in a row from a MIDI keyboard, all the same distance off the target, read as the
+keyboard's octave or transpose button rather than the player: the correction then says "Every note
+is landing an octave too high: check your keyboard's octave or transpose buttons." (`midiShift` in
+`src/core/wrong-note.js`). One stray note keeps the usual hint, and the computer keys never count.
+
 `src/song/feasibility.js`'s `feasibility(song, partId, instrument)` turns
 `fitToInstrument`'s own result into a plain-language badge -- "Fits as
 written", "Transposed to G", "3 notes skipped" -- never a guessed score.
