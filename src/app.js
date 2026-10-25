@@ -20,6 +20,7 @@ import { recordError, getErrors, persistErrors } from './core/error-log.js';
 import { resolveAppVersion, DEV_VERSION } from './core/version.js';
 import { loadPack, packStatus, createIndexedDBStore, packManifestUrl, DEFAULT_MODEL_PACK } from './core/model-pack.js';
 import { checkForUpdate, FALLBACK_DOWNLOAD_URL } from './core/update-check.js';
+import { requestKeep, readKeep } from './core/storage-keep.js';
 import { setNoteNaming, name as noteNameFor } from './core/note-names.js';
 import { freqToMidi, midiToFreq, sanitizeA4, setReferencePitch, referencePitch } from './core/pitch.js';
 import { t, t as tl, en, setLocale, LOCALES } from './core/i18n.js';
@@ -2112,6 +2113,7 @@ import { register as registerPathway } from './ui/pathway.js';
       let up = null, low = null, lowR = 1; Object.keys(S.item).forEach(id => { const cur = S.item[id], r1 = retrievability(cur, modelNow), r0 = retrievability(sess.m0[id] || cur, modelNow), g0 = r1 - r0; if (up === null || g0 > up.g) up = { id: id, g: g0 }; if (cur.reps >= 3 && (low === null || r1 < lowR)) { low = id; lowR = r1; } });
       line = 'Session done: ' + Math.round(min * 10) / 10 + ' min, ' + Math.round(100 * sess.ok / sess.judged) + '% right, best streak ' + sess.bestStreak + ', level ' + sess.from + ' to ' + S.level + '.' + (up && up.g > 0.05 ? ' Most improved: ' + inf(up.id).short + '.' : '') + (low ? ' Next time starts with extra ' + inf(low).short + '.' : ''); }
     if (sess.judged >= 8 && Date.now() - lastBackupAt > 7 * 86400000) showBackupNudge(t('side.backupNudge'));
+    if (sess.judged >= 8) askToKeep();
     sess = null; playing = false; paused = false; task = null; bar = null; breakTrap.deactivate(); $('breakCard').hidden = true; $('playBtn').textContent = t('stage.start'); $('endBtn').hidden = true; $('choices').hidden = true; $('prompt').textContent = ''; $('hint').textContent = ''; say(''); $('timeFill').style.width = '0%'; $('showMeBtn').hidden = true; $('howPeekHost').hidden = true; coach(line); save(); showAll(); wakeLock.release();
   }
   const BREAKS = {
@@ -2998,8 +3000,19 @@ import { register as registerPathway } from './ui/pathway.js';
   // it claims aria-current) that shows #settingsView instead of a panel --
   // closePanel() first so any open panel (Songs/Progress/etc) is shut the
   // same way Practice shuts it, then #settingsView replaces #mainArea.
+  // F10: once there is a logged session worth keeping, ask the browser not to clear it when space runs low (src/core/storage-keep.js); Settings reports the answer.
+  function storageManager() { try { return navigator.storage; } catch (e) { return null; } }
+  function askToKeep() { requestKeep(storageManager()).then(() => {}, () => {}); }
+  function refreshKeepStatus() {
+    const out = $('keepStatus');
+    readKeep(storageManager()).then((r) => {
+      if (!r) { out.hidden = true; return; }
+      out.textContent = !r.kept ? t('settings.keepNo') : r.kb == null ? t('settings.keepYesNoSize') : t('settings.keepYes', { kb: r.kb });
+      out.hidden = false;
+    }, () => { out.hidden = true; });
+  }
   function openSettings() {
-    closePanel();
+    closePanel(); refreshKeepStatus();
     $('mainArea').hidden = true; $('panelHost').hidden = true; $('settingsView').hidden = false;
     updateNavState();
   }
