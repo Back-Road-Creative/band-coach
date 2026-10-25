@@ -299,6 +299,8 @@
      placed after the transport -- buttons stay at least 24px (the a11y
      scan, #283), same min-height every other panel button already gets. */
   .panel-songs-mode, .panel-songs-hands { display: flex; flex-wrap: wrap; gap: 4px; }
+  .panel-songs-speed { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .panel-songs-speed-best { margin-left: 8px; opacity: .8; }
   .panel-songs-mode button[aria-pressed="true"], .panel-songs-hands button[aria-pressed="true"] { border-color: var(--good); }
   .panel-songs-check-result { color: var(--muted); }
   .panel-songs-verdict { margin: 4px 0; font-weight: 600; }

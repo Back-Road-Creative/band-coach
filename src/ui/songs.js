@@ -55,6 +55,7 @@ import { phaseOf, repairFor, interludeAfter, addReview, dueReviews, dropReviews,
 import { barHeat, worstBars } from '../song/bar-heat.js';
 import { dimsFromStep, assessmentLines } from './songs/assessed.js';
 import { createLoopBackingTransport, applyAttemptToTransport, backingBpm, rateLabel, barLoopStep, BAR_LOOP_START_RATE } from './songs/loop-backing.js';
+import { MIN_SPEED, MAX_SPEED, SPEED_STEP, sanitizeSpeedLedger, speedKey, speedFor, withSpeed, recordClean, bestForSong, atSpeed } from './songs/my-speed.js';
 import { mapMasteryKeys } from './songs/mastery.js';
 import { parseChallenge, buildChallenge } from '../song/challenge.js';
 import { writeBandPack, readBandPack } from '../song/band-pack.js';
@@ -306,6 +307,10 @@ function mountSongsPanel(hostEl, api) {
   const reviewStore = api.store('songs-review');
   const sessionStartedAt = Date.now();
   const reviewQueue = () => sanitizeReviewQueue(reviewStore.get());
+  // "My speed" (F12, src/ui/songs/my-speed.js): each song+part's chosen
+  // speed and its best clean Check speed. Read through the sanitizer only.
+  const speedStore = api.store('songs-speed');
+  const speedLedger = () => sanitizeSpeedLedger(speedStore.get());
   function songStatusLedger() { return sanitizeStatusLedger(statusStore.get()); }
   function setSongStatus(fn, songId, opts) {
     statusStore.set(opts !== undefined ? fn(songStatusLedger(), songId, opts) : fn(songStatusLedger(), songId));
@@ -605,6 +610,8 @@ function mountSongsPanel(hostEl, api) {
       if (label) li.appendChild(el('span', { class: 'panel-songs-status', text: label }));
       li.appendChild(removeControl(songOrMeta, libraryId));
     }
+    const best = bestForSong(speedLedger(), songOrMeta.id);
+    if (best !== null) li.appendChild(el('span', { class: 'panel-songs-speed-best', text: t('songs.speed.best', { pct: best }) }));
     // P3-8: no more per-row Save-as/export controls here -- MIDI/MusicXML/
     // ABC now live inside the open song's own Export action (songHeader,
     // songExportControls() below is reused there instead).
@@ -1160,7 +1167,7 @@ function mountSongsPanel(hostEl, api) {
     // on -- built once per practice session, not per step, so a phrase
     // crossing a tempoMap change plays, counts in and is judged against the
     // same tempo curve throughout.
-    practice = { song: arrangedSong, baseSong: song, partId, instrument, instrumentId, plan, arrangement, results: resumeEntry ? resumeEntry.tail.slice() : [], stepIndex: resumeEntry ? resumeEntry.stepIndex : 0, repair: null, interlude: null, transferNote: null, recording: false, countingIn: false, countInTimer: null, playedEvents: [], recordStartSec: 0, stop: null, loopTransport: null, loopTransportStepIndex: null, clock: createSongClock(arrangedSong), mode, assistance, hands, lastCheckVerdict: null, lessonKey: lessonKeyValue, resumeRate: resumeEntry ? resumeEntry.rate : null, returnTo: opts.returnTo || null };
+    practice = { song: arrangedSong, baseSong: song, partId, instrument, instrumentId, plan, arrangement, results: resumeEntry ? resumeEntry.tail.slice() : [], stepIndex: resumeEntry ? resumeEntry.stepIndex : 0, repair: null, interlude: null, transferNote: null, recording: false, countingIn: false, countInTimer: null, playedEvents: [], recordStartSec: 0, stop: null, loopTransport: null, loopTransportStepIndex: null, clock: createSongClock(arrangedSong), mode, assistance, hands, lastCheckVerdict: null, lessonKey: lessonKeyValue, resumeRate: resumeEntry ? resumeEntry.rate : null, returnTo: opts.returnTo || null, speedSlot: speedKey(song.id, partId), speed: speedFor(speedLedger(), speedKey(song.id, partId)), speedRecord: null };
     currentPractice = practice;
     if (resumeEntry) say(t('songs.say.resume'), 'ok');
     saveLesson();
@@ -1308,6 +1315,7 @@ function mountSongsPanel(hostEl, api) {
         text: practice.lastCheckVerdict === 'counted' ? t('songs.mode.counted') : t('songs.mode.practiceOnly'),
       }));
     }
+    appendSpeedRecord();
     // "Practise again" keeps the mode and returnTo it started with
     // (restart(), above) -- a second run started from the keyboard
     // hand-off must still end with "Back to practice" (C11a), and a
@@ -1513,6 +1521,33 @@ function mountSongsPanel(hostEl, api) {
     practiceSection.appendChild(modeGroup);
   }
 
+  // "My speed" (F12): 50-100 % of the written tempo, kept per song+part.
+  // The next try's backing, count-in and judging all follow it
+  // (effectiveBpm above); changing it never re-renders, so a slider moved
+  // with the arrow keys keeps its focus.
+  function renderSpeedControl() {
+    const wrap = el('div', { class: 'panel-songs-speed' });
+    const input = el('input', { type: 'range', id: 'songsMySpeed', min: String(MIN_SPEED), max: String(MAX_SPEED), step: String(SPEED_STEP), value: String(practice.speed) });
+    const out = el('output', { for: 'songsMySpeed', text: t('songs.speed.value', { pct: practice.speed }) });
+    input.disabled = practice.recording || practice.countingIn;
+    input.addEventListener('input', () => { out.textContent = t('songs.speed.value', { pct: input.value }); });
+    input.addEventListener('change', () => {
+      speedStore.set(withSpeed(speedLedger(), practice.speedSlot, Number(input.value)));
+      practice.speed = speedFor(speedLedger(), practice.speedSlot);
+    });
+    wrap.append(el('label', { for: 'songsMySpeed', text: t('songs.speed.label') }), input, out);
+    practiceSection.appendChild(wrap);
+  }
+
+  function appendSpeedRecord() {
+    const r = practice.speedRecord;
+    if (!r) return;
+    practiceSection.appendChild(el('p', {
+      class: 'panel-songs-speed-record',
+      text: r.prev === null ? t('songs.speed.record', { pct: r.speed }) : t('songs.speed.recordUp', { pct: r.speed, prev: r.prev }),
+    }));
+  }
+
   function renderHandsControl(step) {
     // Hands (H3): only a two-hand keyboard song ever sets practice.hands to
     // anything but null (startPractice above) -- a melody-only song, or any
@@ -1571,6 +1606,7 @@ function mountSongsPanel(hostEl, api) {
         text: practice.lastCheckVerdict === 'counted' ? t('songs.mode.counted') : t('songs.mode.practiceOnly'),
       }));
     }
+    appendSpeedRecord();
 
     // The last judged try's bar-by-bar result (advance() below), kept on
     // screen until the learner starts another try (startRecording() clears
@@ -1619,6 +1655,7 @@ function mountSongsPanel(hostEl, api) {
     renderStepTransport(step);
     renderModeControl();
     renderHandsControl(step);
+    renderSpeedControl();
     renderStepFeedback(stepIndex);
     // A9: moved from ahead of titleRow/the notation/the transport (playBtn
     // above) to here, below all of it -- 28 instrument cards used to sit
@@ -1735,9 +1772,10 @@ function mountSongsPanel(hostEl, api) {
   // Used for BOTH the synth backing playback below and the timing judged in
   // finishRecording(), so a learner following a slowed-down backing is
   // judged against the tempo they actually heard, not the rung's full speed.
+  // The learner's own "My speed" (F12) scales every timed step on top.
   function effectiveBpm(step) {
     const tr = transportFor(step);
-    return tr ? backingBpm(step.bpm, tr.getRate()) : step.bpm;
+    return atSpeed(tr ? backingBpm(step.bpm, tr.getRate()) : step.bpm, practice.speed);
   }
 
   // The rate-ladder transport a step plays and is judged at: the plan rung's own, or the
@@ -1963,6 +2001,7 @@ function mountSongsPanel(hostEl, api) {
     practice.lastHeatBars = null;
     practice.lastAssessed = null;
     practice.lastCheckVerdict = null;
+    practice.speedRecord = null;
     practice.lastVerdict = null;
 
     // Real listening only begins once the count-in ends (below); this is the
@@ -2167,7 +2206,7 @@ function mountSongsPanel(hostEl, api) {
         instrument: practice.instrumentId, skill: step.kind + ':' + step.phraseIndex, source: 'song',
         songId: practice.song.id, partId: practice.partId, assistance: practice.assistance,
         dims, unassessed, activeMs: Math.max(0, Math.round(elapsedMs || 0)),
-        bpmTarget: step.bpm || null, bpmActual: step.bpm || null, input: loggedInput,
+        bpmTarget: step.bpm || null, bpmActual: atSpeed(step.bpm, practice.speed) || null, input: loggedInput,
         hands: practice.hands || undefined,
       }); // no `now` option: makeEvent defaults to Date.now(), the same epoch-ms clock every other event row uses -- api.now() is the audio clock (seconds since page load) and must never stamp `at`.
       api.logEvent(row);
@@ -2176,6 +2215,13 @@ function mountSongsPanel(hostEl, api) {
       // disagree with what actually counts. A fail clears it -- nothing
       // was judged worth a verdict on this try.
       if (practice.mode === 'check') practice.lastCheckVerdict = passed ? (isIndependentOk(row) ? 'counted' : 'practice') : null;
+      // A counted Check of the whole piece is the song's speed record (F12):
+      // only a speed better than the saved best is stored and announced.
+      if (practice.lastCheckVerdict === 'counted' && step.kind === 'whole') {
+        const { ledger, record } = recordClean(speedLedger(), practice.speedSlot, practice.speed);
+        if (record) speedStore.set(ledger);
+        practice.speedRecord = record;
+      }
     }
     // A failed try gets told the FIRST concrete thing to fix -- the
     // missed note, the late note, the hold/tune reason, or the extra note
