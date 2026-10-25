@@ -62,13 +62,16 @@ function makeTree(made) {
 
 function release(dir, env, flags = ['--release']) {
   const r = spawnSync(process.execPath, ['build/build.mjs', ...flags], { cwd: dir, encoding: 'utf8', env });
-  let footer = null;
+  let footer = null, built = null;
   const file = join(dir, 'dist', 'release', 'band-coach.html');
   if (existsSync(file)) {
-    const m = /<footer id="verFooter"[^>]*>[^<]*(built \d{4}-\d{2}-\d{2})/.exec(readFileSync(file, 'utf8'));
+    const html = readFileSync(file, 'utf8');
+    const m = /<footer id="verFooter"[^>]*>[^<]*(built \d{4}-\d{2}-\d{2})/.exec(html);
     footer = m && m[1];
+    const b = /<meta name="band-coach-built" content="([^"]*)">/.exec(html);
+    built = b && b[1];
   }
-  return { rc: r.status, stderr: r.stderr, footer };
+  return { rc: r.status, stderr: r.stderr, footer, built };
 }
 
 function setup(t) {
@@ -83,6 +86,7 @@ test('A. a release build is dated from the commit (committer time), not the day 
   const r = release(dir, cleanEnv());
   assert.equal(r.rc, 0, r.stderr);
   assert.equal(r.footer, 'built 2001-02-03');
+  assert.equal(r.built, '2001-02-03', 'the age line in Settings reads the same date as the footer');
   assert.doesNotMatch(r.stderr, /wall clock/i);
 });
 

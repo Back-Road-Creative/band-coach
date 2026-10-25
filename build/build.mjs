@@ -35,6 +35,7 @@ const PKG = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
 const CSS_PLACEHOLDER = '/*__BAND_COACH_CSS__*/';
 const JS_PLACEHOLDER = '/*__BAND_COACH_JS__*/';
 const VERSION_META_PLACEHOLDER = '<meta name="band-coach-version" content="">';
+const BUILT_META_PLACEHOLDER = '<meta name="band-coach-built" content="">';
 const VERSION_FOOTER_PLACEHOLDER = '<footer id="verFooter" aria-hidden="true"></footer>';
 
 // The release footer's UTC YYYY-MM-DD, resolved in this order:
@@ -205,11 +206,15 @@ export async function build({ release = false, outDir = OUT_DIR } = {}) {
     if (!html.includes(VERSION_META_PLACEHOLDER)) {
       throw new Error('src/index.html is missing the version meta placeholder');
     }
+    if (!html.includes(BUILT_META_PLACEHOLDER)) {
+      throw new Error('src/index.html is missing the build date meta placeholder');
+    }
     if (!html.includes(VERSION_FOOTER_PLACEHOLDER)) {
       throw new Error('src/index.html is missing the version footer placeholder');
     }
     html = html
       .replace(VERSION_META_PLACEHOLDER, `<meta name="band-coach-version" content="${PKG.version}">`)
+      .replace(BUILT_META_PLACEHOLDER, `<meta name="band-coach-built" content="${date}">`)
       .replace(VERSION_FOOTER_PLACEHOLDER, `<footer id="verFooter" aria-hidden="true">Band Coach v${PKG.version} · built ${date}</footer>`);
 
     mkdirSync(releaseDir, { recursive: true });
