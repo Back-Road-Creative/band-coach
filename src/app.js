@@ -7,7 +7,7 @@ import { sanitizeDB as sanitizeDBCore } from './core/sanitize-db.js';
 import { createLibrary, indexedDbStore, memoryStore } from './song/library.js';
 import { captureToSong } from './song/capture.js';
 import { toAudioTime, judgeTap, medianLatency } from './core/timing.js';
-import { DEFAULT_STABILITY_DAYS, MIN_STABILITY_DAYS, MAX_STABILITY_DAYS, GRADE, retrievability, review, due, migrateItem } from './core/srs.js';
+import { DEFAULT_STABILITY_DAYS, MIN_STABILITY_DAYS, MAX_STABILITY_DAYS, GRADE, retrievability, review, due, migrateItem, mastered } from './core/srs.js';
 import { handsTogetherById, handsModeFromId, fingeringLabel, bothUnlocked, effectiveHands, prepLine, HANDS_TOGETHER_EXERCISES, isTimedPairId, PAIR_ONSET_TOL_MS, PAIR_RELEASE_TOL_MS, isStagedPairId, handsStageFromId, heldBassMelody, SPLIT_MID_TOL_RATIO, POSITION_SHIFT_SEMITONES, HANDS_POSITION_EXERCISES, positionPrepLine } from './core/hands-together.js';
 import { step as stepHandsTogether } from './core/hands-together-stage.js';
 import { createMidiParser, describeOutputs, scheduleSong, playOnOutput, stopAll } from './core/midi.js';
@@ -972,6 +972,8 @@ import { register as registerPathway } from './ui/pathway.js';
     // out as 'j1tr': that matches no id parseId() recognises at all.
     if (kind === 'hands') { const handsSuf = handsPref === 'right' ? 'r' : handsPref === 'left' ? 'l' : ''; if (handsSuf) pool = pool.map(id => /^j\d+$/.test(id) ? id + handsSuf : id); }
     if (sess.warm > 0) { sess.warm--; warm = true; const base = kind === 'bar' || kind === 'kit' ? kind : kind === 'chord' ? 'chord' : 'one'; kind = base; pool = byStrength(pool, modelNow).slice(0, Math.max(2, Math.ceil(pool.length / 2))); }
+    // F7: the one "end on a win" item is a single well-known element that does not count, whatever this level would hand out.
+    if (sess && sess.winId) { warm = true; pool = [sess.winId]; kind = sess.winId[0] === 'c' ? 'chord' : 'one'; }
     return { kind: kind, warm: warm, pool: pool };
   }
   function applySessionPlan(d, M, warm, kind, pool) {
@@ -1190,7 +1192,8 @@ import { register as registerPathway } from './ui/pathway.js';
   }
   function failEl(msg, confKey) { const e = cur(); if (!e) return; if (!e.failed) { e.failed = true; e.reveal = true; } if (confKey) S.conf[confKey] = (S.conf[confKey] || 0) + 1; flashBad = performance.now(); say(msg, 'no'); updateDesc(); }
   function finishTask() {
-    const t = task; task.done = true; let from = lastItem, anyFail = false;
+    // `t`, never `task`, below: credit() can call takeBreak('tired'), which sets task = null mid-loop.
+    const t = task; t.done = true; let from = lastItem, anyFail = false;
     // One learning-event row per judged element (plan 6.4), warm-up
     // included -- a warm-up still tells a later reader what was practised,
     // it just never touches the SRS model (see credit()'s `warm` early
@@ -1201,8 +1204,8 @@ import { register as registerPathway } from './ui/pathway.js';
     // no route was passed: the debug hook or grooveInject calling onNote
     // with no third argument, and onPitch's own pluck-chord and sustain
     // passEl calls (microphone rows, never a kbd note).
-    task.els.forEach(e => { credit(e.id, e.q || 0, from, task.warm, e.rt, gradeOutcome({ helped: !!e.helped, failed: !!e.failed, assistance: e.assistance || null, q: e.q || 0 })); logEvent(makeEvent({ instrument: mod, skill: e.id, source: task.warm ? 'warmup' : 'drill', assistance: e.helped ? 'shown' : (e.assistance || 'none'), dims: { pitch: e.q > 0 ? 'ok' : 'miss' }, unassessed: [], activeMs: Math.round((e.rt || 0) * 1000), bpmTarget: null, bpmActual: null, hands: e.info.kind === 'hands-together' ? handsModeFromId(e.id) : undefined, input: e.input }, { now: modelNow })); from = e.id; if (!(e.q > 0)) anyFail = true; });
-    lastItem = from; nextTaskAt = now() + (anyFail ? 1.5 : 0.7); if (task.kind === 'ear') nextTaskAt = now() + (anyFail ? 2.6 : 1.1); save(); showAll();
+    t.els.forEach(e => { credit(e.id, e.q || 0, from, t.warm, e.rt, gradeOutcome({ helped: !!e.helped, failed: !!e.failed, assistance: e.assistance || null, q: e.q || 0 })); logEvent(makeEvent({ instrument: mod, skill: e.id, source: t.warm ? 'warmup' : 'drill', assistance: e.helped ? 'shown' : (e.assistance || 'none'), dims: { pitch: e.q > 0 ? 'ok' : 'miss' }, unassessed: [], activeMs: Math.round((e.rt || 0) * 1000), bpmTarget: null, bpmActual: null, hands: e.info.kind === 'hands-together' ? handsModeFromId(e.id) : undefined, input: e.input }, { now: modelNow })); from = e.id; if (!(e.q > 0)) anyFail = true; });
+    lastItem = from; if (sess) sess.lastMiss = anyFail; nextTaskAt = now() + (anyFail ? 1.5 : 0.7); if (t.kind === 'ear') nextTaskAt = now() + (anyFail ? 2.6 : 1.1); save(); showAll();
     if (t.onDone) t.onDone(); // a captured-melody chunk advances (or repeats) once its rows are logged
   }
   // a played note (MIDI key, screen key, or a plucked note the microphone
@@ -1507,7 +1510,7 @@ import { register as registerPathway } from './ui/pathway.js';
   // ---------- the loop ----------
   function tick(dt) {
     sess.active += dt; sess.sinceBreak += dt;
-    if (!task || (task.done && now() >= nextTaskAt)) { task = buildTask(); present(); }
+    if (!task || (task.done && now() >= nextTaskAt)) { if (task && task.win) { endSession(task.els.every(e => e.q > 0) ? task.win : null); return; } task = buildTask(); present(); }
     if (task.kind === 'bar') tickBar();
     else if (task.kind === 'bar2') tickBar2();
     else if (task.kind === 'kit') tickKitBar();
@@ -2026,7 +2029,7 @@ import { register as registerPathway } from './ui/pathway.js';
       const ids = DB.custom.map(m => customItem(mod, m, DB.prefs)).filter(x => x), n = ids.length; if (n) { if (chunk * 4 >= n) { chunk = 0; coach('That was the whole tune. Back to the top.'); } const part = ids.slice(chunk * 4, chunk * 4 + 4), t = { kind: 'seq', els: [], idx: 0, warm: true, custom: true, limit: 10, ref: 'target', blind: false, t0: now(), done: false };
         part.forEach(id => { S.tick++; it(id, modelNow).seen = S.tick; t.els.push({ id: id, info: inf(id), failed: false, t0: 0, rt: 0, reveal: true }); }); t.onDone = () => { if (!t.els.some(e => e.failed)) chunk++; else say('Same four notes again until they are clean.', ''); }; return t; }
     }
-    return buildLevelTask();
+    const lt = buildLevelTask(); if (sess && sess.winId) { lt.win = sess.winId; sess.winId = null; } return lt;
   }
 
   // ---------- sessions, pauses and breaks ----------
@@ -2109,19 +2112,33 @@ import { register as registerPathway } from './ui/pathway.js';
     const check = validateEvent(ev); if (!check.ok) { recordError('logEvent', new Error('dropped invalid event -- ' + check.errors.join('; '))); return; }
     DB.events.push(ev); DB.events = boundEvents(DB.events, { skillMap: KBD_SONG_SKILL_MAP, skillMapInstrument: 'kbd' }); save();
   }
-  function endSession() {
+  // `wonOn`: the id of the F7 "end on a win" item, when the session ends right after playing it cleanly.
+  function endSession(wonOn) {
     if (!sess) return; document.body.classList.remove('practising'); showUpdateIfIdle(); toneSrcs.forEach(s => { try { s.stop(); } catch (e) {} }); const min = sess.active / 60; let line = 'Session ended. Too short to log.';
     if (sess.judged >= 8) { DB.sessions.push({ d: today(), mod: mod, min: Math.round(min * 10) / 10, acc: sess.ok / sess.judged, a1: mean(sess.first), a2: mean(sess.last), from: sess.from, to: S.level, breaks: sess.breaks }); DB.sessions = DB.sessions.slice(-60);
       let up = null, low = null, lowR = 1; Object.keys(S.item).forEach(id => { const cur = S.item[id], r1 = retrievability(cur, modelNow), r0 = retrievability(sess.m0[id] || cur, modelNow), g0 = r1 - r0; if (up === null || g0 > up.g) up = { id: id, g: g0 }; if (cur.reps >= 3 && (low === null || r1 < lowR)) { low = id; lowR = r1; } });
       line = 'Session done: ' + Math.round(min * 10) / 10 + ' min, ' + Math.round(100 * sess.ok / sess.judged) + '% right, best streak ' + sess.bestStreak + ', level ' + sess.from + ' to ' + S.level + '.' + (up && up.g > 0.05 ? ' Most improved: ' + inf(up.id).short + '.' : '') + (low ? ' Next time starts with extra ' + inf(low).short + '.' : ''); }
+    if (typeof wonOn === 'string') line = t('coach.endedOnWin', { name: inf(wonOn).short }) + ' ' + line;
     if (sess.judged >= 8 && Date.now() - lastBackupAt > 7 * 86400000) showBackupNudge(t('side.backupNudge'));
     if (sess.judged >= 8) askToKeep();
     sess = null; playing = false; paused = false; task = null; bar = null; breakTrap.deactivate(); $('breakCard').hidden = true; $('playBtn').textContent = t('stage.start'); $('endBtn').hidden = true; $('choices').hidden = true; $('prompt').textContent = ''; $('hint').textContent = ''; say(''); $('timeFill').style.width = '0%'; $('showMeBtn').hidden = true; $('howPeekHost').hidden = true; coach(line); save(); showAll(); wakeLock.release();
   }
   const BREAKS = {
     user: ['Paused', 'Take your time. A pause of 90 seconds or more counts as a break and resets your energy.', 0], away: ['You stepped away', 'Nothing came in for a while, so I paused. The exercise you left does not count against you.', 0], hidden: ['Paused', 'The page was hidden, so I stopped the clock. Nothing was counted while you were gone.', 0],
-    error: ['Paused to recover', 'Something went wrong inside the trainer. It repaired its state and your progress is safe.', 0], tired: ['Break time: 2 minutes', '', 120], long: ['Break time: 5 minutes', '25 minutes without a break. Stand up, shake out your hands, get water. Practice past this point mostly rehearses mistakes.', 300], target: ['That is today\'s practice', 'Short and fresh beats long and tired. End here, or take a break and do one more block.', 300]
+    error: ['Paused to recover', 'Something went wrong inside the trainer. It repaired its state and your progress is safe.', 0], tired: ['Break time: 2 minutes', '', 120], long: ['Break time: 5 minutes', '25 minutes without a break. Stand up, shake out your hands, get water. Practice past this point mostly rehearses mistakes.', 300], target: ['That is today\'s practice', 'Short and fresh beats long and tired. End here, or take a break and do one more block.', 300],
+    endwin: ['', '', 0]
   };
+  // F7: end on a win. At a tired or error break, or on End right after a miss, offer one item the
+  // learner already knows well (srs.js mastered()); playing it ends the session, so it never adds more than that one.
+  function winCandidate() {
+    try {
+      if (!sess || customOn || grooveOn) return null;
+      const d = D(), M = MODS[mod], k = d.task || 'one';
+      if (!M || M.input === 'answer' || M.kit || ['one', 'chord', 'seq', 'mix'].indexOf(k) < 0) return null;
+      return mastered(S.item, poolFor(d), modelNow);
+    } catch (e) { return null; }
+  }
+  function endOrWin() { if (sess && !paused && sess.lastMiss && winCandidate()) takeBreak('endwin'); else endSession(); }
   const breakTrap = createFocusTrap({ container: $('breakCard'), onEscape: () => resume() });
   function takeBreak(kind, mins) {
     if (!sess || paused) return; const b = BREAKS[kind]; playing = false; paused = true; pauseInfo = { at: Date.now(), secs: b[2] }; let why = b[1];
@@ -2131,6 +2148,9 @@ import { register as registerPathway } from './ui/pathway.js';
     // chose (sess.target, captured by the caller above before it is zeroed)
     // instead of BREAKS.target's generic fallback string.
     let title = b[0]; if (kind === 'target' && mins) title = 'That is today\'s ' + mins + ' minutes';
+    if (kind === 'endwin') { title = t('break.endWinTitle'); why = t('break.endWinWhy'); }
+    const winId = (kind === 'tired' || kind === 'error' || kind === 'endwin') ? winCandidate() : null;
+    $('winBtn').hidden = !winId; if (winId) $('winBtn').textContent = t('break.win', { name: inf(winId).short });
     $('breakTitle').textContent = title; $('breakWhy').textContent = why; $('breakClock').hidden = !b[2]; $('snoozeBtn').hidden = !(kind === 'tired' || kind === 'long'); $('breakCard').hidden = false; $('playBtn').textContent = t('stage.resume'); task = null; bar = null; save(); showAll(); breakTrap.activate($('playBtn'));
   }
   function tickBreak() { if (!pauseInfo || !pauseInfo.secs) return; const left = Math.max(0, pauseInfo.secs - (Date.now() - pauseInfo.at) / 1000); $('breakClock').textContent = left > 0 ? Math.floor(left / 60) + ':' + ('0' + Math.floor(left % 60)).slice(-2) : 'Ready when you are'; }
@@ -2594,7 +2614,8 @@ import { register as registerPathway } from './ui/pathway.js';
   $('replayBtn').addEventListener('click', function () { this.blur(); if (task && !task.done) { playRef(task); lastInputAt = now(); } });
   $('showMeBtn').addEventListener('click', function () { this.blur(); const e = cur(); if (!task || task.done || !e) return; if (!e.failed && !e.helped) { e.helped = true; e.reveal = true; } say('Shown. This one is help, not a test: no credit and no penalty.', ''); refreshPrompt(); });
   $('playBtn').addEventListener('click', function () { this.blur(); if (!sess) startAfterMic(); else if (paused) resume(); else takeBreak('user'); });
-  $('endBtn').addEventListener('click', function () { this.blur(); endSession(); }); $('endBtn2').addEventListener('click', endSession); $('backBtn').addEventListener('click', resume);
+  $('endBtn').addEventListener('click', function () { this.blur(); endOrWin(); });
+  $('winBtn').addEventListener('click', () => { if (!sess) return; const id = winCandidate(); if (!id) { endSession(); return; } sess.winId = id; resume(); coach(t('coach.winGo', { name: inf(id).short })); }); $('endBtn2').addEventListener('click', endSession); $('backBtn').addEventListener('click', resume);
   $('snoozeBtn').addEventListener('click', () => { sess.snoozeUntil = Date.now() + 5 * 60000; sess.tiredFor = 0; S.ready = Math.min(S.ready, 0.6); pauseInfo = { at: Date.now(), secs: 0 }; resume(); coach('Five more minutes, then I will ask again. I have eased off the pace meanwhile.'); });
   document.addEventListener('visibilitychange', () => { if (document.hidden && playing) takeBreak('hidden'); if (document.hidden) { flushSave(); releaseNotes(); runTeardown('hidden'); } else { audioParked = false; refreshModelClock(); resumeAudio(); ioRefresh(); } wakeLock.handleVisibilityChange(document); });
   // A hidden tab is a pause the learner might return to; pagehide (real tab
