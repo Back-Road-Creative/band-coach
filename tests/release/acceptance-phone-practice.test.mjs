@@ -46,6 +46,7 @@ import {
   keyboardRects,
   keyboardProbePoints,
   keyboardSamplePoints,
+  zoomSpan,
   kitRects,
   kitSamplePoints,
   targetSizes,
@@ -76,6 +77,7 @@ const PARENT_DESKTOP_MEDIA = { '1280x800': ['(prefers-color-scheme: light)'], '1
 const NAMES = ['C', 'C♯', 'D', 'E♭', 'E', 'F', 'F♯', 'G', 'A♭', 'A', 'B♭', 'B'];
 const nm = (m) => NAMES[((m % 12) + 12) % 12];
 const lbl = (m) => `${m} (${nm(m)})`;
+const spanText = (z) => `${nm(z.lo)}${Math.floor(z.lo / 12) - 1}–${nm(z.hi)}${Math.floor(z.hi / 12) - 1}`; // the zoomed row's label, "A3–F4"
 const WHITE_NAMES = { 48: 'C3', 50: 'D', 52: 'E', 53: 'F', 55: 'G', 57: 'A', 59: 'B', 60: 'C4', 62: 'D', 64: 'E', 65: 'F', 67: 'G', 69: 'A', 71: 'B', 72: 'C5' };
 const LEVEL1_TARGET = { C: 60, D: 62, E: 64 };
 const KIT_LETTERS = { kick: 'F', snare: 'J', 'hihat-closed': 'D', 'hihat-pedal': 'C', 'hihat-open': 'E', 'tom-floor': 'K', 'tom-mid': 'I', 'tom-high': 'U', crash: 'R', ride: 'O' };
@@ -146,6 +148,8 @@ async function checkKeyboardGeometry(page, ctx, vp) {
   assert.equal(m.width, Math.round(m.cssWidth * Math.min(m.devicePixelRatio, 2)), `${ctx}: the canvas is its screen box times the device scale factor`);
   const rects = keyboardRects(m);
   const texts = await page.evaluate('window.__q61.texts()');
+  // F18: on a canvas under 333 CSS px the keyboard is one zoomed row; idle, it must open on the helper's default window (A3 up)
+  if (rects.zoom && zoomSpan(texts)?.text !== spanText(rects.zoom)) disagree(`the zoomed row is labelled "${zoomSpan(texts)?.text}", not "${spanText(rects.zoom)}"`);
   for (const k of rects.keys.filter((x) => !x.black)) {
     const { x, y, w, h } = k.rect, name = WHITE_NAMES[k.midi];
     const drawn = texts.find((t) => t.text === name && near1(t.x, x + w / 2) && t.y >= y && t.y <= y + h);
@@ -153,7 +157,7 @@ async function checkKeyboardGeometry(page, ctx, vp) {
     if (drawn.align !== 'center') disagree(`white key ${lbl(k.midi)}: its name is ${drawn.align}-aligned, not centred`);
   }
   for (const s of rects.labelStrips) {
-    const start = s.row === 0 ? 'Left hand ·' : 'Right hand ·';
+    const start = rects.zoom ? spanText(rects.zoom) : s.row === 0 ? 'Left hand ·' : 'Right hand ·';
     const drawn = texts.find((t) => t.text.startsWith(start));
     if (!drawn || !(drawn.x >= s.rect.x - 1 && drawn.x <= s.rect.x + s.rect.w && drawn.y >= s.rect.y && drawn.y <= s.rect.y + s.rect.h)) {
       disagree(`row label "${start}" ${drawn ? `drawn at (${drawn.x.toFixed(1)}, ${drawn.y.toFixed(1)})` : 'not drawn'}, not inside the strip x ${s.rect.x.toFixed(1)}+ y ${s.rect.y.toFixed(1)}-${(s.rect.y + s.rect.h).toFixed(1)}`);
@@ -206,6 +210,20 @@ async function tapOnScreen(page, id) {
   const r = await page.evaluate(`(() => { const b = document.getElementById(${JSON.stringify(id)}).getBoundingClientRect(); return { x: b.left + b.width / 2, y: b.top + b.height / 2, top: b.top, bottom: b.bottom, ih: innerHeight }; })()`);
   assert.ok(r.top >= 0 && r.bottom <= r.ih, `#${id} is not on screen (top ${r.top.toFixed(1)}, bottom ${r.bottom.toFixed(1)}, window ${r.ih} tall) at scroll ${await page.evaluate('scrollY')}`);
   await page.tap(r.x, r.y);
+}
+// F18: a learner on the zoomed phone row brings a key into view with Lower keys/Higher keys, tapped where they are on
+// screen; the row it shows is read from the span label the canvas draws. A black key needs both white neighbours shown,
+// so its outside-edge taps land on keys that are drawn. No-op on the two-row layout.
+async function shownSpan(page) { return zoomSpan(await page.evaluate('window.__q61.texts()')) || {}; }
+async function showKey(page, midi) {
+  const black = ![0, 2, 4, 5, 7, 9, 11].includes(midi % 12), lo = black ? midi - 1 : midi, hi = black ? midi + 1 : midi;
+  for (let i = 0; i < 8; i++) {
+    const s = await shownSpan(page);
+    if (s.lo === undefined || (lo >= s.lo && hi <= s.hi)) return;
+    await tapOnScreen(page, lo < s.lo ? 'kbdLower' : 'kbdHigher');
+    await raf(page);
+  }
+  throw new Error(`Lower keys/Higher keys never brought ${lbl(midi)} into the zoomed row (it shows ${(await shownSpan(page)).text})`);
 }
 async function startSession(page) {
   await tapOnScreen(page, 'playBtn');
@@ -343,8 +361,10 @@ async function runSize(t, page, size) {
     await sub(st, 'a wrong key shows the feedback card', async () => {
       before = await cvBox(page);
       const target = await readTarget(page);
-      const wrong = target - 12, m = await settledMetrics(page); // the right note an octave low: the longest feedback line there is ("... Right note, wrong octave: go one octave up.")
-      const c = toClient(keyboardProbePoints(keyboardRects(m).keys.find((k) => k.midi === wrong))[0], m);
+      const wrong = target - 12; // the right note an octave low: the longest feedback line there is ("... Right note, wrong octave: go one octave up.")
+      await showKey(page, wrong);
+      const m = await settledMetrics(page);
+      const c = toClient(keyboardProbePoints(keyboardRects(m, await shownSpan(page)).keys.find((k) => k.midi === wrong))[0], m);
       await page.tap(c.x, c.y);
       await page.waitFor("document.getElementById('feedback').textContent.trim() !== ''", 5000);
     });
