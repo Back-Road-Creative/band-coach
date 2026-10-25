@@ -349,7 +349,7 @@ songs in the backup cannot be stored on this device, nothing changes: your curre
 songs are left exactly as they were. An older backup made before songs were included still restores —
 it just has no songs to bring back. Restoring a backup that holds a song you already have (identical notes and title) keeps the one copy instead of adding a "(2)" duplicate; picking a file again, or "Save a copy", still adds a second song. A backup file that is damaged or was written by a newer Band
 Coach is refused with a message explaining why (in the language you chose), before any "replace your progress" question is asked, and your current progress is left untouched. A quiet reminder appears at the end of a session long enough to be logged (8 answers or more) when you have not saved a
-backup in the last week — never after a session too short to log, since there is nothing yet to lose. The "My progress" panel also shows a practice calendar (minutes and
+backup in the last week — never after a session too short to log, since there is nothing yet to lose. If the progress saved on this device cannot be read when Band Coach opens, it says so in the same place, starts fresh and keeps the unreadable copy, so restoring a backup brings your progress back. The "My progress" panel also shows a practice calendar (minutes and
 level changes, one cell per day, for the last 8 weeks) and a daily minutes goal with a streak — the
 practice log itself only keeps the most recent 60 sessions, so days older than that say "earlier
 sessions not kept" rather than a false zero. "Print this week's report" turns the last 7 days into a
