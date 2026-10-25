@@ -20,16 +20,10 @@
 
 import { parse } from './notation.js';
 import { starterGrooves } from './grooves.js';
-
-const PUBLIC_DOMAIN = 'Public domain';
-
-function traditional(origin) {
-  return `Traditional ${origin} melody of unknown authorship; this transcription was made for Band Coach.`;
-}
-
-function composed(name, note) {
-  return `Melody by ${name}${note ? ` (${note})` : ''}; this transcription was made for Band Coach.`;
-}
+import { starterFolkTunes } from './folk.js';
+import { PUBLIC_DOMAIN, traditional, composed } from './wording.js';
+import { transpose } from '../model.js';
+import { feasibility } from '../feasibility.js';
 
 export const starterSongDefs = [
   {
@@ -224,14 +218,7 @@ export function build(def) {
 }
 
 export const starterSongs = starterSongDefs.map(build);
-export { starterGrooves };
-export const starterIds = new Set([...starterSongs, ...starterGrooves].map((s) => s.id)); // reserved: library.add() never stores a copy under one
-
-// A built-in song by id: a starter tune or a drum-kit groove (grooves.js),
-// for every path that reopens a song by id (a hand-off, Carry on).
-export function starterById(id) {
-  return starterSongs.find((s) => s.id === id) || starterGrooves.find((s) => s.id === id);
-}
+export { starterGrooves, starterFolkTunes };
 
 // True when any note in any part of `song` carries an explicit left-hand
 // tag -- i.e. the song was built from a def with an `lh` string above. The
@@ -241,6 +228,59 @@ export function starterById(id) {
 // before a real arrangement exists).
 export function isTwoHand(song) {
   return song.parts.some((part) => part.notes.some((n) => n.hand === 'lh'));
+}
+
+// Band-key versions (F17): every one-hand tune, and every folk tune, again in
+// concert B-flat and E-flat -- the two keys a band instrument reads easily
+// (feasibility.js, the "transposed" level, would otherwise shift them for the
+// player). Each moves the nearest way (never more than a tritone), skips a key
+// the tune is already in, and is a Song of its own: id `<id>-in-b-flat`.
+const BAND_KEYS = [{ slug: 'b-flat', name: 'B♭', tonic: 10 }, { slug: 'e-flat', name: 'E♭', tonic: 3 }];
+function keyVersions(song) {
+  return BAND_KEYS.filter((k) => k.tonic !== song.key.tonic).map((k) => ({
+    ...transpose(song, ((((k.tonic - song.key.tonic + 6) % 12) + 12) % 12) - 6),
+    id: `${song.id}-in-${k.slug}`,
+    title: `${song.title} (in ${k.name})`,
+  }));
+}
+
+// One entry per tune: its home-key song and the key versions, keyed by slug.
+// Two-hand pieces have no versions (transposing both hands is not offered).
+const families = [...starterSongs, ...starterFolkTunes].map((home) => {
+  const versions = isTwoHand(home) ? [] : keyVersions(home);
+  const find = (slug) => versions.find((v) => v.id.endsWith('-in-' + slug));
+  return { home, bFlat: find('b-flat'), eFlat: find('e-flat'), versions };
+});
+const allStarters = [...starterSongs, ...starterFolkTunes, ...families.flatMap((f) => f.versions), ...starterGrooves];
+
+export const starterIds = new Set(allStarters.map((s) => s.id)); // reserved: library.add() never stores a copy under one
+
+// A built-in song by id: a starter tune, a folk tune or a band-key version of
+// one, or a drum-kit groove (grooves.js), for every path that reopens a song
+// by id (a hand-off, Carry on, Edit).
+export function starterById(id) {
+  return allStarters.find((s) => s.id === id);
+}
+
+// The starters for the Songs list on one instrument: `fits` are songs it can
+// play (as written, else transposed), `others` are home-key songs with notes
+// it cannot play. Per tune, a band instrument (brass, or any transposing one)
+// tries the B-flat and E-flat versions before the home key, first as-written
+// winning, then first transposed; everyone else keeps the home key whenever it
+// is playable and reaches for a band key only when it is not.
+export function startersFor(instrument) {
+  const bandFirst = instrument.family === 'brass' || instrument.transposition !== 0;
+  const fits = [], others = [];
+  families.forEach((f) => {
+    const candidates = (bandFirst ? [f.bFlat, f.eFlat, f.home] : [f.home, f.bFlat, f.eFlat]).filter(Boolean);
+    const levelOf = (song) => feasibility(song, song.parts[0].id, instrument).level;
+    const levels = candidates.map(levelOf);
+    const playable = (l) => l === 'as-written' || l === 'transposed';
+    const pick = !bandFirst && playable(levels[0]) ? candidates[0]
+      : candidates[levels.indexOf('as-written')] || candidates[levels.indexOf('transposed')];
+    if (pick) fits.push(pick); else others.push(f.home);
+  });
+  return { fits, others };
 }
 
 // The subset of starterSongs with no left-hand part: the single pool every

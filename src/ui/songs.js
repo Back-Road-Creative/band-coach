@@ -42,7 +42,7 @@ import { yin } from '../audio/yin.js';
 import { freqToMidi, referencePitch } from '../core/pitch.js';
 import { createOnsetDetector } from '../audio/onset.js';
 import { rangeForInstrument } from '../audio/range.js';
-import { starterSongs, starterGrooves, starterById } from '../song/starter/index.js';
+import { starterSongs, starterGrooves, starterById, startersFor } from '../song/starter/index.js';
 import { createLibrary, memoryStore, indexedDbStore } from '../song/library.js';
 import { validateSong, songBarCount, barsOf, MAX_SONG_BARS } from '../song/model.js';
 import { buildLessonPlan, nextStep, creditFor } from '../song/lesson.js';
@@ -545,17 +545,21 @@ function mountSongsPanel(hostEl, api) {
   // The library read is async and mount + show() each call this back to back, so
   // the saved rows are swapped only AFTER the read, in one synchronous block: an
   // overlapping call can never leave a saved song appended twice. The starter rows
-  // are rebuilt only when the instrument changes between the drum kit (the
-  // practice grooves) and everything else (the starter tunes), so a row the
-  // learner has focused or pressed meanwhile stays in the page (and Escape
-  // still reaches the panel).
+  // are rebuilt only when the instrument changes (the drum kit lists the practice
+  // grooves, any other instrument the starters that fit it, then the rest marked
+  // as not fitting), so a row the learner has focused or pressed meanwhile stays in
+  // the page (and Escape still reaches the panel).
   async function refreshList() {
-    const kind = api.mod() === 'drum-kit' ? 'grooves' : 'tunes';
+    const kind = api.mod();
     if (listUl.dataset.starters !== kind) {
       listUl.dataset.starters = kind;
       listUl.querySelectorAll('li:not([data-saved])').forEach((li) => li.remove());
       const firstSaved = listUl.firstChild;
-      (kind === 'grooves' ? starterGrooves : starterSongs).forEach((song) => listUl.insertBefore(songRow(song, null), firstSaved));
+      const add = (song, note) => { const li = songRow(song, null); if (note) li.appendChild(el('span', { class: 'panel-songs-notall', text: t('songs.list.notAllNotes') })); listUl.insertBefore(li, firstSaved); };
+      const inst = INSTRUMENTS.find((i) => i.id === kind);
+      if (kind === 'drum-kit') starterGrooves.forEach((song) => add(song));
+      else if (inst) { const r = startersFor(inst); r.fits.forEach((song) => add(song)); r.others.forEach((song) => add(song, true)); }
+      else starterSongs.forEach((song) => add(song));
     }
     let saved = [];
     try { saved = await library.list(); } catch (e) { saved = []; }
