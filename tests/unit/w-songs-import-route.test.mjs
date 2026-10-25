@@ -119,3 +119,10 @@ test('importerFor("gp7") actually reaches importGp7, not importMusicXml, on a re
 test('importerFor("midi") wraps the FileReader ArrayBuffer, not a bare pass-through', () => {
   assert.notEqual(importerFor('midi'), importMidi, 'must wrap the raw ArrayBuffer in a Uint8Array, not hand it straight to importMidi');
 });
+
+test('routes older Guitar Pro files (.gp3, .gp4, .gpx) to unsupported-gp, with no importer', () => {
+  for (const name of ['solo.gp3', 'Riff.GP4', 'song.gpx']) {
+    assert.deepEqual(routeImportFile(name), { kind: 'unsupported-gp', readAs: null }, name);
+  }
+  assert.equal(importerFor('unsupported-gp'), null);
+});

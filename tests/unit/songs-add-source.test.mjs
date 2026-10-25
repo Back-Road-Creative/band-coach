@@ -40,6 +40,16 @@ test('anything else is unknown', () => {
   assert.equal(classifyAddFile('no-extension-at-all', '').kind, 'unknown');
 });
 
+test('an older Guitar Pro file is its own kind, not unknown', () => {
+  assert.equal(classifyAddFile('solo.gp3', '').kind, 'unsupported-gp');
+  assert.equal(classifyAddFile('riff.gp4', '').kind, 'unsupported-gp');
+  assert.equal(classifyAddFile('song.gpx', 'application/octet-stream').kind, 'unsupported-gp');
+});
+
+test('the accept list lets a learner pick an older Guitar Pro file so they get its message', () => {
+  ['gp3', 'gp4', 'gpx'].forEach((ext) => assert.ok(ADD_ACCEPT.split(',').includes('.' + ext), 'ADD_ACCEPT should name .' + ext));
+});
+
 test('a notation file carries its routeImportFile route along', () => {
   const result = classifyAddFile('tune.mid', '');
   assert.deepEqual(result.route, { kind: 'midi', readAs: 'bytes' });

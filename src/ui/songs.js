@@ -2512,6 +2512,10 @@ function mountSongsPanel(hostEl, api) {
       say(t('songs.say.unsupported'), 'no');
       return;
     }
+    if (classified.kind === 'unsupported-gp') {
+      say(t('songs.say.unsupportedGp'), 'no');
+      return;
+    }
     const route = classified.route;
     if (classified.kind === 'audio') { await importAudioFile(file); return; }
     if (route.kind === 'band-pack') { await importBandPack(file, route); return; }

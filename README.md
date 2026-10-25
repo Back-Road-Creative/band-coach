@@ -626,8 +626,9 @@ song list, and Play along has its own **Back to songs** button alongside Edit no
 The Songs panel (`src/ui/songs.js`) turns a whole tune — built in, or imported from a `.mid`,
 `.midi`, `.abc`, `.xml`, `.musicxml`, compressed `.mxl`, Guitar Pro `.gp`, Guitar Pro 5 `.gp5`, or a
 recording (`.wav`, `.mp3`, `.ogg`, `.m4a`, `.flac`, `.webm`) — into a
-step-by-step practice lesson (`src/song/lesson.js`), tracking each learner's own pass/fail record
-and crediting every correctly played note toward the same mastery store a built-in drill uses —
+step-by-step practice lesson (`src/song/lesson.js`). An older Guitar Pro file (`.gp3`, `.gp4`,
+`.gpx`) is refused with a message to export it as `.gp5`, `.gp` or MusicXML. The panel tracks each learner's own pass/fail record
+and credits every correctly played note toward the same mastery store a built-in drill uses —
 credit always lands on whichever instrument the song is actually being played on, even if a
 different instrument is showing on the main screen, and a finished lesson leaves its own row in
 the practice log (`source: "song"`) alongside built-in drill sessions. Opening (or resuming) a

@@ -34,6 +34,10 @@
 // single-song importer and stays handled separately in songs.js. Its
 // extension is `.bandpack`, not `.zip`: `.zip` is left 'unknown' on purpose,
 // so a random zip a learner happens to pick is never mistaken for one.
+//
+// Older Guitar Pro files (`.gp3`, `.gp4`, and GP6's `.gpx`) have no importer.
+// They route to 'unsupported-gp' rather than 'unknown' so songs.js can say
+// which formats to export to instead of the generic "not supported" line.
 
 import { importMidi } from '../../song/import-midi.js';
 import { importAbc } from '../../song/import-abc.js';
@@ -68,6 +72,7 @@ export function routeImportFile(fileName) {
   if (ext === 'mxl') return { kind: 'musicxml', readAs: 'bytes' };
   if (ext === 'gp') return { kind: 'gp7', readAs: 'bytes' };
   if (ext === 'gp5') return { kind: 'gp5', readAs: 'bytes' };
+  if (ext === 'gp3' || ext === 'gp4' || ext === 'gpx') return { kind: 'unsupported-gp', readAs: null };
   if (ext === 'bandpack') return { kind: 'band-pack', readAs: 'bytes' };
   if (ext === 'json') return { kind: 'challenge', readAs: 'text' };
   return { kind: 'unknown', readAs: null };

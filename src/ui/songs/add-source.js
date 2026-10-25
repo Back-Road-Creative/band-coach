@@ -31,6 +31,7 @@ export function classifyAddFile(fileName, mimeType) {
   if (NOTATION_ROUTE_KINDS.has(route.kind)) return { kind: 'notation', route };
   if (route.kind === 'challenge') return { kind: 'challenge', route };
   if (route.kind === 'band-pack') return { kind: 'band-pack', route };
+  if (route.kind === 'unsupported-gp') return { kind: 'unsupported-gp', route };
   const mime = String(mimeType || '').toLowerCase();
   const ext = extensionOf(fileName);
   if (mime.startsWith('audio/') || LEARN_AUDIO_EXTENSIONS.includes(ext)) return { kind: 'audio', route: null };
@@ -41,7 +42,9 @@ export function classifyAddFile(fileName, mimeType) {
 // kept as one list by hand so a new extension added to routeImportFile or
 // LEARN_AUDIO_EXTENSIONS is easy to add here too (there is no automatic way
 // to derive an <input accept> string from those modules' internal branches).
-export const ADD_ACCEPT = '.mid,.midi,.abc,.xml,.musicxml,.mxl,.gp,.gp5,.bandpack,.json,.wav,.mp3,.ogg,.m4a,.flac,.webm';
+// .gp3/.gp4/.gpx are accepted only so picking one shows songs.say.unsupportedGp;
+// the help line lists just the formats that import.
+export const ADD_ACCEPT = '.mid,.midi,.abc,.xml,.musicxml,.mxl,.gp,.gp5,.gp3,.gp4,.gpx,.bandpack,.json,.wav,.mp3,.ogg,.m4a,.flac,.webm';
 
 export const ADD_HELP_LINE = 'Add a score (.mid, .midi, .abc, .xml, .musicxml, .mxl, .gp, .gp5), a recording (.wav, .mp3, .ogg, .m4a, .flac, .webm), a band pack (.bandpack) or a challenge (.json).';
 
