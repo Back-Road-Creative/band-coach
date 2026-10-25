@@ -22,6 +22,8 @@ import { resolveAppVersion, DEV_VERSION } from './core/version.js';
 import { loadPack, packStatus, createIndexedDBStore, packManifestUrl, DEFAULT_MODEL_PACK } from './core/model-pack.js';
 import { checkForUpdate, FALLBACK_DOWNLOAD_URL } from './core/update-check.js';
 import { requestKeep, readKeep } from './core/storage-keep.js';
+import { copyAgeDays } from './core/copy-age.js';
+import { watchForInstall } from './core/install-offer.js';
 import { setNoteNaming, name as noteNameFor } from './core/note-names.js';
 import { freqToMidi, midiToFreq, sanitizeA4, setReferencePitch, referencePitch } from './core/pitch.js';
 import { t, t as tl, en, setLocale, LOCALES } from './core/i18n.js';
@@ -2893,6 +2895,9 @@ import { register as registerPathway } from './ui/pathway.js';
   $('backupNudgeDismiss').addEventListener('click', () => { $('backupNudge').hidden = true; });
   $('updateReload').addEventListener('click', () => location.reload());
   try { watchForUpdate(navigator.serviceWorker, () => { updateWaiting = true; showUpdateIfIdle(); }); } catch (e) { /* no service worker here */ }
+  // F16: the hosted copy offers Install when the browser allows it (src/core/install-offer.js); the button sits at the foot of Settings so appearing moves no other control.
+  const installOffer = watchForInstall(window, (ready) => { $('installBtn').hidden = !ready; });
+  $('installBtn').addEventListener('click', () => { if (installOffer) installOffer.install().then(() => {}, () => {}); });
   // ---------- Copy diagnostics (src/core/diagnostics.js)
   $('diagCopyBtn').addEventListener('click', async () => {
     const text = buildDiagnostics({ version: APP_VERSION, userAgent: navigator.userAgent, errors: getErrors(), capabilities: { microphone: !!navigator.mediaDevices, midi: !!navigator.requestMIDIAccess, audioWorklet: !!window.AudioWorkletNode, songStorage: !!window.indexedDB } });
@@ -3064,8 +3069,15 @@ import { register as registerPathway } from './ui/pathway.js';
       out.hidden = false;
     }, () => { out.hidden = true; });
   }
+  // F16: how old this copy is, from the build date stamped into the file (src/core/copy-age.js); filled before the view shows, so nothing moves.
+  function refreshCopyAge() {
+    const out = $('copyAge'), meta = document.querySelector('meta[name="band-coach-built"]');
+    const days = copyAgeDays(meta && meta.content, Date.now());
+    out.hidden = days == null;
+    if (days != null) out.textContent = days === 0 ? t('settings.copyAgeToday') : days === 1 ? t('settings.copyAgeOne') : t('settings.copyAge', { days });
+  }
   function openSettings() {
-    closePanel(); refreshKeepStatus();
+    closePanel(); refreshKeepStatus(); refreshCopyAge();
     $('mainArea').hidden = true; $('panelHost').hidden = true; $('settingsView').hidden = false;
     updateNavState();
   }

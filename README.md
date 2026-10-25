@@ -48,6 +48,9 @@ answers right there: up to date, a newer version is out with a link to get it, o
 reach the server, also with a link to get the current file. It never checks on its own — only on
 a press — and a development build (one you built yourself rather than downloaded) says so instead
 of checking, since there is nothing meaningful to compare.
+Under that button Settings also says how old your copy is ("This copy is 200 days old."), counted
+from the build date stamped into the file, so it needs no network and works offline
+(`src/core/copy-age.js`). A development build has no build date and shows no age line.
 
 Settings also has an optional **Download model pack** button, for extra data some features may use later
 (Band Coach works fully without it). Like the update check it does nothing until you press it: it asks
@@ -1600,6 +1603,12 @@ bar under the rail, "A new version is ready. Reload when you finish practicing."
 button (`src/core/update-watch.js`). It never interrupts practice: a hand-over during a session
 waits until the session ends. A first install is not announced, and a downloaded copy
 (no service worker under `file://`) never shows it.
+
+When the browser offers to install the hosted copy (the `beforeinstallprompt` event, Chromium
+browsers only), the page holds back the browser's own banner and shows an "Install Band Coach"
+button at the foot of Settings instead (`src/core/install-offer.js`). Pressing it opens the
+browser's install prompt once; the button goes away after that, or when the app is installed some
+other way. Browsers that never offer it (Safari, Firefox, any downloaded copy) never show the button.
 
 **iPhone microphone behaviour is unmeasured.** This edition has only been proven in headless
 Chromium against a loopback test server (`tests/build/pages-offline.test.mjs`) — that it installs,
