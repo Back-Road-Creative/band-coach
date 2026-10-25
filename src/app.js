@@ -2,7 +2,7 @@ import { judgePitch, OCTAVE_POLICY } from './core/judge.js';
 import { createDeafWindow } from './audio/deaf-window.js';
 import { exportProgress as exportProgressFile, importProgress as importProgressFile, migrate as migrateDB } from './core/progress-file.js';
 import { checkFileSize } from './ui/songs/import-route.js';
-import { safeSet, safeGet, getStorage } from './core/storage.js';
+import { safeSet, safeGet, getStorage, crossTabCheck } from './core/storage.js';
 import { sanitizeDB as sanitizeDBCore } from './core/sanitize-db.js';
 import { createLibrary, indexedDbStore, memoryStore } from './song/library.js';
 import { captureToSong } from './song/capture.js';
@@ -805,11 +805,22 @@ import { register as registerPathway } from './ui/pathway.js';
   // VERIFIED write -- advancing it on a failed attempt would make flushSave
   // believe a write it never made had already landed, and silently skip
   // every retry after it.
+  // Set once another tab has written the DB key under us. Nothing in this page saves again: the learner reloads (the notice's button) and the new page loads the other tab's data.
+  let otherTabChanged = false;
+  function markOtherTab() {
+    if (otherTabChanged) return; otherTabChanged = true; saveFailedShown = false; if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
+    ['settingsSay', 'mainSay'].forEach(id => { const el = $(id); el.textContent = t('storage.otherTab') + ' '; const b = document.createElement('button'); b.type = 'button'; b.textContent = t('storage.reload'); b.addEventListener('click', () => location.reload()); el.appendChild(b); });
+  }
+  window.addEventListener('storage', e => { if (e.key === KEY && e.newValue !== null && e.newValue !== lastStored && (!e.storageArea || e.storageArea === store.storage)) markOtherTab(); });
   function writeDB() {
     if (MODS[mod]) DB.mods[mod] = S = sanitizeModel(mod, S, modelNow);
     // Before the instrument question is answered, a setting the learner changed is stored, but not the boot-time default instrument, so the next visit still asks.
     const candidate = JSON.stringify(instrumentChosen ? DB : Object.assign({}, DB, { prefs: Object.assign({}, DB.prefs, { mod: null }) }));
-    const result = store.blocked ? { ok: false } : safeSet(store.storage, KEY, candidate);
+    // Another tab changed the stored data since this page last saw it: writing now would silently overwrite their newer progress, so stop and offer a reload. An unreadable store is no proof either, so it counts as a failed save.
+    if (otherTabChanged) return false;
+    const seen = crossTabCheck(store.storage, KEY, lastStored);
+    if (seen === 'changed') { markOtherTab(); return false; }
+    const result = (store.blocked || seen === 'unreadable') ? { ok: false } : safeSet(store.storage, KEY, candidate);
     if (result.ok) { lastStored = candidate; if (saveFailedShown) { saveFailedShown = false; $('settingsSay').textContent = ''; $('mainSay').textContent = ''; } }
     else { saveFailedShown = true; $('settingsSay').textContent = t('storage.saveFailed'); $('mainSay').textContent = t('storage.saveFailed'); }
     return result.ok;
