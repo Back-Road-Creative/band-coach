@@ -343,7 +343,7 @@ a later save succeeds — you never have to open Settings to find out progress i
 blocking it), Settings shows a plain-language status until a later save succeeds. Open
 the Settings screen for "Save a backup", which downloads
 `band-coach-progress.json`, and "Restore a backup", which loads one back in. The backup file now
-carries your saved songs (from the Learn and Songs panels) alongside your practice progress, so
+carries your saved songs (from the Learn and Songs panels) alongside your practice progress (if this browser will not let Band Coach read the saved songs, the backup is still saved with your progress and the message says the songs are not in it), so
 restoring one brings both back — a restore replaces your progress and songs together, and if the
 songs in the backup cannot be stored on this device, nothing changes: your current progress and
 songs are left exactly as they were. An older backup made before songs were included still restores —
