@@ -135,6 +135,10 @@
         <button type="button" class="primary big" id="playBtn" hidden>Start</button>
         <button type="button" id="endBtn" hidden data-i18n="side.end">End session</button>
       </div>
+      <div class="backup-nudge" id="tuneFirst" role="status" hidden>
+        <span id="tuneFirstText" data-i18n="side.tuneFirst">Strings drift between sessions. Tune first? It takes about 30 seconds.</span>
+        <span><button type="button" class="small" id="tuneFirstGo" data-i18n="side.tuneFirstGo">Tune first</button> <button type="button" class="small" id="tuneFirstSkip" data-i18n="side.tuneFirstSkip">Skip</button></span>
+      </div>
       <div class="card">
         <div class="eyebrow" data-i18n="side.energyEyebrow">Your energy this session</div>
         <div class="meterbox thin" role="progressbar" aria-label="Estimated energy" aria-valuemin="0" aria-valuemax="100" id="energyBar"><div id="energyFill"></div></div>

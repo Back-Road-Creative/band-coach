@@ -558,6 +558,11 @@ it finished. Nothing was saved.", shown once). Ear training, How to play it, Mus
 their own plain home the same way: a "Tools" group inside the instrument sheet, alongside
 Tuner/Capture a melody/Interval drill/Rhythm, open with no extra click once the sheet is open.
 
+Before the first session on a string instrument, the side rail offers **Tune first** (about 30
+seconds): it opens the Tuner on that instrument's own strings. **Skip** puts the offer away; either
+answer is remembered on this device (`bandcoach.v1.tuneAsked`), and an instrument already practised
+never gets it. Keyboard, voice, winds and drums have nothing to tune, so they never see it.
+
 Opening any song shows one row of plain actions directly above its practise section: **Edit
 notes**, **Play along**, **Export**, **Share**, **Save a copy**, **Print** — a starter tune's Edit
 notes saves a copy first (starter tunes are never edited in place) and opens that. Export reveals
