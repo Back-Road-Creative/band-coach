@@ -1618,6 +1618,9 @@ function mountSongsPanel(hostEl, api) {
     if (practice.lastAssessed) {
       practiceSection.appendChild(renderAssessedList(practice.lastAssessed));
     }
+    if (practice.lastTry && practice.lastTry.events.length) {
+      practiceSection.appendChild(el('button', { type: 'button', class: 'panel-songs-hear-try', text: t('songs.hearTry'), onclick: playTry }));
+    }
   }
 
   function renderPractice() {
@@ -1815,10 +1818,10 @@ function mountSongsPanel(hostEl, api) {
     return { step, played: [], assessed: true };
   }
 
-  function playPhrase(step) {
+  function playPhrase(step, startAt) {
     const notes = step.notes;
     if (!notes.length) return;
-    const at0 = api.now() + 0.15;
+    const at0 = startAt != null ? startAt : api.now() + 0.15;
     const spacing = 0.55;
     // Schedule by real tick offsets when the step has a tempo -- on the same
     // phrase-local clock the try is judged on (phraseSec from step.originTick,
@@ -1849,6 +1852,26 @@ function mountSongsPanel(hostEl, api) {
         else api.tone(n.midi, at0 + i * spacing, spacing * 0.85, 0.22);
       });
     }
+  }
+
+  // "Hear your try" (F15): no sound is ever recorded, so the last try is
+  // rebuilt from the notes it heard -- each at its own offset, a held note
+  // cut at 1.5 s -- and the target phrase follows after a short gap. A
+  // pitchless mic onset (the rhythm step) plays as a click. The click is a
+  // user gesture, so it starts the sound for a MIDI-only learner too.
+  function playTry() {
+    const { step, events } = practice.lastTry;
+    api.audio();
+    const at0 = api.now() + 0.15;
+    let end = 0;
+    events.forEach((e) => {
+      const dur = Math.min(1.5, Math.max(0.12, e.durSec || 0.3));
+      if (practice.instrument.kit && e.piece && typeof api.drum === 'function') api.drum(e.piece, at0 + e.atSec);
+      else if (e.midi != null) api.tone(e.midi, at0 + e.atSec, dur, 0.22);
+      else api.click(at0 + e.atSec, false);
+      end = Math.max(end, e.atSec + dur);
+    });
+    playPhrase(step, at0 + end + 0.6);
   }
 
   function listenDrumKit() {
@@ -2002,6 +2025,7 @@ function mountSongsPanel(hostEl, api) {
     practice.lastAssessed = null;
     practice.lastCheckVerdict = null;
     practice.speedRecord = null;
+    practice.lastTry = null;
     practice.lastVerdict = null;
 
     // Real listening only begins once the count-in ends (below); this is the
@@ -2062,6 +2086,7 @@ function mountSongsPanel(hostEl, api) {
     // already.
     closeOpenMidiEvents(practice.playedEvents, Math.max(0, (api.now() - practice.recordStartSec)));
     stopRecording();
+    practice.lastTry = { step, events: practice.playedEvents.map((e) => ({ midi: e.midi, piece: e.piece, atSec: e.atSec, durSec: e.durSec })) };
     const timed = step.kind !== 'pitches';
     const result = judgeAttempt(handSplit(step).step.notes, latencyAdjusted(practice.playedEvents, songLatencyMs(api.db())), {
       bpm: effectiveBpm(step) || practice.song.bpm,
@@ -2312,6 +2337,7 @@ function mountSongsPanel(hostEl, api) {
       practice.lastHeatBars = null;
       practice.lastAssessed = null;
       practice.lastCheckVerdict = null;
+      practice.lastTry = null;
     practice.lastVerdict = null;
     }
     finishStep(step, passed, opts);

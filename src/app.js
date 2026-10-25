@@ -308,8 +308,10 @@ import { register as registerPathway } from './ui/pathway.js';
   // deaf window is opened for the BUFFER'S OWN length, so it always covers
   // exactly what will actually play, however long that family's tail runs.
   const toneSrcs = new Set(); // reference tones scheduled and not yet ended, so ending a session can cancel the ones still queued
+  const toneTrail = []; // a short debug trail of what was scheduled (see the __DEBUG_HOOK__ below), never read by the app
   function tone(m, at, dur, vol) {
     if (!actx) return;
+    toneTrail.push({ midi: m, at: at }); if (toneTrail.length > 200) toneTrail.shift();
     const family = instrumentById[mod] && instrumentById[mod].family;
     const samples = renderVoice(family, mfreq(m), actx.sampleRate, dur, vol || 0.22);
     const buffer = actx.createBuffer(1, samples.length, actx.sampleRate);
@@ -3287,6 +3289,7 @@ import { register as registerPathway } from './ui/pathway.js';
   if (__DEBUG_HOOK__) Object.assign(hook, { rangeHeld: () => rangeTest && rangeTest.curMidi !== null ? { stage: rangeTest.stage, midi: rangeTest.curMidi, ms: performance.now() - rangeTest.curSince } : null });
   if (__DEBUG_HOOK__) Object.assign(hook, { kitBox: () => kitBox, kitLabels: () => kitLabels });
   if (__DEBUG_HOOK__) Object.assign(hook, { micHits: () => drumMicHits.slice() });
+  if (__DEBUG_HOOK__) Object.assign(hook, { tones: () => toneTrail.slice() });
   if (__DEBUG_HOOK__) window.__coach = hook;
 
   // Boot is over. Announce it so anything driving the page has a condition to
