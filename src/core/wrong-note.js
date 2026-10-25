@@ -43,6 +43,24 @@ export function wrongNoteHint({ heardMidi, targetMidi, policy, fretted, input, n
   return t(n > 1 ? 'wrongNote.frets.other' : 'wrongNote.frets.one', { n: n, dir: t(gap > 0 ? 'wrongNote.up' : 'wrongNote.down') });
 }
 
+// F13: a MIDI keyboard with its octave or transpose button on plays every note the same
+// distance off, so each wrong-note hint ("go one octave down") is right but the cause is the
+// keyboard. `misses` is the run of consecutive wrong MIDI notes, oldest first, each
+// { heardMidi, targetMidi }; once the last SHIFT_RUN share one nonzero offset (heard minus
+// target) that offset is returned, else 0. One stray note is never enough.
+export const SHIFT_RUN = 4;
+export function midiShift(misses) {
+  if (!Array.isArray(misses) || misses.length < SHIFT_RUN) return 0;
+  const d = misses.slice(-SHIFT_RUN).map((m) => m.heardMidi - m.targetMidi);
+  return d[0] !== 0 && d.every((x) => x === d[0]) ? d[0] : 0;
+}
+export function midiShiftHint(offset) {
+  const dir = offset > 0 ? 'Up' : 'Down';
+  const n = Math.abs(offset);
+  if (n === 12) return t('wrongNote.shift.octave' + dir);
+  return n === 1 ? t('wrongNote.shift.one' + dir) : t('wrongNote.shift.semis' + dir, { n: n });
+}
+
 // A transposing wind item carries `written` (what the prompt and staff show) beside `midi` (what
 // sounds). Corrections name notes the way the page does, so this maps a heard SOUNDING pitch to
 // the written one; an item with no `written` (concert pitch, bass clef) is returned unchanged.
