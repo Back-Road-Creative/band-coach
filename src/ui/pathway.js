@@ -8,8 +8,12 @@
 // (a different song, any time) row, pathwayState() reports 'complete'; with
 // only retained evidence in hand it instead offers the transfer song (in
 // Check mode, never re-offering the same-song recheck) -- see the
-// extraHtml block below for how the two results render.
+// extraHtml block below for how the two results render. F19: on a
+// microphone instrument with a first-week path (src/instruments/
+// first-week.js) the same panel lists that instrument's six steps instead,
+// each labelled practice-grade -- see mountFirstWeek below.
 import { pathwayState } from '../core/pathway.js';
+import { firstWeekFor, firstWeekSong, RETAINED, TRANSFER_DONE, COMPLETE } from '../instruments/first-week.js';
 import { reviewItems as kbdPathwayOutcomes, outcomeReviewed, transferSongFor, RETAINED_TEXT, TRANSFER_TEXT, TRANSFER_DONE_TEXT, COMPLETE_TEXT } from '../instruments/kbd-pathway.js';
 import { songFor } from '../instruments/kbd-songs.js';
 import { starterSongs } from '../song/starter/index.js';
@@ -24,7 +28,71 @@ const STEP_NAMES = {
   song: t('pathway.step.song'),
   check: t('pathway.step.check'),
   return: t('pathway.step.return'),
+  transfer: t('pathway.step.transfer'),
 };
+
+// mountFirstWeek: the mic-instrument panel. pathwayState runs on this
+// instrument's own rows and the microphone route; its 'return' step with a
+// 'transfer' action is shown as the sixth step ('transfer'), and
+// 'complete' marks no step current, only the result lines below the list.
+function mountFirstWeek(el, api, fw) {
+  const db = api.db();
+  const id = fw.id;
+  const level = (db.mods && db.mods[id] && db.mods[id].level) || 1;
+  const ps = pathwayState({ instrument: id, input: 'mic', events: db.events, sessions: db.sessions, proof: api.micProof(), level, now: Date.now() });
+  const kind = ps.action.kind;
+  const current = ps.step === 'return' && kind === 'transfer' ? 'transfer' : ps.step;
+  const label = ' <span class="pathway-unreviewed" role="note">' + t('pathway.practiceGrade') + '</span>';
+  const li = fw.steps.map((s) => {
+    const isCurrent = s.value.step === current;
+    return '<li data-step="' + s.value.step + '"'
+      + (isCurrent ? ' aria-current="step" class="pathway-current"' : '') + '>'
+      + '<strong>' + STEP_NAMES[s.value.step] + '</strong>'
+      + (isCurrent ? ' <span class="pathway-here">' + t('pathway.current') + '</span>' : '')
+      + ' -- ' + s.value.text + label + '</li>';
+  }).join('');
+
+  const seen = (db.events || []).filter((ev) => ev && ev.instrument === id && ev.source === 'song' && typeof ev.songId === 'string').map((ev) => ev.songId);
+  const song = kind === 'transfer' ? (firstWeekSong(id, seen.concat([ps.checkSongId])) || firstWeekSong(id, [ps.checkSongId])) : kind === 'recheck' && ps.checkSongId ? { songId: ps.checkSongId } : firstWeekSong(id);
+  const starter = song ? starterSongs.find((s) => s.id === song.songId) : null;
+  const title = starter ? starter.title : (song ? song.songId : '');
+
+  let actionHtml = '';
+  if (kind === 'connect-mic' || kind === 'trainer') {
+    actionHtml = '<button type="button" id="pathwayAction">' + t('pathway.action.firstWeekTrainer', { name: fw.name }) + '</button>';
+  } else if (kind === 'open-song' && song) {
+    actionHtml = '<button type="button" id="pathwayAction">' + t('pathway.action.song', { title: title }) + '</button>';
+  } else if ((kind === 'check-song' || kind === 'recheck' || kind === 'transfer') && song) {
+    actionHtml = '<button type="button" id="pathwayAction">' + t('pathway.action.check', { title: title }) + '</button>';
+  } else if (kind === 'wait') {
+    actionHtml = '<p class="pathway-wait">' + t('pathway.action.wait', { date: new Date(ps.action.dueAt).toLocaleDateString() }) + '</p>';
+  }
+
+  let extraHtml = '';
+  if (ps.retainedAt !== undefined) extraHtml += '<p class="pathway-retained" role="note">' + RETAINED + label + '</p>';
+  if (ps.step === 'complete') {
+    extraHtml += '<p class="pathway-transfer-done" role="note">' + TRANSFER_DONE + label + '</p>'
+      + '<p class="pathway-complete" role="note">' + COMPLETE + label + '</p>';
+  }
+
+  el.innerHTML = '<div class="panel-pathway">'
+    + '<h2 id="pathwayHeading" tabindex="-1">' + t('pathway.firstWeekTitle', { name: fw.name }) + '</h2>'
+    + '<ol class="pathway-steps">' + li + '</ol>'
+    + actionHtml
+    + extraHtml
+    + '</div>';
+  el.querySelector('#pathwayHeading').focus();
+
+  const actionBtn = el.querySelector('#pathwayAction');
+  if (actionBtn) {
+    actionBtn.addEventListener('click', () => {
+      if (kind === 'connect-mic' || kind === 'trainer') { api.setMod(id); return; }
+      if (!song) return;
+      requestOpenSong(api, song.songId, song.partId, id, id, kind === 'open-song' ? undefined : 'check');
+      api.openPanel('songs');
+    });
+  }
+}
 
 export function register(panels) {
   panels.register({
@@ -33,6 +101,8 @@ export function register(panels) {
     get tag() { return t('pathway.tag'); },
     color: '#7fb3ff',
     mount(el, api) {
+      const fw = firstWeekFor(api.mod());
+      if (fw) { mountFirstWeek(el, api, fw); return; }
       // Read the level from DB.mods.kbd, not api.mod(), because the panel
       // may open while another mod shows (e.g. a nav click reached it, not
       // only the kbd options button).

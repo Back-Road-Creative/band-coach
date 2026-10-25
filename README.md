@@ -1015,6 +1015,15 @@ section also records a finding worth knowing before reading Progress's own numbe
 a learner passes a song's Check mode, "Passed on your own" counts every judged step of that
 walkthrough, not just the one whole-piece row the pathway itself is watching for.
 
+Every microphone instrument a starter song fits (as written or transposed) has its own "Your first
+week" button and panel: six steps (connect the microphone, the first trainer level, a song, a check
+of the whole piece on the microphone with no help, a recheck a day later, then a different song),
+built from the instrument's record by `src/instruments/first-week.js` and judged by the same
+`pathwayState` on that instrument's own rows. Every step there is labelled "practice-grade (mic, not
+yet checked by a player)": the microphone judges it, and no player has checked these steps yet.
+Alto sax, oboe and drum kit have no path until a starter song fits them. Proof:
+`node --test tests/unit/pathway-instruments.test.mjs tests/characterization/pathway-instruments-panel.test.mjs`.
+
 ## Capo, alternate tunings and a left-handed view
 
 The "How to play it" panel's fretted-instrument diagrams (guitar, bass, ukulele, mandolin,

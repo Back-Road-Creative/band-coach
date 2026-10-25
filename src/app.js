@@ -71,6 +71,7 @@ import { isReviewCurrent, instrumentUnreviewed } from './instruments/review.js';
 import { starterSongs } from './song/starter/index.js';
 import { pathwayState } from './core/pathway.js';
 import { reviewItems as kbdPathwayOutcomes, outcomeReviewed } from './instruments/kbd-pathway.js';
+import { firstWeekFor } from './instruments/first-week.js';
 // slot:import:notation-wire
 //
 // slot:import:a11y
@@ -2392,6 +2393,9 @@ import { register as registerPathway } from './ui/pathway.js';
     // needs a suggested song), since 'setup'/'lesson' come before any song
     // is suggested at all.
     if (mod === 'kbd') btn('kbdPathwayBtn', t('pathway.open'), () => openPanel('pathway'));
+    // F19: a microphone instrument with a first-week path
+    // (src/instruments/first-week.js) gets the same panel, its own six steps.
+    else if (firstWeekFor(mod)) btn('pathwayBtn', t('pathway.openFirstWeek'), () => openPanel('pathway'));
     if (MODS[mod] && mod !== 'ear') btn('calBtn', calRun ? 'Listening for 8 taps…' : 'Calibrate timing (' + Math.round(DB.latencyMs || 0) + ' ms)', startCalibrate, false);
     if (mod === 'capture') { btn('capGo', cap.on ? 'Stop' : 'Listen', () => { if (cap.on) capStop(); else { if (!micReady) { say('Connect your microphone first (open "Set up input", press Connect), then press Listen.', 'no'); return; } ensureAudio(); cap.on = true; cap.notes = []; cap.savedId = null; cap.start = now(); cap.curM = -1; say(''); renderOpts(); } }, true); btn('capPlay', 'Play it back', () => { if (!cap.notes.length) { say('Nothing captured yet.', 'no'); return; } ensureAudio(); const t0 = now() + 0.1; cap.notes.forEach(n => tone(n.m, t0 + n.t - (cap.notes[0] ? cap.notes[0].t : 0), Math.max(0.2, n.d))); }); const lessons = {}; MOD_IDS.filter(m => hasMasteryScheme(m)).forEach(m => { lessons[m] = [MODS[m].name]; }); sel('capTo', cap.notes.length + ' notes. Practice on', lessons, 'kbd', () => {});
       // 'Make it a lesson': the captured tune becomes a draft Song (src/song/
@@ -3039,6 +3043,9 @@ import { register as registerPathway } from './ui/pathway.js';
     // exposed here so a mounted panel (the keyboard pathway panel) can ask
     // the same question pathwayState needs without reaching past the API.
     midiProof: () => midiPortInputs.some(i => midiHeard.has(i)),
+    // micProof(): the microphone is connected this page load -- the live
+    // half of a mic instrument's first-week 'setup' step (F19).
+    micProof: () => micReady,
     // midiOut: "Play it for me" (see midiOutPlay near handleMidiMessage) -- ready() is true only once the learner has picked a connected output.
     midiOut: { ready: () => !!midiOutSelected(), playing: () => midiOutBusy, play: (song, partIndex, onEnd) => midiOutPlay(song, partIndex, onEnd), stop: () => midiOutStop() },
   };
