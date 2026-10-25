@@ -573,6 +573,12 @@ seconds): it opens the Tuner on that instrument's own strings. **Skip** puts the
 answer is remembered on this device (`bandcoach.v1.tuneAsked`), and an instrument already practised
 never gets it. Keyboard, voice, winds and drums have nothing to tune, so they never see it.
 
+Strings also drift during a session. While you drill a string instrument, each note judged on the
+right pitch class keeps how far it sat off its semitone; once the median of the last eight is more
+than 20 cents off, the side rail says so ("Your notes sound about 25 cents flat. Tune?"). **Tune**
+opens the Tuner on that instrument's strings; **Not now** puts it away for the rest of the session.
+One sour note never triggers it, only a steady lean the same way.
+
 Opening any song shows one row of plain actions directly above its practise section: **Edit
 notes**, **Play along**, **Export**, **Share**, **Save a copy**, **Print** — a starter tune's Edit
 notes saves a copy first (starter tunes are never edited in place) and opens that. Export reveals

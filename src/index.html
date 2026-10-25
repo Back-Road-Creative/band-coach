@@ -141,6 +141,10 @@
         <span id="tuneFirstText" data-i18n="side.tuneFirst">Strings drift between sessions. Tune first? It takes about 30 seconds.</span>
         <span><button type="button" class="small" id="tuneFirstGo" data-i18n="side.tuneFirstGo">Tune first</button> <button type="button" class="small" id="tuneFirstSkip" data-i18n="side.tuneFirstSkip">Skip</button></span>
       </div>
+      <div class="backup-nudge" id="tuneDrift" role="status" hidden>
+        <span id="tuneDriftText"></span>
+        <span><button type="button" class="small" id="tuneDriftGo" data-i18n="side.tuneDriftGo">Tune</button> <button type="button" class="small" id="tuneDriftSkip" data-i18n="side.tuneDriftSkip">Not now</button></span>
+      </div>
       <div class="card" id="energyCard">
         <div class="eyebrow" data-i18n="side.energyEyebrow">Your energy this session</div>
         <div class="meterbox thin" role="progressbar" aria-label="Estimated energy" aria-valuemin="0" aria-valuemax="100" id="energyBar"><div id="energyFill"></div></div>
