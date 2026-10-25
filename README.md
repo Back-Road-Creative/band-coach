@@ -1558,6 +1558,13 @@ worker's precache list so it always answers with the live version, never a cache
 what lets a downloaded `band-coach.html`, which can never auto-update itself, ask whether it's
 stale.
 
+The service worker takes over a new version as soon as it installs, but an open page keeps
+running the old code until it reloads. So the page watches for that hand-over and shows a short
+bar under the rail, "A new version is ready. Reload when you finish practicing.", with a Reload
+button (`src/core/update-watch.js`). It never interrupts practice: a hand-over during a session
+waits until the session ends. A first install is not announced, and a downloaded copy
+(no service worker under `file://`) never shows it.
+
 **iPhone microphone behaviour is unmeasured.** This edition has only been proven in headless
 Chromium against a loopback test server (`tests/build/pages-offline.test.mjs`) — that it installs,
 its service worker activates, and it renders after going offline. Whether Safari on an actual
