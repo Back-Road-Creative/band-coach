@@ -60,7 +60,7 @@ Downloaded (with the version). No model has been trained or published yet, so to
 answers "No model pack is published yet." and keeps nothing. A pack that fails to download or
 verify is never kept, and a pack is only ever downloaded from its own folder on the Band Coach website.
 
-The app follows your system's light/dark setting automatically, or pick Light/Dark yourself from the Theme control next to "Show note names" on the Settings screen. Two more controls next to Theme let you pick how notes are named -- letters, German (H/B), or fixed-do solfege (Do, Re, Mi...) -- and whether the black keys are spelled with sharps, flats, or today's mixed spelling. A "Tuning reference (A4, Hz)" box (415 to 466, default 440) is for players whose group tunes to 442 or similar: the tuner, ear training, recording and song listening judge your playing against it, and the reference tones the app plays follow it. Analysing an audio file you load is not affected.
+The app follows your system's light/dark setting automatically, or pick Light/Dark yourself from the Theme control next to "Show note names" on the Settings screen. Two more controls next to Theme let you pick how notes are named -- letters, German (H/B), or fixed-do solfege (Do, Re, Mi...) -- and whether the black keys are spelled with sharps, flats, or today's mixed spelling. A "Tuning reference (A4, Hz)" box (415 to 466, default 440) is for players whose group tunes to 442 or similar: the tuner, ear training, recording and song listening judge your playing against it, and the reference tones the app plays follow it. Analysing an audio file you load is not affected. While a session runs the page becomes a focus view: the energy card and "What the coach is leaning on" fold away until End, so the instrument, the prompt, the objective, the feedback and the live stats keep the room. A "Music stand view" checkbox under "Show note names" (off by default) also shows the prompt 1.5x while practicing, for reading it from a music stand.
 
 If your microphone or keyboard is not being heard, the next two sections are the ones to read.
 Everything from "Build it from source" down is for people working on the app itself.
@@ -570,6 +570,15 @@ flight the same way, saying so plainly on the next visit ("Your last recording w
 it finished. Nothing was saved.", shown once). Ear training, How to play it, Music theory and a Metronome (a steady click with a 30-240 tempo, 2, 3, 4 or 6 beats per bar and one Start/Stop button; the first beat of each bar sounds higher, and your tempo is remembered) get
 their own plain home the same way: a "Tools" group inside the instrument sheet, alongside
 Tuner/Capture a melody/Interval drill/Rhythm, open with no extra click once the sheet is open.
+
+The first time you pick an instrument, before any practice is logged, the side rail asks "Can I hear
+you? Play any note." The first clean note it hears from the microphone or a MIDI keyboard is named
+("Heard A4"), so you know your input works before a drill judges anything. A microphone that delivers
+only silence, or sound too quiet to judge, gets the same plain explanation the drills give.
+**Connect my instrument** opens the mic or MIDI connection. **Just look around** is for trying the
+app with no instrument: drills still run, a banner says nothing is scored, and nothing goes into your
+history or progress until you press **Score my playing**. Drums, ear training and the tools never
+show this card.
 
 Before the first session on a string instrument, the side rail offers **Tune first** (about 30
 seconds): it opens the Tuner on that instrument's own strings. **Skip** puts the offer away; either

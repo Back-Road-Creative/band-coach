@@ -34,7 +34,7 @@ import { yin } from './audio/yin.js';
 import { createPitchNode } from './audio/pitch-worklet.js';
 //
 import { gatesFor, meterLevel, releaseFloor, classifyRoomCheck, ROOM_CHECK_VERSION, MIN_FLOOR, QUIET_RELEASE_SEC, ringBefore } from './audio/levels.js';
-import { diagnoseInput, stepDiagnosis } from './audio/input-diagnosis.js';
+import { diagnoseInput, stepDiagnosis, heardNote } from './audio/input-diagnosis.js';
 import { createOnsetDetector } from './audio/onset.js';
 import { createDrumClassifier } from './audio/drum-classify.js';
 //
@@ -891,7 +891,7 @@ import { register as registerPathway } from './ui/pathway.js';
     // coach message coach.warmUpTail, "... it does not
     // count."), so it must not touch the spaced-repetition model either: no
     // S.item/S.trans write, and no S.judged/S.ready/session counters below.
-    if (warm) return;
+    if (warm || exploring) return; // F4 exploring: nothing is scored
     const out = outcome || gradeOutcome({ helped: false, assistance: null, q: q });
     // A helped element (Show me) is not a test: no review, no streak, no
     // level move, no judged count -- only the session's help counter moves.
@@ -1281,7 +1281,7 @@ import { register as registerPathway } from './ui/pathway.js';
   }
   // microphone frames: plucked instruments fire note events, voices and winds are judged on a held pitch
   function onPitch(fr, dt) {
-    const ringPrev = ringBefore(ringEnv, dt); ringEnv = Math.max(fr.rms, ringPrev); heard = fr; if (deafWindow.isDeaf()) return; const M = MODS[mod]; if (!playing || !task || task.done) return; const e = cur(); if (!e) return;
+    const ringPrev = ringBefore(ringEnv, dt); ringEnv = Math.max(fr.rms, ringPrev); heard = fr; if (deafWindow.isDeaf()) return; const M = MODS[mod]; if (!playing) proofFrame(fr); if (!playing || !task || task.done) return; const e = cur(); if (!e) return;
     // Field-report fix: on a single-note item, tell the learner WHY nothing
     // is being judged instead of leaving them with silence. Skipped on a
     // chord item, where hearing more than one pitch class is the point, not
@@ -2072,6 +2072,29 @@ import { register as registerPathway } from './ui/pathway.js';
   function askInstrumentFirst() { if (instrumentChosen) return false; setInstrumentSheetOpen(true); const b = document.querySelector('#picker button'); if (b) b.focus(); return true; }
   // F2: before the first session on a string instrument, offer to tune first. "Tune first" opens the
   // tuner on this instrument's own strings; either answer is remembered, and practising it once ends the offer.
+  // F4 first-run input proof: the first instrument pick on a profile with no practice logged asks for any note
+  // (#inputProof) and names the first clean one heard, from the mic (proofFrame, fed by onPitch before any task) or a
+  // MIDI note-on; a mic that delivers silence gets input-diagnosis.js's own line. "Just look around" turns on
+  // `exploring` for this page load: drills run, but credit(), logEvent() and logSession() record nothing.
+  let proofFrames = [], proofSince = null, proofLast = null, proofHeardMidi = null, proofDone = false, exploring = false;
+  function proofFits() { const M = MODS[mod]; return !!M && !M.kit && (M.input === 'pluck' || M.input === 'sustain' || mod === 'kbd'); }
+  function refreshInputProof() {
+    $('inputProof').hidden = !(instrumentChosen && !sess && !proofDone && !exploring && proofFits() && !DB.sessions.length);
+    $('inputProofConnect').hidden = proofHeardMidi !== null || (mod === 'kbd' ? midiOn : micReady);
+  }
+  function proofHeard(m) { if ($('inputProof').hidden || proofHeardMidi !== null) return; proofHeardMidi = m; $('inputProofSay').textContent = t('side.proofHeard', { note: nname(m, true) }); refreshInputProof(); }
+  function proofFrame(fr) {
+    if ($('inputProof').hidden || proofHeardMidi !== null) return;
+    const tNow = now(); proofFrames.push({ rms: fr.rms, clarity: fr.clarity, midi: fr.midi, t: tNow });
+    while (proofFrames.length && proofFrames[0].t < tNow - DIAG_WINDOW_SEC - 0.5) proofFrames.shift();
+    const m = heardNote(proofFrames, { gate: gates.note }); if (m !== null) { proofHeard(m); return; }
+    if (proofSince === null) proofSince = tNow;
+    const step = stepDiagnosis(diagnoseInput(proofFrames, { gates: { pitch: gates.note } }), proofLast, { sinceSec: tNow - proofSince }); proofLast = step.last;
+    if (step.say) $('inputProofSay').textContent = step.say; else if (step.clear) $('inputProofSay').textContent = '';
+  }
+  $('inputProofConnect').addEventListener('click', () => $('ioBtn').click());
+  $('inputProofLook').addEventListener('click', () => { exploring = true; proofDone = true; $('exploreBanner').hidden = false; refreshInputProof(); });
+  $('exploreStop').addEventListener('click', () => { exploring = false; $('exploreBanner').hidden = true; });
   function refreshTuneFirst() { const tg = TUNINGS[mod]; $('tuneFirst').hidden = !(instrumentChosen && !sess && mod !== 'chrom' && tg && tg[1].length && !tuneAsked.includes(mod) && !DB.sessions.some(r => r && r.mod === mod)); }
   function noteTuneAsked(m) { if (!tuneAsked.includes(m)) tuneAsked.push(m); try { localStorage.setItem(TUNE_ASKED_KEY, JSON.stringify(tuneAsked)); } catch (e) {} $('tuneFirst').hidden = true; }
   $('tuneFirstGo').addEventListener('click', () => { const m = mod; noteTuneAsked(m); tunerKind = m; setMod('tuner'); });
@@ -2085,7 +2108,7 @@ import { register as registerPathway } from './ui/pathway.js';
   $('tuneDriftSkip').addEventListener('click', () => { $('tuneDrift').hidden = true; });
   function startSession() {
     if (askInstrumentFirst()) return;
-    $('tuneFirst').hidden = true; $('tuneDrift').hidden = true; driftCents = []; driftAsked = false;
+    $('tuneFirst').hidden = true; $('tuneDrift').hidden = true; driftCents = []; driftAsked = false; $('inputProof').hidden = true;
     document.body.classList.add('practising'); refreshModelClock(); ensureAudio(); sess = newSession(); recent = []; streak = 0; errCount = 0; task = null; lastItem = null; lastInputAt = now(); chunk = 0; say('');
     // Session length E7c: the learner's own choice (DB.prefs.sessionMinutes,
     // 0 meaning no limit) sets today's target before the tired check below,
@@ -2093,6 +2116,7 @@ import { register as registerPathway } from './ui/pathway.js';
     sess.target = DB.prefs.sessionMinutes || 0;
     let msg = customOn ? t('coach.capturedMelody', { count: DB.custom.length }) : lvNum(S.level) + ': ' + lvName(D().name) + '.'; if (tiredPattern()) { sess.target = sess.target ? Math.min(sess.target, 15) : 15; msg = t('coach.tiredCap', { minutes: sess.target }) + msg; } else if (todayMinutes() >= 45) msg = t('coach.longDay', { minutes: Math.round(todayMinutes()) }) + msg;
     if (S.judged > 5 && !customOn) { sess.warm = 4; msg += t('coach.warmUpTail'); }
+    if (exploring) msg = t('coach.exploring') + msg;
     // A returning keyboard learner (a prior kbd session logged on an earlier
     // day) is told, once per page load, which keyboard-path step comes next
     // (src/core/pathway.js's pathwayState) -- t('coach.welcomePath') plus
@@ -2130,6 +2154,7 @@ import { register as registerPathway } from './ui/pathway.js';
   // `source`/`songId` ride along for a reader that wants to tell a song
   // session from a drill session apart.
   function logSession(rec) {
+    if (exploring) return;
     const modState = DB.mods[rec.mod], level = modState ? modState.level : 1, acc = num(rec.acc, 0, 0, 1);
     DB.sessions.push({ d: today(), mod: rec.mod, min: Math.round(num(rec.minutes, 0, 0, 600) * 10) / 10, acc: acc, a1: acc, a2: acc, from: level, to: level, breaks: 0, source: rec.source || 'song', songId: rec.songId || null });
     DB.sessions = DB.sessions.slice(-60); save();
@@ -2141,6 +2166,7 @@ import { register as registerPathway } from './ui/pathway.js';
   // that fails validateEvent() is dropped, not thrown, same as a bad
   // DB.sessions row -- a caller bug must never crash a practice session.
   function logEvent(ev) {
+    if (exploring) return;
     const check = validateEvent(ev); if (!check.ok) { recordError('logEvent', new Error('dropped invalid event -- ' + check.errors.join('; '))); return; }
     DB.events.push(ev); DB.events = boundEvents(DB.events, { skillMap: KBD_SONG_SKILL_MAP, skillMapInstrument: 'kbd' }); save();
   }
@@ -2151,6 +2177,7 @@ import { register as registerPathway } from './ui/pathway.js';
       let up = null, low = null, lowR = 1; Object.keys(S.item).forEach(id => { const cur = S.item[id], r1 = retrievability(cur, modelNow), r0 = retrievability(sess.m0[id] || cur, modelNow), g0 = r1 - r0; if (up === null || g0 > up.g) up = { id: id, g: g0 }; if (cur.reps >= 3 && (low === null || r1 < lowR)) { low = id; lowR = r1; } });
       line = 'Session done: ' + Math.round(min * 10) / 10 + ' min, ' + Math.round(100 * sess.ok / sess.judged) + '% right, best streak ' + sess.bestStreak + ', level ' + sess.from + ' to ' + S.level + '.' + (up && up.g > 0.05 ? ' Most improved: ' + inf(up.id).short + '.' : '') + (low ? ' Next time starts with extra ' + inf(low).short + '.' : ''); }
     if (typeof wonOn === 'string') line = t('coach.endedOnWin', { name: inf(wonOn).short }) + ' ' + line;
+    if (exploring) line = t('coach.exploreEnded');
     if (sess.judged >= 8 && Date.now() - lastBackupAt > 7 * 86400000) showBackupNudge(t('side.backupNudge'));
     if (sess.judged >= 8) askToKeep();
     sess = null; playing = false; paused = false; task = null; bar = null; breakTrap.deactivate(); $('breakCard').hidden = true; $('playBtn').textContent = t('stage.start'); $('endBtn').hidden = true; $('choices').hidden = true; $('prompt').textContent = ''; $('hint').textContent = ''; say(''); $('timeFill').style.width = '0%'; $('showMeBtn').hidden = true; $('howPeekHost').hidden = true; coach(line); save(); showAll(); wakeLock.release();
@@ -2451,6 +2478,7 @@ import { register as registerPathway } from './ui/pathway.js';
       else ioState('', t(mod === 'rhy' ? 'io.padOptional' : 'io.keysOptional'));
     }
     if (!$('midiDetails').hidden) renderMidiDetails();
+    refreshInputProof();
   }
   // Blinks #midiActDot on ANY MIDI byte -- exercise running or not -- so a
   // learner whose note is not being judged (nothing running, or heard
@@ -2521,7 +2549,7 @@ import { register as registerPathway } from './ui/pathway.js';
     parser.feed(d).forEach(evt => {
       if (evt.type === 'on' && kitLearnSink && kitLearnSink(input.name, evt.note)) return; // the kit set-up walk-through is learning this pad; it is not a hit
       const note = kitNote(input, evt.note);
-      if (evt.type === 'on') { noteState.noteOn(input, evt.channel, note); realMidiHeld.add(note); onNote(note, true, 'midi'); } else { noteState.noteOff(input, evt.channel, note); if (!noteState.isHeld(note)) realMidiHeld.delete(note); onNoteOff(note, 'midi'); }
+      if (evt.type === 'on') { proofHeard(note); noteState.noteOn(input, evt.channel, note); realMidiHeld.add(note); onNote(note, true, 'midi'); } else { noteState.noteOff(input, evt.channel, note); if (!noteState.isHeld(note)) realMidiHeld.delete(note); onNoteOff(note, 'midi'); }
     });
   }
   const canOpenMic = () => !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
@@ -2679,6 +2707,7 @@ import { register as registerPathway } from './ui/pathway.js';
   $('easierBtn').addEventListener('click', function () { this.blur(); jump(-1); }); $('harderBtn').addEventListener('click', function () { this.blur(); jump(1); });
   $('resetBtn').addEventListener('click', function () { this.blur(); if (!confirm(t('reset.confirm', { name: MODS[mod].name }))) return; if (sess) endSession(); DB.mods[mod] = S = freshModel(); recent = []; streak = 0; coach(t('reset.progressCleared', { name: MODS[mod].name })); save(); showAll(); });
   $('optNames').addEventListener('change', function () { DB.prefs.names = this.checked; save(); renderOpts(); }); // the practice Show labels own up to names off
+  $('optStand').addEventListener('change', function () { DB.prefs.stand = this.checked; save(); applyStand(); }); // F8: the prompt reads 1.5x while practising (styles.css body.practising.stand)
   // Theme J1: 'system' removes the attribute so styles.css's own
   // prefers-color-scheme media query decides; 'light'/'dark' pin it,
   // overriding the OS setting either way (see src/styles.css).
@@ -2709,7 +2738,7 @@ import { register as registerPathway } from './ui/pathway.js';
     // are enough; #prompt stays empty until a real exercise names one.
     $('prompt').textContent = ''; $('hint').textContent = ''; $('choices').hidden = true; say(''); if (MODS[m]) coach(idleCoachLine());
     renderOpts(); ioRefresh(); showAll(); if (!booting) instrumentChosen = true; if (instrumentChosen) { revealStage(); save(); }
-    refreshTuneFirst();
+    refreshTuneFirst(); refreshInputProof();
   }
   // Two visual tiers inside the one #picker container (kept as a single id
   // so every existing `#picker button` selector -- setMod's aria-pressed
@@ -2828,6 +2857,7 @@ import { register as registerPathway } from './ui/pathway.js';
   // panels use, same fallback-to-memory pattern as src/ui/learn.js:92-93) ----------
   // A new version never interrupts practice: the notice waits for the session to end.
   let updateWaiting = false;
+  function applyStand() { $('optStand').checked = DB.prefs.stand; document.body.classList.toggle('stand', DB.prefs.stand); }
   function showUpdateIfIdle() { if (updateWaiting && !document.body.classList.contains('practising')) $('updateReady').hidden = false; }
   function showBackupNudge(text) { $('backupNudgeText').textContent = text; $('backupNudge').hidden = false; }
   function noteBackupMade(t) { lastBackupAt = t; try { localStorage.setItem(BACKUP_AT_KEY, String(t)); } catch (e) {} }
@@ -2869,7 +2899,7 @@ import { register as registerPathway } from './ui/pathway.js';
   function applyProfile(db) {
     const priorLatencyMs = DB && DB.latencyMs;
     modelNow = Date.now(); DB = sanitizeDB(db, undefined, modelNow); DB.latencyMs = num(priorLatencyMs, DB.latencyMs, 0, 300); if (!Array.isArray(DB.custom)) DB.custom = [];
-    $('optNames').checked = DB.prefs.names; $('optTheme').value = DB.prefs.theme; applyTheme(DB.prefs.theme); $('optLocale').value = DB.prefs.locale; applyLocale(DB.prefs.locale); setNoteNaming(DB.prefs.noteNaming); setReferencePitch(DB.prefs.a4); $('optNoteSystem').value = DB.prefs.noteNaming.system; $('optAccidentals').value = DB.prefs.noteNaming.accidentals; $('optA4').value = DB.prefs.a4; setMod(DB.prefs.mod);
+    $('optNames').checked = DB.prefs.names; applyStand(); $('optTheme').value = DB.prefs.theme; applyTheme(DB.prefs.theme); $('optLocale').value = DB.prefs.locale; applyLocale(DB.prefs.locale); setNoteNaming(DB.prefs.noteNaming); setReferencePitch(DB.prefs.a4); $('optNoteSystem').value = DB.prefs.noteNaming.system; $('optAccidentals').value = DB.prefs.noteNaming.accidentals; $('optA4').value = DB.prefs.a4; setMod(DB.prefs.mod);
   }
   let restoreUndoProfile = null;
   $('restoreUndoBtn').addEventListener('click', () => {
@@ -3155,7 +3185,7 @@ import { register as registerPathway } from './ui/pathway.js';
     updateNavState();
   }
   // A boot step that throws used to leave a blank or half-wired page with no word to the learner; say so, with the error text, instead (and record it, so the error log, console and release gate see the failed boot too).
-  try { loadDB(); applyLocale(DB.prefs.locale); if (!Array.isArray(DB.custom)) DB.custom = []; $('optNames').checked = DB.prefs.names; $('optTheme').value = DB.prefs.theme; $('optLocale').value = DB.prefs.locale; applyTheme(DB.prefs.theme); $('optNoteSystem').value = DB.prefs.noteNaming.system; $('optAccidentals').value = DB.prefs.noteNaming.accidentals; $('optA4').value = DB.prefs.a4; buildPicker(); pickerAsSheet = hasSavedMod; instrumentChosen = hasSavedMod; setInstrumentSheetOpen(!hasSavedMod); buildNav(); setMod(mod); if (loadedCorrupt) showBackupNudge(t('side.dataUnreadable')); booting = false; requestAnimationFrame(frame);
+  try { loadDB(); applyLocale(DB.prefs.locale); if (!Array.isArray(DB.custom)) DB.custom = []; $('optNames').checked = DB.prefs.names; applyStand(); $('optTheme').value = DB.prefs.theme; $('optLocale').value = DB.prefs.locale; applyTheme(DB.prefs.theme); $('optNoteSystem').value = DB.prefs.noteNaming.system; $('optAccidentals').value = DB.prefs.noteNaming.accidentals; $('optA4').value = DB.prefs.a4; buildPicker(); pickerAsSheet = hasSavedMod; instrumentChosen = hasSavedMod; setInstrumentSheetOpen(!hasSavedMod); buildNav(); setMod(mod); if (loadedCorrupt) showBackupNudge(t('side.dataUnreadable')); booting = false; requestAnimationFrame(frame);
     if (store.blocked) { saveFailedShown = true; $('settingsSay').textContent = t('storage.saveFailed'); $('mainSay').textContent = t('storage.saveFailed'); }
   } catch (e) { recordError('boot', e); const p = document.createElement('div'); p.id = 'bootFailed'; p.setAttribute('role', 'alert'); p.style.cssText = 'padding:12px;margin:8px;border:2px solid #c0392b;background:#fff;color:#111'; p.textContent = t('boot.failed', { error: (e && e.message) || String(e) }); document.body.insertBefore(p, document.body.firstChild); }
   const hook = !__DEBUG_HOOK__ ? null : { state: () => S, db: () => DB, sess: () => sess, task: () => task, cur: cur, note: onNote, answer: answer, tap: onTap, bar: () => bar, playing: () => playing, setMod: setMod, testSource: testSource, heard: () => heard, yin: yin, cap: () => cap, tuner: () => tunerState, tunerLock: () => tunerLock, deaf: () => deafWindow.isDeaf(), deafUntil: () => deafWindow.until(), exportProgress: doExportProgress, importProgress: doImportProgress, audioNow: audioNow, modelNow: () => modelNow, plan: () => sessionPlan, planProgress: () => planProgress,
