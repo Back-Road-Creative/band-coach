@@ -1686,6 +1686,22 @@ import { register as registerPathway } from './ui/pathway.js';
   // The [lo, hi] MIDI range the on-screen keyboard is currently drawing (used
   // both by draw() below and by onNote()'s "heard but not shown" message --
   // a note outside this range never lights up no matter how it arrived).
+  // F18: below the canvas width where the two rows hold 44 CSS px white keys (a 320px phone), the keyboard zooms to
+  // one row of as many white keys as fit at 44px (black keys stay over the 24px WCAG 2.5.8 floor), slid across C3-C5 by
+  // the Lower keys/Higher keys buttons; a target the coach shows is brought into the window (draw()'s kbd branch).
+  const KBD_WHITES = []; for (let m = 48; m <= 72; m++) if ([0, 2, 4, 5, 7, 9, 11].indexOf(m % 12) >= 0) KBD_WHITES.push(m);
+  let kbdWinIdx = 5, kbdZoom = null; // kbdWinIdx: the zoomed window's first white key in KBD_WHITES (5 = A3, so middle C shows); kbdZoom: { idx, n } while zoomed
+  function kbdWindow(n, targets) {
+    const max = KBD_WHITES.length - n, clampI = i => Math.max(0, Math.min(max, i)); let idx = clampI(kbdWinIdx);
+    const out = m => m < KBD_WHITES[idx] || m > KBD_WHITES[idx + n - 1];
+    if (targets.length && targets.some(out)) { const at = KBD_WHITES.filter(w => w <= targets[0]).length - 1; idx = clampI(at - Math.floor((n - 1) / 2)); }
+    kbdWinIdx = idx; return { idx: idx, n: n, lo: KBD_WHITES[idx], hi: KBD_WHITES[idx + n - 1] };
+  }
+  function syncKbdShift() {
+    const z = kbdZoom, lo = $('kbdLower'), hi = $('kbdHigher');
+    if (lo.hidden !== !z) { lo.hidden = !z; hi.hidden = !z; }
+    if (z) { lo.disabled = z.idx <= 0; hi.disabled = z.idx >= KBD_WHITES.length - z.n; }
+  }
   const kbdRange = () => [48, 72]; // always two octaves (C3-C5) so a beginner sees both hands' zones from level 1; judged notes/levels/hand gates are unchanged
   // `o.row`/`o.hand` ('lh'/'rh') tag every keyRect this call produces -- unset
   // on the single-octave layout, 0/'lh' or 1/'rh' when draw()'s kbd branch
@@ -1935,11 +1951,16 @@ import { register as registerPathway } from './ui/pathway.js';
   }
   let kbdTargetDbg = []; // last keyboard target list drawn (debug hook only)
   function draw() {
-    rootK = (parseFloat(getComputedStyle(document.documentElement).fontSize) || 16) / 16; cv.classList.toggle('staffkbd', staffBand('kbd') && mod === 'kbd'); cv.classList.toggle('kbd', mod === 'kbd'); size(); const W = cv.width, H = cv.height; g.clearRect(0, 0, W, H); rowRects = []; keyRects = []; kbdOverviewRect = null;
+    rootK = (parseFloat(getComputedStyle(document.documentElement).fontSize) || 16) / 16; cv.classList.toggle('staffkbd', staffBand('kbd') && mod === 'kbd'); cv.classList.toggle('kbd', mod === 'kbd'); size(); const W = cv.width, H = cv.height; g.clearRect(0, 0, W, H); rowRects = []; keyRects = []; kbdOverviewRect = null; kbdZoom = null; if (mod !== 'kbd') syncKbdShift();
     if (TOOLS[mod]) { if (mod === 'tuner') drawTuner(W, H); else drawCapture(W, H); return; }
     const M = MODS[mod], e = playing && task && !task.done ? cur() : null, showE = e || (task && task.done ? task.els[task.els.length - 1] : null);
     if (mod === 'kbd') { const kr = kbdRange(), sb = staffBand('kbd'), oy = sb ? H * staffBandH('kbd', H) : 0, Hk = sb ? H * (1 - staffBandH('kbd', H)) : H; const tg = []; let rhMidi = null, lhMidi = null; if (e && !(task.kind === 'groove')) { if (e.info.kind === 'chord') { if (e.reveal || e.failed) e.info.pcs.forEach(x => tg.push(60 + x)); } else if (e.info.kind === 'hands-together') { if (e.reveal || e.failed) { tg.push(e.info.ex.rh.midi, e.info.ex.lh.midi); rhMidi = e.info.ex.rh.midi; lhMidi = e.info.ex.lh.midi; } } else if (e.reveal || e.failed) tg.push(e.info.midi); } if (task && task.kind === 'groove' && !task.done) task.els.forEach(x => { if (x.info.midi && (x.reveal || x.failed)) tg.push(x.info.midi); }); kbdTargetDbg = tg; const good = performance.now() - flashGood < 300 && task ? task.els.slice(0, task.idx).map(x => x.info.midi).filter(x => x) : []; const kOpts = { target: tg, good: good, names: DB.prefs.names, rhMidi: rhMidi, lhMidi: lhMidi, letters: kbdTyping ? KBD_LETTERS : null };
-      if (kr[0] === 48) {
+      const css = cv.getBoundingClientRect().width || W, pxCss = W / css, rowCss = W * 0.96 / pxCss, zn = Math.min(8, Math.floor(rowCss / 44));
+      if (rowCss / 8 < 40) { // the two rows' 8-white right-hand row would fall under item D2's 40px floor
+        const z = kbdZoom = kbdWindow(zn, tg), x0 = W * 0.02, labelH = Hk * 0.07, y0 = oy + Hk * 0.18;
+        g.fillStyle = '#93a0bd'; font(labelH * 0.55, 600); g.textAlign = 'left'; g.fillText(nname(z.lo, true) + '–' + nname(z.hi, true), x0, y0 + labelH * 0.72);
+        drawKeys(x0, y0 + labelH, W * 0.96, Hk * 0.7 - labelH, z.lo, z.hi, Object.assign({}, kOpts, { row: 0 }));
+      } else if (kr[0] === 48) {
         // item B2 (Wave kbd): once the octave below is unlocked (level 8+, or
         // a custom captured melody below middle C) a single 15-white-key strip
         // put ~21px between white keys on a 340px-wide phone canvas -- under
@@ -1960,7 +1981,8 @@ import { register as registerPathway } from './ui/pathway.js';
         label('Right hand · ' + nname(60, true) + ' · middle C – ' + nname(72, true), y2);
         drawKeys(x0, y3, rowW, rowH, 60, 72, Object.assign({}, kOpts, { row: 1, hand: 'rh' }));
       } else drawKeys(W * 0.02, oy + Hk * 0.18, W * 0.96, Hk * 0.7, kr[0], kr[1], kOpts);
-      drawKbdOverview(W * 0.02, oy + Hk * 0.905, W * 0.96, Hk * 0.07, kr[0], kr[1]);
+      drawKbdOverview(W * 0.02, oy + Hk * 0.905, W * 0.96, Hk * 0.07, kbdZoom ? kbdZoom.lo : kr[0], kbdZoom ? kbdZoom.hi : kr[1]);
+      syncKbdShift();
       if (e && e.info.kind === 'chord') { g.fillStyle = '#e9edf6'; font(Hk * 0.11); g.textAlign = 'center'; g.fillText(e.info.sym, W / 2, oy + Hk * 0.13); } if (document.activeElement === cv) { const fi = kbdFocusInfo(); if (fi) { g.strokeStyle = '#ffd23f'; g.lineWidth = 4; g.strokeRect(fi.x + 2, fi.y + 2, fi.w - 4, fi.h - 4); } } }
     else if (M.tuning) { if (staffBand(mod)) { g.save(); g.translate(0, H * 0.42); drawFret(M, e, W, H * 0.58); g.restore(); } else drawFret(M, e, W, H); } else if (mod === 'voice') { if (staffBand(mod)) { g.save(); g.translate(0, H * 0.42); drawVoice(e, W, H * 0.58); g.restore(); } else drawVoice(e, W, H); } else if (M.staff) drawStaff(M, e, W, H); else if (mod === 'harp') drawHarp(e, W, H);
     else if (mod === 'mallet-percussion') { const rec = instrumentById['mallet-percussion'], tg = e && e.info.kind === 'note' && (e.reveal || e.failed) ? [e.info.midi] : []; const mOpts = { target: tg, good: [], names: DB.prefs.names }; if (staffBand(mod)) { g.save(); g.translate(0, H * 0.42); drawBars(W * 0.03, H * 0.58 * 0.1, W * 0.94, H * 0.58 * 0.8, rec.range, mOpts); g.restore(); } else drawBars(W * 0.03, H * 0.18, W * 0.94, H * 0.7, rec.range, mOpts); }
@@ -2619,6 +2641,8 @@ import { register as registerPathway } from './ui/pathway.js';
   $('tapPad').addEventListener('pointerdown', ev => { ev.preventDefault(); ensureAudio(); onTap(ev); });
   $('replayBtn').addEventListener('click', function () { this.blur(); if (task && !task.done) { playRef(task); lastInputAt = now(); } });
   $('showMeBtn').addEventListener('click', function () { this.blur(); const e = cur(); if (!task || task.done || !e) return; if (!e.failed && !e.helped) { e.helped = true; e.reveal = true; } say('Shown. This one is help, not a test: no credit and no penalty.', ''); refreshPrompt(); });
+  $('kbdLower').addEventListener('click', function () { if (kbdZoom) kbdWinIdx = Math.max(0, kbdZoom.idx - (kbdZoom.n - 1)); draw(); }); // F18: slide the zoomed phone keyboard
+  $('kbdHigher').addEventListener('click', function () { if (kbdZoom) kbdWinIdx = Math.min(KBD_WHITES.length - kbdZoom.n, kbdZoom.idx + (kbdZoom.n - 1)); draw(); });
   $('playBtn').addEventListener('click', function () { this.blur(); if (!sess) startAfterMic(); else if (paused) resume(); else takeBreak('user'); });
   $('endBtn').addEventListener('click', function () { this.blur(); endOrWin(); });
   $('winBtn').addEventListener('click', () => { if (!sess) return; const id = winCandidate(); if (!id) { endSession(); return; } sess.winId = id; resume(); coach(t('coach.winGo', { name: inf(id).short })); }); $('endBtn2').addEventListener('click', endSession); $('backBtn').addEventListener('click', resume);
