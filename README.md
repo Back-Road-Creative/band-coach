@@ -15,7 +15,11 @@ Download this one file and double-click it:
 https://github.com/Back-Road-Creative/band-coach/releases/latest/download/band-coach.html
 
 That is the whole app — one page, nothing to install, no account, and it keeps working with the
-network off. Open it in Chrome or Edge. Microphone instruments ask for permission the first time;
+network off. Open it in Chrome or Edge: the automated tests run in headless Chromium and a real
+Chrome is checked by hand before a release; Firefox and Safari are untested, and Safari has no MIDI
+(see [Browser and device support](#browser-and-device-support--what-has-actually-been-tested)).
+Settings > Language switches the app to Español, a first-pass machine translation that a native
+speaker has not yet reviewed. Microphone instruments ask for permission the first time;
 a MIDI keyboard is optional. To put it away, delete the file.
 
 To check your download is the file we published, compare its SHA-256 fingerprint with the
@@ -361,9 +365,8 @@ one-page, printer-friendly summary for a teacher or parent. The backup, restore 
 above are read from the string tables in `src/core/i18n.js` (`t(id, params)`) rather than
 hardcoded. Settings > Language switches the app between English and Español (the choice is saved
 with your other preferences, travels in a backup, and is applied at startup before the first
-screen; `<html lang>` follows it). What is translated: the nav bar, page headings and static
-labels, the keyboard help, the Start/Pause button, the instrument sheet (redrawn the moment the language changes), the Songs and keyboard-path screens' titles and buttons, the Songs panel's status messages (`songs.say.*`; panel names such as "Play Along" stay English, as on screen), the backup/restore/update messages, and the coach lines around a level-up and a session start (`coach.*`: the level-up note, the warm-up and long-day notes, the 45-minute cap), every label on the Settings screen, the whole Progress screen including its printable weekly report (`history.*`), the "Today: ..." plan line (`plan.*`) and the practice option rows (session length, Show, Hands, Play in time; `opt.*`). Everything not yet routed
-through `t()` -- most of the exercise prompts, the remaining coach lines, the "why" sentence after the plan line, the item names in Progress, the teacher summary text, song and lesson text -- stays in English whichever language is picked. The Spanish table is a
+screen; `<html lang>` follows it). What is translated (each `group.*` below is a key prefix in the string tables): the app tagline and the start-up failure notice (`app.*`, `boot.*`); the nav bar and its landmark name (`nav.*`); the instrument sheet and its Tools/More headings (`picker.*`); the "Set up input" panel (`setup.*`), the input hints (`io.*`), the keyboard help and keyboard-path hand-off (`kbd.*`) and the microphone messages such as blocked or not found (`mic.*`, `audio.*` for "Sound stopped", `tuner.*`); the practice stage, its tap pad and replay button (`stage.*`), the side panel with End session and the energy readout (`side.*`, `energy.*`, `break.*`), the level card (`level.*`), the practice option rows (session length, Show, Hands, Play in time; `opt.*`), the wrong-note hints (`wrongNote.*`, `hint.*`) and the written "how to play this" charts (`how.*`, `howInline.*`, `fingerings.*`); the "Today: ..." plan line (`plan.*`) and the coach lines around a level-up and a session start (`coach.*`: the level-up note, the warm-up and long-day notes, the 45-minute cap); the reset button, its confirmation and the sidebar backup and reset controls (`reset.*`, `rail.*`), the backup/restore messages (`backup.*`), the save-failed notice (`storage.*`) and the update-check messages (`update.*`); every label on the Settings screen (`settings.*`), "Copy diagnostics" (`diag.*`), the general error notice (`error.*`) and the downloadable-model status lines (`modelPack.*`); the whole Progress screen including its printable weekly report (`history.*`) and its small stats (`stats.*`); the keyboard path (`pathway.*`); the "not yet checked by a player" review labels (`review.*`); and the Songs screen (`songs.*`: panel titles, buttons, modes, the hand and step wording, the import and pack messages, and the status messages under `songs.say.*`; the names of panels such as "Play Along" stay English, as on screen). That `songs.*` group is the app's own wording around songs, not the songs themselves: a song's title and notes stay as the file or the built-in list gave them, and lesson text not routed through `t()` stays English. Everything else not yet routed
+through `t()` -- most of the exercise prompts, the remaining coach lines, the "why" sentence after the plan line, the item names in Progress, the teacher summary text -- stays in English whichever language is picked. The Spanish table is a
 machine-translated first pass that has not yet been reviewed by a native speaker; a unit test
 fails if any English string lacks a Spanish one. `src/index.html`'s own
 static labels (headings, button text, help copy `src/app.js` never rewrites at runtime) go through
@@ -1585,6 +1588,12 @@ To cut a release:
 
 1. Bump `"version"` in `package.json`.
 2. Tag the commit `vX.Y.Z` (matching that version exactly) and push the tag.
+3. Watch the `release-consistency` run (**Actions → release-consistency**); it starts once `release.yml`
+   has finished for the tag and must pass.
+4. File the manual Partner Center submission through the `Store submission for vX.Y.Z` issue that
+   run opens.
+5. Do the [five-minute human check](#before-announcing-a-release-a-five-minute-human-check) before
+   announcing the release.
 
 `.github/workflows/release.yml` does the rest: it runs the full test suite plus the release gate
 (`npm run gate` — builds `dist/release/band-coach.html` and drives it in headless Chromium to prove
@@ -1788,6 +1797,8 @@ release.
 - **Real MIDI keyboards, real electronic drum kits, real instruments through a real microphone:**
   untested beyond whichever specific hardware someone last ran the checklist above on — never
   claim broader hardware coverage than that.
+
+Contributing to the code: see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Licence
 
