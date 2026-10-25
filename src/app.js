@@ -27,6 +27,7 @@ import { watchForInstall } from './core/install-offer.js';
 import { setNoteNaming, name as noteNameFor } from './core/note-names.js';
 import { freqToMidi, midiToFreq, sanitizeA4, setReferencePitch, referencePitch } from './core/pitch.js';
 import { t, t as tl, en, setLocale, LOCALES } from './core/i18n.js';
+import DETECTION_FIGURES from './core/detection-figures.json';
 import { levelLabel, levelNumLabel } from './core/level-names.js';
 import { micErrorMessage } from './core/mic-error.js';
 import { CLEF_PATHS } from './notation/glyphs.js';
@@ -136,7 +137,9 @@ import { register as registerPathway } from './ui/pathway.js';
   // Language pick (Settings > Language, DB.prefs.locale): switches t(), <html lang>, the static labels and the nav landmark name. Text drawn once (the options list, the instrument sheet) is redrawn by the language control's handler; the rest picks the new language up the next time it is drawn.
   // Settings' two filled-in lines (storage kept, copy age) are set once on open, so a
   // language switch made from Settings redoes them in the new language.
-  function applyLocale(code) { setLocale(code); document.documentElement.lang = code; applyStaticLabels(document); $('mainNav').setAttribute('aria-label', t('nav.label')); $('playBtn').textContent = t(!sess ? 'stage.start' : paused ? 'stage.resume' : 'stage.pause'); if (!$('settingsView').hidden) { refreshKeepStatus(); refreshCopyAge(); } }
+  // Settings > How this works: the measured per-family detection scores, from the generated src/core/detection-figures.json (the same numbers docs/capabilities.md shows). Rebuilt on a language switch.
+  function renderDetectionFigures() { const ul = $('detectionFiguresList'); ul.textContent = ''; const FIGURE_NAMES = { keys: t('settings.figKeys'), fretted: t('settings.figFretted'), bowed: t('settings.figBowed'), wind: t('settings.figWind'), brass: t('settings.figBrass'), 'free-reed': t('settings.figFreeReed'), voice: t('settings.figVoice') }; DETECTION_FIGURES.families.forEach(f => { const li = document.createElement('li'); li.textContent = t('settings.figRow', { family: FIGURE_NAMES[f.family], score: f.meanF1.toFixed(3) }); ul.appendChild(li); }); }
+  function applyLocale(code) { setLocale(code); document.documentElement.lang = code; applyStaticLabels(document); renderDetectionFigures(); $('mainNav').setAttribute('aria-label', t('nav.label')); $('playBtn').textContent = t(!sess ? 'stage.start' : paused ? 'stage.resume' : 'stage.pause'); if (!$('settingsView').hidden) { refreshKeepStatus(); refreshCopyAge(); } }
   const deafWindow = createDeafWindow({ now: () => performance.now() });
   // ---------- accessibility: wake lock, dialog focus, reduced motion ----------
   const wakeLock = createWakeLock();

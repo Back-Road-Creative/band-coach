@@ -1,0 +1,105 @@
+{
+  "multipitch": {
+    "precision": 0.85,
+    "recall": 1,
+    "f1": 0.9189,
+    "matched": 34,
+    "ref": 34,
+    "est": 40
+  },
+  "families": [
+    {
+      "family": "keys",
+      "meanF1": 0.848
+    },
+    {
+      "family": "fretted",
+      "meanF1": 0.848
+    },
+    {
+      "family": "bowed",
+      "meanF1": 0.808
+    },
+    {
+      "family": "wind",
+      "meanF1": 0.808
+    },
+    {
+      "family": "brass",
+      "meanF1": 0.808
+    },
+    {
+      "family": "free-reed",
+      "meanF1": 0.848
+    },
+    {
+      "family": "voice",
+      "meanF1": 0.785
+    }
+  ],
+  "songs": [
+    {
+      "title": "Hot Cross Buns",
+      "f1": 0.741,
+      "matched": 10,
+      "ref": 17,
+      "est": 10
+    },
+    {
+      "title": "Mary Had a Little Lamb",
+      "f1": 0.791,
+      "matched": 17,
+      "ref": 26,
+      "est": 17
+    },
+    {
+      "title": "Au clair de la lune",
+      "f1": 0.842,
+      "matched": 8,
+      "ref": 11,
+      "est": 8
+    },
+    {
+      "title": "Twinkle, Twinkle, Little Star",
+      "f1": 0.727,
+      "matched": 24,
+      "ref": 42,
+      "est": 24
+    },
+    {
+      "title": "Frère Jacques",
+      "f1": 0.933,
+      "matched": 28,
+      "ref": 32,
+      "est": 28
+    },
+    {
+      "title": "London Bridge Is Falling Down",
+      "f1": 0.979,
+      "matched": 23,
+      "ref": 24,
+      "est": 23
+    },
+    {
+      "title": "Ode to Joy (theme)",
+      "f1": 0.824,
+      "matched": 21,
+      "ref": 30,
+      "est": 21
+    },
+    {
+      "title": "Amazing Grace (New Britain)",
+      "f1": 0.824,
+      "matched": 14,
+      "ref": 17,
+      "est": 17
+    },
+    {
+      "title": "Minuet in G",
+      "f1": 0.968,
+      "matched": 30,
+      "ref": 32,
+      "est": 30
+    }
+  ]
+}
