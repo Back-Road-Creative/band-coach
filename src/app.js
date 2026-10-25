@@ -2754,21 +2754,41 @@ import { register as registerPathway } from './ui/pathway.js';
       try { await backupLibrary().importAll(result.songs); }
       catch (e) { const error = en['backup.err.songsNotStored']; coach(t('backup.err.songsNotStored')); return { ok: false, error }; }
     }
-    const priorLatencyMs = DB && DB.latencyMs;
-    modelNow = Date.now(); DB = sanitizeDB(result.db, undefined, modelNow); DB.latencyMs = num(priorLatencyMs, DB.latencyMs, 0, 300); if (!Array.isArray(DB.custom)) DB.custom = [];
-    $('optNames').checked = DB.prefs.names; $('optTheme').value = DB.prefs.theme; applyTheme(DB.prefs.theme); $('optLocale').value = DB.prefs.locale; applyLocale(DB.prefs.locale); setNoteNaming(DB.prefs.noteNaming); setReferencePitch(DB.prefs.a4); $('optNoteSystem').value = DB.prefs.noteNaming.system; $('optAccidentals').value = DB.prefs.noteNaming.accidentals; $('optA4').value = DB.prefs.a4; setMod(DB.prefs.mod);
+    // The profile as it is now, current instrument included, so Undo can put it back.
+    if (MODS[mod]) DB.mods[mod] = S = sanitizeModel(mod, S, modelNow);
+    const before = JSON.parse(JSON.stringify(DB));
+    applyProfile(result.db);
     if (!writeDB()) { const error = en['backup.err.notSaved']; coach(t('backup.err.notSaved')); return { ok: false, error }; }
+    restoreUndoProfile = before; $('restoreUndo').hidden = false;
     coach(t('backup.restored'));
     return result;
   }
+  // Replaces DB, prefs, theme and mod with a restored (or un-restored) profile. The measured latency belongs to this device, so it is kept.
+  function applyProfile(db) {
+    const priorLatencyMs = DB && DB.latencyMs;
+    modelNow = Date.now(); DB = sanitizeDB(db, undefined, modelNow); DB.latencyMs = num(priorLatencyMs, DB.latencyMs, 0, 300); if (!Array.isArray(DB.custom)) DB.custom = [];
+    $('optNames').checked = DB.prefs.names; $('optTheme').value = DB.prefs.theme; applyTheme(DB.prefs.theme); $('optLocale').value = DB.prefs.locale; applyLocale(DB.prefs.locale); setNoteNaming(DB.prefs.noteNaming); setReferencePitch(DB.prefs.a4); $('optNoteSystem').value = DB.prefs.noteNaming.system; $('optAccidentals').value = DB.prefs.noteNaming.accidentals; $('optA4').value = DB.prefs.a4; setMod(DB.prefs.mod);
+  }
+  let restoreUndoProfile = null;
+  $('restoreUndoBtn').addEventListener('click', () => {
+    if (!restoreUndoProfile) return;
+    const db = restoreUndoProfile; restoreUndoProfile = null; $('restoreUndo').hidden = true;
+    applyProfile(db);
+    coach(writeDB() ? t('backup.undone') : t('storage.saveFailed'));
+  });
   $('backupSaveBtn').addEventListener('click', function () { this.blur(); saveBackup(); });
+  function restoreQuestion(exportedAt) {
+    if (exportedAt == null) return t('backup.confirmRestore');
+    let date; try { date = new Date(exportedAt).toLocaleDateString(DB.prefs.locale, { year: 'numeric', month: 'long', day: 'numeric' }); } catch (e) { return t('backup.confirmRestore'); }
+    return t('backup.confirmRestoreDated', { date });
+  }
   $('backupRestoreInput').addEventListener('change', function () {
     const file = this.files && this.files[0]; this.value = '';
     if (!file) return;
     if (checkFileSize(file, 'backup')) { coach(t('backup.err.tooLarge')); return; } // before a FileReader is built
     const reader = new FileReader();
     // Check the file before asking: a file that is not a backup is refused with the reason, and the "replace your progress" confirm is only raised for one that can be restored.
-    reader.onload = () => { const text = String(reader.result), check = importProgressFile(text); if (!check.ok) { coach(t(check.errorId)); return; } if (confirm(t('backup.confirmRestore'))) doImportProgress(check); };
+    reader.onload = () => { const text = String(reader.result), check = importProgressFile(text); if (!check.ok) { coach(t(check.errorId)); return; } if (confirm(restoreQuestion(check.exportedAt))) doImportProgress(check); };
     reader.onerror = () => coach(t('backup.readError'));
     reader.readAsText(file);
   });

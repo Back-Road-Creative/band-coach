@@ -22,7 +22,13 @@ const TUNE = fileURLToPath(new URL('../fixtures/acceptance/backup-restore/tune.a
 const KEY = 'bandcoach.v1';
 const BACKUP_NAME = 'band-coach-progress.json';
 const RESTORED = 'Backup restored.';
+// A backup with no date (formatVersion 1, hand-written) gets the plain question; one the app saved names its day,
+// read from the file itself and written the way the page writes it for an English learner.
 const CONFIRM = { type: 'confirm', message: 'Restore this backup? It will replace your current progress.' };
+const confirmFor = (saved) => {
+  const date = new Date(JSON.parse(saved.text).exportedAt).toLocaleDateString('en', { year: 'numeric', month: 'long', day: 'numeric' });
+  return { type: 'confirm', message: `Restore the backup from ${date}? It will replace your current progress.` };
+};
 const RESET_CONFIRM = { type: 'confirm', message: say('reset.confirm', { name: 'Keyboard' }) };
 const NOT_A_BACKUP = 'That does not look like a Band Coach backup file.';
 const TOO_NEW = 'This backup was made by a newer Band Coach. Update the app to restore it.';
@@ -162,7 +168,7 @@ test('A09 T1: save a backup, move on, restore it through the file chooser: the s
 
     await go(page, 'settings');
     const picked = await restore(page, saved.path, 'accept');
-    assert.deepEqual(picked.dialogs, [CONFIRM]);
+    assert.deepEqual(picked.dialogs, [confirmFor(saved)]);
     await waitSettingsSay(page, RESTORED);
     assert.equal(await textOf(page, 'coach'), RESTORED);
     assert.equal(await level(page), 'Level 3');
@@ -186,7 +192,7 @@ test('A09 T2: declining the confirm changes nothing; picking the same file again
 
     await go(page, 'settings');
     const declined = await restore(page, saved.path, 'dismiss');
-    assert.deepEqual(declined.dialogs, [CONFIRM], 'the one restore confirm was raised');
+    assert.deepEqual(declined.dialogs, [confirmFor(saved)], 'the one restore confirm was raised');
     assert.equal(await storedRaw(page), before, 'storage is byte-for-byte as it was');
     assert.equal(await level(page), 'Level 5');
     await go(page, 'settings');
@@ -196,7 +202,7 @@ test('A09 T2: declining the confirm changes nothing; picking the same file again
     // Negative control: the same file again, accepted, restores. The page
     // cleared the input after the first pick, so this fires a change again.
     const again = await restore(page, saved.path, 'accept');
-    assert.deepEqual(again.dialogs, [CONFIRM]);
+    assert.deepEqual(again.dialogs, [confirmFor(saved)]);
     await waitSettingsSay(page, RESTORED);
     assert.equal(await level(page), 'Level 3');
   }));
@@ -243,7 +249,7 @@ test('A09 T3: six bad backup files each say what is wrong and leave progress and
     // Negative control: the real file restores, so the refusals were about the files.
     await go(page, 'settings');
     const good = await restore(page, saved.path, 'accept');
-    assert.deepEqual(good.dialogs, [CONFIRM]);
+    assert.deepEqual(good.dialogs, [confirmFor(saved)]);
     await waitSettingsSay(page, RESTORED);
     assert.equal(await level(page), 'Level 3');
     assert.deepEqual(page.exceptions, [], 'no uncaught exceptions');
@@ -267,7 +273,7 @@ test('A09 T4: a restore that cannot be saved says so instead of "Backup restored
     t.diagnostic(`storage filled: ${JSON.stringify(fill)}`);
 
     const picked = await restore(page, saved.path, 'accept');
-    assert.deepEqual(picked.dialogs, [CONFIRM]);
+    assert.deepEqual(picked.dialogs, [confirmFor(saved)]);
     const now = await restoreVerdict(page);
     // (a) The write really failed: the page's own save-failed line is up.
     assert.equal(now.mainSay, say('storage.saveFailed'), '#mainSay shows the save-failed line, so the write really failed');
@@ -327,7 +333,7 @@ test('A09 T6: the same build opened under another file name restores a backup ma
 
     await go(page, 'settings');
     const picked = await restore(page, saved.path, 'accept');
-    assert.deepEqual(picked.dialogs, [CONFIRM]);
+    assert.deepEqual(picked.dialogs, [confirmFor(saved)]);
     await waitSettingsSay(page, RESTORED);
     assert.equal(await level(page), 'Level 3');
   }));
