@@ -2,7 +2,7 @@ import { judgePitch, OCTAVE_POLICY } from './core/judge.js';
 import { createDeafWindow } from './audio/deaf-window.js';
 import { exportProgress as exportProgressFile, importProgress as importProgressFile, migrate as migrateDB } from './core/progress-file.js';
 import { checkFileSize } from './ui/songs/import-route.js';
-import { safeSet, safeGet, getStorage, crossTabCheck } from './core/storage.js';
+import { safeSet, safeGet, getStorage, crossTabCheck, readRaw } from './core/storage.js';
 import { sanitizeDB as sanitizeDBCore } from './core/sanitize-db.js';
 import { createLibrary, indexedDbStore, memoryStore } from './song/library.js';
 import { captureToSong } from './song/capture.js';
@@ -772,7 +772,7 @@ import { register as registerPathway } from './ui/pathway.js';
   }
   // sanitizeDB (src/core/sanitize-db.js, with repairEventClocks): the pure gate between a stored or restored profile and the app; the tables it checks against come in here.
   function sanitizeDB(v, defaultLatencyMs, modelNow) { return sanitizeDBCore(v, defaultLatencyMs, modelNow, { MODS, MOD_IDS, WIND_KINDS, VOICE_KINDS, LOCALES, NOTATE_MOD_IDS, sanitizeModel, sanitizePanelData, skillMap: KBD_SONG_SKILL_MAP }); }
-  // The exact string this page last read from or wrote to storage. flushSave()
+  // The exact raw string this page last read from or wrote to storage (corrupt text included, never a re-serialised copy). flushSave()
   // compares against it so a page going away never clobbers a newer write made
   // by someone else in the meantime (another tab, a restored backup).
   let lastStored = null;
@@ -785,7 +785,7 @@ import { register as registerPathway } from './ui/pathway.js';
   // a corrupt record with a fresh one), except the evidence now survives.
   // Resolved once: reading window.localStorage can itself throw (see getStorage), so no other line may touch the bare global to reach the DB.
   const store = getStorage(window);
-  function loadDB() { modelNow = Date.now(); const got = safeGet(store.storage, KEY); lastStored = (got.ok && !got.corrupt && got.value !== null) ? JSON.stringify(got.value) : null; const v = (got.ok && !got.corrupt) ? migrateDB(got.value) : null; hasSavedMod = !!(v && v.prefs && MODS[v.prefs.mod] && TOOL_MOD_IDS.indexOf(v.prefs.mod) < 0); DB = sanitizeDB(v, actx ? (actx.outputLatency || actx.baseLatency || 0) * 1000 : 0, modelNow); mod = DB.prefs.mod; S = DB.mods[mod]; gates = gatesFor(DB.prefs.noiseFloor); setNoteNaming(DB.prefs.noteNaming); }
+  function loadDB() { modelNow = Date.now(); const got = safeGet(store.storage, KEY); lastStored = got.ok ? readRaw(store.storage, KEY) : null; const v = (got.ok && !got.corrupt) ? migrateDB(got.value) : null; hasSavedMod = !!(v && v.prefs && MODS[v.prefs.mod] && TOOL_MOD_IDS.indexOf(v.prefs.mod) < 0); DB = sanitizeDB(v, actx ? (actx.outputLatency || actx.baseLatency || 0) * 1000 : 0, modelNow); mod = DB.prefs.mod; S = DB.mods[mod]; gates = gatesFor(DB.prefs.noiseFloor); setNoteNaming(DB.prefs.noteNaming); }
   let saveTimer = null;
   // Tracks only whether #settingsSay currently shows OUR failed-save
   // message, so a successful save clears exactly that message and never an

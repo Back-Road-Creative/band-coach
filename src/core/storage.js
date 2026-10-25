@@ -99,3 +99,9 @@ export function crossTabCheck(storage, key, lastStored) {
   try { cur = storage.getItem(key); } catch (e) { return 'unreadable'; }
   return crossTabVerdict(cur === undefined ? null : cur, lastStored);
 }
+
+// The exact text storage holds under `key` (null when nothing is stored or the read threw). Compared
+// against, never parsed: a corrupt record or one with different whitespace must still equal itself.
+export function readRaw(storage, key) {
+  try { const raw = storage.getItem(key); return typeof raw === 'string' ? raw : null; } catch (e) { return null; }
+}

@@ -29,3 +29,23 @@ test('a storage event for some other key does not trigger the notice', async (t)
   await page.evaluate("window.dispatchEvent(new StorageEvent('storage', { key: 'unrelated', newValue: 'x', storageArea: localStorage }))");
   assert.equal(await page.evaluate("document.getElementById('mainSay').textContent"), '');
 });
+
+// lastStored must be the exact raw text read at boot, or a record this page itself loaded looks like "another tab wrote it".
+test('corrupt text under the key at boot does not lock saving: the first save writes, no other-tab notice', async (t) => {
+  const page = await launchPage(HTML_PATH, { initScript: "localStorage.setItem('bandcoach.v1', '{not json');" });
+  t.after(() => page.close());
+  await page.evaluate("window.__coach.setMod('kbd')");
+  await page.evaluate("window.dispatchEvent(new Event('pagehide'))");
+  await page.waitFor("localStorage.getItem('bandcoach.v1') !== '{not json'");
+  assert.doesNotMatch(await page.evaluate("document.getElementById('mainSay').textContent"), /another tab/i);
+  assert.equal(await page.evaluate("localStorage.getItem('bandcoach.v1.corrupt')"), '{not json', 'the corrupt text is still preserved');
+});
+
+test('a stored record whose raw text differs from its re-serialised form does not lock saving', async (t) => {
+  const page = await launchPage(HTML_PATH, { initScript: "localStorage.setItem('bandcoach.v1', '{ \"prefs\": { \"mod\": \"gtr\" } }');" });
+  t.after(() => page.close());
+  await page.evaluate("window.__coach.setMod('kbd')");
+  await page.evaluate("window.dispatchEvent(new Event('pagehide'))");
+  await page.waitFor("localStorage.getItem('bandcoach.v1').indexOf(' ') === -1");
+  assert.doesNotMatch(await page.evaluate("document.getElementById('mainSay').textContent"), /another tab/i);
+});

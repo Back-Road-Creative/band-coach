@@ -140,7 +140,7 @@ test('getStorage treats a null localStorage (some browsers) the same as a throwi
 });
 
 // crossTabVerdict: a second tab with an older copy of the data must not overwrite a newer write.
-import { crossTabVerdict, crossTabCheck } from '../../src/core/storage.js';
+import { crossTabVerdict, crossTabCheck, readRaw } from '../../src/core/storage.js';
 
 test('crossTabVerdict: storage still holds what this page last saw -> ok', () => {
   assert.equal(crossTabVerdict('{"a":1}', '{"a":1}'), 'ok');
@@ -164,4 +164,13 @@ test('crossTabRead: wraps getItem, mapping a throw to unreadable', () => {
   assert.equal(crossTabCheck(ok, 'k', 'x'), 'ok');
   assert.equal(crossTabCheck(ok, 'k', 'y'), 'changed');
   assert.equal(crossTabCheck(bad, 'k', 'x'), 'unreadable');
+});
+
+test('readRaw returns the exact text held, including a corrupt record; null when absent or unreadable', () => {
+  const s = fakeStorage(); s.setItem('k', '{ "a": 1 }');
+  assert.equal(readRaw(s, 'k'), '{ "a": 1 }');
+  s.setItem('k', '{bad');
+  assert.equal(readRaw(s, 'k'), '{bad');
+  assert.equal(readRaw(fakeStorage(), 'missing'), null);
+  assert.equal(readRaw({ getItem() { throw new Error('x'); } }, 'k'), null);
 });
