@@ -13,8 +13,12 @@ on:
   # non-push run; tests/unit/release-dry-run.test.mjs pins all three.
   workflow_dispatch:
 
+# Read-only by default: the install and test steps run with a token that cannot write.
+# The one job that publishes asks for more, on itself (a job split would break
+# the adjacency pins in tests/unit/release-workflow-budget-evidence.test.mjs).
+# tests/unit/release-workflow-security.test.mjs pins both.
 permissions:
-  contents: write
+  contents: read
   actions: read
 
 jobs:
@@ -23,6 +27,9 @@ jobs:
   # tests/unit/tag-deploys-wait-for-release-run.test.mjs pins that.
   release:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: read
     # This job runs the same two release-lane runs as ci.yml (here: the suite,
     # whose posttest runs the gate, then the gate again; ci.yml runs the gate
     # first), so its budget must stay at or above ci.yml's;
@@ -126,8 +133,10 @@ jobs:
       - name: check for HEADLESSMODE_DISPATCH_TOKEN
         if: github.event_name == 'push' && github.ref_type == 'tag'
         id: headlessmode-token
+        env:
+          DISPATCH_TOKEN: ${{ secrets.HEADLESSMODE_DISPATCH_TOKEN }}
         run: |
-          if [ -n "${{ secrets.HEADLESSMODE_DISPATCH_TOKEN }}" ]; then
+          if [ -n "$DISPATCH_TOKEN" ]; then
             echo "present=true" >> "$GITHUB_OUTPUT"
           else
             echo "present=false" >> "$GITHUB_OUTPUT"
