@@ -47,7 +47,11 @@ test('a 442 Hz tone reads as MIDI 69 when A4 is 442, and a little sharp at 440',
   await page.waitFor("document.getElementById('ioBtn').hidden === true", effectiveWaitMs(5000));
   await waitForAudioHeard(page);
   const midiNow = async () => { const deadline = Date.now() + effectiveWaitMs(6000); let m = null; while (Date.now() < deadline) { m = await page.evaluate('(() => { const h = window.__coach.heard(); return h && h.freq ? h.midi : null; })()'); if (m !== null) return m; await new Promise((r) => setTimeout(r, 50)); } return m; };
-  const at440 = await midiNow();
+  // The median of 11 readings, not the first one: the first frames after the
+  // tone starts can read a few cents off under a loaded CI runner (69.123,
+  // about 443 Hz, was seen), and this checks the steady reading.
+  const steadyMidi = async () => { const ms = []; for (let i = 0; i < 11; i++) { const m = await midiNow(); if (m !== null) ms.push(m); await new Promise((r) => setTimeout(r, 50)); } ms.sort((a, b) => a - b); return ms.length ? ms[ms.length >> 1] : null; };
+  const at440 = await steadyMidi();
   assert.ok(at440 > 69.05 && at440 < 69.11, `A4=440: expected ~69.0785, got ${at440}`);
   await setA4(page, 442);
   let m442 = null; const deadline = Date.now() + effectiveWaitMs(6000);
