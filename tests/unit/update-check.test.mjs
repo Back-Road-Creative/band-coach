@@ -7,7 +7,7 @@
 // and the dev-build no-request rule) is provable without a browser.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { checkForUpdate, compareVersions, parseVersion, VERSION_CHECK_URL, FALLBACK_DOWNLOAD_URL, CHECK_TIMEOUT_MS } from '../../src/core/update-check.js';
+import { checkForUpdate, compareVersions, parseVersion, VERSION_CHECK_URL, FALLBACK_DOWNLOAD_URL, CHECK_TIMEOUT_MS, MAX_NOTES_CHARS } from '../../src/core/update-check.js';
 import { DEV_VERSION } from '../../src/core/version.js';
 
 test('compareVersions compares numerically per component, not as strings', () => {
@@ -156,5 +156,6 @@ test('notes that are not a string, or only whitespace, are dropped', async () =>
 });
 test('over-long notes are capped at 500 characters', async () => {
   const r = await checkForUpdate({ currentVersion: '1.3.0', fetchImpl: BEHIND({ notes: 'x'.repeat(5000) }) });
-  assert.equal(r.notes.length, 500);
+  assert.equal(MAX_NOTES_CHARS, 500);
+  assert.equal(r.notes.length, MAX_NOTES_CHARS);
 });
