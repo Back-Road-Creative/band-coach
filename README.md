@@ -571,6 +571,15 @@ it finished. Nothing was saved.", shown once). Ear training, How to play it, Mus
 their own plain home the same way: a "Tools" group inside the instrument sheet, alongside
 Tuner/Capture a melody/Interval drill/Rhythm, open with no extra click once the sheet is open.
 
+The first time you pick an instrument, before any practice is logged, the side rail asks "Can I hear
+you? Play any note." The first clean note it hears from the microphone or a MIDI keyboard is named
+("Heard A4"), so you know your input works before a drill judges anything. A microphone that delivers
+only silence, or sound too quiet to judge, gets the same plain explanation the drills give.
+**Connect my instrument** opens the mic or MIDI connection. **Just look around** is for trying the
+app with no instrument: drills still run, a banner says nothing is scored, and nothing goes into your
+history or progress until you press **Score my playing**. Drums, ear training and the tools never
+show this card.
+
 Before the first session on a string instrument, the side rail offers **Tune first** (about 30
 seconds): it opens the Tuner on that instrument's own strings. **Skip** puts the offer away; either
 answer is remembered on this device (`bandcoach.v1.tuneAsked`), and an instrument already practised

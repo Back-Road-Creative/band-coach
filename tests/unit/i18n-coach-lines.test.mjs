@@ -9,7 +9,7 @@ import { en, es } from '../../src/core/i18n.js';
 
 const app = readFileSync(fileURLToPath(new URL('../../src/app.js', import.meta.url)), 'utf8');
 const params = s => [...s.matchAll(/\{(\w+)\}/g)].map(m => m[1]).sort().join(',');
-const KEYS = ['coach.levelUp', 'coach.levelUpNew', 'coach.fastPace', 'coach.warmPrefix', 'coach.capturedMelody', 'coach.tiredCap', 'coach.longDay', 'coach.warmUpTail', 'coach.welcomePath', 'coach.dayCap', 'coach.winGo', 'coach.endedOnWin'];
+const KEYS = ['coach.levelUp', 'coach.levelUpNew', 'coach.fastPace', 'coach.warmPrefix', 'coach.capturedMelody', 'coach.tiredCap', 'coach.longDay', 'coach.warmUpTail', 'coach.welcomePath', 'coach.dayCap', 'coach.winGo', 'coach.endedOnWin', 'coach.exploring', 'coach.exploreEnded'];
 
 // coach.idle / coach.idleBack predate this block (top of the table, already translated).
 const PRE_EXISTING = ['coach.idle', 'coach.idleBack'];

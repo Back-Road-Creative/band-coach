@@ -99,3 +99,15 @@ export function stepDiagnosis(diag, last, { sinceSec, graceSec = DIAGNOSIS_GRACE
   if (!diag.message) return { last: diag.state, say: null, clear: last !== null && last !== 'ok' };
   return { last: diag.state, say: diag.message, clear: false };
 }
+
+// F4 first-run input proof: the note a new learner's first clean sound names. The newest `need` frames must all
+// read as the same clear pitch over the gate, so one stray frame (a pick scrape, a breath) is never taken as proof
+// the input works. frames: { rms, clarity, midi } oldest-first, midi possibly fractional. Returns the MIDI number
+// heard, rounded to the nearest semitone, or null.
+export function heardNote(frames, { gate = SILENCE_RMS, clarityGate = 0.8, need = 3 } = {}) {
+  const list = Array.isArray(frames) ? frames : [];
+  if (list.length < need) return null;
+  const tail = list.slice(-need), m = Math.round(tail[0].midi);
+  if (!Number.isFinite(m)) return null;
+  return tail.every(f => Number.isFinite(f.midi) && Math.round(f.midi) === m && f.rms >= gate && f.clarity > clarityGate) ? m : null;
+}

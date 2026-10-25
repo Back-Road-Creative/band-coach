@@ -138,6 +138,15 @@
         <button type="button" class="primary big" id="playBtn" hidden>Start</button>
         <button type="button" id="endBtn" hidden data-i18n="side.end">End session</button>
       </div>
+      <div class="backup-nudge" id="inputProof" hidden>
+        <span data-i18n="side.proofAsk">Can I hear you? Play any note.</span>
+        <span id="inputProofSay" role="status"></span>
+        <span><button type="button" class="small" id="inputProofConnect" data-i18n="side.proofConnect">Connect my instrument</button> <button type="button" class="small" id="inputProofLook" data-i18n="side.proofLook">Just look around</button></span>
+      </div>
+      <div class="backup-nudge" id="exploreBanner" role="status" hidden>
+        <span data-i18n="side.exploring">Just looking around: nothing is scored or saved to your history.</span>
+        <span><button type="button" class="small" id="exploreStop" data-i18n="side.exploreStop">Score my playing</button></span>
+      </div>
       <div class="backup-nudge" id="tuneFirst" role="status" hidden>
         <span id="tuneFirstText" data-i18n="side.tuneFirst">Strings drift between sessions. Tune first? It takes about 30 seconds.</span>
         <span><button type="button" class="small" id="tuneFirstGo" data-i18n="side.tuneFirstGo">Tune first</button> <button type="button" class="small" id="tuneFirstSkip" data-i18n="side.tuneFirstSkip">Skip</button></span>
