@@ -604,6 +604,11 @@ A clean Check of the whole piece saves that speed as the song's best: the end sc
 70% speed." (or "… (up from 60%)" when it beats the last best), and the song list shows "Clean at
 70%" next to the song. Learn-mode tries never set it.
 
+After a judged try, **Hear your try** plays back what the app heard, then the target phrase. No
+sound is recorded: the try is rebuilt from the notes it caught, each at the moment you played it,
+so a wrong or late note is heard wrong or late (a pitchless clap or tap plays as a click). Starting
+another try, or moving past a Listen step, clears it.
+
 Opening any song shows one row of plain actions directly above its practise section: **Edit
 notes**, **Play along**, **Export**, **Share**, **Save a copy**, **Print** — a starter tune's Edit
 notes saves a copy first (starter tunes are never edited in place) and opens that. Export reveals
