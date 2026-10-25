@@ -16,7 +16,7 @@ import { PCKEYS } from './core/pckeys.js';
 import { createTeardown } from './core/session-teardown.js';
 // Merge slots: a unit in flight adds its imports by replacing ONLY its own
 // slot line, so parallel branches never edit adjacent lines.
-import { recordError, getErrors } from './core/error-log.js';
+import { recordError, getErrors, persistErrors } from './core/error-log.js';
 import { resolveAppVersion, DEV_VERSION } from './core/version.js';
 import { loadPack, packStatus, createIndexedDBStore, packManifestUrl, DEFAULT_MODEL_PACK } from './core/model-pack.js';
 import { checkForUpdate, FALLBACK_DOWNLOAD_URL } from './core/update-check.js';
@@ -111,6 +111,8 @@ import { register as registerPathway } from './ui/pathway.js';
   'use strict';
   const $ = id => document.getElementById(id);
   const errorGate = createNoticeGate();
+  // Same-tab only: the error notice asks for a reload, and Copy diagnostics after it must still list what went wrong.
+  try { persistErrors(window.sessionStorage, 'bandcoach.v1.errors'); } catch (e) {}
   function noteFault(where, err) { try {
     recordError(where, err); if (!errorGate.allow(Date.now()) || $('errorNotice')) return;
     document.body.insertAdjacentHTML('afterbegin', '<div id="errorNotice" class="backup-nudge" role="alert"><span>' + t('error.generic') + '</span><button class="small">' + t('side.backupDismiss') + '</button></div>');
