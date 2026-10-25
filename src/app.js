@@ -59,7 +59,7 @@ import { kitFrame, kitRegions, pieceAt, THRONE } from './instruments/how/drum-ki
 import { layoutPercussionMeasure } from './notation/percussion.js';
 import { songFor, KBD_SONG_SKILL_MAP } from './instruments/kbd-songs.js';
 import { buildMods } from './instruments/mods.js';
-import { tunerTunings } from './instruments/how-kind.js';
+import { tunerTunings, howKindFor } from './instruments/how-kind.js';
 import { itemReview, contentRev } from './instruments/review-ledger.js';
 import { isReviewCurrent, instrumentUnreviewed } from './instruments/review.js';
 import { starterSongs } from './song/starter/index.js';
@@ -1705,8 +1705,17 @@ import { register as registerPathway } from './ui/pathway.js';
     g.strokeStyle = '#e9edf6'; g.lineWidth = 2; g.strokeRect(xs[loW] + 1, y0 + 1, xs[hiW] + kw - xs[loW] - 2, h - 2);
     kbdOverviewRect = { x: x0, y: y0, w: w, h: h, lo: 21, hi: 108, win: { lo: lo, hi: hi, x: xs[loW], y: y0, w: xs[hiW] + kw - xs[loW], h: h } };
   }
+  // The board follows the player's saved capo and left-handed choice (the same
+  // instrumentSetup the "How to play it" panel reads). A capo is a fretted-guitar
+  // idea only (howKindFor === 'fretboard'), never on a fretless board. Left-handed
+  // reverses the string rows exactly as the How panel does (fretboard.js displayIndex,
+  // fingerings.js stringRowOrder): the nut stays on the left, the lowest string's row
+  // swaps with the highest's; pitches, strings and frets never change.
+  let fretViewLast = null;
   function drawFret(M, e, W, H) {
-    const ns = M.tuning.length, nf = M.frets, x0 = W * 0.15, x1 = W * 0.97, y0 = H * 0.16, y1 = H * 0.84, fx = f => f === 0 ? x0 - W * 0.035 : x0 + (x1 - x0) * ((f - 0.5) / nf), sy = s => y0 + (y1 - y0) * ((s - 1) / (ns - 1));
+    const setup = instrumentSetup(instrumentById[mod], { fingeringsStore: (DB.panels && DB.panels.fingerings) || null, prefs: DB.prefs }), lh = !!setup.leftHanded, ns = M.tuning.length, nf = M.frets, capo = !M.fretless && howKindFor(instrumentById[mod]) === 'fretboard' ? Math.min(setup.capo, nf) : 0;
+    const x0 = W * 0.15, x1 = W * 0.97, y0 = H * 0.16, y1 = H * 0.84, fx = f => f === 0 ? x0 - W * 0.035 : x0 + (x1 - x0) * ((f - 0.5) / nf), sy = s => y0 + (y1 - y0) * (((lh ? ns + 1 - s : s) - 1) / (ns - 1));
+    const fv = fretViewLast = { leftHanded: lh, capo: capo, nutX: x0, W: W, dots: [] };
     rr(x0, y0 - H * 0.05, x1 - x0, y1 - y0 + H * 0.1, 6); g.fillStyle = '#2a1c12'; g.fill();
     [3, 5, 7, 9, 12].forEach(f => { if (f > nf) return; g.fillStyle = '#ffffff22'; g.beginPath(); g.arc(fx(f), (y0 + y1) / 2 + (f === 12 ? -H * 0.12 : 0), H * 0.022, 0, 7); g.fill(); if (f === 12) { g.beginPath(); g.arc(fx(f), (y0 + y1) / 2 + H * 0.12, H * 0.022, 0, 7); g.fill(); } });
     // Fretless (bowed) fingerboards draw only the nut, not a grid of fret
@@ -1716,9 +1725,11 @@ import { register as registerPathway } from './ui/pathway.js';
     if (M.fretless) { const x = x0; g.strokeStyle = '#e9edf6'; g.lineWidth = 6; g.beginPath(); g.moveTo(x, y0 - H * 0.05); g.lineTo(x, y1 + H * 0.05); g.stroke(); }
     else for (let f = 0; f <= nf; f++) { const x = x0 + (x1 - x0) * f / nf; g.strokeStyle = f === 0 ? '#e9edf6' : '#8a8f99'; g.lineWidth = f === 0 ? 6 : 2; g.beginPath(); g.moveTo(x, y0 - H * 0.05); g.lineTo(x, y1 + H * 0.05); g.stroke(); if (f > 0) { g.fillStyle = '#93a0bd'; font(H * 0.05, 600); g.textAlign = 'center'; g.fillText(String(f), fx(f), H * 0.97); } }
     for (let s = 1; s <= ns; s++) { g.strokeStyle = '#c9ced9'; g.lineWidth = 1 + (s / ns) * 3; g.beginPath(); g.moveTo(x0 - W * 0.06, sy(s)); g.lineTo(x1, sy(s)); g.stroke(); g.fillStyle = '#93a0bd'; font(H * 0.055, 600); g.textAlign = 'right'; g.fillText(s + (DB.prefs.names ? '  ' + nname(M.tuning[ns - s]) : ''), x0 - W * 0.07, sy(s) + H * 0.02); }
-    const dot = (s, f, col, txt, a) => { g.globalAlpha = a; g.fillStyle = col; g.beginPath(); g.arc(fx(f), sy(s), H * 0.05, 0, 7); g.fill(); g.globalAlpha = 1; if (txt) { g.fillStyle = '#06101d'; font(H * 0.05); g.textAlign = 'center'; g.fillText(txt, fx(f), sy(s) + H * 0.018); } };
-    if (heard && heard.freq && MODS[mod].input === 'pluck') { const p = pc(heard.midi); for (let s = 1; s <= ns; s++) for (let f = 0; f <= nf; f++) if (pc(M.tuning[ns - s] + f) === p) dot(s, f, '#9fb4d8', '', 0.25); }
-    if (e && e.info.kind === 'note' && (e.reveal || e.failed)) { if (e.info.string) dot(e.info.string, e.info.fret, accent(), DB.prefs.names ? nname(e.info.midi) : '', 1); else for (let s = 1; s <= ns; s++) for (let f = 0; f <= nf; f++) if (pc(M.tuning[ns - s] + f) === pc(e.info.midi)) dot(s, f, accent(), '', 0.85); }
+    // capo: frets behind it (nut side) are dimmed and unplayable; the bar sits at fret `capo`
+    if (capo > 0) { const cx = fx(capo), nx = x0 - W * 0.06; g.fillStyle = '#05070c99'; g.fillRect(Math.min(nx, cx), y0 - H * 0.05, Math.abs(cx - nx), y1 - y0 + H * 0.1); g.strokeStyle = '#f3c52f'; g.lineWidth = H * 0.035; g.lineCap = 'round'; g.beginPath(); g.moveTo(cx, y0 - H * 0.04); g.lineTo(cx, y1 + H * 0.04); g.stroke(); g.lineCap = 'butt'; }
+    const dot = (s, f, col, txt, a, kind) => { fv.dots.push({ string: s, fret: f, x: fx(f), y: sy(s), kind: kind }); g.globalAlpha = a; g.fillStyle = col; g.beginPath(); g.arc(fx(f), sy(s), H * 0.05, 0, 7); g.fill(); g.globalAlpha = 1; if (txt) { g.fillStyle = '#06101d'; font(H * 0.05); g.textAlign = 'center'; g.fillText(txt, fx(f), sy(s) + H * 0.018); } };
+    if (heard && heard.freq && MODS[mod].input === 'pluck') { const p = pc(heard.midi); for (let s = 1; s <= ns; s++) for (let f = capo; f <= nf; f++) if (pc(M.tuning[ns - s] + f) === p) dot(s, f, '#9fb4d8', '', 0.25, 'hint'); }
+    if (e && e.info.kind === 'note' && (e.reveal || e.failed)) { if (e.info.string && e.info.fret >= capo) dot(e.info.string, e.info.fret, accent(), DB.prefs.names ? nname(e.info.midi) : '', 1, 'target'); else for (let s = 1; s <= ns; s++) for (let f = capo; f <= nf; f++) if (pc(M.tuning[ns - s] + f) === pc(e.info.midi)) dot(s, f, accent(), '', 0.85, 'target'); }
     if (e && e.info.kind === 'chord') { g.fillStyle = '#e9edf6'; font(H * 0.2); g.textAlign = 'center'; g.fillText(e.info.sym, W * 0.5, H * 0.56); if (typeof e.score === 'number') { g.fillStyle = '#05070c'; rr(W * 0.3, H * 0.66, W * 0.4, H * 0.04, 4); g.fill(); g.fillStyle = e.score > 0.5 ? '#5be08a' : accent(); rr(W * 0.3, H * 0.66, W * 0.4 * c01(e.score), H * 0.04, 4); g.fill(); } }
   }
   // `offScale` (a reading beyond +-50 cents) draws a triangle pointing off
@@ -3022,6 +3033,7 @@ import { register as registerPathway } from './ui/pathway.js';
   if (__DEBUG_HOOK__) Object.assign(hook, { judgeChord: judgeChord, chroma: chroma });
   if (__DEBUG_HOOK__) Object.assign(hook, { groove: () => groove, grooveLast: () => grooveLast, grooveBpm: () => S.grooveBpm, grooveOn: v => { grooveOn = !!v; task = null; groove = null; }, grooveInject: (midi, atAudioTime) => { const fire = () => { if (audioNow() >= atAudioTime) onNote(midi, true); else setTimeout(fire, 4); }; fire(); } });
   //
+  if (__DEBUG_HOOK__) Object.assign(hook, { fretView: () => fretViewLast });
   if (__DEBUG_HOOK__) Object.assign(hook, { kbdTarget: () => kbdTargetDbg });
   if (__DEBUG_HOOK__) Object.assign(hook, { showMe: () => $('showMeBtn').click() });
   //
