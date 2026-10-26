@@ -155,7 +155,7 @@ connected, "Set my keyboard's range" (under "Set up input") asks you to play you
 your highest, and shows "Range: C3 to C5 (25 keys)". Two keys less than an octave apart are
 refused with a reason and the app keeps waiting. The range is kept on this device for that
 keyboard's name, in the same saved data as your settings (so it is in "Save a backup" and goes with
-"Erase all my data"), and "Clear" removes it. While a range is stored, keyboard lessons that ask
+"Erase all my data"), and "Forget this range" removes it. While a range is stored, keyboard lessons that ask
 for single notes are moved by whole octaves to sit inside it; a lesson that cannot be moved to fit
 is left as it is. Songs, chords and two-hand lessons are not moved. With no range stored nothing changes.
 
