@@ -274,7 +274,8 @@ export function indexedDbStore(idbFactory, dbName) {
           db.createObjectStore(STORE_NAME);
         }
       };
-      req.onsuccess = () => resolve(req.result);
+      // Let go when a delete or upgrade asks (Settings > Erase all my data), so it is never blocked by this page's own connections.
+      req.onsuccess = () => { const db = req.result; db.onversionchange = () => db.close(); resolve(db); };
       req.onerror = () => reject(req.error || new Error('failed to open IndexedDB database "' + dbName + '"'));
     });
   }
