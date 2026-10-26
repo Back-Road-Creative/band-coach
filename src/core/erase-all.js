@@ -2,11 +2,11 @@
 // the stores (`storage`, `indexedDB`, `caches`, any of them absent) so a unit
 // test needs no browser. Each store is tried on its own and a throw in one
 // never stops the others; the result says honestly whether all of it went.
-export const APP_KEY_PREFIX = 'bandcoach';
+const APP_KEY_PREFIX = 'bandcoach';
 // Keys written before the app could enumerate them, removed by name even if the store cannot list its keys.
-export const APP_KEYS = ['bandcoach.v1', 'bandcoach.v1.corrupt', 'bandcoach.v1.backupAt', 'bandcoach.v1.tuneAsked', 'bandcoach.v1.errors'];
+const APP_KEYS = ['bandcoach.v1', 'bandcoach.v1.corrupt', 'bandcoach.v1.backupAt', 'bandcoach.v1.tuneAsked', 'bandcoach.v1.errors'];
 export const APP_DATABASES = ['bandcoach-songs', 'band-coach-model-packs'];
-export const APP_CACHE_PREFIX = 'band-coach-pages-v';
+const APP_CACHE_PREFIX = 'band-coach-pages-v';
 
 function eraseKeys(storage) {
   if (!storage) return true;
@@ -22,8 +22,7 @@ function eraseDatabase(indexedDB, name, timeoutMs) {
     try { req = indexedDB.deleteDatabase(name); } catch (e) { done(false); return; }
     if (!req) { done(false); return; }
     req.onsuccess = () => done(true); req.onerror = () => done(false);
-    // The app's own open connections (song library, model pack) are never closed, so the browser reports 'blocked'. The delete stays queued and finishes the moment the page reloads and they close: that is pending, not failed.
-    req.onblocked = () => done(true);
+    // 'blocked' is not done: the app's own connections close when asked, so one still open belongs to another tab, and the timeout reports it.
   });
 }
 async function eraseCaches(caches) {

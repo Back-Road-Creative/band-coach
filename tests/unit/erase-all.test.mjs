@@ -38,9 +38,11 @@ test('deletes each app database and reports a blocked one as not ok', async () =
   assert.equal((await eraseAll({ indexedDB: bad })).ok, false);
 });
 
-test('a blocked delete (the app still holds the database open) counts as queued for the reload', async () => {
-  const indexedDB = { deleteDatabase: () => { const req = {}; setTimeout(() => req.onblocked(), 0); return req; } };
-  assert.equal((await eraseAll({ indexedDB })).ok, true);
+test('a blocked delete is not done: it counts once it succeeds, and one that stays blocked (another tab) is not ok', async () => {
+  const unblocks = { deleteDatabase: () => { const req = {}; setTimeout(() => req.onblocked && req.onblocked(), 0); setTimeout(() => req.onsuccess(), 5); return req; } };
+  assert.equal((await eraseAll({ indexedDB: unblocks }, { timeoutMs: 200 })).ok, true);
+  const stays = { deleteDatabase: () => { const req = {}; setTimeout(() => req.onblocked && req.onblocked(), 0); return req; } };
+  assert.equal((await eraseAll({ indexedDB: stays }, { timeoutMs: 20 })).ok, false);
 });
 
 test('a database delete that never answers does not hang the erase', async () => {

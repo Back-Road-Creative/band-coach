@@ -36,7 +36,7 @@ saved and imported tunes; Progress takes you straight to your practice history. 
 one you're already on does nothing, so it's always safe to press. Instrument is the one place to
 change what you're playing: it names your current instrument (or invites you to choose one the
 first time) and opens the full instrument list as a sheet; picking one closes the sheet again.
-Settings gathers everything you rarely touch — theme, note naming, backups, reset (it asks before clearing an instrument's progress), an "Erase all my data" button (it asks first, says it cannot be undone and points to "Save a backup"; it then removes your progress, the kept unreadable copy, saved songs, settings, any downloaded model pack and this app's offline copy from this device, and reloads — nothing was ever sent anywhere, so there is nothing to delete elsewhere), update checks
+Settings gathers everything you rarely touch — theme, note naming, backups, reset (it asks before clearing an instrument's progress), an "Erase all my data" button (it asks first, says it cannot be undone and points to "Save a backup"; it then removes your progress, the kept unreadable copy, saved songs, settings, any downloaded model pack and this app's offline copy from this device, and reloads; if another Band Coach tab still has your songs open it says so, asks you to close it and does not reload — nothing was ever sent anywhere, so there is nothing to delete elsewhere), update checks
 and the "How this works" explainer — in one plain screen, away from the controls you use every
 practice session.
 
