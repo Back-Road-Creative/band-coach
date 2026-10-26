@@ -1,3 +1,4 @@
 {
-  "1.10.0": "Coach lines and songs messages now show in Spanish, and phone feedback no longer leaves an empty strip mid-session."
+  "1.10.0": "Coach lines and songs messages now show in Spanish, and phone feedback no longer leaves an empty strip mid-session.",
+  "1.11.0": "Starter songs for every instrument and practice grooves on the drum kit, with a per-song speed slider and playback of your try. A metronome, a consistency record in place of streaks, and lessons that stay inside your MIDI keyboard's range. Settings can now erase all your data, and a backup shows its date before you restore it."
 }
