@@ -4,6 +4,7 @@ import { exportProgress as exportProgressFile, importProgress as importProgressF
 import { checkFileSize } from './ui/songs/import-route.js';
 import { safeSet, safeGet, getStorage, crossTabCheck, readRaw } from './core/storage.js';
 import { sanitizeDB as sanitizeDBCore } from './core/sanitize-db.js';
+import { startCapture, captureNote, fitToRange, rangeKeys, sanitizeRanges } from './core/midi-range.js';
 import { createLibrary, indexedDbStore, memoryStore } from './song/library.js';
 import { captureToSong } from './song/capture.js';
 import { toAudioTime, judgeTap, medianLatency } from './core/timing.js';
@@ -798,7 +799,7 @@ import { register as registerPathway } from './ui/pathway.js';
     return s;
   }
   // sanitizeDB (src/core/sanitize-db.js, with repairEventClocks): the pure gate between a stored or restored profile and the app; the tables it checks against come in here.
-  function sanitizeDB(v, defaultLatencyMs, modelNow) { return sanitizeDBCore(v, defaultLatencyMs, modelNow, { MODS, MOD_IDS, WIND_KINDS, VOICE_KINDS, LOCALES, NOTATE_MOD_IDS, sanitizeModel, sanitizePanelData, skillMap: KBD_SONG_SKILL_MAP }); }
+  function sanitizeDB(v, defaultLatencyMs, modelNow) { const d = sanitizeDBCore(v, defaultLatencyMs, modelNow, { MODS, MOD_IDS, WIND_KINDS, VOICE_KINDS, LOCALES, NOTATE_MOD_IDS, sanitizeModel, sanitizePanelData, skillMap: KBD_SONG_SKILL_MAP }); d.prefs.midiRange = sanitizeRanges(v && v.prefs && v.prefs.midiRange); return d; } // F13: per-keyboard lowest/highest key (src/core/midi-range.js); kept here, in the one gate every load and restore runs through, so it rides in the backup
   // The exact raw string this page last read from or wrote to storage (corrupt text included, never a re-serialised copy). flushSave()
   // compares against it so a page going away never clobbers a newer write made
   // by someone else in the meantime (another tab, a restored backup).
@@ -1043,6 +1044,8 @@ import { register as registerPathway } from './ui/pathway.js';
     }
     return { kind: kind, pool: pool, planKind: planKind, planBlind: planBlind, seqLen: seqLen, planApplyId: planApplyId };
   }
+  // F13: single notes only (chords and hands-together are not a phrase to shift); ids stay put so progress is still counted per lesson note, only the pitch asked for moves by whole octaves.
+  function fitKbdToRange(t) { const r = activeMidiRange(); if (!r || !t.els.length || !t.els.every(e => e.id[0] === 'n' && e.info.kind === 'note')) return; const f = fitToRange(t.els.map(e => e.info.midi), r.range); if (f.shift) t.els.forEach((e, i) => { e.info = inf('n' + f.notes[i]); }); }
   function fillTaskItems(t, kind, pool, d, M, seqLen, planApplyId, mk) {
     if (kind === 'one' || kind === 'chord' || kind === 'hold' || kind === 'hands') t.els.push(mk(pick(lastItem, pool, modelNow)));
     else if (kind === 'seq') {
@@ -1085,6 +1088,7 @@ import { register as registerPathway } from './ui/pathway.js';
     // boundary) serialises it whole for a test.
     const mk = id => { S.tick++; it(id, modelNow).seen = S.tick; const e = { id: id, info: inf(id), failed: false, t0: 0, rt: 0, reveal: shouldReveal({ exposures: it(id, modelNow).reps }) && !planBlind }; if (isStagedPairId(id)) e.pair = { phase: 'learn', on: {}, off: {}, learnOn: [], notes: [], rhOns: [], rhOffs: [], last: null }; return e; };
     fillTaskItems(t, kind, pool, d, M, pl.seqLen, pl.planApplyId, mk);
+    if (mod === 'kbd') fitKbdToRange(t); // F13: a stored keyboard range keeps the target notes playable
     if (M.input === 'answer') { t.kind = 'ear'; if (!t.els.length) t.els.push(mk(pick(lastItem, pool, modelNow))); const e = t.els[0], fam = pool.filter(id => id[0] === e.id[0] && (e.id[0] !== 'i' || id.slice(-1) === e.id.slice(-1))); t.choices = fam.slice().sort((a, b) => (inf(a).semi || 0) - (inf(b).semi || 0) || (a < b ? -1 : 1)); t.root = 55 + ((S.tick * 5) % 12); }
     if (planKind) planProgress[planKind] = (planProgress[planKind] || 0) + 1;
     return t;
@@ -2464,7 +2468,7 @@ import { register as registerPathway } from './ui/pathway.js';
   // is holding it any more, so one port's note-off (or a blur/unplug
   // releasing that port) can never cancel the SAME pitch held on another
   // port.
-  let midiPorts = [], midiPortInputs = [], midiHeard = new Set(), midiLog = [], realMidiHeld = new Set(), midiParsers = new Map(), midiBlinkTimer = null, noteState = createNoteState();
+  let midiPorts = [], midiPortInputs = [], midiHeard = new Set(), midiLog = [], realMidiHeld = new Set(), midiParsers = new Map(), midiBlinkTimer = null, noteState = createNoteState(), rangeCap = null, lastMidiName = null;
   // midiPortInputs is kept parallel to midiPorts rather than held on the port
   // objects themselves: midiPorts is handed to the debug hook and crosses the
   // page boundary by value, and a live MIDIInput does not survive that trip.
@@ -2493,6 +2497,7 @@ import { register as registerPathway } from './ui/pathway.js';
       else ioState('', t(mod === 'rhy' ? 'io.padOptional' : 'io.keysOptional'));
     }
     if (!$('midiDetails').hidden) renderMidiDetails();
+    $('midiRangeBtn').hidden = detailsBtn.hidden; renderMidiRange();
     refreshInputProof();
   }
   // Blinks #midiActDot on ANY MIDI byte -- exercise running or not -- so a
@@ -2507,6 +2512,18 @@ import { register as registerPathway } from './ui/pathway.js';
     $('midiDetailsText').textContent = lines.join('\n');
   }
   $('midiDetailsBtn').addEventListener('click', function () { this.blur(); const el = $('midiDetails'); el.hidden = !el.hidden; if (!el.hidden) renderMidiDetails(); });
+  // F13: "Set my keyboard's range" -- lowest key, then highest key, kept per keyboard name in DB.prefs.midiRange (src/core/midi-range.js).
+  const midiDevName = input => input.name || 'MIDI device';
+  function activeMidiRange() { const r = DB.prefs.midiRange || {}, names = [lastMidiName].concat(midiPorts.map(p => p.name)); for (const n of names) if (n && r[n]) return { name: n, range: r[n] }; return null; }
+  const midiRangeText = r => t('range.line', { low: nname(r.low, true), high: nname(r.high, true), keys: rangeKeys(r) });
+  function renderMidiRange() { const a = activeMidiRange(); $('midiRangeLine').textContent = a ? midiRangeText(a.range) : ''; $('midiRangeClear').hidden = !a; }
+  function rangeNote(input, evt) {
+    const s = captureNote(rangeCap, evt.note, evt.velocity); if (s === rangeCap) return; rangeCap = s;
+    if (s.step === 'done') { (DB.prefs.midiRange || (DB.prefs.midiRange = {}))[midiDevName(input)] = s.range; lastMidiName = midiDevName(input); rangeCap = null; save(); renderMidiRange(); coach(midiRangeText(s.range)); }
+    else coach(t(s.reason === 'too-narrow' ? 'range.tooNarrow' : s.reason === 'not-higher' ? 'range.notHigher' : 'range.high'));
+  }
+  $('midiRangeBtn').addEventListener('click', function () { this.blur(); rangeCap = rangeCap ? null : startCapture(); if (rangeCap) coach(t('range.low')); else renderMidiRange(); });
+  $('midiRangeClear').addEventListener('click', function () { this.blur(); const a = activeMidiRange(); if (a) { delete DB.prefs.midiRange[a.name]; save(); } renderMidiRange(); });
   // ---------- MIDI out: "Play it for me" ----------
   // midiOutPorts: the live MIDIAccess.outputs that are connected; midiOutId: the one the learner picked in
   // #midiOutSelect ('' = none, and then no Play it for me button is offered -- nothing to play to). midiOutBusy
@@ -2571,6 +2588,8 @@ import { register as registerPathway } from './ui/pathway.js';
     let parser = midiParsers.get(input); if (!parser) { parser = createMidiParser(); midiParsers.set(input, parser); }
     parser.feed(d).forEach(evt => {
       if (evt.type === 'cc') { if (evt.controller === 64) onPedal(input, evt.value); return; }
+      if (rangeCap) { if (evt.type === 'on') rangeNote(input, evt); return; } // the range walk-through is learning a key; it is not an answer
+      if (evt.type === 'on') lastMidiName = midiDevName(input);
       if (evt.type === 'on' && kitLearnSink && kitLearnSink(input.name, evt.note)) return; // the kit set-up walk-through is learning this pad; it is not a hit
       const note = kitNote(input, evt.note);
       if (evt.type === 'on') { proofHeard(note); noteState.noteOn(input, evt.channel, note); realMidiHeld.add(note); onNote(note, true, 'midi'); } else { noteState.noteOff(input, evt.channel, note); if (!noteState.isHeld(note)) realMidiHeld.delete(note); onNoteOff(note, 'midi'); }
