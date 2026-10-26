@@ -42,16 +42,52 @@ test('the packaging step refuses placeholder identity', () => {
   );
 });
 
-test('the plain dist:appx target is not what the workflow runs', () => {
+// Split the workflow into steps (each starts with "      - " at step indent).
+function steps() {
   const text = workflow();
-  const plain = text
-    .split('\n')
-    .filter((line) => /^\s*run: npm run dist:appx\s*$/.test(line));
-  assert.deepEqual(
-    plain,
-    [],
-    'dist:appx falls back to placeholders silently; the workflow must not call it',
-  );
+  const body = text.slice(text.indexOf('\n  package:'));
+  return body.split(/^      - /m).slice(1);
+}
+const PR_ONLY = /^\s+if: github\.event_name == 'pull_request'\s*$/m;
+const NOT_PR = /^\s+if: github\.event_name != 'pull_request'\s*$/m;
+
+test('the plain dist:appx target runs only on pull_request, never on tag or dispatch', () => {
+  const plain = steps().filter((s) => /^\s*run: npm run dist:appx\s*$/m.test(s));
+  assert.equal(plain.length, 1, 'exactly one step runs the non-submission dist:appx (the PR build)');
+  assert.match(plain[0], PR_ONLY, 'dist:appx falls back to placeholders silently; it must be gated to pull_request');
+});
+
+test('the workflow has a pull_request trigger limited to store/** and this workflow', () => {
+  const text = workflow();
+  const on = text.slice(text.indexOf('\non:'), text.indexOf('\npermissions:'));
+  assert.match(on, /pull_request:\s*\n\s+paths:\s*\n\s+- 'store\/\*\*'\s*\n\s+- '\.github\/workflows\/store-package\.yml'/);
+  assert.match(on, /workflow_dispatch/);
+  assert.match(on, /tags:\s*\n\s*- 'v\*'/);
+});
+
+test('every step that runs dist:appx:submission or reads the identity variables is off pull_request', () => {
+  const hits = steps().filter((s) => /dist:appx:submission|vars\.BC_/.test(s));
+  assert.ok(hits.length >= 1);
+  for (const s of hits) assert.match(s, NOT_PR, `step must be skipped on pull_request:\n${s}`);
+});
+
+test('the manifest check, which rejects placeholder identity, is skipped on pull_request', () => {
+  const s = steps().find((x) => /verify-appx\.mjs/.test(x));
+  assert.match(s, NOT_PR);
+});
+
+test('a pull_request run still launches the packaged app and runs WACK', () => {
+  for (const re of [/--smoke-test/, /run-wack\.ps1/]) {
+    const s = steps().find((x) => re.test(x));
+    assert.ok(s, `missing step for ${re}`);
+    assert.doesNotMatch(s, NOT_PR);
+    assert.doesNotMatch(s, /ref_type == 'tag'/);
+  }
+});
+
+test('superseded pull_request runs are cancelled, other runs never', () => {
+  const text = workflow();
+  assert.match(text, /^concurrency:\s*\n\s+group: .*\n\s+cancel-in-progress: \$\{\{ github\.event_name == 'pull_request' \}\}/m);
 });
 
 test('all three identity variables are still passed to the packaging step', () => {

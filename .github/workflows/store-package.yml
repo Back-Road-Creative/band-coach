@@ -5,9 +5,21 @@ on:
   push:
     tags:
       - 'v*'
+  # A dependency bump under store/ (Electron, electron-builder) is otherwise
+  # first packaged and launched at tag time. A PR run builds the unsubmitted
+  # package (no Store identity, nothing uploaded to the Store) and launches it.
+  pull_request:
+    paths:
+      - 'store/**'
+      - '.github/workflows/store-package.yml'
 
 permissions:
   contents: read
+
+# Only a superseded PR run is cancelled; a tag or manual run always finishes.
+concurrency:
+  group: store-package-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   # release.yml is the only tag workflow that runs the test suite and the
@@ -83,7 +95,17 @@ jobs:
         working-directory: store
         run: npm ci
 
+      # A PR has no Store identity (repository variables are not the point of a
+      # dependency bump, and a fork PR cannot read them), so it packages with
+      # the placeholders. That .appx proves the build and launch only; it is
+      # never uploaded to the Store.
+      - name: package the appx (pull request, placeholder identity)
+        if: github.event_name == 'pull_request'
+        working-directory: store
+        run: npm run dist:appx
+
       - name: package the appx
+        if: github.event_name != 'pull_request'
         working-directory: store
         # BC_IDENTITY_NAME / BC_PUBLISHER / BC_PUBLISHER_DISPLAY_NAME are
         # repository VARIABLES (public manifest values, not secrets).
@@ -101,6 +123,9 @@ jobs:
           BC_PUBLISHER_DISPLAY_NAME: ${{ vars.BC_PUBLISHER_DISPLAY_NAME }}
 
       - name: verify the built appx manifest
+        # Skipped on a pull_request: it rejects the placeholder identity that
+        # a PR build deliberately carries.
+        if: github.event_name != 'pull_request'
         # Reads AppxManifest.xml out of the .appx electron-builder just wrote
         # and fails the run if it doesn't match what was supposed to ship
         # (wrong/unstamped version, leftover placeholder identity, or

@@ -60,7 +60,7 @@ test('Store steps are marked unconfirmed, not invented', () => {
   const rest = d.slice(from + 1);
   const next = rest.search(/^## /m);
   const store = next === -1 ? rest : rest.slice(0, next);
-  assert.match(store, /confirm with JP/i, 'the Store section itself must say "confirm with JP" for the steps this repo cannot verify');
+  assert.match(store, /confirm with the maintainer/i, 'the Store section itself must say "confirm with the maintainer" for the steps this repo cannot verify');
 });
 
 test('every workflow the runbook names exists in this repo', () => {

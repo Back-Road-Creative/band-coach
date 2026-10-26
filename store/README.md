@@ -175,7 +175,14 @@ whether the mic/MIDI prompt behaves as the browser build does. See "What was NOT
 `BC_IDENTITY_NAME`/`BC_PUBLISHER`/`BC_PUBLISHER_DISPLAY_NAME` aren't set. That fallback exists so a
 local build works before real identity values exist — it is **not** what CI runs.
 
-`npm run dist:appx:submission` is what the tag-triggered `store-package` CI workflow runs. It is the
+`store-package` runs on `v*` tags, on manual dispatch, and on any pull request that touches
+`store/**` (or the workflow itself), so an Electron or electron-builder bump is packaged and
+launched before a tag. A pull-request run uses `npm run dist:appx` (placeholder identity, no
+repository variables needed), launches the packaged app, and runs the Windows App Certification
+Kit; it skips the manifest check, which rejects placeholder identity, and its `.appx` is not a
+release candidate. Superseded pull-request runs are cancelled; tag and manual runs never are.
+
+`npm run dist:appx:submission` is what the tag and manual `store-package` runs execute. It is the
 same build with the identity guard turned on
 (`apply-identity.mjs --require-identity`): it refuses (non-zero exit, naming exactly which of the
 three env vars are missing) to write a config that still has ANY placeholder identity field. Use it
