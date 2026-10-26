@@ -153,6 +153,23 @@ The `e4b6fb5` section above is kept as it stood at `4f0f210`. Four statements in
 | Unresolved limitations | Step time estimates are untimed. README check 2 (notes from a real keyboard) is human-only. The release-suite browser cap reads the load once at the start, so a box that fills during a local run can fail timing-sensitive tests that pass in CI. |
 | Reviewer / date | _unsigned_ |
 
+## Candidate: `d52b562` for v1.11.0, 2026-10-26
+
+| Field | Value |
+|---|---|
+| Commit | `d52b5628b9e7e65b36705791ca2175072731fc6c` (`main` on 2026-10-26, the 1.11.0 bump #618; 75 commits since `v1.10.0`). Supersedes `3d60d1a`. |
+| Last published release | `v1.10.0`, tagged 2026-10-22 at `7a00ca1`; release asset sha256 `1fd8a52eedc549da73d73a6a0e1b92c944364a47897e82cbd1658d7eb0a0da4e` |
+| Candidate artifact | `npm run stage` at `d52b562` (clean tree, `SOURCE_DATE_EPOCH` = commit time): `dist/release/band-coach.html` sha256 `228013ad45d89d9c0ab0711f79fce1da3b92020073ced6e3222496b09357750e`, 781,905 bytes, staged to a downloaded copy of band-coach.html for the hand run. CI's release job built the same bytes for #618 (run 40342390381). Pages and the Store package wrap this same file. |
+| Platforms | As README 'Browser and device support': headless Chromium in CI on every commit; windowed Chrome on Windows only through the Windows lane below and the hand check; Firefox and Safari untested; phone sizes emulated only, real phones untested. |
+| Inputs | As README 'Browser and device support': computer keys, on-screen keys, a stubbed MIDI keyboard and a fake microphone in CI; real MIDI keyboards, e-kits and instruments through a real microphone untested beyond the hardware of the last hand run. |
+| Content | As README 'Beginner pathway status': every row's content review is provisional (no reviewer yet). The new starter songs, drum grooves and first-week paths are labelled practice-grade, not reviewed by a player. |
+| Dependencies | Node v22.22.2; `npm audit`: found 0 vulnerabilities. axe-core 4.14.0 (lock). Store package on Electron 45.0.0 (#573) and electron-builder 26.18.0 (#572). |
+| Automated checks | CI green on `d52b562` (main run 40350197442; jobs plan 121667841520, development 121667933827, release 121667933874, test 121679580675 all success): development suites 4290 tests (4289 pass, 0 fail, 1 skipped); release block 340 tests (340 pass, 0 fail, 0 todo, 0 skipped), release file 781,905 bytes, sha256 `228013ad…`, the same as the staged file. Stage evidence (`band-coach.html.evidence.json`, beside the staged copy): `# pass 340 # fail 0 # todo 0 # skipped 0`, commit `d52b5628`, dirty false, ran 2026-10-26T15:46:27Z, with `BAND_COACH_TEST_CONCURRENCY=3`. |
+| Windows lane | **Not a full pass: W3 is an outstanding post-deploy gate.** Run from WSL on Windows (Chrome/155.0.8059.85, Node v24.19.0) against the staged file, sha256 `228013ad45d89d9c0ab0711f79fce1da3b92020073ced6e3222496b09357750e` (the lane checked it), lane scripts at `d52b562`, `--expect-version 1.11.0`. Report `.data/worktrees/bc-logs/cand-d52b5628/winlane.json`, sha256 `609ab3f0b3da97eab1c7eb0c45aeb841d3a0d1bfdc56249e146c8851dc68d9c7`: W1 PASS, W2 PASS, W3 FAIL, W4 PASS, W5 PASS. W3 failed because the update check compares with the published `version.json`, which says 1.10.0 until the v1.11.0 tag deploys Pages ("You're running the latest version (1.10.0)."), as at `3d60d1a`. Post-deploy gate, before announcing: after Pages serves `version.json` 1.11.0, rerun W3 on this file (`--expect-version 1.11.0`) and add the result here in a docs commit. Steps 1 and 5 are covered by W1 and W5; step 6 is not covered until then. |
+| Manual runs | **device-only: README "Before announcing a release: a five-minute human check" steps 2, 3, 4, 7 and 8 need a real MIDI keyboard, a microphone and instrument, speakers and a phone; run on a downloaded copy of band-coach.html (sha256 `228013ad45d89d9c0ab0711f79fce1da3b92020073ced6e3222496b09357750e`) or the downloaded release file, naming the machine, browser version, hardware, time taken and verdict. New since v1.10.0 and reachable only on real hardware: the MIDI key-range step (#616) and the drum grooves on a real kit (#608).** |
+| Unresolved limitations | Step time estimates are untimed. README check 2 (notes from a real keyboard) is human-only. The release-suite browser cap reads the load once at the start, so a box that fills during a local run can fail timing-sensitive tests that pass in CI. |
+| Reviewer / date | _unsigned_ |
+
 ## D2 / E9 evidence ledger
 
 What the automated suite proves for each interaction, device and accessibility dimension, and
