@@ -2881,7 +2881,18 @@ import { register as registerPathway } from './ui/pathway.js';
   let updateWaiting = false;
   function applyStand() { $('optStand').checked = DB.prefs.stand; document.body.classList.toggle('stand', DB.prefs.stand); }
   function showUpdateIfIdle() { if (updateWaiting && !document.body.classList.contains('practising')) $('updateReady').hidden = false; }
-  function showBackupNudge(text) { $('backupNudgeText').textContent = text; $('backupNudge').hidden = false; }
+  // `copy` (the kept unreadable text) is passed only by the start-up notice; every other call hides the save-the-copy button.
+  let unreadableCopy = null;
+  function showBackupNudge(text, copy) { $('backupNudgeText').textContent = text; unreadableCopy = typeof copy === 'string' && copy ? copy : null; $('backupNudgeSaveCopy').hidden = unreadableCopy === null; $('backupNudge').hidden = false; }
+  function saveUnreadableCopy() {
+    if (unreadableCopy === null) return;
+    const blob = new Blob([unreadableCopy], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = 'band-coach-unreadable-progress.txt';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    coach(t('backup.unreadableSaved'));
+  }
   function noteBackupMade(t) { lastBackupAt = t; try { localStorage.setItem(BACKUP_AT_KEY, String(t)); } catch (e) {} }
   function backupLibrary() { try { return createLibrary(indexedDbStore(indexedDB, 'bandcoach-songs')); } catch (e) { return createLibrary(memoryStore()); } }
   // The song store opens lazily, so a blocked or broken IndexedDB surfaces here, not in backupLibrary():
@@ -2946,6 +2957,7 @@ import { register as registerPathway } from './ui/pathway.js';
     reader.onerror = () => coach(t('backup.readError'));
     reader.readAsText(file);
   });
+  $('backupNudgeSaveCopy').addEventListener('click', saveUnreadableCopy);
   $('backupNudgeDismiss').addEventListener('click', () => { $('backupNudge').hidden = true; });
   $('updateReload').addEventListener('click', () => location.reload());
   try { watchForUpdate(navigator.serviceWorker, () => { updateWaiting = true; showUpdateIfIdle(); }); } catch (e) { /* no service worker here */ }
@@ -3210,7 +3222,7 @@ import { register as registerPathway } from './ui/pathway.js';
     updateNavState();
   }
   // A boot step that throws used to leave a blank or half-wired page with no word to the learner; say so, with the error text, instead (and record it, so the error log, console and release gate see the failed boot too).
-  try { loadDB(); applyLocale(DB.prefs.locale); if (!Array.isArray(DB.custom)) DB.custom = []; $('optNames').checked = DB.prefs.names; applyStand(); $('optTheme').value = DB.prefs.theme; $('optLocale').value = DB.prefs.locale; applyTheme(DB.prefs.theme); $('optNoteSystem').value = DB.prefs.noteNaming.system; $('optAccidentals').value = DB.prefs.noteNaming.accidentals; $('optA4').value = DB.prefs.a4; buildPicker(); pickerAsSheet = hasSavedMod; instrumentChosen = hasSavedMod; setInstrumentSheetOpen(!hasSavedMod); buildNav(); setMod(mod); if (loadedCorrupt) showBackupNudge(t('side.dataUnreadable')); booting = false; requestAnimationFrame(frame);
+  try { loadDB(); applyLocale(DB.prefs.locale); if (!Array.isArray(DB.custom)) DB.custom = []; $('optNames').checked = DB.prefs.names; applyStand(); $('optTheme').value = DB.prefs.theme; $('optLocale').value = DB.prefs.locale; applyTheme(DB.prefs.theme); $('optNoteSystem').value = DB.prefs.noteNaming.system; $('optAccidentals').value = DB.prefs.noteNaming.accidentals; $('optA4').value = DB.prefs.a4; buildPicker(); pickerAsSheet = hasSavedMod; instrumentChosen = hasSavedMod; setInstrumentSheetOpen(!hasSavedMod); buildNav(); setMod(mod); if (loadedCorrupt) { let kept = null; try { kept = store.storage.getItem(KEY + '.corrupt'); } catch (e) {} showBackupNudge(t('side.dataUnreadable'), kept); } booting = false; requestAnimationFrame(frame);
     if (store.blocked) { saveFailedShown = true; $('settingsSay').textContent = t('storage.saveFailed'); $('mainSay').textContent = t('storage.saveFailed'); }
   } catch (e) { recordError('boot', e); const p = document.createElement('div'); p.id = 'bootFailed'; p.setAttribute('role', 'alert'); p.style.cssText = 'padding:12px;margin:8px;border:2px solid #c0392b;background:#fff;color:#111'; p.textContent = t('boot.failed', { error: (e && e.message) || String(e) }); document.body.insertBefore(p, document.body.firstChild); }
   const hook = !__DEBUG_HOOK__ ? null : { state: () => S, db: () => DB, sess: () => sess, task: () => task, cur: cur, note: onNote, answer: answer, tap: onTap, bar: () => bar, playing: () => playing, setMod: setMod, testSource: testSource, heard: () => heard, yin: yin, cap: () => cap, tuner: () => tunerState, tunerLock: () => tunerLock, deaf: () => deafWindow.isDeaf(), deafUntil: () => deafWindow.until(), exportProgress: doExportProgress, importProgress: doImportProgress, audioNow: audioNow, modelNow: () => modelNow, plan: () => sessionPlan, planProgress: () => planProgress,
