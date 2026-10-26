@@ -149,7 +149,7 @@ measured plain-JS number does not clear the bar the plan set.
 listening to the mic live. Transcribing a loaded audio file is offline: at
 1.836× a 3-minute recording takes about 5½ minutes on this CPU. That is slow but
 workable behind a progress bar. So a file-import-only T1 pack is a product call
-for JP, not something this measurement rules out. The comment at
+for the maintainer, not something this measurement rules out. The comment at
 `src/audio/file-frames.js:17` rejected basic-pitch as "~2.2 MB". That figure is
 refuted here: the weights are 742,392 B (fp32) and 187,545 B (int8). The comment
 should be corrected whenever that file is next touched.
