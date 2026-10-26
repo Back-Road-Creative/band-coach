@@ -13,7 +13,7 @@
     "dist:appx:submission": "npm run prepare-app -- --require-release && node scripts/apply-identity.mjs --require-identity && electron-builder --win appx --config electron-builder.generated.json"
   },
   "devDependencies": {
-    "electron": "44.7.0",
+    "electron": "45.0.0",
     "electron-builder": "26.18.0"
   }
 }
