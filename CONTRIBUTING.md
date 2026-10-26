@@ -16,8 +16,10 @@ places that already say how to work on it.
 1. You need Node 22 or newer.
 2. `npm ci`
 3. `npm run build` writes `dist/band-coach.html`.
-4. `npm test`. Run `npm run build` first: the tests open the built page, and a test whose page is
-   missing fails at once.
+4. `npm test`. It builds first (`pretest`), runs the development suites, and then runs the release
+   gate (`posttest`, the same as `npm run test:release`), so a green `npm test` includes the release
+   file. For a quicker loop run one family: `npm run test:unit` for the pure-logic tests, or
+   `npm run test:release` for the gate on `dist/release/band-coach.html` alone.
 5. Keep a change to one thing, and update the README (or the doc that describes it) in the same
    change.
 
@@ -29,3 +31,5 @@ places that already say how to work on it.
 - Say plainly in the README what a learner can and cannot rely on. Do not claim a browser, device
   or instrument works until someone has actually tried it; the README's "Browser and device support"
   section lists what has.
+- There are no git hooks to install: nothing runs on commit or push, so run the tests yourself
+  before you open a change. (`.codex/hooks.json` configures an AI coding agent only; you can ignore it.)

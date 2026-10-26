@@ -130,9 +130,9 @@ Per starter song (keys profile), F1 with matched of reference notes and notes es
 Until a measured live-microphone harness exists, read every `mic-single-note` row as practice-grade
 detection, as the First release section already says.
 
-## First release (assumed, JP to confirm)
+## First release (assumed, the maintainer to confirm)
 
-This section is a working assumption for what "first release" targets, not a decision — **JP to
+This section is a working assumption for what "first release" targets, not a decision — **the maintainer to
 confirm** before it drives any external claim:
 
 - Learners: beginner adults and teens.
