@@ -108,5 +108,5 @@ test('docs/capabilities.md has a row for every instrument matching the computed 
 
 test('docs/capabilities.md marks its first-release assumptions as awaiting the product owner', () => {
   const doc = readFileSync(DOC_PATH, 'utf8');
-  assert.ok(/JP to confirm/.test(doc), 'expected the phrase "JP to confirm" in docs/capabilities.md');
+  assert.ok(/the maintainer to confirm/.test(doc), 'expected the phrase "the maintainer to confirm" in docs/capabilities.md');
 });

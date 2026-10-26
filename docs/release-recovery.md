@@ -6,7 +6,7 @@ A tag push makes three things at once: a GitHub release with `band-coach.html` a
 (`.github/workflows/store-package.yml`). A bad release has to be pulled from each one separately,
 and none of the workflows has a "withdraw" mode. This page is the order to do it in and what each
 step does and does not fix. It describes only what is in this repo; anything about the Microsoft
-Store that this repo cannot show is marked **confirm with JP**.
+Store that this repo cannot show is marked **confirm with the maintainer**.
 
 Who does it: whoever can run `gh` with write access to `Back-Road-Creative/band-coach` and
 trigger workflows. Nothing here needs a code change except the last section's new release.
@@ -89,7 +89,7 @@ Things to know:
   old build until it is reloaded.
 - If the run is refused or the deploy step fails, look at the `github-pages` environment's
   deployment rules under repo Settings. Whether a tag ref is allowed there is a setting this repo
-  does not record: **confirm with JP**.
+  does not record: **confirm with the maintainer**.
 
 ## 3. The Store build
 
@@ -102,7 +102,7 @@ Partner Center upload is tracked. The submission itself is made by hand, outside
   `Store submission for vX.Y.Z` issue that it is withdrawn and close it.
 - If it **has** been submitted or is live: what Partner Center lets you do (cancel a submission in
   review, roll back to an earlier package, how long certification takes for the replacement) is not
-  something this repo documents or can test. **Confirm with JP** before promising anyone a time.
+  something this repo documents or can test. **Confirm with the maintainer** before promising anyone a time.
   Do not assume a published Store version can be recalled.
 - A replacement appx takes a new version: the appx version is derived from the repo-root
   `package.json` (`store/README.md`, "Where the appx version comes from"), and the Store rejects a
@@ -111,7 +111,7 @@ Partner Center upload is tracked. The submission itself is made by hand, outside
 ## 4. What to tell learners
 
 Say it in everyday words, once, wherever the download link was shared (the Headless Mode site is
-notified by `release.yml` and also polls daily; **confirm with JP** how its copy gets edited).
+notified by `release.yml` and also polls daily; **confirm with the maintainer** how its copy gets edited).
 Cover: what went wrong, whether progress was affected, what to do now. Template:
 
 > We withdrew Band Coach X.Y.Z because <plain description, e.g. "it could lose practice progress
