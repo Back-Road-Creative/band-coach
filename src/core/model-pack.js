@@ -140,7 +140,8 @@ export function createIndexedDBStore({
       req.onupgradeneeded = () => {
         if (!req.result.objectStoreNames.contains(storeName)) req.result.createObjectStore(storeName);
       };
-      req.onsuccess = () => resolve(req.result);
+      // Let go when a delete or upgrade asks, so erasing all data is never blocked by this page's own connection.
+      req.onsuccess = () => { const db = req.result; db.onversionchange = () => db.close(); resolve(db); };
       req.onerror = () => reject(req.error);
     });
   }
