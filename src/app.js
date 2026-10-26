@@ -19,6 +19,7 @@ import { createTeardown } from './core/session-teardown.js';
 // slot line, so parallel branches never edit adjacent lines.
 import { recordError, getErrors, persistErrors } from './core/error-log.js';
 import { resolveAppVersion, DEV_VERSION } from './core/version.js';
+import { eraseAll } from './core/erase-all.js';
 import { loadPack, packStatus, createIndexedDBStore, packManifestUrl, DEFAULT_MODEL_PACK } from './core/model-pack.js';
 import { checkForUpdate, FALLBACK_DOWNLOAD_URL } from './core/update-check.js';
 import { requestKeep, readKeep } from './core/storage-keep.js';
@@ -841,7 +842,10 @@ import { register as registerPathway } from './ui/pathway.js';
     ['settingsSay', 'mainSay'].forEach(id => { const el = $(id); el.textContent = t('storage.otherTab') + ' '; const b = document.createElement('button'); b.type = 'button'; b.textContent = t('storage.reload'); b.addEventListener('click', () => location.reload()); el.appendChild(b); });
   }
   window.addEventListener('storage', e => { if (e.key === KEY && e.newValue !== null && e.newValue !== lastStored && (!e.storageArea || e.storageArea === store.storage)) markOtherTab(); });
+  // Set while "Erase all my data" runs: nothing in this page may write the DB back before the reload.
+  let erasing = false;
   function writeDB() {
+    if (erasing) return false;
     if (MODS[mod]) DB.mods[mod] = S = sanitizeModel(mod, S, modelNow);
     // Before the instrument question is answered, a setting the learner changed is stored, but not the boot-time default instrument, so the next visit still asks.
     const candidate = JSON.stringify(instrumentChosen ? DB : Object.assign({}, DB, { prefs: Object.assign({}, DB.prefs, { mod: null }) }));
@@ -2941,6 +2945,7 @@ import { register as registerPathway } from './ui/pathway.js';
     applyProfile(db);
     coach(writeDB() ? t('backup.undone') : t('storage.saveFailed'));
   });
+  $('eraseAllBtn').addEventListener('click', function () { this.blur(); if (!confirm(t('erase.confirm'))) return; if (sess) endSession(); erasing = true; if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; } eraseAll({ storage: store.storage, session: window.sessionStorage, indexedDB: window.indexedDB, caches: window.caches }).then(r => { if (r.ok) location.reload(); else { erasing = false; coach(t("erase.partial")); } }); });
   $('backupSaveBtn').addEventListener('click', function () { this.blur(); saveBackup(); });
   function restoreQuestion(exportedAt) {
     if (exportedAt == null) return t('backup.confirmRestore');
