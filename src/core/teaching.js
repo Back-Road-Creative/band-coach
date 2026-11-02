@@ -21,7 +21,7 @@ export const PHASES = ['explain', 'demo', 'guided', 'check', 'repair', 'transfer
 
 // Which loop phase a src/song/lesson.js buildLessonPlan step belongs to. A
 // step with no passRule (the "listen" kind) is pure explanation -- nothing
-// is judged. "rhythm"/"pitches" are the guided, narrower-than-the-whole-
+// is judged. "rhythm"/"pitches"/"drum-order" are the guided, narrower-than-the-whole-
 // phrase steps; "phrase-slow"/"tempo-ladder"/"chain"/"whole" are where the
 // learner is actually checked against the full phrase at speed. "repair" is
 // the short isolated exercise repairFor (below) builds.
@@ -29,7 +29,7 @@ export function phaseOf(step) {
   if (step && step.kind === 'demo') return 'demo';
   if (step && step.kind === 'transfer') return 'transfer';
   if (!step || !step.passRule) return 'explain';
-  if (step.kind === 'rhythm' || step.kind === 'pitches') return 'guided';
+  if (step.kind === 'rhythm' || step.kind === 'pitches' || step.kind === 'drum-order') return 'guided';
   if (step.kind === 'repair') return 'repair';
   if (step.kind === 'phrase-slow' || step.kind === 'tempo-ladder' || step.kind === 'chain' || step.kind === 'whole') return 'check';
   return 'explain';

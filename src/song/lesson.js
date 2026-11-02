@@ -486,6 +486,18 @@ export function buildLessonPlan(song, partId, instrument, opts = {}) {
     // would misrepresent them.
     const difficulty = phraseDifficulty(phrase, { beatTicks: bt, key: song.key }).score;
     steps.push({ kind: 'listen', phraseIndex: pi, bars: phrase.bars, originTick, bpm: bpmAt(originTick, 1), tempoScale: 1, notes, passRule: null, difficulty });
+    // A percussion part's own untimed step (the drum twin of "pitches"
+    // below): the right drums in the right order, no clock. Strict on purpose
+    // -- every hit named and in place, nothing extra -- because order is the
+    // only thing judged here (practice.js's judgeDrumOrder); minPieceRate
+    // also marks it as a drum step for assessed.js, and a mic hit the mic
+    // cannot name is ignored by passesRule exactly as on the timed steps.
+    if (isPercussion) {
+      steps.push({
+        kind: 'drum-order', phraseIndex: pi, bars: phrase.bars, originTick, bpm: 0, tempoScale: 0, notes, difficulty,
+        passRule: { hitRate: 1, maxMeanErrorMs: null, maxExtras: 0, minPieceRate: 1 }
+      });
+    }
     steps.push({
       kind: 'rhythm', phraseIndex: pi, bars: phrase.bars, originTick, bpm: bpmAt(originTick, 1), tempoScale: 1, notes, difficulty,
       // maxExtras: 0 -- a wrong note struck alongside a chord (practice.js
@@ -546,6 +558,34 @@ export function buildLessonPlan(song, partId, instrument, opts = {}) {
   }
 
   return { songId: song.id, partId, instrumentId: instrument.id, level, fit, steps };
+}
+
+// ---------------------------------------------------------------------------
+// Saved lessons from before the drum-order step existed
+// ---------------------------------------------------------------------------
+
+// A saved lesson stores a bare stepIndex, and a drum plan now has one extra
+// step per phrase, so an index saved earlier would land one or more steps
+// early. Lessons saved by the new code carry this tag on the end of their
+// key's `tempo` field (src/ui/songs.js adds it for a drum plan only); an
+// entry found WITHOUT it is a pre-drum-order save of a drum part and is
+// upgraded here. The old plan is exactly the new plan minus its drum-order
+// steps, so old index i is the i-th non-drum-order step -- the same musical
+// step, never one earlier, and a learner who was on "rhythm" stays on it
+// rather than being sent back to the new step.
+export const DRUM_ORDER_TEMPO_TAG = '#drum-order';
+export function upgradeLegacyDrumEntry(plan, entry) {
+  if (!entry) return null;
+  const oldToNew = [];
+  plan.steps.forEach((s, i) => { if (s.kind !== 'drum-order') oldToNew.push(i); });
+  if (!Number.isInteger(entry.stepIndex) || entry.stepIndex < 0 || entry.stepIndex >= oldToNew.length) return null;
+  const stepIndex = oldToNew[entry.stepIndex];
+  return {
+    ...entry,
+    key: { ...entry.key, tempo: entry.key.tempo + DRUM_ORDER_TEMPO_TAG },
+    stepIndex,
+    tail: entry.tail.map((row) => ({ ...row, stepIndex })),
+  };
 }
 
 // ---------------------------------------------------------------------------

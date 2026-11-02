@@ -45,7 +45,7 @@ import { rangeForInstrument } from '../audio/range.js';
 import { starterSongs, starterGrooves, starterById, startersFor } from '../song/starter/index.js';
 import { createLibrary, memoryStore, indexedDbStore } from '../song/library.js';
 import { validateSong, songBarCount, barsOf, MAX_SONG_BARS } from '../song/model.js';
-import { buildLessonPlan, nextStep, creditFor } from '../song/lesson.js';
+import { buildLessonPlan, nextStep, creditFor, DRUM_ORDER_TEMPO_TAG, upgradeLegacyDrumEntry } from '../song/lesson.js';
 import { INSTRUMENTS } from '../instruments/index.js';
 import { capabilityFor } from '../instruments/capability.js';
 import { importerFor, checkFileSize } from './songs/import-route.js';
@@ -185,6 +185,7 @@ const STEP_WORDS = {
   listen: 'Listen',
   rhythm: 'Clap the rhythm',
   pitches: 'Play the notes, any speed',
+  'drum-order': 'Play the drums in order, any speed',
   'phrase-slow': 'Play it slowly',
   'tempo-ladder': 'Play it up to speed',
   chain: 'Play the phrases together',
@@ -212,6 +213,7 @@ function fidelityNoticeFor(song, api) {
 function stepHint(step) {
   if (step.kind === 'listen') return 'Just listen this time.';
   if (step.kind === 'pitches') return 'Play the notes in order. Speed does not matter yet.';
+  if (step.kind === 'drum-order') return 'Play the drums in order. Speed does not matter yet.';
   if (step.kind === 'tempo-ladder') return 'Play along at ' + step.bpm + ' beats a minute.';
   if (step.bpm) return 'Play along at ' + step.bpm + ' beats a minute.';
   return 'Play along.';
@@ -1146,13 +1148,20 @@ function mountSongsPanel(hostEl, api) {
     // the lesson starts at step 1 with no message, same as always. Check
     // never reads (or, in saveLesson() below, writes) the saved-place list
     // at all, so it always starts at step 1.
-    const lessonKeyValue = lessonKey({ song: arrangedSong, partId, instrumentId, setup, arrangement, assistance, hands });
+    const plainKey = lessonKey({ song: arrangedSong, partId, instrumentId, setup, arrangement, assistance, hands });
+    // A drum plan carries the drum-order step; its saves are tagged on the
+    // key's tempo field so an older save of the same part (made before that
+    // step existed, whose stepIndex counts one step fewer per phrase) is
+    // told apart and upgraded onto the same musical step -- see
+    // upgradeLegacyDrumEntry (src/song/lesson.js).
+    const isDrumPlan = plan.steps.some((s) => s.kind === 'drum-order');
+    const lessonKeyValue = isDrumPlan ? { ...plainKey, tempo: plainKey.tempo + DRUM_ORDER_TEMPO_TAG } : plainKey;
+    const savedLessons = sanitizeLessonList((store.get() || {}).lessons);
+    const legacyDrumCount = plan.steps.filter((s) => s.kind !== 'drum-order').length;
     const foundEntry = mode === 'check' || opts.fresh
       ? null
-      : sanitizeLessonEntry(
-        findLesson(sanitizeLessonList((store.get() || {}).lessons), lessonKeyValue),
-        plan.steps.length
-      );
+      : sanitizeLessonEntry(findLesson(savedLessons, lessonKeyValue), plan.steps.length)
+        || (isDrumPlan ? upgradeLegacyDrumEntry(plan, sanitizeLessonEntry(findLesson(savedLessons, plainKey), legacyDrumCount)) : null);
     // A saved entry still sitting at step 0 with an empty trailing tail
     // carries no actual progress (every fresh open writes one via
     // saveLesson() below) -- resuming it would be a false "Picking up where
@@ -1671,7 +1680,7 @@ function mountSongsPanel(hostEl, api) {
     renderStepTransport(step);
     renderModeControl();
     renderHandsControl(step);
-    renderSpeedControl();
+    if (step.kind !== 'drum-order') renderSpeedControl(); // untimed: no tempo to follow, so nothing to slow down
     renderStepFeedback(stepIndex);
     // A9: moved from ahead of titleRow/the notation/the transport (playBtn
     // above) to here, below all of it -- 28 instrument cards used to sit
@@ -2100,7 +2109,7 @@ function mountSongsPanel(hostEl, api) {
     closeOpenMidiEvents(practice.playedEvents, Math.max(0, (api.now() - practice.recordStartSec)));
     stopRecording();
     practice.lastTry = { step, events: practice.playedEvents.map((e) => ({ midi: e.midi, piece: e.piece, atSec: e.atSec, durSec: e.durSec })) };
-    const timed = step.kind !== 'pitches';
+    const timed = step.kind !== 'pitches' && step.kind !== 'drum-order';
     const result = judgeAttempt(handSplit(step).step.notes, latencyAdjusted(practice.playedEvents, songLatencyMs(api.db())), {
       bpm: effectiveBpm(step) || practice.song.bpm,
       ticksPerQuarter: practice.song.ticksPerQuarter,
