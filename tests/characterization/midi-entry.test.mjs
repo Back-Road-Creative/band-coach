@@ -479,7 +479,7 @@ const COUNT_GUM = `
   })();
 `;
 const SETTLED = "window.__gumCount >= 1 || /No MIDI device|Another program/.test(document.getElementById('ioText').textContent)";
-const MIC_SETTLED = "/Screen keys and computer keys work/.test(document.getElementById('ioText').textContent)";
+const MIC_SETTLED = "/kick, snare and hi-hat only/.test(document.getElementById('ioText').textContent)";
 async function kitOpens(t, mod, portState) {
   const page = await launchPage(htmlPath, { initScript: FAKE_MIDI_INIT + COUNT_GUM });
   t.after(() => page.close());
