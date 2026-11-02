@@ -267,6 +267,8 @@
     .panel-songs-practice { padding-bottom: calc(104px + env(safe-area-inset-bottom)); }
   }
   .panel-songs-count { color: var(--muted); }
+  .panel-songs-beat-guide { display: block; box-sizing: border-box; width: 100%; max-width: 640px; height: auto; aspect-ratio: auto; margin: 8px 0; scroll-margin: 8px 0 130px; background: #10141f; border-radius: 6px; }
+  .panel-songs-beat-guide[hidden] { display: none; }
   .panel-songs-transport .panel-songs-count { margin: 0; align-self: center; }
   .panel-songs-play-on-list { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
   .panel-songs-instrument-btn { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 6px 10px; }
@@ -756,7 +758,7 @@
     body:not(.printing-report):not(.printing-song) .editor-toolbar, body:not(.printing-report):not(.printing-song) .editor-record, body:not(.printing-report):not(.printing-song) .editor-status,
     body:not(.printing-report):not(.printing-song) .editor-check, body:not(.printing-report):not(.printing-song) .editor-say,
     body:not(.printing-report):not(.printing-song) .panel-songs-list, body:not(.printing-report):not(.printing-song) .panel-songs-intro, body:not(.printing-report):not(.printing-song) .panel-songs-msg,
-    body:not(.printing-report):not(.printing-song) .panel-songs-warn, body:not(.printing-report):not(.printing-song) .panel-songs-count, body:not(.printing-report):not(.printing-song) .panel-songs-practice,
+    body:not(.printing-report):not(.printing-song) .panel-songs-warn, body:not(.printing-report):not(.printing-song) .panel-songs-count, body:not(.printing-report):not(.printing-song) .panel-songs-beat-guide,body:not(.printing-report):not(.printing-song) .panel-songs-practice,
     body:not(.printing-report):not(.printing-song) .settings-view, body:not(.printing-report):not(.printing-song) .main-nav, body:not(.printing-report):not(.printing-song) .backup-nudge, body:not(.printing-report):not(.printing-song) .opts,
     body:not(.printing-report):not(.printing-song) button, body:not(.printing-report):not(.printing-song) select, body:not(.printing-report):not(.printing-song) input { display: none !important; }
     .wrap, .main, .stage, .panel-host, .panel-editor, #cv, .editor-canvas { background: #fff !important; color: #000 !important; }

@@ -798,7 +798,7 @@ note while still failing on timing, hold/tune or an extra note does not read as 
 not raise the backing's speed. Every "Your turn" opens with a four-beat count-in at the step's own
 tempo, played through the same clicks the Record door's own count-in uses (`src/ui/learn/count-in.js`),
 so listening only starts once the count-in ends and a learner's reaction time to the click no longer
-reads as a late first note. On
+reads as a late first note. The count and the notes coming up show in the beat guide (see Beat cues). On
 a MIDI keyboard, each note's length is tracked too — closed off by that note's own next press, or
 by the end of the try — so the hold/tune checks above work for a MIDI player the same way they
 already do for the mic. Importing a challenge, a band pack or a single song captures the id the
@@ -1396,7 +1396,7 @@ percussion staff, with the kit drawn underneath it the way it looks from the thr
 hi-hat far left and low, the crash behind it, the snare (the biggest drum) front-left between your knees, the
 bass drum's pedal at centre front, the two rack toms side by side above it, the floor tom close in on the
 right, the ride far right and set back, and a small throne mark at the bottom edge. The drums the bar
-uses are outlined, and they fill in while the count-in plays. Play the bar on an
+uses are outlined, and the beat cues below show when to hit each one. Play the bar on an
 electronic kit over MIDI, on the computer keys (F bass drum, J snare, D closed
 hi-hat, E open hi-hat, C hi-hat pedal, U/I/K high/mid/floor tom, R crash, O
 ride), by clicking the drawn kit, or on a real kit in front of your microphone
@@ -1602,6 +1602,38 @@ keyboard, guitar/uke/mandolin/banjo, or mallet percussion -- shows a "Has
 chords" badge and plays only the top note of each chord in the lesson,
 since that instrument (and the app's own pitch-listening mic path) can only
 sound one note at a time.
+
+## Beat cues
+
+Every exercise with a beat to follow shows when to play, not just the count-in click. Exercises with
+no clock (single notes, sequences, chords, held notes, ear training) show none, because nothing about
+them is late or early.
+
+- **Beat number.** A big number counts up, 1 to the end of the bar, through the count-in and on through
+  the bar being played, pulsing on each beat. It is drawn on the drum kit, both rhythm exercises and
+  "play in time", which also writes each note in its own beat cell and lights it in turn.
+- **Line across the notes.** A line sweeps the staff (or the cells) and reaches each note the moment it
+  is due, however unevenly the notes are engraved.
+- **Closing rings (drum kit).** Each drum gets a ring that closes on that drum's own next hit, so a kick
+  one eighth away shows a nearly closed ring while a snare three eighths away shows a wide one.
+- **Songs: the beat guide** (`src/ui/songs/beat-guide.js`). During a "Your turn" a strip shows the beat
+  number and a runway of the notes sliding toward a "now" line: higher notes on higher rows, one named
+  row per drum on a kit, one row for a rhythm step, so it shows the shape without naming a note. Check
+  shows the count-in number and then nothing, to keep its no-help promise. Steps with no clock (notes
+  in order, drums in order) show only the count-in too.
+- **Clicks through the bar.** Rhythm reading has always clicked through its bar. The metronome now also
+  keeps going on the drum kit and rhythm vocabulary, up to the last level, where keeping time alone is
+  the point. It stays off while a
+  microphone counts hits, because the mic would hear each click as a hit. On the kit, a real MIDI hit
+  proves an e-kit is being played, so the mic stops counting (it would only hear the pads) and the
+  clicks come back; unplugging the kit hands the count back to the mic. In Songs, clicks run through
+  only for a MIDI instrument outside Check; a song's drum part has none, since its listener keeps the
+  mic open.
+
+The cues run on the same clock the judge marks hits with (`cueClock` in `src/core/beat-cues.js`: audio
+time minus the calibrated latency, and the learned offset in the trainer), so a line reaching a note
+is what "on time" means. None of this changes how a hit is scored. With reduced motion on, the line
+and the runway step by the beat instead of sliding, and the next drum simply lights in place of a ring.
 
 ## Rhythm vocabulary
 

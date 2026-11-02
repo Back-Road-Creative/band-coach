@@ -64,6 +64,8 @@ import { exportMusicXml } from '../song/export-musicxml.js';
 import { exportAbc } from '../song/export-abc.js';
 import { makeEvent, isIndependentOk } from '../core/learning-events.js';
 import { t } from '../core/i18n.js';
+import { guideSpec } from '../core/beat-cues.js';
+import { createBeatGuide } from './songs/beat-guide.js';
 import { classifyAddFile, ADD_ACCEPT, ADD_HELP_LINE } from './songs/add-source.js';
 import { createRecordDoor, transcribeAudioFile, refuseNoNotes } from './songs/record-door.js';
 import { renderReview, makeHandoffs } from './songs/review.js';
@@ -209,6 +211,9 @@ function fidelityNoticeFor(song, api) {
   const report = fidelityReport(null, song, part.id, instrument);
   return fidelityNoticeText(report);
 }
+
+// Whether the clock counts on this step, for the judge and for the beat guide alike.
+const isTimedStep = (step) => step.kind !== 'pitches' && step.kind !== 'drum-order';
 
 function stepHint(step) {
   if (step.kind === 'listen') return 'Just listen this time.';
@@ -1676,6 +1681,7 @@ function mountSongsPanel(hostEl, api) {
     syncLoopTransport(step, stepIndex);
     renderStepHeading(step, stepIndex, plan);
     renderStepBody(step);
+    attachBeatGuide(); // above the transport, which is fixed to the bottom of a phone's screen
     renderStepTempo(step);
     renderStepTransport(step);
     renderModeControl();
@@ -1719,6 +1725,10 @@ function mountSongsPanel(hostEl, api) {
   // difficulty badge (repairFor's step never carries one). Just what it is
   // ("Fix one thing: …"), what to do ("Just these notes…"), and the same
   // play/record controls every other passRule'd step gets.
+  function attachBeatGuide() {
+    if (practice.recording && practice.beatGuide) practice.beatGuide.attach(practiceSection);
+  }
+
   function renderRepairStep(step) {
     const isLoop = step.kind === 'bar-loop';
     if (isLoop) {
@@ -1729,6 +1739,7 @@ function mountSongsPanel(hostEl, api) {
       practiceSection.appendChild(el('h4', { text: repairTitle(step) }));
       practiceSection.appendChild(el('p', { text: 'Just these notes, then back to the phrase.' }));
     }
+    attachBeatGuide();
     if (practice.mode !== 'check') {
       practiceSection.appendChild(el('button', { type: 'button', text: t('songs.step.play'), onclick: () => playPhrase(step) }));
     }
@@ -2063,6 +2074,29 @@ function mountSongsPanel(hostEl, api) {
     // The phrase origin (atSec 0 for judging) is one beat AFTER the last
     // click -- the downbeat the count-in was leading up to.
     practice.recordStartSec = at0 + times[times.length - 1] + spb;
+    // The beat guide (src/ui/songs/beat-guide.js). Clicks carry on through the
+    // try only where nothing can hear them as notes: a mic or a kit's listener
+    // would. Check (the no-help contract below) gets only the count-in.
+    const help = practice.mode !== 'check', timed = isTimedStep(step) && step.bpm > 0, kit = !!practice.instrument.kit;
+    if (practice.beatGuide) practice.beatGuide.stop();
+    practice.beatGuide = createBeatGuide({
+      countTimes: times.map((x) => at0 + x),
+      originSec: practice.recordStartSec,
+      spec: guideSpec({
+        notes: handSplit(step).step.notes,
+        originTick: step.originTick,
+        song: practice.song,
+        tickSec: (tick, origin) => phraseSec(tick, origin, effectiveBpm(step), practice.song.ticksPerQuarter, practice.clock),
+        help,
+        timed,
+        kit,
+        rhythmOnly: onsetsOnly,
+      }),
+      now: api.now,
+      latencyMs: songLatencyMs(api.db()),
+      click: api.click,
+      clicksOn: help && timed && !kit && practice.instrument.input === 'midi',
+    });
     // Hands (H3): the OTHER hand's notes are played back as accompaniment
     // during a chosen-hand try -- same per-note schedule as playPhrase()
     // above (phraseSec off this step's own originTick/clock), just anchored
@@ -2096,6 +2130,7 @@ function mountSongsPanel(hostEl, api) {
   function stopRecording() {
     if (practice && practice.countInTimer) { clearTimeout(practice.countInTimer); practice.countInTimer = null; }
     if (practice && practice.stop) { practice.stop(); practice.stop = null; }
+    if (practice && practice.beatGuide) { practice.beatGuide.stop(); practice.beatGuide = null; }
     if (practice) { practice.recording = false; practice.countingIn = false; }
   }
 
@@ -2109,7 +2144,7 @@ function mountSongsPanel(hostEl, api) {
     closeOpenMidiEvents(practice.playedEvents, Math.max(0, (api.now() - practice.recordStartSec)));
     stopRecording();
     practice.lastTry = { step, events: practice.playedEvents.map((e) => ({ midi: e.midi, piece: e.piece, atSec: e.atSec, durSec: e.durSec })) };
-    const timed = step.kind !== 'pitches' && step.kind !== 'drum-order';
+    const timed = isTimedStep(step);
     const result = judgeAttempt(handSplit(step).step.notes, latencyAdjusted(practice.playedEvents, songLatencyMs(api.db())), {
       bpm: effectiveBpm(step) || practice.song.bpm,
       ticksPerQuarter: practice.song.ticksPerQuarter,
