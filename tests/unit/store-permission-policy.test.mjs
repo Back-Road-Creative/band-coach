@@ -19,15 +19,25 @@ const OTHER_FILE_URL = 'file://' + join(repoRoot, 'store', 'app', 'evil.html');
 // own — only a matching requestingUrl/webContentsUrl should.
 const FILE_ORIGIN_FORMS = [APP_FILE_URL, 'file://', 'file:///', 'null', undefined];
 
-test('ALLOWED_PERMISSIONS names exactly media/midi', () => {
-  assert.deepEqual(new Set(ALLOWED_PERMISSIONS), new Set(['media', 'midi']));
+test('ALLOWED_PERMISSIONS names exactly media/midi/midiSysex', () => {
+  assert.deepEqual(new Set(ALLOWED_PERMISSIONS), new Set(['media', 'midi', 'midiSysex']));
 });
 
-test('denies midiSysex even from the app file (the app never requests SysEx)', () => {
-  assert.equal(isAllowed({ permission: 'midiSysex', requestingUrl: APP_FILE_URL, appFileUrl: APP_FILE_URL }), false);
+// v1.11.0 (#567) denied midiSysex because the app never asks for SysEx, and that
+// refused every drum kit and keyboard: Electron 45 / Chromium 156 reports a plain
+// requestMIDIAccess(), with no options, to the request handler as 'midiSysex'
+// (measured 2026-11-02 against the real binary). It is the only request made, so
+// refusing it rejects the call with NotAllowedError and no prompt is ever shown.
+test('allows midiSysex from the app file: a plain requestMIDIAccess() arrives under that name', () => {
+  assert.equal(isAllowed({ permission: 'midiSysex', requestingUrl: APP_FILE_URL, appFileUrl: APP_FILE_URL }), true);
 });
 
-for (const permission of ['media', 'midi']) {
+test('denies midiSysex from any other page', () => {
+  assert.equal(isAllowed({ permission: 'midiSysex', requestingUrl: OTHER_FILE_URL, appFileUrl: APP_FILE_URL }), false);
+  assert.equal(isAllowed({ permission: 'midiSysex', requestingUrl: 'https://evil.example/', appFileUrl: APP_FILE_URL }), false);
+});
+
+for (const permission of ['media', 'midi', 'midiSysex']) {
   for (const requestingOrigin of FILE_ORIGIN_FORMS) {
     test(`allows ${permission} from the app's own file (origin=${String(requestingOrigin)}, via requestingUrl)`, () => {
       assert.equal(

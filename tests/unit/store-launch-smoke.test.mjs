@@ -13,7 +13,7 @@ import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
-const { SMOKE_FLAG, smokeExitCode } = require('../../store/lib/smoke.js');
+const { SMOKE_FLAG, MIDI_PROBE, smokeExitCode } = require('../../store/lib/smoke.js');
 const mainJs = readFileSync(new URL('../../store/main.js', import.meta.url), 'utf8');
 const workflow = readFileSync(
   new URL('../../.github/workflows/store-package.yml', import.meta.url),
@@ -21,7 +21,7 @@ const workflow = readFileSync(
 );
 
 test('a page that loaded with no errors passes', () => {
-  assert.equal(smokeExitCode({ loaded: true, pageErrors: [] }), 0);
+  assert.equal(smokeExitCode({ loaded: true, pageErrors: [], midi: 'ok, inputs 0' }), 0);
 });
 
 test('a page that never loaded fails', () => {
@@ -38,6 +38,29 @@ test('a renderer crash fails', () => {
 
 test('an uncaught page error fails', () => {
   assert.notEqual(smokeExitCode({ loaded: true, pageErrors: ['TypeError: x is undefined'] }), 0);
+});
+
+// v1.11.0 reached the Store with MIDI refused on every machine: the launch check
+// only proved the page loaded. Asking for real on the packaged exe proves the
+// grant before upload, whatever name Electron uses for the request next time.
+test('a refused MIDI request fails the launch check', () => {
+  assert.notEqual(smokeExitCode({ loaded: true, pageErrors: [], midi: 'NotAllowedError: Permission to use Web MIDI API was not granted.' }), 0);
+  assert.notEqual(smokeExitCode({ loaded: true, pageErrors: [], midi: 'SecurityError: blocked' }), 0);
+});
+
+test('a MIDI request that never answers or never ran fails the launch check', () => {
+  assert.notEqual(smokeExitCode({ loaded: true, pageErrors: [], midi: 'no answer' }), 0);
+  assert.notEqual(smokeExitCode({ loaded: true, pageErrors: [] }), 0);
+});
+
+test('a machine with no MIDI devices or no MIDI service still passes: permission was granted', () => {
+  assert.equal(smokeExitCode({ loaded: true, pageErrors: [], midi: 'ok, inputs 0' }), 0);
+  assert.equal(smokeExitCode({ loaded: true, pageErrors: [], midi: 'InvalidStateError: Platform dependent initialization failed.' }), 0);
+});
+
+test('main.js asks for MIDI in the loaded page during the smoke check', () => {
+  assert.match(MIDI_PROBE, /navigator\.requestMIDIAccess\(\)/);
+  assert.match(mainJs, /executeJavaScript\(MIDI_PROBE/);
 });
 
 test('main.js only runs the smoke check when given the flag', () => {

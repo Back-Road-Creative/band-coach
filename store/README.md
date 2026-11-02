@@ -26,7 +26,7 @@ no paid CI, no paid services anywhere in this path.
   `contextIsolation: true`, `nodeIntegration: false`, `sandbox: true`. Denies all navigation and
   `window.open` away from the app file. Blocks every network request (`session.webRequest`) —
   only `file:`/`blob:`/`data:` are allowed, so the app stays visibly offline. Permission handler
-  grants only `media` (microphone) and `midi` (never SysEx), denies everything else — see
+  grants only `media` (microphone) and MIDI (`midi`, `midiSysex`), denies everything else — see
   "Permission decision" below. Menu: Quit, Reload, Toggle Full Screen, About.
 - `lib/permission-policy.js` — the pure allow/deny decision for `getUserMedia`/Web MIDI requests
   (no Electron import; see "Permission decision" below).
@@ -95,8 +95,9 @@ no paid CI, no paid services anywhere in this path.
   `CAPABILITY_MAP` (device/uap/uap6/uap7/common/mobile/rescap) has no `midi` entry of any kind.
   Chromium's Web MIDI implementation talks to the system MIDI service directly and isn't gated by
   a UWP/AppX capability declaration the way the microphone is, so there's nothing to add here —
-  MIDI access should work in the packaged app without a manifest capability, but this has **not**
-  been verified on an actual Windows machine (see "Not verified" below).
+  MIDI access should work in the packaged app without a manifest capability. The launch check asks
+  for MIDI on the packaged exe on the Windows runner, which proves the grant; a real device through
+  the packaged app still has not been verified (see "Not verified" below).
 
 ## Where the appx version comes from
 
@@ -143,7 +144,7 @@ passing every identifying argument Electron gives those handlers.
 
 It allows a request only when:
 
-- `permission` is exactly `media` or `midi` (never `midiSysex`, never a wildcard, never any other
+- `permission` is exactly `media`, `midi` or `midiSysex` (never a wildcard, never any other
   permission Electron might ask about — geolocation, notifications, clipboard, etc.), and
 - at least one of `requestingUrl` (from the handler's `details` object) or `webContentsUrl`
   (`webContents.getURL()`) is present, parses as a `file:` URL, and its host+path exactly match
@@ -168,6 +169,13 @@ empty/undefined for a legitimate in-app `getUserMedia()`/`requestMIDIAccess()` c
 `file://` page (which would make this handler wrongly deny a real request, i.e. fail safe but
 break the feature) — this can only be confirmed by running the packaged app on Windows and watching
 whether the mic/MIDI prompt behaves as the browser build does. See "What was NOT verified here".
+
+`midiSysex` has to be allowed even though the app never uses SysEx. Electron 45 / Chromium 156
+reports a plain `requestMIDIAccess()` to the request handler under that name and no other (measured
+against the real binary, 2026-11-02). v1.11.0 (#567) took it off the list and the app answered every
+Connect with "the answer was no", with no prompt anywhere. Electron shows no permission box, so this
+handler is the only answer the page ever gets. `--smoke-test` now makes that call on the packaged
+exe and exits 6 if it is refused, so `store-package` fails before upload if this breaks again.
 
 ## Building a Store submission package
 
@@ -307,8 +315,9 @@ Store's own install path — see below.
   failures are warnings Partner Center accepts. What WACK does not cover: Microsoft's own
   certification also has human testers and policy review, so a WACK pass does not guarantee
   Store approval.
-- MIDI device access in the packaged app is unverified for the reason above (no Windows machine
-  available here).
+- MIDI with a real device in the packaged app is unverified for the reason above (no Windows
+  machine available here). The launch check proves permission is granted on the runner, which has
+  no MIDI device.
 - The version stamping is checked on the real artifact: `scripts/verify-appx.mjs` reads
   `AppxManifest.xml` out of every `store-package` build and fails the run unless
   `Identity/@Version` is `X.Y.Z.0` for the root `package.json` version (the v1.7.0 tag build

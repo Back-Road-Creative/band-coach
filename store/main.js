@@ -18,7 +18,7 @@ const { app, BrowserWindow, Menu, session, shell } = require('electron');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { isAllowed, ALLOWED_PERMISSIONS } = require('./lib/permission-policy.js');
-const { SMOKE_FLAG, smokeExitCode } = require('./lib/smoke.js');
+const { SMOKE_FLAG, MIDI_PROBE, smokeExitCode } = require('./lib/smoke.js');
 const { isSafeExternalUrl } = require('./lib/external-url.js');
 
 const APP_HTML_PATH = path.join(__dirname, 'app', 'band-coach.html');
@@ -191,8 +191,13 @@ function runSmokeTest(win) {
   });
   wc.on('did-finish-load', () => {
     state.loaded = true;
+    const askMidi = wc.executeJavaScript(MIDI_PROBE, true).then(
+      (answer) => { state.midi = answer; },
+      (error) => { state.midi = 'probe failed: ' + error.message; }
+    );
     // Give start-up scripts a moment to throw before the verdict.
-    setTimeout(finish, 3000);
+    const settle = new Promise((resolve) => setTimeout(resolve, 3000));
+    Promise.all([askMidi, settle]).then(finish);
   });
   setTimeout(finish, 45000);
 }
