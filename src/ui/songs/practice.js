@@ -179,6 +179,41 @@ function judgeOnsets(chords, played, onsetAt, matches, extraList, bpm, ticksPerQ
   }));
 }
 
+// The drum "right drums, right order, no clock" judge (percussion + timed:
+// false -- the "drum-order" step kind, src/song/lesson.js). Time plays no part
+// at all: the played hits are taken in the order they arrived and read off
+// against the written beats, one beat at a time. A beat with several drums
+// written at the same moment (kick + hi-hat) takes the next that-many hits,
+// in either order, with no need for them to be struck together. Within a
+// beat a hit that is the right drum (pieceOkFor true) is paired first, then a
+// hit the mic could not tell apart from the others (pieceOkFor null) fills
+// what is left, so a mic user is never failed on a drum the mic cannot name;
+// anything still unpaired is a wrong drum (a hit, pieceOk false) or, with no
+// hit left, a miss. Hits beyond the last beat are extras.
+function judgeDrumOrder(chords, played, matches, extraList, bpm, ticksPerQuarter) {
+  const ordered = played.map((ev, i) => ({ ev, i })).sort((a, b) => a.ev.atSec - b.ev.atSec || a.i - b.i).map((x) => x.ev);
+  let cursor = 0;
+  chords.forEach((chord) => {
+    const window = ordered.slice(cursor, cursor + chord.length);
+    cursor += window.length;
+    const pick = new Array(chord.length).fill(-1);
+    const free = new Set(window.map((_, k) => k));
+    [true, null].forEach((want) => chord.forEach((n, ni) => {
+      if (pick[ni] !== -1) return;
+      for (const k of free) { if (pieceOkFor(n, window[k]) === want) { pick[ni] = k; free.delete(k); break; } }
+    }));
+    chord.forEach((n, ni) => { if (pick[ni] === -1 && free.size) { const k = free.values().next().value; pick[ni] = k; free.delete(k); } });
+    chord.forEach((n, ni) => {
+      if (pick[ni] === -1) { matches.push(missedNote(n)); return; }
+      const hit = window[pick[ni]];
+      const m = matchOneNote(n, hit, false, null, bpm, ticksPerQuarter, null, undefined);
+      m.pieceOk = pieceOkFor(n, hit);
+      matches.push(m);
+    });
+  });
+  ordered.slice(cursor).forEach((ev) => extraList.push(ev));
+}
+
 // Single expected note at this tick: the original forward-only search
 // (no chord window) -- but anything skipped over on the way to the
 // match is, by construction, a non-match under this note's pitch (the
@@ -312,7 +347,8 @@ export function judgeAttempt(expectedNotes, playedEvents, opts = {}) {
     // percussion: a drum step (P4-11) -- there is no pitch to match in
     // order, only an onset and, maybe, which piece of the kit sounded it, so
     // this always takes the onset-matching path below (judgeOnsets), same as
-    // onsetsOnly, and scores pieceOk instead of pitchOk on each match.
+    // onsetsOnly, and scores pieceOk instead of pitchOk on each match
+    // (except with timed:false, which judges by order alone -- judgeDrumOrder).
     percussion = false,
     clock,
   } = opts;
@@ -322,11 +358,14 @@ export function judgeAttempt(expectedNotes, playedEvents, opts = {}) {
   const extraList = [];
   const onsetAt = (tick) => phraseSec(tick, originTick, bpm, ticksPerQuarter, clock);
   let cursor = 0;
-  const onsetMatched = onsetsOnly || percussion;
-  const allSingle = !onsetMatched && groupIntoChords(notes).every((g) => g.length === 1);
+  // percussion + timed:false: the drum-order step -- by order alone, no clock.
+  const orderOnly = percussion && !timed;
+  const onsetMatched = !orderOnly && (onsetsOnly || percussion);
+  const allSingle = !onsetMatched && !orderOnly && groupIntoChords(notes).every((g) => g.length === 1);
   if (onsetMatched) judgeOnsets(groupIntoChords(notes), played, onsetAt, matches, extraList, bpm, ticksPerQuarter, policy, clock, percussion);
+  if (orderOnly) judgeDrumOrder(groupIntoChords(notes), played, matches, extraList, bpm, ticksPerQuarter);
   if (allSingle) judgeSingleNotes(notes, played, timed, onsetAt, policy, bpm, ticksPerQuarter, clock, matches, extraList);
-  for (const chord of onsetMatched || allSingle ? [] : groupIntoChords(notes)) {
+  for (const chord of onsetMatched || allSingle || orderOnly ? [] : groupIntoChords(notes)) {
     if (chord.length === 1) {
       // Single expected note inside a step that also holds a chord: the
       // original forward-only search (greedySingle).
@@ -474,7 +513,7 @@ export function firstCorrection(result, passRule) {
       const midi = miss.note && miss.note.midi;
       // A rhythm step's ("Clap the rhythm") missed onset has no pitch of its
       // own worth naming -- it is a missed beat, not a missed note.
-      if (midi == null) return 'Missed a beat — ' + result.hitCount + ' of ' + result.judgedCount + '.';
+      if (midi == null || miss.note.piece != null) return 'Missed a beat — ' + result.hitCount + ' of ' + result.judgedCount + '.';
       return 'Missed the ' + noteName(midi) + ' — ' + result.hitCount + ' of ' + result.judgedCount + ' notes.';
     }
   }

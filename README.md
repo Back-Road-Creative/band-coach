@@ -737,7 +737,15 @@ A drum part practises the same way, on its own kit staff instead of a pitched on
 sounding real drum hits, and hits heard from an e-kit's MIDI or a real kit through the microphone
 both counted; a fifth "Which drum" line reads Not assessed when the mic heard a hit but could not
 tell which drum (a tom, crash or ride) from another. Drums struck together (bass drum and hi-hat
-on one beat) are each checked against the hit that named them. On the drum kit, Songs lists eight
+on one beat) are each checked against the hit that named them. Before any timing is asked for, each phrase of a drum part has its own
+untimed step, "Play the drums in order, any speed" (`kind: 'drum-order'`, right after Listen and before
+"Clap the rhythm"): the right drums in the right order, at any speed, with no timing score or tempo to hold (the usual four-click count-in is only a moment to get ready) and no
+speed control. A wrong drum, a wrong order, a missing hit or an extra hit sends you back to try again with a plain
+message, up to 3 tries in a row, then on to "Clap the rhythm" (a mic can misname a drum or hear one hit twice, and this step has no skip button); drums written at the same moment (bass drum and hi-hat together) are accepted in either order, and a
+mic hit it cannot name (toms, crash, ride) is never held against you. A drum lesson saved before this step
+existed resumes on the same musical step (its saves are tagged `#drum-order` on the key's tempo field;
+an untagged save is upgraded by `upgradeLegacyDrumEntry` in `src/song/lesson.js`, never moved backward)
+(`tests/unit/drum-order.test.mjs`, `tests/characterization/songs-drum-order.test.mjs`). On the drum kit, Songs lists eight
 practice grooves in place of the starter tunes (`src/song/starter/grooves.js`: rock, half-time,
 waltz, four on the floor, ride, 6/8, sixteenths, and a rock beat with a fill), each four bars or
 more and taught the same way; a groove has no Edit notes (`tests/characterization/songs-drum-grooves.test.mjs`).
