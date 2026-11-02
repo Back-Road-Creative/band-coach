@@ -50,7 +50,7 @@ test('main.js installs a permission handler naming only media/midi', () => {
     .split(',')
     .map(s => s.trim().replace(/^['"]|['"]$/g, ''))
     .filter(Boolean);
-  assert.deepEqual(new Set(names), new Set(['media', 'midi']));
+  assert.deepEqual(new Set(names), new Set(['media', 'midi', 'midiSysex']));
 });
 
 test('main.js denies navigation and window.open away from the app file', () => {

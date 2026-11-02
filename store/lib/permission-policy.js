@@ -23,7 +23,15 @@
 // somehow spoofed to match.
 'use strict';
 
-const ALLOWED_PERMISSIONS = new Set(['media', 'midi']);
+// midiSysex is on the list because of how Electron names the request, not because
+// the app wants SysEx: Electron 45 / Chromium 156 reports a plain
+// requestMIDIAccess(), no options, to setPermissionRequestHandler as 'midiSysex'
+// and as nothing else (measured against the real binary, 2026-11-02). Refusing it
+// rejects the call with NotAllowedError and no prompt, which is how v1.11.0 (#567)
+// lost MIDI on every machine. The app still never asks for or sends SysEx
+// (src/app.js calls requestMIDIAccess() with no options, src/core/midi.js skips
+// incoming SysEx), and the grant only ever reaches the exact app file below.
+const ALLOWED_PERMISSIONS = new Set(['media', 'midi', 'midiSysex']);
 
 const REMOTE_ORIGIN_RE = /^(https?|ftp|wss?):/i;
 
@@ -60,7 +68,7 @@ function isSameFile(candidate, appFileUrl) {
 
 // isAllowed decides whether ONE permission request should be granted.
 //
-// - permission: the string Electron passed ('media', 'midi', or
+// - permission: the string Electron passed ('media', 'midi', 'midiSysex', or
 //   anything else, which is always denied).
 // - requestingOrigin: setPermissionCheckHandler's third argument, if any.
 //   Used only as a remote-origin veto (see module doc comment above).
