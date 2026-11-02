@@ -141,7 +141,18 @@ app asks. Answering Block, or closing the box, shows "Chrome asked to use your M
 answer was no" and turns the button into "Try MIDI again", which asks again. If Chrome stops
 asking, click the icon left of the address bar (site settings) and set MIDI devices to Allow. A
 browser with no MIDI support on this computer says it "could not reach MIDI"; "No MIDI device is
-plugged in" is a separate message meaning MIDI works but no keyboard is connected. A song practice
+plugged in" is a separate message meaning MIDI works but no keyboard is connected.
+
+A drum kit gets its own messages. With no kit found, the status line says so, says what to check
+(power, USB cable, a USB-MIDI adapter for a kit with only a round 5-pin socket) and says the
+microphone is listening for now, kick, snare and hi-hat only. If the kit appears later it is picked
+up and that message goes away. If MIDI is refused or unavailable, the reason is shown with the same
+microphone line. The status line says "Hit any pad" and the keyboard range button is not offered.
+The Windows Store app has no permission box and no address bar, so a refusal there never gives the
+Chrome advice: it says the fault is in the app and points to Settings > Copy diagnostics. "MIDI
+details" shows the exact error; in the Store app it also goes in the diagnostics.
+
+A song practice
 attempt's learning
 record carries which route actually played it: "midi" only when every judged note was a real MIDI
 note-on, "computer-key" or "mic" when every judged note came from that one route instead, "mixed"

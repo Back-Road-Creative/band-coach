@@ -2446,6 +2446,9 @@ import { register as registerPathway } from './ui/pathway.js';
 
   // ---------- inputs ----------
   function ioState(cls, text) { $('ioDot').className = 'dot ' + cls; $('ioText').textContent = text; }
+  // store/preload.js marks the Store shell. It has no permission box and no address bar, so it can never take the Chrome advice.
+  const inStoreShell = () => document.documentElement.getAttribute('data-shell') === 'store';
+  const onKitInput = () => !!(MODS[mod] && MODS[mod].input === 'mic+midi');
   let midiOn = false; const needsMic = () => TOOLS[mod] || MODS[mod].input === 'pluck' || MODS[mod].input === 'sustain';
   // "Connected" is earned, not assumed (field reports: status said connected
   // while the keyboard sent nothing). But earning it governs what the app
@@ -2469,6 +2472,8 @@ import { register as registerPathway } from './ui/pathway.js';
   // releasing that port) can never cancel the SAME pitch held on another
   // port.
   let midiPorts = [], midiPortInputs = [], midiHeard = new Set(), midiLog = [], realMidiHeld = new Set(), midiParsers = new Map(), midiBlinkTimer = null, noteState = createNoteState(), rangeCap = null, lastMidiName = null;
+  // kitMicReason: why a drum kit is on the mic, shown until MIDI finds a kit. midiLastError: the browser's own words, for MIDI details and a report. midiRefused keeps the button on "Try MIDI again" through a status refresh.
+  let kitMicReason = null, midiLastError = null, midiRefused = false;
   // midiPortInputs is kept parallel to midiPorts rather than held on the port
   // objects themselves: midiPorts is handed to the debug hook and crosses the
   // page boundary by value, and a live MIDIInput does not survive that trip.
@@ -2483,21 +2488,23 @@ import { register as registerPathway } from './ui/pathway.js';
   // Per-port wording: "working" is earned by bytes from THAT port, so a keyboard that has only opened stays "found" even when another one has played.
   function midiStatus() {
     const live = midiPorts.map((p, i) => ({ name: p.name, heard: midiHeard.has(midiPortInputs[i]), works: midiWorks(i) })).filter(p => p.works), join = a => a.join(' and '), heard = live.filter(p => p.heard).map(p => p.name), quiet = live.filter(p => !p.heard).map(p => p.name);
-    const foundTxt = quiet.length ? join(quiet) + ' found. Press any key on ' + (live.length > 1 ? 'one' : 'it') + '.' : '';
+    const found = (names, many) => onKitInput() ? t('io.kitFound', { names: join(names) }) : join(names) + ' found. Press any key on ' + (many ? 'one' : 'it') + '.';
+    const foundTxt = quiet.length ? found(quiet, live.length > 1) : '';
     if (!heard.length) return foundTxt;
-    return join(heard) + (heard.length > 1 ? ' are working.' : ' is working.') + (quiet.length ? ' ' + join(quiet) + ' found. Press any key on ' + (quiet.length > 1 ? 'one' : 'it') + '.' : '');
+    return join(heard) + (heard.length > 1 ? ' are working.' : ' is working.') + (quiet.length ? ' ' + found(quiet, quiet.length > 1) : '');
   }
   function ioRefresh() {
     const b = $('ioBtn'), detailsBtn = $('midiDetailsBtn'), tcb = $('tunerConnect'); if (tcb) tcb.hidden = micReady;
     if (needsMic()) { b.hidden = micReady; b.textContent = t('tuner.connectMic'); detailsBtn.hidden = true; ioState(micReady ? 'on' : '', micReady ? 'Listening through your microphone.' : 'This one listens through a microphone or audio interface.'); }
     else if (mod === 'ear') { b.hidden = true; detailsBtn.hidden = true; ioState('on', 'Nothing to connect. Turn your sound up.'); }
     else {
-      b.hidden = midiOn; b.textContent = 'Connect MIDI'; detailsBtn.hidden = false;
+      b.hidden = midiOn; b.textContent = midiRefused ? 'Try MIDI again' : 'Connect MIDI'; detailsBtn.hidden = false;
       if (midiOn) { ioState('on', midiStatus()); }
+      else if (kitMicReason && micReady && onKitInput()) ioState('on', kitMicReason + ' ' + t('io.kitOnMic'));
       else ioState('', t(mod === 'rhy' ? 'io.padOptional' : 'io.keysOptional'));
     }
     if (!$('midiDetails').hidden) renderMidiDetails();
-    $('midiRangeBtn').hidden = detailsBtn.hidden; renderMidiRange();
+    $('midiRangeBtn').hidden = detailsBtn.hidden || onKitInput(); renderMidiRange();
     refreshInputProof();
   }
   // Blinks #midiActDot on ANY MIDI byte -- exercise running or not -- so a
@@ -2508,6 +2515,7 @@ import { register as registerPathway } from './ui/pathway.js';
   function renderMidiDetails() {
     const lines = midiPorts.length ? [] : ['No MIDI input has been seen yet.'];  // midiLog is cleared with the last port (wire()), so old bytes never sit under this line
     midiPorts.forEach((p, i) => lines.push(p.name + ' -- state: ' + p.state + ', connection: ' + p.connection + (p.ok ? ', opened.' : ', open failed: ' + (p.error || 'unknown reason') + (midiHeard.has(midiPortInputs[i]) ? ', but it is sending messages anyway.' : '.'))));
+    if (midiLastError) lines.push('Last MIDI error: ' + midiLastError);
     if (midiLog.length) { lines.push(''); lines.push('Last messages heard (hex):'); midiLog.forEach(h => lines.push(h)); }
     $('midiDetailsText').textContent = lines.join('\n');
   }
@@ -2606,8 +2614,13 @@ import { register as registerPathway } from './ui/pathway.js';
     if (!canOpenMic()) { const msg = NO_MIC_API_MSG; ioState('off', msg); coach(msg); return; }
     ensureAudio(); openMic().then(() => { ioRefresh(); if (!sess && mod === m) startSession(); }).catch(blocked);
   }
+  // A drum kit falls back to the mic (kick/snare/hi-hat only, see listenDrums()) rather than leaving Connect a dead end, and always says why: done silently, the status line read "MIDI is optional" while the learner's kit went unheard.
+  function kitFallbackToMic(reason) {
+    openMic().then(() => { kitMicReason = reason; ioRefresh(); }).catch(e => { recordError('mic:connect', e); ioState('off', reason + ' ' + t('io.kitMicBlocked')); });
+  }
   function connectMidi() {
     navigator.requestMIDIAccess().then(a => {
+      midiLastError = null; midiRefused = false;
       const wire = () => {
         midiOutRefresh(a);
         const inputs = []; a.inputs.forEach(i => inputs.push(i));
@@ -2638,24 +2651,30 @@ import { register as registerPathway } from './ui/pathway.js';
           midiPorts = results.map(r => ({ name: r.input.name || 'MIDI device', state: r.input.state, connection: r.input.connection, ok: r.ok, error: r.error }));
           midiPortInputs = results.map(r => r.input); if (!midiPorts.length) midiLog.length = 0;
           midiOn = results.some((r, i) => r.ok || midiWorks(i));
+          if (connected.length) kitMicReason = null;
           ioRefresh();
           // No MIDI input at all: an e-kit was tried and genuinely is not
-          // there, so a drum kit falls back to the mic (kick/snare/hi-hat
-          // only, see listenDrums()) rather than leaving Connect a dead end.
-          // A kit whose e-kit IS found never reaches here, so this can never
-          // fight real MIDI note-ons for the same tap.
-          if (!connected.length && MODS[mod] && MODS[mod].input === 'mic+midi' && canOpenMic()) openMic().then(ioRefresh).catch(() => ioState('off', 'No MIDI device found, and the microphone was blocked. Allow it, or plug in a kit.'));
+          // there. A kit whose e-kit IS found never reaches the fallback, so
+          // this can never fight real MIDI note-ons for the same tap.
+          if (!connected.length && onKitInput() && canOpenMic()) kitFallbackToMic(t('io.kitNotFound'));
+          else if (!connected.length && onKitInput()) ioState('off', t('io.kitNotFound') + ' ' + t('io.kitMicBlocked'));
           else if (!connected.length) ioState('off', 'No MIDI device is plugged in. Plug it in and it will be picked up. Screen and computer keys still work as practice, not proof a real keyboard works.');
-          else if (!midiOn) ioState('off', 'Another program may be using this keyboard. Close it and press Connect again.');
+          else if (!midiOn) ioState('off', onKitInput() ? t('io.kitBusy') : 'Another program may be using this keyboard. Close it and press Connect again.');
         });
       };
       wire(); a.onstatechange = wire;
     }).catch(e => {
       // Chrome 124+ asks on every requestMIDIAccess(): a dismissed/blocked prompt is NotAllowedError, so say that and keep Connect there to ask again. SecurityError is the embedded/iframe case, the only one the standalone copy fixes. Anything else (InvalidStateError: no MIDI backend) is not a permission problem.
-      const n = e && e.name, tail = ' Screen and computer keys still work as practice, not proof a real keyboard works.';
-      if (n === 'NotAllowedError') { const b = $('ioBtn'); b.hidden = false; b.disabled = false; b.textContent = 'Try MIDI again'; ioState('off', 'Chrome asked to use your MIDI devices and the answer was no (or the box was closed). Click Try MIDI again to ask again; if Chrome no longer asks, click the icon left of the address bar and allow MIDI.' + tail); }
-      else if (n === 'SecurityError') ioState('off', 'MIDI was blocked here. Open the standalone copy in Chrome.' + tail);
-      else ioState('off', 'This browser could not reach MIDI on this computer.' + tail);
+      // The Store shell answers MIDI itself, with no box and no address bar, so a refusal there is the app's fault and the Chrome advice would send the learner looking for controls that do not exist.
+      const n = e && e.name, store = inStoreShell(), kit = onKitInput(), tail = kit ? '' : ' Screen and computer keys still work as practice, not proof a real keyboard works.';
+      midiLastError = (n || 'Error') + ': ' + ((e && e.message) || 'no message'); if (store) recordError('midi:connect', e); // in a browser this is the learner's own answer or a browser limit, not an app fault
+      const refusedByStore = t('io.storeMidiRefused', { device: t(kit ? 'io.deviceKit' : 'io.deviceKeyboard') });
+      let reason;
+      if (n === 'NotAllowedError') { midiRefused = true; const b = $('ioBtn'); b.hidden = false; b.disabled = false; b.textContent = 'Try MIDI again'; reason = store ? refusedByStore : 'Chrome asked to use your MIDI devices and the answer was no (or the box was closed). Click Try MIDI again to ask again; if Chrome no longer asks, click the icon left of the address bar and allow MIDI.'; }
+      else if (n === 'SecurityError') reason = store ? refusedByStore : 'MIDI was blocked here. Open the standalone copy in Chrome.';
+      else reason = store ? t('io.storeMidiNoService') : 'This browser could not reach MIDI on this computer.';
+      if (kit && canOpenMic()) kitFallbackToMic(reason);
+      else ioState('off', reason + tail);
     });
   }
   $('ioBtn').addEventListener('click', () => {
@@ -2666,7 +2685,7 @@ import { register as registerPathway } from './ui/pathway.js';
       // cannot read MIDI at all (needsMic() stays false for 'mic+midi' so an
       // e-kit is tried FIRST; see the empty-inputs branch below for the same
       // fallback when MIDI is readable but nothing is plugged in).
-      if (MODS[mod] && MODS[mod].input === 'mic+midi' && canOpenMic()) { connectMic(); return; }
+      if (onKitInput() && canOpenMic()) { kitFallbackToMic(t('io.kitNoMidiApi')); return; }
       ioState('off', 'This browser cannot read MIDI. Use Chrome or Edge. Screen and computer keys still work as practice, not proof a real keyboard works.'); return;
     }
     connectMidi();
