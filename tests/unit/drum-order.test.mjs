@@ -96,6 +96,20 @@ test('a failed attempt repeats the step, a pass moves on to rhythm', () => {
   assert.equal(plan.steps[2].kind, 'rhythm');
 });
 
+test('three failed tries in a row move on to rhythm, so a misheard hit can never wall off the song', () => {
+  const plan = buildLessonPlan(song(beat), 'kit', drumKit);
+  const i = plan.steps.findIndex((x) => x.kind === 'drum-order');
+  assert.equal(plan.steps[i + 1].kind, 'rhythm');
+  const fail = { stepIndex: i, passed: false };
+  assert.equal(nextStep(plan, [fail]), i, 'first miss repeats');
+  assert.equal(nextStep(plan, [fail, fail]), i, 'second miss repeats');
+  assert.equal(nextStep(plan, [fail, fail, fail]), i + 1, 'third miss moves on');
+  // Control: a pass between misses restarts the count, and a rhythm step still repeats however often it fails.
+  assert.equal(nextStep(plan, [fail, fail, { stepIndex: i, passed: true }, fail]), i);
+  const r = { stepIndex: i + 1, passed: false };
+  assert.equal(nextStep(plan, [r, r, r]), i + 1);
+});
+
 test('timed percussion judging is unchanged (timed default still time-nearest)', () => {
   const r = judgeAttempt(beat, beat.map((n, i) => hit(n.piece, i * 0.6)), { bpm: 100, ticksPerQuarter: TPQ, percussion: true });
   assert.equal(r.matches.every((m) => m.errorMs != null), true);

@@ -730,7 +730,7 @@ on one beat) are each checked against the hit that named them. Before any timing
 untimed step, "Play the drums in order, any speed" (`kind: 'drum-order'`, right after Listen and before
 "Clap the rhythm"): the right drums in the right order, at any speed, with no timing score or tempo to hold (the usual four-click count-in is only a moment to get ready) and no
 speed control. A wrong drum, a wrong order, a missing hit or an extra hit sends you back to try again with a plain
-message; drums written at the same moment (bass drum and hi-hat together) are accepted in either order, and a
+message, up to 3 tries in a row, then on to "Clap the rhythm" (a mic can misname a drum or hear one hit twice, and this step has no skip button); drums written at the same moment (bass drum and hi-hat together) are accepted in either order, and a
 mic hit it cannot name (toms, crash, ride) is never held against you. A drum lesson saved before this step
 existed resumes on the same musical step (its saves are tagged `#drum-order` on the key's tempo field;
 an untagged save is upgraded by `upgradeLegacyDrumEntry` in `src/song/lesson.js`, never moved backward)

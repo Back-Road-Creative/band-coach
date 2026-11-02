@@ -574,6 +574,7 @@ export function buildLessonPlan(song, partId, instrument, opts = {}) {
 // step, never one earlier, and a learner who was on "rhythm" stays on it
 // rather than being sent back to the new step.
 export const DRUM_ORDER_TEMPO_TAG = '#drum-order';
+const DRUM_ORDER_MAX_TRIES = 3;
 export function upgradeLegacyDrumEntry(plan, entry) {
   if (!entry) return null;
   const oldToNew = [];
@@ -641,6 +642,10 @@ export function nextStep(plan, results) {
   // ladder rung, in which case drop back to the previous (slower) rung.
   const consecutiveFails = trailingFails(results, lastIndex);
   const cur = steps[lastIndex];
+  // The drum-order step is a strict on-ramp with no skip button, and a mic can
+  // misname a drum or hear one hit twice. After three misses, on to "rhythm",
+  // which still judges which drum was hit, so nobody is walled off a song.
+  if (consecutiveFails >= DRUM_ORDER_MAX_TRIES && cur && cur.kind === 'drum-order') return lastIndex + 1;
   if (consecutiveFails >= 2 && cur && cur.kind === 'tempo-ladder') {
     for (let i = lastIndex - 1; i >= 0; i--) {
       if (steps[i].phraseIndex !== cur.phraseIndex) break;
