@@ -1455,6 +1455,17 @@ comes from) are:
 8. 6/8
 9. a swing ride pattern
 
+A failed bar on these levels comes round again before the trainer moves on:
+the same bar replays, up to 3 tries in all (`kitRepeatStep` in
+`src/instruments/drum-kit.js`), with the line "Same bar again: try 2 of 3."
+beside the usual correction, and a "moving on" line after the third miss. The
+tighter levels past the table do not repeat, and a bar with no hits at all
+never does (the learner may have walked away, so the idle-bar break still
+works). Readiness is charged once per bar: a failed repeat is not credited
+as a failure, so it cannot also trip the rough-patch reset. A clean repeat
+earns normal credit. A level change, instrument change or session end drops
+the owed repeat.
+
 Stickings (which hand) are never judged, since a key, click or MIDI note only
 says which drum and when. The singles, doubles and paradiddle bars show R/L
 under each note (D/I in Spanish) as guidance, and the tip still names the

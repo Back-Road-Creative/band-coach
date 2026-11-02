@@ -61,7 +61,7 @@ import { capabilityFor, capabilityChipKeys } from './instruments/capability.js';
 import { rangeForInstrument, FALLBACK_RANGE, frameSizeForInstrument } from './audio/range.js';
 import { renderVoice } from './audio/voices.js';
 import { layoutFor as harpLayoutFor } from './instruments/how/harmonica.js';
-import { pieceForMidi } from './instruments/drum-kit.js';
+import { pieceForMidi, kitRepeatStep, kitRepeatFor, KIT_MAX_TRIES } from './instruments/drum-kit.js';
 import { renderKitSetup } from './ui/kit-setup.js';
 import { kitNoteFor } from './instruments/how/kit-presets.js';
 import { kitFrame, kitRegions, pieceAt, THRONE } from './instruments/how/drum-kit.js';
@@ -885,7 +885,7 @@ import { register as registerPathway } from './ui/pathway.js';
   const byStrength = (pool, now) => pool.slice().sort((a, c) => (retrievability(it(c, now), now) - retrievability(it(a, now), now)) || (a < c ? -1 : 1));
 
   // ---------- session monitor: fatigue, frustration, breaks ----------
-  let sess = null, playing = false, paused = false, pauseInfo = null, task = null, lastItem = null, recent = [], streak = 0, errCount = 0, lastInputAt = 0, nextTaskAt = 0, sessionPlan = [], planProgress = { review: 0, weak: 0, apply: 0, check: 0 };
+  let kitRep = null, kitAgainShown = false, sess = null, playing = false, paused = false, pauseInfo = null, task = null, lastItem = null, recent = [], streak = 0, errCount = 0, lastInputAt = 0, nextTaskAt = 0, sessionPlan = [], planProgress = { review: 0, weak: 0, apply: 0, check: 0 };
   const newSession = () => ({ mod: mod, active: 0, sinceBreak: 0, judged: 0, ok: 0, first: [], last: [], w30: [], best30: 0, rts: [], bestRt: null, downs: 0, breaks: 0, failRun: 0, reliefIn: 0, warm: 0, tiredFor: 0, snoozeUntil: 0, from: S.level, bestStreak: 0, F: 0, m0: JSON.parse(JSON.stringify(S.item)), capWarned: false, target: 0, cal: [], idleBars: 0 });
   function fatigue() {
     const acc30 = sess.w30.length >= 24 ? mean(sess.w30) : null; if (acc30 !== null) sess.best30 = Math.max(sess.best30, acc30);
@@ -1064,8 +1064,10 @@ import { register as registerPathway } from './ui/pathway.js';
       if (!t.els.some(e => e.info.on.length)) { t.els[0] = mk('rq'); }
     }
     else if (kind === 'kit') {
-      const L = d.bars ? d : M.levels[S.tick % M.levels.length], b = L.bars[S.tick % L.bars.length]; S.tick++;
-      t.kit = { metre: L.metre, bpm: d.bars ? L.bpm : L.bpm + 6 * (S.level - M.levels.length), swing: L.swing || 0, bar: b, name: L.name }; t.els = [{ id: 'kit', info: { label: lvName(L.name) }, failed: false, t0: 0, rt: 0, reveal: false }];
+      // a failed bar still owed a repeat replays the same level and bar (S.tick untouched, so the bar order is unchanged); otherwise pick as before
+      const R = kitRepeatFor(kitRep, mod, S.level); kitRep = R;
+      const L = R ? R.L : d.bars ? d : M.levels[S.tick % M.levels.length], b = R ? R.bar : L.bars[S.tick % L.bars.length]; if (!R) S.tick++;
+      t.kit = { metre: L.metre, bpm: d.bars ? L.bpm : L.bpm + 6 * (S.level - M.levels.length), swing: L.swing || 0, bar: b, name: L.name, L: L, tryNo: R ? R.tries + 1 : 1 }; t.els = [{ id: 'kit', info: { label: lvName(L.name) }, failed: false, t0: 0, rt: 0, reveal: false }];
     }
     else if (kind === 'bar2') {
       const variants = d.bars || [[['qr']]], cells = variants[S.tick % variants.length]; S.tick++; t.rCells = cells; t.els = [{ id: 'bar2', info: { label: lvName(d.name) }, failed: false, t0: 0, rt: 0, reveal: false }];
@@ -1129,7 +1131,7 @@ import { register as registerPathway } from './ui/pathway.js';
     if (t.kind === 'ear') { p = e.info.kind === 'interval' ? 'Which <b>interval</b>?' : 'Which <b>chord</b>?'; h = 'Listen, then choose. Number keys work too.'; const box = $('choices'); box.innerHTML = ''; t.choices.forEach((id, k) => { const b = document.createElement('button'); b.type = 'button'; b.id = 'ch-' + id; b.textContent = (k + 1) + '. ' + inf(id).label; b.addEventListener('click', () => { b.blur(); answer(id, 'screen-tap'); }); box.appendChild(b); }); playRef(t); }
     else if (t.kind === 'bar') { p = 'Read it, then <b>tap it</b>'; h = 'Four clicks to get ready, then tap the bar in time.'; startBar(); }
     else if (t.kind === 'bar2') { p = 'Read it, then <b>tap it</b>'; h = 'Listen for the count-in, then tap the bar (or bars) in time.'; startBar2(); }
-    else if (t.kind === 'kit') { p = 'Read it, then <b>play it</b>'; h = (t.kit.bar.tip ? t.kit.bar.tip + ' ' : '') + 'Listen for the count-in, then play the bar on the drums it shows.'; startKitBar(); }
+    else if (t.kind === 'kit') { p = 'Read it, then <b>play it</b>'; h = (t.kit.bar.tip ? t.kit.bar.tip + ' ' : '') + 'Listen for the count-in, then play the bar on the drums it shows.'; if (t.kit.tryNo > 1) { const again = tl('kit.again', { n: t.kit.tryNo, max: KIT_MAX_TRIES }); coach(again); h = again + ' ' + h; kitAgainShown = true; } else if (kitAgainShown) { kitAgainShown = false; coach(''); } startKitBar(); }
     else if (t.kind === 'groove') { p = 'Play ' + t.els.map(el => promptFor(el.info, el.reveal)).join(' → ') + ' — <b>in time</b>'; h = 'Four clicks to count in, then play each note on the beat.'; startGroove(); }
     else { const verb = mod === 'voice' ? 'Sing' : 'Play'; p = verb + ' ' + t.els.map((el, k) => (k === t.idx ? '<b>' : '') + promptFor(el.info, el.reveal) + (k === t.idx ? '</b>' : '')).join(' → '); if (t.kind === 'hold') p = (mod === 'voice' ? 'Hold ' : 'Hold ') + '<b>' + e.info.label + '</b> for two seconds'; h = hintFor(e); playRef(t); }
     $('prompt').innerHTML = p; $('hint').textContent = (t.warm ? tl('coach.warmPrefix') : '') + h; updateDesc(); updateHowPeek();
@@ -1221,7 +1223,7 @@ import { register as registerPathway } from './ui/pathway.js';
     // no route was passed: the debug hook or grooveInject calling onNote
     // with no third argument, and onPitch's own pluck-chord and sustain
     // passEl calls (microphone rows, never a kbd note).
-    t.els.forEach(e => { credit(e.id, e.q || 0, from, t.warm, e.rt, gradeOutcome({ helped: !!e.helped, failed: !!e.failed, assistance: e.assistance || null, q: e.q || 0 })); logEvent(makeEvent({ instrument: mod, skill: e.id, source: t.warm ? 'warmup' : 'drill', assistance: e.helped ? 'shown' : (e.assistance || 'none'), dims: { pitch: e.q > 0 ? 'ok' : 'miss' }, unassessed: [], activeMs: Math.round((e.rt || 0) * 1000), bpmTarget: null, bpmActual: null, hands: e.info.kind === 'hands-together' ? handsModeFromId(e.id) : undefined, input: e.input }, { now: modelNow })); from = e.id; if (!(e.q > 0)) anyFail = true; });
+    t.els.forEach(e => { credit(e.id, e.q || 0, from, t.warm || e.noCredit, e.rt, gradeOutcome({ helped: !!e.helped, failed: !!e.failed, assistance: e.assistance || null, q: e.q || 0 })); logEvent(makeEvent({ instrument: mod, skill: e.id, source: t.warm ? 'warmup' : 'drill', assistance: e.helped ? 'shown' : (e.assistance || 'none'), dims: { pitch: e.q > 0 ? 'ok' : 'miss' }, unassessed: [], activeMs: Math.round((e.rt || 0) * 1000), bpmTarget: null, bpmActual: null, hands: e.info.kind === 'hands-together' ? handsModeFromId(e.id) : undefined, input: e.input }, { now: modelNow })); from = e.id; if (!(e.q > 0)) anyFail = true; });
     lastItem = from; if (sess) sess.lastMiss = anyFail; nextTaskAt = now() + (anyFail ? 1.5 : 0.7); if (t.kind === 'ear') nextTaskAt = now() + (anyFail ? 2.6 : 1.1); save(); showAll();
     if (t.onDone) t.onDone(); // a captured-melody chunk advances (or repeats) once its rows are logged
   }
@@ -1458,8 +1460,11 @@ import { register as registerPathway } from './ui/pathway.js';
     e.rt = 1; e.q = bad ? 0 : 1; e.failed = !!bad; const bias = deltas.length ? mean(deltas) : 0;
     say(bad ? parts.join(', ') + '.' : 'Clean bar. Average ' + Math.round(Math.abs(bias) * 1000) + ' ms ' + (bias < 0 ? 'early' : 'late') + '.', bad ? 'no' : 'ok');
     if (!bar.taps.length) sess.idleBars++; else sess.idleBars = 0;
-    if (sess.idleBars >= 2) { sess.idleBars = 0; task.done = true; takeBreak('away'); return; }
-    task.idx = task.els.length; finishTask(); nextTaskAt = now() + 0.4;
+    // Repeat a failed bar (kitRepeatStep: normal-table levels only, never a no-hit bar, 3 tries). Readiness is charged once per bar, not once per try: a failed repeat is told to credit() as a warm-up (`warm` skips the model, S.ready and sess.failRun), so three tries cannot also trip the "rough patch" failRun>=5 reset.
+    const step = kitRepeatStep(kitRep, { mod: mod, level: S.level, inTable: S.level <= MODS[mod].levels.length, bar: task.kit.bar, failed: !!bad, hits: bar.taps.length });
+    kitRep = step.rep && Object.assign(step.rep, { L: task.kit.L }); if (bad && !step.penalise) e.noCredit = true;
+    if (sess.idleBars >= 2) { sess.idleBars = 0; kitRep = null; task.done = true; takeBreak('away'); return; }
+    task.idx = task.els.length; finishTask(); nextTaskAt = now() + 0.4; if (step.giveUp) { kitAgainShown = false; coach(tl('kit.movingOn')); }
   }
 
   // ---------- play in time: a count-in, then the shown notes played on the beat (F7) ----------
@@ -2125,7 +2130,7 @@ import { register as registerPathway } from './ui/pathway.js';
   function startSession() {
     if (askInstrumentFirst()) return;
     $('tuneFirst').hidden = true; $('tuneDrift').hidden = true; driftCents = []; driftAsked = false; $('inputProof').hidden = true;
-    document.body.classList.add('practising'); refreshModelClock(); ensureAudio(); sess = newSession(); recent = []; streak = 0; errCount = 0; task = null; lastItem = null; lastInputAt = now(); chunk = 0; say('');
+    document.body.classList.add('practising'); refreshModelClock(); ensureAudio(); sess = newSession(); kitRep = null; recent = []; streak = 0; errCount = 0; task = null; lastItem = null; lastInputAt = now(); chunk = 0; say('');
     // Session length E7c: the learner's own choice (DB.prefs.sessionMinutes,
     // 0 meaning no limit) sets today's target before the tired check below,
     // so tiredPattern()'s 15-minute cap only tightens it, never loosens it.
@@ -2188,7 +2193,7 @@ import { register as registerPathway } from './ui/pathway.js';
   }
   // `wonOn`: the id of the F7 "end on a win" item, when the session ends right after playing it cleanly.
   function endSession(wonOn) {
-    if (!sess) return; document.body.classList.remove('practising'); showUpdateIfIdle(); toneSrcs.forEach(s => { try { s.stop(); } catch (e) {} }); const min = sess.active / 60; let line = 'Session ended. Too short to log.';
+    kitRep = null; if (!sess) return; document.body.classList.remove('practising'); showUpdateIfIdle(); toneSrcs.forEach(s => { try { s.stop(); } catch (e) {} }); const min = sess.active / 60; let line = 'Session ended. Too short to log.';
     if (sess.judged >= 8) { DB.sessions.push({ d: today(), mod: mod, min: Math.round(min * 10) / 10, acc: sess.ok / sess.judged, a1: mean(sess.first), a2: mean(sess.last), from: sess.from, to: S.level, breaks: sess.breaks }); DB.sessions = DB.sessions.slice(-60);
       let up = null, low = null, lowR = 1; Object.keys(S.item).forEach(id => { const cur = S.item[id], r1 = retrievability(cur, modelNow), r0 = retrievability(sess.m0[id] || cur, modelNow), g0 = r1 - r0; if (up === null || g0 > up.g) up = { id: id, g: g0 }; if (cur.reps >= 3 && (low === null || r1 < lowR)) { low = id; lowR = r1; } });
       line = 'Session done: ' + Math.round(min * 10) / 10 + ' min, ' + Math.round(100 * sess.ok / sess.judged) + '% right, best run ' + sess.bestStreak + ' right in a row, level ' + sess.from + ' to ' + S.level + '.' + (up && up.g > 0.05 ? ' Most improved: ' + inf(up.id).short + '.' : '') + (low ? ' Next time starts with extra ' + inf(low).short + '.' : ''); }

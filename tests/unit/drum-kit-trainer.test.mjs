@@ -209,3 +209,87 @@ test('bars without sticking show no hand letters', async (t) => {
   const desc = await page.evaluate("document.getElementById('cvDesc').textContent");
   assert.ok(!desc.includes('(R)') && !desc.includes('(L)'));
 });
+
+// ---- a failed bar comes round again (up to 3 tries) ----
+// One hit on the wrong drum is a failure that still has a hit in it.
+async function failBar(page) {
+  const onsets = await page.evaluate('window.__coach.bar().onsets');
+  await keyAt(page, KEY.snare, onsets[0].t);
+  return judged(page);
+}
+async function nextBar(page, prevT0) {
+  await page.waitFor(`window.__coach.bar() && !window.__coach.bar().judged && window.__coach.bar().t0 !== ${prevT0}`, 20000);
+  return page.evaluate('({ onsets: window.__coach.bar().onsets.map(o => o.pieces.join()), tick: window.__coach.state().tick, ready: window.__coach.state().ready, hint: document.getElementById(\'hint\').textContent, coach: document.getElementById(\'coach\').textContent, t0: window.__coach.bar().t0 })');
+}
+
+test('a failed bar replays the same bar, three tries in all, then moves on; readiness is charged once', async (t) => {
+  const page = await launchPage(HTML_PATH);
+  t.after(() => page.close());
+  await startKit(page, 1, 0);
+  const ready0 = await page.evaluate('window.__coach.state().ready');
+  let r = await failBar(page);
+  assert.equal(r.failed, true);
+  const t0a = await page.evaluate('window.__coach.bar().t0');
+  const ready1 = await page.evaluate('window.__coach.state().ready');
+  assert.ok(ready1 < ready0, 'the first failure is charged');
+  const second = await nextBar(page, t0a);
+  const first = await page.evaluate('window.__coach.state().tick');
+  assert.equal(second.tick, first);
+  assert.match(second.coach, /Same bar again: try 2 of 3\./);
+  assert.match(second.hint, /try 2 of 3/);
+  assert.deepEqual(second.onsets, ['kick', 'kick', 'kick', 'kick']);
+  r = await failBar(page);
+  assert.match(r.say, /wrong drum/, 'the correction is still shown');
+  const third = await nextBar(page, second.t0);
+  assert.match(third.coach, /try 3 of 3/);
+  assert.equal(third.tick, second.tick, 'repeating does not advance the bar order');
+  assert.equal(third.ready, ready1, 'a failed repeat is not charged again');
+  r = await failBar(page);
+  await page.waitFor("/moving on/.test(document.getElementById('coach').textContent)");
+  const fourth = await nextBar(page, third.t0);
+  assert.equal(fourth.tick, third.tick + 1, 'after the third failure the next bar is chosen as before');
+  assert.equal(fourth.ready, ready1, 'three failures cost readiness once');
+  assert.doesNotMatch(fourth.coach, /try \d of 3/);
+});
+
+test('a clean repeat is credited and the next bar moves on', async (t) => {
+  const page = await launchPage(HTML_PATH);
+  t.after(() => page.close());
+  await startKit(page, 1, 0);
+  await failBar(page);
+  const t0a = await page.evaluate('window.__coach.bar().t0');
+  const ready1 = await page.evaluate('window.__coach.state().ready');
+  const second = await nextBar(page, t0a);
+  const onsets = await page.evaluate('window.__coach.bar().onsets');
+  for (const o of onsets) await keyAt(page, KEY.kick, o.t);
+  const r = await judged(page);
+  assert.equal(r.failed, false, r.say);
+  assert.ok(await page.evaluate('window.__coach.state().ready') > ready1, 'a clean repeat earns normal credit');
+  const third = await nextBar(page, second.t0);
+  assert.equal(third.tick, second.tick + 1);
+  assert.doesNotMatch(third.coach, /try \d of 3/);
+});
+
+test('a bar with no hits at all does not repeat', async (t) => {
+  const page = await launchPage(HTML_PATH);
+  t.after(() => page.close());
+  await startKit(page, 1, 0);
+  await judged(page);
+  const t0a = await page.evaluate('window.__coach.bar().t0');
+  const tick0 = await page.evaluate('window.__coach.state().tick');
+  const next = await nextBar(page, t0a);
+  assert.equal(next.tick, tick0 + 1, 'the next bar was chosen, not the same one');
+  assert.doesNotMatch(next.coach, /try \d of 3/);
+});
+
+test('above the normal table a failed bar does not repeat', async (t) => {
+  const page = await launchPage(HTML_PATH);
+  t.after(() => page.close());
+  await startKit(page, TRAINER_LEVELS.length + 1, 0);
+  await failBar(page);
+  const t0a = await page.evaluate('window.__coach.bar().t0');
+  const tick0 = await page.evaluate('window.__coach.state().tick');
+  const next = await nextBar(page, t0a);
+  assert.equal(next.tick, tick0 + 1);
+  assert.doesNotMatch(next.coach, /try \d of 3/);
+});
