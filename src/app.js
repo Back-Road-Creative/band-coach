@@ -1,4 +1,5 @@
 import { judgePitch, OCTAVE_POLICY } from './core/judge.js';
+import { beatTimes, beatAt, sweepAt, drumRings, clicksThrough, cueClock } from './core/beat-cues.js';
 import { createDeafWindow } from './audio/deaf-window.js';
 import { exportProgress as exportProgressFile, importProgress as importProgressFile, migrate as migrateDB } from './core/progress-file.js';
 import { checkFileSize } from './ui/songs/import-route.js';
@@ -1340,7 +1341,7 @@ import { register as registerPathway } from './ui/pathway.js';
 
   // ---------- rhythm reading: a count-in bar, then the bar you tap ----------
   let bar = null, calRun = null;
-  function startBar() { const bpm = D().bpm || 72, spb = 60 / bpm, t0 = now() + 0.15; bar = { spb: spb, t0: t0, playAt: t0 + 4 * spb, end: t0 + 8 * spb, clicks: 0, taps: [], onsets: [], judged: false }; let b = 0; task.els.forEach(e => { e.info.on.forEach(o => bar.onsets.push({ t: bar.playAt + (b + o) * spb, el: e, hit: null })); e.b0 = b; b += e.info.beats; }); }
+  function startBar() { const bpm = D().bpm || 72, spb = 60 / bpm, t0 = now() + 0.15; bar = { spb: spb, t0: t0, playAt: t0 + 4 * spb, end: t0 + 8 * spb, barEnd: t0 + 8 * spb, countBeats: 4, clicks: 0, taps: [], onsets: [], judged: false }; let b = 0; task.els.forEach(e => { e.info.on.forEach(o => bar.onsets.push({ t: bar.playAt + (b + o) * spb, el: e, hit: null })); e.b0 = b; b += e.info.beats; }); }
   const audioNow = () => actx ? actx.currentTime : performance.now() / 1000;
   const tapAudioTime = ev => toAudioTime({ eventTimeStamp: ev && typeof ev.timeStamp === 'number' ? ev.timeStamp : performance.now(), perfNow: performance.now(), audioNow: audioNow() });
   function startCalibrate() {
@@ -1393,11 +1394,11 @@ import { register as registerPathway } from './ui/pathway.js';
     const totalSec = RHY.totalTicks(phrase.events) * (60 / bpm) / RHY.TPQ;
     const t0 = now() + 0.15, playAt = t0 + M.beats * beatSec;
     const onsets = RHY.onsetsOf(phrase.events, { bpm: bpm, swing: d.swing || 0 }).map(t => ({ t: playAt + t, hit: null }));
-    bar = { spb: beatSec, t0: t0, playAt: playAt, end: playAt + totalSec + 0.3, clicks: 0, countBeats: M.beats, metre: metre, phrase: phrase, onsets: onsets, taps: [], judged: false };
+    bar = { spb: beatSec, t0: t0, playAt: playAt, end: playAt + totalSec + 0.3, barEnd: playAt + totalSec, clicks: 0, countBeats: M.beats, metre: metre, phrase: phrase, onsets: onsets, taps: [], judged: false };
   }
   function tickBar2() {
-    if (!bar || !task || task.kind !== 'bar2') return; const t = now();
-    while (bar.clicks < bar.countBeats && bar.t0 + bar.clicks * bar.spb < t + 0.12) { const at = bar.t0 + bar.clicks * bar.spb; if (at > t - 0.01) click(at, bar.clicks === 0); bar.clicks++; }
+    if (!bar || !task || task.kind !== 'bar2') return; const t = now(), upTo = barClickCount(false);
+    while (bar.clicks < upTo && bar.t0 + bar.clicks * bar.spb < t + 0.12) { const at = bar.t0 + bar.clicks * bar.spb; if (at > t - 0.01) click(at, bar.clicks % bar.countBeats === 0); bar.clicks++; }
     if (!bar.judged && t > bar.end) {
       bar.judged = true; const win = 0.15, deltas = [];
       bar.onsets.forEach(o => { let best = null; bar.taps.forEach(tp => { if (tp.used) return; const dd = tp.t - o.t; if (Math.abs(dd) <= win && (!best || Math.abs(dd) < Math.abs(best.t - o.t))) best = tp; }); if (best) { best.used = true; o.hit = best.t - o.t; deltas.push(o.hit); } });
@@ -1417,13 +1418,15 @@ import { register as registerPathway } from './ui/pathway.js';
   const KIT = instrumentById['drum-kit'].kit, KIT_KEYS = {}; KIT.forEach(p => { KIT_KEYS[p.key] = p.id; });
   const kitName = id => { const p = KIT.find(k => k.id === id); return p ? p.name : 'a note off the kit'; };
   let kitFlash = { piece: null, at: -1e12 }, kitBox = null, kitLabels = [];
+  // How many of this bar's beats click: the count-in always, then on through the bar (clicksThrough says when not).
+  const barClickCount = micCounts => clicksThrough({ level: S.level, levels: MODS[mod].levels.length, micCounts: micCounts }) ? Math.round((bar.barEnd - bar.t0) / bar.spb) : bar.countBeats;
   function startKitBar() {
     const k = task.kit, M = RHY.METRES[k.metre], phrase = RHY.buildPhrase({ metre: k.metre, cells: k.bar.cells }), beatSec = (60 / k.bpm) * (M.beatUnit / RHY.TPQ), t0 = now() + 0.15, playAt = t0 + M.beats * beatSec, times = RHY.onsetsOf(phrase.events, { bpm: k.bpm, swing: k.swing });
     let tick = 0; const beats = [], mt = k.metre.split('/').map(Number); phrase.events.forEach(ev => { if (!ev.rest && !ev.tied) beats.push(tick / RHY.TPQ); tick += ev.dur; });
     const onsets = times.map((t, i) => ({ t: playAt + t, beat: beats[i], pieces: k.bar.hits[i].pieces, flam: k.bar.hits[i].flam }));
     // laid out in quarter beats (a 6/8 bar is three), then the time signature shows the real metre
     const staff = layoutPercussionMeasure({ hits: [].concat(...onsets.map(o => o.pieces.map(p => ({ piece: p, start: o.beat })))), time: [tick / RHY.TPQ, 4], width: 400 }).primitives; staff.forEach(q => { if (q.type === 'timeSig') { q.top = mt[0]; q.bottom = mt[1]; } });
-    bar = { spb: beatSec, t0: t0, playAt: playAt, end: playAt + tick * (60 / k.bpm) / RHY.TPQ + 0.3, clicks: 0, countBeats: M.beats, metre: k.metre, onsets: onsets, staff: staff, noteX: [...new Set(staff.filter(q => q.type === 'notehead').map(q => q.x))].sort((a, b) => a - b), taps: [], judged: false };
+    bar = { spb: beatSec, t0: t0, playAt: playAt, end: playAt + tick * (60 / k.bpm) / RHY.TPQ + 0.3, barEnd: playAt + tick * (60 / k.bpm) / RHY.TPQ, clicks: 0, countBeats: M.beats, metre: k.metre, onsets: onsets, staff: staff, noteX: [...new Set(staff.filter(q => q.type === 'notehead').map(q => q.x))].sort((a, b) => a - b), taps: [], judged: false };
   }
   // A drum-name a mic hit cannot give (toms, crash, ride -- drum-classify.js
   // only tells kick/snare/hihat apart) is judged leniently rather than
@@ -1433,7 +1436,13 @@ import { register as registerPathway } from './ui/pathway.js';
   const KIT_MIC_UNNAMED = new Set(['tom-floor', 'tom-mid', 'tom-high', 'crash', 'ride']);
   // src/audio/drum-classify.js's three classes, named to this kit's piece ids.
   const DRUM_KIND_TO_PIECE = { kick: 'kick', snare: 'snare', hihat: 'hihat-closed' };
+  // Set by the first real note from an e-kit, cleared when no MIDI port is left
+  // (midi wire() below). Connect arms the mic and MIDI together, so without this
+  // an e-kit player's mic would count each pad thump as a second hit, and would
+  // hear a click through the bar as a hit too.
+  let kitMidiHit = false;
   function onHit(piece, t, source) {
+    if (source === 'midi') kitMidiHit = true; else if (source === 'mic' && kitMidiHit) return;
     // A real mic hit already made its own sound; only a silent input (key,
     // click, or an e-kit's own MIDI voice) needs the app's synthesized one.
     lastInputAt = now(); if (piece) { kitFlash = { piece: piece, at: performance.now() }; if (source !== 'midi' && source !== 'mic') drumHit(piece, now() + 0.005); }
@@ -1442,8 +1451,8 @@ import { register as registerPathway } from './ui/pathway.js';
     if (at >= bar.playAt - 0.25) bar.taps.push({ t: at, piece: piece, used: false, source: source });
   }
   function tickKitBar() {
-    if (!bar || !task || task.kind !== 'kit') return; const t = now();
-    while (bar.clicks < bar.countBeats && bar.t0 + bar.clicks * bar.spb < t + 0.12) { const at = bar.t0 + bar.clicks * bar.spb; if (at > t - 0.01) click(at, bar.clicks === 0); bar.clicks++; }
+    if (!bar || !task || task.kind !== 'kit') return; const t = now(), upTo = barClickCount(micReady && !kitMidiHit);
+    while (bar.clicks < upTo && bar.t0 + bar.clicks * bar.spb < t + 0.12) { const at = bar.t0 + bar.clicks * bar.spb; if (at > t - 0.01) click(at, bar.clicks % bar.countBeats === 0); bar.clicks++; }
     if (bar.judged || t <= bar.end) return;
     bar.judged = true; const win = S.level > MODS[mod].levels.length ? 0.11 : 0.15, deltas = [];
     const near = (o, ok) => { let best = null; bar.taps.forEach(tp => { if (!tp.used && ok(tp) && Math.abs(tp.t - o.t) <= win && (!best || Math.abs(tp.t - o.t) < Math.abs(best.t - o.t))) best = tp; }); if (best) best.used = true; return best; };
@@ -1840,8 +1849,18 @@ import { register as registerPathway } from './ui/pathway.js';
     if (e) { const x = x0 + (e.info.hole - 0.5) * hw, up = e.info.dir === 'b'; g.fillStyle = accent(); font(H * 0.2); g.textAlign = 'center'; g.fillText(up ? '↑' : '↓', x, up ? y0 - H * 0.13 : y0 - H * 0.13); font(H * 0.06); g.fillStyle = '#e9edf6'; g.fillText(up ? 'BLOW' : 'DRAW', x + hw * 1.3, y0 - H * 0.17); const c = liveCents(e.info.midi, true); g.fillStyle = '#5be08a'; g.fillRect(x0, H * 0.95, w * c01(holdFor / (task.kind === 'hold' ? 2 : 0.5)), H * 0.025); if (heard && heard.freq) { font(H * 0.05, 600); g.fillStyle = '#93a0bd'; g.textAlign = 'left'; g.fillText('Hearing ' + nname(heard.midi, true) + (c !== null && Math.abs(c) < 100 ? ', ' + Math.round(Math.abs(c)) + ' cents ' + (c > 0 ? 'sharp' : 'flat') : ''), x0, H * 0.1); } }
   }
   function drawEar(W, H) { const t = task; if (t && t.revealed && t.played) { drawKeys(W * 0.05, H * 0.3, W * 0.9, H * 0.5, 48, 84, { target: t.played, good: [], names: DB.prefs.names }); g.fillStyle = '#e9edf6'; font(H * 0.09); g.textAlign = 'center'; g.fillText(t.played.map(m => nname(m)).join('  →  '), W / 2, H * 0.18); } else { g.fillStyle = accent(); font(H * 0.5); g.textAlign = 'center'; g.fillText('?', W / 2, H * 0.66); g.strokeStyle = accent(); g.lineWidth = 4; if (reducedMotion) { g.beginPath(); g.arc(W / 2, H * 0.5, H * 0.35, 0, 7); g.stroke(); } else { const k = (performance.now() / 600) % 1; g.globalAlpha = 1 - k; g.beginPath(); g.arc(W / 2, H * 0.5, H * (0.3 + 0.15 * k), 0, 7); g.stroke(); g.globalAlpha = 1; } } }
+  // ---------- beat cues: what each timed exercise shows of the beat (timing in src/core/beat-cues.js) ----------
+  // lastCue is what this frame showed, for the test hook; draw() clears it each frame.
+  let lastCue = null;
+  const cueLatency = () => DB.latencyMs != null ? DB.latencyMs : (actx ? (actx.outputLatency || actx.baseLatency || 0) * 1000 : 0);
+  function drawBeatNumber(beat, x, y, size, alpha) {
+    if (!beat) return; g.save(); g.globalAlpha = alpha || 1; g.fillStyle = beat.n === 1 ? '#f3c52f' : '#e9edf6'; font(size * (reducedMotion ? 1 : 1 + 0.18 * beat.pulse)); g.textAlign = 'center'; g.fillText(String(beat.n), x, y); g.restore();
+  }
+  // Reduced motion: the line steps from beat to beat instead of sliding.
+  function cueSweep(t, times, beat, points) { return sweepAt(reducedMotion && beat ? times[beat.index] : t, points); }
+  function barBeat(t) { const times = beatTimes(bar.t0, bar.spb, Math.round((bar.barEnd - bar.t0) / bar.spb)); return { times: times, beat: beatAt(t, times, bar.countBeats) }; }
   function drawBar(W, H) {
-    if (!bar || !task) return; const x0 = W * 0.08, x1 = W * 0.94, bw = (x1 - x0) / 4, y = H * 0.48, t = now(), stem = H * 0.26, nh = H * 0.045;
+    if (!bar || !task) return; const x0 = W * 0.08, x1 = W * 0.94, bw = (x1 - x0) / 4, y = H * 0.48, t = cueClock(now(), cueLatency(), S.offset), stem = H * 0.26, nh = H * 0.045;
     g.strokeStyle = '#c9ced9'; g.lineWidth = 2; g.beginPath(); g.moveTo(x0 - 10, y); g.lineTo(x1 + 10, y); g.stroke(); g.lineWidth = 4; g.beginPath(); g.moveTo(x0 - 10, y - H * 0.2); g.lineTo(x0 - 10, y + H * 0.2); g.moveTo(x1 + 10, y - H * 0.2); g.lineTo(x1 + 10, y + H * 0.2); g.stroke();
     for (let b = 0; b < 4; b++) { g.fillStyle = '#93a0bd'; font(H * 0.07, 600); g.textAlign = 'center'; g.fillText(String(b + 1), x0 + (b + 0.12) * bw, H * 0.93); }
     const X = beat => x0 + (beat + 0.12) * bw; g.fillStyle = '#e9edf6'; g.strokeStyle = '#e9edf6';
@@ -1856,23 +1875,42 @@ import { register as registerPathway } from './ui/pathway.js';
       else if (c === 'ess') { head(b0); head(b0 + 0.5); head(b0 + 0.75); beam(b0, b0 + 0.75, 0); beam(b0 + 0.5, b0 + 0.75, 1); } else if (c === 'sse') { head(b0); head(b0 + 0.25); head(b0 + 0.5); beam(b0, b0 + 0.5, 0); beam(b0, b0 + 0.25, 1); }
       else if (c === 'eqe') { head(b0); flag(b0); head(b0 + 0.5); head(b0 + 1.5); flag(b0 + 1.5); } });
     if (bar.judged) { bar.onsets.forEach(o => { const beat = (o.t - bar.playAt) / bar.spb, onTime = o.hit !== null && Math.abs(o.hit) < 0.06, mark = o.hit === null ? '✗' : onTime ? '✓' : (o.hit < 0 ? 'early' : 'late'); g.fillStyle = o.hit === null ? '#ff6b5e' : onTime ? '#5be08a' : '#f3c52f'; const mx = X(beat) - 3 + (o.hit || 0) / bar.spb * bw; g.fillRect(mx, y + H * 0.2, 6, H * 0.08); font(H * 0.032, 700); g.textAlign = 'center'; g.fillText(mark, mx + 3, y + H * 0.2 - 4); }); bar.taps.filter(tp => !tp.used).forEach(tp => { g.fillStyle = '#ff6b5e'; font(H * 0.07); g.textAlign = 'center'; g.fillText('×', X((tp.t - bar.playAt) / bar.spb), y + H * 0.28); }); }
-    if (t < bar.playAt) { const left = Math.ceil((bar.playAt - t) / bar.spb); g.fillStyle = accent(); font(H * 0.22); g.textAlign = 'center'; g.fillText(String(clamp(left, 1, 4)), W * 0.5, H * 0.22); } else if (t < bar.end) { const px = X((t - bar.playAt) / bar.spb - 0); g.strokeStyle = accent(); g.lineWidth = 3; g.beginPath(); g.moveTo(px, y - H * 0.34); g.lineTo(px, y + H * 0.2); g.stroke(); bar.taps.forEach(tp => { g.fillStyle = '#93a0bd'; g.fillRect(X((tp.t - bar.playAt) / bar.spb) - 2, y + H * 0.2, 4, H * 0.06); }); }
+    if (!bar.judged) drawBarCue('bar', t, W, H, y, [{ t: bar.t0, x: x0 - 10 }, { t: bar.playAt, x: X(0) }, { t: bar.barEnd, x: X(4) }]);
+    if (!bar.judged && t >= bar.playAt) bar.taps.forEach(tp => { g.fillStyle = '#93a0bd'; g.fillRect(X((tp.t - bar.playAt) / bar.spb) - 2, y + H * 0.2, 4, H * 0.06); });
+  }
+  // The rhythm bars: the number counts up through the count-in and the bar, and the line walks in to the first note during the count-in.
+  function drawBarCue(kind, t, W, H, y, points) {
+    const { times, beat } = barBeat(t), x = cueSweep(t, times, beat, points);
+    drawBeatNumber(beat, W * 0.5, H * 0.19, H * 0.17); // sits on top of the stems, which reach H * 0.22
+    // Not the instrument's colour: rhythm's pale blue reads as a barline.
+    g.strokeStyle = '#f3c52f'; g.lineWidth = 3; g.beginPath(); g.moveTo(x, y - H * 0.34); g.lineTo(x, y + H * 0.2); g.stroke();
+    lastCue = { kind: kind, t: t, n: beat ? beat.n : null, sweepX: x, rings: [], lit: [], cell: null };
   }
   // rests, ties, triplet brackets, dots and the time signature, for the rhythm-vocabulary bars
-  // The bar on a percussion staff (top), the kit from the throne (bottom): the bar's drums outlined, filled
-  // while the count-in runs, the piece just hit flashing; after judging, a mark under each note.
+  // The bar on a percussion staff (top), the kit from the throne (bottom): the bar's drums outlined, the
+  // piece just hit flashing; after judging, a mark under each note. While the bar runs: the beat number beside
+  // the staff, a line crossing each note on time, and a ring closing on each drum as its next hit nears.
   // what each drawn piece is called on the kit (a beginner reads the name; the key letter is only a hint). [name, second line, side it prefers (l/r/u/d), 's' for the small print of the hi-hat's tab and pedal]; the hi-hat is named once, on its disc
   const kitDrawNames = () => ({ kick: [tl('kit.piece.kick')], snare: [tl('kit.piece.snare')], 'hihat-closed': [tl('kit.draw.hihat')], 'hihat-pedal': [tl('kit.draw.pedal'), '', 'r', 's'], 'hihat-open': [tl('kit.draw.open'), '', 'u', 's'], 'tom-floor': [tl('kit.piece.tom-floor'), '', 'l'], 'tom-mid': [tl('kit.draw.mid1'), tl('kit.draw.mid2'), 'u'], 'tom-high': [tl('kit.draw.high1'), tl('kit.draw.high2'), 'u'], crash: [tl('kit.piece.crash')], ride: [tl('kit.piece.ride')] });
   function requiredKitPieces() { return task && task.kind === 'kit' && bar ? [...new Set(bar.onsets.flatMap(o => o.pieces))] : []; }
   function drawKit(W, H) {
-    const on = bar && task && task.kind === 'kit' && bar.staff, t = now(), pre = on && t < bar.playAt, want = {}, bw = W * 0.94, bh = on ? H * 0.62 : H * 0.9, box = { x: (W - bw) / 2, y: on ? H * 0.37 : (H - bh) / 2, w: bw, h: bh, s: bh };
-    kitBox = box; kitLabels = []; if (on) { bar.kitBox = box; bar.onsets.forEach(o => o.pieces.forEach(p => { want[p] = 1; }));
-      const sc = Math.min(W * 0.9 / 400, H * 0.33 / 130), x0 = (W - 400 * sc) / 2, y0 = H * 0.02;
+    const on = bar && task && task.kind === 'kit' && bar.staff, t = cueClock(now(), cueLatency(), S.offset), cueLit = {}, want = {}, bw = W * 0.94, bh = on ? H * 0.62 : H * 0.9, box = { x: (W - bw) / 2, y: on ? H * 0.37 : (H - bh) / 2, w: bw, h: bh, s: bh };
+    let rings = []; kitBox = box; kitLabels = []; if (on) { bar.kitBox = box; bar.onsets.forEach(o => o.pieces.forEach(p => { want[p] = 1; }));
+      const sc = Math.min(W * 0.9 / 400, H * 0.33 / 130), x0 = (W - 400 * sc) / 2, y0 = H * 0.02, midY = y0 + 65 * sc, sweepX = bar.judged ? 0 : cueSweep(t, barBeat(t).times, barBeat(t).beat, [{ t: bar.t0, x: x0 }, ...bar.onsets.map((o, i) => ({ t: o.t, x: x0 + (bar.noteX[i] || 0) * sc })), { t: bar.barEnd, x: x0 + 400 * sc }]);
+      if (!bar.judged) {
+        // The margin beside the staff holds the number; on a phone the staff fills the width, so it sits faint behind the staff instead.
+        const beat = barBeat(t).beat, size = Math.min(H * 0.18, x0 * 0.8), fits = size >= 28, next = drumRings(bar.onsets, t, bar.spb);
+        if (fits) drawBeatNumber(beat, W - x0 / 2, midY + size * 0.35, size); else drawBeatNumber(beat, W / 2, midY + 40 * sc, 110 * sc, 0.35);
+        bar.onsets.forEach(o => { if (Math.abs(o.t - t) < 0.085) o.pieces.forEach(p => { cueLit[p] = 1; }); });
+        if (reducedMotion) next.forEach(r => { cueLit[r.piece] = 1; }); else rings = next;
+        lastCue = { kind: 'kit', t: t, n: beat ? beat.n : null, sweepX: sweepX, noteX: bar.onsets.map((o, i) => x0 + (bar.noteX[i] || 0) * sc), rings: rings, lit: Object.keys(cueLit), cell: null };
+      }
       g.save(); g.translate(x0, y0); g.scale(sc, sc); g.strokeStyle = '#c9ced9'; g.fillStyle = '#e9edf6'; g.lineWidth = 1.5 / sc; drawPrimitives(g, bar.staff, {}); g.restore();
+      if (!bar.judged) { g.strokeStyle = accent(); g.lineWidth = 3; g.beginPath(); g.moveTo(sweepX, y0); g.lineTo(sweepX, y0 + 130 * sc); g.stroke(); }
       bar.onsets.forEach((o, i) => { const x = x0 + (bar.noteX[i] || 0) * sc; if (o.flam) { g.fillStyle = '#93a0bd'; font(11 * sc, 700); g.textAlign = 'center'; g.fillText('flam', x, y0 + 10 * sc); } const sk = task.kit.bar.hits[i] && task.kit.bar.hits[i].sticking; if (sk) { g.fillStyle = '#93a0bd'; font(11 * sc, 700); g.textAlign = 'center'; g.fillText(tl('kit.stick.' + sk), x, y0 + 100 * sc); } if (!bar.judged || !o.res) return; const bad = o.res.some(r => r.dt === undefined), off = Math.max(...o.res.map(r => Math.abs(r.dt || 0))); g.fillStyle = bad ? '#ff6b5e' : off > 0.05 ? '#f3c52f' : '#5be08a'; g.beginPath(); g.arc(x, y0 + 122 * sc, 5 * sc, 0, 7); g.fill(); }); }
     // the kit is drawn from the throne in a frame that keeps its shape inside the box (drum-kit.js): drums are heads with a rim, cymbals discs with a bell, pedals footboards, the open hi-hat a tab on the hi-hat's far edge
     const f = kitFrame(box), m = f.h, thr = { x: f.x + (THRONE.x - THRONE.w / 2) * m, y: f.y + (THRONE.y - THRONE.h / 2) * m, w: THRONE.w * m, h: THRONE.h * m };
-    const pcs = kitRegions(box, DB.prefs.kit, requiredKitPieces()).map(r => { const flash = kitFlash.piece === r.id && performance.now() - kitFlash.at < 160, c = r.kind === 'circle', p = { id: r.id, shape: r.shape }; return { p, r, x: r.cx, y: r.cy, hw: c ? r.r : r.w / 2, hh: c ? r.r : r.h / 2, rr: c ? r.r : 0, bb: c ? { x: r.cx - r.r, y: r.cy - r.r, w: r.r * 2, h: r.r * 2 } : { x: r.x, y: r.y, w: r.w, h: r.h }, lit: flash || (pre && want[r.id]), flash, hint: r.id === 'hihat-pedal' && want['hihat-closed'] && !want['hihat-pedal'] }; });
+    const pcs = kitRegions(box, DB.prefs.kit, requiredKitPieces()).map(r => { const flash = kitFlash.piece === r.id && performance.now() - kitFlash.at < 160, c = r.kind === 'circle', p = { id: r.id, shape: r.shape }; return { p, r, x: r.cx, y: r.cy, hw: c ? r.r : r.w / 2, hh: c ? r.r : r.h / 2, rr: c ? r.r : 0, bb: c ? { x: r.cx - r.r, y: r.cy - r.r, w: r.r * 2, h: r.r * 2 } : { x: r.x, y: r.y, w: r.w, h: r.h }, lit: flash || !!cueLit[r.id], flash, hint: r.id === 'hihat-pedal' && want['hihat-closed'] && !want['hihat-pedal'] }; });
     g.beginPath(); g.ellipse(thr.x + thr.w / 2, thr.y + thr.h / 2, thr.w / 2, thr.h / 2, 0, 0, 7); g.fillStyle = '#1b2130'; g.fill(); g.strokeStyle = '#93a0bd'; g.lineWidth = 1; g.stroke();
     // the tab is first in hit order and drawn last, over the hi-hat disc; a closed hi-hat wanted outlines the hi-hat pedal (dashed, never filled) because the left foot holds it shut
     pcs.slice().reverse().forEach(({ p, r, x, y, lit, flash, hint }) => { const rc = r.kind === 'circle'; g.beginPath(); if (rc) g.arc(x, y, r.r, 0, 7); else g.rect(r.x, r.y, r.w, r.h); g.fillStyle = flash ? '#f3c52f' : lit ? '#f08a4b' : p.shape === 'cymbal' || p.shape === 'tab' ? '#2a3140' : '#1b2130'; g.fill(); const on = want[p.id] || hint; g.strokeStyle = on ? '#f08a4b' : '#93a0bd'; g.lineWidth = on ? 3 : 1.5; if (hint) g.setLineDash([6, 4]); g.stroke(); g.setLineDash([]);
@@ -1880,6 +1918,8 @@ import { register as registerPathway } from './ui/pathway.js';
       if (p.shape === 'drum') g.arc(x, y, r.r * 0.8, 0, 7); else if (p.shape === 'cymbal') g.arc(x, y, r.r * 0.3, 0, 7);
       else if (p.id === 'kick') { g.ellipse(x, r.y + r.h * 0.22, r.w * 0.38, r.h * 0.18, 0, 0, 7); g.rect(r.x + r.w * 0.15, r.y + r.h * 0.72, r.w * 0.7, r.h * 0.2); } else if (p.id === 'hihat-pedal') { g.moveTo(r.x + 3, r.y + r.h * 0.25); g.lineTo(r.x + r.w - 3, r.y + r.h * 0.25); }
       g.stroke(); });
+    // each ring lands on its drum's own rim at the moment to hit it
+    rings.forEach(({ piece, progress }) => { const q = pcs.find(c => c.p.id === piece); if (!q) return; const grow = 1.2 * (1 - progress); g.strokeStyle = '#f3c52f'; g.lineWidth = 3; g.globalAlpha = 0.35 + 0.65 * progress; g.beginPath(); if (q.r.kind === 'circle') g.arc(q.x, q.y, q.rr * (1 + grow), 0, 7); else g.rect(q.r.x - q.hw * grow, q.r.y - q.hh * grow, q.r.w + 2 * q.hw * grow, q.r.h + 2 * q.hh * grow); g.stroke(); g.globalAlpha = 1; });
     // Names go on after every circle is down. A name that fits is written inside its circle; any other tries its own side, the opposite side, then under and over the circle, and takes the first spot that touches no other name, no other piece and not the canvas edge; with none free it loses its second line (closed/pedal/open) and tries again, so two names never run into each other on a phone-width kit.
     const drawNames = kitDrawNames(), placed = [], hit = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
     pcs.slice().sort((a, b) => Number(a.p.id === 'kick') - Number(b.p.id === 'kick')).forEach(({ p, x, y, rr, hw, hh, lit }) => {
@@ -1909,7 +1949,7 @@ import { register as registerPathway } from './ui/pathway.js';
       font(Math.max(11, m * 0.034), 700); g.textAlign = 'center'; g.fillStyle = lit ? '#05070c' : '#f3c52f'; g.fillText(key, x, kick && inside ? y + fs * 0.9 : inside ? y + hh - Math.max(4, m * 0.012) : y + 4); });
   }
   function drawBar2(W, H) {
-    if (!bar || !task) return; const x0 = W * 0.1, x1 = W * 0.94, y = H * 0.48, t = now(), stem = H * 0.26, nh = H * 0.045;
+    if (!bar || !task) return; const x0 = W * 0.1, x1 = W * 0.94, y = H * 0.48, t = cueClock(now(), cueLatency(), S.offset), stem = H * 0.26, nh = H * 0.045;
     const total = RHY.totalTicks(bar.phrase.events) || 1, X = tick => x0 + (tick / total) * (x1 - x0);
     g.strokeStyle = '#c9ced9'; g.lineWidth = 2; g.beginPath(); g.moveTo(x0 - 10, y); g.lineTo(x1 + 10, y); g.stroke();
     bar.phrase.bars.forEach((b, i) => { const bx = i === 0 ? x0 - 10 : X(RHY.totalTicks(bar.phrase.events.slice(0, b.start))); g.lineWidth = i === 0 || i === bar.phrase.bars.length - 1 ? 4 : 2; g.beginPath(); g.moveTo(bx, y - H * 0.2); g.lineTo(bx, y + H * 0.2); g.stroke(); });
@@ -1935,8 +1975,18 @@ import { register as registerPathway } from './ui/pathway.js';
     });
     tripletGroups.forEach(grp => { const x2 = X(grp.lastTick != null ? grp.lastTick : grp.firstTick) + nh * 1.3, x1t = X(grp.firstTick); g.strokeStyle = '#93a0bd'; g.lineWidth = 2; g.beginPath(); g.moveTo(x1t, y - stem * 1.15); g.lineTo(x2, y - stem * 1.15); g.stroke(); g.fillStyle = '#93a0bd'; font(H * 0.06, 700); g.textAlign = 'center'; g.fillText('3', (x1t + x2) / 2, y - stem * 1.25); });
     if (bar.judged) { bar.onsets.forEach(o => { const tick = Math.round(((o.t - bar.playAt) / (bar.end - 0.3 - bar.playAt)) * total); g.fillStyle = o.hit === null ? '#ff6b5e' : Math.abs(o.hit) < 0.06 ? '#5be08a' : '#f3c52f'; g.fillRect(X(tick) - 3, y + H * 0.2, 6, H * 0.08); }); bar.taps.filter(tp => !tp.used).forEach(tp => { g.fillStyle = '#ff6b5e'; font(H * 0.07); g.textAlign = 'center'; g.fillText('×', X(((tp.t - bar.playAt) / (bar.end - 0.3 - bar.playAt)) * total), y + H * 0.28); }); }
-    if (t < bar.playAt) { const left = Math.ceil((bar.playAt - t) / bar.spb); g.fillStyle = accent(); font(H * 0.22); g.textAlign = 'center'; g.fillText(String(clamp(left, 1, bar.countBeats)), W * 0.5, H * 0.22); }
-    else if (t < bar.end) { const tick = ((t - bar.playAt) / (bar.end - 0.3 - bar.playAt)) * total; g.strokeStyle = accent(); g.lineWidth = 3; g.beginPath(); g.moveTo(X(tick), y - H * 0.34); g.lineTo(X(tick), y + H * 0.2); g.stroke(); }
+    if (!bar.judged) drawBarCue('bar2', t, W, H, y, [{ t: bar.t0, x: x0 - 10 }, { t: bar.playAt, x: X(0) }, { t: bar.barEnd, x: X(total) }]);
+  }
+  // Play in time: a strip over the instrument with the count, the four notes in a row, and a line that reaches each note's cell on its beat.
+  function drawGrooveCue(W, H) {
+    if (groove.judged) return;
+    const t = cueClock(now(), cueLatency(), 0), n = task.els.length, spb = groove.spb, h = H * 0.13, x0 = W * 0.12, x1 = W * 0.98, cw = (x1 - x0) / n, centre = i => x0 + (i + 0.5) * cw;
+    const times = beatTimes(groove.t0, spb, n * 2), beat = beatAt(t, times, n), at = Math.floor((t - groove.grid[0]) / spb + 0.5), cell = at >= 0 && at < n ? at : null;
+    const x = cueSweep(t, times, beat, [{ t: groove.t0, x: x0 }, ...groove.grid.map((gt, i) => ({ t: gt, x: centre(i) })), { t: groove.grid[n - 1] + spb / 2, x: x1 }]);
+    g.fillStyle = 'rgba(12,15,22,0.92)'; g.fillRect(0, 0, W, h); drawBeatNumber(beat, x0 / 2, h * 0.8, h * 0.85);
+    task.els.forEach((e, i) => { const label = promptFor(e.info, e.reveal); if (i === cell) { g.fillStyle = '#f3c52f'; g.fillRect(x0 + i * cw + 2, 2, cw - 4, h - 4); } g.fillStyle = i === cell ? '#05070c' : '#e9edf6'; font(h * 0.5, 700); const wide = g.measureText(label).width; if (wide > cw * 0.9) font(h * 0.36 * cw * 0.9 / wide, 700); g.textAlign = 'center'; g.fillText(label, centre(i), h * 0.62); });
+    g.strokeStyle = accent(); g.lineWidth = 3; g.beginPath(); g.moveTo(x, 0); g.lineTo(x, h); g.stroke();
+    lastCue = { kind: 'groove', t: t, n: beat ? beat.n : null, sweepX: x, rings: [], lit: [], cell: cell };
   }
   // Overlay staff for the five wired instruments (NOTATE_MOD_IDS), additive
   // to each instrument's existing drawing so today's display is unchanged
@@ -1976,6 +2026,7 @@ import { register as registerPathway } from './ui/pathway.js';
   }
   let kbdTargetDbg = []; // last keyboard target list drawn (debug hook only)
   function draw() {
+    lastCue = null;
     rootK = (parseFloat(getComputedStyle(document.documentElement).fontSize) || 16) / 16; cv.classList.toggle('staffkbd', staffBand('kbd') && mod === 'kbd'); cv.classList.toggle('kbd', mod === 'kbd'); size(); const W = cv.width, H = cv.height; g.clearRect(0, 0, W, H); rowRects = []; keyRects = []; kbdOverviewRect = null; kbdZoom = null; if (mod !== 'kbd') syncKbdShift();
     if (TOOLS[mod]) { if (mod === 'tuner') drawTuner(W, H); else drawCapture(W, H); return; }
     const M = MODS[mod], e = playing && task && !task.done ? cur() : null, showE = e || (task && task.done ? task.els[task.els.length - 1] : null);
@@ -2014,6 +2065,7 @@ import { register as registerPathway } from './ui/pathway.js';
     else if (M.kit) drawKit(W, H);
     else if (mod === 'ear') drawEar(W, H); else if (mod === 'rhy') { if (task && task.kind === 'bar2') drawBar2(W, H); else drawBar(W, H); }
     if (NOTATE_MOD_IDS.indexOf(mod) >= 0) drawNotation(e, W, H); else lastStaff = null;
+    if (task && task.kind === 'groove' && groove) drawGrooveCue(W, H);
     if (!reducedMotion && performance.now() - flashBad < 220) { g.strokeStyle = '#ff6b5e'; g.lineWidth = 8; g.strokeRect(4, 4, W - 8, H - 8); g.fillStyle = '#ff6b5e'; font(H * 0.06, 700); g.textAlign = 'left'; g.fillText('✗', 14, H * 0.09); } else if (!reducedMotion && performance.now() - flashGood < 220) { g.strokeStyle = '#5be08a'; g.lineWidth = 8; g.strokeRect(4, 4, W - 8, H - 8); g.fillStyle = '#5be08a'; font(H * 0.06, 700); g.textAlign = 'left'; g.fillText('✓', 14, H * 0.09); }
     if (!playing && !(rangeTest && mod === 'voice')) { g.fillStyle = '#93a0bd'; font(H * 0.08); g.textAlign = 'right'; g.fillText(sess ? t('stage.paused') : t(instrumentChosen ? 'stage.pressStart' : 'stage.pickFirst'), W * 0.97, H * 0.1); }
   }
@@ -2629,6 +2681,7 @@ import { register as registerPathway } from './ui/pathway.js';
       const wire = () => {
         midiOutRefresh(a);
         const inputs = []; a.inputs.forEach(i => inputs.push(i));
+        if (!inputs.some(i => i.state === 'connected')) kitMidiHit = false; // the e-kit is gone: an acoustic kit's mic counts again
         // A port this app had open that is gone: onstatechange no longer lists
         // it at all (unplugged, or Windows handed its note port back to a DAW),
         // or still lists it but reads anything other than 'connected'. Null its
@@ -3283,7 +3336,7 @@ import { register as registerPathway } from './ui/pathway.js';
   if (__DEBUG_HOOK__) Object.assign(hook, { startWithoutMic: () => { instrumentChosen = true; revealStage(); startSession(); } });
   if (__DEBUG_HOOK__) Object.assign(hook, { pitchFrame: (fr, dt) => onPitch(fr, dt) });
   if (__DEBUG_HOOK__) Object.assign(hook, { testPluck: testPluck, pitchWorkletActive: () => !!pitchWorkletNode });
-  if (__DEBUG_HOOK__) Object.assign(hook, { testDrumHit: testDrumHit });
+  if (__DEBUG_HOOK__) Object.assign(hook, { testDrumHit: testDrumHit, kitHit: onHit, beatCue: () => lastCue });
   //
   if (__DEBUG_HOOK__) Object.assign(hook, { gates: () => gates, calibrate: calibrateNoiseFloor, devices: () => micDevices, pitchWorkletGate: () => lastWorkletGateSent, monoRoute: () => lastMonoRoute,
     // Test-only seam (mic-gate-and-capture): drives the exact same
