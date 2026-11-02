@@ -103,6 +103,25 @@ export const TRAINER_LEVELS = [
   L('Swing ride pattern', '4/4', 100, ['q:R ee:R+P,R q:R ee:R+P,R', 'q:R+K ee:R+P+K,R q:R+K ee:R+P+K,R'], 1)
 ];
 
+// A failed drill bar replays the SAME bar before the trainer moves on, so the
+// learner can fix it. Pure: the caller owns the clock and the state (`rep`).
+// `rep` is null or { mod, level, bar, tries } (`bar` is the bar object just
+// played, compared by identity). Only a failure that had at least one hit,
+// on a level inside the normal table (`inTable`), repeats: a bar with no hits
+// at all may mean the learner walked away, so it takes today's path (the
+// idle-bar count and the "away" break). `penalise` is true only for the FIRST
+// failure of a bar, so three tries cost readiness once, not three times.
+export const KIT_MAX_TRIES = 3;
+export function kitRepeatStep(rep, { mod, level, inTable, bar, failed, hits }) {
+  const same = !!rep && rep.mod === mod && rep.level === level && rep.bar === bar;
+  if (!inTable || !failed || !hits) return { rep: null, again: false, giveUp: false, penalise: true, tryNo: 0 };
+  const tries = (same ? rep.tries : 0) + 1;
+  if (tries >= KIT_MAX_TRIES) return { rep: null, again: false, giveUp: true, penalise: !same, tryNo: tries };
+  return { rep: { mod, level, bar, tries }, again: true, giveUp: false, penalise: !same, tryNo: tries };
+}
+// The repeat still owed for this instrument and level, else null (a level or instrument change drops it).
+export function kitRepeatFor(rep, mod, level) { return rep && rep.mod === mod && rep.level === level && rep.tries < KIT_MAX_TRIES ? rep : null; }
+
 export default {
   id: 'drum-kit',
   name: 'Drum kit',
