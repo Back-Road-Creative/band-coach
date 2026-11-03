@@ -897,6 +897,8 @@ string tuning, and an ordered curriculum). `src/instruments/index.js` exports
 `INSTRUMENTS` and `byId`. Every record also carries a `provenance` field — null
 until a musician has reviewed its curriculum, see "Beginner pathway status" below.
 
+Opened from the Wind and brass module (a transposition group, not one instrument), the "How to play it" panel starts on a chart for the group chosen under "My instrument", never on Keyboard (`windChartIdsFor()` in `src/instruments/how-kind.js`): B flat opens on the trumpet, bass clef on the trombone, and so on. A group that covers several instruments (concert pitch: flute or oboe; B flat: trumpet or clarinet) shows one line asking the learner to choose theirs from the existing instrument list; baritone sax has no chart, so the panel says so and shows no diagram until another instrument is picked.
+
 The "How to play it" panel (`src/ui/fingerings.js`) never leaves that gap
 implicit: `src/instruments/review.js`'s `isReviewed()` treats a record's
 provenance as reviewed only when `reviewedBy` and `reviewedAt` are both
