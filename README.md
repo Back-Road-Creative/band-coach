@@ -735,7 +735,8 @@ never grades (a clapped rhythm's pitch, a keyboard's fixed pitch and length), No
 The strip's "Work on bar N next" line carries a "Loop bar N" button: it repeats that one bar from 60% speed and speeds up after each clean try through the Riff Repeater ladder below, and "Back to the lesson" returns (`tests/characterization/songs-loop-backing.test.mjs`).
 A drum part practises the same way, on its own kit staff instead of a pitched one, "Play it"
 sounding real drum hits, and hits heard from an e-kit's MIDI or a real kit through the microphone
-both counted; a fifth "Which drum" line reads Not assessed when the mic heard a hit but could not
+both counted, except that once a real MIDI hit lands the microphone stops counting (it would only hear the pads
+again), through retries and later steps, until the e-kit is unplugged (`tests/characterization/songs-kit-mic-after-midi.test.mjs`); a fifth "Which drum" line reads Not assessed when the mic heard a hit but could not
 tell which drum (a tom, crash or ride) from another. Drums struck together (bass drum and hi-hat
 on one beat) are each checked against the hit that named them. Before any timing is asked for, each phrase of a drum part has its own
 untimed step, "Play the drums in order, any speed" (`kind: 'drum-order'`, right after Listen and before

@@ -3136,7 +3136,7 @@ import { register as registerPathway } from './ui/pathway.js';
   const panels = createPanels({ onEscape: () => { closePanel(); const nb = $('navInstrument'); if (document.activeElement === document.body && nb) nb.focus(); } });
   const panelApi = {
     db: () => DB, save: save, mod: () => mod, setMod: m => { closePanel(); setMod(m); }, instrument: id => instrumentById[id || mod], windTransposition: () => { const k = WIND_KINDS[DB.prefs.wind || 'bb']; return k[2] === 'bass' ? 0 : k[1]; }, // wind: the learner's B flat/E flat/F choice (theory panel only; the shared record stays concert)
-    audio: () => { ensureAudio(); return actx; }, openMic: openMic, analysers: () => ({ time: anTime, freq: anFreq }), gates: () => gates,
+    audio: () => { ensureAudio(); return actx; }, openMic: openMic, analysers: () => ({ time: anTime, freq: anFreq }), gates: () => gates, midiConnected: () => midiPorts.length > 0, // a MIDI port is plugged in (Songs' drum kit stops counting the mic once it hears a real hit, and only while this holds)
     tone: tone, click: click, now: now, say: say, coach: coach, recordError: recordError, close: () => closePanel(),
     drum: (piece, at) => drumHit(piece, at),
     // openPanel(id): P2b-3, lets one panel open a sibling panel directly --

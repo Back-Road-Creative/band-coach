@@ -288,6 +288,10 @@ function readFile(file, route) {
 }
 
 function mountSongsPanel(hostEl, api) {
+  // Same rule as the trainer's kitMidiHit (src/app.js): after a real MIDI hit the
+  // mic only hears the e-kit echo, so listenDrumKit stops counting it. Held here, not
+  // per listen, so it outlives a retry or the next step; cleared when no MIDI port is connected.
+  let kitMidiHit = false;
   let library;
   try {
     library = createLibrary(indexedDbStore(indexedDB, 'bandcoach-songs'));
@@ -1922,6 +1926,7 @@ function mountSongsPanel(hostEl, api) {
     // step's instrument is), so a computer-key hit on this same lesson
     // must never be recorded as 'midi' either.
     const unsubscribe = onMidiNote((midi, _exact, atAudioSec, source) => {
+      if (source === 'midi') kitMidiHit = true;
       practice.playedEvents.push({ piece: pieceForMidi(midi), atSec: (atAudioSec != null ? atAudioSec : api.now()) - practice.recordStartSec, source });
       updateCount();
     });
@@ -1957,6 +1962,8 @@ function mountSongsPanel(hostEl, api) {
         const chunk = buf.subarray(end - DRUM_HOP, end);
         const hopAtSec = (t - c * (DRUM_HOP / audio.sampleRate)) - practice.recordStartSec;
         capture.push(chunk, hopAtSec).forEach((hit) => {
+          if (kitMidiHit && !api.midiConnected()) kitMidiHit = false; // the e-kit is gone: an acoustic kit's mic counts again
+          if (kitMidiHit) return;
           practice.playedEvents.push({ piece: hit.piece, atSec: hit.atSec, source: 'mic' });
           heard = true;
         });
