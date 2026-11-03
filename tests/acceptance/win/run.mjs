@@ -31,6 +31,8 @@ const SCENARIO_MS = 120000;
 // The probe's off-screen spot (probe/drive.mjs): headed, but out of the way.
 const OFFSCREEN = '-32000,-32000';
 const NODE_EXE = '/mnt/c/Program Files/nodejs/node.exe';
+// How long the WSL side waits for the Windows side.
+export const WSL_CHILD_MS = 15 * 60 * 1000;
 
 // The scenarios, in run order. Each file exports { id, run(page, ctx), verdict }.
 export const registry = [
@@ -40,6 +42,14 @@ export const registry = [
   { id: 'W4', file: 'w4-audio-gesture.win.mjs' },
   { id: 'W5', file: 'w5-midi-outcome.win.mjs' },
 ];
+
+// Scenarios that need a person, run only by name with --only. Never part of a full run or of its
+// exit code, so an unattended lane cannot sit waiting for someone to hit a drum.
+export const attended = [
+  { id: 'K1', file: 'k1-kit-reading.win.mjs', maxMs: 12 * 60 * 1000 },
+];
+
+export const selectScenarios = (only) => (only ? [...registry, ...attended].filter((r) => r.id === only) : registry);
 
 const VALUE_FLAGS = { '--win-root': 'winRoot', '--html': 'html', '--sha256': 'sha256', '--expect-version': 'expectVersion', '--only': 'only', '--chrome': 'chrome', '--node': 'node', '--report': 'report', '--run-dir': 'runDir' };
 
@@ -118,7 +128,7 @@ async function runScenario(entry, ctx) {
     return { id: entry.id, status: 'BLOCKED', launchError: true, text: `could not start Chrome and open the file: ${e.message}`, attempts: e.attempts, ms: Date.now() - t0 };
   }
   try {
-    const observed = await withDeadline(mod.run(page, ctx), SCENARIO_MS, `${entry.id} did not finish within ${SCENARIO_MS / 1000} s`);
+    const observed = await withDeadline(mod.run(page, ctx), entry.maxMs ?? SCENARIO_MS, `${entry.id} did not finish within ${(entry.maxMs ?? SCENARIO_MS) / 1000} s`);
     const v = mod.verdict(observed);
     return { id: entry.id, status: v.status, text: v.text, findings: v.findings, observed, identity: page.identity, ms: Date.now() - t0 };
   } catch (e) {
@@ -160,9 +170,9 @@ export async function runWindows(args, log = console.log) {
     log(`lane cannot run: ${bad}`);
     return finish(2);
   }
-  const selected = args.only ? registry.filter((r) => r.id === args.only) : registry;
+  const selected = selectScenarios(args.only);
   if (!selected.length) {
-    report.preflight = `no scenario ${args.only}; registered: ${registry.map((r) => r.id).join(', ')}`;
+    report.preflight = `no scenario ${args.only}; registered: ${[...registry, ...attended].map((r) => r.id).join(', ')}`;
     log(`lane cannot run: ${report.preflight}`);
     return finish(planLane({ found: false, results: [], registry, only: args.only }));
   }
@@ -206,7 +216,7 @@ export function runWsl(args, err = console.error) {
     const argv = [`${runWin}\\tests\\acceptance\\win\\run.mjs`, '--run-dir', runWin, '--html', htmlWin, '--sha256', args.sha256 || sha256Of(html), '--report', `${runWin}\\report.json`];
     for (const [flag, key] of [['--expect-version', 'expectVersion'], ['--only', 'only'], ['--chrome', 'chrome']]) if (args[key]) argv.push(flag, args[key]);
     if (args.visible) argv.push('--visible');
-    const child = spawnSync(args.node, argv, { stdio: 'inherit', cwd: runDir, timeout: 15 * 60 * 1000 });
+    const child = spawnSync(args.node, argv, { stdio: 'inherit', cwd: runDir, timeout: WSL_CHILD_MS });
     const hasReport = existsSync(join(runDir, 'report.json'));
     code = laneExit({ status: child.status, hasReport });
     const reportTo = args.report || join(repoRoot, 'dist', 'windows-lane-report.json');
