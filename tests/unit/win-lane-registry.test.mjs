@@ -11,15 +11,17 @@ import * as lane from '../acceptance/win/run.mjs';
 
 const dir = join(dirname(fileURLToPath(import.meta.url)), '..', 'acceptance', 'win');
 const onDisk = () => readdirSync(dir).filter((f) => f.endsWith('.win.mjs')).sort();
+// A scenario that needs a person is listed apart from the unattended ones, and still has to be listed.
+const everyScenario = [...lane.registry, ...lane.attended];
 
-test('U4 registry files are exactly the *.win.mjs files on disk', () => {
-  assert.deepEqual(lane.registry.map((r) => r.file).sort(), onDisk());
+test('U4 registry and attended files are exactly the *.win.mjs files on disk', () => {
+  assert.deepEqual(everyScenario.map((r) => r.file).sort(), onDisk());
 });
 
 test('U4 each registry entry has a distinct id and its file exports that id', async () => {
-  assert.equal(new Set(lane.registry.map((r) => r.id)).size, lane.registry.length, 'ids are distinct');
+  assert.equal(new Set(everyScenario.map((r) => r.id)).size, everyScenario.length, 'ids are distinct');
   assert.ok(lane.registry.length >= 1, 'the registry is not empty');
-  for (const { id, file } of lane.registry) {
+  for (const { id, file } of everyScenario) {
     const mod = await import(pathToFileURL(join(dir, file)).href);
     assert.equal(mod.id, id, `${file} exports id ${id}`);
     assert.equal(typeof mod.run, 'function', `${file} exports run`);
