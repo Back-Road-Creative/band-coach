@@ -84,10 +84,13 @@ export function kitNoteFor(rawKit, device, note) {
   return piece ? canonicalMidi(piece) : note;
 }
 
+// Stamp on a saved pad list. A list is only trusted when it carries this value: lists saved before the walk-through ignored a pad's bursts and replaced the old list could read pads wrongly (snare as high tom), so older or unstamped lists are dropped and GM applies until the pads are taught again.
+export const LEARN_VERSION = 2;
+
 export function sanitizeKitPrefs(raw) {
   const p = raw && typeof raw === 'object' ? raw : {};
   const hidden = Array.isArray(p.hiddenPieces) ? p.hiddenPieces : [];
-  const placements = sanitizePlacements(p.placements), midiMaps = sanitizeMidiMaps(p.midiMaps), hatShared = sanitizeHatShared(p.hatShared, midiMaps), cc4Only = sanitizeCc4Only(p.cc4Only, midiMaps);
+  const stamped = p.learnVersion === LEARN_VERSION, placements = sanitizePlacements(p.placements), midiMaps = stamped ? sanitizeMidiMaps(p.midiMaps) : {}, hatShared = sanitizeHatShared(stamped ? p.hatShared : null, midiMaps), cc4Only = sanitizeCc4Only(stamped ? p.cc4Only : null, midiMaps);
   return {
     preset: p.preset === 'compact' ? 'compact' : 'standard',
     leftHanded: p.leftHanded === true,
@@ -95,7 +98,8 @@ export function sanitizeKitPrefs(raw) {
     ...(Object.keys(placements).length ? { placements } : {}),
     ...(Object.keys(midiMaps).length ? { midiMaps } : {}),
     ...(Object.keys(hatShared).length ? { hatShared } : {}),
-    ...(Object.keys(cc4Only).length ? { cc4Only } : {})
+    ...(Object.keys(cc4Only).length ? { cc4Only } : {}),
+    ...(Object.keys(midiMaps).length || Object.keys(cc4Only).length ? { learnVersion: LEARN_VERSION } : {})
   };
 }
 

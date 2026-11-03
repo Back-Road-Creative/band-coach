@@ -136,7 +136,7 @@ test('only that pair may share: any other repeated note is still refused (contro
 });
 
 test('sharing also works when the open hi-hat is relearned onto the closed one', async t => {
-  const page = await startWalk(t, { midiMaps: { 'XKORCE Kit': { 42: 'hihat-closed', 36: 'kick' } } });
+  const page = await startWalk(t, { midiMaps: { 'XKORCE Kit': { 42: 'hihat-closed', 36: 'kick' } }, learnVersion: 2 });
   await click(page, 'kitLearnStop');
   await click(page, 'kitRelearn-hihat-open');
   await midiNoteOn(page, 'p1', 42);
@@ -147,7 +147,7 @@ test('sharing also works when the open hi-hat is relearned onto the closed one',
 // Counts how many times the app announced a hit on the coach line (one per hit it counted, even when the words repeat).
 const watchHits = page => page.evaluate("window.__hits = 0; new MutationObserver(m => { window.__hits += m.length; }).observe(document.getElementById('coach'), { childList: true, characterData: true, subtree: true })");
 const hits = page => page.evaluate('window.__hits');
-const FLAGGED = { cc4Only: { 'XKORCE Kit': true } };
+const FLAGGED = { cc4Only: { 'XKORCE Kit': true }, learnVersion: 2 };
 async function kitPage(t, kit) {
   const page = await launchPage(HTML_PATH, { initScript: FAKE_MIDI_INIT });
   t.after(() => page.close());
