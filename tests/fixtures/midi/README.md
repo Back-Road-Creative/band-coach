@@ -47,3 +47,7 @@ Sysex (F0/F7), multiple *distinct* tempo values, and trailing bytes after an
 end-of-track marker are still covered only by the hand-built bytes in
 `tests/unit/import-midi.test.mjs` — no small, unambiguously-licensed real
 file exercising those was found in the time available for this change.
+
+`kit-reading-usb-midi.json` is not downloaded: it is the K1 Windows lane reading of one electronic kit on 2026-11-03
+(`tests/acceptance/win/k1-kit-reading.win.mjs`), every pad struck twice. Each message is `[ms from the first, ...bytes]`.
+`tests/unit/kit-hit-guard.test.mjs` replays it.
