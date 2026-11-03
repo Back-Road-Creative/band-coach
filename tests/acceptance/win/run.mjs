@@ -39,6 +39,7 @@ export const registry = [
   { id: 'W3', file: 'w3-update-check.win.mjs' },
   { id: 'W4', file: 'w4-audio-gesture.win.mjs' },
   { id: 'W5', file: 'w5-midi-outcome.win.mjs' },
+  { id: 'W6', file: 'w6-kit-walk-through.win.mjs' },
 ];
 
 const VALUE_FLAGS = { '--win-root': 'winRoot', '--html': 'html', '--sha256': 'sha256', '--expect-version': 'expectVersion', '--only': 'only', '--chrome': 'chrome', '--node': 'node', '--report': 'report', '--run-dir': 'runDir' };

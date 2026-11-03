@@ -2681,8 +2681,11 @@ import { register as registerPathway } from './ui/pathway.js';
   function kitFallbackToMic(reason) {
     openMic().then(() => { kitMicReason = reason; ioRefresh(); }).catch(e => { recordError('mic:connect', e); ioState('off', reason + ' ' + t('io.kitMicBlocked')); });
   }
+  // One MIDI access for the page, kept as the promise so a second press while the first request is still open shares it. A refused or failed request is dropped, so the next press asks again (Chrome asks on every request); a granted one is reused, never a second connection to leave open.
+  let midiAccessP = null;
   function connectMidi() {
-    navigator.requestMIDIAccess().then(a => {
+    if (!midiAccessP) { const p = navigator.requestMIDIAccess(); midiAccessP = p; p.catch(() => { if (midiAccessP === p) midiAccessP = null; }); }
+    midiAccessP.then(a => {
       midiLastError = null; midiRefused = false;
       const wire = () => {
         midiOutRefresh(a);
