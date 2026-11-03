@@ -397,3 +397,52 @@ test('W6 run: the only port it ever names is band-coach-lane, and an absent port
   assert.equal(sends.length, 1, 'one attempt, no second port tried');
   assert.match(sends[0], /o\.name === "band-coach-lane"/, 'picked by exact name');
 });
+
+// ---- W7: doubled notes on band-coach-lane on the trainer screen and in a Songs drum step. One strike must count once.
+const w7obs = (over = {}) => ({
+  exceptions: [],
+  laneOutput: true,
+  trainer: { single: 0, repeated: 1, bleeding: 1 },
+  songs: { single: 1, repeated: 1, bleeding: 1 },
+  ...over,
+});
+
+test('W7 verdict: each strike counted once on both screens is a PASS that says how it was sent', async () => {
+  const w7 = await load('w7-kit-double-hits.win.mjs');
+  assert.equal(w7.id, 'W7');
+  assert.equal(w7.verdict, w7.w7Verdict);
+  const v = w7.w7Verdict(w7obs());
+  assert.equal(v.status, 'PASS');
+  assert.match(v.text, /band-coach-lane/);
+  assert.deepEqual(v.findings, []);
+});
+
+test('W7 verdict: a trainer that ignores a single hit, or keeps a repeat or a bleed, is a FAIL that names it', async () => {
+  const w7 = await load('w7-kit-double-hits.win.mjs');
+  for (const [trainer, word] of [[{ single: 1, repeated: 1, bleeding: 1 }, /single/], [{ single: 0, repeated: 0, bleeding: 1 }, /repeated/], [{ single: 0, repeated: 1, bleeding: 0 }, /bleeding/]]) {
+    const v = w7.w7Verdict(w7obs({ trainer }));
+    assert.equal(v.status, 'FAIL');
+    assert.match(v.text, /trainer/);
+    assert.match(v.text, word);
+  }
+});
+
+test('W7 verdict: a Songs step that hears a strike as anything but one note is a FAIL that names it', async () => {
+  const w7 = await load('w7-kit-double-hits.win.mjs');
+  for (const [songs, word] of [[{ single: 0, repeated: 1, bleeding: 1 }, /single/], [{ single: 1, repeated: 2, bleeding: 1 }, /repeated/], [{ single: 1, repeated: 1, bleeding: 2 }, /bleeding/]]) {
+    const v = w7.w7Verdict(w7obs({ songs }));
+    assert.equal(v.status, 'FAIL');
+    assert.match(v.text, /Songs/);
+    assert.match(v.text, word);
+  }
+});
+
+test('W7 verdict: an absent port is BLOCKED by name, and a stuck screen, a missing reading or an exception is a FAIL', async () => {
+  const w7 = await load('w7-kit-double-hits.win.mjs');
+  const none = w7.w7Verdict(w7obs({ laneOutput: false, trainer: undefined, songs: undefined }));
+  assert.equal(none.status, 'BLOCKED');
+  assert.match(none.text, /band-coach-lane/);
+  assert.equal(w7.w7Verdict(w7obs({ stuck: 'no Songs row' })).status, 'FAIL');
+  assert.equal(w7.w7Verdict(w7obs({ exceptions: ['boom'] })).status, 'FAIL');
+  assert.equal(w7.w7Verdict(w7obs({ songs: undefined })).status, 'FAIL');
+});

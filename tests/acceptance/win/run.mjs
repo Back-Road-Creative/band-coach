@@ -42,6 +42,7 @@ export const registry = [
   { id: 'W4', file: 'w4-audio-gesture.win.mjs' },
   { id: 'W5', file: 'w5-midi-outcome.win.mjs' },
   { id: 'W6', file: 'w6-kit-walk-through.win.mjs' },
+  { id: 'W7', file: 'w7-kit-double-hits.win.mjs' },
 ];
 
 // Scenarios that need a person, run only by name with --only. Never part of a full run or of its
