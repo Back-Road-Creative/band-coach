@@ -23,6 +23,16 @@ export const KEYED_WOODWIND_CHART_BY_ID = {
   'sax-tenor-bb': 'sax'
 };
 
+// Which chart records the Wind and brass module's "My instrument" choice (a
+// transposition group, WIND_KINDS in src/app.js) can show in How to play it,
+// in the order to offer them. Violin is named by the c group but is not a wind
+// record; baritone sax (ebb), soprano sax, euphonium and tuba have no record.
+// An unknown group is bb, the same fallback app.js uses.
+const WIND_CHART_IDS = { c: ['flute', 'oboe'], bb: ['trumpet-bb', 'clarinet-bb'], bbt: ['sax-tenor-bb'], eb: ['sax-alto-eb'], ebb: [], f: ['horn-f'], bc: ['trombone'] };
+export function windChartIdsFor(windKind) {
+  return (Object.prototype.hasOwnProperty.call(WIND_CHART_IDS, windKind) ? WIND_CHART_IDS[windKind] : WIND_CHART_IDS.bb).slice();
+}
+
 export function howKindFor(instrument) {
   if (!instrument) return null;
   // A drum `kit` (schema.js) is drawn as the kit itself, whatever the family.

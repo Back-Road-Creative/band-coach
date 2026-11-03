@@ -5,6 +5,7 @@
 // file is just DOM.
 import { el } from './dom.js';
 import { INSTRUMENTS } from '../instruments/index.js';
+import { windChartIdsFor } from '../instruments/how-kind.js';
 import { howKindFor, computeHow, defaultNoteFor, alternateTuningsFor } from './fingerings/how.js';
 import { noteName, chromaticRange } from './fingerings/notes.js';
 import { readFingeringSetup } from './fingerings/setup.js';
@@ -412,6 +413,8 @@ export function registerFingerings(panels) {
       const instrSelect = el('select', { id: 'fingInstrument' });
       PLAYABLE.forEach(rec => instrSelect.appendChild(el('option', { value: rec.id, text: rec.name })));
 
+      let windGroupEmpty = false; // the chosen group has no chart: its "no chart" line goes once the learner picks an instrument
+      const windNote = el('p', { class: 'small fing-wind-note', hidden: '' }); // Wind and brass: which instruments the chosen group covers
       const capoLabel = el('label', { for: 'fingCapo', text: 'Capo' });
       const capoInput = el('input', { id: 'fingCapo', type: 'number', min: '0', max: '11', value: '0' });
       const tuningLabel = el('label', { for: 'fingTuning', text: 'Tuning' });
@@ -427,6 +430,7 @@ export function registerFingerings(panels) {
 
       hostEl.appendChild(el('div', { class: 'panel-fingerings' }, [
         title, help, reviewHost,
+        windNote,
         el('div', { class: 'fing-row' }, [instrLabel, instrSelect]),
         controlsHost,
         rangeHost, notesHost, diagramHost, descHost
@@ -513,14 +517,21 @@ export function registerFingerings(panels) {
         render();
       }
 
-      instrSelect.addEventListener('change', () => selectInstrument(instrSelect.value));
+      instrSelect.addEventListener('change', () => { if (windGroupEmpty) windNote.hidden = true; selectInstrument(instrSelect.value); });
       capoInput.addEventListener('change', () => { capo = Math.min(11, Math.max(0, Math.round(Number(capoInput.value)) || 0)); capoInput.value = String(capo); rememberCurrent(); render(); });
       tuningSelect.addEventListener('change', () => { tuningName = tuningSelect.value; rememberCurrent(); render(); });
       leftHandedInput.addEventListener('change', () => { leftHanded = leftHandedInput.checked; rememberCurrent(); render(); });
 
       const current = api.instrument();
-      const startId = current && howKindFor(current) ? current.id : (PLAYABLE[0] && PLAYABLE[0].id);
-      if (startId) selectInstrument(startId);
+      // The Wind and brass module is a transposition group, not one instrument (its record has no chart of its own), so open on a chart for the group the learner chose; Keyboard is never the answer here.
+      const windGroupIds = !(current && howKindFor(current)) && api.mod() === 'wind' ? windChartIdsFor(api.db().prefs.wind || 'bb') : null;
+      const startId = windGroupIds ? windGroupIds[0] : current && howKindFor(current) ? current.id : (PLAYABLE[0] && PLAYABLE[0].id);
+      if (windGroupIds && windGroupIds.length > 1) { windNote.textContent = 'This group covers several instruments. Choose yours from the list.'; windNote.hidden = false; }
+      if (windGroupIds && !windGroupIds.length) {
+        windGroupEmpty = true; windNote.textContent = 'This instrument has no chart yet. Pick another from the list.'; windNote.hidden = false;
+        const none = el('option', { value: '', text: 'Choose an instrument', disabled: '' }); instrSelect.insertBefore(none, instrSelect.firstChild); instrSelect.value = '';
+        diagramHost.textContent = 'No chart for this instrument yet.';
+      } else if (startId) selectInstrument(startId);
       else {
         diagramHost.textContent = 'No instrument here has a fingering chart yet.';
       }
