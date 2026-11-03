@@ -9,7 +9,7 @@
 // below (each just wraps a `page.evaluate` call):
 //   window.__midiAddPort(id, name, state)   -- add a port; fires onstatechange on the access object
 //   window.__midiRemovePort(id)             -- mark a port disconnected and drop it; fires onstatechange
-//   window.__midiSend(id, bytes)            -- deliver a raw message (plain array of byte numbers) on a port
+//   window.__midiSend(id, bytes, timeStamp) -- deliver a raw message (plain array of byte numbers) on a port; timeStamp (ms) optional
 //   window.__midiSetOpenResult(id, ok)      -- make that port's input.open() resolve (true) or reject (false)
 //   window.__midiReject()                   -- makes the NEXT requestMIDIAccess() call reject (permission denied)
 //   window.__midiAddOutput(id, name)        -- add an output port (MIDIOutput shape); its send(bytes, atMs) is recorded
@@ -60,9 +60,9 @@ export const FAKE_MIDI_INIT = `
     window.__midiPorts.delete(id);
     window.__midiAccessListeners.forEach(function (fn) { fn({ port: input }); });
   };
-  window.__midiSend = function (id, bytes) {
+  window.__midiSend = function (id, bytes, timeStamp) {
     const input = window.__midiPorts.get(id);
-    if (input && input.onmidimessage) input.onmidimessage({ data: new Uint8Array(bytes) });
+    if (input && input.onmidimessage) input.onmidimessage(timeStamp === undefined ? { data: new Uint8Array(bytes) } : { data: new Uint8Array(bytes), timeStamp: timeStamp });
   };
   window.__midiSetOpenResult = function (id, ok) { window.__midiOpenResults.set(id, ok); };
   window.__midiReject = function () { window.__midiRejectNext = true; };
@@ -101,8 +101,8 @@ export async function midiRemovePort(page, id) {
   await page.evaluate(`window.__midiRemovePort(${JSON.stringify(id)})`);
 }
 
-export async function midiSend(page, id, bytes) {
-  await page.evaluate(`window.__midiSend(${JSON.stringify(id)}, ${JSON.stringify(bytes)})`);
+export async function midiSend(page, id, bytes, timeStamp) {
+  await page.evaluate(`window.__midiSend(${JSON.stringify(id)}, ${JSON.stringify(bytes)}${timeStamp === undefined ? '' : ', ' + JSON.stringify(timeStamp)})`);
 }
 
 export async function midiNoteOn(page, id, note, velocity = 100, channel = 0) {

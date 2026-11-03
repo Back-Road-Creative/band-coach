@@ -205,7 +205,7 @@ async function startBothHandsExercise(page) {
 }
 const hex = (note) => `90 ${note.toString(16).padStart(2, '0')} 64`;
 async function waitHeard(page, note) {
-  await page.waitFor(`(() => { const l = document.getElementById('midiDetailsText').textContent.split('\\n'); return l[l.indexOf('Last messages heard (hex):') + 1] === ${JSON.stringify(hex(note))}; })()`);
+  await page.waitFor(`(() => { const l = document.getElementById('midiDetailsText').textContent.split('\\n'); const x = l[l.indexOf('Last messages heard (hex):') + 1], h = ${JSON.stringify(hex(note))}; return x === h || (typeof x === 'string' && x.startsWith(h + '  +') && x.endsWith(' ms')); })()`);
 }
 const readFeedback = (page) => page.evaluate("({ cls: document.getElementById('feedback').className, text: document.getElementById('feedback').textContent })");
 const BOTH_HANDS_PASS = /: both hands together\./;

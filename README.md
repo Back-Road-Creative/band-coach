@@ -126,7 +126,9 @@ listens to every port whether or not it managed to open it, and a note actually 
 as better proof than opening the port was. A small dot next to Connect blinks on every MIDI byte the
 page receives, even with no exercise running — useful for telling "the app cannot see my keyboard"
 apart from "the app sees it but has nothing to judge right now". "MIDI details" opens a readout of
-every input's name, connection state and the last few raw messages heard, for tracking down a
+every input's name, connection state and the last few raw messages heard, each with the
+milliseconds since the previous message from the same input (e.g. `99 24 64  +15 ms`; handy for
+sizing a filter window when a kit sends two signals per hit), for tracking down a
 silent keyboard on your own machine. Held notes are tracked per device, so two keyboards (or a
 disconnected one plugged back in) holding the same pitch never cancel each other, and switching
 away from the tab, letting the window lose focus, or unplugging mid-note releases whatever was held.
