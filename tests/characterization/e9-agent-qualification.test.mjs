@@ -108,7 +108,7 @@ test('e-kit row: General MIDI drum notes through a MIDI port name the right drum
   await midiAddPort(page, 'k1', 'Synthetic e-kit');
   await page.evaluate("document.getElementById('ioBtn').click()");
   await page.waitFor("document.getElementById('ioText').textContent.length > 0");
-  const cases = [[36, 9, /^Bass drum heard/], [38, 9, /^Snare heard/], [42, 9, /^Hi-hat \(closed\) heard/], [44, 9, /^Hi-hat \(pedal\) heard/], [38, 0, /^Snare heard/], [99, 9, /^MIDI note 99 is not one of the drums on this kit/]];
+  const cases = [[36, 9, /^Kick heard/], [38, 9, /^Snare heard/], [42, 9, /^Hi-hat closed heard/], [44, 9, /^Hi-hat pedal heard/], [38, 0, /^Snare heard/], [99, 9, /^MIDI note 99 is not one of the drums on this kit/]];
   for (const [note, channel, want] of cases) {
     await page.evaluate("document.getElementById('coach').textContent = ''");
     await midiNoteOn(page, 'k1', note, 100, channel);

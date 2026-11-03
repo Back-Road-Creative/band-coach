@@ -1414,11 +1414,11 @@ it is the right drum and within 150 ms of the beat (110 ms once you are past
 the last level). The right time on the wrong drum is reported as "wrong drum",
 with the drum it wanted. A MIDI note that isn't on the kit counts as an extra
 hit, and the coach line says so.
-Every drum on the drawn kit is labelled with its name (Kick, Snare, Hi-hat, Floor tom ...), with its
+Every drum on the drawn kit is labelled with its name (Kick, Snare, Hi-hat, Floor tom ...; one set of names, `kit.piece.*` in `src/core/i18n.js`, is used on the set-up picture, the practice drawing, How to play it and the coach lines), with its
 computer key as a small yellow hint (a name too long for its piece sits beside it, above it or below it, never on another drum or another name, on a phone as on a desktop; the toms' names break onto two lines). The shapes tell the
 pieces apart without reading a label: drums are heads with a rim, cymbals are discs with a bell, pedals are
-footboards (the bass drum's has its shell beyond it). The hi-hat is one cymbal, about the size of the crash and named once (Hi-hat): tap the disc for closed (D),
-the small tab on its far edge (marked "open") for open (E), and the small footboard below it (marked "pedal") for the pedal (C); when a bar asks for
+footboards (the kick's has its shell beyond it); the set-up picture also carries a small own icon on every piece (the open hat's is two cymbals held apart, the pedal's a hinged footplate) and a name on or beside each, so no piece is unnamed there. The hi-hat is one cymbal, about the size of the crash and named once (Hi-hat): tap the disc for closed (D),
+the square tab resting on its far edge, touching the disc and not the crash (marked "open"), for open (E), and the small footboard below it (marked "pedal") for the pedal (C); when a bar asks for
 a closed hi-hat the footboard is outlined with a dashed line, since your left foot holds it shut. The kit keeps its shape
 (it is centred with space either side, never stretched to the full width); before you start it fills the canvas
 height, and the canvas is taller for the kit than for other instruments. Every piece, the hi-hat tab and footboard
@@ -1441,7 +1441,8 @@ picture on the same sheet (or select one and use the arrow keys), and use
 picture so you can still place them. The custom positions are saved with your
 other kit choices (`placements` in the saved kit preferences), survive
 backup/restore, and drive the practice drawing, the click targets, How to play it
-and the Songs diagrams. A position outside the kit's frame is dropped on load.
+and the Songs diagrams. Dragging the hi-hat, its open tab or its pedal moves all three together (the tab and pedal keep their place beside the disc); a layout you saved earlier loads exactly as saved, and only the pieces you then move are changed. A position outside the kit's frame is dropped on load.
+On a phone each drum's name sits against its own drum, never nearer another piece.
 Preset transforms, placement validation and preference validation live in
 `src/instruments/how/kit-presets.js`.
 

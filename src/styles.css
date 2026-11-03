@@ -785,3 +785,6 @@
   #kitPreview .kit-pc { fill: color-mix(in srgb, var(--accent) 35%, transparent); stroke: var(--accent); stroke-width: 0.006; cursor: grab; }
   #kitPreview .kit-pc.kit-hidden { opacity: 0.35; stroke-dasharray: 0.02 0.015; }
   #kitPreview .kit-pc.kit-sel, #kitPreview .kit-pc:focus-visible { stroke: var(--text); stroke-width: 0.012; outline: none; }
+  #kitPreview .kit-lab { fill: var(--text); font-weight: 700; text-anchor: middle; pointer-events: none; user-select: none; }
+  #kitPreview .kit-ic { fill: none; stroke: var(--text); stroke-width: 0.005; stroke-linejoin: round; pointer-events: none; }
+  #kitPreview .kit-lab.kit-hidden, #kitPreview .kit-ic.kit-hidden { opacity: 0.35; }

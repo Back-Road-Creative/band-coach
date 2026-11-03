@@ -35,18 +35,19 @@ test('kitLayout places every kit piece exactly once, fully inside the KIT_ASPECT
   }
 });
 
-test('no two regions touch (the open-hi-hat tab sits just clear of the hi-hat disc far edge)', () => {
+test('no two regions touch, except the open-hi-hat tab resting on the hi-hat disc far edge', () => {
   const layout = kitLayout();
   for (let i = 0; i < layout.length; i++) {
     for (let j = i + 1; j < layout.length; j++) {
       const a = layout[i], b = layout[j];
-      const g = gap(a, b);
+      const g = gap(a, b), hat = [a.id, b.id].sort().join() === 'hihat-closed,hihat-open';
+      if (hat) continue;
       assert.ok(g > 0, a.id + ' and ' + b.id + ' touch (gap ' + g.toFixed(3) + ')');
     }
   }
   const p = at(), tab = bounds(p['hihat-open']);
   const edge = p['hihat-closed'].y - p['hihat-closed'].r - tab.y1;
-  assert.ok(edge > 0 && edge < 0.5 * p['hihat-closed'].r, 'the tab sits just clear of the disc far edge (the phone tap rule wants its centre 12 px from the disc): ' + edge);
+  assert.ok(edge <= 0 && edge > -0.03, 'the tab rests on the disc far edge, overlapping it by no more than a sliver (the tab is the 24 px tap square, so no spacing exception is needed): ' + edge);
 });
 
 test('the kit reads like a real kit from the throne', () => {

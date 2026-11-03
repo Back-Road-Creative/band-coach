@@ -74,7 +74,7 @@ test('the right time on the wrong drum fails the bar and names the drum it wante
   const r = await judged(page);
   assert.equal(r.failed, true);
   assert.match(r.say, /wrong drum/);
-  assert.match(r.say, /Bass drum/);
+  assert.match(r.say, /Kick/);
 });
 
 test('a kit key sounds a drum even before a bar starts', async (t) => {

@@ -78,14 +78,14 @@ function pieceOkFor(note, hit) {
 
 // Plain words for a piece id, for firstCorrection's "That was the X — this
 // beat wants the Y." (below); named to match src/instruments/drum-kit.js's
-// own PIECES names, lowercased to sit mid-sentence. An id not listed here
+// own PIECES names (kit.piece.* in the locale tables), lowercased to sit mid-sentence. An id not listed here
 // (there is none in drum-kit.js today) falls back to the id itself rather
 // than throwing.
 const PIECE_WORDS = {
-  kick: 'bass drum', snare: 'snare',
+  kick: 'kick', snare: 'snare',
   'hihat-closed': 'hi-hat', 'hihat-open': 'hi-hat', 'hihat-pedal': 'hi-hat', hihat: 'hi-hat',
   'tom-floor': 'floor tom', 'tom-mid': 'mid tom', 'tom-high': 'high tom',
-  crash: 'crash cymbal', ride: 'ride cymbal',
+  crash: 'crash', ride: 'ride',
 };
 function pieceWord(piece) {
   return PIECE_WORDS[piece] || piece || 'drum';
