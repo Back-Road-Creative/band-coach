@@ -66,6 +66,23 @@ It listens on every input except `band-coach-lane` through one connection of its
 
 The reading of 2026-11-03 found both repeats and bleed. It is kept as `tests/fixtures/midi/kit-reading-usb-midi.json` and the guard (`createHitGuard`, `src/core/midi.js`) is tested against it.
 
+### One pad, played hard (`--pad`, `--hits`)
+
+To ask whether one pad sends other pads' notes, play only that pad:
+
+```
+node tests/acceptance/win/run.mjs --win-root /mnt/d/band-coach-win-lane --only K1 --pad kick --hits 20 --report <path>
+```
+
+| Flag | What it does |
+|---|---|
+| `--pad <pieceId>` | A piece id from `PIECES` in `src/instruments/drum-kit.js` (`kick`, `snare`, `hihat-closed`, `hihat-pedal`, `hihat-open`, `tom-floor`, `tom-mid`, `tom-high`, `crash`, `ride`). The screen says "Hit only the Kick, 20 times, some hard and some normal. Heard k of 20." An unknown id is BLOCKED and lists the ids. |
+| `--hits <n>` | How many hits to listen for (a whole number, default 20). |
+
+Each hit is own when every note in it belongs to that piece, and crosstalk when it carries any other note. The result line reads, for example, `kick: 20 hits, 17 clean, 3 also sent 38 (snare, vel 20-31), 1 also sent 48 (tom-high, vel 18)`: of 20 kick hits, 3 also sent note 38, which the table gives to the snare, at velocities 20 to 31, and 1 also sent 48, the high tom, at 18. A note no piece owns reads `not a kit note`. All clean ends with "No crosstalk from this pad: the cause is elsewhere"; any crosstalk ends with "Crosstalk: a rule for this pad, written from these velocities". The report keeps each hit's class and the per-note counts and velocity ranges under `reading.pad`.
+
+Every K1 reading also records the app's saved pad list, read from the page's own storage (key `bandcoach.v1`, `prefs.kit.midiMaps`), not through `window.__coach`, which the release file does not have. The text ends with `Saved pad list: none` or `Saved pad list for <device>: 38->tom-high, 48->ride`, and the report carries it as `savedPadList`. The lane opens Chrome with a fresh profile, so expect none unless the profile held a saved list.
+
 The result is OBSERVED, or BLOCKED if no port or no note was heard, and never PASS. K1 is in `attended` in `run.mjs`, not `registry`, so a full lane run never runs it or counts it.
 
 ## Results and exit codes

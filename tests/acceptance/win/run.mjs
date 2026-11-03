@@ -53,7 +53,7 @@ export const attended = [
 
 export const selectScenarios = (only) => (only ? [...registry, ...attended].filter((r) => r.id === only) : registry);
 
-const VALUE_FLAGS = { '--win-root': 'winRoot', '--html': 'html', '--sha256': 'sha256', '--expect-version': 'expectVersion', '--only': 'only', '--chrome': 'chrome', '--node': 'node', '--report': 'report', '--run-dir': 'runDir' };
+const VALUE_FLAGS = { '--win-root': 'winRoot', '--html': 'html', '--sha256': 'sha256', '--expect-version': 'expectVersion', '--only': 'only', '--chrome': 'chrome', '--node': 'node', '--report': 'report', '--run-dir': 'runDir', '--pad': 'pad', '--hits': 'hits' };
 
 export function parseArgs(argv) {
   const out = { node: NODE_EXE, visible: false };
@@ -63,6 +63,10 @@ export function parseArgs(argv) {
     else if (VALUE_FLAGS[a]) {
       if (i + 1 >= argv.length) throw new Error(`${a} needs a value`);
       out[VALUE_FLAGS[a]] = argv[++i];
+      if (a === '--hits') {
+        if (!/^[1-9][0-9]*$/.test(out.hits)) throw new Error(`--hits needs a whole number of 1 or more, got ${out.hits}`);
+        out.hits = Number(out.hits);
+      }
     } else throw new Error(`unknown argument ${a}`);
   }
   return out;
@@ -104,7 +108,7 @@ export function laneExit({ status, hasReport }) {
 // What is copied into the run directory, relative to the repository: the driver, every
 // file in tests/acceptance/win, and the app's own text table W3 matches its verdict on.
 export function stageFiles(winFiles) {
-  return ['tests/helpers/browser.mjs', 'tests/helpers/console-allowlist.mjs', 'src/core/i18n.js', ...winFiles.filter((f) => f.endsWith('.mjs')).map((f) => `tests/acceptance/win/${f}`)];
+  return ['tests/helpers/browser.mjs', 'tests/helpers/console-allowlist.mjs', 'src/core/i18n.js', 'src/instruments/drum-kit.js', ...winFiles.filter((f) => f.endsWith('.mjs')).map((f) => `tests/acceptance/win/${f}`)];
 }
 
 // A byte copy by read and write: copyFileSync fails with EPERM on the /mnt/<letter>/ drives.
@@ -178,7 +182,7 @@ export async function runWindows(args, log = console.log) {
     log(`lane cannot run: ${report.preflight}`);
     return finish(planLane({ found: false, results: [], registry, only: args.only }));
   }
-  const ctx = { html, sha256: args.sha256, expectVersion: args.expectVersion, visible: args.visible };
+  const ctx = { html, sha256: args.sha256, expectVersion: args.expectVersion, visible: args.visible, pad: args.pad, hits: args.hits };
   for (const entry of selected) {
     const r = await runScenario(entry, ctx);
     report.results.push(r);
@@ -216,7 +220,7 @@ export function runWsl(args, err = console.error) {
       htmlWin = `${runWin}\\band-coach.html`;
     }
     const argv = [`${runWin}\\tests\\acceptance\\win\\run.mjs`, '--run-dir', runWin, '--html', htmlWin, '--sha256', args.sha256 || sha256Of(html), '--report', `${runWin}\\report.json`];
-    for (const [flag, key] of [['--expect-version', 'expectVersion'], ['--only', 'only'], ['--chrome', 'chrome']]) if (args[key]) argv.push(flag, args[key]);
+    for (const [flag, key] of [['--expect-version', 'expectVersion'], ['--only', 'only'], ['--chrome', 'chrome'], ['--pad', 'pad'], ['--hits', 'hits']]) if (args[key]) argv.push(flag, String(args[key]));
     if (args.visible) argv.push('--visible');
     const child = spawnSync(args.node, argv, { stdio: 'inherit', cwd: runDir, timeout: WSL_CHILD_MS });
     const hasReport = existsSync(join(runDir, 'report.json'));
