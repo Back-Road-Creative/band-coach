@@ -82,6 +82,7 @@ import { arrangeFor, songForArrangement } from '../song/arrange/index.js';
 import { staffView, renderStepView, tabView, fingeringLine, kitView } from './songs/step-view.js';
 import { createDrumCapture } from './songs/drum-capture.js';
 import { pieceForMidi } from '../instruments/drum-kit.js';
+import { hatPartner } from '../instruments/how/kit-presets.js';
 import { fidelityReport } from '../song/eval/fidelity.js';
 import { lessonKey, sanitizeLessonList, sanitizeLessonEntry, rememberLesson, findLesson, resultsTail } from '../song/lesson-resume.js';
 import { handsAvailable, stepForHands } from '../song/hand-filter.js';
@@ -149,9 +150,9 @@ export function practisingKit() { return !!(currentPractice && currentPractice.i
 // moment this panel opens. Every existing
 // caller of forwardNote/forwardNoteAt keeps working with no fourth
 // argument, same as before this parameter existed.
-export function forwardNote(midi, exact, atAudioSec, source) {
+export function forwardNote(midi, exact, atAudioSec, source, sharedHat) {
   for (const fn of noteListeners.slice()) {
-    try { fn(midi, exact, atAudioSec, source); } catch (e) { /* one bad listener must not break the others */ }
+    try { fn(midi, exact, atAudioSec, source, sharedHat); } catch (e) { /* one bad listener must not break the others */ }
   }
 }
 
@@ -1928,9 +1929,10 @@ function mountSongsPanel(hostEl, api) {
     // listener hears every route onNote() does, whatever the current
     // step's instrument is), so a computer-key hit on this same lesson
     // must never be recorded as 'midi' either.
-    const unsubscribe = onMidiNote((midi, _exact, atAudioSec, source) => {
+    const unsubscribe = onMidiNote((midi, _exact, atAudioSec, source, sharedHat) => {
       if (source === 'midi') kitMidiHit = true;
-      practice.playedEvents.push({ piece: pieceForMidi(midi), atSec: (atAudioSec != null ? atAudioSec : api.now()) - practice.recordStartSec, source });
+      const piece = pieceForMidi(midi), alt = sharedHat ? hatPartner(piece) : null; // a device that sends one note for closed and open hi-hat: the hit counts for either
+      practice.playedEvents.push({ piece, ...(alt ? { alt } : {}), atSec: (atAudioSec != null ? atAudioSec : api.now()) - practice.recordStartSec, source });
       updateCount();
     });
     // Best effort: an e-kit alone (no room mic permission) still works

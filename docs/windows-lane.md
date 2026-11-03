@@ -44,6 +44,28 @@ profile lives inside the run directory too.
 | `--node <path>` | Windows `node.exe`. Default `/mnt/c/Program Files/nodejs/node.exe`. |
 | `--report <path>` | Where the JSON report goes. Default `dist/windows-lane-report.json`. |
 
+## The kit reading (K1)
+
+What a real kit sends for one hit, read off the kit itself. A person is needed only to hit the pads:
+
+```
+node build/build.mjs --release
+node tests/acceptance/win/run.mjs --win-root /mnt/d/band-coach-win-lane --only K1 --visible --report dist/k1.json
+```
+
+Close every other copy of Band Coach first, because another program holding the port stops the kit being heard. A Chrome window counts the hits. Hit each pad once, about a second apart, then again harder or softer. It stops 3 seconds after 20 hits, or a minute after the last hit once it has 6, or after 11 minutes.
+
+It listens on every input except `band-coach-lane` through one connection of its own, without pressing the app's Connect, so a repeat came from the kit or its driver and not from the app. It sends nothing. Note-ons less than 250 ms apart count as one hit, and the report gives every hit's notes, gaps and loudness:
+
+| What one hit sent | Result names |
+|---|---|
+| One note | No guard: the cause is elsewhere |
+| The same note repeated, every gap 20 ms or less (half the 40 ms flam window) | A short fixed window for all MIDI |
+| The same note repeated, a gap over 20 ms | A loudness rule on kit parts, tested on this kit first |
+| Different notes, or the same note on two ports | A piece owns several notes |
+
+The result is OBSERVED, or BLOCKED if no port or no note was heard, and never PASS. K1 is in `attended` in `run.mjs`, not `registry`, so a full lane run never runs it or counts it.
+
 ## Results and exit codes
 
 Each scenario ends PASS, FAIL (with the finding), OBSERVED (something was seen but not

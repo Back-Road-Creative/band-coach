@@ -39,13 +39,34 @@ function sanitizeMidiMaps(raw) {
   return out;
 }
 
-// `map` with `pieceId` now heard on `note`: the piece's earlier note and any other piece that owned this note are dropped, so a note names one piece and a pad one note.
-export function learnPad(map, pieceId, note) {
+// Per device, beside the learned map. `hatShared`: { [device]: note } where the closed and open hi-hat were taught the same note on purpose (the map holds that note under one of them, so the share is saved here; it is dropped when that note no longer belongs to a hi-hat piece). `cc4Only`: { [device]: true } for a hi-hat pedal that sends only CC4, never a note; with it unset a device's CC4 is never read as a hit, because many pedals send CC4 and a note together.
+function sanitizeDeviceFlags(raw, midiMaps, valid) {
+  const out = {};
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return out;
+  for (const name of Object.keys(raw)) {
+    const key = deviceKey(name);
+    if (!key || key === '__proto__' || has(out, key) || Object.keys(out).length >= MAX_LEARNED_DEVICES) continue;
+    if (valid(raw[name], midiMaps[key])) out[key] = raw[name];
+  }
+  return out;
+}
+const sanitizeHatShared = (raw, midiMaps) => sanitizeDeviceFlags(raw, midiMaps, (note, map) => isNote(note) && !!map && hatPartner(map[note]) !== null);
+const sanitizeCc4Only = (raw, midiMaps) => sanitizeDeviceFlags(raw, midiMaps, v => v === true);
+// The note a device's closed and open hi-hat share, or null; and whether its pedal is CC4-only.
+export const hatSharedNote = (rawKit, device) => { const m = rawKit && typeof rawKit === 'object' ? rawKit.hatShared : null, key = deviceKey(device); return m && typeof m === 'object' && key && has(m, key) && isNote(m[key]) ? m[key] : null; };
+export const pedalCc4Only = (rawKit, device) => { const m = rawKit && typeof rawKit === 'object' ? rawKit.cc4Only : null, key = deviceKey(device); return !!(m && typeof m === 'object' && key && has(m, key) && m[key] === true); };
+
+// The other half of the one pair of pieces that may deliberately share a note (many e-kits send one note for the hi-hat whatever its pedal does), or null.
+export const hatPartner = id => (id === 'hihat-closed' ? 'hihat-open' : id === 'hihat-open' ? 'hihat-closed' : null);
+
+// `map` with `pieceId` now heard on `note`: the piece's earlier note and any other piece that owned this note are dropped, so a note names one piece and a pad one note. With `shareHat`, a note already owned by the other hi-hat piece is kept by that owner (a note names one piece, so the newcomer has no entry of its own and the shared note plays as the owner); nothing else may share.
+export function learnPad(map, pieceId, note, { shareHat = false } = {}) {
   const next = {};
   if (map && typeof map === 'object') for (const n of Object.keys(map)) if (isNote(Number(n)) && PIECES.some(p => p.id === map[n])) next[n] = map[n];
   if (!PIECES.some(p => p.id === pieceId) || !isNote(note)) return next;
-  for (const n of Object.keys(next)) if (next[n] === pieceId || Number(n) === note) delete next[n];
-  next[note] = pieceId;
+  const shares = shareHat && has(next, note) && next[note] === hatPartner(pieceId);
+  for (const n of Object.keys(next)) if (next[n] === pieceId || (!shares && Number(n) === note)) delete next[n];
+  if (!shares) next[note] = pieceId;
   return next;
 }
 
@@ -66,13 +87,15 @@ export function kitNoteFor(rawKit, device, note) {
 export function sanitizeKitPrefs(raw) {
   const p = raw && typeof raw === 'object' ? raw : {};
   const hidden = Array.isArray(p.hiddenPieces) ? p.hiddenPieces : [];
-  const placements = sanitizePlacements(p.placements), midiMaps = sanitizeMidiMaps(p.midiMaps);
+  const placements = sanitizePlacements(p.placements), midiMaps = sanitizeMidiMaps(p.midiMaps), hatShared = sanitizeHatShared(p.hatShared, midiMaps), cc4Only = sanitizeCc4Only(p.cc4Only, midiMaps);
   return {
     preset: p.preset === 'compact' ? 'compact' : 'standard',
     leftHanded: p.leftHanded === true,
     hiddenPieces: [...new Set(hidden.filter(id => PIECES.some(p => p.id === id)))],
     ...(Object.keys(placements).length ? { placements } : {}),
-    ...(Object.keys(midiMaps).length ? { midiMaps } : {})
+    ...(Object.keys(midiMaps).length ? { midiMaps } : {}),
+    ...(Object.keys(hatShared).length ? { hatShared } : {}),
+    ...(Object.keys(cc4Only).length ? { cc4Only } : {})
   };
 }
 
