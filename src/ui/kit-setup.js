@@ -1,7 +1,7 @@
 import { PIECES } from '../instruments/drum-kit.js';
 import { drawKit } from './kit-draw.js';
 import { kitLayout, describeHit, kitGroup } from '../instruments/how/drum-kit.js';
-import { sanitizeKitPrefs, learnPad, hatPartner, deviceKey, KIT_ASPECT, PLACE_SCALE } from '../instruments/how/kit-presets.js';
+import { sanitizeKitPrefs, learnPad, hatPartner, deviceKey, LEARN_VERSION, KIT_ASPECT, PLACE_SCALE } from '../instruments/how/kit-presets.js';
 import { t } from '../core/i18n.js';
 
 // One hit teaches one pad: after a note is taken, further note-ons are ignored until the pad has been quiet this long (a bouncing pad or a double trigger sends several).
@@ -14,7 +14,7 @@ export function renderKitSetup(host, raw, onChange, learn) {
   if (stopLearning) stopLearning();
   host.replaceChildren();
   let prefs = sanitizeKitPrefs(raw), svgReady = false;
-  const save = patch => { prefs = sanitizeKitPrefs({ ...prefs, ...patch }); if (svgReady) draw(); onChange(prefs); };
+  const save = patch => { prefs = sanitizeKitPrefs({ ...prefs, ...patch, ...('midiMaps' in patch || 'cc4Only' in patch ? { learnVersion: LEARN_VERSION } : {}) }); if (svgReady) draw(); onChange(prefs); };
   const legend = document.createElement('legend'); legend.textContent = t('kit.setup'); host.appendChild(legend);
   const label = (id, text, input) => {
     input.id = id;
@@ -88,7 +88,7 @@ export function renderKitSetup(host, raw, onChange, learn) {
   const skipBtn = button('kitLearnSkip', t('kit.learnSkip'), () => { if (run) run.last = null; advance(); });
   const noSendBtn = button('kitLearnNoSend', t('kit.learnNoSend'), () => noSend());
   const stopBtn = button('kitLearnStop', t('kit.learnStop'), () => finish());
-  const forgetBtn = button('kitLearnForget', t('kit.learnForget'), () => { finish(); status.textContent = ''; const { midiMaps, hatShared, cc4Only, ...rest } = prefs; prefs = sanitizeKitPrefs(rest); syncLearn(); onChange(prefs); });
+  const forgetBtn = button('kitLearnForget', t('kit.learnForget'), () => { finish(); status.textContent = ''; const { midiMaps, hatShared, cc4Only, learnVersion, ...rest } = prefs; prefs = sanitizeKitPrefs(rest); syncLearn(); onChange(prefs); });
   host.appendChild(status); host.appendChild(stepNote); host.appendChild(listHost);
   const name = id => t('kit.piece.' + id);
   const cur = () => run.pieces[run.i].id;
@@ -134,7 +134,7 @@ export function renderKitSetup(host, raw, onChange, learn) {
     // Pieces hidden on this sheet are not on the player's kit, so the walk-through does not ask for them.
     const shown = PIECES.filter(p => !prefs.hiddenPieces.includes(p.id)), pieces = only ? shown.filter(p => p.id === only) : shown;
     if (!pieces.length) return;
-    run = { i: 0, learned: {}, taught: {}, last: null, device: only ? (lastDevice || (Object.keys(prefs.midiMaps || {}).length === 1 ? Object.keys(prefs.midiMaps)[0] : null)) : null, off: null, pieces, only: !!only };
+    run = { i: 0, learned: {}, taught: {}, last: null, device: only ? (lastDevice || (Object.keys(prefs.midiMaps || {}).length === 1 ? Object.keys(prefs.midiMaps)[0] : null)) : null, off: null, pieces, only: !!only, fresh: !only };
     stopLearning = finish;
     run.off = learn.listen((device, note, kind) => {
       // The sheet closed or this render was replaced: hand the note back to the app.
@@ -142,6 +142,8 @@ export function renderKitSetup(host, raw, onChange, learn) {
       const key = deviceKey(device);
       if (!key) return false;
       if (run.device === null) run.device = key; else if (key !== run.device) return false;
+      // A full set-up replaces this device's list: start from nothing, so stopping early or skipping a pad leaves GM there, never an older guess.
+      if (run.fresh) { run.fresh = false; const gone = o => { const { [key]: _, ...kept } = o || {}; return kept; }; if ((prefs.midiMaps || {})[key] || (prefs.hatShared || {})[key] !== undefined || (prefs.cc4Only || {})[key]) save({ midiMaps: gone(prefs.midiMaps), hatShared: gone(prefs.hatShared), cc4Only: gone(prefs.cc4Only) }); }
       const id = cur(), now = performance.now(), quiet = run.last === null || now - run.last >= LEARN_QUIET_MS;
       if (kind === 'pedal') {
         // Many pedals send CC4 together with a note, so a CC4 alone does not end the step: wait one quiet gap for the note. If none comes, this pedal sends only CC4: save that flag for this device (the app reads CC4 as the pedal only for a flagged device).

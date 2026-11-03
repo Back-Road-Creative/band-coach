@@ -5,7 +5,7 @@ import { computeHow } from '../../src/ui/fingerings/how.js';
 import { instrumentSetup } from '../../src/ui/fingerings/setup.js';
 import drumKit from '../../src/instruments/drum-kit.js';
 import { sanitizeDB } from '../../src/core/sanitize-db.js';
-import { sanitizeKitPrefs } from '../../src/instruments/how/kit-presets.js';
+import { sanitizeKitPrefs, learnPad, LEARN_VERSION } from '../../src/instruments/how/kit-presets.js';
 
 test('left-handed kits mirror every hit region and the teaching directions', () => {
   const right = kitLayout(), left = kitLayout({ leftHanded: true });
@@ -90,4 +90,17 @@ test('profile restore keeps valid placements and drops bad ones', () => {
   const placements = { snare: { x: 0.5, y: 0.5, scale: 1 } };
   assert.deepEqual(run({ placements: JSON.parse(JSON.stringify(placements)) }).placements, placements);
   assert.equal('placements' in run({ placements: { snare: { x: 5, y: 5 } } }), false);
+});
+
+test('a saved pad list counts only with the current learn stamp; older or unstamped lists and their flags are dropped', () => {
+  const flags = { hatShared: { 'K': 42 }, cc4Only: { 'K': true } };
+  const old = sanitizeKitPrefs({ preset: 'compact', placements: { kick: { x: 0.5, y: 0.5, scale: 1 } }, midiMaps: { K: { 38: 'tom-high', 48: 'ride', 42: 'hihat-closed' } }, ...flags });
+  assert.deepEqual(Object.keys(old).sort(), ['hiddenPieces', 'leftHanded', 'placements', 'preset']);
+  assert.equal(sanitizeKitPrefs({ midiMaps: { K: { 38: 'snare' } }, learnVersion: LEARN_VERSION - 1 }).midiMaps, undefined);
+  const kept = sanitizeKitPrefs({ midiMaps: { K: { 38: 'snare', 42: 'hihat-closed' } }, ...flags, learnVersion: LEARN_VERSION });
+  assert.deepEqual(kept.midiMaps, { K: { 38: 'snare', 42: 'hihat-closed' } });
+  assert.equal(kept.learnVersion, LEARN_VERSION);
+  assert.deepEqual(kept.cc4Only, { K: true });
+  assert.equal(sanitizeKitPrefs({ learnVersion: LEARN_VERSION }).learnVersion, undefined, 'a stamp never exists without a list');
+  assert.deepEqual(learnPad({ 38: 'snare' }, 'ride', 48), { 38: 'snare', 48: 'ride' });
 });
