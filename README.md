@@ -136,6 +136,7 @@ ignored: 3") with the raw bytes still listed. A flam still counts as two, as lon
 louder; a flam played loud then soft, or with both hits at full strength, reads as one. Held notes are tracked per device, so two keyboards (or a
 disconnected one plugged back in) holding the same pitch never cancel each other, and switching
 away from the tab, letting the window lose focus, or unplugging mid-note releases whatever was held.
+The page keeps one MIDI connection: pressing Connect again reuses it instead of opening another, and if Chrome's question was dismissed or blocked the next press asks again.
 
 Proof that a keyboard works is earned per device, not kept once earned: swap a proven keyboard for
 one that has never sent a note and the status line goes back to "found", not "is working", until

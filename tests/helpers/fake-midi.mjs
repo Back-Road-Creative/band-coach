@@ -14,12 +14,22 @@
 //   window.__midiReject()                   -- makes the NEXT requestMIDIAccess() call reject (permission denied)
 //   window.__midiAddOutput(id, name)        -- add an output port (MIDIOutput shape); its send(bytes, atMs) is recorded
 //   window.__midiOutSent                    -- every {id, bytes, atMs} any output was sent, in call order
+//   window.__midiAccesses                   -- every access object handed out, in order. Like real Chrome, each access gets its OWN
+//                                              port objects (audit F10: sameInputObject false); the first access's are the ones in
+//                                              window.__midiPorts, later ones are views of them that share name/state but keep their
+//                                              own onmidimessage/connection. __midiSend reaches every access's object for that id.
 //   window.__midiMakeUnavailable()          -- deletes navigator.requestMIDIAccess entirely (no Web MIDI at all)
 export const FAKE_MIDI_INIT = `
   window.__midiPorts = new Map();
   window.__midiOpenResults = new Map();
   window.__midiAccessListeners = [];
   window.__midiRejectNext = false;
+  window.__midiAccesses = [];
+  function __midiViewFor(access, device) {
+    if (device.type !== 'input' || access === window.__midiAccesses[0]) return device;
+    if (!access.__views.has(device)) access.__views.set(device, Object.create(device, { onmidimessage: { value: null, writable: true }, connection: { value: 'closed', writable: true } }));
+    return access.__views.get(device);
+  }
 
   function __midiMakeInput(id, name, state) {
     return {
@@ -62,7 +72,11 @@ export const FAKE_MIDI_INIT = `
   };
   window.__midiSend = function (id, bytes, timeStamp) {
     const input = window.__midiPorts.get(id);
-    if (input && input.onmidimessage) input.onmidimessage(timeStamp === undefined ? { data: new Uint8Array(bytes) } : { data: new Uint8Array(bytes), timeStamp: timeStamp });
+    if (!input) return;
+    // One physical note reaches every access's own port object, as in real Chrome.
+    const targets = [input];
+    window.__midiAccesses.forEach(function (a) { const v = a.__views.get(input); if (v) targets.push(v); });
+    targets.forEach(function (port) { if (port.onmidimessage) port.onmidimessage(timeStamp === undefined ? { data: new Uint8Array(bytes) } : { data: new Uint8Array(bytes), timeStamp: timeStamp }); });
   };
   window.__midiSetOpenResult = function (id, ok) { window.__midiOpenResults.set(id, ok); };
   window.__midiReject = function () { window.__midiRejectNext = true; };
@@ -77,8 +91,9 @@ export const FAKE_MIDI_INIT = `
     configurable: true,
     value: function () {
       if (window.__midiRejectNext) { window.__midiRejectNext = false; return Promise.reject(new Error('Permission denied')); }
-      const access = { inputs: { forEach: function (fn) { window.__midiPorts.forEach(fn); } }, outputs: { forEach: function (fn) { window.__midiOutPorts.forEach(fn); } }, onstatechange: null };
-      window.__midiAccessListeners.push(function (ev) { if (access.onstatechange) access.onstatechange(ev); });
+      const access = { __views: new Map(), inputs: { forEach: function (fn) { window.__midiPorts.forEach(function (d, id) { fn(__midiViewFor(access, d), id); }); } }, outputs: { forEach: function (fn) { window.__midiOutPorts.forEach(fn); } }, onstatechange: null };
+      window.__midiAccesses.push(access);
+      window.__midiAccessListeners.push(function (ev) { if (access.onstatechange) access.onstatechange({ port: __midiViewFor(access, ev.port) }); });
       window.__midiAccess = access;
       return Promise.resolve(access);
     },
