@@ -352,3 +352,48 @@ for (const [file, opts] of [['w2-progress-reload.win.mjs', { paceMs: 1, settleMs
     assert.ok(shown > pick && start > shown, `Start is clicked only after it shows (${steps.slice(0, 4).join(' | ')})`);
   });
 }
+
+// ---- W6: the kit walk-through on band-coach-lane. One note, and the same note doubled, must each move it one pad.
+const w6obs = (over = {}) => ({ exceptions: [], laneOutput: true, single: { before: 'kick', after: 'snare', advanced: 1 }, doubled: { before: 'snare', after: 'hihat-closed', advanced: 1, gapMs: 15 }, ...over });
+
+test('W6 verdict: one pad for one note and one pad for a doubled note is a PASS', async () => {
+  const w6 = await load('w6-kit-walk-through.win.mjs');
+  assert.equal(w6.id, 'W6');
+  assert.equal(w6.verdict, w6.w6Verdict);
+  const v = w6.w6Verdict(w6obs());
+  assert.equal(v.status, 'PASS');
+  assert.match(v.text, /15 ms apart/);
+});
+
+test('W6 verdict: a doubled note that skips a pad, or does not move it, or never ran is a FAIL', async () => {
+  const w6 = await load('w6-kit-walk-through.win.mjs');
+  for (const advanced of [0, 2]) {
+    const v = w6.w6Verdict(w6obs({ doubled: { before: 'snare', after: 'x', advanced, gapMs: 15 } }));
+    assert.equal(v.status, 'FAIL', String(advanced));
+    assert.match(v.text, /15 ms apart/);
+  }
+  assert.equal(w6.w6Verdict(w6obs({ doubled: undefined })).status, 'FAIL');
+});
+
+test('W6 verdict: a single note that moves the walk-through zero or two pads is a FAIL, an absent port is BLOCKED by name', async () => {
+  const w6 = await load('w6-kit-walk-through.win.mjs');
+  for (const advanced of [0, 2]) assert.equal(w6.w6Verdict(w6obs({ single: { before: 'kick', after: 'x', advanced } })).status, 'FAIL', String(advanced));
+  const b = w6.w6Verdict(w6obs({ laneOutput: false, single: undefined, doubled: undefined }));
+  assert.equal(b.status, 'BLOCKED');
+  assert.match(b.text, /"band-coach-lane"/);
+  assert.equal(w6.w6Verdict(w6obs({ exceptions: ['Uncaught: x'] })).status, 'FAIL');
+  assert.equal(w6.w6Verdict(w6obs({ stuck: 'waitFor kitLearn timed out' })).status, 'FAIL');
+});
+
+test('W6 run: the only port it ever names is band-coach-lane, and an absent port sends nothing and stops', async () => {
+  const w6 = await load('w6-kit-walk-through.win.mjs');
+  const evals = [];
+  const page = quietPage({ grant: async () => {}, waitFor: async () => {}, evaluate: async (expr) => { evals.push(expr); return /requestMIDIAccess/.test(expr) ? false : /dataset\.piece/.test(expr) ? 'kick' : 'ok'; } });
+  const o = await w6.run(page);
+  assert.equal(o.laneOutput, false);
+  assert.equal(o.single, undefined, 'nothing was sent after the port was missing');
+  assert.equal(w6.w6Verdict(o).status, 'BLOCKED');
+  const sends = evals.filter((e) => /requestMIDIAccess/.test(e));
+  assert.equal(sends.length, 1, 'one attempt, no second port tried');
+  assert.match(sends[0], /o\.name === "band-coach-lane"/, 'picked by exact name');
+});
