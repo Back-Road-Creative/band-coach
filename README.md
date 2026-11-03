@@ -1484,6 +1484,8 @@ backup/restore. A learned note overrides the General MIDI note for that device
 only: a device with no learned pads, and any note you have not taught it, keep
 the General MIDI reading, and a note nobody has seen is still an "extra note".
 A full set-up (**Hit each pad**) replaces the device's list: on the first note of the run that device's saved notes, shared-hat entry and CC4-only flag are cleared, so stopping early leaves only the pads heard and a skipped pad reads as General MIDI; **Relearn** of one pad keeps the rest. A saved list carries a version stamp (`learnVersion` in the saved kit preferences, `LEARN_VERSION` in `src/instruments/how/kit-presets.js`); lists saved by older versions have no stamp and are discarded on load (the layout and other kit choices stay), so a list an old walk-through scrambled cannot override General MIDI -- teach the pads again. **Forget learned pads** clears every learned map, the shared-hat and CC4-only flags and the stamp. `pieceForMidi(note, map)` in
+When a learned list changes a note, the heard line says so ("High tom heard (note 38, learned as High tom; General MIDI says Snare) -- ..."), and "MIDI details" appends " -> High tom (learned, GM Snare)" to that message and adds a "Learned pad list in use for <device>: <n> notes" line, so a wrong list can be told from a wrong kit.
+**Forget learned pads** clears every learned map and the shared-hat and CC4-only flags. `pieceForMidi(note, map)` in
 `src/instruments/drum-kit.js` takes the optional map; `src/app.js` reads a
 learned note as the General MIDI note of its piece before the trainer, Songs
 drum practice and reference hear it, and only while a kit is in front or Songs is practising a percussion part
@@ -1941,12 +1943,18 @@ release tests and the Windows lane on the exact staged file (its sha256 is recor
    for are marked right. **Fail** if a piece has no name or a correct hit is not marked. The
    microphone can tell only kick, snare and hi-hat apart, so write which route you used in the
    record: a pass on the computer keys or the microphone is not an electronic-kit pass.
+   With an electronic kit, also hit each pad once and fill in the per-pad table in
+   [docs/hand-test.md](docs/hand-test.md): a snare that reads "High tom" fails this step.
 8. **Phone, if you have one (1 min).** Once this release's tag has deployed the phone copy (see
    "Phone copy" above), open it on the phone, pick an instrument, press "Start" and play a few notes
    on the screen. **Pass** if you can tap each key or pad the exercise asks for without hitting its
    neighbour, read the labels without zooming, and stop with "Pause" or "End session" without
    hunting for it. **Fail** if any of that needs zooming, scrolling sideways or a second try. Write
    the phone model in the record.
+
+[docs/hand-test.md](docs/hand-test.md) is the sheet to fill in: one row per person-only step, a
+per-pad drum kit table, and what to send back (the filled tables, the copy tested, the file's
+sha256). Paste it into the record's Manual row.
 
 Total, adding up the estimates above (none has been timed yet): about 10 minutes with
 every step by hand, about 8 minutes when a passing Windows-lane run on this file covers

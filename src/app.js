@@ -64,7 +64,7 @@ import { renderVoice } from './audio/voices.js';
 import { layoutFor as harpLayoutFor } from './instruments/how/harmonica.js';
 import { pieceForMidi, hatBleedsOnSnare, kitRepeatStep, kitRepeatFor, KIT_MAX_TRIES } from './instruments/drum-kit.js';
 import { renderKitSetup, LEARN_QUIET_MS } from './ui/kit-setup.js';
-import { kitNoteFor, hatSharedNote, hatPartner, pedalCc4Only } from './instruments/how/kit-presets.js';
+import { kitNoteFor, deviceKey, hatSharedNote, hatPartner, pedalCc4Only } from './instruments/how/kit-presets.js';
 import { kitFrame, kitRegions, kitLayout, kitLines, pieceIcon, pieceAt, THRONE } from './instruments/how/drum-kit.js';
 import { layoutPercussionMeasure } from './notation/percussion.js';
 import { songFor, KBD_SONG_SKILL_MAP } from './instruments/kbd-songs.js';
@@ -1245,6 +1245,7 @@ import { register as registerPathway } from './ui/pathway.js';
   // attempt can tell a real keyboard from a stand-in the same way
   // (src/ui/songs.js's advance()) -- never anything about credit, mastery or
   // pass/fail, which stay blind to it.
+  let kitRawNote = null; // set only while one MIDI note-on is handled, and only when a learned pad list turned the device's own note into another one: that raw note, so the heard line can say so
   let kitHatShared = false; // set only while one MIDI note-on is handled: this device sends one note for closed and open hi-hat, so the hit also counts for the other hat piece
   let midiMisses = []; // F13: consecutive wrong MIDI notes, oldest first (onNote below)
   function onNote(midi, exact, source) {
@@ -1260,7 +1261,7 @@ import { register as registerPathway } from './ui/pathway.js';
     // is a tap source like the space bar: route the hit to onTap() before
     // the drum-kit branch and the not-judging message below can call it a stray note.
     if (calRun) { onTap(); return; }
-    if (MODS[mod] && MODS[mod].kit) { const p = pieceForMidi(midi); if (p === null) coach('MIDI note ' + midi + ' is not one of the drums on this kit' + (playing ? ', so it counts as an extra hit.' : '.')); else if (!playing) coach(kitName(p) + ' heard -- start an exercise to see it judged.'); onHit(p, tapAudioTime(), source, kitHatShared ? hatPartner(p) : null); return; }
+    if (MODS[mod] && MODS[mod].kit) { const p = pieceForMidi(midi); if (p === null) coach('MIDI note ' + midi + ' is not one of the drums on this kit' + (playing ? ', so it counts as an extra hit.' : '.')); else if (!playing) coach(kitName(p) + ' heard' + (kitRawNote === null ? '' : ' (note ' + kitRawNote + ', learned as ' + kitName(p) + '; General MIDI says ' + gmDrumName(kitRawNote) + ')') + ' -- start an exercise to see it judged.'); onHit(p, tapAudioTime(), source, kitHatShared ? hatPartner(p) : null); return; }
     lastInputAt = now(); pressed[midi] = performance.now();
     if (source === 'midi') { const notJudging = !playing || !task || task.done; const outOfView = !notJudging && mod === 'kbd' && (midi < kbdRange()[0] || midi > kbdRange()[1]); if (notJudging) coach(nname(midi) + ' heard' + (playing ? '.' : ' -- start an exercise to see it judged.')); else if (outOfView) coach(nname(midi) + ' heard, but that key is not drawn on screen right now.'); }
     if (!playing || !task || task.done) return; const e = cur(); if (!e) return; const i = e.info;
@@ -2577,6 +2578,7 @@ import { register as registerPathway } from './ui/pathway.js';
     midiPorts.forEach((p, i) => lines.push(p.name + ' -- state: ' + p.state + ', connection: ' + p.connection + (p.ok ? ', opened.' : ', open failed: ' + (p.error || 'unknown reason') + (midiHeard.has(midiPortInputs[i]) ? ', but it is sending messages anyway.' : '.'))));
     if (midiLastError) lines.push('Last MIDI error: ' + midiLastError);
     if (midiDoubled) lines.push('Double hits ignored: ' + midiDoubled);
+    const learnedMap = onKitScreen() && lastMidiName ? ((DB.prefs.kit || {}).midiMaps || {})[deviceKey(lastMidiName)] : null; if (learnedMap && typeof learnedMap === 'object') lines.push('Learned pad list in use for ' + deviceKey(lastMidiName) + ': ' + Object.keys(learnedMap).length + ' notes');
     if (midiLog.length) { lines.push(''); lines.push('Last messages heard (hex):'); midiLog.forEach(h => lines.push(h)); }
     $('midiDetailsText').textContent = lines.join('\n');
   }
@@ -2639,6 +2641,7 @@ import { register as registerPathway } from './ui/pathway.js';
   let kitLearnSink = null;
   const kitLearn = { listen: fn => { kitLearnSink = fn; return () => { if (kitLearnSink === fn) kitLearnSink = null; }; } };
   const onKitScreen = () => (MODS[mod] && MODS[mod].kit) || (panels.current() === 'songs' && songsPractisingKit());
+  const gmDrumName = n => { const p = pieceForMidi(n); return p === null ? 'no drum' : kitName(p); }; // what the standard General MIDI drum map calls this device note
   const kitNote = (input, note) => onKitScreen() ? kitNoteFor(DB.prefs.kit, input.name, note) : note;
   // A kit sends one strike as several notes (src/core/midi.js createHitGuard). Channel 10 (9 here) is the drum channel, so a kit is guarded on the Rhythm screen too, and a keyboard keeps every fast repeat outside the kit screens.
   const DRUM_CHANNEL = 9, hitGuard = createHitGuard({ bleeds: hatBleedsOnSnare });
@@ -2678,9 +2681,10 @@ import { register as registerPathway } from './ui/pathway.js';
       if (rangeCap) { if (evt.type === 'on') rangeNote(input, evt, at); return; } // the range walk-through is learning a key; it is not an answer
       if (evt.type === 'on') lastMidiName = midiDevName(input);
       if (evt.type === 'on' && kitLearnSink && kitLearnSink(input.name, evt.note)) return; // the kit set-up walk-through is learning this pad; it is not a hit
-      const note = kitNote(input, evt.note);
+      const note = kitNote(input, evt.note), remapped = evt.type === 'on' && onKitScreen() && pieceForMidi(note) !== pieceForMidi(evt.note); // a learned note is read as its piece's canonical GM note, so compare pieces: a pad taught as the piece GM already calls it is not a change
+      if (remapped && midiLog.length) { midiLog[0] += ' -> ' + kitName(pieceForMidi(note)) + ' (learned, GM ' + gmDrumName(evt.note) + ')'; if (!$('midiDetails').hidden) renderMidiDetails(); }
       if (evt.type === 'on' && (evt.channel === DRUM_CHANNEL || onKitScreen()) && hitGuard.drop({ port: input, channel: evt.channel, note, velocity: evt.velocity, at })) { midiDoubled++; if (!$('midiDetails').hidden) renderMidiDetails(); return; } // the kit's own echo of a hit already heard; its note-off still passes
-      if (evt.type === 'on') { proofHeard(note); noteState.noteOn(input, evt.channel, note); realMidiHeld.add(note); kitHatShared = hatSharedNote(DB.prefs.kit, input.name) === evt.note; try { onNote(note, true, 'midi'); } finally { kitHatShared = false; } } else { noteState.noteOff(input, evt.channel, note); if (!noteState.isHeld(note)) realMidiHeld.delete(note); onNoteOff(note, 'midi'); }
+      if (evt.type === 'on') { proofHeard(note); noteState.noteOn(input, evt.channel, note); realMidiHeld.add(note); kitHatShared = hatSharedNote(DB.prefs.kit, input.name) === evt.note; kitRawNote = remapped ? evt.note : null; try { onNote(note, true, 'midi'); } finally { kitHatShared = false; kitRawNote = null; } } else { noteState.noteOff(input, evt.channel, note); if (!noteState.isHeld(note)) realMidiHeld.delete(note); onNoteOff(note, 'midi'); }
     });
   }
   const canOpenMic = () => !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
