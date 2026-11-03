@@ -1439,8 +1439,12 @@ Preset transforms, placement validation and preference validation live in
 
 To teach the app which note each pad sends, connect your electronic kit under
 **Set up input**, then press **Hit each pad** on the same sheet. It lights each
-piece in turn (the prompt names it) and saves the note that arrives; **Skip this
-one** leaves a piece as it was and **Stop** ends early. The notes are saved per
+piece in turn (the prompt names it) and saves the note that arrives; one hit
+teaches one pad, so any further note within 250 ms of the last one (a bouncing
+pad, a double trigger) is ignored and the prompt says so, and a note already
+taught to an earlier piece in the same run is refused until you hit a different
+pad or press Skip. **Skip this one** leaves a piece as it was and **Stop** ends
+early; the finish line counts the pads learned, not the notes heard. The notes are saved per
 MIDI device name (`midiMaps` in the saved kit preferences, up to 8 devices), so a
 second kit does not inherit the first one's pads, and they survive progress
 backup/restore. A learned note overrides the General MIDI note for that device

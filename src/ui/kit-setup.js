@@ -3,6 +3,10 @@ import { kitLayout } from '../instruments/how/drum-kit.js';
 import { sanitizeKitPrefs, learnPad, deviceKey, KIT_ASPECT, PLACE_SCALE } from '../instruments/how/kit-presets.js';
 import { t } from '../core/i18n.js';
 
+// One hit teaches one pad: after a note is taken, further note-ons are ignored until the pad has been quiet this long (a bouncing pad or a double trigger sends several).
+const LEARN_QUIET_MS = 250;
+// The piece an earlier step of this walk-through already taught `note`, or null. Kept on its own so a later rule (hi-hat closed and open sharing a note) changes in one place.
+const takenThisRun = (run, note) => run.learned[note] || null;
 // `learn` is { listen(fn) -> stop }: while listening, each MIDI note-on arrives as fn(deviceName, note), and fn returns true when the walk-through used the note (so the app does not also judge it as a hit).
 let stopLearning = null;
 export function renderKitSetup(host, raw, onChange, learn) {
@@ -78,7 +82,7 @@ export function renderKitSetup(host, raw, onChange, learn) {
   const status = document.createElement('p'); status.id = 'kitLearnStatus'; status.className = 'small'; status.setAttribute('role', 'status');
   let run = null;
   const startBtn = button('kitLearn', t('kit.learn'), () => begin());
-  const skipBtn = button('kitLearnSkip', t('kit.learnSkip'), () => advance());
+  const skipBtn = button('kitLearnSkip', t('kit.learnSkip'), () => { if (run) run.last = null; advance(); });
   const stopBtn = button('kitLearnStop', t('kit.learnStop'), () => finish());
   const forgetBtn = button('kitLearnForget', t('kit.learnForget'), () => { finish(); status.textContent = ''; const { midiMaps, ...rest } = prefs; prefs = sanitizeKitPrefs(rest); syncLearn(); onChange(prefs); });
   host.appendChild(status);
@@ -88,7 +92,9 @@ export function renderKitSetup(host, raw, onChange, learn) {
   function finish() {
     if (!run) return;
     const done = run; run = null; stopLearning = null; done.off();
-    status.textContent = done.count ? t(done.count === 1 ? 'kit.learnDone.one' : 'kit.learnDone', { count: done.count, device: done.device }) : '';
+    // The count is pieces of this run still in the saved map, not note-ons heard.
+    const saved = (prefs.midiMaps || {})[done.device] || {}, count = Object.keys(done.learned).filter(n => saved[n] === done.learned[n]).length;
+    status.textContent = count ? t(count === 1 ? 'kit.learnDone.one' : 'kit.learnDone', { count, device: done.device }) : '';
     syncLearn();
   }
   function begin() {
@@ -96,7 +102,7 @@ export function renderKitSetup(host, raw, onChange, learn) {
     // Pieces hidden on this sheet are not on the player's kit, so the walk-through does not ask for them.
     const pieces = PIECES.filter(p => !prefs.hiddenPieces.includes(p.id));
     if (!pieces.length) return;
-    run = { i: 0, count: 0, device: null, off: null, pieces };
+    run = { i: 0, learned: {}, last: null, device: null, off: null, pieces };
     stopLearning = finish;
     run.off = learn.listen((device, note) => {
       // The sheet closed or this render was replaced: hand the note back to the app.
@@ -104,9 +110,14 @@ export function renderKitSetup(host, raw, onChange, learn) {
       const key = deviceKey(device);
       if (!key) return false;
       if (run.device === null) run.device = key; else if (key !== run.device) return false;
-      const maps = prefs.midiMaps || {};
-      save({ midiMaps: { ...maps, [key]: learnPad(maps[key], run.pieces[run.i].id, note) } });
-      run.count++; advance(); return true;
+      const now = performance.now(), quiet = run.last === null || now - run.last >= LEARN_QUIET_MS;
+      run.last = now;
+      if (!quiet) { prompt(); status.textContent += ' ' + t('kit.learnIgnored', { note }); return true; }
+      const owner = takenThisRun(run, note);
+      if (owner) { prompt(); status.textContent += ' ' + t('kit.learnTaken', { note, piece: t('kit.piece.' + owner) }); return true; }
+      const maps = prefs.midiMaps || {}, id = run.pieces[run.i].id;
+      save({ midiMaps: { ...maps, [key]: learnPad(maps[key], id, note) } });
+      run.learned[note] = id; advance(); return true;
     });
     prompt(); syncLearn();
   }
