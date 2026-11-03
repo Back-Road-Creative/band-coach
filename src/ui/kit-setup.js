@@ -1,13 +1,13 @@
 import { PIECES } from '../instruments/drum-kit.js';
-import { kitLayout } from '../instruments/how/drum-kit.js';
-import { sanitizeKitPrefs, learnPad, deviceKey, KIT_ASPECT, PLACE_SCALE } from '../instruments/how/kit-presets.js';
+import { kitLayout, describeHit } from '../instruments/how/drum-kit.js';
+import { sanitizeKitPrefs, learnPad, hatPartner, deviceKey, KIT_ASPECT, PLACE_SCALE } from '../instruments/how/kit-presets.js';
 import { t } from '../core/i18n.js';
 
 // One hit teaches one pad: after a note is taken, further note-ons are ignored until the pad has been quiet this long (a bouncing pad or a double trigger sends several).
-const LEARN_QUIET_MS = 250;
-// The piece an earlier step of this walk-through already taught `note`, or null. Kept on its own so a later rule (hi-hat closed and open sharing a note) changes in one place.
-const takenThisRun = (run, note) => run.learned[note] || null;
-// `learn` is { listen(fn) -> stop }: while listening, each MIDI note-on arrives as fn(deviceName, note), and fn returns true when the walk-through used the note (so the app does not also judge it as a hit).
+export const LEARN_QUIET_MS = 250;
+// The piece an earlier step of this walk-through already taught `note`, or null. Closed and open hi-hat may share a note on purpose (many e-kits send one note for both), so the other hi-hat piece does not count as having taken it.
+const takenThisRun = (run, note, id) => { const owner = run.learned[note]; return owner && owner !== hatPartner(id) ? owner : null; };
+// `learn` is { listen(fn) -> stop }: while listening, each MIDI note-on arrives as fn(deviceName, note), and a pedal that sends only CC4 arrives as fn(deviceName, null, 'pedal'); fn returns true when the walk-through used the note (so the app does not also judge it as a hit).
 let stopLearning = null;
 export function renderKitSetup(host, raw, onChange, learn) {
   if (stopLearning) stopLearning();
@@ -80,46 +80,90 @@ export function renderKitSetup(host, raw, onChange, learn) {
   const hint = document.createElement('p'); hint.className = 'small'; hint.textContent = t('kit.learnHint'); host.appendChild(hint);
   const button = (id, text, on) => { const b = document.createElement('button'); b.type = 'button'; b.id = id; b.className = 'small'; b.textContent = text; b.addEventListener('click', on); host.appendChild(b); return b; };
   const status = document.createElement('p'); status.id = 'kitLearnStatus'; status.className = 'small'; status.setAttribute('role', 'status');
-  let run = null;
+  const stepNote = document.createElement('p'); stepNote.id = 'kitLearnStep'; stepNote.className = 'small';
+  const listHost = document.createElement('div'); listHost.id = 'kitLearnList';
+  let run = null, lastDevice = null;
   const startBtn = button('kitLearn', t('kit.learn'), () => begin());
+  const backBtn = button('kitLearnBack', t('kit.learnBack'), () => back());
   const skipBtn = button('kitLearnSkip', t('kit.learnSkip'), () => { if (run) run.last = null; advance(); });
+  const noSendBtn = button('kitLearnNoSend', t('kit.learnNoSend'), () => noSend());
   const stopBtn = button('kitLearnStop', t('kit.learnStop'), () => finish());
-  const forgetBtn = button('kitLearnForget', t('kit.learnForget'), () => { finish(); status.textContent = ''; const { midiMaps, ...rest } = prefs; prefs = sanitizeKitPrefs(rest); syncLearn(); onChange(prefs); });
-  host.appendChild(status);
-  function syncLearn() { skipBtn.hidden = stopBtn.hidden = !run; startBtn.hidden = !!run; forgetBtn.hidden = !!run || !prefs.midiMaps; }
-  function prompt() { pick(run.pieces[run.i].id); status.textContent = t('kit.learnPrompt', { piece: t('kit.piece.' + run.pieces[run.i].id) }); }
+  const forgetBtn = button('kitLearnForget', t('kit.learnForget'), () => { finish(); status.textContent = ''; const { midiMaps, hatShared, cc4Only, ...rest } = prefs; prefs = sanitizeKitPrefs(rest); syncLearn(); onChange(prefs); });
+  host.appendChild(status); host.appendChild(stepNote); host.appendChild(listHost);
+  const name = id => t('kit.piece.' + id);
+  const cur = () => run.pieces[run.i].id;
+  const say = extra => { status.textContent = (status.textContent + ' ' + extra).trim(); };
+  function syncLearn() { skipBtn.hidden = stopBtn.hidden = !run; backBtn.hidden = !run || run.only; backBtn.disabled = !run || run.i === 0; noSendBtn.hidden = !run || cur() !== 'hihat-pedal'; if (!run) stepNote.textContent = ''; startBtn.hidden = !!run; forgetBtn.hidden = !!run || !(prefs.midiMaps || prefs.cc4Only); renderList(); }
+  // The pieces shown on this sheet with the note each one learned for the device in front, and a Relearn button on every row.
+  function renderList() {
+    const maps = prefs.midiMaps || {}, keys = Object.keys(maps).length ? Object.keys(maps) : Object.keys(prefs.cc4Only || {}), dev = (run && run.device) || lastDevice || (keys.length === 1 ? keys[0] : null);
+    listHost.replaceChildren(); if (!dev) return;
+    const saved = maps[dev] || {}, sharedNote = (prefs.hatShared || {})[dev], pedalCc = !!(prefs.cc4Only || {})[dev];
+    const h = document.createElement('p'); h.className = 'small'; h.textContent = t('kit.learnListHead') + ' (' + dev + ')'; listHost.appendChild(h);
+    const ul = document.createElement('ul'); ul.className = 'small';
+    for (const piece of PIECES.filter(p => !prefs.hiddenPieces.includes(p.id))) {
+      const id = piece.id, own = Object.keys(saved).find(n => saved[n] === id), li = document.createElement('li'); li.id = 'kitRow-' + id;
+      const partner = hatPartner(id), shares = own === undefined && partner && sharedNote !== undefined && saved[sharedNote] === partner;
+      const what = own !== undefined ? t('kit.learnRowNote', { note: own }) : shares ? t('kit.learnRowShared', { note: sharedNote, piece: name(partner) }) : id === 'hihat-pedal' && pedalCc ? t('kit.learnRowCc') : t('kit.learnRowNone');
+      li.append(name(id) + ': ' + what + ' ');
+      const b = document.createElement('button'); b.type = 'button'; b.id = 'kitRelearn-' + id; b.className = 'small'; b.textContent = t('kit.learnRelearn'); b.setAttribute('aria-label', t('kit.learnRelearn') + ': ' + name(id)); b.addEventListener('click', () => relearn(id)); li.appendChild(b); ul.appendChild(li);
+    }
+    listHost.appendChild(ul);
+  }
+  function prompt() { clearTimeout(run.ccTimer); run.ccTimer = null; const id = cur(); pick(id); status.textContent = t(id === 'hihat-pedal' ? 'kit.learnPromptPress' : 'kit.learnPrompt', { piece: name(id) }); stepNote.textContent = id.startsWith('hihat-') ? describeHit(id, prefs) : ''; syncLearn(); }
   function advance() { if (!run) return; run.i++; if (run.i >= run.pieces.length) finish(); else prompt(); }
+  // A piece taught again starts clean: its earlier note no longer counts as taken in this run.
+  function forgetTaught(id) { for (const n of Object.keys(run.learned)) if (run.learned[n] === id) delete run.learned[n]; delete run.taught[id];  }
+  function back() { if (!run || run.only || run.i === 0) return; run.i--; run.last = null; forgetTaught(cur()); prompt(); }
+  function noSend() { if (!run || cur() !== 'hihat-pedal') return; const id = cur(); run.last = null; advance(); say(t('kit.learnNoSent', { piece: name(id) })); }
+  function relearn(id) {
+    if (run && !run.only) { const i = run.pieces.findIndex(p => p.id === id); if (i < 0) return; run.i = i; run.last = null; forgetTaught(id); prompt(); return; }
+    if (run) finish();
+    begin({ only: id });
+  }
   function finish() {
     if (!run) return;
-    const done = run; run = null; stopLearning = null; done.off();
-    // The count is pieces of this run still in the saved map, not note-ons heard.
-    const saved = (prefs.midiMaps || {})[done.device] || {}, count = Object.keys(done.learned).filter(n => saved[n] === done.learned[n]).length;
+    const done = run; run = null; stopLearning = null; clearTimeout(done.ccTimer); done.off(); if (done.device) lastDevice = done.device;
+    // The count is pieces of this run that still have a note in the saved map (their own, or the one they share), not note-ons heard.
+    const saved = (prefs.midiMaps || {})[done.device] || {}, count = Object.keys(done.taught).filter(id => saved[done.taught[id]] === id || saved[done.taught[id]] === hatPartner(id)).length;
     status.textContent = count ? t(count === 1 ? 'kit.learnDone.one' : 'kit.learnDone', { count, device: done.device }) : '';
     syncLearn();
   }
-  function begin() {
+  function begin({ only } = {}) {
     if (!learn || run) return;
     // Pieces hidden on this sheet are not on the player's kit, so the walk-through does not ask for them.
-    const pieces = PIECES.filter(p => !prefs.hiddenPieces.includes(p.id));
+    const shown = PIECES.filter(p => !prefs.hiddenPieces.includes(p.id)), pieces = only ? shown.filter(p => p.id === only) : shown;
     if (!pieces.length) return;
-    run = { i: 0, learned: {}, last: null, device: null, off: null, pieces };
+    run = { i: 0, learned: {}, taught: {}, last: null, device: only ? (lastDevice || (Object.keys(prefs.midiMaps || {}).length === 1 ? Object.keys(prefs.midiMaps)[0] : null)) : null, off: null, pieces, only: !!only };
     stopLearning = finish;
-    run.off = learn.listen((device, note) => {
+    run.off = learn.listen((device, note, kind) => {
       // The sheet closed or this render was replaced: hand the note back to the app.
       if (!run || !host.isConnected || host.closest('[hidden]')) { finish(); return false; }
       const key = deviceKey(device);
       if (!key) return false;
       if (run.device === null) run.device = key; else if (key !== run.device) return false;
-      const now = performance.now(), quiet = run.last === null || now - run.last >= LEARN_QUIET_MS;
+      const id = cur(), now = performance.now(), quiet = run.last === null || now - run.last >= LEARN_QUIET_MS;
+      if (kind === 'pedal') {
+        // Many pedals send CC4 together with a note, so a CC4 alone does not end the step: wait one quiet gap for the note. If none comes, this pedal sends only CC4: save that flag for this device (the app reads CC4 as the pedal only for a flagged device).
+        if (id !== 'hihat-pedal') return false;
+        if (run.ccTimer) return true;
+        const mine = run; run.ccTimer = setTimeout(() => { mine.ccTimer = null; if (run !== mine || cur() !== 'hihat-pedal') return; save({ cc4Only: { ...prefs.cc4Only, [key]: true } }); advance(); say(t('kit.learnPedalCc', { piece: name(id) })); }, LEARN_QUIET_MS); return true;
+      }
       run.last = now;
       if (!quiet) { prompt(); status.textContent += ' ' + t('kit.learnIgnored', { note }); return true; }
-      const owner = takenThisRun(run, note);
-      if (owner) { prompt(); status.textContent += ' ' + t('kit.learnTaken', { note, piece: t('kit.piece.' + owner) }); return true; }
-      const maps = prefs.midiMaps || {}, id = run.pieces[run.i].id;
-      save({ midiMaps: { ...maps, [key]: learnPad(maps[key], id, note) } });
-      run.learned[note] = id; advance(); return true;
+      const owner = takenThisRun(run, note, id);
+      if (owner) { prompt(); status.textContent += ' ' + t('kit.learnTaken', { note, piece: name(owner) }); return true; }
+      const maps = prefs.midiMaps || {}, partner = hatPartner(id), shared = !!partner && (maps[key] || {})[note] === partner;
+      // A hat piece taught its own note ends any share; a note (not CC4) for the pedal ends its CC4-only flag.
+      const hatShared = { ...prefs.hatShared }, cc4Only = { ...prefs.cc4Only };
+      if (partner) { if (shared) hatShared[key] = note; else delete hatShared[key]; }
+      if (id === 'hihat-pedal') delete cc4Only[key];
+      save({ midiMaps: { ...maps, [key]: learnPad(maps[key], id, note, { shareHat: true }) }, hatShared, cc4Only });
+      if (!run.learned[note]) run.learned[note] = id;
+      run.taught[id] = note;
+      advance(); if (shared) say(t('kit.learnShared', { note, first: name(partner), second: name(id) })); return true;
     });
-    prompt(); syncLearn();
+    prompt();
   }
   syncLearn();
 }

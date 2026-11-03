@@ -57,8 +57,8 @@ export const MIC_UNNAMEABLE = new Set(['tom-floor', 'tom-mid', 'tom-high', 'cras
 // cannot tell foot from stick, open from closed) -- so a mic 'hihat' matches
 // any of the three expected hi-hat pieces, while a MIDI hit still has to name
 // the exact one.
-function pieceMatches(expectedPiece, playedPiece) {
-  if (playedPiece === expectedPiece) return true;
+function pieceMatches(expectedPiece, playedPiece, altPiece) {
+  if (playedPiece === expectedPiece || (altPiece && altPiece === expectedPiece)) return true; // alt: the other hi-hat piece a shared-note kit's hit also counts for
   if (playedPiece === 'hihat' && typeof expectedPiece === 'string' && expectedPiece.indexOf('hihat') === 0) return true;
   return false;
 }
@@ -73,7 +73,7 @@ function pieceOkFor(note, hit) {
   if (!hit) return null;
   if (hit.source === 'mic' && MIC_UNNAMEABLE.has(note.piece)) return null;
   if (hit.piece == null) return null;
-  return pieceMatches(note.piece, hit.piece);
+  return pieceMatches(note.piece, hit.piece, hit.alt);
 }
 
 // Plain words for a piece id, for firstCorrection's "That was the X — this
@@ -158,7 +158,7 @@ function judgeOnsets(chords, played, onsetAt, matches, extraList, bpm, ticksPerQ
       chord.forEach((note, n) => {
         let pick = -1;
         claimed[k].forEach((i) => {
-          if (taken.has(i) || !pieceMatches(note.piece, played[i].piece)) return;
+          if (taken.has(i) || !pieceMatches(note.piece, played[i].piece, played[i].alt)) return;
           if (pick === -1 || Math.abs(played[i].atSec - times[k]) < Math.abs(played[pick].atSec - times[k])) pick = i;
         });
         if (pick !== -1) { taken.add(pick); hitFor[k][n] = pick; }
