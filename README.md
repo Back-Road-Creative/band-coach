@@ -1452,13 +1452,32 @@ teaches one pad, so any further note within 250 ms of the last one (a bouncing
 pad, a double trigger) is ignored and the prompt says so, and a note already
 taught to an earlier piece in the same run is refused until you hit a different
 pad or press Skip. **Skip this one** leaves a piece as it was and **Stop** ends
-early; the finish line counts the pads learned, not the notes heard. The notes are saved per
+early; **Back** returns to the previous piece to teach it again, and the list under
+the walk-through shows what each piece learned, with a **Relearn** button on every
+row (in the middle of a walk it jumps to that piece; otherwise it redoes just that
+one). On the hi-hat steps the prompt adds the plain-words sentence for that piece,
+the pedal step says "Press" rather than "Hit", and **My kit does not send this**
+skips the pedal and says so. Closed and open hi-hat are the one pair that may share
+a note on purpose (many e-kits send one note for both): the first piece taught keeps
+it, the other has no note of its own, the line says so, and playing that note counts
+as the first piece for the app's own sounds; any other repeated note is still refused.
+The share is saved per device (`hatShared` in the saved kit preferences, with the
+backup), the row for the other hat reads "shared with ...", and the trainer and the
+Songs kit steps (timed and any-order) take that note for either hat piece, while a
+kit with two separate notes still tells the two apart. A pedal's CC4 (a position, not
+a note) is never counted by default, because many pedals send CC4 beside a note and
+that would be two hits per press. On the pedal step of the walk-through a CC4 waits one
+250 ms quiet gap for a note: if a note arrives it is learned as normal; if none does,
+the device is saved as CC4-only (`cc4Only`, with the backup) and from then on, while a
+kit is the instrument, CC4 rising through 64 counts as one hi-hat-pedal hit (falling or
+staying above does not, and a second crossing inside the quiet gap is the same press).
+Teaching the pedal a note clears the flag; the skip leaves it alone. The finish line counts the pads learned, not the notes heard. The notes are saved per
 MIDI device name (`midiMaps` in the saved kit preferences, up to 8 devices), so a
 second kit does not inherit the first one's pads, and they survive progress
 backup/restore. A learned note overrides the General MIDI note for that device
 only: a device with no learned pads, and any note you have not taught it, keep
 the General MIDI reading, and a note nobody has seen is still an "extra note".
-**Forget learned pads** clears every learned map. `pieceForMidi(note, map)` in
+**Forget learned pads** clears every learned map and the shared-hat and CC4-only flags. `pieceForMidi(note, map)` in
 `src/instruments/drum-kit.js` takes the optional map; `src/app.js` reads a
 learned note as the General MIDI note of its piece before the trainer, Songs
 drum practice and reference hear it, and only while a kit is in front or Songs is practising a percussion part

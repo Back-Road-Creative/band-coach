@@ -63,8 +63,8 @@ import { rangeForInstrument, FALLBACK_RANGE, frameSizeForInstrument } from './au
 import { renderVoice } from './audio/voices.js';
 import { layoutFor as harpLayoutFor } from './instruments/how/harmonica.js';
 import { pieceForMidi, kitRepeatStep, kitRepeatFor, KIT_MAX_TRIES } from './instruments/drum-kit.js';
-import { renderKitSetup } from './ui/kit-setup.js';
-import { kitNoteFor } from './instruments/how/kit-presets.js';
+import { renderKitSetup, LEARN_QUIET_MS } from './ui/kit-setup.js';
+import { kitNoteFor, hatSharedNote, hatPartner, pedalCc4Only } from './instruments/how/kit-presets.js';
 import { kitFrame, kitRegions, pieceAt, THRONE } from './instruments/how/drum-kit.js';
 import { layoutPercussionMeasure } from './notation/percussion.js';
 import { songFor, KBD_SONG_SKILL_MAP } from './instruments/kbd-songs.js';
@@ -1245,6 +1245,7 @@ import { register as registerPathway } from './ui/pathway.js';
   // attempt can tell a real keyboard from a stand-in the same way
   // (src/ui/songs.js's advance()) -- never anything about credit, mastery or
   // pass/fail, which stay blind to it.
+  let kitHatShared = false; // set only while one MIDI note-on is handled: this device sends one note for closed and open hi-hat, so the hit also counts for the other hat piece
   let midiMisses = []; // F13: consecutive wrong MIDI notes, oldest first (onNote below)
   function onNote(midi, exact, source) {
     if (source) kbdTyping = source === 'computer-key'; // the keys wear their computer letters only while the computer keyboard is what is playing them
@@ -1254,12 +1255,12 @@ import { register as registerPathway } from './ui/pathway.js';
     // later UI change makes #cv reachable during songs: such a tap would
     // then reach advance() with no route, and its row keeps `input` off
     // rather than guessed (src/ui/songs.js's advance()).
-    forwardSongNote(midi, exact, undefined, (source === 'midi' || source === 'computer-key') ? source : undefined);
+    forwardSongNote(midi, exact, undefined, (source === 'midi' || source === 'computer-key') ? source : undefined, kitHatShared);
     // "Calibrate timing" listens for taps, and a MIDI keyboard or drum set
     // is a tap source like the space bar: route the hit to onTap() before
     // the drum-kit branch and the not-judging message below can call it a stray note.
     if (calRun) { onTap(); return; }
-    if (MODS[mod] && MODS[mod].kit) { const p = pieceForMidi(midi); if (p === null) coach('MIDI note ' + midi + ' is not one of the drums on this kit' + (playing ? ', so it counts as an extra hit.' : '.')); else if (!playing) coach(kitName(p) + ' heard -- start an exercise to see it judged.'); onHit(p, tapAudioTime(), source); return; }
+    if (MODS[mod] && MODS[mod].kit) { const p = pieceForMidi(midi); if (p === null) coach('MIDI note ' + midi + ' is not one of the drums on this kit' + (playing ? ', so it counts as an extra hit.' : '.')); else if (!playing) coach(kitName(p) + ' heard -- start an exercise to see it judged.'); onHit(p, tapAudioTime(), source, kitHatShared ? hatPartner(p) : null); return; }
     lastInputAt = now(); pressed[midi] = performance.now();
     if (source === 'midi') { const notJudging = !playing || !task || task.done; const outOfView = !notJudging && mod === 'kbd' && (midi < kbdRange()[0] || midi > kbdRange()[1]); if (notJudging) coach(nname(midi) + ' heard' + (playing ? '.' : ' -- start an exercise to see it judged.')); else if (outOfView) coach(nname(midi) + ' heard, but that key is not drawn on screen right now.'); }
     if (!playing || !task || task.done) return; const e = cur(); if (!e) return; const i = e.info;
@@ -1442,14 +1443,14 @@ import { register as registerPathway } from './ui/pathway.js';
   // an e-kit player's mic would count each pad thump as a second hit, and would
   // hear a click through the bar as a hit too.
   let kitMidiHit = false;
-  function onHit(piece, t, source) {
+  function onHit(piece, t, source, alt) {
     if (source === 'midi') kitMidiHit = true; else if (source === 'mic' && kitMidiHit) return;
     // A real mic hit already made its own sound; only a silent input (key,
     // click, or an e-kit's own MIDI voice) needs the app's synthesized one.
     lastInputAt = now(); if (piece) { kitFlash = { piece: piece, at: performance.now() }; if (source !== 'midi' && source !== 'mic') drumHit(piece, now() + 0.005); }
     if (!playing || !task || task.kind !== 'kit' || !bar || bar.judged) return;
     const latencyMs = DB.latencyMs != null ? DB.latencyMs : (actx ? (actx.outputLatency || actx.baseLatency || 0) * 1000 : 0), at = t - S.offset - latencyMs / 1000;
-    if (at >= bar.playAt - 0.25) bar.taps.push({ t: at, piece: piece, used: false, source: source });
+    if (at >= bar.playAt - 0.25) bar.taps.push({ t: at, piece: piece, used: false, source: source, alt: alt || null });
   }
   function tickKitBar() {
     if (!bar || !task || task.kind !== 'kit') return; const t = now(), upTo = barClickCount(micReady && !kitMidiHit);
@@ -1458,7 +1459,7 @@ import { register as registerPathway } from './ui/pathway.js';
     bar.judged = true; const win = S.level > MODS[mod].levels.length ? 0.11 : 0.15, deltas = [];
     const near = (o, ok) => { let best = null; bar.taps.forEach(tp => { if (!tp.used && ok(tp) && Math.abs(tp.t - o.t) <= win && (!best || Math.abs(tp.t - o.t) < Math.abs(best.t - o.t))) best = tp; }); if (best) best.used = true; return best; };
     // A mic hit the classifier could not name (piece null, source 'mic') still counts for a tom/crash/ride onset -- the mic can only tell kick, snare and hi-hat apart.
-    const tapMatches = (tp, p) => tp.piece === p || (tp.piece === null && tp.source === 'mic' && KIT_MIC_UNNAMED.has(p));
+    const tapMatches = (tp, p) => tp.piece === p || (tp.alt && tp.alt === p) || (tp.piece === null && tp.source === 'mic' && KIT_MIC_UNNAMED.has(p));
     // right drum first (a flam wants a second snare hit within 40 ms), then an on-time hit on another drum is "wrong drum"; what is left over is extra
     bar.onsets.forEach(o => { o.res = o.pieces.map(p => { const hit = near(o, tp => tapMatches(tp, p)); if (!hit) return { p: p, miss: true }; deltas.push(hit.t - o.t); if (!o.flam) return { p: p, dt: hit.t - o.t }; const two = near(o, tp => tapMatches(tp, p)), gap = two ? Math.abs(two.t - hit.t) : null; return gap !== null && gap <= 0.04 ? { p: p, dt: hit.t - o.t } : { p: p, flam: gap }; }); });
     bar.onsets.forEach(o => o.res.forEach(r => { if (!r.miss) return; const other = near(o, tp => tp.piece && tp.piece !== r.p); if (other) { r.miss = false; r.wrong = other.piece; } }));
@@ -2644,6 +2645,15 @@ import { register as registerPathway } from './ui/pathway.js';
     const down = value >= 64, was = pedalDown.get(input); pedalDown.set(input, down);
     if (down && !was && panels.current() === 'songs' && !songsHandsFree('try', 'pedal')) songsHandsFree('next', 'pedal');
   }
+  // A hi-hat pedal that sends only CC4 (a position, not a note), saved as such for this device by the set-up walk-through (many pedals send CC4 beside a note, which would count twice, so an unflagged device's CC4 is never a hit): while a kit is the instrument, a value rising through 64 is one hi-hat-pedal hit. Falling, or staying above 64, is not a hit, and a crossing within the quiet gap of the last one (each restarting it) is the same press, like the set-up walk-through's own wait.
+  const hatCc = new Map();
+  function onHatPedal(input, value) {
+    const s = hatCc.get(input) || { above: false, last: -Infinity }, rise = value >= 64 && !s.above, at = performance.now(); s.above = value >= 64; hatCc.set(input, s);
+    if (!rise) return;
+    const gap = at - s.last < LEARN_QUIET_MS; s.last = at; if (gap || rangeCap) return;
+    if (kitLearnSink && kitLearnSink(input.name, null, 'pedal')) return; // the kit set-up walk-through is learning the pedal; it is not a hit
+    if (MODS[mod] && MODS[mod].kit && pedalCc4Only(DB.prefs.kit, input.name)) { lastMidiName = midiDevName(input); onNote(44, true, 'midi'); } // 44 is the pedal's own note, read straight (a learned map must not remap it)
+  }
   function handleMidiMessage(input, ev) {
     const d = ev.data; if (!d || !d.length) return;
     midiBlink();
@@ -2657,13 +2667,13 @@ import { register as registerPathway } from './ui/pathway.js';
     if (midiOutBusy) return; // the keyboard is playing a song back for the learner and echoes its own notes as input -- not the learner playing, so not judged
     let parser = midiParsers.get(input); if (!parser) { parser = createMidiParser(); midiParsers.set(input, parser); }
     parser.feed(d).forEach(evt => {
-      if (evt.type === 'cc') { if (evt.controller === 64) onPedal(input, evt.value); return; }
+      if (evt.type === 'cc') { if (evt.controller === 64) onPedal(input, evt.value); else if (evt.controller === 4) onHatPedal(input, evt.value); return; }
       if (evt.type === 'on' && rangeEcho(evt.note, at)) return; // the second copy of a doubled key press, during or just after the range walk-through
       if (rangeCap) { if (evt.type === 'on') rangeNote(input, evt, at); return; } // the range walk-through is learning a key; it is not an answer
       if (evt.type === 'on') lastMidiName = midiDevName(input);
       if (evt.type === 'on' && kitLearnSink && kitLearnSink(input.name, evt.note)) return; // the kit set-up walk-through is learning this pad; it is not a hit
       const note = kitNote(input, evt.note);
-      if (evt.type === 'on') { proofHeard(note); noteState.noteOn(input, evt.channel, note); realMidiHeld.add(note); onNote(note, true, 'midi'); } else { noteState.noteOff(input, evt.channel, note); if (!noteState.isHeld(note)) realMidiHeld.delete(note); onNoteOff(note, 'midi'); }
+      if (evt.type === 'on') { proofHeard(note); noteState.noteOn(input, evt.channel, note); realMidiHeld.add(note); kitHatShared = hatSharedNote(DB.prefs.kit, input.name) === evt.note; try { onNote(note, true, 'midi'); } finally { kitHatShared = false; } } else { noteState.noteOff(input, evt.channel, note); if (!noteState.isHeld(note)) realMidiHeld.delete(note); onNoteOff(note, 'midi'); }
     });
   }
   const canOpenMic = () => !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
