@@ -65,7 +65,7 @@ import { layoutFor as harpLayoutFor } from './instruments/how/harmonica.js';
 import { pieceForMidi, hatBleedsOnSnare, kitRepeatStep, kitRepeatFor, KIT_MAX_TRIES } from './instruments/drum-kit.js';
 import { renderKitSetup, LEARN_QUIET_MS } from './ui/kit-setup.js';
 import { kitNoteFor, hatSharedNote, hatPartner, pedalCc4Only } from './instruments/how/kit-presets.js';
-import { kitFrame, kitRegions, pieceAt, THRONE } from './instruments/how/drum-kit.js';
+import { kitFrame, kitRegions, kitLayout, kitLines, pieceIcon, pieceAt, THRONE } from './instruments/how/drum-kit.js';
 import { layoutPercussionMeasure } from './notation/percussion.js';
 import { songFor, KBD_SONG_SKILL_MAP } from './instruments/kbd-songs.js';
 import { buildMods } from './instruments/mods.js';
@@ -1892,8 +1892,9 @@ import { register as registerPathway } from './ui/pathway.js';
   // The bar on a percussion staff (top), the kit from the throne (bottom): the bar's drums outlined, the
   // piece just hit flashing; after judging, a mark under each note. While the bar runs: the beat number beside
   // the staff, a line crossing each note on time, and a ring closing on each drum as its next hit nears.
-  // what each drawn piece is called on the kit (a beginner reads the name; the key letter is only a hint). [name, second line, side it prefers (l/r/u/d), 's' for the small print of the hi-hat's tab and pedal]; the hi-hat is named once, on its disc
-  const kitDrawNames = () => ({ kick: [tl('kit.piece.kick')], snare: [tl('kit.piece.snare')], 'hihat-closed': [tl('kit.draw.hihat')], 'hihat-pedal': [tl('kit.draw.pedal'), '', 'r', 's'], 'hihat-open': [tl('kit.draw.open'), '', 'u', 's'], 'tom-floor': [tl('kit.piece.tom-floor'), '', 'l'], 'tom-mid': [tl('kit.draw.mid1'), tl('kit.draw.mid2'), 'u'], 'tom-high': [tl('kit.draw.high1'), tl('kit.draw.high2'), 'u'], crash: [tl('kit.piece.crash')], ride: [tl('kit.piece.ride')] });
+  // what each drawn piece is called on the kit (a beginner reads the name; the key letter is only a hint); the words come from drum-kit.js's kitLines(), the table the set-up sheet and the panel read too. [name, second line, side it prefers (l/r/u/d), 's' for the small print of the hi-hat's tab and pedal]; the hi-hat is named once, on its disc
+  const KIT_SIDE = { 'hihat-pedal': ['l', 's'], 'hihat-open': ['u', 's'], 'tom-floor': ['l'], 'tom-mid': ['u'], 'tom-high': ['u'] };
+  const kitDrawNames = () => Object.fromEntries(KIT.map(k => { const [a, b = ''] = kitLines(k.id), [side = '', small = ''] = KIT_SIDE[k.id] || []; return [k.id, [a, b, side, small]]; }));
   function requiredKitPieces() { return task && task.kind === 'kit' && bar ? [...new Set(bar.onsets.flatMap(o => o.pieces))] : []; }
   function drawKit(W, H) {
     const on = bar && task && task.kind === 'kit' && bar.staff, t = cueClock(now(), cueLatency(), S.offset), cueLit = {}, want = {}, bw = W * 0.94, bh = on ? H * 0.62 : H * 0.9, box = { x: (W - bw) / 2, y: on ? H * 0.37 : (H - bh) / 2, w: bw, h: bh, s: bh };
@@ -1910,30 +1911,30 @@ import { register as registerPathway } from './ui/pathway.js';
       g.save(); g.translate(x0, y0); g.scale(sc, sc); g.strokeStyle = '#c9ced9'; g.fillStyle = '#e9edf6'; g.lineWidth = 1.5 / sc; drawPrimitives(g, bar.staff, {}); g.restore();
       if (!bar.judged) { g.strokeStyle = accent(); g.lineWidth = 3; g.beginPath(); g.moveTo(sweepX, y0); g.lineTo(sweepX, y0 + 130 * sc); g.stroke(); }
       bar.onsets.forEach((o, i) => { const x = x0 + (bar.noteX[i] || 0) * sc; if (o.flam) { g.fillStyle = '#93a0bd'; font(11 * sc, 700); g.textAlign = 'center'; g.fillText('flam', x, y0 + 10 * sc); } const sk = task.kit.bar.hits[i] && task.kit.bar.hits[i].sticking; if (sk) { g.fillStyle = '#93a0bd'; font(11 * sc, 700); g.textAlign = 'center'; g.fillText(tl('kit.stick.' + sk), x, y0 + 100 * sc); } if (!bar.judged || !o.res) return; const bad = o.res.some(r => r.dt === undefined), off = Math.max(...o.res.map(r => Math.abs(r.dt || 0))); g.fillStyle = bad ? '#ff6b5e' : off > 0.05 ? '#f3c52f' : '#5be08a'; g.beginPath(); g.arc(x, y0 + 122 * sc, 5 * sc, 0, 7); g.fill(); }); }
-    // the kit is drawn from the throne in a frame that keeps its shape inside the box (drum-kit.js): drums are heads with a rim, cymbals discs with a bell, pedals footboards, the open hi-hat a tab on the hi-hat's far edge
+    // the kit is drawn from the throne in a frame that keeps its shape inside the box (drum-kit.js): drums are heads with a rim, cymbals discs with a bell, pedals footboards, the open hi-hat a square tab resting on the hi-hat disc
     const f = kitFrame(box), m = f.h, thr = { x: f.x + (THRONE.x - THRONE.w / 2) * m, y: f.y + (THRONE.y - THRONE.h / 2) * m, w: THRONE.w * m, h: THRONE.h * m };
-    const pcs = kitRegions(box, DB.prefs.kit, requiredKitPieces()).map(r => { const flash = kitFlash.piece === r.id && performance.now() - kitFlash.at < 160, c = r.kind === 'circle', p = { id: r.id, shape: r.shape }; return { p, r, x: r.cx, y: r.cy, hw: c ? r.r : r.w / 2, hh: c ? r.r : r.h / 2, rr: c ? r.r : 0, bb: c ? { x: r.cx - r.r, y: r.cy - r.r, w: r.r * 2, h: r.r * 2 } : { x: r.x, y: r.y, w: r.w, h: r.h }, lit: flash || !!cueLit[r.id], flash, hint: r.id === 'hihat-pedal' && want['hihat-closed'] && !want['hihat-pedal'] }; });
+    const laid = Object.fromEntries(kitLayout(DB.prefs.kit, requiredKitPieces()).map(q => [q.id, q])), pcs = kitRegions(box, DB.prefs.kit, requiredKitPieces()).map(r => { const flash = kitFlash.piece === r.id && performance.now() - kitFlash.at < 160, c = r.kind === 'circle', p = { id: r.id, shape: r.shape }; return { p, r, x: r.cx, y: r.cy, hw: c ? r.r : r.w / 2, hh: c ? r.r : r.h / 2, rr: c ? r.r : 0, bb: c ? { x: r.cx - r.r, y: r.cy - r.r, w: r.r * 2, h: r.r * 2 } : { x: r.x, y: r.y, w: r.w, h: r.h }, lit: flash || !!cueLit[r.id], flash, hint: r.id === 'hihat-pedal' && want['hihat-closed'] && !want['hihat-pedal'] }; });
     g.beginPath(); g.ellipse(thr.x + thr.w / 2, thr.y + thr.h / 2, thr.w / 2, thr.h / 2, 0, 0, 7); g.fillStyle = '#1b2130'; g.fill(); g.strokeStyle = '#93a0bd'; g.lineWidth = 1; g.stroke();
     // the tab is first in hit order and drawn last, over the hi-hat disc; a closed hi-hat wanted outlines the hi-hat pedal (dashed, never filled) because the left foot holds it shut
     pcs.slice().reverse().forEach(({ p, r, x, y, lit, flash, hint }) => { const rc = r.kind === 'circle'; g.beginPath(); if (rc) g.arc(x, y, r.r, 0, 7); else g.rect(r.x, r.y, r.w, r.h); g.fillStyle = flash ? '#f3c52f' : lit ? '#f08a4b' : p.shape === 'cymbal' || p.shape === 'tab' ? '#2a3140' : '#1b2130'; g.fill(); const on = want[p.id] || hint; g.strokeStyle = on ? '#f08a4b' : '#93a0bd'; g.lineWidth = on ? 3 : 1.5; if (hint) g.setLineDash([6, 4]); g.stroke(); g.setLineDash([]);
-      g.strokeStyle = '#93a0bd'; g.lineWidth = 1; g.beginPath();
-      if (p.shape === 'drum') g.arc(x, y, r.r * 0.8, 0, 7); else if (p.shape === 'cymbal') g.arc(x, y, r.r * 0.3, 0, 7);
-      else if (p.id === 'kick') { g.ellipse(x, r.y + r.h * 0.22, r.w * 0.38, r.h * 0.18, 0, 0, 7); g.rect(r.x + r.w * 0.15, r.y + r.h * 0.72, r.w * 0.7, r.h * 0.2); } else if (p.id === 'hihat-pedal') { g.moveTo(r.x + 3, r.y + r.h * 0.25); g.lineTo(r.x + r.w - 3, r.y + r.h * 0.25); }
-      g.stroke(); });
+      // the piece's line-icon is the set-up sheet's own outline (pieceIcon), drawn in frame units
+      g.save(); g.translate(f.x, f.y); g.scale(m, m); g.strokeStyle = '#93a0bd'; g.lineWidth = 1 / m; g.stroke(new Path2D(pieceIcon(p.id, laid[p.id]))); g.restore(); });
     // each ring lands on its drum's own rim at the moment to hit it
     rings.forEach(({ piece, progress }) => { const q = pcs.find(c => c.p.id === piece); if (!q) return; const grow = 1.2 * (1 - progress); g.strokeStyle = '#f3c52f'; g.lineWidth = 3; g.globalAlpha = 0.35 + 0.65 * progress; g.beginPath(); if (q.r.kind === 'circle') g.arc(q.x, q.y, q.rr * (1 + grow), 0, 7); else g.rect(q.r.x - q.hw * grow, q.r.y - q.hh * grow, q.r.w + 2 * q.hw * grow, q.r.h + 2 * q.hh * grow); g.stroke(); g.globalAlpha = 1; });
     // Names go on after every circle is down. A name that fits is written inside its circle; any other tries its own side, the opposite side, then under and over the circle, and takes the first spot that touches no other name, no other piece and not the canvas edge; with none free it loses its second line (closed/pedal/open) and tries again, so two names never run into each other on a phone-width kit.
     const drawNames = kitDrawNames(), placed = [], hit = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
-    pcs.slice().sort((a, b) => Number(a.p.id === 'kick') - Number(b.p.id === 'kick')).forEach(({ p, x, y, rr, hw, hh, lit }) => {
+    pcs.slice().sort((a, b) => Number(a.p.id === 'kick') - Number(b.p.id === 'kick')).forEach(({ p, r: reg, x, y, rr, hw, hh, lit }) => {
       const nm = drawNames[p.id], small = nm[3] === 's', fs = small ? 11 : Math.max(13, m * 0.05), key = KIT.find(k => k.id === p.id).key.toUpperCase(); font(fs, small ? 400 : 700); const tw = g.measureText(nm[0]).width, kick = p.id === 'kick', inside = (kick ? tw + 2 <= hw * 2 : rr > 0 && tw + 6 <= rr * 2) && !nm[1] && !nm[2]; let sw = 0; if (nm[1]) { font(Math.max(11, fs * 0.85), 400); sw = g.measureText(nm[1]).width; font(fs, 700); }
       g.fillStyle = inside && lit ? '#05070c' : '#e9edf6';
       if (inside) { const ny = kick ? y - fs * 0.5 : y - fs * 0.05; g.textAlign = 'center'; g.fillText(nm[0], x, ny); const r = { id: p.id, x: x - tw / 2, y: ny - fs * 1.0, w: tw, h: fs * 1.2 }; kitLabels.push(r); placed.push(r); }
       else {
         const side = (dir, two, dy = 0) => { const lw = two ? Math.max(tw, sw) : tw, lx = dir < 0 ? x - hw - 5 : x + hw + 5; return { ax: lx, al: dir < 0 ? 'right' : 'left', by: y - dy - (two ? 1 : -fs * 0.35), two, r: { id: p.id, x: dir < 0 ? lx - lw : lx, y: y - dy - fs * 1.05, w: lw, h: two ? fs * 2.2 : fs * 1.2 } }; };
         const stack = (dir, two) => { const lw = two ? Math.max(tw, sw) : tw, by = dir > 0 ? y + hh + 2 + fs * 1.05 : y - hh - 4 - (two ? fs * 0.95 : 0); return { ax: x, al: 'center', by, two, r: { id: p.id, x: x - lw / 2, y: by - fs * 1.05, w: lw, h: two ? fs * 2.2 : fs * 1.2 } }; };
-        const dir = (nm[2] === 'l' ? -1 : 1) * (DB.prefs.kit.leftHanded ? -1 : 1), free = c => c.r.x >= 0 && c.r.x + c.r.w <= W && c.r.y >= 0 && c.r.y + c.r.h <= H && !placed.some(q => hit({ x: c.r.x - 2, y: c.r.y - 2, w: c.r.w + 4, h: c.r.h + 4 }, q)) && !hit(c.r, thr) && !pcs.some(o => o.p !== p && hit(c.r, o.bb));
+        const dir = (nm[2] === 'l' ? -1 : 1) * (DB.prefs.kit.leftHanded ? -1 : 1), gapTo = (b, o) => o.kind === 'circle' ? Math.max(0, Math.hypot(Math.max(b.x - o.cx, 0, o.cx - b.x - b.w), Math.max(b.y - o.cy, 0, o.cy - b.y - b.h)) - o.r) : Math.hypot(Math.max(o.x - b.x - b.w, 0, b.x - o.x - o.w), Math.max(o.y - b.y - b.h, 0, b.y - o.y - o.h));
+        // strict: the name must also sit nearer its own piece than any other (by 1.5 px), so on a phone a name never reads as the neighbour's
+        const free = (c, strict) => c.r.x >= 0 && c.r.x + c.r.w <= W && c.r.y >= 0 && c.r.y + c.r.h <= H && !placed.some(q => hit({ x: c.r.x - 2, y: c.r.y - 2, w: c.r.w + 4, h: c.r.h + 4 }, q)) && !hit(c.r, thr) && !pcs.some(o => o.p !== p && hit(c.r, o.bb)) && (!strict || !pcs.some(o => o.p !== p && gapTo(c.r, o.r) <= gapTo(c.r, reg) + 1.5));
         const shifted = (c, dx) => ({ ...c, ax: c.ax + dx, r: { ...c.r, x: c.r.x + dx } });
-        let pick = null; for (const two of nm[1] ? [true, false] : [false]) { const first = nm[2] === 'u' ? [stack(-1, two)] : nm[2] === 'd' ? [stack(1, two)] : []; pick = [...first, side(dir, two), side(dir, two, fs * 0.6), side(dir, two, -fs * 0.6), side(-dir, two), stack(1, two), stack(-1, two), ...[0.5, -0.5, 1, -1].flatMap(dx => [shifted(stack(1, two), fs * dx), shifted(stack(-1, two), fs * dx)]), ...[1.5, -1.5, 2.5, -2.5].flatMap(dy => [side(dir, two, fs * dy), side(-dir, two, fs * dy)])].find(free); if (pick) break; }
+        let pick = null; for (const strict of [true, false]) { for (const two of nm[1] ? [true, false] : [false]) { const first = nm[2] === 'u' ? [stack(-1, two)] : nm[2] === 'd' ? [stack(1, two)] : []; pick = [...first, side(dir, two), side(dir, two, fs * 0.6), side(dir, two, -fs * 0.6), side(-dir, two), stack(1, two), stack(-1, two), ...[0.5, -0.5, 1, -1].flatMap(dx => [shifted(stack(1, two), fs * dx), shifted(stack(-1, two), fs * dx)]), ...[1.5, -1.5, 2.5, -2.5].flatMap(dy => [side(dir, two, fs * dy), side(-dir, two, fs * dy)])].find(c => free(c, strict)); if (pick) break; } if (pick) break; }
         // On a small active kit, the staff leaves little room beside the
         // snare. Search nearby gaps before falling back to a colliding label.
         if (!pick) {
@@ -1942,7 +1943,7 @@ import { register as registerPathway } from './ui/pathway.js';
             const ax = x + dx * fs * 0.75, by = y + dy * fs * 0.75;
             candidates.push({ ax, by, al: 'center', two: false, distance: dx * dx + dy * dy, r: { id: p.id, x: ax - tw / 2, y: by - fs * 1.05, w: tw, h: fs * 1.2 } });
           }
-          pick = candidates.sort((a, b) => a.distance - b.distance).find(free);
+          candidates.sort((a, b) => a.distance - b.distance); pick = candidates.find(c => free(c, true)) || candidates.find(c => free(c, false));
         }
         if (!pick) pick = side(dir, !!nm[1]);
         g.textAlign = pick.al; g.fillText(nm[0], pick.ax, pick.by); if (pick.two) { font(Math.max(11, fs * 0.85), 400); g.fillText(nm[1], pick.ax, pick.by + fs * 0.95 + 1); }

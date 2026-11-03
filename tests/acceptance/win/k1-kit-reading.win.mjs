@@ -28,7 +28,7 @@ const FIX = {
   'one-note': 'One note per hit. No guard: the cause is elsewhere and the audit reopens',
   'short-window': 'The same note repeated, gap clearly shorter than a flam. Fix: a short fixed window for all MIDI',
   'loudness-rule': 'The same note repeated, gap in flam range. Fix: a loudness rule on kit parts, tested on this kit first',
-  'several-notes': 'Different notes for one hit. A guard does not help. Fix: a piece owns several notes',
+  'several-notes': 'Different notes for one hit. A soft note a few ms after a loud one is one pad bleeding into another: add the pair to hatBleedsOnSnare (src/instruments/drum-kit.js). Otherwise a piece owns several notes',
 };
 
 // Pure: the logged messages in, the reading out.
@@ -63,6 +63,9 @@ export function readKit(log) {
   return { hits, counts, repeatGaps, ccCount, rows };
 }
 
+// Pure: the ports as Chrome reports them, state included, so a port that never opened is not read as no hits.
+const portWords = (o) => (o.ports?.length ? o.ports.map((p) => `${p.name} (${p.state}, ${p.connection})`) : o.inputs).join(', ');
+
 // Pure: is there enough to stop listening?
 export function doneListening({ hits, sinceLastMs, elapsedMs }) {
   if (elapsedMs >= LISTEN_MS) return true;
@@ -75,6 +78,7 @@ const startListening = `(async () => {
   const inputs = (window.__kitInputs = []);
   const openErrors = (window.__kitOpenErrors = []);
   const access = await navigator.requestMIDIAccess();
+  window.__kitPorts = () => [...access.inputs.values()].filter((i) => i.name !== ${JSON.stringify(LANE_PORT)}).map((i) => ({ name: i.name, state: i.state, connection: i.connection }));
   const listen = (input) => {
     if (input.name === ${JSON.stringify(LANE_PORT)} || inputs.includes(input.name)) return;
     inputs.push(input.name);
@@ -102,9 +106,10 @@ export async function run(page) {
     let seen = 0;
     for (;;) {
       o.log = await page.evaluate('window.__kitLog');
+      o.ports = await page.evaluate('window.__kitPorts()');
       if (o.log.length !== seen) { seen = o.log.length; lastAt = Date.now(); }
       const hits = readKit(o.log).hits.length;
-      await show(page, `Hit each pad once, about a second apart, then again harder or softer. Heard ${hits} of ${TARGET_HITS} hits.`);
+      await show(page, `Hit each pad once, about a second apart, then again harder or softer. Heard ${hits} of ${TARGET_HITS} hits. Listening on ${portWords({ ...o, inputs: [] })}.`);
       if (doneListening({ hits, sinceLastMs: Date.now() - lastAt, elapsedMs: Date.now() - t0 })) break;
       await sleep(POLL_MS);
     }
@@ -125,10 +130,10 @@ export function k1Verdict(o) {
   const r = readKit(o.log);
   if (!r.hits.length) {
     const errors = o.openErrors.length ? ` Could not open: ${o.openErrors.join('; ')}.` : '';
-    return { status: 'BLOCKED', text: `K1 heard no notes on ${o.inputs.join(', ')}.${errors} Another program holding the port would look like this`, findings };
+    return { status: 'BLOCKED', text: `K1 heard no notes on ${portWords(o)}.${errors} Another program holding the port would look like this`, findings };
   }
   const gaps = r.repeatGaps.length ? ` (gaps ${Math.min(...r.repeatGaps)} to ${Math.max(...r.repeatGaps)} ms)` : '';
-  const heard = `${r.hits.length} hit(s) on ${o.inputs.join(', ')}: ${r.counts.one} one note, ${r.counts.same} same note repeated${gaps}, ${r.counts.different} different notes`;
+  const heard = `${r.hits.length} hit(s) on ${portWords(o)}: ${r.counts.one} one note, ${r.counts.same} same note repeated${gaps}, ${r.counts.different} different notes`;
   return { status: 'OBSERVED', text: `K1 heard ${heard}. ${r.rows.map((row) => FIX[row]).join('. ')}`, findings, reading: r };
 }
 

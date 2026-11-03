@@ -112,7 +112,7 @@ test('closed and open hi-hat may share a note on purpose: the first owner keeps 
   assert.equal(await prompt(page), 'Learned 4 pads on XKORCE Kit.', 'kick, snare, closed and open each have a note');
   assert.match(await page.evaluate("document.getElementById('kitRow-hihat-open').textContent"), /42.*shared/i);
   await midiNoteOn(page, 'p1', 42);
-  assert.match(await coach(page), /Hi-hat \(closed\) heard/, 'playing the shared note counts as the closed hi-hat');
+  assert.match(await coach(page), /Hi-hat closed heard/, 'playing the shared note counts as the closed hi-hat');
 });
 
 test('a shared note sent twice at once is still one pad (doubled run)', async t => {

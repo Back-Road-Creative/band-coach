@@ -67,6 +67,13 @@ test('verdict: a reading is OBSERVED, never PASS, and names the fix', () => {
   assert.match(k1Verdict(obs([on(38, 0), on(40, 5)])).text, /several notes/);
 });
 
+test('verdict: different notes point at a pad bleeding into another first, because the real kit did that', () => {
+  const v = k1Verdict(obs([on(46, 0, 127), on(38, 4, 39)]));
+  assert.match(v.text, /bleed/);
+  assert.match(v.text, /hatBleedsOnSnare/);
+  assert.doesNotMatch(v.text, /A guard does not help/);
+});
+
 test('verdict: no kit port, or a port that stayed silent, is BLOCKED and says what it listened to', () => {
   const none = k1Verdict(obs([], { inputs: [] }));
   assert.equal(none.status, 'BLOCKED');
@@ -76,6 +83,21 @@ test('verdict: no kit port, or a port that stayed silent, is BLOCKED and says wh
   assert.match(silent.text, /USB MIDI/);
   assert.match(silent.text, /port busy/);
   assert.equal(k1Verdict(obs([], { stuck: 'no midi' })).status, 'BLOCKED');
+});
+
+test('verdict: a silent port says what state Chrome reported for it, so a port that never opened is not read as no hits', () => {
+  const closed = k1Verdict(obs([], { ports: [{ name: 'USB MIDI', state: 'disconnected', connection: 'closed' }] }));
+  assert.equal(closed.status, 'BLOCKED');
+  assert.match(closed.text, /USB MIDI \(disconnected, closed\)/);
+  const open = k1Verdict(obs([], { ports: [{ name: 'USB MIDI', state: 'connected', connection: 'open' }] }));
+  assert.match(open.text, /USB MIDI \(connected, open\)/);
+  assert.match(k1Verdict(obs([])).text, /USB MIDI/);
+});
+
+test('verdict: a reading also names the port state', () => {
+  const v = k1Verdict(obs([on(38, 0), on(36, 1000)], { ports: [{ name: 'USB MIDI', state: 'connected', connection: 'open' }] }));
+  assert.equal(v.status, 'OBSERVED');
+  assert.match(v.text, /USB MIDI \(connected, open\)/);
 });
 
 test('listening ends on enough hits then a short quiet, on a long quiet after a few hits, or at the limit', () => {

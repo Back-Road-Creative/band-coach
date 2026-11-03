@@ -39,7 +39,7 @@ profile lives inside the run directory too.
 | `--sha256 <hex>` | The sha256 the opened file must have. A mismatch exits 2. |
 | `--expect-version <v>` | The version the file should report (used by scenarios that read it). |
 | `--only <id>` | Run one scenario. A partial run always exits 1. |
-| `--visible` | Open the window on screen. By default it is headed but placed off-screen (`-32000,-32000`). |
+| `--visible` | Place the window on the screen of its Windows session. By default it is headed but placed off-screen (`-32000,-32000`). A window started from WSL can sit in a session that is not the one on your monitor, so you may still not see it. |
 | `--chrome <C:\...\chrome.exe>` | Use this Chrome. If it does not exist the lane exits 2 with "chrome not found". |
 | `--node <path>` | Windows `node.exe`. Default `/mnt/c/Program Files/nodejs/node.exe`. |
 | `--report <path>` | Where the JSON report goes. Default `dist/windows-lane-report.json`. |
@@ -50,10 +50,10 @@ What a real kit sends for one hit, read off the kit itself. A person is needed o
 
 ```
 node build/build.mjs --release
-node tests/acceptance/win/run.mjs --win-root /mnt/d/band-coach-win-lane --only K1 --visible --report dist/k1.json
+node tests/acceptance/win/run.mjs --win-root /mnt/d/band-coach-win-lane --only K1 --report dist/k1.json
 ```
 
-Close every other copy of Band Coach first, because another program holding the port stops the kit being heard. A Chrome window counts the hits. Hit each pad once, about a second apart, then again harder or softer. It stops 3 seconds after 20 hits, or a minute after the last hit once it has 6, or after 11 minutes.
+Close every other copy of Band Coach first, because another program holding the port stops the kit being heard. You do not need to see or open anything: the listener runs in a Windows session that is not on your monitor and still hears the USB kit. Hit each pad once, about a second apart, then again harder or softer. It stops 3 seconds after 20 hits, or a minute after the last hit once it has 6, or after 11 minutes.
 
 It listens on every input except `band-coach-lane` through one connection of its own, without pressing the app's Connect, so a repeat came from the kit or its driver and not from the app. It sends nothing. Note-ons less than 250 ms apart count as one hit, and the report gives every hit's notes, gaps and loudness:
 
@@ -62,7 +62,9 @@ It listens on every input except `band-coach-lane` through one connection of its
 | One note | No guard: the cause is elsewhere |
 | The same note repeated, every gap 20 ms or less (half the 40 ms flam window) | A short fixed window for all MIDI |
 | The same note repeated, a gap over 20 ms | A loudness rule on kit parts, tested on this kit first |
-| Different notes, or the same note on two ports | A piece owns several notes |
+| Different notes, or the same note on two ports | Bleed if a soft note follows a loud one by a few ms (`hatBleedsOnSnare`), otherwise a piece owns several notes |
+
+The reading of 2026-11-03 found both repeats and bleed. It is kept as `tests/fixtures/midi/kit-reading-usb-midi.json` and the guard (`createHitGuard`, `src/core/midi.js`) is tested against it.
 
 The result is OBSERVED, or BLOCKED if no port or no note was heard, and never PASS. K1 is in `attended` in `run.mjs`, not `registry`, so a full lane run never runs it or counts it.
 

@@ -48,9 +48,9 @@ test('a learned note plays its piece, other devices keep the GM map, and an unse
   await midiNoteOn(page, 'p1', 60);
   assert.match(await coach(page), /Snare heard/);
   await midiNoteOn(page, 'p1', 38);
-  assert.match(await coach(page), /Ride cymbal heard/, 'the learned note beats GM on this device');
+  assert.match(await coach(page), /Ride heard/, 'the learned note beats GM on this device');
   await midiNoteOn(page, 'p1', 36);
-  assert.match(await coach(page), /Bass drum heard/, 'unlearned notes keep the GM reading');
+  assert.match(await coach(page), /Kick heard/, 'unlearned notes keep the GM reading');
   await midiNoteOn(page, 'p1', 39);
   assert.match(await coach(page), /not one of the drums/);
   await midiNoteOn(page, 'p2', 38);

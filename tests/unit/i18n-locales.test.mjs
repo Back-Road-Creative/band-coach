@@ -42,8 +42,8 @@ test('LOCALES lists exactly the locales that have a table, English first', () =>
 
 const KIT_IDS = ['kick', 'snare', 'hihat-closed', 'hihat-open', 'hihat-pedal', 'tom-high', 'tom-mid', 'tom-floor', 'crash', 'ride'];
 
-test('every drum-kit piece has a translated description, spoken name and drawn label', () => {
-  const keys = [...KIT_IDS.flatMap(id => ['kit.desc.' + id, 'kit.name.' + id]), 'kit.desc.kick-compact', 'kit.side.left', 'kit.side.right',
+test('every drum-kit piece has a translated description, name and drawn label', () => {
+  const keys = [...KIT_IDS.flatMap(id => ['kit.desc.' + id, 'kit.piece.' + id]), 'kit.desc.kick-compact', 'kit.side.left', 'kit.side.right',
     'kit.draw.hihat', 'kit.draw.open', 'kit.draw.pedal', 'kit.draw.mid1', 'kit.draw.mid2', 'kit.draw.high1', 'kit.draw.high2', 'kit.notOnKit'];
   for (const k of keys) {
     assert.equal(typeof en[k], 'string', k + ' missing in en');
@@ -60,7 +60,7 @@ test('describeHit, piece names and the left-handed mirror follow the language', 
   assert.match(describeHit('kick'), /^Bombo: /);
   assert.equal(describeHit('hihat-pedal', { leftHanded: true }), t('kit.desc.hihat-pedal', { left: es['kit.side.right'], right: es['kit.side.left'] }));
   assert.notEqual(describeHit('hihat-pedal', { leftHanded: true }), describeHit('hihat-pedal'));
-  assert.equal(PIECES.find(p => p.id === 'snare').name, es['kit.name.snare']);
+  assert.equal(PIECES.find(p => p.id === 'snare').name, es['kit.piece.snare']);
   setLocale('en');
-  assert.equal(PIECES.find(p => p.id === 'kick').name, 'Bass drum');
+  assert.equal(PIECES.find(p => p.id === 'kick').name, 'Kick');
 });
