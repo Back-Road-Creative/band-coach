@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { pieceForMidi, canonicalMidi, PIECES } from '../../src/instruments/drum-kit.js';
-import { sanitizeKitPrefs, learnPad, kitNoteFor } from '../../src/instruments/how/kit-presets.js';
+import { sanitizeKitPrefs, learnPad, kitNoteFor, LEARN_VERSION } from '../../src/instruments/how/kit-presets.js';
 import { sanitizeDB } from '../../src/core/sanitize-db.js';
 import { en, es } from '../../src/core/i18n.js';
 
@@ -34,7 +34,7 @@ test('learnPad gives a piece the new note, dropping its earlier ones and any oth
 });
 
 test('kitNoteFor turns a learned note into the GM note for its piece, and leaves everything else alone', () => {
-  const kit = sanitizeKitPrefs({ midiMaps: { 'XKORCE Kit': { 60: 'snare', 61: 'ride' } } });
+  const kit = sanitizeKitPrefs({ learnVersion: LEARN_VERSION, midiMaps: { 'XKORCE Kit': { 60: 'snare', 61: 'ride' } } });
   assert.equal(kitNoteFor(kit, 'XKORCE Kit', 60), canonicalMidi('snare'));
   assert.equal(kitNoteFor(kit, 'XKORCE Kit', 61), canonicalMidi('ride'));
   assert.equal(kitNoteFor(kit, 'XKORCE Kit', 38), 38, 'not learned: unchanged');
@@ -46,8 +46,8 @@ test('kitNoteFor turns a learned note into the GM note for its piece, and leaves
 
 test('sanitizeKitPrefs keeps valid per-device maps and drops everything malformed', () => {
   const good = { 'XKORCE Kit': { 60: 'snare', 61: 'ride' }, 'Other': { 36: 'kick' } };
-  assert.deepEqual(sanitizeKitPrefs({ midiMaps: JSON.parse(JSON.stringify(good)) }).midiMaps, good);
-  const dirty = sanitizeKitPrefs({ midiMaps: {
+  assert.deepEqual(sanitizeKitPrefs({ learnVersion: LEARN_VERSION, midiMaps: JSON.parse(JSON.stringify(good)) }).midiMaps, good);
+  const dirty = sanitizeKitPrefs({ learnVersion: LEARN_VERSION, midiMaps: {
     '  Padded  ': { 60: 'snare', 128: 'kick', '-1': 'kick', 1.5: 'kick', abc: 'kick', 62: 'bogus', 63: 3, 64: 'snare' },
     '': { 60: 'snare' },
     __proto__: { 60: 'snare' },
@@ -56,8 +56,8 @@ test('sanitizeKitPrefs keeps valid per-device maps and drops everything malforme
     List: ['snare']
   } }).midiMaps;
   assert.deepEqual(dirty, { Padded: { 60: 'snare', 64: 'snare' } });
-  for (const bad of [null, 1, 'x', [], undefined]) assert.ok(!('midiMaps' in sanitizeKitPrefs({ midiMaps: bad })));
-  assert.ok(!('midiMaps' in sanitizeKitPrefs({ midiMaps: { Empty: {} } })));
+  for (const bad of [null, 1, 'x', [], undefined]) assert.ok(!('midiMaps' in sanitizeKitPrefs({ learnVersion: LEARN_VERSION, midiMaps: bad })));
+  assert.ok(!('midiMaps' in sanitizeKitPrefs({ learnVersion: LEARN_VERSION, midiMaps: { Empty: {} } })));
   assert.equal(({}).polluted, undefined);
 });
 
@@ -65,14 +65,14 @@ test('device names and device count are bounded', () => {
   const maps = {};
   for (let i = 0; i < 20; i++) maps['Kit ' + i] = { 36: 'kick' };
   maps['x'.repeat(200)] = { 36: 'kick' };
-  const out = sanitizeKitPrefs({ midiMaps: maps }).midiMaps;
+  const out = sanitizeKitPrefs({ learnVersion: LEARN_VERSION, midiMaps: maps }).midiMaps;
   assert.ok(Object.keys(out).length <= 8);
   assert.ok(Object.keys(out).every(k => k.length <= 80));
 });
 
 test('learned maps survive profile restore beside the other kit preferences', () => {
   const deps = { MODS: { kbd: {} }, MOD_IDS: ['kbd'], WIND_KINDS: {}, VOICE_KINDS: {}, LOCALES: [], NOTATE_MOD_IDS: [], sanitizeModel: x => x, sanitizePanelData: () => ({}), skillMap: {} };
-  const kit = { preset: 'compact', leftHanded: false, hiddenPieces: [], midiMaps: { 'XKORCE Kit': { 60: 'snare' } } };
+  const kit = { preset: 'compact', leftHanded: false, hiddenPieces: [], midiMaps: { 'XKORCE Kit': { 60: 'snare' } }, learnVersion: LEARN_VERSION };
   assert.deepEqual(sanitizeDB({ prefs: { kit: JSON.parse(JSON.stringify(kit)) } }, 0, 0, deps).prefs.kit, kit);
 });
 
