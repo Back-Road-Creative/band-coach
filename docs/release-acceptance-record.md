@@ -36,7 +36,9 @@ The Automated row quotes the `band-coach.html.evidence.json` that `npm run stage
 4. **Manual runs.** README "Before announcing a release: a five-minute human check", step by
    step, on the release build the candidate's "Candidate artifact" row names (its staged copy
    before a release, the downloaded file after one), naming the machine, browser version and
-   hardware. Then the
+   hardware. The person fills in [hand-test.md](hand-test.md) and the Manual row carries the
+   filled rows (the per-pad drum kit table verbatim, the copy tested, the file's sha256), or
+   `**device-only: <which rows await the person>**`. Then the
    D2/E9 ledger below: each "human on device" cell is filled in by the person who did it, with
    the device model, or left as **open**. A step the README marks as covered by the Windows lane
    ([windows-lane.md](windows-lane.md)) is skipped by hand only when the candidate's "Windows
