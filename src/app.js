@@ -2528,7 +2528,7 @@ import { register as registerPathway } from './ui/pathway.js';
   // is holding it any more, so one port's note-off (or a blur/unplug
   // releasing that port) can never cancel the SAME pitch held on another
   // port.
-  let midiPorts = [], midiPortInputs = [], midiHeard = new Set(), midiLog = [], realMidiHeld = new Set(), midiParsers = new Map(), midiBlinkTimer = null, noteState = createNoteState(), rangeCap = null, lastMidiName = null;
+  let midiPorts = [], midiPortInputs = [], midiHeard = new Set(), midiLog = [], midiLastAt = new Map(), realMidiHeld = new Set(), midiParsers = new Map(), midiBlinkTimer = null, noteState = createNoteState(), rangeCap = null, lastMidiName = null;
   // kitMicReason: why a drum kit is on the mic, shown until MIDI finds a kit. midiLastError: the browser's own words, for MIDI details and a report. midiRefused keeps the button on "Try MIDI again" through a status refresh.
   let kitMicReason = null, midiLastError = null, midiRefused = false;
   // midiPortInputs is kept parallel to midiPorts rather than held on the port
@@ -2647,7 +2647,8 @@ import { register as registerPathway } from './ui/pathway.js';
     // Whatever open() reported, this port is demonstrably delivering, so stop
     // warning about a program that plainly is not in the way.
     midiHeard.add(input); if (midiPortInputs.indexOf(input) !== -1) midiOn = true;
-    midiLog.unshift(Array.from(d).map(b => b.toString(16).padStart(2, '0')).join(' ')); if (midiLog.length > 8) midiLog.length = 8;
+    const at = Number.isFinite(ev.timeStamp) ? ev.timeStamp : performance.now(), prevAt = midiLastAt.get(input); midiLastAt.set(input, at);  // gap since this port's previous message, so a player can size a double-hit filter window
+    midiLog.unshift(Array.from(d).map(b => b.toString(16).padStart(2, '0')).join(' ') + (prevAt === undefined ? '' : '  +' + Math.max(0, Math.round(at - prevAt)) + ' ms')); if (midiLog.length > 8) midiLog.length = 8;
     ioRefresh();
     if (midiOutBusy) return; // the keyboard is playing a song back for the learner and echoes its own notes as input -- not the learner playing, so not judged
     let parser = midiParsers.get(input); if (!parser) { parser = createMidiParser(); midiParsers.set(input, parser); }
@@ -2707,7 +2708,7 @@ import { register as registerPathway } from './ui/pathway.js';
         const connected = inputs.filter(i => i.state === 'connected');
         Promise.all(connected.map(i => i.open().then(() => ({ input: i, ok: true }), e => ({ input: i, ok: false, error: (e && e.message) || 'could not be opened' })))).then(results => {
           midiPorts = results.map(r => ({ name: r.input.name || 'MIDI device', state: r.input.state, connection: r.input.connection, ok: r.ok, error: r.error }));
-          midiPortInputs = results.map(r => r.input); if (!midiPorts.length) midiLog.length = 0;
+          midiPortInputs = results.map(r => r.input); if (!midiPorts.length) { midiLog.length = 0; midiLastAt.clear(); }
           midiOn = results.some((r, i) => r.ok || midiWorks(i));
           if (connected.length) kitMicReason = null;
           ioRefresh();
