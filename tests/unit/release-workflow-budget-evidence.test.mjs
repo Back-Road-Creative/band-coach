@@ -56,12 +56,17 @@ test('T0 the parser sees the release workflow', () => {
   assert.ok(all.length >= 9, `expected at least 9 steps, parsed ${all.length}`);
 });
 
-test('T1 the tag run budget is at least ci.yml budget, which runs the same work', () => {
+test('T1 the tag run budget covers both ci.yml lanes, which it runs one after the other', () => {
   const rel = timeouts(release);
-  const ci = timeouts(workflow('ci.yml'));
+  const ci = workflow('ci.yml');
   assert.equal(rel.length, 1, `release.yml should have exactly one timeout-minutes, found ${rel.length}`);
-  assert.ok(ci.length >= 1, 'ci.yml has no timeout-minutes');
-  assert.ok(rel[0] >= Math.max(...ci), `release.yml allows ${rel[0]} min but ci.yml allows ${Math.max(...ci)} min for the same suite and gate runs; a later ci.yml rise must be followed here`);
+  const lane = (name) => {
+    const m = ci.match(new RegExp(`^  ${name}:\\n[\\s\\S]*?timeout-minutes: (\\d+)`, 'm'));
+    assert.ok(m, `ci.yml has no timeout-minutes for ${name}`);
+    return Number(m[1]);
+  };
+  const need = lane('development') + lane('release');
+  assert.ok(rel[0] >= need, `release.yml allows ${rel[0]} min but runs ci.yml's development and release lanes back to back, which ci.yml allows ${need} min; v1.12.0 was cancelled at 30 min with no test failed`);
 });
 
 test('T2 the workflow keeps its name and tag trigger; its manual trigger is a dry run (release-dry-run.test.mjs pins the guards)', () => {

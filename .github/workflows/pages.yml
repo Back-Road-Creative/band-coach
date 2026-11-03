@@ -51,7 +51,7 @@ jobs:
   # tag-only: a branch run builds the site but never publishes it.
   release-gate:
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 70
     permissions:
       actions: read
     steps:
@@ -60,7 +60,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          for attempt in $(seq 1 70); do
+          for attempt in $(seq 1 130); do
             if runs="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow release.yml --commit "$GITHUB_SHA" --branch "$GITHUB_REF_NAME" --event push --limit 20 --json status,conclusion)"; then
               verdict="$(printf '%s' "$runs" | jq -r 'if any(.[]; .conclusion == "success") then "pass" elif length == 0 or any(.[]; .status != "completed") then "wait" else "fail" end')" || verdict=wait
             else

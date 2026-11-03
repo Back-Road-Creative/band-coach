@@ -55,6 +55,19 @@ function script(file) {
 }
 
 for (const { file, job: gated } of GATED) {
+  test(`${file}: release-gate outwaits the release job, and its own job limit outlasts the wait`, () => {
+    const release = job(workflow('release.yml'), 'release').match(/^ {4}timeout-minutes: (\d+)/m);
+    assert.ok(release, 'release.yml has no job time limit');
+    const text = script(file);
+    const attempts = text.match(/seq 1 (\d+)/);
+    const pause = text.match(/sleep (\d+)/);
+    assert.ok(attempts && pause, `${file}: the wait loop's shape changed`);
+    const waitMinutes = Number(attempts[1]) * Number(pause[1]) / 60;
+    assert.ok(waitMinutes > Number(release[1]), `${file} stops waiting after ${waitMinutes} min, but release.yml may run ${release[1]} min`);
+    const limit = job(workflow(file), 'release-gate').match(/^ {4}timeout-minutes: (\d+)/m);
+    assert.ok(limit && Number(limit[1]) > waitMinutes, `${file}: release-gate's job limit must outlast its ${waitMinutes} min wait`);
+  });
+
   test(`${file}: ${gated} needs a release-gate job that reads release.yml's run for this commit`, () => {
     const text = workflow(file);
     const gate = job(text, 'release-gate');
