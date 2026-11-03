@@ -1941,12 +1941,18 @@ release tests and the Windows lane on the exact staged file (its sha256 is recor
    for are marked right. **Fail** if a piece has no name or a correct hit is not marked. The
    microphone can tell only kick, snare and hi-hat apart, so write which route you used in the
    record: a pass on the computer keys or the microphone is not an electronic-kit pass.
+   With an electronic kit, also hit each pad once and fill in the per-pad table in
+   [docs/hand-test.md](docs/hand-test.md): a snare that reads "High tom" fails this step.
 8. **Phone, if you have one (1 min).** Once this release's tag has deployed the phone copy (see
    "Phone copy" above), open it on the phone, pick an instrument, press "Start" and play a few notes
    on the screen. **Pass** if you can tap each key or pad the exercise asks for without hitting its
    neighbour, read the labels without zooming, and stop with "Pause" or "End session" without
    hunting for it. **Fail** if any of that needs zooming, scrolling sideways or a second try. Write
    the phone model in the record.
+
+[docs/hand-test.md](docs/hand-test.md) is the sheet to fill in: one row per person-only step, a
+per-pad drum kit table, and what to send back (the filled tables, the copy tested, the file's
+sha256). Paste it into the record's Manual row.
 
 Total, adding up the estimates above (none has been timed yet): about 10 minutes with
 every step by hand, about 8 minutes when a passing Windows-lane run on this file covers
