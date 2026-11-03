@@ -2,8 +2,8 @@
 // Pure parts only. The listening itself needs Windows Chrome and a person at the kit.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { attended, registry, selectScenarios, WSL_CHILD_MS } from '../acceptance/win/run.mjs';
-import { FLAM_MS, HIT_QUIET_MS, doneListening, k1Verdict, readKit } from '../acceptance/win/k1-kit-reading.win.mjs';
+import { attended, parseArgs, registry, selectScenarios, stageFiles, WSL_CHILD_MS } from '../acceptance/win/run.mjs';
+import { FLAM_MS, HIT_QUIET_MS, doneListening, k1Verdict, readKit, savedPadText } from '../acceptance/win/k1-kit-reading.win.mjs';
 
 const on = (note, t, vel = 100, port = 'USB MIDI', ch = 9) => ({ port, t, data: [0x90 | ch, note, vel] });
 const off = (note, t, port = 'USB MIDI', ch = 9) => ({ port, t, data: [0x80 | ch, note, 0] });
@@ -123,4 +123,85 @@ test('K1 gets its own time limit, and the WSL side outwaits it', () => {
   const k1 = attended.find((r) => r.id === 'K1');
   assert.ok(k1.maxMs > 120000);
   assert.ok(k1.maxMs + 60000 <= WSL_CHILD_MS);
+});
+
+// A kick played alone: hit i starts at i*1000 ms; extra notes follow 5 ms later.
+const kick = (n, extra = {}) => Array.from({ length: n }, (_, i) => [on(36, i * 1000, 100), ...(extra[i] || []).map(([note, vel]) => on(note, i * 1000 + 5, vel))]).flat();
+
+test('--pad and --hits are read, --hits must be a whole number, and the staged files carry the piece table', () => {
+  const a = parseArgs(['--win-root', '/x', '--only', 'K1', '--pad', 'kick', '--hits', '20']);
+  assert.equal(a.pad, 'kick');
+  assert.equal(a.hits, 20);
+  assert.equal(parseArgs(['--win-root', '/x']).pad, undefined);
+  assert.throws(() => parseArgs(['--hits', 'many']), /--hits/);
+  assert.throws(() => parseArgs(['--hits', '0']), /--hits/);
+  assert.throws(() => parseArgs(['--pad']), /--pad/);
+  assert.ok(stageFiles([]).includes('src/instruments/drum-kit.js'));
+});
+
+test('pad reading: a hit with only the pad\'s own notes is own, any other note is crosstalk with its velocity', () => {
+  const r = readKit(kick(3, { 1: [[38, 20]], 2: [[38, 31], [48, 18]] }), 'kick');
+  assert.deepEqual(r.hits.map((h) => h.padClass), ['own', 'crosstalk', 'crosstalk']);
+  assert.equal(r.pad.total, 3);
+  assert.equal(r.pad.own, 1);
+  assert.equal(r.pad.crosstalk, 2);
+  assert.deepEqual(r.pad.strays, [
+    { note: 38, piece: 'snare', hits: 2, velMin: 20, velMax: 31 },
+    { note: 48, piece: 'tom-high', hits: 1, velMin: 18, velMax: 18 },
+  ]);
+  assert.equal(readKit(kick(2)).pad, undefined);
+});
+
+test('pad reading: the pad\'s alternate note (35 for kick) is still own', () => {
+  assert.equal(readKit([on(35, 0), on(36, 1000)], 'kick').pad.crosstalk, 0);
+});
+
+test('pad verdict: a clean pad says the cause is elsewhere and stays OBSERVED', () => {
+  const v = k1Verdict(obs(kick(4), { pad: 'kick', target: 4 }));
+  assert.equal(v.status, 'OBSERVED');
+  assert.match(v.text, /kick: 4 hits, 4 clean\./);
+  assert.match(v.text, /No crosstalk from this pad: the cause is elsewhere/);
+  assert.doesNotMatch(v.text, /also sent/);
+});
+
+test('pad verdict: crosstalk lists each other note with its piece and velocity range, and asks for a rule', () => {
+  const v = k1Verdict(obs(kick(20, { 3: [[38, 20]], 7: [[38, 31]], 9: [[38, 25]], 11: [[48, 18]] }), { pad: 'kick' }));
+  assert.equal(v.status, 'OBSERVED');
+  assert.match(v.text, /kick: 20 hits, 16 clean, 3 also sent 38 \(snare, vel 20-31\), 1 also sent 48 \(tom-high, vel 18\)/);
+  assert.match(v.text, /Crosstalk: a rule for this pad, written from these velocities/);
+});
+
+test('pad verdict: a note no piece owns is reported as not a kit note', () => {
+  const v = k1Verdict(obs(kick(2, { 0: [[99, 7]] }), { pad: 'kick' }));
+  assert.match(v.text, /1 also sent 99 \(not a kit note, vel 7\)/);
+});
+
+test('pad verdict: an unknown piece id is BLOCKED and lists the ids', () => {
+  const v = k1Verdict(obs(kick(2), { pad: 'bongo' }));
+  assert.equal(v.status, 'BLOCKED');
+  assert.match(v.text, /bongo/);
+  assert.match(v.text, /kick/);
+});
+
+test('saved pad list: none when absent or empty, per device with note->piece when present', () => {
+  assert.equal(savedPadText(null), 'Saved pad list: none');
+  assert.equal(savedPadText({}), 'Saved pad list: none');
+  assert.equal(savedPadText({ 'USB MIDI': {} }), 'Saved pad list: none');
+  assert.equal(savedPadText({ 'USB MIDI': { 48: 'ride', 38: 'tom-high' } }), 'Saved pad list for USB MIDI: 38->tom-high, 48->ride');
+});
+
+test('verdict: the saved pad list ends the text and is kept in the reading for the report', () => {
+  const maps = { 'USB MIDI': { 38: 'tom-high', 48: 'ride' } };
+  const v = k1Verdict(obs(kick(2), { pad: 'kick', savedPadList: maps }));
+  assert.ok(v.text.endsWith('Saved pad list for USB MIDI: 38->tom-high, 48->ride'));
+  assert.deepEqual(v.savedPadList, maps);
+  assert.ok(k1Verdict(obs([on(38, 0)])).text.endsWith('Saved pad list: none'));
+  assert.ok(k1Verdict(obs(kick(2), { pad: 'kick', savedPadList: null })).text.endsWith('Saved pad list: none'));
+});
+
+test('a smaller --hits target ends listening sooner', () => {
+  const base = { hits: 5, sinceLastMs: 3000, elapsedMs: 0 };
+  assert.equal(doneListening(base), false);
+  assert.equal(doneListening({ ...base, target: 5 }), true);
+  assert.equal(doneListening({ hits: 3, sinceLastMs: 60000, elapsedMs: 0, target: 3 }), true);
 });
