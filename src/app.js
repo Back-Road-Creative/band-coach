@@ -13,7 +13,7 @@ import { tuneDrift } from './core/tune-drift.js';
 import { DEFAULT_STABILITY_DAYS, MIN_STABILITY_DAYS, MAX_STABILITY_DAYS, GRADE, retrievability, review, due, migrateItem, mastered } from './core/srs.js';
 import { handsTogetherById, handsModeFromId, fingeringLabel, bothUnlocked, effectiveHands, prepLine, HANDS_TOGETHER_EXERCISES, isTimedPairId, PAIR_ONSET_TOL_MS, PAIR_RELEASE_TOL_MS, isStagedPairId, handsStageFromId, heldBassMelody, SPLIT_MID_TOL_RATIO, POSITION_SHIFT_SEMITONES, HANDS_POSITION_EXERCISES, positionPrepLine } from './core/hands-together.js';
 import { step as stepHandsTogether } from './core/hands-together-stage.js';
-import { createMidiParser, describeOutputs, scheduleSong, playOnOutput, stopAll } from './core/midi.js';
+import { createMidiParser, createHitGuard, describeOutputs, scheduleSong, playOnOutput, stopAll } from './core/midi.js';
 import { createNoteState } from './core/note-state.js';
 import { PCKEYS } from './core/pckeys.js';
 import { createTeardown } from './core/session-teardown.js';
@@ -62,7 +62,7 @@ import { capabilityFor, capabilityChipKeys } from './instruments/capability.js';
 import { rangeForInstrument, FALLBACK_RANGE, frameSizeForInstrument } from './audio/range.js';
 import { renderVoice } from './audio/voices.js';
 import { layoutFor as harpLayoutFor } from './instruments/how/harmonica.js';
-import { pieceForMidi, kitRepeatStep, kitRepeatFor, KIT_MAX_TRIES } from './instruments/drum-kit.js';
+import { pieceForMidi, hatBleedsOnSnare, kitRepeatStep, kitRepeatFor, KIT_MAX_TRIES } from './instruments/drum-kit.js';
 import { renderKitSetup, LEARN_QUIET_MS } from './ui/kit-setup.js';
 import { kitNoteFor, hatSharedNote, hatPartner, pedalCc4Only } from './instruments/how/kit-presets.js';
 import { kitFrame, kitRegions, kitLayout, kitLines, pieceIcon, pieceAt, THRONE } from './instruments/how/drum-kit.js';
@@ -2576,6 +2576,7 @@ import { register as registerPathway } from './ui/pathway.js';
     const lines = midiPorts.length ? [] : ['No MIDI input has been seen yet.'];  // midiLog is cleared with the last port (wire()), so old bytes never sit under this line
     midiPorts.forEach((p, i) => lines.push(p.name + ' -- state: ' + p.state + ', connection: ' + p.connection + (p.ok ? ', opened.' : ', open failed: ' + (p.error || 'unknown reason') + (midiHeard.has(midiPortInputs[i]) ? ', but it is sending messages anyway.' : '.'))));
     if (midiLastError) lines.push('Last MIDI error: ' + midiLastError);
+    if (midiDoubled) lines.push('Double hits ignored: ' + midiDoubled);
     if (midiLog.length) { lines.push(''); lines.push('Last messages heard (hex):'); midiLog.forEach(h => lines.push(h)); }
     $('midiDetailsText').textContent = lines.join('\n');
   }
@@ -2637,7 +2638,11 @@ import { register as registerPathway } from './ui/pathway.js';
   // A pad the player taught the kit set-up sheet arrives as the General MIDI note of its piece, so every kit listener below (trainer, Songs drum practice, reference) hears the right drum. Only a kit, or Songs while the part being practised is a percussion part (it plays on the kit whatever is selected), reads a device's learned map.
   let kitLearnSink = null;
   const kitLearn = { listen: fn => { kitLearnSink = fn; return () => { if (kitLearnSink === fn) kitLearnSink = null; }; } };
-  const kitNote = (input, note) => (MODS[mod] && MODS[mod].kit) || (panels.current() === 'songs' && songsPractisingKit()) ? kitNoteFor(DB.prefs.kit, input.name, note) : note;
+  const onKitScreen = () => (MODS[mod] && MODS[mod].kit) || (panels.current() === 'songs' && songsPractisingKit());
+  const kitNote = (input, note) => onKitScreen() ? kitNoteFor(DB.prefs.kit, input.name, note) : note;
+  // A kit sends one strike as several notes (src/core/midi.js createHitGuard). Channel 10 (9 here) is the drum channel, so a kit is guarded on the Rhythm screen too, and a keyboard keeps every fast repeat outside the kit screens.
+  const DRUM_CHANNEL = 9, hitGuard = createHitGuard({ bleeds: hatBleedsOnSnare });
+  let midiDoubled = 0;
   // A sustain pedal (CC64) is a foot button in Songs: each press (value
   // crossing 64 going down; a half-pedal wobble while down is not a second
   // press) presses the step's Your turn / Stop and check, else its Next.
@@ -2674,6 +2679,7 @@ import { register as registerPathway } from './ui/pathway.js';
       if (evt.type === 'on') lastMidiName = midiDevName(input);
       if (evt.type === 'on' && kitLearnSink && kitLearnSink(input.name, evt.note)) return; // the kit set-up walk-through is learning this pad; it is not a hit
       const note = kitNote(input, evt.note);
+      if (evt.type === 'on' && (evt.channel === DRUM_CHANNEL || onKitScreen()) && hitGuard.drop({ port: input, channel: evt.channel, note, velocity: evt.velocity, at })) { midiDoubled++; if (!$('midiDetails').hidden) renderMidiDetails(); return; } // the kit's own echo of a hit already heard; its note-off still passes
       if (evt.type === 'on') { proofHeard(note); noteState.noteOn(input, evt.channel, note); realMidiHeld.add(note); kitHatShared = hatSharedNote(DB.prefs.kit, input.name) === evt.note; try { onNote(note, true, 'midi'); } finally { kitHatShared = false; } } else { noteState.noteOff(input, evt.channel, note); if (!noteState.isHeld(note)) realMidiHeld.delete(note); onNoteOff(note, 'midi'); }
     });
   }
@@ -2727,7 +2733,7 @@ import { register as registerPathway } from './ui/pathway.js';
         const connected = inputs.filter(i => i.state === 'connected');
         Promise.all(connected.map(i => i.open().then(() => ({ input: i, ok: true }), e => ({ input: i, ok: false, error: (e && e.message) || 'could not be opened' })))).then(results => {
           midiPorts = results.map(r => ({ name: r.input.name || 'MIDI device', state: r.input.state, connection: r.input.connection, ok: r.ok, error: r.error }));
-          midiPortInputs = results.map(r => r.input); if (!midiPorts.length) { midiLog.length = 0; midiLastAt.clear(); }
+          midiPortInputs = results.map(r => r.input); if (!midiPorts.length) { midiLog.length = 0; midiLastAt.clear(); midiDoubled = 0; }
           midiOn = results.some((r, i) => r.ok || midiWorks(i));
           if (connected.length) kitMicReason = null;
           ioRefresh();
@@ -3376,7 +3382,7 @@ import { register as registerPathway } from './ui/pathway.js';
   if (__DEBUG_HOOK__) Object.assign(hook, { kbdTarget: () => kbdTargetDbg });
   if (__DEBUG_HOOK__) Object.assign(hook, { showMe: () => $('showMeBtn').click() });
   //
-  if (__DEBUG_HOOK__) Object.assign(hook, { midi: () => ({ on: midiOn, ports: midiPorts, log: midiLog.slice(), held: Array.from(realMidiHeld) }), heldNotes: () => noteState.heldPitches() });
+  if (__DEBUG_HOOK__) Object.assign(hook, { midi: () => ({ on: midiOn, ports: midiPorts, log: midiLog.slice(), held: Array.from(realMidiHeld), doubled: midiDoubled }), heldNotes: () => noteState.heldPitches() });
   //
   // slot:hook:rhythm-vocab
   //

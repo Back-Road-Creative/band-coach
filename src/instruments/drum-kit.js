@@ -64,6 +64,12 @@ export function canonicalMidi(pieceId) {
   return piece ? piece.midi[0] : null;
 }
 
+// Pads that leak into each other on a real kit (src/core/midi.js createHitGuard): a hi-hat hit also sends a soft snare note.
+export function hatBleedsOnSnare(fromNote, toNote) {
+  const from = pieceForMidi(fromNote);
+  return (from === 'hihat-closed' || from === 'hihat-open') && pieceForMidi(toNote) === 'snare';
+}
+
 // A kit bar, written as space-separated 'cell:hits' steps: `cell` is a
 // src/core/rhythm.js cell id, `hits` names one entry per sounding note of
 // that cell, comma-separated. Pieces sounding together join with '+', and
