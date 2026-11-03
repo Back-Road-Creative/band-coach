@@ -31,8 +31,8 @@ import { t } from '../core/i18n.js';
 // (j snare, u high tom, i mid tom, k floor tom, o ride), and the two pedals
 // on the keys nearest where the feet would be (f bass drum, c hi-hat pedal).
 // The keys follow where each piece sits, not which stick hits it.
-// `name` is read live from the locale tables (kit.name.<id>), so it follows the language.
-const piece = (id, midi, key) => ({ id, get name() { return t('kit.name.' + id); }, midi, key });
+// `name` is read live from the locale tables (kit.piece.<id>, the one set of names every screen uses), so it follows the language.
+const piece = (id, midi, key) => ({ id, get name() { return t('kit.piece.' + id); }, midi, key });
 export const PIECES = [
   piece('kick', [35, 36], 'f'),
   piece('snare', [38, 37, 40], 'j'),

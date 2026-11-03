@@ -59,7 +59,7 @@ test('right drums in order pass at any pace: slow, fast, with a long pause', () 
 test('wrong drum, wrong order, missing and extra hits each fail with a plain message', () => {
   const swapped = [hit('snare', 0), hit('kick', 1), hit('kick', 2), hit('snare', 3)];
   assert.equal(passes(swapped), false);
-  assert.match(firstCorrection(judge(swapped), rule()), /snare.*bass drum/);
+  assert.match(firstCorrection(judge(swapped), rule()), /snare.*kick/);
   const wrong = [hit('kick', 0), hit('kick', 1), hit('kick', 2), hit('snare', 3)];
   assert.equal(passes(wrong), false);
   const missing = [hit('kick', 0), hit('snare', 1), hit('kick', 2)];

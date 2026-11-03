@@ -231,7 +231,7 @@ test('drum-kit is a ready percussion record with the contract kit and a curricul
   const keys = Object.fromEntries(rec.kit.map(p => [p.id, p.key]));
   assert.deepEqual(keys, { kick: 'f', snare: 'j', 'hihat-closed': 'd', 'hihat-open': 'e', 'hihat-pedal': 'c', 'tom-high': 'u', 'tom-mid': 'i', 'tom-floor': 'k', crash: 'r', ride: 'o' });
   const names = Object.fromEntries(rec.kit.map(p => [p.id, p.name]));
-  assert.deepEqual(names, { kick: 'Bass drum', snare: 'Snare', 'hihat-closed': 'Hi-hat (closed)', 'hihat-pedal': 'Hi-hat (pedal)', 'hihat-open': 'Hi-hat (open)', 'tom-floor': 'Floor tom', 'tom-mid': 'Mid tom', 'tom-high': 'High tom', crash: 'Crash cymbal', ride: 'Ride cymbal' });
+  assert.deepEqual(names, { kick: 'Kick', snare: 'Snare', 'hihat-closed': 'Hi-hat closed', 'hihat-pedal': 'Hi-hat pedal', 'hihat-open': 'Hi-hat open', 'tom-floor': 'Floor tom', 'tom-mid': 'Mid tom', 'tom-high': 'High tom', crash: 'Crash', ride: 'Ride' });
 });
 
 test('drum-kit helpers map every GM note to its piece and each piece to its first note', async () => {

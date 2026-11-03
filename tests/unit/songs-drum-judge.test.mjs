@@ -57,7 +57,7 @@ test('a MIDI snare where the kick is wanted fails with a plain correction', () =
   assert.equal(r.pieceRate, 0);
   const passRule = { hitRate: 0.8, maxMeanErrorMs: 120, minPieceRate: 0.8 };
   assert.equal(passesRule(r, passRule), false);
-  assert.equal(firstCorrection(r, passRule), 'That was the snare — this beat wants the bass drum.');
+  assert.equal(firstCorrection(r, passRule), 'That was the snare — this beat wants the kick.');
 });
 
 test('a mic hit on a tom beat is on time but its drum is not assessed', () => {

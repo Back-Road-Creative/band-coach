@@ -150,19 +150,19 @@ export function keyboardSamplePoints(key) {
 //   drum    a head with a rim ring at 0.8 r             body #1b2130
 //   cymbal  a disc with a bell ring at 0.3 r            body #2a3140
 //   pedal   a footboard (the kick's rect also holds its shell)   body #1b2130
-//   tab     the open hi-hat's tab on the hi-hat's far edge       body #2a3140
+//   tab     the open hi-hat's tab resting on the hi-hat's far edge       body #2a3140
 const KIT_ASPECT = 1.4;
 const KIT_POSITIONS = {
-  'hihat-open': { kind: 'rect', shape: 'tab', x: 0.17, y: 0.375, w: 0.13, h: 0.10 },
-  'hihat-closed': { kind: 'circle', shape: 'cymbal', x: 0.17, y: 0.62, r: 0.14 },
-  'hihat-pedal': { kind: 'rect', shape: 'pedal', x: 0.17, y: 0.86, w: 0.15, h: 0.13 },
+  'hihat-open': { kind: 'rect', shape: 'tab', x: 0.15, y: 0.395, w: 0.19, h: 0.19 },
+  'hihat-closed': { kind: 'circle', shape: 'cymbal', x: 0.15, y: 0.62, r: 0.14 },
+  'hihat-pedal': { kind: 'rect', shape: 'pedal', x: 0.15, y: 0.86, w: 0.15, h: 0.13 },
   kick: { kind: 'rect', shape: 'pedal', x: 0.7, y: 0.725, w: 0.18, h: 0.41 },
   snare: { kind: 'circle', shape: 'drum', x: 0.465, y: 0.66, r: 0.135 },
-  'tom-high': { kind: 'circle', shape: 'drum', x: 0.58, y: 0.32, r: 0.11 },
-  'tom-mid': { kind: 'circle', shape: 'drum', x: 0.82, y: 0.32, r: 0.11 },
+  'tom-high': { kind: 'circle', shape: 'drum', x: 0.57, y: 0.32, r: 0.11 },
+  'tom-mid': { kind: 'circle', shape: 'drum', x: 0.83, y: 0.32, r: 0.11 },
   'tom-floor': { kind: 'circle', shape: 'drum', x: 1.09, y: 0.66, r: 0.13 },
-  crash: { kind: 'circle', shape: 'cymbal', x: 0.30, y: 0.17, r: 0.14 },
-  ride: { kind: 'circle', shape: 'cymbal', x: 1.21, y: 0.28, r: 0.16 },
+  crash: { kind: 'circle', shape: 'cymbal', x: 0.33, y: 0.14, r: 0.13 },
+  ride: { kind: 'circle', shape: 'cymbal', x: 1.23, y: 0.28, r: 0.16 },
 };
 
 // drawKit (src/app.js :1757): the kit's OUTER box is bw = 0.94W wide, centred; with no kit

@@ -13,7 +13,7 @@
 // `shape` says how a piece is drawn: 'drum' (a head with a rim ring), 'cymbal'
 // (a disc with a bell), 'pedal' (a footboard rectangle; the bass drum's rect
 // also takes the small shell beyond its footboard) and 'tab' (the open
-// hi-hat's small rounded tab on the hi-hat's far edge). Circles carry r,
+// hi-hat's square tab, resting on the top of the hi-hat disc). Circles carry r,
 // rectangles carry w and h.
 //
 // The kit is set up right-handed (the common default): hi-hat on the far
@@ -22,8 +22,10 @@
 // drum's pedal at centre front; two rack toms side by side above it; the floor
 // tom close in on the right; the ride far right and set back. The hi-hat is one
 // pair of cymbals but closed, open and pedal are different sounds with
-// different GM notes, so it is one disc about crash size (closed), a small tab just clear of its far edge
-// (open: small, so its centre sits 12 px off the disc for the phone tap rule) and its footboard (pedal): three pieces to judge, one cymbal to look at.
+// different GM notes, so it is one disc about crash size (closed), a tab resting on the top of the disc
+// (open) and its footboard (pedal): three pieces to judge, one cymbal to look at. The tab touches the disc, so it
+// is the full 24 px phone tap target (a smaller one would need its centre 12 px clear of the disc, and so could not
+// touch it), and it sits well clear of the crash so it cannot read as the crash's. The three move as one (kitGroup).
 import { PIECES } from '../drum-kit.js';
 import { t } from '../../core/i18n.js';
 import { applyKitPreset, sanitizeKitPrefs, KIT_ASPECT } from './kit-presets.js';
@@ -33,25 +35,48 @@ export { KIT_ASPECT };
 const POSITIONS = {
   kick: { x: 0.70, y: 0.725, w: 0.18, h: 0.41, shape: 'pedal' },
   snare: { x: 0.465, y: 0.66, r: 0.135, shape: 'drum' },
-  'hihat-closed': { x: 0.17, y: 0.62, r: 0.14, shape: 'cymbal' },
-  'hihat-open': { x: 0.17, y: 0.375, w: 0.13, h: 0.10, shape: 'tab' },
-  'hihat-pedal': { x: 0.17, y: 0.86, w: 0.15, h: 0.13, shape: 'pedal' },
-  'tom-high': { x: 0.58, y: 0.32, r: 0.11, shape: 'drum' },
-  'tom-mid': { x: 0.82, y: 0.32, r: 0.11, shape: 'drum' },
+  'hihat-closed': { x: 0.15, y: 0.62, r: 0.14, shape: 'cymbal' },
+  'hihat-open': { x: 0.15, y: 0.395, w: 0.19, h: 0.19, shape: 'tab' },
+  'hihat-pedal': { x: 0.15, y: 0.86, w: 0.15, h: 0.13, shape: 'pedal' },
+  'tom-high': { x: 0.57, y: 0.32, r: 0.11, shape: 'drum' },
+  'tom-mid': { x: 0.83, y: 0.32, r: 0.11, shape: 'drum' },
   'tom-floor': { x: 1.09, y: 0.66, r: 0.13, shape: 'drum' },
-  crash: { x: 0.30, y: 0.17, r: 0.14, shape: 'cymbal' },
-  ride: { x: 1.21, y: 0.28, r: 0.16, shape: 'cymbal' }
+  crash: { x: 0.33, y: 0.14, r: 0.13, shape: 'cymbal' },
+  ride: { x: 1.23, y: 0.28, r: 0.16, shape: 'cymbal' }
 };
 
 // The decoration at the bottom edge: the throne the player sits on. Not a
 // piece, not clickable. Same units as POSITIONS.
 export const THRONE = { x: 0.70, y: 0.975, w: 0.18, h: 0.05 };
 
-// Region order in kitRegions(): the open-hi-hat tab first, so pieceAt() returns it before the disc under it. Placed pieces may overlap; the nearest centre then wins.
+// Region order in kitRegions(): the open-hi-hat tab first, so pieceAt() returns it before the disc it rests on. Placed pieces may overlap; the nearest centre then wins.
 const HIT_ORDER = ['hihat-open', 'hihat-closed', 'hihat-pedal', 'kick', 'snare', 'tom-high', 'tom-mid', 'tom-floor', 'crash', 'ride'];
 
 // Plain-words sentences, one per piece (kit.desc.<id> in the locale tables): where it is and what plays it, for
 // a learner who has never sat at a kit. The side words are {left}/{right} params, so a left-handed kit just swaps them.
+
+// The hi-hat is one cymbal on the kit, so its disc, open tab and pedal are placed together: dragging any one moves all three.
+const HAT_GROUP = ['hihat-closed', 'hihat-open', 'hihat-pedal'];
+export const kitGroup = id => (HAT_GROUP.includes(id) ? [...HAT_GROUP] : [id]);
+
+// One line-drawing per piece, as an SVG path in frame units around a placed piece `p` ({ x, y } plus r or w/h): a rim
+// on a drum, a bell on a cymbal, a shell over a footboard on the kick, two cymbals held apart on the open tab and a
+// hinged footplate on the hi-hat pedal. The pedal and the open tab are different shapes, never one small square.
+export function pieceIcon(id, p) {
+  const { x, y } = p, f = n => +n.toFixed(4), pt = (a, b) => f(x + a) + ' ' + f(y + b), ell = (cx, cy, rx, ry) => 'M' + f(cx + rx) + ' ' + f(cy) + 'A' + f(rx) + ' ' + f(ry) + ' 0 1 0 ' + f(cx - rx) + ' ' + f(cy) + 'A' + f(rx) + ' ' + f(ry) + ' 0 1 0 ' + f(cx + rx) + ' ' + f(cy) + 'Z';
+  if (id === 'hihat-open') return 'M' + pt(-0.06, -0.035) + 'L' + pt(0, -0.065) + 'L' + pt(0.06, -0.035) + 'M' + pt(-0.06, -0.005) + 'L' + pt(0, -0.025) + 'L' + pt(0.06, -0.005);
+  if (id === 'hihat-pedal') return 'M' + pt(-0.045, -0.045) + 'L' + pt(-0.045, -0.005) + 'L' + pt(0.045, -0.005) + 'L' + pt(0.045, -0.03) + 'Z';
+  if (id === 'kick') return ell(x, y - p.h * 0.28, p.w * 0.38, p.h * 0.18) + 'M' + pt(-p.w * 0.35, p.h * 0.22) + 'L' + pt(p.w * 0.35, p.h * 0.22) + 'L' + pt(p.w * 0.35, p.h * 0.42) + 'L' + pt(-p.w * 0.35, p.h * 0.42) + 'Z';
+  const k = ['crash', 'ride', 'hihat-closed'].includes(id) ? 0.3 : 0.8;
+  return ell(x, y, p.r * k, p.r * k);
+}
+
+// ONE table of the words written on a drawing of the kit, read by the set-up sheet, the panel and the trainer: a piece's full name (kit.piece.*), except the hi-hat, which is one cymbal named once ("Hi-hat") with a small word each on its open tab and its pedal.
+const DRAW_WORDS = { 'hihat-closed': 'kit.draw.hihat', 'hihat-open': 'kit.draw.open', 'hihat-pedal': 'kit.draw.pedal' };
+export const kitWord = id => t(DRAW_WORDS[id] || 'kit.piece.' + id);
+// The same word as one or two lines for a tight spot (the trainer's canvas breaks the mid and high tom over two lines); the lines always read as kitWord().
+const TWO_LINES = { 'tom-mid': ['kit.draw.mid1', 'kit.draw.mid2'], 'tom-high': ['kit.draw.high1', 'kit.draw.high2'] };
+export const kitLines = id => TWO_LINES[id] ? TWO_LINES[id].map(k => t(k)) : [kitWord(id)];
 
 // Every piece's drawn spot, as fresh objects: { id, name, shape, x, y, r } for
 // circles, { id, name, shape, x, y, w, h } for rectangles.

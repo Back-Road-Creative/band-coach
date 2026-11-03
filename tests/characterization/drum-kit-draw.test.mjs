@@ -81,7 +81,7 @@ for (const [name, width, height, mobile] of [['390x844', 390, 844, true], ['320x
   });
 }
 
-test('the hi-hat is one cymbal named once: a small tab on its far edge, a footboard under it', async (t) => {
+test('the hi-hat is one cymbal named once: a tab resting on its far edge, a footboard under it', async (t) => {
   const page = await launchPage(HTML_PATH, { initScript: SPY });
   t.after(() => page.close());
   await page.setViewport({ width: 390, height: 844, mobile: true });
@@ -93,6 +93,7 @@ test('the hi-hat is one cymbal named once: a small tab on its far edge, a footbo
   const b = await page.evaluate('window.__coach.kitBox()'), regs = Object.fromEntries(kitRegions(b).map(r => [r.id, r]));
   const disc = regs['hihat-closed'], tab = regs['hihat-open'], pedal = regs['hihat-pedal'], crash = regs.crash;
   assert.ok(Math.abs(disc.r - crash.r) <= 0.02 * b.h, 'the hi-hat disc is about crash size');
-  assert.ok(tab.w < 1.3 * disc.r && tab.h < 0.8 * disc.r, 'the open tab is small beside the disc: ' + tab.w + 'x' + tab.h + ' vs r ' + disc.r);
+  // the tab is now a full 24 px tap square (so it can touch the disc with no spacing exception): narrower than the disc, not a second cymbal
+  assert.ok(tab.w < 1.5 * disc.r && tab.h < 1.5 * disc.r, 'the open tab is smaller than the disc: ' + tab.w + 'x' + tab.h + ' vs r ' + disc.r);
   assert.ok(tab.cy < disc.cy - 0.7 * disc.r, 'the tab is on the far (upper) edge');
 });
