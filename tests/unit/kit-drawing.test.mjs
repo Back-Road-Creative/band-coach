@@ -69,3 +69,17 @@ test('a saved layout is read as saved: a moved disc does not drag the tab or ped
   for (const id of ['hihat-open', 'hihat-pedal', 'kick', 'crash']) assert.deepEqual([at(l, id).x, at(l, id).y], [at(before, id).x, at(before, id).y], id + ' stays where the layout puts it');
   assert.ok(Math.abs(at(l, 'snare').r - at(before, 'snare').r * 1.2) < 1e-9);
 });
+
+test('one table of on-drawing words: a piece reads the same on the set-up sheet, the panel and the trainer, in both languages', async () => {
+  const { kitWord, kitLines } = await import('../../src/instruments/how/drum-kit.js');
+  for (const loc of ['en', 'es']) {
+    setLocale(loc);
+    for (const p of PIECES) {
+      assert.equal(kitWord(p.id), t(({ 'hihat-closed': 'kit.draw.hihat', 'hihat-open': 'kit.draw.open', 'hihat-pedal': 'kit.draw.pedal' })[p.id] || 'kit.piece.' + p.id), loc + ' ' + p.id);
+      assert.equal(kitLines(p.id).join(' '), kitWord(p.id), loc + ' ' + p.id + ' lines read as the word');
+    }
+  }
+  setLocale('en');
+  assert.deepEqual(kitLines('tom-mid'), ['Mid', 'tom']);
+  assert.deepEqual(kitLines('snare'), ['Snare']);
+});

@@ -1,5 +1,6 @@
 import { PIECES } from '../instruments/drum-kit.js';
-import { kitLayout, describeHit, kitGroup, pieceIcon } from '../instruments/how/drum-kit.js';
+import { drawKit } from './kit-draw.js';
+import { kitLayout, describeHit, kitGroup } from '../instruments/how/drum-kit.js';
 import { sanitizeKitPrefs, learnPad, hatPartner, deviceKey, KIT_ASPECT, PLACE_SCALE } from '../instruments/how/kit-presets.js';
 import { t } from '../core/i18n.js';
 
@@ -42,32 +43,19 @@ export function renderKitSetup(host, raw, onChange, learn) {
   label('kitSize', t('kit.size'), size);
   const reset = document.createElement('button'); reset.type = 'button'; reset.id = 'kitReset'; reset.className = 'small'; reset.textContent = t('kit.reset'); host.appendChild(reset);
   let sel = PIECES[0].id, drag = null;
-  const mirror = x => prefs.leftHanded ? KIT_ASPECT - x : x, els = {}, icons = {}, HAT_WORDS = { 'hihat-closed': 'kit.draw.hihat', 'hihat-open': 'kit.draw.open', 'hihat-pedal': 'kit.draw.pedal' };
+  const mirror = x => prefs.leftHanded ? KIT_ASPECT - x : x, parts = { shape: {}, icon: {}, text: {} }, els = parts.shape;
   const clamp = (n, lo, hi) => Math.min(hi, Math.max(lo, n));
-  // Every piece is drawn, hidden ones dimmed, so a hidden piece can still be placed for when it reappears.
+  // The picture is the shared kit drawing (src/ui/kit-draw.js); this sheet adds the handle on each shape: drag, arrow keys, selection. Every piece is drawn, hidden ones dimmed, so a hidden piece can still be placed for when it reappears. Names and icons take no pointer, the shape under them is the handle.
+  const wire = (el, p) => {
+    el.setAttribute('tabindex', '0'); el.setAttribute('role', 'button'); el.setAttribute('aria-label', t('kit.piece.' + p.id));
+    el.addEventListener('pointerdown', ev => { pick(p.id); drag = { id: p.id, pointer: ev.pointerId }; if (el.setPointerCapture) try { el.setPointerCapture(ev.pointerId); } catch (e) { /* synthetic pointers cannot be captured */ } ev.preventDefault(); });
+    el.addEventListener('focus', () => pick(p.id));
+    el.addEventListener('keydown', ev => { const d = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[ev.key]; if (!d) return; ev.preventDefault(); const q = kitLayout(prefs, [p.id]).find(o => o.id === p.id); move(p.id, q.x + d[0] * 0.02, q.y + d[1] * 0.02, true); });
+  };
   const draw = () => {
     const layout = kitLayout(prefs, PIECES.map(p => p.id));
-    for (const p of layout) {
-      let el = els[p.id];
-      if (!el) {
-        el = els[p.id] = document.createElementNS(NS, p.r !== undefined ? 'circle' : 'rect'); el.dataset.piece = p.id; el.setAttribute('tabindex', '0'); el.setAttribute('role', 'button'); el.setAttribute('aria-label', t('kit.piece.' + p.id)); el.setAttribute('class', 'kit-pc'); svg.appendChild(el);
-        el.addEventListener('pointerdown', ev => { pick(p.id); drag = { id: p.id, pointer: ev.pointerId }; if (el.setPointerCapture) try { el.setPointerCapture(ev.pointerId); } catch (e) { /* synthetic pointers cannot be captured */ } ev.preventDefault(); });
-        el.addEventListener('focus', () => pick(p.id));
-        el.addEventListener('keydown', ev => { const d = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[ev.key]; if (!d) return; ev.preventDefault(); const q = kitLayout(prefs, [p.id]).find(o => o.id === p.id); move(p.id, q.x + d[0] * 0.02, q.y + d[1] * 0.02, true); });
-      }
-      if (p.r !== undefined) { el.setAttribute('cx', p.x); el.setAttribute('cy', p.y); el.setAttribute('r', p.r); } else { el.setAttribute('x', p.x - p.w / 2); el.setAttribute('y', p.y - p.h / 2); el.setAttribute('width', p.w); el.setAttribute('height', p.h); }
-      el.classList.toggle('kit-hidden', prefs.hiddenPieces.includes(p.id)); el.classList.toggle('kit-sel', p.id === sel);
-    }
-    // Names and icons go on after every shape, so no shape covers them; they take no pointer, the shape under them is the handle. The hi-hat is named once ("Hi-hat"), its tab and pedal by one small word each, as on the trainer and the panel.
-    for (const p of layout) {
-      const small = p.shape === 'tab' || p.id === 'hihat-pedal', hidden = prefs.hiddenPieces.includes(p.id), dy = p.shape === 'cymbal' ? p.r * 0.62 : p.id === 'kick' ? p.h * 0.18 : p.shape === 'tab' ? p.h * 0.3 : small ? p.h * 0.38 : 0.013;
-      let g = icons[p.id];
-      if (!g) {
-        g = icons[p.id] = { ic: document.createElementNS(NS, 'path'), tx: document.createElementNS(NS, 'text') }; g.ic.dataset.icon = p.id; g.ic.setAttribute('class', 'kit-ic'); g.tx.dataset.label = p.id; g.tx.setAttribute('class', 'kit-lab'); g.tx.textContent = t(HAT_WORDS[p.id] || 'kit.piece.' + p.id); svg.appendChild(g.ic); svg.appendChild(g.tx);
-      }
-      g.ic.setAttribute('d', pieceIcon(p.id, p)); g.tx.setAttribute('x', p.x); g.tx.setAttribute('y', p.y + dy); g.tx.setAttribute('font-size', small ? 0.035 : 0.04);
-      g.ic.classList.toggle('kit-hidden', hidden); g.tx.classList.toggle('kit-hidden', hidden);
-    }
+    drawKit(svg, layout, parts, wire);
+    for (const p of layout) { const hidden = prefs.hiddenPieces.includes(p.id); els[p.id].classList.toggle('kit-hidden', hidden); els[p.id].classList.toggle('kit-sel', p.id === sel); parts.icon[p.id].classList.toggle('kit-hidden', hidden); parts.text[p.id].classList.toggle('kit-hidden', hidden); }
   };
   const pick = id => { sel = id; size.value = (prefs.placements && prefs.placements[id] ? prefs.placements[id].scale : 1); for (const k in els) els[k].classList.toggle('kit-sel', k === id); };
   // x is in the right-handed frame, so a mirrored kit's drag is un-mirrored first. The hi-hat, its tab and its pedal are one cymbal: they move by the same amount (kept inside the frame together), each keeping its own size. Only pieces that move get a saved placement, so a saved layout is never changed for the player.

@@ -780,6 +780,12 @@
 
   .panel-host:has(.fing-drumkit) { min-width: 0; }
 
+  /* The panel's kit is the same drawing as the set-up sheet's (src/ui/kit-draw.js), in the panel's colours. */
+  .fing-drumkit .kit-pc { fill: var(--panel-2); stroke: var(--line); }
+  .fing-drumkit .kit-pc.fing-cymbal { fill: none; }
+  .fing-drumkit .kit-lab { fill: var(--text); font-weight: 700; }
+  .fing-drumkit .kit-ic { fill: none; stroke: var(--line); stroke-width: 0.005; stroke-linejoin: round; }
+
   /* Set-up sheet kit preview: drag a piece to where it sits on your kit. */
   #kitPreview { display: block; width: 100%; max-width: 560px; aspect-ratio: 1.4 / 1; background: var(--ground); border: 1px solid var(--line); border-radius: 8px; touch-action: none; }
   #kitPreview .kit-pc { fill: color-mix(in srgb, var(--accent) 35%, transparent); stroke: var(--accent); stroke-width: 0.006; cursor: grab; }

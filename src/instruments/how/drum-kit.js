@@ -22,7 +22,7 @@
 // drum's pedal at centre front; two rack toms side by side above it; the floor
 // tom close in on the right; the ride far right and set back. The hi-hat is one
 // pair of cymbals but closed, open and pedal are different sounds with
-// different GM notes, so it is one disc about crash size (closed), a tab resting on its far edge
+// different GM notes, so it is one disc about crash size (closed), a tab resting on the top of the disc
 // (open) and its footboard (pedal): three pieces to judge, one cymbal to look at. The tab touches the disc, so it
 // is the full 24 px phone tap target (a smaller one would need its centre 12 px clear of the disc, and so could not
 // touch it), and it sits well clear of the crash so it cannot read as the crash's. The three move as one (kitGroup).
@@ -65,11 +65,18 @@ export const kitGroup = id => (HAT_GROUP.includes(id) ? [...HAT_GROUP] : [id]);
 export function pieceIcon(id, p) {
   const { x, y } = p, f = n => +n.toFixed(4), pt = (a, b) => f(x + a) + ' ' + f(y + b), ell = (cx, cy, rx, ry) => 'M' + f(cx + rx) + ' ' + f(cy) + 'A' + f(rx) + ' ' + f(ry) + ' 0 1 0 ' + f(cx - rx) + ' ' + f(cy) + 'A' + f(rx) + ' ' + f(ry) + ' 0 1 0 ' + f(cx + rx) + ' ' + f(cy) + 'Z';
   if (id === 'hihat-open') return 'M' + pt(-0.06, -0.035) + 'L' + pt(0, -0.065) + 'L' + pt(0.06, -0.035) + 'M' + pt(-0.06, -0.005) + 'L' + pt(0, -0.025) + 'L' + pt(0.06, -0.005);
-  if (id === 'hihat-pedal') return 'M' + pt(-0.055, -0.045) + 'L' + pt(-0.055, -0.005) + 'L' + pt(0.055, -0.005) + 'L' + pt(0.055, -0.03) + 'Z';
+  if (id === 'hihat-pedal') return 'M' + pt(-0.045, -0.045) + 'L' + pt(-0.045, -0.005) + 'L' + pt(0.045, -0.005) + 'L' + pt(0.045, -0.03) + 'Z';
   if (id === 'kick') return ell(x, y - p.h * 0.28, p.w * 0.38, p.h * 0.18) + 'M' + pt(-p.w * 0.35, p.h * 0.22) + 'L' + pt(p.w * 0.35, p.h * 0.22) + 'L' + pt(p.w * 0.35, p.h * 0.42) + 'L' + pt(-p.w * 0.35, p.h * 0.42) + 'Z';
   const k = ['crash', 'ride', 'hihat-closed'].includes(id) ? 0.3 : 0.8;
   return ell(x, y, p.r * k, p.r * k);
 }
+
+// ONE table of the words written on a drawing of the kit, read by the set-up sheet, the panel and the trainer: a piece's full name (kit.piece.*), except the hi-hat, which is one cymbal named once ("Hi-hat") with a small word each on its open tab and its pedal.
+const DRAW_WORDS = { 'hihat-closed': 'kit.draw.hihat', 'hihat-open': 'kit.draw.open', 'hihat-pedal': 'kit.draw.pedal' };
+export const kitWord = id => t(DRAW_WORDS[id] || 'kit.piece.' + id);
+// The same word as one or two lines for a tight spot (the trainer's canvas breaks the mid and high tom over two lines); the lines always read as kitWord().
+const TWO_LINES = { 'tom-mid': ['kit.draw.mid1', 'kit.draw.mid2'], 'tom-high': ['kit.draw.high1', 'kit.draw.high2'] };
+export const kitLines = id => TWO_LINES[id] ? TWO_LINES[id].map(k => t(k)) : [kitWord(id)];
 
 // Every piece's drawn spot, as fresh objects: { id, name, shape, x, y, r } for
 // circles, { id, name, shape, x, y, w, h } for rectangles.
