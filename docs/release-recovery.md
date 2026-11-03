@@ -151,6 +151,14 @@ What a backup does when the older file cannot take it
   The best backup to use is the last one made before the bad release; the learner may have to say
   which one that was by its file date.
 
+## A tag run that ran out of time
+
+If `release.yml` shows **cancelled** with "exceeded the maximum execution time", nothing was
+published and the tag is still good. `pages.yml` and `store-package.yml` fail at their
+`release-gate` for the same reason. Re-run `release.yml`'s failed job, and once it passes re-run the
+failed jobs of the other two (re-running `release.yml` alone does not re-trigger them). A re-run uses
+the workflow files at the tagged commit, so a raised time limit only helps the next tag.
+
 ## 6. Ship the replacement
 
 1. Fix on `main` (or revert the bad change there), with the usual review.
