@@ -132,6 +132,9 @@ let currentPractice = null;
 // is exact and needs no clock of its own.
 export function recordStartSec() { return currentPractice ? currentPractice.recordStartSec : null; }
 
+// True while the part being practised is a percussion part (the drum-kit instrument): src/app.js applies a learned pad map only then.
+export function practisingKit() { return !!(currentPractice && currentPractice.instrument && currentPractice.instrument.kit); }
+
 // Called from the single added line in src/app.js's onNote(). Fires for
 // every played note (MIDI keyboard, on-screen keys, computer keys) whether
 // or not the app's own built-in drill is running, so a song practice step

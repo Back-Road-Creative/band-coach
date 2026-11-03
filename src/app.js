@@ -87,7 +87,7 @@ import { estimateRange, classify, exerciseRangeFor, tonicFromRange } from './ins
 //
 //
 // slot:import:w-songs
-import { register as registerSongs, forwardNote as forwardSongNote, forwardNoteAt as forwardSongNoteAt, requestOpenSong, recordStartSec as songsRecordStartSec, handsFree as songsHandsFree } from './ui/songs.js';
+import { register as registerSongs, forwardNote as forwardSongNote, forwardNoteAt as forwardSongNoteAt, requestOpenSong, recordStartSec as songsRecordStartSec, practisingKit as songsPractisingKit, handsFree as songsHandsFree } from './ui/songs.js';
 import { itemIdForMidi } from './ui/songs/mastery.js';
 import { __setDebugFrames as __editorSetDebugFrames, __isRecording as __editorIsRecording } from './ui/songs/record-door.js';
 import { register as registerEditor, __getDebugSong } from './ui/editor.js';
@@ -1344,10 +1344,11 @@ import { register as registerPathway } from './ui/pathway.js';
   function startBar() { const bpm = D().bpm || 72, spb = 60 / bpm, t0 = now() + 0.15; bar = { spb: spb, t0: t0, playAt: t0 + 4 * spb, end: t0 + 8 * spb, barEnd: t0 + 8 * spb, countBeats: 4, clicks: 0, taps: [], onsets: [], judged: false }; let b = 0; task.els.forEach(e => { e.info.on.forEach(o => bar.onsets.push({ t: bar.playAt + (b + o) * spb, el: e, hit: null })); e.b0 = b; b += e.info.beats; }); }
   const audioNow = () => actx ? actx.currentTime : performance.now() / 1000;
   const tapAudioTime = ev => toAudioTime({ eventTimeStamp: ev && typeof ev.timeStamp === 'number' ? ev.timeStamp : performance.now(), perfNow: performance.now(), audioNow: audioNow() });
+  const CAL_TAPS = 8, CAL_BPM = 72; // calibration asks for CAL_TAPS clicks at CAL_BPM; a tap closer than half a beat to the last counted one is a doubled hit, not a tap
   function startCalibrate() {
     if (calRun || !ensureAudio()) return;
-    const bpm = 72, spb = 60 / bpm, t0 = now() + 0.15, beats = [];
-    for (let i = 0; i < 8; i++) beats.push(t0 + i * spb);
+    const spb = 60 / CAL_BPM, t0 = now() + 0.15, beats = [];
+    for (let i = 0; i < CAL_TAPS; i++) beats.push(t0 + i * spb);
     beats.forEach((at, i) => click(at, i % 4 === 0));
     calRun = { beats: beats };
     calRun.taps = [];
@@ -1362,7 +1363,7 @@ import { register as registerPathway } from './ui/pathway.js';
   }
   function onTap(ev) {
     lastInputAt = now(); $('tapPad').classList.add('down'); setTimeout(() => $('tapPad').classList.remove('down'), 90);
-    if (calRun) { const raw = tapAudioTime(ev), v = judgeTap({ tapTime: raw, beatTimes: calRun.beats, latencyMs: 0, windowMs: 1e9 }); if (v.errorMs !== null) { calRun.taps.push(v.errorMs); say('Caught ' + calRun.taps.length + ' of 8 taps.', ''); } return; }
+    if (calRun) { if (calRun.taps.length >= CAL_TAPS) return; const raw = tapAudioTime(ev); if (calRun.lastRaw !== undefined && raw - calRun.lastRaw < 30 / CAL_BPM) return; const v = judgeTap({ tapTime: raw, beatTimes: calRun.beats, latencyMs: 0, windowMs: 1e9 }); if (v.errorMs !== null) { calRun.lastRaw = raw; calRun.taps.push(v.errorMs); say('Caught ' + calRun.taps.length + ' of ' + CAL_TAPS + ' taps.', ''); } return; }
     if (!playing || !task || (task.kind !== 'bar' && task.kind !== 'bar2') || !bar || bar.judged) return;
     const latencyMs = DB.latencyMs != null ? DB.latencyMs : (actx ? (actx.outputLatency || actx.baseLatency || 0) * 1000 : 0);
     const win = S.level > MODS.rhy.levels.length ? 0.11 : 0.15;
@@ -2468,7 +2469,7 @@ import { register as registerPathway } from './ui/pathway.js';
     // F19: a microphone instrument with a first-week path
     // (src/instruments/first-week.js) gets the same panel, its own six steps.
     else if (firstWeekFor(mod)) btn('pathwayBtn', t('pathway.openFirstWeek'), () => openPanel('pathway'));
-    if (MODS[mod] && mod !== 'ear') btn('calBtn', calRun ? 'Listening for 8 taps…' : 'Calibrate timing (' + Math.round(DB.latencyMs || 0) + ' ms)', startCalibrate, false);
+    if (MODS[mod] && mod !== 'ear') btn('calBtn', calRun ? 'Listening for ' + CAL_TAPS + ' taps…' : 'Calibrate timing (' + Math.round(DB.latencyMs || 0) + ' ms)', startCalibrate, false);
     if (mod === 'capture') { btn('capGo', cap.on ? 'Stop' : 'Listen', () => { if (cap.on) capStop(); else { if (!micReady) { say('Connect your microphone first (open "Set up input", press Connect), then press Listen.', 'no'); return; } ensureAudio(); cap.on = true; cap.notes = []; cap.savedId = null; cap.start = now(); cap.curM = -1; say(''); renderOpts(); } }, true); btn('capPlay', 'Play it back', () => { if (!cap.notes.length) { say('Nothing captured yet.', 'no'); return; } ensureAudio(); const t0 = now() + 0.1; cap.notes.forEach(n => tone(n.m, t0 + n.t - (cap.notes[0] ? cap.notes[0].t : 0), Math.max(0.2, n.d))); }); const lessons = {}; MOD_IDS.filter(m => hasMasteryScheme(m)).forEach(m => { lessons[m] = [MODS[m].name]; }); sel('capTo', cap.notes.length + ' notes. Practice on', lessons, 'kbd', () => {});
       // 'Make it a lesson': the captured tune becomes a draft Song (src/song/
       // capture.js), added to the same library the Songs panel reads, then
@@ -2582,12 +2583,15 @@ import { register as registerPathway } from './ui/pathway.js';
   function activeMidiRange() { const r = DB.prefs.midiRange || {}, names = [lastMidiName].concat(midiPorts.map(p => p.name)); for (const n of names) if (n && r[n]) return { name: n, range: r[n] }; return null; }
   const midiRangeText = r => t('range.line', { low: nname(r.low, true), high: nname(r.high, true), keys: rangeKeys(r) });
   function renderMidiRange() { const a = activeMidiRange(); $('midiRangeLine').textContent = a ? midiRangeText(a.range) : ''; $('midiRangeClear').hidden = !a; }
-  function rangeNote(input, evt) {
-    const s = captureNote(rangeCap, evt.note, evt.velocity); if (s === rangeCap) return; rangeCap = s;
+  // A key press that arrives twice within RANGE_DOUBLE_MS is one press: the repeat is neither "not higher" mid-walk nor a played note once the walk is done.
+  const RANGE_DOUBLE_MS = 120; let rangeLast = null;
+  const rangeEcho = (note, at) => !!rangeLast && rangeLast.note === note && at - rangeLast.at >= 0 && at - rangeLast.at < RANGE_DOUBLE_MS;
+  function rangeNote(input, evt, at) {
+    const s = captureNote(rangeCap, evt.note, evt.velocity); if (s === rangeCap) return; rangeCap = s; rangeLast = { note: evt.note, at: at };
     if (s.step === 'done') { (DB.prefs.midiRange || (DB.prefs.midiRange = {}))[midiDevName(input)] = s.range; lastMidiName = midiDevName(input); rangeCap = null; save(); renderMidiRange(); coach(midiRangeText(s.range)); }
     else coach(t(s.reason === 'too-narrow' ? 'range.tooNarrow' : s.reason === 'not-higher' ? 'range.notHigher' : 'range.high'));
   }
-  $('midiRangeBtn').addEventListener('click', function () { this.blur(); rangeCap = rangeCap ? null : startCapture(); if (rangeCap) coach(t('range.low')); else renderMidiRange(); });
+  $('midiRangeBtn').addEventListener('click', function () { this.blur(); rangeCap = rangeCap ? null : startCapture(); rangeLast = null; if (rangeCap) coach(t('range.low')); else renderMidiRange(); });
   $('midiRangeClear').addEventListener('click', function () { this.blur(); const a = activeMidiRange(); if (a) { delete DB.prefs.midiRange[a.name]; save(); } renderMidiRange(); });
   // ---------- MIDI out: "Play it for me" ----------
   // midiOutPorts: the live MIDIAccess.outputs that are connected; midiOutId: the one the learner picked in
@@ -2628,10 +2632,10 @@ import { register as registerPathway } from './ui/pathway.js';
   // One raw MIDI message from an opened port: blink, log it for the details
   // readout, parse it (createMidiParser keeps running status per port), and
   // feed note-on/off into onNote()/the real held-note set.
-  // A pad the player taught the kit set-up sheet arrives as the General MIDI note of its piece, so every kit listener below (trainer, Songs drum practice, reference) hears the right drum. Only a kit, or Songs (a percussion part plays on the kit whatever is selected), reads a device's learned map.
+  // A pad the player taught the kit set-up sheet arrives as the General MIDI note of its piece, so every kit listener below (trainer, Songs drum practice, reference) hears the right drum. Only a kit, or Songs while the part being practised is a percussion part (it plays on the kit whatever is selected), reads a device's learned map.
   let kitLearnSink = null;
   const kitLearn = { listen: fn => { kitLearnSink = fn; return () => { if (kitLearnSink === fn) kitLearnSink = null; }; } };
-  const kitNote = (input, note) => (MODS[mod] && MODS[mod].kit) || panels.current() === 'songs' ? kitNoteFor(DB.prefs.kit, input.name, note) : note;
+  const kitNote = (input, note) => (MODS[mod] && MODS[mod].kit) || (panels.current() === 'songs' && songsPractisingKit()) ? kitNoteFor(DB.prefs.kit, input.name, note) : note;
   // A sustain pedal (CC64) is a foot button in Songs: each press (value
   // crossing 64 going down; a half-pedal wobble while down is not a second
   // press) presses the step's Your turn / Stop and check, else its Next.
@@ -2654,7 +2658,8 @@ import { register as registerPathway } from './ui/pathway.js';
     let parser = midiParsers.get(input); if (!parser) { parser = createMidiParser(); midiParsers.set(input, parser); }
     parser.feed(d).forEach(evt => {
       if (evt.type === 'cc') { if (evt.controller === 64) onPedal(input, evt.value); return; }
-      if (rangeCap) { if (evt.type === 'on') rangeNote(input, evt); return; } // the range walk-through is learning a key; it is not an answer
+      if (evt.type === 'on' && rangeEcho(evt.note, at)) return; // the second copy of a doubled key press, during or just after the range walk-through
+      if (rangeCap) { if (evt.type === 'on') rangeNote(input, evt, at); return; } // the range walk-through is learning a key; it is not an answer
       if (evt.type === 'on') lastMidiName = midiDevName(input);
       if (evt.type === 'on' && kitLearnSink && kitLearnSink(input.name, evt.note)) return; // the kit set-up walk-through is learning this pad; it is not a hit
       const note = kitNote(input, evt.note);

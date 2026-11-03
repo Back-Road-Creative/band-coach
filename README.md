@@ -171,6 +171,9 @@ keyboard's name, in the same saved data as your settings (so it is in "Save a ba
 "Erase all my data"), and "Forget this range" removes it. While a range is stored, keyboard lessons that ask
 for single notes are moved by whole octaves to sit inside it; a lesson that cannot be moved to fit
 is left as it is. Songs, chords and two-hand lessons are not moved. With no range stored nothing changes.
+A key press that arrives twice within 120 ms (a keyboard that doubles a hit) counts once: the repeat neither
+reads as "not higher than your lowest key" nor shows up afterwards as a played note
+(`tests/characterization/midi-range-doubled.test.mjs`).
 
 "Play it for me" sends a song's notes out to a connected MIDI keyboard so it plays itself. Open
 "Set up input", pick your keyboard under "Play songs on" (it only appears when the browser
@@ -1455,7 +1458,9 @@ the General MIDI reading, and a note nobody has seen is still an "extra note".
 **Forget learned pads** clears every learned map. `pieceForMidi(note, map)` in
 `src/instruments/drum-kit.js` takes the optional map; `src/app.js` reads a
 learned note as the General MIDI note of its piece before the trainer, Songs
-drum practice and reference hear it, and only while a kit or Songs is in front.
+drum practice and reference hear it, and only while a kit is in front or Songs is practising a percussion part
+(`practisingKit()` in `src/ui/songs.js`); a keyboard part in Songs reads its own notes even when the keyboard's name
+matches a device with a saved map (`tests/characterization/kit-map-songs.test.mjs`).
 
 Through the microphone, `src/app.js`'s `listenDrums()` runs an onset detector
 plus `src/audio/drum-classify.js`'s band-energy classifier on every hit, and
@@ -1653,7 +1658,8 @@ rests, ties, dotted-eighth figures, triplets, 3/4, 6/8, swing, and two-bar phras
 The "Calibrate timing" button, on every instrument's option row (and Rhythm reading's), plays eight clicks and takes a tap on each: the tap pad,
 the space bar or any letter key on Rhythm reading (the space bar elsewhere), or a note on a connected MIDI keyboard or drum-kit pad -- the same
 inputs the exercises judge (`tests/characterization/calibrate-timing-every-instrument.test.mjs`). Songs and drills use the result. Each caught tap is counted on screen; four or more store the median
-offset as the latency allowance every later tap is judged against.
+offset as the latency allowance every later tap is judged against. Counting stops at eight, and a tap closer than half a beat to the last counted one is
+treated as a doubled hit and ignored (`tests/characterization/calibrate-cap.test.mjs`).
 
 ## Ear training
 

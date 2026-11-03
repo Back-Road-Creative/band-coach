@@ -27,13 +27,15 @@ test('Calibrate timing counts MIDI note-ons as taps and shows each one caught', 
   t.after(() => page.close());
   await startCalibrate(page);
 
-  // Eight note-ons spaced well inside the ~6.5 s listening window; the
-  // window accepts any offset (windowMs 1e9), so spacing is not judged.
+  // Eight note-ons spaced well inside the ~6.5 s listening window and more
+  // than half a beat (0.42 s) apart, since a closer tap is a doubled hit and
+  // is ignored; the window accepts any offset (windowMs 1e9), so the timing
+  // itself is not judged.
   for (let i = 0; i < 8; i++) {
     await page.evaluate("window.__midiSend('p1', [0x90, 60, 100]); window.__midiSend('p1', [0x80, 60, 0]);");
     await page.waitFor(`${feedback} === 'Caught ${i + 1} of 8 taps.'`, 3000);
     assert.doesNotMatch(await page.evaluate(coachText), /heard/, 'a calibration tap is not an out-of-exercise note');
-    await new Promise((r) => setTimeout(r, 250));
+    await new Promise((r) => setTimeout(r, 450));
   }
 
   await page.waitFor(`/^Timing calibrated: -?\\d+ ms\\.$/.test(${feedback})`, 10000);
