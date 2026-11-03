@@ -1483,6 +1483,7 @@ second kit does not inherit the first one's pads, and they survive progress
 backup/restore. A learned note overrides the General MIDI note for that device
 only: a device with no learned pads, and any note you have not taught it, keep
 the General MIDI reading, and a note nobody has seen is still an "extra note".
+When a learned list changes a note, the heard line says so ("High tom heard (note 38, learned as High tom; General MIDI says Snare) -- ..."), and "MIDI details" appends " -> High tom (learned, GM Snare)" to that message and adds a "Learned pad list in use for <device>: <n> notes" line, so a wrong list can be told from a wrong kit.
 **Forget learned pads** clears every learned map and the shared-hat and CC4-only flags. `pieceForMidi(note, map)` in
 `src/instruments/drum-kit.js` takes the optional map; `src/app.js` reads a
 learned note as the General MIDI note of its piece before the trainer, Songs
