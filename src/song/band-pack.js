@@ -181,7 +181,11 @@ export function writeBandPack({ name, songs, parts } = {}) {
   songs.forEach((song, i) => {
     entries.push({ name: 'songs/' + i + '.json', data: encoder.encode(JSON.stringify(song)) });
   });
-  return writeZip(entries);
+  const zip = writeZip(entries);
+  if (zip.length > MAX_BAND_PACK_BYTES) {
+    throw new Error('these songs are too large to share (over 20 MB) as one band pack; share them one at a time instead');
+  }
+  return zip;
 }
 
 // Reads and validates a band pack from untrusted zip bytes -- a file handed

@@ -103,3 +103,19 @@ test('parseChallenge never evaluates the input as code', () => {
   const challenge = parseChallenge(text);
   assert.equal(challenge.title, 'constructor.constructor("return process")().exit()');
 });
+
+// ---- a challenge file the app's own reader can open ----
+
+function longSong(id, noteCount) {
+  return song(id, { parts: [{ id: 'p', name: 'P', notes: Array.from({ length: noteCount }, (_, i) => ({ start: i * 480, dur: 480, midi: 60 })) }] });
+}
+
+test('buildChallenge: 20 songs of 3000 notes still open again', () => {
+  const songs = Array.from({ length: 20 }, (_, i) => longSong('s' + i, 3000));
+  assert.equal(parseChallenge(buildChallenge('Long', songs)).songs.length, 20);
+});
+
+test('buildChallenge refuses a file over the size parseChallenge accepts', () => {
+  const songs = Array.from({ length: MAX_CHALLENGE_SONGS }, (_, i) => longSong('s' + i, 4000));
+  assert.throws(() => buildChallenge('Too long', songs), /too large to export \(over 5 MB\)/);
+});
