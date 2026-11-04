@@ -396,3 +396,17 @@ test('importAll: restoring the same backup twice keeps one copy of each and repo
   assert.deepEqual(r2.ids, r1.ids);
   assert.equal((await library.list()).length, 2);
 });
+
+test('importAll: a song the library refuses is counted and the others are still restored', async () => {
+  const library = createLibrary(memoryStore());
+  const tooLong = song('long', { parts: [{ id: 'p', name: 'P', notes: [{ start: 5001 * 1920, dur: 480, midi: 60 }] }] });
+  const r = await library.importAll([song('a'), tooLong, song('b')]);
+  assert.deepEqual({ imported: r.imported, skipped: r.skipped, failed: r.failed, ids: r.ids }, { imported: 2, skipped: 0, failed: 1, ids: ['a', 'b'] });
+  assert.equal((await library.list()).length, 2);
+});
+
+test('importAll: a store that cannot save still fails the whole restore', async () => {
+  const store = memoryStore();
+  store.runTx = async () => { throw new Error('storage is full'); };
+  await assert.rejects(() => createLibrary(store).importAll([song('a')]), /storage is full/);
+});

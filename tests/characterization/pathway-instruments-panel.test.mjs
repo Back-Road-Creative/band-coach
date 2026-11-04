@@ -67,3 +67,26 @@ test('an instrument no starter song fits (oboe) shows no path button', async (t)
   assert.equal(await page.evaluate("!!document.getElementById('pathwayBtn')"), false);
   assert.deepEqual(page.exceptions, []);
 });
+
+test('a song id is shown as text, never run as page markup', async (t) => {
+  const page = await launchPage(HTML_PATH);
+  t.after(() => page.close());
+
+  const evil = '<img src=x onerror="window.__ran=1">';
+  const row = { v: 1, id: 'evil-check', at: Date.now() - 2 * 86400000, instrument: 'flute', skill: 'whole:null', source: 'song', input: 'mic', assistance: 'none', dims: { pitch: 'ok' }, unassessed: [], activeMs: 1000, songId: evil };
+  await page.evaluate(`(function () {
+    const db = window.__coach.db();
+    db.events = (db.events || []).concat([${JSON.stringify(row)}]);
+    window.localStorage.setItem('bandcoach.v1', JSON.stringify(db));
+  })()`);
+  await page.reload();
+  await page.evaluate("window.__coach.setMod('flute')");
+  await page.evaluate("document.getElementById('pathwayBtn').click()");
+  await page.waitFor("document.getElementById('pathwayAction')");
+  await new Promise((r) => setTimeout(r, 300));
+
+  assert.equal(await page.evaluate("!!document.querySelector('#pathwayAction img')"), false, 'no element was built from the id');
+  assert.equal(await page.evaluate('window.__ran === 1'), false, 'the handler did not run');
+  assert.ok((await page.evaluate("document.getElementById('pathwayAction').textContent")).includes(evil));
+  assert.deepEqual(page.exceptions, []);
+});
