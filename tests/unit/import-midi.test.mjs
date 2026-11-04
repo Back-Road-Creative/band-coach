@@ -1,6 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { importMidi } from '../../src/song/import-midi.js';
+import { exportMidi } from '../../src/song/export-midi.js';
+import { normalizeSong } from '../../src/song/model.js';
 
 // --- tiny MIDI byte-writer helper, local to this test file (no binary fixtures) ---
 
@@ -164,7 +166,7 @@ test('percussion channel 10 is marked in the part name', () => {
   assert.match(song.parts[0].name, /percussion/);
 });
 
-test('a second tempo event is ignored and produces a warning', () => {
+test('a second tempo event becomes a tempo change, with nothing to warn about', () => {
   const events = [
     ...tempoEvent(120),
     ...noteOn(0, 0, 60),
@@ -176,8 +178,58 @@ test('a second tempo event is ignored and produces a warning', () => {
   const { song, warnings } = importMidi(bytes);
 
   assert.equal(song.bpm, 120);
+  assert.deepEqual(song.tempoMap, [{ tick: 240, bpm: 200 }]);
+  assert.deepEqual(warnings, []);
+});
+
+test('tempo, metre and key changes survive a trip out through exportMidi and back', () => {
+  const original = normalizeSong({
+    id: 'trip', title: 'Trip', key: { tonic: 0, mode: 'major' }, metre: { num: 3, den: 4 }, bpm: 120, ticksPerQuarter: 480,
+    tempoMap: [{ tick: 2880, bpm: 200 }],
+    metreChanges: [{ tick: 1440, num: 4, den: 4 }],
+    keyChanges: [{ tick: 1440, tonic: 7, mode: 'major' }],
+    parts: [{ id: 'p', name: 'P', notes: [{ start: 0, dur: 480, midi: 60 }, { start: 2880, dur: 480, midi: 67 }] }],
+    chords: [],
+  });
+  const { song, warnings } = importMidi(exportMidi(original));
+  assert.deepEqual(warnings, []);
+  assert.equal(song.bpm, 120);
+  assert.deepEqual(song.metre, { num: 3, den: 4 });
+  assert.deepEqual(song.key, { tonic: 0, mode: 'major' });
+  assert.deepEqual(song.tempoMap, [{ tick: 2880, bpm: 200 }]);
+  assert.deepEqual(song.metreChanges, [{ tick: 1440, num: 4, den: 4 }]);
+  assert.deepEqual(song.keyChanges, [{ tick: 1440, tonic: 7, mode: 'major' }]);
+});
+
+test('change ticks are rescaled to 480 per quarter and sorted across tracks', () => {
+  const conductor = [...tempoEvent(120), ...tempoEvent(100, 192), ...endOfTrack(0)];
+  const melody = [...tempoEvent(60, 96), ...noteOn(0, 0, 60), ...noteOff(96, 0, 60), ...endOfTrack(0)];
+  const { song } = importMidi(midiFile({ format: 1, ntrks: 2, ppq: 96 }, [conductor, melody]));
+  assert.equal(song.bpm, 120);
+  assert.deepEqual(song.tempoMap, [{ tick: 480, bpm: 60 }, { tick: 960, bpm: 100 }]);
+});
+
+test('past the tempo-change limit the song keeps its first tempo and says so', () => {
+  const ramp = Array.from({ length: 2001 }, (_, i) => tempoEvent(i % 2 ? 120 : 100, 1)).flat();
+  const events = [...tempoEvent(120), ...noteOn(0, 0, 60), ...ramp, ...noteOff(0, 0, 60), ...endOfTrack(0)];
+  const { song, warnings } = importMidi(midiFile({ format: 0, ntrks: 1, ppq: 480 }, [events]));
+  assert.equal(song.bpm, 120);
+  assert.equal(song.tempoMap, undefined);
   assert.equal(warnings.length, 1);
-  assert.match(warnings[0], /tempo/i);
+  assert.match(warnings[0], /first tempo \(120 bpm\)/);
+});
+
+test('a repeated value is not a change, and a damaged later time signature does not sink the file', () => {
+  const events = [
+    ...tempoEvent(120), ...timeSigEvent(3, 2), ...noteOn(0, 0, 60), ...tempoEvent(120, 240),
+    ...timeSigEvent(3, 2), ...timeSigEvent(0, 2), ...timeSigEvent(4, 8), ...noteOff(240, 0, 60), ...endOfTrack(0),
+  ];
+  const { song, warnings } = importMidi(midiFile({ format: 0, ntrks: 1, ppq: 480 }, [events]));
+  assert.deepEqual(song.metre, { num: 3, den: 4 });
+  assert.equal(song.tempoMap, undefined);
+  assert.equal(song.metreChanges, undefined);
+  assert.equal(warnings.length, 2);
+  assert.match(warnings[0], /time signature/i);
 });
 
 test('rescales PPQ 96 to 480 ticks per quarter', () => {

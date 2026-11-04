@@ -12,7 +12,8 @@
 // brief (schema 'song/1', ticksPerQuarter always 480 regardless of the
 // source file's own PPQ — this module rescales). `warnings` is an array of
 // plain-English strings describing anything lossy or ambiguous about the
-// import (currently: ignored tempo changes after the first).
+// import (currently: a damaged time signature that was skipped, or more tempo
+// changes than playback can follow).
 //
 // Supports SMF format 0 and format 1. Format 2 (independent multi-song
 // files) and SMPTE-based time division are rejected with a thrown Error
@@ -157,25 +158,15 @@ function decodeText(bytes) {
 function handleMeta(metaType, data, absTick, ctx, warnings) {
   if (metaType === 0x51 && data.length >= 3) {
     const microsPerQuarter = (data[0] << 16) | (data[1] << 8) | data[2];
-    const bpm = microsPerQuarter > 0 ? 60000000 / microsPerQuarter : IMPORT_DEFAULT_BPM;
-    if (!ctx.tempoSet) {
-      ctx.bpm = bpm;
-      ctx.tempoSet = true;
-    } else if (Math.abs(bpm - ctx.bpm) > 1e-9) {
-      warnings.push(
-        `Tempo change to ${Math.round(bpm * 100) / 100} bpm at tick ${absTick} was ignored; using the first tempo (${Math.round(ctx.bpm * 100) / 100} bpm) for the whole song.`
-      );
-    }
-  } else if (metaType === 0x58 && data.length >= 2 && !ctx.metreSet) {
+    ctx.tempos.push({ tick: absTick, bpm: microsPerQuarter > 0 ? 60000000 / microsPerQuarter : IMPORT_DEFAULT_BPM });
+  } else if (metaType === 0x58 && data.length >= 2) {
     const num = data[0];
     const den = 2 ** data[1];
-    ctx.metre = { num, den };
-    ctx.metreSet = true;
-  } else if (metaType === 0x59 && data.length >= 2 && !ctx.keySet) {
-    const sf = signedByte(data[0]);
-    const mi = data[1];
-    ctx.key = keyFromSignature(sf, mi);
-    ctx.keySet = true;
+    // One bad event mid-song must not lose the whole file; 2**n up to 64 is exactly what model.js accepts.
+    if (num >= 1 && den <= 64) ctx.metres.push({ tick: absTick, num, den });
+    else warnings.push(`A damaged time signature (${num}/${den}) at tick ${absTick} was skipped.`);
+  } else if (metaType === 0x59 && data.length >= 2) {
+    ctx.keys.push({ tick: absTick, ...keyFromSignature(signedByte(data[0]), data[1]) });
   }
   // Other meta types (instrument name, lyric, marker, cue point, SMPTE
   // offset, sequencer-specific, ...) carry no data this Song shape needs
@@ -300,6 +291,25 @@ function stripExt(fileName) {
   return fileName.replace(/\.[^./\\]+$/, '');
 }
 
+// shortcut: past this many the song plays at one tempo, because clock.js walks the whole map for each
+// note (20000 changes froze "Play it for me" for 41 s); upgrade by giving clock.sec a running total.
+const MAX_TEMPO_CHANGES = 2000;
+
+// The file's events of one kind, in song order: the first holds from the start
+// of the song, each later different one is a change (model.js's list shape).
+function firstAndChanges(events, scale, same) {
+  const sorted = events.map((e) => ({ ...e, tick: Math.round(e.tick * scale) })).sort((a, b) => a.tick - b.tick);
+  const changes = [];
+  let current = sorted[0];
+  for (const event of sorted.slice(1)) {
+    if (!same(event, current)) {
+      changes.push(event);
+      current = event;
+    }
+  }
+  return { first: sorted[0], changes };
+}
+
 export function importMidi(bytes, options = {}) {
   const { fileName = null } = options;
   const warnings = [];
@@ -307,7 +317,7 @@ export function importMidi(bytes, options = {}) {
   const reader = new ByteReader(arr);
   const { ntrks, ppq } = parseHeader(reader);
 
-  const ctx = { bpm: null, tempoSet: false, metre: null, metreSet: false, key: null, keySet: false };
+  const ctx = { tempos: [], metres: [], keys: [] };
   const tracks = [];
   let tracksParsed = 0;
 
@@ -355,9 +365,12 @@ export function importMidi(bytes, options = {}) {
     }
   });
 
-  const bpm = ctx.bpm ?? IMPORT_DEFAULT_BPM;
-  const metre = ctx.metre ?? { num: 4, den: 4 };
-  const key = ctx.key ?? null;
+  const tempos = firstAndChanges(ctx.tempos, scale, (a, b) => a.bpm === b.bpm);
+  const metres = firstAndChanges(ctx.metres, scale, (a, b) => a.num === b.num && a.den === b.den);
+  const keys = firstAndChanges(ctx.keys, scale, (a, b) => a.tonic === b.tonic && a.mode === b.mode);
+  const bpm = tempos.first?.bpm ?? IMPORT_DEFAULT_BPM;
+  const metre = metres.first ? { num: metres.first.num, den: metres.first.den } : { num: 4, den: 4 };
+  const key = keys.first ? { tonic: keys.first.tonic, mode: keys.first.mode } : null;
   // A track named just "untitled" (a DAW's placeholder) is no title: name the song after its file, as record-door does.
   const trackTitle = tracks[0] && tracks[0].name && !/^\s*untitled\s*$/i.test(tracks[0].name) ? tracks[0].name : null;
   const title = trackTitle || (fileName ? stripExt(fileName) : null) || 'Untitled MIDI Import';
@@ -377,6 +390,13 @@ export function importMidi(bytes, options = {}) {
     parts,
     chords: [],
   };
+  if (tempos.changes.length > MAX_TEMPO_CHANGES) {
+    warnings.push(`This file changes tempo ${tempos.changes.length} times, more than Band Coach can follow; it plays at the first tempo (${Math.round(bpm * 100) / 100} bpm) throughout.`);
+  } else if (tempos.changes.length) {
+    song.tempoMap = tempos.changes;
+  }
+  if (metres.changes.length) song.metreChanges = metres.changes;
+  if (keys.changes.length) song.keyChanges = keys.changes;
 
   return finishImport(song, warnings);
 }
