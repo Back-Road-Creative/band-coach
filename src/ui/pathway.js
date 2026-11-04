@@ -13,6 +13,7 @@
 // first-week.js) the same panel lists that instrument's six steps instead,
 // each labelled practice-grade -- see mountFirstWeek below.
 import { pathwayState } from '../core/pathway.js';
+import { escapeHtml } from '../core/escape.js';
 import { firstWeekFor, firstWeekSong, RETAINED, TRANSFER_DONE, COMPLETE } from '../instruments/first-week.js';
 import { reviewItems as kbdPathwayOutcomes, outcomeReviewed, transferSongFor, RETAINED_TEXT, TRANSFER_TEXT, TRANSFER_DONE_TEXT, COMPLETE_TEXT } from '../instruments/kbd-pathway.js';
 import { songFor } from '../instruments/kbd-songs.js';
@@ -55,7 +56,8 @@ function mountFirstWeek(el, api, fw) {
   const seen = (db.events || []).filter((ev) => ev && ev.instrument === id && ev.source === 'song' && typeof ev.songId === 'string').map((ev) => ev.songId);
   const song = kind === 'transfer' ? (firstWeekSong(id, seen.concat([ps.checkSongId])) || firstWeekSong(id, [ps.checkSongId])) : kind === 'recheck' && ps.checkSongId ? { songId: ps.checkSongId } : firstWeekSong(id);
   const starter = song ? starterSongs.find((s) => s.id === song.songId) : null;
-  const title = starter ? starter.title : (song ? song.songId : '');
+  // A song id can come from a shared file or a backup, and title goes into innerHTML below.
+  const title = escapeHtml(starter ? starter.title : (song ? song.songId : ''));
 
   let actionHtml = '';
   if (kind === 'connect-mic' || kind === 'trainer') {
