@@ -50,4 +50,5 @@ file exercising those was found in the time available for this change.
 
 `kit-reading-usb-midi.json` is not downloaded: it is the K1 Windows lane reading of one electronic kit on 2026-11-03
 (`tests/acceptance/win/k1-kit-reading.win.mjs`), every pad struck twice. Each message is `[ms from the first, ...bytes]`.
-`tests/unit/kit-hit-guard.test.mjs` replays it.
+`tests/unit/kit-hit-guard.test.mjs` replays it. `kit-reading-kick-usb-midi.json` is the same kit and lane the same day, the kick
+pad only, 20 hits (`--pad kick --hits 20`), in the same format; the same test replays it.

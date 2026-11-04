@@ -67,14 +67,15 @@ export function createMidiParser() {
 
 // One strike on an electronic kit can arrive as more than one note-on. Numbers from a real kit, every pad struck twice
 // (tests/fixtures/midi/kit-reading-usb-midi.json): the same note again, never louder, up to 59 ms after the note before it;
-// and a soft snare note about 5 ms after a hi-hat hit, at a third of its loudness. A flam looks like the first, so loudness
-// tells them apart: a flam's grace note is soft and its main hit louder.
-export const RETRIGGER_MS = 70, BLEED_MS = 10, BLEED_RATIO = 0.4, TOP_VELOCITY = 127;
+// and a soft snare note about 5 ms after a hi-hat hit, at a third of its loudness. A kick at full force also sends soft snare and
+// tom notes up to 19 ms later (kit-reading-kick-usb-midi.json). A flam looks like the first, so loudness tells them apart: a
+// flam's grace note is soft and its main hit louder.
+export const RETRIGGER_MS = 70, BLEED_RATIO = 0.4, TOP_VELOCITY = 127;
 
-// drop(hit) says whether this note-on is the kit's own echo of a hit already heard. `bleeds(fromNote, toNote)` names the
-// pairs of pads that leak into each other: a loud hat beside a soft kick is two real hits, so the rule is not for every pair.
-// Limits, because the bytes are identical: a flam played loud then soft, or with both hits at the top velocity, is one hit;
-// a very soft snare within 10 ms of a loud hi-hat is bleed.
+// drop(hit) says whether this note-on is the kit's own echo of a hit already heard. `bleeds(fromNote, toNote, gapMs, fromVelocity)`
+// names the pads that leak into each other and how far: a loud hat beside a soft kick is two real hits, so the rule is not for
+// every pair (padBleeds, src/instruments/drum-kit.js). Limits, because the bytes are identical: a flam played loud then soft, or
+// with both hits at the top velocity, is one hit; a very soft snare within 10 ms of a loud hi-hat is bleed.
 export function createHitGuard({ bleeds = () => false } = {}) {
   const ports = new Map(); // port -> { notes: Map(channel:note -> { at, velocity }), last: the last kept hit }
   function drop({ port, channel, note, velocity, at }) {
@@ -85,7 +86,7 @@ export function createHitGuard({ bleeds = () => false } = {}) {
       same.at = at; // the next repeat is measured from this one; a louder hit still has to beat the hit that was kept
       return true;
     }
-    if (last && last.note !== note && at - last.at <= BLEED_MS && velocity <= last.velocity * BLEED_RATIO && bleeds(last.note, note)) {
+    if (last && last.note !== note && velocity <= last.velocity * BLEED_RATIO && bleeds(last.note, note, at - last.at, last.velocity)) {
       state.notes.set(key, { at, velocity }); // so the bleed's own repeat goes too, and a real, louder snare straight after it stays
       return true;
     }

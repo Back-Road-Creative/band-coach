@@ -70,7 +70,7 @@ test('verdict: a reading is OBSERVED, never PASS, and names the fix', () => {
 test('verdict: different notes point at a pad bleeding into another first, because the real kit did that', () => {
   const v = k1Verdict(obs([on(46, 0, 127), on(38, 4, 39)]));
   assert.match(v.text, /bleed/);
-  assert.match(v.text, /hatBleedsOnSnare/);
+  assert.match(v.text, /padBleeds/);
   assert.doesNotMatch(v.text, /A guard does not help/);
 });
 

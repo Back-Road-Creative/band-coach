@@ -70,6 +70,21 @@ export function hatBleedsOnSnare(fromNote, toNote) {
   return (from === 'hihat-closed' || from === 'hihat-open') && pieceForMidi(toNote) === 'snare';
 }
 
+// A kick at full force can send more than the kick: 13 of 20 kicks on a real kit also sent soft snare or tom notes
+// (tests/fixtures/midi/kit-reading-kick-usb-midi.json).
+export function kickBleedsOnDrums(fromNote, toNote) {
+  return pieceForMidi(fromNote) === 'kick' && ['snare', 'tom-high', 'tom-mid', 'tom-floor'].includes(pieceForMidi(toNote));
+}
+
+// The guard's bleed rule: does this soft note belong to the louder hit gapMs before it? Each window comes from its own reading.
+// Hat: about 5 ms, so 10. Kick: 7.9 to 18.9 ms, so 25, and only from 127, because the reading's softer kicks (47 to 104) sent
+// nothing else. Limit, because the bytes are identical: a soft snare played within 25 ms of a full-force kick reads as crosstalk.
+const HAT_BLEED_MS = 10, KICK_BLEED_MS = 25, FULL_FORCE = 127;
+export function padBleeds(fromNote, toNote, gapMs, fromVelocity) {
+  if (hatBleedsOnSnare(fromNote, toNote)) return gapMs <= HAT_BLEED_MS;
+  return kickBleedsOnDrums(fromNote, toNote) && gapMs <= KICK_BLEED_MS && fromVelocity >= FULL_FORCE;
+}
+
 // A kit bar, written as space-separated 'cell:hits' steps: `cell` is a
 // src/core/rhythm.js cell id, `hits` names one entry per sounding note of
 // that cell, comma-separated. Pieces sounding together join with '+', and

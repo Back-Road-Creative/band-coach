@@ -1,17 +1,19 @@
 // The double-hit guard, against what a real kit sent (tests/fixtures/midi/kit-reading-usb-midi.json, K1 run of 2026-11-03).
 // That kit repeats a hit as the same note, strong then weaker, up to 59 ms later, and a hi-hat hit also sends a soft snare
-// note about 5 ms later. The guard drops those and keeps flams, two drums at once and fast playing.
+// note about 5 ms later. A kick at full force also sends soft snare and tom notes up to 19 ms later
+// (tests/fixtures/midi/kit-reading-kick-usb-midi.json). The guard drops those and keeps flams, two drums at once and fast playing.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createHitGuard, createMidiParser, RETRIGGER_MS } from '../../src/core/midi.js';
-import { hatBleedsOnSnare, TRAINER_LEVELS } from '../../src/instruments/drum-kit.js';
+import { hatBleedsOnSnare, kickBleedsOnDrums, padBleeds, TRAINER_LEVELS } from '../../src/instruments/drum-kit.js';
 import { buildPhrase, onsetsOf } from '../../src/core/rhythm.js';
 import { starterGrooves } from '../../src/song/starter/index.js';
 import { ticksToSeconds } from '../../src/song/model.js';
 
 const capture = JSON.parse(readFileSync(new URL('../fixtures/midi/kit-reading-usb-midi.json', import.meta.url), 'utf8'));
-const guarded = (hits, opts = { bleeds: hatBleedsOnSnare }) => {
+const kickCapture = JSON.parse(readFileSync(new URL('../fixtures/midi/kit-reading-kick-usb-midi.json', import.meta.url), 'utf8'));
+const guarded = (hits, opts = { bleeds: padBleeds }) => {
   const guard = createHitGuard(opts);
   return hits.filter(h => !guard.drop({ port: 'kit', channel: 9, ...h }));
 };
@@ -19,7 +21,7 @@ const hit = (note, velocity, at, over = {}) => ({ note, velocity, at, ...over })
 
 test('the captured kit: every hit counts once, in the order the pads were struck', () => {
   const parser = createMidiParser();
-  const guard = createHitGuard({ bleeds: hatBleedsOnSnare });
+  const guard = createHitGuard({ bleeds: padBleeds });
   const kept = [];
   let ons = 0;
   for (const [at, ...bytes] of capture.messages) {
@@ -31,6 +33,54 @@ test('the captured kit: every hit counts once, in the order the pads were struck
   }
   assert.equal(ons, 36, 'the capture really holds 36 note-ons for 21 hits');
   assert.deepEqual(kept, [36, 44, 46, 38, 44, 42, 48, 49, 45, 43, 51, 36, 44, 42, 46, 38, 48, 49, 45, 43, 51]);
+});
+
+test('the captured kick: 20 strikes count 20 times, and none of the snare or tom notes it also sent counts', () => {
+  const parser = createMidiParser();
+  const guard = createHitGuard({ bleeds: padBleeds });
+  const kept = [], sent = [];
+  for (const [at, ...bytes] of kickCapture.messages) {
+    for (const e of parser.feed(bytes)) {
+      if (e.type !== 'on') continue;
+      sent.push(e.note);
+      if (!guard.drop({ port: kickCapture.port, channel: e.channel, note: e.note, velocity: e.velocity, at })) kept.push(e.note);
+    }
+  }
+  assert.equal(sent.length, 41, 'the capture really holds 41 note-ons for 20 strikes');
+  assert.deepEqual([...new Set(sent)].sort(), [36, 38, 43, 45, 48]);
+  assert.deepEqual(kept, Array(20).fill(36));
+});
+
+test('a full-force kick: the snare and tom notes it sends are dropped, with their own repeat and however many there are', () => {
+  assert.deepEqual(guarded([hit(36, 127, 0), hit(38, 26, 8)]).map(h => h.note), [36]);
+  assert.deepEqual(guarded([hit(36, 127, 0), hit(38, 31, 12), hit(45, 38, 19)]).map(h => h.note), [36]);
+  assert.deepEqual(guarded([hit(36, 127, 0), hit(43, 34, 10), hit(48, 32, 15)]).map(h => h.note), [36]);
+  assert.deepEqual(guarded([hit(36, 127, 0), hit(38, 26, 8), hit(38, 20, 15)]).map(h => h.note), [36]);
+});
+
+test('beside a kick, real drums stay', () => {
+  const after = (rest) => guarded([hit(36, 127, 0), ...rest]).map(h => h.at);
+  assert.deepEqual(after([hit(38, 100, 5)]), [0, 5], 'a real snare with the kick is far louder than the crosstalk');
+  assert.deepEqual(after([hit(38, 51, 5)]), [0, 5], 'over 40% of the kick is not crosstalk');
+  assert.deepEqual(after([hit(38, 30, 26)]), [0, 26], 'a soft snare past the window is a ghost note');
+  assert.deepEqual(after([hit(38, 30, 12), hit(38, 110, 30)]), [0, 30], 'a real snare straight after the crosstalk is louder, so it stays');
+  assert.deepEqual(after([hit(42, 30, 5)]), [0, 5], 'the reading never showed a kick sending a hi-hat');
+  assert.deepEqual(after([hit(49, 30, 5)]), [0, 5], 'nor a cymbal');
+  assert.deepEqual(guarded([hit(38, 30, 0), hit(36, 127, 3)]).map(h => h.at), [0, 3], 'a soft snare before the kick is a real hit');
+});
+
+test('a kick below full force keeps every note beside it: the reading\'s softer kicks sent nothing else', () => {
+  for (const v of [47, 77, 96, 104, 126]) assert.deepEqual(guarded([hit(36, v, 0), hit(38, 26, 8)]).map(h => h.at), [0, 8], `kick at ${v}`);
+});
+
+test('the kick window does not widen the hi-hat\'s: a soft snare 15 ms after a hat is a ghost note', () => {
+  assert.deepEqual(guarded([hit(42, 127, 0), hit(38, 39, 15)]).map(h => h.at), [0, 15]);
+});
+
+test('kick crosstalk names only a kick over a snare or a tom', () => {
+  for (const to of [38, 43, 45, 48]) assert.equal(kickBleedsOnDrums(36, to), true, `to ${to}`);
+  for (const to of [36, 42, 44, 46, 49, 51]) assert.equal(kickBleedsOnDrums(36, to), false, `to ${to}`);
+  for (const from of [38, 42, 45, 49]) assert.equal(kickBleedsOnDrums(from, 38), false, `from ${from}`);
 });
 
 test('single hits all stay (control)', () => {
@@ -87,7 +137,7 @@ test('without a bleed rule nothing but repeats is dropped', () => {
 });
 
 test('another port or channel is another instrument', () => {
-  const guard = createHitGuard({ bleeds: hatBleedsOnSnare });
+  const guard = createHitGuard({ bleeds: padBleeds });
   assert.equal(guard.drop({ port: 'a', channel: 9, note: 38, velocity: 120, at: 0 }), false);
   assert.equal(guard.drop({ port: 'b', channel: 9, note: 38, velocity: 40, at: 5 }), false);
   assert.equal(guard.drop({ port: 'a', channel: 3, note: 38, velocity: 40, at: 10 }), false);

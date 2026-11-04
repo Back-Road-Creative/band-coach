@@ -32,7 +32,7 @@ const FIX = {
   'one-note': 'One note per hit. No guard: the cause is elsewhere and the audit reopens',
   'short-window': 'The same note repeated, gap clearly shorter than a flam. Fix: a short fixed window for all MIDI',
   'loudness-rule': 'The same note repeated, gap in flam range. Fix: a loudness rule on kit parts, tested on this kit first',
-  'several-notes': 'Different notes for one hit. A soft note a few ms after a loud one is one pad bleeding into another: add the pair to hatBleedsOnSnare (src/instruments/drum-kit.js). Otherwise a piece owns several notes',
+  'several-notes': 'Different notes for one hit. A soft note a few ms after a loud one is one pad bleeding into another: add the pair and its window to padBleeds (src/instruments/drum-kit.js). Otherwise a piece owns several notes',
 };
 
 const PAD_FIX = {
