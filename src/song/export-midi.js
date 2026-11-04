@@ -97,9 +97,13 @@ function tempoEvents(song) {
   });
 }
 
+// song.metre and song.key hold from tick 0; only some importers also list that first value as a change.
+function laterChanges(changes) {
+  return (changes || []).filter((change) => change.tick > 0);
+}
+
 function timeSignatureEvents(song) {
-  const entries =
-    song.metreChanges && song.metreChanges.length > 0 ? song.metreChanges : [{ tick: 0, num: song.metre.num, den: song.metre.den }];
+  const entries = [{ tick: 0, num: song.metre.num, den: song.metre.den }, ...laterChanges(song.metreChanges)];
   return entries.map((entry) => ({
     tick: entry.tick,
     bytes: [0xff, 0x58, 0x04, entry.num, Math.round(Math.log2(entry.den)), 24, 8],
@@ -107,7 +111,7 @@ function timeSignatureEvents(song) {
 }
 
 function keySignatureEvents(song) {
-  const entries = song.keyChanges && song.keyChanges.length > 0 ? song.keyChanges : song.key ? [{ tick: 0, ...song.key }] : [];
+  const entries = [...(song.key ? [{ tick: 0, ...song.key }] : []), ...laterChanges(song.keyChanges)];
   return entries.map((entry) => ({
     tick: entry.tick,
     bytes: [0xff, 0x59, 0x02, signedByte(sharpsFlatsForKey(entry)), entry.mode === 'minor' ? 1 : 0],
