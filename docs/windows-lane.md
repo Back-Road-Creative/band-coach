@@ -68,9 +68,10 @@ The reading of 2026-11-03 found both repeats and bleed. It is kept as `tests/fix
 
 ### One pad, played hard (`--pad`, `--hits`)
 
-To ask whether one pad sends other pads' notes, play only that pad:
+To ask whether one pad sends other pads' notes, play only that pad. Run it from a checkout at current `main`, because an older one refuses `--pad` as an unknown argument. The lane needs the release file, so build it first, or pass an already staged copy with `--html <path>`:
 
 ```
+node build/build.mjs --release
 node tests/acceptance/win/run.mjs --win-root /mnt/d/band-coach-win-lane --only K1 --pad kick --hits 20 --report <path>
 ```
 
