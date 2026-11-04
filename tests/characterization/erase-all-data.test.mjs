@@ -39,9 +39,8 @@ test("the app's own open databases close when a delete asks, so erase never wait
   const page = await launchPage(HTML_PATH);
   t.after(() => page.close());
   await page.evaluate("window.__coach.openPanel('songs')"); // lists the saved songs, which opens (and so creates) the song database
-  await page.waitFor("indexedDB.databases().then((l) => { window.__dbs = l.map((d) => d.name); }) && window.__dbs && window.__dbs.includes('bandcoach-songs') && window.__dbs.includes('band-coach-model-packs')");
+  await page.waitFor("indexedDB.databases().then((l) => { window.__dbs = l.map((d) => d.name); }) && window.__dbs && window.__dbs.includes('bandcoach-songs')");
   assert.equal(await page.evaluate(deleteDb('bandcoach-songs')), 'deleted');
-  assert.equal(await page.evaluate(deleteDb('band-coach-model-packs')), 'deleted');
 });
 
 test('a database another tab keeps open is reported as not erased, and the page does not reload', async (t) => {

@@ -30,22 +30,19 @@ This is what the source does today. Each point names where to check it.
   (`src/ui/playalong.js`). The tracks are stopped when you leave that mode
   (`src/app.js`). A recorded take is kept only in memory for the tab; the code
   comment in `src/ui/playalong.js` says it is never sent anywhere, and the only
-  network calls are the two listed below.
+  network call is the one listed below.
 - **Browser storage.** Progress and settings live in `localStorage`. Your song
-  library and the optional model pack live in `IndexedDB` (the library database is
+  library lives in `IndexedDB` (the library database is
   named `bandcoach-songs`, see `src/ui/editor.js`). Error notes are kept in
   `sessionStorage` for the tab (`src/app.js`). The "erase all" button clears
   these. Nothing is stored in cookies.
-- **Network requests.** Band Coach makes a request only when you press a button:
+- **Network requests.** Band Coach makes a request only when you press this button:
   - "Check for updates" fetches
     `https://back-road-creative.github.io/band-coach/version.json`
     (`src/core/update-check.js`).
-  - The optional model pack button fetches a manifest and pack from
-    `https://back-road-creative.github.io/band-coach/model-packs/`
-    (`src/core/model-pack.js`).
 
-  It does not open a `WebSocket` or `XMLHttpRequest`, and the only `fetch` calls in
-  `src/` are those two. Nothing is requested on load, on a timer, or in the
+  It does not open a `WebSocket` or `XMLHttpRequest`, and the only `fetch` call in
+  `src/` is that one. Nothing is requested on load, on a timer, or in the
   background.
 
 ## Scope

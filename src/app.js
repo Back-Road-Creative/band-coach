@@ -22,7 +22,6 @@ import { createTeardown } from './core/session-teardown.js';
 import { recordError, getErrors, persistErrors } from './core/error-log.js';
 import { resolveAppVersion, DEV_VERSION } from './core/version.js';
 import { eraseAll } from './core/erase-all.js';
-import { loadPack, packStatus, createIndexedDBStore, packManifestUrl, DEFAULT_MODEL_PACK } from './core/model-pack.js';
 import { checkForUpdate, FALLBACK_DOWNLOAD_URL } from './core/update-check.js';
 import { requestKeep, readKeep } from './core/storage-keep.js';
 import { copyAgeDays } from './core/copy-age.js';
@@ -2866,7 +2865,7 @@ import { register as registerPathway } from './ui/pathway.js';
   function applyTheme(t) { if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t); else document.documentElement.removeAttribute('data-theme'); }
   $('optTheme').addEventListener('change', function () { DB.prefs.theme = this.value; applyTheme(this.value); applyAccent(); save(); });
   // The idle coach line was written in the old language; rewrite it (only it: a live session's line is left as is).
-  $('optLocale').addEventListener('change', function () { const idle = $('coach').textContent === idleCoachLine(); DB.prefs.locale = LOCALES.some(l => l.code === this.value) ? this.value : 'en'; applyLocale(DB.prefs.locale); if (idle) $('coach').textContent = idleCoachLine(); rebuildPicker(); updateNavInstrumentLabel(); renderOpts(); ioRefresh(); showAll(); refreshModelPack(); save(); });
+  $('optLocale').addEventListener('change', function () { const idle = $('coach').textContent === idleCoachLine(); DB.prefs.locale = LOCALES.some(l => l.code === this.value) ? this.value : 'en'; applyLocale(DB.prefs.locale); if (idle) $('coach').textContent = idleCoachLine(); rebuildPicker(); updateNavInstrumentLabel(); renderOpts(); ioRefresh(); showAll(); save(); });
   function applyNoteNaming() { DB.prefs.noteNaming = { system: $('optNoteSystem').value, accidentals: $('optAccidentals').value }; setNoteNaming(DB.prefs.noteNaming); save(); showAll(); }
   $('optA4').addEventListener('change', function () { DB.prefs.a4 = sanitizeA4(Number(this.value)); setReferencePitch(DB.prefs.a4); this.value = DB.prefs.a4; save(); });
   $('optNoteSystem').addEventListener('change', applyNoteNaming); $('optAccidentals').addEventListener('change', applyNoteNaming);
@@ -3128,35 +3127,6 @@ import { register as registerPathway } from './ui/pathway.js';
       checkForUpdate({ currentVersion: APP_VERSION, fetchImpl: typeof fetch === 'function' ? fetch : undefined })
         .then(renderUpdateResult, () => renderUpdateResult({ status: 'error', downloadUrl: FALLBACK_DOWNLOAD_URL }))
         .then(() => { updBtn.disabled = false; });
-    });
-  })();
-
-  // ---------- optional model pack: same consent-on-press shape as the update check above. Nothing
-  // is requested until the button is pressed; the status line only ever READS the local IndexedDB
-  // cache (src/core/model-pack.js carries fetch/verify/cache policy and is unit-tested on its own).
-  let refreshModelPack = () => {};
-  (function () {
-    const btn = $('modelPackBtn'), out = $('modelPackStatus');
-    if (!btn || !out) return;
-    const store = createIndexedDBStore(), inFlight = new Set();
-    if (!store) { btn.disabled = true; out.textContent = t('modelPack.noStorage'); return; }
-    // Every status write takes a new ticket; a cache read that resolves after a newer write
-    // (the on-load read losing a race to a fast press) drops its stale answer.
-    let ticket = 0;
-    const say = (text) => { ticket++; out.textContent = text; };
-    function render() {
-      const mine = ++ticket;
-      const show = (text) => { if (mine === ticket) out.textContent = text; };
-      packStatus({ store, packName: DEFAULT_MODEL_PACK, inFlight }).then(s => { show(s.state === 'cached' ? t('modelPack.cached', { version: s.version }) : s.state === 'downloading' ? t('modelPack.downloading') : t('modelPack.absent')); }, () => { show(t('modelPack.absent')); });
-    }
-    render(); refreshModelPack = render; // a language switch re-reads the status so it is re-worded
-    btn.addEventListener('click', function () {
-      this.blur();
-      if (btn.disabled) return;
-      btn.disabled = true; say(t('modelPack.downloading'));
-      loadPack({ manifestUrl: packManifestUrl(), fetchImpl: typeof fetch === 'function' ? fetch : undefined, store, inFlight })
-        .then(() => render(), e => { say(t(e && e.code === 'no-manifest' ? 'modelPack.notPublished' : 'modelPack.failed')); })
-        .then(() => { btn.disabled = false; });
     });
   })();
 

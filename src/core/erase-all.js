@@ -5,6 +5,7 @@
 const APP_KEY_PREFIX = 'bandcoach';
 // Keys written before the app could enumerate them, removed by name even if the store cannot list its keys.
 const APP_KEYS = ['bandcoach.v1', 'bandcoach.v1.corrupt', 'bandcoach.v1.backupAt', 'bandcoach.v1.tuneAsked', 'bandcoach.v1.errors'];
+// band-coach-model-packs: a removed feature; a copy that had it may still hold the empty database.
 export const APP_DATABASES = ['bandcoach-songs', 'band-coach-model-packs'];
 const APP_CACHE_PREFIX = 'band-coach-pages-v';
 

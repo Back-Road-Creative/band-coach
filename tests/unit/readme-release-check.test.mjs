@@ -44,7 +44,7 @@ test('the five-minute check covers pressing "Check for updates" in the downloade
   assert.match(
     section,
     /Check for updates/,
-    'the checklist must include a step that presses the "Check for updates" button -- it is one of the app\'s two features that go online (the other is the model-pack download), and no automated test exercises it against the real deployment',
+    'the checklist must include a step that presses the "Check for updates" button -- it is the app\'s one feature that goes online, and no automated test exercises it against the real deployment',
   );
 });
 
