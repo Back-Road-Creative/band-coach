@@ -10,6 +10,8 @@ places that already say how to work on it.
 - [Test](README.md#test): the test scripts, what each family runs, and which ones drive a browser.
 - [docs/ci.md](docs/ci.md): what runs in CI.
 - [docs/review-workflow.md](docs/review-workflow.md): how a real player checks the teaching content.
+- [docs/ponytail.md](docs/ponytail.md): optional, pinned Ponytail setup for Claude Code;
+  local dashboard, no external reporting, and the same test/review requirements.
 
 ## The short version
 
