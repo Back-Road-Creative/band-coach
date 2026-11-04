@@ -208,3 +208,9 @@ test('readBandPack refuses a file larger than MAX_BAND_PACK_BYTES before unzippi
   const bytes = new Uint8Array(MAX_BAND_PACK_BYTES + 1);
   assert.throws(() => readBandPack(bytes), /too large to open \(over 20 MB\)/);
 });
+
+test('writeBandPack refuses a pack over the size readBandPack accepts', () => {
+  const notes = Array.from({ length: 12000 }, (_, i) => ({ start: i * 480, dur: 480, midi: 60 }));
+  const songs = Array.from({ length: MAX_BAND_PACK_SONGS }, (_, i) => song('s' + i, { parts: [{ id: 'melody', name: 'Melody', notes }] }));
+  assert.throws(() => writeBandPack({ name: 'Too long', songs }), /too large to share \(over 20 MB\)/);
+});

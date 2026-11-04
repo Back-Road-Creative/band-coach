@@ -98,5 +98,9 @@ export function buildChallenge(title, songs, opts = {}) {
     note: typeof opts.note === 'string' && opts.note.length ? opts.note : null,
     songs,
   };
-  return JSON.stringify(challenge, null, 2);
+  const text = JSON.stringify(challenge);
+  if (byteLength(text) > MAX_CHALLENGE_BYTES) {
+    throw new Error('these songs are too large to export (over 5 MB) as one challenge; remove some from your library first');
+  }
+  return text;
 }
