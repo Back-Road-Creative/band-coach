@@ -380,7 +380,8 @@ export function segment(song, partId) {
       phraseStartBar = bar + 1;
     }
   }
-  return phrases;
+  // Silent bars are not a phrase: a step with no notes can never be passed.
+  return phrases.filter(p => p.notes.length > 0);
 }
 
 // ---------------------------------------------------------------------------

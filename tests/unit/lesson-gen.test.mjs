@@ -432,3 +432,32 @@ test('creditFor falls back to step.notes + passed when matches is not given (bac
   const credit = creditFor({ step, passed: true, elapsedMs: 10000 });
   assert.deepEqual(credit.masteryKeys, [{ key: 'midi:60', hit: true }]);
 });
+
+// ---- silent bars ----
+
+function barsOfNotes(bars) {
+  return bars.flatMap((bar) => [0, 1, 2, 3].map((beat) => ({ start: bar * 1920 + beat * 480, dur: 480, midi: 60 + beat })));
+}
+function songWithNotesIn(bars) {
+  return {
+    schema: 'song/1', id: 'rests', title: 'Rests', composer: null, licence: null, source: null, key: null,
+    metre: { num: 4, den: 4 }, bpm: 100, ticksPerQuarter: 480, chords: [],
+    parts: [{ id: 'm', name: 'M', notes: barsOfNotes(bars) }]
+  };
+}
+
+test('segment: silent bars never become a phrase, at the start or in the middle', () => {
+  const opening = segment(songWithNotesIn([8, 9, 10, 11]), 'm');
+  assert.ok(opening.length > 0);
+  assert.ok(opening.every((p) => p.notes.length > 0), JSON.stringify(opening.map((p) => p.bars)));
+  const middle = segment(songWithNotesIn([0, 1, 2, 3, 12, 13, 14, 15]), 'm');
+  assert.ok(middle.every((p) => p.notes.length > 0), JSON.stringify(middle.map((p) => p.bars)));
+  assert.equal(middle.flatMap((p) => p.notes).length, 32, 'every note is still in a phrase');
+});
+
+test('buildLessonPlan: every judged step of a song with long rests has notes to play', () => {
+  const plan = buildLessonPlan(songWithNotesIn([0, 1, 2, 3, 12, 13, 14, 15]), 'm', gtr);
+  const empty = plan.steps.filter((s) => s.passRule && s.notes.length === 0);
+  assert.deepEqual(empty.map((s) => s.kind), []);
+  assert.equal(plan.steps[plan.steps.length - 1].notes.length, 32, 'the whole-piece step still has every note');
+});
