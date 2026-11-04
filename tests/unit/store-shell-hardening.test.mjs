@@ -1,6 +1,6 @@
 // Hardening checks for the Windows Store desktop shell (store/**): https-only
 // external links, Electron fuses, and the preload flag that hides the two
-// web-only blocks (update check, model pack). Plain `node --test`; Electron
+// web-only block (update check). Plain `node --test`; Electron
 // is stubbed, so nothing here needs store/node_modules.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -118,12 +118,11 @@ test('preload marks <html> as the Store shell', () => {
   assert.equal(attrs['data-shell'], 'store', 'preload must set data-shell="store" on <html>');
 });
 
-test('styles.css hides the update-check and model-pack groups only under html[data-shell="store"]', () => {
+test('styles.css hides the update-check group only under html[data-shell="store"]', () => {
   const css = readFileSync(join(repoRoot, 'src', 'styles.css'), 'utf8');
   const rule = css.match(/([^{}]*data-shell="store"[^{}]*)\{([^}]*)\}/);
   assert.ok(rule, 'styles.css needs a data-shell="store" rule');
   assert.match(rule[1], /#updateCheckBtn/);
-  assert.match(rule[1], /#modelPackBtn/);
   assert.match(rule[2], /display:\s*none/);
   assert.doesNotMatch(css.replace(rule[0], ''), /data-shell/, 'one rule only');
 });

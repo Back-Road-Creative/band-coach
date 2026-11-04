@@ -1,8 +1,7 @@
 // Settings that change how the app looks or reads have to take effect
 // everywhere at once, on the release file a person downloads: the practice
 // 'Show' control owns up to names turned off in Settings, a theme switch
-// repaints the accent ink, a language switch re-words the model-pack line,
-// the form fields follow the dark theme, and the hands-together prompt uses
+// repaints the accent ink, the form fields follow the dark theme, and the hands-together prompt uses
 // the note names the learner picked. State is seeded through localStorage
 // (as acceptance-midi does); the changes are real change events on the
 // Settings controls.
@@ -46,18 +45,6 @@ test('Switching to Dark in Settings repaints the accent ink at once, no reload',
     assert.equal(dark.display, dark.accent);
     await pick(page, 'optTheme', 'light');
     assert.deepEqual(await vars(), light, 'and back to light');
-  });
-});
-
-test('Switching language re-words the model-pack status at once, both ways', async (t) => {
-  await withAcceptancePage(t, { initScript: seed({ prefs: { mod: 'kbd' } }) }, async (page) => {
-    await go(page, 'settings');
-    await page.waitFor("document.getElementById('modelPackStatus').textContent.trim() !== ''");
-    assert.equal(await textOf(page, 'modelPackStatus'), 'Not downloaded.');
-    await pick(page, 'optLocale', 'es');
-    await page.waitFor(`document.getElementById('modelPackStatus').textContent.trim() === ${JSON.stringify('Sin descargar.')}`);
-    await pick(page, 'optLocale', 'en');
-    await page.waitFor(`document.getElementById('modelPackStatus').textContent.trim() === ${JSON.stringify('Not downloaded.')}`);
   });
 });
 

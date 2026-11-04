@@ -186,11 +186,10 @@ test('hosted copy under its CSP: boots, runs the worklet from blob:, raises no v
   await waitFor("document.getElementById('ioBtn').hidden === true", 15000, 'the mic to start');
   await waitFor('window.__bcFrames > 5', 15000, 'frames from the AudioWorklet node (not the setInterval fallback)');
   await waitFor("parseFloat(document.getElementById('micLevelFill').style.width) > 0", 8000, 'the level meter to move');
-  // The two on-press network features. The hosts may be unreachable from the test box, which is fine:
+  // The on-press network feature. The host may be unreachable from the test box, which is fine:
   // a failed fetch is not a violation, a CSP-refused one is.
   await evaluate("document.getElementById('updateCheckBtn').click()");
-  await evaluate("document.getElementById('modelPackBtn').click()");
-  await waitFor("!document.getElementById('updateCheckBtn').disabled && !document.getElementById('modelPackBtn').disabled", 30000, 'both press-to-fetch buttons to settle');
+  await waitFor("!document.getElementById('updateCheckBtn').disabled", 30000, 'the press-to-fetch button to settle');
   // The page registers its service worker on load; worker-src 'self' has to let that through.
   await waitFor('navigator.serviceWorker.getRegistration().then(function (r) { return !!r; })', 15000, 'the service worker to register under worker-src');
   // Let any deferred load surface a violation (a negative check: a wait here can only miss one, never fail falsely).

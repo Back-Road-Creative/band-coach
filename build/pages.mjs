@@ -180,10 +180,8 @@ function injectPwaHead(releaseHtml) {
 //     style attribute cannot run script.
 //   - img-src: the app itself draws no <img>/CSS images (everything is inline
 //     SVG or canvas); 'self' covers only the manifest and apple-touch icons.
-//   - connect-src: the update check and the optional model pack fetch from the
-//     project's own Pages origin (src/core/update-check.js, model-pack.js). A
-//     model pack's manifest `url` must therefore live on that same origin: a
-//     pack file hosted anywhere else would be refused on this copy.
+//   - connect-src: the update check fetches from the project's own Pages origin
+//     (src/core/update-check.js).
 //   - worker-src: only the service worker (./sw.js, same origin). The pitch
 //     worklet is not a Worker; addModule is governed by script-src, which is
 //     why blob: lives there and not here (measured: no violation without it).
