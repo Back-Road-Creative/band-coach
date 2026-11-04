@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { deflateRawSync } from 'node:zlib';
 
 import {
   BAND_PACK_FORMAT, BAND_PACK_VERSION, MAX_BAND_PACK_SONGS, MAX_BAND_PACK_BYTES, writeBandPack, readBandPack
@@ -40,19 +41,20 @@ function buildTestZip(entries) {
   const central = [];
   for (const entry of entries) {
     const nameBytes = encoder.encode(entry.name);
-    const data = entry.data;
-    const crc = crc32(data);
+    const crc = crc32(entry.data);
+    const data = entry.deflate ? deflateRawSync(entry.data) : entry.data;
+    const method = entry.deflate ? 8 : 0;
     const localOffset = out.length;
-    push32(0x04034b50); push16(20); push16(0); push16(0); push16(0); push16(0);
-    push32(crc); push32(data.length); push32(data.length);
+    push32(0x04034b50); push16(20); push16(0); push16(method); push16(0); push16(0);
+    push32(crc); push32(data.length); push32(entry.data.length);
     push16(nameBytes.length); push16(0);
     pushBytes(nameBytes); pushBytes(data);
-    central.push({ nameBytes, crc, size: data.length, localOffset });
+    central.push({ nameBytes, crc, size: data.length, rawSize: entry.data.length, method, localOffset });
   }
   const cdStart = out.length;
   for (const rec of central) {
-    push32(0x02014b50); push16(20); push16(20); push16(0); push16(0); push16(0); push16(0);
-    push32(rec.crc); push32(rec.size); push32(rec.size);
+    push32(0x02014b50); push16(20); push16(20); push16(0); push16(rec.method); push16(0); push16(0);
+    push32(rec.crc); push32(rec.size); push32(rec.rawSize);
     push16(rec.nameBytes.length); push16(0); push16(0); push16(0); push16(0); push32(0);
     push32(rec.localOffset); pushBytes(rec.nameBytes);
   }
@@ -214,3 +216,17 @@ test('writeBandPack refuses a pack over the size readBandPack accepts', () => {
   const songs = Array.from({ length: MAX_BAND_PACK_SONGS }, (_, i) => song('s' + i, { parts: [{ id: 'melody', name: 'Melody', notes }] }));
   assert.throws(() => writeBandPack({ name: 'Too long', songs }), /too large to share \(over 20 MB\)/);
 });
+
+test('readBandPack: refuses a small pack that deflates past the size cap, even listing one entry many times', () => {
+  const body = JSON.stringify(song('huge'));
+  const padded = new TextEncoder().encode(body + ' '.repeat(1024 * 1024 - body.length));
+  const name = 'songs/huge.json';
+  const manifest = new TextEncoder().encode(JSON.stringify({
+    format: BAND_PACK_FORMAT, version: BAND_PACK_VERSION, name: 'Bomb',
+    songs: Array.from({ length: 30 }, () => ({ file: name, title: 'Huge' })),
+  }));
+  const bytes = buildTestZip([{ name: 'band-pack.json', data: manifest }, { name, data: padded, deflate: true }]);
+  assert.ok(bytes.length < 64 * 1024, 'the file itself is small, so the outer size check does not catch it');
+  assert.throws(() => readBandPack(bytes), /larger than/);
+});
+

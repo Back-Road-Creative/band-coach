@@ -32,7 +32,7 @@ const MANIFEST_NAME = 'band-pack.json';
 // Same song bound as src/song/challenge.js: a band's whole set list fits
 // comfortably, and a hostile or corrupted pack can't ask the library to
 // store thousands of songs. The byte cap is on the zip as handed over,
-// checked before anything is unzipped (unzip-lite caps each entry too).
+// checked before anything is unzipped, and again on everything it unpacks to.
 export const MAX_BAND_PACK_SONGS = 50;
 export const MAX_BAND_PACK_BYTES = 20 * 1024 * 1024;
 
@@ -198,6 +198,14 @@ export function readBandPack(bytes) {
   }
   const entries = readZipEntries(bytes);
   const byName = new Map(entries.map((e) => [e.name, e]));
+  // Our writer stores entries uncompressed, so a real pack unpacks to less than the cap. A crafted
+  // one deflates a few KB into many MB per entry, and can list the same entry for every song.
+  let unpackBudget = MAX_BAND_PACK_BYTES;
+  const readEntry = (entry) => {
+    const data = readZipEntryData(bytes, entry, unpackBudget);
+    unpackBudget -= data.length;
+    return data;
+  };
 
   const manifestEntry = byName.get(MANIFEST_NAME);
   if (!manifestEntry) {
@@ -206,7 +214,7 @@ export function readBandPack(bytes) {
   const decoder = new TextDecoder('utf-8');
   let manifest;
   try {
-    manifest = JSON.parse(decoder.decode(readZipEntryData(bytes, manifestEntry)));
+    manifest = JSON.parse(decoder.decode(readEntry(manifestEntry)));
   } catch (e) {
     throw new Error('the band pack manifest is not valid JSON: ' + messageOf(e));
   }
@@ -242,7 +250,7 @@ export function readBandPack(bytes) {
     }
     let raw;
     try {
-      raw = JSON.parse(decoder.decode(readZipEntryData(bytes, zipEntry)));
+      raw = JSON.parse(decoder.decode(readEntry(zipEntry)));
     } catch (e) {
       throw new Error('song ' + (i + 1) + ' of the band pack could not be read: ' + messageOf(e));
     }
