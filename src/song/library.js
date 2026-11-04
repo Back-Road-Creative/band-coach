@@ -49,6 +49,15 @@ function contentHash(song) {
   return h.toString(16).padStart(8, '0') + ':' + text.length;
 }
 
+// The song as it will be stored, or a plain-English throw if it can never be stored.
+function storable(song) {
+  const normalized = normalizeSong(song);
+  if (byteLength(JSON.stringify(normalized)) > MAX_SONG_BYTES) {
+    throw new Error('song "' + normalized.title + '" is too large to store (over 5 MB)');
+  }
+  return normalized;
+}
+
 function metaFrom(song, addedAt) {
   const durationTicks = songDurationTicks(song);
   return {
@@ -102,11 +111,7 @@ export function createLibrary(store) {
       if (!Number.isFinite(now)) {
         throw new Error('add() requires a numeric `now` timestamp');
       }
-      const normalized = normalizeSong(song);
-      const serialized = JSON.stringify(normalized);
-      if (byteLength(serialized) > MAX_SONG_BYTES) {
-        throw new Error('song "' + normalized.title + '" is too large to store (over 5 MB)');
-      }
+      const normalized = storable(song);
       // A restore (importAll) passes dedupe: identical content already stored
       // (hash match, then a full compare so a hash collision can never swallow a
       // different song) hands back the existing id. A plain add never dedupes:
@@ -153,11 +158,7 @@ export function createLibrary(store) {
       }
       const existingMeta = await store.get(metaKey(id));
       if (!existingMeta) throw new Error('no song with id "' + id + '"');
-      const normalized = normalizeSong({ ...song, id });
-      const serialized = JSON.stringify(normalized);
-      if (byteLength(serialized) > MAX_SONG_BYTES) {
-        throw new Error('song "' + normalized.title + '" is too large to store (over 5 MB)');
-      }
+      const normalized = storable({ ...song, id });
       const meta = { ...metaFrom(normalized, existingMeta.addedAt), updatedAt: now };
       await store.runTx([
         { op: 'put', key: songKey(id), value: normalized },
@@ -200,8 +201,11 @@ export function createLibrary(store) {
     // Restores songs from exportAll()'s output (an array, or a JSON string
     // of one). Each song is validated and, on an id clash, given a new id
     // rather than overwriting what is already stored. Returns
-    // { imported: number, skipped: number, ids: string[] }; a song already
-    // stored with identical content is skipped (its existing id is in `ids`).
+    // { imported: number, skipped: number, failed: number, ids: string[] }; a
+    // song already stored with identical content is skipped (its existing id
+    // is in `ids`). A song that can never be stored (damaged, or saved before a
+    // limit it now breaks) is counted in `failed` so the rest still restore; a
+    // store failure still throws, because every later song would fail too.
     async importAll(json) {
       const songs = typeof json === 'string' ? JSON.parse(json) : json;
       if (!Array.isArray(songs)) {
@@ -209,13 +213,15 @@ export function createLibrary(store) {
       }
       const ids = [];
       let skipped = 0;
+      let failed = 0;
       for (const song of songs) {
+        try { storable(song); } catch (e) { failed++; continue; }
         const before = new Set((await this.list()).map(m => m.id));
         const id = await this.add(song, { now: Date.now(), dedupe: true });
         if (before.has(id)) skipped++;
         ids.push(id);
       }
-      return { imported: ids.length - skipped, skipped, ids };
+      return { imported: ids.length - skipped, skipped, failed, ids };
     }
   };
 }
