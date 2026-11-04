@@ -1,5 +1,6 @@
 // One strike on a real kit can send the note twice or send a soft snare note beside a hi-hat
-// (tests/fixtures/midi/kit-reading-usb-midi.json). These play those messages through a fake port on each screen a drummer
+// (tests/fixtures/midi/kit-reading-usb-midi.json), or soft snare and tom notes beside a full-force kick
+// (tests/fixtures/midi/kit-reading-kick-usb-midi.json). These play those messages through a fake port on each screen a drummer
 // uses, each with a single-hit control. The message times are given, so a slow box cannot widen a gap past the window.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -17,6 +18,7 @@ const SINGLE = note => [[note, 100, 0]];
 const REPEATED = note => [[note, 110, 0], [note, 45, 30]];
 const HARD = note => [[note, 127, 0], [note, 127, 20], [note, 32, 79]];
 const BLEEDING = note => [[note, 121, 0], [SNARE, 39, 5]];
+const KICK_CROSSTALK = note => [[note, 127, 0], [SNARE, 26, 12], [45, 38, 18]];
 
 async function connected(t, mod) {
   const page = await launchPage(HTML_PATH, { initScript: FAKE_MIDI_INIT });
@@ -69,6 +71,11 @@ test('trainer: a hi-hat hit bleeding a soft snare note is one hit', async t => {
   const r = await trainerBar(t, 1, 2, allNotes(BLEEDING));
   assert.equal(r.failed, false, r.say);
   assert.equal(r.midi.doubled, 4);
+});
+test('trainer: a full-force kick that also sends snare and tom notes is one hit', async t => {
+  const r = await trainerBar(t, 1, 0, allNotes(KICK_CROSSTALK));
+  assert.equal(r.failed, false, r.say);
+  assert.equal(r.midi.doubled, 8);
 });
 test('trainer: two drums written together both count, with the hat first', async t => {
   const tick = TRAINER_LEVELS[1].bars.findIndex(b => b.hits.some(h => h.pieces.includes('hihat-closed') && h.pieces.includes('snare')));
@@ -156,6 +163,18 @@ test('MIDI details shows the ignored count beside the raw bytes it ignored', asy
 });
 
 // Every pad in turn, with the messages the real kit sent: the walk-through lands one piece per pad.
+test('walk-through: a kick that also sends snare and tom notes learns the kick, and the snare is still asked for', async t => {
+  const page = await connected(t, 'drum-kit');
+  await page.evaluate("document.getElementById('setupBtn').click()");
+  await page.evaluate("document.getElementById('kitLearn').click()");
+  await page.evaluate(strikeScript(KICK_CROSSTALK(36)));
+  await new Promise(r => setTimeout(r, 300));
+  await page.evaluate(strikeScript(SINGLE(SNARE)));
+  await new Promise(r => setTimeout(r, 300));
+  assert.deepEqual(await page.evaluate("window.__coach.db().prefs.kit.midiMaps['Test E-kit']"), { 36: 'kick', 38: 'snare' });
+  assert.deepEqual(page.exceptions, []);
+});
+
 test('walk-through: repeated and bleeding pads each learn one piece and never skip the next', async t => {
   const page = await connected(t, 'drum-kit');
   await page.evaluate("document.getElementById('setupBtn').click()");

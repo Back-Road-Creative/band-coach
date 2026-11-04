@@ -402,8 +402,8 @@ test('W6 run: the only port it ever names is band-coach-lane, and an absent port
 const w7obs = (over = {}) => ({
   exceptions: [],
   laneOutput: true,
-  trainer: { single: 0, repeated: 1, bleeding: 1 },
-  songs: { single: 1, repeated: 1, bleeding: 1 },
+  trainer: { single: 0, repeated: 1, bleeding: 1, crosstalk: 2 },
+  songs: { single: 1, repeated: 1, bleeding: 1, crosstalk: 1 },
   ...over,
 });
 
@@ -419,7 +419,7 @@ test('W7 verdict: each strike counted once on both screens is a PASS that says h
 
 test('W7 verdict: a trainer that ignores a single hit, or keeps a repeat or a bleed, is a FAIL that names it', async () => {
   const w7 = await load('w7-kit-double-hits.win.mjs');
-  for (const [trainer, word] of [[{ single: 1, repeated: 1, bleeding: 1 }, /single/], [{ single: 0, repeated: 0, bleeding: 1 }, /repeated/], [{ single: 0, repeated: 1, bleeding: 0 }, /bleeding/]]) {
+  for (const [trainer, word] of [[{ single: 1, repeated: 1, bleeding: 1, crosstalk: 2 }, /single/], [{ single: 0, repeated: 0, bleeding: 1, crosstalk: 2 }, /repeated/], [{ single: 0, repeated: 1, bleeding: 0, crosstalk: 2 }, /bleeding/], [{ single: 0, repeated: 1, bleeding: 1, crosstalk: 1 }, /crosstalk/]]) {
     const v = w7.w7Verdict(w7obs({ trainer }));
     assert.equal(v.status, 'FAIL');
     assert.match(v.text, /trainer/);
@@ -429,7 +429,7 @@ test('W7 verdict: a trainer that ignores a single hit, or keeps a repeat or a bl
 
 test('W7 verdict: a Songs step that hears a strike as anything but one note is a FAIL that names it', async () => {
   const w7 = await load('w7-kit-double-hits.win.mjs');
-  for (const [songs, word] of [[{ single: 0, repeated: 1, bleeding: 1 }, /single/], [{ single: 1, repeated: 2, bleeding: 1 }, /repeated/], [{ single: 1, repeated: 1, bleeding: 2 }, /bleeding/]]) {
+  for (const [songs, word] of [[{ single: 0, repeated: 1, bleeding: 1, crosstalk: 1 }, /single/], [{ single: 1, repeated: 2, bleeding: 1, crosstalk: 1 }, /repeated/], [{ single: 1, repeated: 1, bleeding: 2, crosstalk: 1 }, /bleeding/], [{ single: 1, repeated: 1, bleeding: 1, crosstalk: 2 }, /crosstalk/]]) {
     const v = w7.w7Verdict(w7obs({ songs }));
     assert.equal(v.status, 'FAIL');
     assert.match(v.text, /Songs/);

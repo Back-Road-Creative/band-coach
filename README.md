@@ -130,10 +130,12 @@ every input's name, connection state and the last few raw messages heard, each w
 milliseconds since the previous message from the same input (e.g. `99 24 64  +15 ms`; handy for
 sizing a filter window when a kit sends two signals per hit), for tracking down a
 silent keyboard on your own machine. A drum kit often sends one strike as several notes: the same
-note again, softer, up to about 60 ms later, or a soft snare note just after a hi-hat. On a kit screen
+note again, softer, up to about 60 ms later, a soft snare note just after a hi-hat, or soft snare and
+tom notes just after a kick played at full force. On a kit screen
 or the drum channel those count as one hit, and MIDI details says how many it ignored ("Double hits
 ignored: 3") with the raw bytes still listed. A flam still counts as two, as long as the second hit is
-louder; a flam played loud then soft, or with both hits at full strength, reads as one. Held notes are tracked per device, so two keyboards (or a
+louder; a flam played loud then soft, or with both hits at full strength, reads as one, and so does a
+soft snare played within 25 ms of a full-force kick. Held notes are tracked per device, so two keyboards (or a
 disconnected one plugged back in) holding the same pitch never cancel each other, and switching
 away from the tab, letting the window lose focus, or unplugging mid-note releases whatever was held.
 The page keeps one MIDI connection: pressing Connect again reuses it instead of opening another, and if Chrome's question was dismissed or blocked the next press asks again.

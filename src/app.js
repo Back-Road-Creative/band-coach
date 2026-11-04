@@ -62,7 +62,7 @@ import { capabilityFor, capabilityChipKeys } from './instruments/capability.js';
 import { rangeForInstrument, FALLBACK_RANGE, frameSizeForInstrument } from './audio/range.js';
 import { renderVoice } from './audio/voices.js';
 import { layoutFor as harpLayoutFor } from './instruments/how/harmonica.js';
-import { pieceForMidi, hatBleedsOnSnare, kitRepeatStep, kitRepeatFor, KIT_MAX_TRIES } from './instruments/drum-kit.js';
+import { pieceForMidi, padBleeds, kitRepeatStep, kitRepeatFor, KIT_MAX_TRIES } from './instruments/drum-kit.js';
 import { renderKitSetup, LEARN_QUIET_MS } from './ui/kit-setup.js';
 import { kitNoteFor, deviceKey, hatSharedNote, hatPartner, pedalCc4Only } from './instruments/how/kit-presets.js';
 import { kitFrame, kitRegions, kitLayout, kitLines, pieceIcon, pieceAt, THRONE } from './instruments/how/drum-kit.js';
@@ -2644,7 +2644,7 @@ import { register as registerPathway } from './ui/pathway.js';
   const gmDrumName = n => { const p = pieceForMidi(n); return p === null ? 'no drum' : kitName(p); }; // what the standard General MIDI drum map calls this device note
   const kitNote = (input, note) => onKitScreen() ? kitNoteFor(DB.prefs.kit, input.name, note) : note;
   // A kit sends one strike as several notes (src/core/midi.js createHitGuard). Channel 10 (9 here) is the drum channel, so a kit is guarded on the Rhythm screen too, and a keyboard keeps every fast repeat outside the kit screens.
-  const DRUM_CHANNEL = 9, hitGuard = createHitGuard({ bleeds: hatBleedsOnSnare });
+  const DRUM_CHANNEL = 9, hitGuard = createHitGuard({ bleeds: padBleeds });
   let midiDoubled = 0;
   // A sustain pedal (CC64) is a foot button in Songs: each press (value
   // crossing 64 going down; a half-pedal wobble while down is not a second

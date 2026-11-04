@@ -3,7 +3,8 @@
 //
 // The strikes copy the real kit's reading (tests/fixtures/midi/kit-reading-usb-midi.json), on the
 // drum channel: one note, the same note again softer about 30 ms later, and a loud hi-hat with a
-// soft snare note right behind it. Each must count once. Notes go ONLY to the output port named
+// soft snare note right behind it, and a full-force kick with soft snare and tom notes behind it
+// (tests/fixtures/midi/kit-reading-kick-usb-midi.json). Each must count once. Notes go ONLY to the output port named
 // exactly `band-coach-lane`; if it is absent the result is BLOCKED and no other port is tried.
 //
 // The release file has no debug hook, so this reads what a person can read: "Double hits ignored"
@@ -27,12 +28,14 @@ const ON = 0x99;
 const SNARE = 38;
 const OPEN_HAT = 46;
 const KICK = 36;
+const TOM_MID = 45;
 // Well past the guard's 70 ms, so one strike never runs into the next.
 const BETWEEN_MS = 400;
 export const STRIKES = {
   single: { list: [[ON, KICK, 100]], gapMs: 0 },
   repeated: { list: [[ON, SNARE, 110], [ON, SNARE, 45]], gapMs: 30 },
   bleeding: { list: [[ON, OPEN_HAT, 121], [ON, SNARE, 39]], gapMs: 0 },
+  crosstalk: { list: [[ON, KICK, 127], [ON, SNARE, 26], [ON, TOM_MID, 38]], gapMs: 0 },
 };
 const KINDS = Object.keys(STRIKES);
 
@@ -98,14 +101,14 @@ export function w7Verdict(o) {
   if (!o.stuck) {
     if (!o.trainer) findings.push('the trainer screen gave no reading');
     if (!o.songs) findings.push('the Songs step gave no reading');
-    const want = { trainer: { single: 0, repeated: 1, bleeding: 1 }, songs: { single: 1, repeated: 1, bleeding: 1 } };
+    const want = { trainer: { single: 0, repeated: 1, bleeding: 1, crosstalk: 2 }, songs: { single: 1, repeated: 1, bleeding: 1, crosstalk: 1 } };
     for (const kind of KINDS) {
       if (o.trainer && o.trainer[kind] !== want.trainer[kind]) findings.push(`trainer: a ${kind} strike moved "Double hits ignored" by ${o.trainer[kind]}, not ${want.trainer[kind]}`);
       if (o.songs && o.songs[kind] !== want.songs[kind]) findings.push(`Songs: a ${kind} strike was heard as ${o.songs[kind]} note(s), not 1`);
     }
   }
   if (findings.length) return { status: 'FAIL', text: `W7 found ${findings.length} problem(s): ${findings.join('; ')}`, findings };
-  return { status: 'PASS', text: `on the trainer screen a single strike was kept and a repeat and a hi-hat bleed were ignored; in a Songs drum step each strike was heard as one note. Sent only on ${LANE_PORT}`, findings };
+  return { status: 'PASS', text: `on the trainer screen a single strike was kept and a repeat, a hi-hat bleed and a kick's crosstalk were ignored; in a Songs drum step each strike was heard as one note. Sent only on ${LANE_PORT}`, findings };
 }
 
 export const verdict = w7Verdict;
