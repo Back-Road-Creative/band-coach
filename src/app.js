@@ -1,7 +1,7 @@
 import { judgePitch, OCTAVE_POLICY } from './core/judge.js';
 import { beatTimes, beatAt, sweepAt, drumRings, clicksThrough, cueClock } from './core/beat-cues.js';
 import { createDeafWindow } from './audio/deaf-window.js';
-import { exportProgress as exportProgressFile, importProgress as importProgressFile, migrate as migrateDB } from './core/progress-file.js';
+import { exportProgress as exportProgressFile, importProgress as importProgressFile, migrate as migrateDB, MAX_IMPORT_BYTES } from './core/progress-file.js';
 import { checkFileSize } from './ui/songs/import-route.js';
 import { safeSet, safeGet, getStorage, crossTabCheck, readRaw } from './core/storage.js';
 import { sanitizeDB as sanitizeDBCore } from './core/sanitize-db.js';
@@ -3030,13 +3030,14 @@ import { register as registerPathway } from './ui/pathway.js';
   async function doExportProgress() { let songs = [], songsMissing = false; try { songs = await backupLibrary().exportAll(); } catch (e) { songsMissing = true; } const env = exportProgressFile(DB, { appVersion: APP_VERSION, now: Date.now, songs }); if (songsMissing) Object.defineProperty(env, 'songsMissing', { value: true }); return env; }
   async function saveBackup() {
     const env = await doExportProgress();
-    const blob = new Blob([JSON.stringify(env, null, 2)], { type: 'application/json' });
+    const blob = new Blob([JSON.stringify(env)], { type: 'application/json' });
+    const tooLarge = blob.size > MAX_IMPORT_BYTES; // restore would refuse this file, so it must not count as a backup made
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a'); a.href = url; a.download = 'band-coach-progress.json';
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
-    noteBackupMade(Date.now()); $('backupNudge').hidden = true;
-    coach(t(env.songsMissing ? 'backup.savedNoSongs' : 'backup.saved'));
+    if (!tooLarge) { noteBackupMade(Date.now()); $('backupNudge').hidden = true; }
+    coach(t(tooLarge ? 'backup.savedTooLarge' : env.songsMissing ? 'backup.savedNoSongs' : 'backup.saved'));
   }
   async function doImportProgress(textOrChecked) {
     const result = typeof textOrChecked === 'string' ? importProgressFile(textOrChecked) : textOrChecked; // a pre-checked result: parsed once
@@ -3045,8 +3046,9 @@ import { register as registerPathway } from './ui/pathway.js';
     // IndexedDB unavailable): if it does, nothing about the live profile
     // has changed yet, so there is nothing to roll back. Only once the
     // songs are safely in does this replace DB, prefs, theme and mod.
+    let songsFailed = 0;
     if (Array.isArray(result.songs) && result.songs.length) {
-      try { await backupLibrary().importAll(result.songs); }
+      try { songsFailed = (await backupLibrary().importAll(result.songs)).failed; }
       catch (e) { const error = en['backup.err.songsNotStored']; coach(t('backup.err.songsNotStored')); return { ok: false, error }; }
     }
     // The profile as it is now, current instrument included, so Undo can put it back.
@@ -3055,7 +3057,7 @@ import { register as registerPathway } from './ui/pathway.js';
     applyProfile(result.db);
     if (!writeDB()) { const error = en['backup.err.notSaved']; coach(t('backup.err.notSaved')); return { ok: false, error }; }
     restoreUndoProfile = before; $('restoreUndo').hidden = false;
-    coach(t('backup.restored'));
+    coach(songsFailed ? t('backup.restoredSongsFailed', { count: songsFailed }) : t('backup.restored'));
     return result;
   }
   // Replaces DB, prefs, theme and mod with a restored (or un-restored) profile. The measured latency belongs to this device, so it is kept.
