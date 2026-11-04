@@ -86,6 +86,31 @@ Every K1 reading also records the app's saved pad list, read from the page's own
 
 The result is OBSERVED, or BLOCKED if no port or no note was heard, and never PASS. K1 is in `attended` in `run.mjs`, not `registry`, so a full lane run never runs it or counts it.
 
+## The kit check (K2)
+
+The drum-kit sheet in [hand-test.md](hand-test.md) section 2, filled in by the lane. A person only hits a pad when the terminal says to, and the sheet is copied from the line the app itself shows:
+
+```
+node tests/acceptance/win/run.mjs --win-root /mnt/d/band-coach-win-lane --html <staged file> --sha256 <its sha256> --only K2 --report <path>
+```
+
+Run it in your own terminal, because the prompts print there, with the kit on and every other copy of Band Coach closed. You do not need to see or open anything: Chrome runs in a Windows session that is not on your monitor and still hears the USB kit. It takes about 3 minutes and has four rounds, all on the release file through its own screens (Drum kit, the set-up sheet, Connect MIDI):
+
+| Round | What you do | What it records |
+|---|---|---|
+| 1 | Hit each of the 10 pads once | What the app calls each pad before it is taught. A wrong name here is what the walk-through is for, so this round never fails the check |
+| 2 | The app's "Hit each pad" walk-through, in its own words | The saved pad list after it. A step with nothing heard in 40 seconds is skipped |
+| 3 | Hit each of the 10 pads once again | The sheet's table |
+| 4 | Hit the kick as hard as you can, 5 times | Every line must name the kick, one per hit, with the loudest velocity and what else the kick sent |
+
+A row passes only when each hit got one line and the line names the piece hit. A wrong name, one strike read twice and a hit the app stayed quiet about each fail the row; a pad with nothing heard in 25 seconds is `not run`. Silence on the first 3 pads stops it as BLOCKED, because the kit is not reaching Chrome.
+
+The filled sheet prints at the end and is in the report as `observed.sheetMd`, beside the notes each pad sent and the whole MIDI log. The result is PASS, FAIL, BLOCKED, or OBSERVED when a row was not run or the kick never reached velocity 127, which leaves the crosstalk rule untested. `--only` always exits 1, so read the result line, not the exit code.
+
+What it does not cover: Chrome opens with a fresh profile, so it never sees the pad list saved in your own Chrome. If your own Chrome still names the wrong drums after this passes, press "Hit each pad" there once. It also does not play an exercise, so the correct-hit marks and beat cues in README step 7 stay with a person.
+
+`--rehearse` sends every hit on `band-coach-lane` instead (by exact name, nothing is sent anywhere else), so an agent runs the whole check on real Chrome before a person's time is spent. A rehearsal is never a PASS and its sheet says it was no kit. K2 is in `attended` in `run.mjs`, so a full lane run never runs it or counts it.
+
 ## Results and exit codes
 
 Each scenario ends PASS, FAIL (with the finding), OBSERVED (something was seen but not
