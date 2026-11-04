@@ -178,7 +178,8 @@ reads as "not higher than your lowest key" nor shows up afterwards as a played n
 "Set up input", pick your keyboard under "Play songs on" (it only appears when the browser
 reports a MIDI output), then press "Play it for me" on a song's practice step; it follows the song's
 own tempo, tempo changes included, and the same button turns into "Stop playing", which silences the
-keyboard at once. Leaving or hiding the tab also stops it. While the keyboard is playing, anything it
+keyboard within about a fifth of a second (notes go to the browser only that far ahead, because a
+note already handed over can't be taken back). Leaving or hiding the tab also stops it. While the keyboard is playing, anything it
 sends back is ignored, so its own playing is never judged as yours. With no output picked there is
 no button, and Check mode never shows it (hearing the answer would spoil the check). The scheduling
 and sending logic lives in `src/core/midi.js` (`scheduleSong`, `playOnOutput`, `stopAll`,

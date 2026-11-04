@@ -155,11 +155,33 @@ export function scheduleSong(song, opts) {
   return events.map(e => ({ atMs: e.atMs, bytes: e.bytes }));
 }
 
-// Sends every scheduled message to a real (or fake, in tests) MIDIOutput via
-// its timestamped send(bytes, atMs) -- the caller owns the clock these
-// timestamps are relative to (see scheduleSong's startMs).
-export function playOnOutput(output, messages) {
-  (messages || []).forEach(m => output.send(m.bytes, m.atMs));
+// Sends scheduled messages to a real (or fake, in tests) MIDIOutput via its
+// timestamped send(bytes, atMs), the next moment's worth at a time: a message
+// with a future timestamp can't be taken back once handed to the browser, so
+// sending the whole part up front would leave Stop unable to stop it. `now` is
+// the clock the timestamps are on (see scheduleSong's startMs). Returns
+// stop(channel), which ends the sending and silences that channel.
+const SEND_AHEAD_MS = 200;
+export function playOnOutput(output, messages, now = () => performance.now()) {
+  const msgs = messages || [];
+  let next = 0, timer = null, lastAtMs = -Infinity;
+  function sendDue() {
+    const horizon = now() + SEND_AHEAD_MS;
+    while (next < msgs.length && msgs[next].atMs <= horizon) {
+      output.send(msgs[next].bytes, msgs[next].atMs);
+      lastAtMs = msgs[next].atMs;
+      next++;
+    }
+    timer = next < msgs.length ? setTimeout(sendDue, SEND_AHEAD_MS / 2) : null;
+  }
+  sendDue();
+  return function stop(channel) {
+    clearTimeout(timer);
+    next = msgs.length;
+    stopAll(output, channel);
+    // A note-on already handed over still sounds after this, and its note-off may never have been sent.
+    if (lastAtMs > now()) stopAll(output, channel, lastAtMs + 1);
+  };
 }
 
 // Silences a channel immediately: an All Notes Off controller message (CC
@@ -167,9 +189,10 @@ export function playOnOutput(output, messages) {
 // the 128 MIDI notes as a fallback for the ones that don't -- there is no
 // runtime note-tracking state here (this module is pure), so "every note
 // still sounding" is covered by sending for every note that could be, rather
-// than trying to remember which ones actually are.
-export function stopAll(output, channel) {
+// than trying to remember which ones actually are. atMs, when given, sends it
+// at that timestamp instead of immediately.
+export function stopAll(output, channel, atMs) {
   const ch = (channel || 0) & 0x0f;
-  output.send([CONTROL_CHANGE | ch, ALL_NOTES_OFF_CC, 0]);
-  for (let note = 0; note < 128; note++) output.send([NOTE_OFF | ch, note, 0]);
+  output.send([CONTROL_CHANGE | ch, ALL_NOTES_OFF_CC, 0], atMs);
+  for (let note = 0; note < 128; note++) output.send([NOTE_OFF | ch, note, 0], atMs);
 }
