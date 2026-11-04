@@ -141,17 +141,63 @@ test('scheduleSong: throws a plain-English error for an out-of-range partIndex',
 
 // ---- playOnOutput / stopAll ---------------------------------------------
 
-test('playOnOutput: sends every message\'s bytes at its timestamp, in order', () => {
+test('playOnOutput: sends every message\'s bytes at its timestamp, in order', (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
   const output = fakeOutput();
   const messages = [
     { atMs: 0, bytes: [0x90, 60, 80] },
     { atMs: 500, bytes: [0x80, 60, 0] },
   ];
-  playOnOutput(output, messages);
+  let clock = 0;
+  playOnOutput(output, messages, () => clock);
+  for (; clock < 1000; clock += 50) t.mock.timers.tick(50);
   assert.deepEqual(output.sent, [
     { bytes: [0x90, 60, 80], atMs: 0 },
     { bytes: [0x80, 60, 0], atMs: 500 },
   ]);
+});
+
+test('playOnOutput: hands over only the next moment of the song, the rest as time passes', (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const output = fakeOutput();
+  const messages = [0, 1000, 2000].map(atMs => ({ atMs, bytes: [0x90, 60, 80] }));
+  let clock = 0;
+  playOnOutput(output, messages, () => clock);
+  assert.deepEqual(output.sent.map(s => s.atMs), [0]);
+  for (; clock < 1000; clock += 50) t.mock.timers.tick(50);
+  assert.deepEqual(output.sent.map(s => s.atMs), [0, 1000]);
+  for (; clock < 2000; clock += 50) t.mock.timers.tick(50);
+  assert.deepEqual(output.sent.map(s => s.atMs), [0, 1000, 2000]);
+});
+
+test('Stop: nothing more is sent, and a note already handed over cannot stay stuck on', (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const output = fakeOutput();
+  // The note-on is close enough to have gone to the browser already; its note-off is not.
+  const messages = [
+    { atMs: 100, bytes: [0x90, 60, 80] },
+    { atMs: 1000, bytes: [0x80, 60, 0] },
+    { atMs: 2000, bytes: [0x90, 62, 80] },
+  ];
+  const stop = playOnOutput(output, messages, () => 0);
+  stop(0);
+  const count = output.sent.length;
+  t.mock.timers.tick(5000);
+  assert.equal(output.sent.length, count, 'the timer is cancelled');
+  assert.equal(output.sent.filter(s => (s.bytes[0] & 0xf0) === 0x90).length, 1, 'no later note starts');
+  assert.deepEqual(output.sent[1].bytes, [0xb0, 123, 0], 'silenced straight away');
+  const lateOff = output.sent.find(s => s.bytes[0] === 0x80 && s.bytes[1] === 60 && s.atMs > 100);
+  assert.ok(lateOff, 'a second note-off lands after the note that was already on its way');
+});
+
+test('Stop: with nothing still on its way, one round of silence is enough', (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const output = fakeOutput();
+  let clock = 0;
+  const stop = playOnOutput(output, [{ atMs: 100, bytes: [0x90, 60, 80] }], () => clock);
+  clock = 500;
+  stop(0);
+  assert.equal(output.sent.length, 1 + 1 + 128);
 });
 
 test('stopAll: sends All Notes Off (CC 123) on the given channel plus a note-off for every possible note', () => {

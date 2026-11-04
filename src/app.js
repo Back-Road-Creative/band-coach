@@ -13,7 +13,7 @@ import { tuneDrift } from './core/tune-drift.js';
 import { DEFAULT_STABILITY_DAYS, MIN_STABILITY_DAYS, MAX_STABILITY_DAYS, GRADE, retrievability, review, due, migrateItem, mastered } from './core/srs.js';
 import { handsTogetherById, handsModeFromId, fingeringLabel, bothUnlocked, effectiveHands, prepLine, HANDS_TOGETHER_EXERCISES, isTimedPairId, PAIR_ONSET_TOL_MS, PAIR_RELEASE_TOL_MS, isStagedPairId, handsStageFromId, heldBassMelody, SPLIT_MID_TOL_RATIO, POSITION_SHIFT_SEMITONES, HANDS_POSITION_EXERCISES, positionPrepLine } from './core/hands-together.js';
 import { step as stepHandsTogether } from './core/hands-together-stage.js';
-import { createMidiParser, createHitGuard, describeOutputs, scheduleSong, playOnOutput, stopAll } from './core/midi.js';
+import { createMidiParser, createHitGuard, describeOutputs, scheduleSong, playOnOutput } from './core/midi.js';
 import { createNoteState } from './core/note-state.js';
 import { PCKEYS } from './core/pckeys.js';
 import { createTeardown } from './core/session-teardown.js';
@@ -2602,7 +2602,7 @@ import { register as registerPathway } from './ui/pathway.js';
   // #midiOutSelect ('' = none, and then no Play it for me button is offered -- nothing to play to). midiOutBusy
   // is true from the first scheduled note until the last one ends (or Stop): handleMidiMessage drops input
   // while it is, since a keyboard that plays itself also reports those notes back as if the learner pressed them.
-  let midiOutPorts = [], midiOutId = '', midiOutBusy = false, midiOutTimer = null, midiOutActive = null, midiOutOnEnd = null;
+  let midiOutPorts = [], midiOutId = '', midiOutBusy = false, midiOutTimer = null, midiOutStopSending = null, midiOutOnEnd = null;
   function midiOutSelected() { return midiOutPorts.find(p => p.id === midiOutId) || null; }
   function midiOutRefresh(access) {
     const all = []; if (access && access.outputs && access.outputs.forEach) access.outputs.forEach(p => all.push(p));
@@ -2615,8 +2615,8 @@ import { register as registerPathway } from './ui/pathway.js';
   }
   function midiOutStop() {
     clearTimeout(midiOutTimer); midiOutTimer = null;
-    const out = midiOutActive, done = midiOutOnEnd; midiOutActive = null; midiOutOnEnd = null; midiOutBusy = false;
-    if (out) { try { stopAll(out, 0); } catch (e) {} }
+    const stopSending = midiOutStopSending, done = midiOutOnEnd; midiOutStopSending = null; midiOutOnEnd = null; midiOutBusy = false;
+    if (stopSending) { try { stopSending(0); } catch (e) {} }
     if (done) done();
   }
   // Schedules one part of `song` on the picked output on the performance.now() timeline (Web MIDI's own
@@ -2627,8 +2627,8 @@ import { register as registerPathway } from './ui/pathway.js';
     const startMs = performance.now() + 150;
     let msgs; try { msgs = scheduleSong(song, { partIndex: partIndex || 0, startMs, channel: 0 }); } catch (e) { return false; }
     if (!msgs.length) return false;
-    playOnOutput(out, msgs);
-    midiOutActive = out; midiOutOnEnd = onEnd || null; midiOutBusy = true;
+    midiOutStopSending = playOnOutput(out, msgs);
+    midiOutOnEnd = onEnd || null; midiOutBusy = true;
     midiOutTimer = setTimeout(midiOutStop, Math.max(0, msgs[msgs.length - 1].atMs - performance.now()) + 250);
     return true;
   }

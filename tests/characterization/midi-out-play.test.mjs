@@ -51,15 +51,18 @@ test('Play it for me sends the song to the picked MIDI output, Stop sends CC 123
     for (let i = 1; i < sent.length; i++) assert.ok(sent[i].atMs >= sent[i - 1].atMs, 'messages are in time order');
     assert.ok(sent[0].atMs > await page.evaluate('performance.now()') - 5000, 'timestamps are on the performance.now() timeline');
     assert.equal(await page.evaluate(`${playBtn}.textContent`), 'Stop playing');
+    // A message handed to the browser cannot be taken back, so the song must not be handed over up front.
+    assert.ok(Math.max(...sent.map(m => m.atMs)) < await page.evaluate('performance.now()') + 1000, 'only the next moment of the song is queued');
 
     // The keyboard echoing its own note back while sounding is not judged.
     await page.evaluate("window.__midiSend('p1', [0x90, 64, 100])");
     assert.equal(await page.evaluate("document.querySelector('.panel-songs-count').textContent"), 'Notes heard so far: 0');
 
-    const before = sent.length;
     await page.evaluate(`${playBtn}.click()`);
     const after = await midiOutSent(page);
-    assert.deepEqual(after[before].bytes, [0xb0, 123, 0], 'Stop sends All Notes Off first');
+    assert.ok(after.some(m => m.bytes[0] === 0xb0 && m.bytes[1] === 123), 'Stop sends All Notes Off');
+    const stoppedAt = after.findIndex(m => m.bytes[0] === 0xb0);
+    assert.ok(after.slice(stoppedAt).every(m => (m.bytes[0] & 0xf0) !== 0x90), 'no note starts once Stop is pressed');
     assert.equal(await page.evaluate(`${playBtn}.textContent`), 'Play it for me');
 
     // Judging resumes once playback has stopped.
