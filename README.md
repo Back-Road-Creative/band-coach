@@ -779,7 +779,8 @@ assignments, the same file-exchange pattern as a challenge — no account, no se
 call. A challenge over 5 MB or a band pack over 20 MB is refused at export with a plain reason, because
 no copy of the app could open it again. A MIDI file's drum track (channel 10) imports as a drum-kit part; the trainer reads it on
 the percussion staff; Review's "Play notes" sounds it as drums and "Practise this" opens it on the drum kit. A part with no
-playable note on the chosen instrument says so instead of passing. Each phrase's tempo-ladder rungs run their own "Riff Repeater" loop
+playable note on the chosen instrument says so instead of passing. Bars where the part is silent are
+not lesson steps: the lesson goes straight to the next bars with notes. Each phrase's tempo-ladder rungs run their own "Riff Repeater" loop
 (`src/ui/songs/loop-backing.js`, wiring `src/audio/stretch/loop.js`'s difficulty ladder into the
 lesson): a missed attempt steps the synthesized backing's speed down, a fully clean attempt steps
 it back up, and the panel always shows the current rate in plain words ("Playing at 90% speed",
