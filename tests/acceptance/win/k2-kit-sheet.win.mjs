@@ -13,6 +13,7 @@
 // PASS: it proves the check works, and nothing about a kit.
 import { en } from '../../../src/core/i18n.js';
 import { PIECES } from '../../../src/instruments/drum-kit.js';
+import { describeHit } from '../../../src/instruments/how/drum-kit.js';
 import { LANE_PORT, LISTEN_MS, listenerScript, padLine, readKit, savedPadsRead, savedPadText } from './k1-kit-reading.win.mjs';
 import { sendOnLane } from './w6-kit-walk-through.win.mjs';
 import { STRIKES } from './w7-kit-double-hits.win.mjs';
@@ -123,12 +124,15 @@ const markNow = (page) => page.evaluate('({ lines: window.__kitLines.length, log
 const clickById = (page, elementId) => page.evaluate(`document.getElementById(${JSON.stringify(elementId)}).click()`);
 const stepText = (page) => page.evaluate("({ status: document.getElementById('kitLearnStatus').textContent, note: document.getElementById('kitLearnStep').textContent })");
 
-const padPrompt = (r) => {
+const padAction = (r) => {
   if (r.id === 'hihat-pedal') return 'press the Hi-hat pedal once';
   if (r.id === 'hihat-closed') return 'hit the Hi-hat closed once, with the pedal held down';
   if (r.id === 'hihat-open') return 'hit the Hi-hat open once, with the pedal up';
   return `hit the ${r.name} once`;
 };
+// Every prompt ends by saying where the pad sits: a person at the kit has only the terminal to go on.
+export const padPrompt = (r) => `${padAction(r)}. ${describeHit(r.id)}`;
+export const stepPrompt = (r, asked) => `${asked} ${describeHit(r.id)}`;
 
 // One prompt, one sheet row.
 async function padRow(page, env, r, where) {
@@ -168,7 +172,7 @@ async function walkThrough(page, env, round) {
     const asked = en[r.id === 'hihat-pedal' ? 'kit.learnPromptPress' : 'kit.learnPrompt'].replace('{piece}', r.name);
     const { status, note } = await stepText(page);
     if (!status.startsWith(asked)) throw new Error(`the walk-through shows "${status}" where it should ask "${asked}"`);
-    env.say(`${round}, pad ${i + 1} of ${KIT_SHEET_ROWS.length}: ${asked}${note ? ` ${note}` : ''}`);
+    env.say(`${round}, pad ${i + 1} of ${KIT_SHEET_ROWS.length}: ${stepPrompt(r, `${asked}${note ? ` ${note}` : ''}`)}`);
     if (env.rehearse) await env.send([[0x99, r.note, 100]], 0);
     const deadline = Date.now() + Math.min(STEP_WAIT_MS, env.left());
     let shown = status;
