@@ -10,6 +10,20 @@ import { starterById } from '../../src/song/starter/index.js';
 const GUIDE = "document.querySelector('.panel-songs-beat-guide')";
 const btn = (text) => `Array.from(document.querySelectorAll('.panel-songs-practice button')).find(b => b.textContent === '${text}')`;
 
+// Wait until the guide on the page reports `phase`, and hand back that same frame's
+// attributes. A re-render can swap in a fresh canvas (hidden=false, no phase yet), so a
+// wait on the phase followed by a separate read of `hidden` could straddle the swap.
+async function guideAt(page, phase, timeoutMs) {
+  const read = `(() => { const g = ${GUIDE}; return g && g.dataset.phase === '${phase}' ? { hidden: g.hidden, ...g.dataset } : null; })()`;
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const seen = await page.evaluate(`JSON.stringify(${read})`);
+    if (seen !== 'null') return JSON.parse(seen);
+    if (Date.now() > deadline) throw new Error(`guide never reached phase ${phase} within ${timeoutMs}ms`);
+    await new Promise((r) => setTimeout(r, 50));
+  }
+}
+
 async function toTurn(page, mod, mode, title = 'Hot Cross Buns') {
   await page.evaluate(`window.__coach.setMod('${mod}')`);
   await page.evaluate("window.__coach.openPanel('songs')");
@@ -62,9 +76,9 @@ test('Check keeps its no-help promise: the count-in shows, then nothing to follo
   await page.waitFor(`${GUIDE} && ${GUIDE}.dataset.phase === 'count'`, 10000);
   assert.equal(await page.evaluate(`${GUIDE}.dataset.runway`), 'off');
   await page.waitFor("document.querySelector('.panel-songs-count').textContent.startsWith('Notes heard so far')", 10000);
-  await page.waitFor(`${GUIDE}.dataset.phase === 'done'`, 5000);
-  assert.equal(await page.evaluate(`${GUIDE}.dataset.blocks`), '0');
-  assert.equal(await page.evaluate(`${GUIDE}.dataset.clicks`), '0', 'no click to lean on');
+  const done = await guideAt(page, 'done', 5000);
+  assert.equal(done.blocks, '0');
+  assert.equal(done.clicks, '0', 'no click to lean on');
 });
 
 test('the drums-in-order step has no clock, so it counts in and shows nothing to keep time with', async (t) => {
@@ -75,8 +89,8 @@ test('the drums-in-order step has no clock, so it counts in and shows nothing to
   await page.evaluate(`${btn('Your turn')}.click()`);
   await page.waitFor(`${GUIDE} && ${GUIDE}.dataset.phase === 'count'`, 10000);
   assert.equal(await page.evaluate(`${GUIDE}.dataset.runway`), 'off');
-  await page.waitFor(`${GUIDE}.dataset.phase === 'done'`, 10000);
-  assert.equal(await page.evaluate(`${GUIDE}.hidden`), true, 'nothing is left on screen once the count-in ends');
+  const done = await guideAt(page, 'done', 10000);
+  assert.equal(done.hidden, true, 'nothing is left on screen once the count-in ends');
 });
 
 test('a mic instrument gets the runway but no clicks, which the mic would hear as notes', async (t) => {
