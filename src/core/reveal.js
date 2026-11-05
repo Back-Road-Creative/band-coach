@@ -37,7 +37,7 @@ export function hintFor(item, revealed) {
   if (!item) return '';
   const mic = ' The mic checks the note and its octave — not which string you used.';
   if (item.string !== undefined) {
-    if (!revealed) return 'Find this note on the neck.' + mic;
+    if (!revealed) return 'Find this note on the neck. No dot this time: this one is from memory, and Show me lights it.' + mic;
     return 'String ' + item.string + (item.fret ? ', fret ' + item.fret : ', played open') + '. The dot shows where.' + mic;
   }
   const isHarmonica = item.hole !== undefined && item.dir !== undefined;

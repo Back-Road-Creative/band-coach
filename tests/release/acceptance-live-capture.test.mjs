@@ -22,7 +22,7 @@ import { name } from '../../src/core/note-names.js';
 
 // The first item of each lesson on a fresh profile. The prompt shows only the letter, with no
 // octave, so the test pins the item (id s6f0 and n60) and fails loudly if the curriculum moves.
-const GTR = { mod: 'gtr', midi: 40, letter: 'E', short: 'E (string 6)' }; // open low E string
+const GTR = { mod: 'gtr', midi: 40, letter: 'E', prompt: 'Low E', short: 'E (string 6)' }; // open low E string
 const MALLET = { mod: 'mallet-percussion', midi: 60, letter: 'C' };
 // What the app says when the item times out unplayed (src/app.js, failEl 'Time. ' + the string and
 // fret + 'It is shown now: play it to move on.'). It is not a judgment, and it is the only #feedback
@@ -53,7 +53,7 @@ async function connectAndStart(page, item) {
   await page.clickSelector('#playBtn');
   const started = await nowMs(page);
   await page.waitFor("!!document.querySelector('#prompt b')");
-  assert.equal(await promptLetter(page), item.letter, 'curriculum changed: re-run probe A (the first item is no longer the one this test plays)');
+  assert.equal(await promptLetter(page), item.prompt || item.letter, 'curriculum changed: re-run probe A (the first item is no longer the one this test plays)');
   return started;
 }
 
@@ -104,7 +104,7 @@ for (const [label, gain] of [['quiet', 0.12], ['loud', 1.0]]) {
       assert.ok(first, 'the app said nothing in #feedback about a correct pluck (no pass record)');
       assert.ok(isPass(first), `the first thing said about the correct pluck was not a pass: ${first.cls} ${JSON.stringify(first.text)}`);
       assert.match(first.text, /^E \(string 6\): yes, in \d+\.\d s\.$/);
-      await page.waitFor("(document.querySelector('#prompt b') || {}).textContent !== 'E'").catch(() => assert.fail('the prompt did not move to the next note after a pass'));
+      await page.waitFor("(document.querySelector('#prompt b') || {}).textContent !== 'Low E'").catch(() => assert.fail('the prompt did not move to the next note after a pass'));
     });
   });
 }
