@@ -176,7 +176,7 @@ test('NEW: a key played outside the keyboard drawing\'s current range says it wa
   assert.match(text, /not.*(shown|drawn|screen)/i);
 });
 
-test('NEW: hands-together grades from real note-on/note-off state, not a 600ms timer, over MIDI', async (t) => {
+test('hands-together over MIDI: keys pressed 900 ms apart get no credit, pressed together they pass', async (t) => {
   const page = await launchPage(htmlPath, { initScript: FAKE_MIDI_INIT });
   t.after(() => page.close());
 
@@ -192,12 +192,18 @@ test('NEW: hands-together grades from real note-on/note-off state, not a 600ms t
   const info = await page.evaluate('window.__coach.cur().info');
   assert.equal(info.kind, 'hands-together');
 
-  // Hold the right-hand note well past 600ms (the old timer window), THEN
-  // add the left-hand note. A real player holding a chord for a second is
-  // normal; the old 0.6s-since-note-on window would have expired and failed
-  // to see the right hand as still "held" by the time the left hand landed.
+  // Level 13 used to pass this, on the reasoning that a player may hold a chord
+  // for a second. A hand check found that it then never cared when the second
+  // key went down, so the note-ons must now land within 0.6 s of each other.
   await midiNoteOn(page, 'p1', info.ex.rh.midi);
   await new Promise((r) => setTimeout(r, 900));
+  await midiNoteOn(page, 'p1', info.ex.lh.midi);
+  await page.waitFor("/not together/.test(document.getElementById('feedback').textContent)");
+  assert.notEqual(await page.evaluate("document.getElementById('feedback').className"), 'ok');
+
+  await midiNoteOff(page, 'p1', info.ex.rh.midi);
+  await midiNoteOff(page, 'p1', info.ex.lh.midi);
+  await midiNoteOn(page, 'p1', info.ex.rh.midi);
   await midiNoteOn(page, 'p1', info.ex.lh.midi);
   await page.waitFor("document.getElementById('feedback').className === 'ok'");
 });
