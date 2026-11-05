@@ -13,7 +13,6 @@
 // PASS: it proves the check works, and nothing about a kit.
 import { en } from '../../../src/core/i18n.js';
 import { PIECES } from '../../../src/instruments/drum-kit.js';
-import { describeHit } from '../../../src/instruments/how/drum-kit.js';
 import { LANE_PORT, LISTEN_MS, listenerScript, padLine, readKit, savedPadsRead, savedPadText } from './k1-kit-reading.win.mjs';
 import { sendOnLane } from './w6-kit-walk-through.win.mjs';
 import { STRIKES } from './w7-kit-double-hits.win.mjs';
@@ -131,8 +130,10 @@ const padAction = (r) => {
   return `hit the ${r.name} once`;
 };
 // Every prompt ends by saying where the pad sits: a person at the kit has only the terminal to go on.
-export const padPrompt = (r) => `${padAction(r)}. ${describeHit(r.id)}`;
-export const stepPrompt = (r, asked) => `${asked} ${describeHit(r.id)}`;
+// The app's describeHit() words for a fresh profile, read from the table already staged; the unit test holds them equal.
+const padPlace = (r) => en[`kit.desc.${r.id}`].replace(/\{left\}/g, en['kit.side.left']).replace(/\{right\}/g, en['kit.side.right']);
+export const padPrompt = (r) => `${padAction(r)}. ${padPlace(r)}`;
+export const stepPrompt = (r, asked) => `${asked} ${padPlace(r)}`;
 
 // One prompt, one sheet row.
 async function padRow(page, env, r, where) {
