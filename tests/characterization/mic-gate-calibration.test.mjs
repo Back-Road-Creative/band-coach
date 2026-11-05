@@ -62,7 +62,8 @@ test('a quiet pluck the stock gate misses registers once "Check my microphone" l
   // "before" half of the characterization, not an assumption.
   const before = await waitForHeardSnapshot(
     page,
-    (s) => s.rms > 0.005 && s.rms < 0.0075,
+    // On a slow runner the analyser hears the band before the worklet exists, and its gate is still null.
+    (s) => s.gate !== null && s.rms > 0.005 && s.rms < 0.0075,
     { timeoutMs: 8000 },
   );
   assert.ok(Math.abs(before.gate - 0.008) < 1e-9, `the worklet must start at the pinned 0.008 rmsGate, got ${before.gate}`);
