@@ -5,7 +5,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { attended, parseArgs, registry, selectScenarios } from '../acceptance/win/run.mjs';
-import { KIT_SHEET_ROWS, k2Verdict, notRunRow, rowFromLines, sheetMarkdown } from '../acceptance/win/k2-kit-sheet.win.mjs';
+import { describeHit } from '../../src/instruments/how/drum-kit.js';
+import { KIT_SHEET_ROWS, k2Verdict, notRunRow, padPrompt, rowFromLines, sheetMarkdown, stepPrompt } from '../acceptance/win/k2-kit-sheet.win.mjs';
 
 const line = (name) => `${name} heard -- start an exercise to see it judged.`;
 const goodRows = () => KIT_SHEET_ROWS.map((r) => ({ ...r, ...rowFromLines(r.name, [line(r.name)], 1) }));
@@ -156,4 +157,14 @@ test('no port, a silent kit and a stopped run are BLOCKED, each saying why', () 
 
 test('an uncaught exception fails even when every row is right', () => {
   assert.equal(k2Verdict(obs({ exceptions: ['boom'] })).status, 'FAIL');
+});
+
+test('every K2 prompt says where the pad sits, in the words the app itself uses', () => {
+  for (const r of KIT_SHEET_ROWS) {
+    const where = describeHit(r.id);
+    assert.ok(where, r.id);
+    assert.ok(padPrompt(r).endsWith(where), `${r.id}: ${padPrompt(r)}`);
+    assert.ok(stepPrompt(r, 'Hit it.').endsWith(where), `${r.id}: ${stepPrompt(r, 'Hit it.')}`);
+  }
+  assert.match(padPrompt(KIT_SHEET_ROWS.find((r) => r.id === 'tom-floor')), /standing on its own legs/);
 });

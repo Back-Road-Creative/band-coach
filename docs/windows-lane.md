@@ -96,6 +96,8 @@ node tests/acceptance/win/run.mjs --win-root /mnt/d/band-coach-win-lane --html <
 
 Run it in your own terminal, because the prompts print there, with the kit on and every other copy of Band Coach closed. You do not need to see or open anything: Chrome runs in a Windows session that is not on your monitor and still hears the USB kit. It takes about 3 minutes and has four rounds, all on the release file through its own screens (Drum kit, the set-up sheet, Connect MIDI):
 
+Every prompt names the pad and then says where it sits on a standard kit, in the words the app uses for it (the app's `kit.desc.*` lines).
+
 | Round | What you do | What it records |
 |---|---|---|
 | 1 | Hit each of the 10 pads once | What the app calls each pad before it is taught. A wrong name here is what the walk-through is for, so this round never fails the check |

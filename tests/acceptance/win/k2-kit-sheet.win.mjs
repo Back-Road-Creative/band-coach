@@ -123,12 +123,17 @@ const markNow = (page) => page.evaluate('({ lines: window.__kitLines.length, log
 const clickById = (page, elementId) => page.evaluate(`document.getElementById(${JSON.stringify(elementId)}).click()`);
 const stepText = (page) => page.evaluate("({ status: document.getElementById('kitLearnStatus').textContent, note: document.getElementById('kitLearnStep').textContent })");
 
-const padPrompt = (r) => {
+const padAction = (r) => {
   if (r.id === 'hihat-pedal') return 'press the Hi-hat pedal once';
   if (r.id === 'hihat-closed') return 'hit the Hi-hat closed once, with the pedal held down';
   if (r.id === 'hihat-open') return 'hit the Hi-hat open once, with the pedal up';
   return `hit the ${r.name} once`;
 };
+// Every prompt ends by saying where the pad sits: a person at the kit has only the terminal to go on.
+// The app's describeHit() words for a fresh profile, read from the table already staged; the unit test holds them equal.
+const padPlace = (r) => en[`kit.desc.${r.id}`].replace(/\{left\}/g, en['kit.side.left']).replace(/\{right\}/g, en['kit.side.right']);
+export const padPrompt = (r) => `${padAction(r)}. ${padPlace(r)}`;
+export const stepPrompt = (r, asked) => `${asked} ${padPlace(r)}`;
 
 // One prompt, one sheet row.
 async function padRow(page, env, r, where) {
@@ -168,7 +173,7 @@ async function walkThrough(page, env, round) {
     const asked = en[r.id === 'hihat-pedal' ? 'kit.learnPromptPress' : 'kit.learnPrompt'].replace('{piece}', r.name);
     const { status, note } = await stepText(page);
     if (!status.startsWith(asked)) throw new Error(`the walk-through shows "${status}" where it should ask "${asked}"`);
-    env.say(`${round}, pad ${i + 1} of ${KIT_SHEET_ROWS.length}: ${asked}${note ? ` ${note}` : ''}`);
+    env.say(`${round}, pad ${i + 1} of ${KIT_SHEET_ROWS.length}: ${stepPrompt(r, `${asked}${note ? ` ${note}` : ''}`)}`);
     if (env.rehearse) await env.send([[0x99, r.note, 100]], 0);
     const deadline = Date.now() + Math.min(STEP_WAIT_MS, env.left());
     let shown = status;
