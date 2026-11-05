@@ -295,9 +295,9 @@ function untrackGroup(pgid) {
 // test never waits on a gesture. An acceptance launch drops exactly those two
 // and keeps the simulated devices: a fake mic is a device, not a permission.
 // `headed` leaves the headless flag out; `windowPosition` ('x,y') places a
-// headed window. On win32 the probe's flags apply: --headless=new, extensions
+// headed window. `realMic` opens the machine's own microphone (only the lane's G1 asks). On win32 the probe's flags apply: --headless=new, extensions
 // off, no default-browser check.
-export function browserArgs(userDataDir, extraArgs = [], { acceptance = false, headed = false, windowPosition, platform = process.platform } = {}) {
+export function browserArgs(userDataDir, extraArgs = [], { acceptance = false, headed = false, windowPosition, realMic = false, platform = process.platform } = {}) {
   const win = platform === 'win32';
   return [
     ...(headed ? [] : [win ? '--headless=new' : '--headless']),
@@ -307,7 +307,7 @@ export function browserArgs(userDataDir, extraArgs = [], { acceptance = false, h
     `--user-data-dir=${userDataDir}`,
     '--no-first-run',
     ...(acceptance ? [] : ['--autoplay-policy=no-user-gesture-required', '--use-fake-ui-for-media-stream']),
-    '--use-fake-device-for-media-stream',
+    ...(realMic ? [] : ['--use-fake-device-for-media-stream']),
     ...extraArgs,
     'about:blank',
   ];
@@ -335,9 +335,9 @@ export function readDevtoolsActivePort(text) {
 
 // `platform` only selects the launch shape; kill and exit hooks use the real one.
 // `pollMs` is how often the win32 port file is read; only a test with a fake browser changes it.
-export function spawnBrowser(bin, userDataDir, extraArgs = [], { launchTimeoutMs = 15000, acceptance = false, headed = false, windowPosition, platform = process.platform, pollMs = 50 } = {}) {
+export function spawnBrowser(bin, userDataDir, extraArgs = [], { launchTimeoutMs = 15000, acceptance = false, headed = false, windowPosition, realMic = false, platform = process.platform, pollMs = 50 } = {}) {
   const win = platform === 'win32';
-  const args = browserArgs(userDataDir, extraArgs, { acceptance, headed, windowPosition, platform });
+  const args = browserArgs(userDataDir, extraArgs, { acceptance, headed, windowPosition, realMic, platform });
   if (process.env.CI) args.splice(1, 0, '--no-sandbox');
   // Its own process group (detached), so cleanup can kill the renderer, GPU
   // and zygote processes too, not just the launched parent: those are
@@ -642,7 +642,7 @@ export function launchPage(htmlPath, options = {}) {
 }
 
 async function launchPageOnce(htmlPath, options = {}) {
-  const { fakeAudioFile, initScript, acceptance = false, headed = false, windowPosition } = options;
+  const { fakeAudioFile, initScript, acceptance = false, headed = false, windowPosition, realMic = false } = options;
   const bin = acceptance ? findAcceptanceBrowser() : findBrowserBinary();
   if (!bin) {
     throw new Error(
@@ -655,7 +655,7 @@ async function launchPageOnce(htmlPath, options = {}) {
   const extraArgs = fakeAudioFile ? [`--use-file-for-fake-audio-capture=${fakeAudioFile}`] : [];
   let spawned;
   try {
-    spawned = await spawnBrowser(bin, userDataDir, extraArgs, { acceptance, headed, windowPosition });
+    spawned = await spawnBrowser(bin, userDataDir, extraArgs, { acceptance, headed, windowPosition, realMic });
   } catch (e) {
     // spawnBrowser already killed the group; the profile dir is ours to remove.
     rmSync(userDataDir, profileRmOptions());

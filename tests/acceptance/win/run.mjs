@@ -50,11 +50,12 @@ export const registry = [
 export const attended = [
   { id: 'K1', file: 'k1-kit-reading.win.mjs', maxMs: 12 * 60 * 1000 },
   { id: 'K2', file: 'k2-kit-sheet.win.mjs', maxMs: 12 * 60 * 1000 },
+  { id: 'G1', file: 'g1-guitar-takes.win.mjs', maxMs: 12 * 60 * 1000, realMic: true },
 ];
 
 export const selectScenarios = (only) => (only ? [...registry, ...attended].filter((r) => r.id === only) : registry);
 
-const VALUE_FLAGS = { '--win-root': 'winRoot', '--html': 'html', '--sha256': 'sha256', '--expect-version': 'expectVersion', '--only': 'only', '--chrome': 'chrome', '--node': 'node', '--report': 'report', '--run-dir': 'runDir', '--pad': 'pad', '--hits': 'hits' };
+const VALUE_FLAGS = { '--win-root': 'winRoot', '--html': 'html', '--sha256': 'sha256', '--expect-version': 'expectVersion', '--only': 'only', '--chrome': 'chrome', '--node': 'node', '--report': 'report', '--run-dir': 'runDir', '--pad': 'pad', '--hits': 'hits', '--clips': 'clips' };
 
 export function parseArgs(argv) {
   const out = { node: NODE_EXE, visible: false };
@@ -110,11 +111,24 @@ export function laneExit({ status, hasReport }) {
 // What is copied into the run directory, relative to the repository: the driver, every
 // file in tests/acceptance/win, and the app's own text table W3 matches its verdict on.
 export function stageFiles(winFiles) {
-  return ['tests/helpers/browser.mjs', 'tests/helpers/console-allowlist.mjs', 'src/core/i18n.js', 'src/instruments/drum-kit.js', ...winFiles.filter((f) => f.endsWith('.mjs')).map((f) => `tests/acceptance/win/${f}`)];
+  return ['tests/helpers/browser.mjs', 'tests/helpers/console-allowlist.mjs', 'src/core/i18n.js', 'src/instruments/drum-kit.js', 'tests/helpers/pluck-wav.mjs', 'tests/fixtures/acceptance/live-capture-wav.mjs', ...winFiles.filter((f) => f.endsWith('.mjs')).map((f) => `tests/acceptance/win/${f}`)];
 }
 
 // A byte copy by read and write: copyFileSync fails with EPERM on the /mnt/<letter>/ drives.
 const copyBytes = (from, to) => writeFileSync(to, readFileSync(from));
+
+// Why G1 must not write into this folder, or null: a second run would overwrite takes a person played.
+export const takesFolderProblem = (dir) => (existsSync(join(dir, 'manifest.json')) ? `${dir} already holds takes: move them or pass another --clips` : null);
+
+// The takes leave the run folder before it is removed. Returns how many files were carried.
+export function copyTakes(from, to) {
+  if (!existsSync(from)) return 0;
+  const files = readdirSync(from);
+  mkdirSync(to, { recursive: true });
+  for (const f of files) copyBytes(join(from, f), join(to, f));
+  return files.length;
+}
+
 const sha256Of = (file) => createHash('sha256').update(readFileSync(file)).digest('hex');
 
 function withDeadline(promise, ms, what) {
@@ -131,7 +145,7 @@ async function runScenario(entry, ctx) {
   const mod = await import(pathToFileURL(join(here, entry.file)).href);
   let page;
   try {
-    page = await launchPage(ctx.html, { acceptance: true, headed: true, windowPosition: ctx.visible ? undefined : OFFSCREEN });
+    page = await launchPage(ctx.html, { acceptance: true, headed: true, windowPosition: ctx.visible ? undefined : OFFSCREEN, realMic: Boolean(entry.realMic && !ctx.rehearse) });
   } catch (e) {
     return { id: entry.id, status: 'BLOCKED', launchError: true, text: `could not start Chrome and open the file: ${e.message}`, attempts: e.attempts, ms: Date.now() - t0 };
   }
@@ -184,7 +198,7 @@ export async function runWindows(args, log = console.log) {
     log(`lane cannot run: ${report.preflight}`);
     return finish(planLane({ found: false, results: [], registry, only: args.only }));
   }
-  const ctx = { html, sha256: args.sha256, expectVersion: args.expectVersion, visible: args.visible, pad: args.pad, hits: args.hits, rehearse: args.rehearse, say: log };
+  const ctx = { html, sha256: args.sha256, expectVersion: args.expectVersion, visible: args.visible, pad: args.pad, hits: args.hits, rehearse: args.rehearse, clipsDir: join(args.runDir || process.cwd(), 'clips'), say: log };
   for (const entry of selected) {
     const r = await runScenario(entry, ctx);
     report.results.push(r);
@@ -206,6 +220,9 @@ export function runWsl(args, err = console.error) {
   if (linuxHtml && !existsSync(html)) return err(`html not found: ${html} (build it with: node build/build.mjs --release)`), 2;
   if (!linuxHtml && !/^[A-Za-z]:[\\/]/.test(html)) return err(`--html must be a Linux path or a Windows path (C:\\...), got ${html}`), 2;
   if (!linuxHtml && !args.sha256) return err('--sha256 is required when --html is a Windows path'), 2;
+  const takesTo = args.clips || join(repoRoot, 'dist', 'guitar-takes');
+  const badTakes = args.only === 'G1' && takesFolderProblem(takesTo);
+  if (badTakes) return err(badTakes), 2;
   mkdirSync(args.winRoot, { recursive: true });
   // The only thing the lane ever writes or removes is this directory.
   const runDir = mkdtempSync(join(args.winRoot, 'run-'));
@@ -233,6 +250,7 @@ export function runWsl(args, err = console.error) {
     if (hasReport) copyBytes(join(runDir, 'report.json'), reportTo);
     else writeFileSync(reportTo, JSON.stringify({ lane: 'windows', exit: code, note: 'the Windows side wrote no report', childStatus: child.status, childSignal: child.signal, childError: child.error && child.error.message }, null, 2) + '\n');
     console.log(`report: ${reportTo}`);
+    if (copyTakes(join(runDir, 'clips'), takesTo)) console.log(`takes: ${takesTo}`);
   } finally {
     try {
       cleanupRun(runDir, args.winRoot);
