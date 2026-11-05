@@ -102,11 +102,16 @@ function stepOn(ctx, ev, out) {
     }
     return;
   }
-  // Plain/right-only/left-only: real MIDI reads the true held set (a chord held longer than 0.6s still grades); every other exact caller keeps the 0.6s window.
+  // Plain/right-only/left-only: real MIDI reads the true held set, so a stray key still down counts as wrong; "together" is the 0.6s window of note-ons for every exact caller.
   const heldMidis = source === 'midi' ? Array.from(ctx.realMidiHeld) : windowHeld();
   const g = gradeHandsTogetherExact(ex, heldMidis, handsMode);
   if (g.wrong.length) { fail(wrongMsg, id + '>x' + midi); if (source !== 'midi') clearHeld(); return; }
-  if (g.ok) pass(undefined, ex.short + ': ' + (handsMode === 'right' ? 'right hand' : handsMode === 'left' ? 'left hand' : 'both hands together') + '. ' + fingeringLabel(ex) + '.');
+  const recent = source === 'midi' ? windowHeld() : heldMidis;
+  if (!g.ok || !gradeHandsTogetherExact(ex, recent, handsMode).ok) {
+    if (real && gradeHandsTogetherExact(ex, noteState.heldPitches(), handsMode).ok) say('Both keys are down, but not together. Let go of both, then press them at the same moment.', 'no');
+    return;
+  }
+  pass(undefined, ex.short + ': ' + (handsMode === 'right' ? 'right hand' : handsMode === 'left' ? 'left hand' : 'both hands together') + '. ' + fingeringLabel(ex) + '.');
 }
 
 // The note-off half of levels 14-17's CHECK phase. Only a real MIDI or

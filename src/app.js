@@ -1159,7 +1159,7 @@ import { register as registerPathway } from './ui/pathway.js';
       const hMode = handsModeFromId(e.id);
       if (hMode === 'right') return 'Right hand: finger ' + i.ex.rh.finger + ', ' + nname(i.ex.rh.midi) + '. The left hand (' + nname(i.ex.lh.midi) + ') may play along but is not checked. A MIDI keyboard or two hands on the computer keys grades the right-hand note exactly; a microphone grades it approximately.';
       if (hMode === 'left') return 'Left hand: finger ' + i.ex.lh.finger + ', ' + nname(i.ex.lh.midi) + '. The right hand (' + nname(i.ex.rh.midi) + ') may play along but is not checked. A MIDI keyboard or two hands on the computer keys grades the left-hand note exactly; a microphone grades it approximately.';
-      return fingeringLabel(i.ex) + ' (' + nname(i.ex.rh.midi) + ' right hand, ' + nname(i.ex.lh.midi) + ' left hand). A MIDI keyboard or two hands on the computer keys grades both notes exactly; a microphone only hears one note at a time, so that grading is approximate.';
+      return fingeringLabel(i.ex) + ' (' + nname(i.ex.rh.midi) + ' right hand, ' + nname(i.ex.lh.midi) + ' left hand). A MIDI keyboard or two hands on the computer keys grades both notes exactly: press them at the same moment. Letting go is not timed here. A microphone only hears one note at a time, so that grading is approximate.';
     }
     if (mod === 'voice') return task.ref === 'target' ? 'You heard the note. Sing it back in any octave and hold it.' : 'You heard Do. Find ' + i.short + ' from it.';
     if (MODS[mod].staff) return t('hint.staffNote', { label: i.label });

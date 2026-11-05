@@ -1208,6 +1208,8 @@ returns to Both with no extra step the moment it unlocks. See `tests/unit/hands-
 and `tests/characterization/kbd-hand-alone-gate.test.mjs` for the exact rules and the real-MIDI
 walk-through.
 
+On level 13, Both needs the two keys pressed within 0.6 seconds of each other, on a MIDI keyboard, computer keys or screen taps alike. Pressed further apart earns no credit and, on real keys, the line says to let go and press together. Letting go is not timed until level 14.
+
 Level 14, "Hands together: matching rhythms", reuses the same five both-hands pairs (its own
 `j1t`-`j5t` ids — a distinct spaced-repetition mastery from the plain `j1`-`j5` both-hands item, so
 a timed pass never credits or consumes it) but adds real timing on top of the exact both-hands
