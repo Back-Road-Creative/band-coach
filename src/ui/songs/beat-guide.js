@@ -37,8 +37,9 @@ export function createBeatGuide({ countTimes, originSec, spec, now, latencyMs, c
   let frameId = null, stopped = false, next = 0, sounded = 0;
 
   // Clicks are booked a little ahead on the real audio clock, like the trainer's.
+  // clicksOn is a flag, or a function asked on every frame: a drum kit's clicks start at the first real MIDI hit.
   function bookClicks(audioNow) {
-    if (!clicksOn) return;
+    if (typeof clicksOn === 'function' ? !clicksOn() : !clicksOn) return;
     while (next < playTimes.length && playTimes[next] < audioNow + LOOKAHEAD_SEC) {
       if (playTimes[next] > audioNow - 0.01) { click(playTimes[next], next % spec.perBar === 0); sounded++; }
       next++;

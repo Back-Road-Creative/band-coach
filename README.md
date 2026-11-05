@@ -1671,8 +1671,9 @@ them is late or early.
   microphone counts hits, because the mic would hear each click as a hit. On the kit, a real MIDI hit
   proves an e-kit is being played, so the mic stops counting (it would only hear the pads) and the
   clicks come back; unplugging the kit hands the count back to the mic. In Songs, clicks run through
-  only for a MIDI instrument outside Check; a song's drum part has none, since its listener keeps the
-  mic open.
+  for a MIDI instrument outside Check. A song's drum part follows the same rule as the kit trainer: it
+  has none while the microphone counts, and they start at the first real MIDI hit (a computer-key or
+  on-screen hit does not count) and stop again when the kit is unplugged. Check never has them.
 
 The cues run on the same clock the judge marks hits with (`cueClock` in `src/core/beat-cues.js`: audio
 time minus the calibrated latency, and the learned offset in the trainer), so a line reaching a note

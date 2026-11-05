@@ -64,7 +64,7 @@ import { exportMusicXml } from '../song/export-musicxml.js';
 import { exportAbc } from '../song/export-abc.js';
 import { makeEvent, isIndependentOk } from '../core/learning-events.js';
 import { t } from '../core/i18n.js';
-import { guideSpec } from '../core/beat-cues.js';
+import { guideSpec, clicksThrough } from '../core/beat-cues.js';
 import { createBeatGuide } from './songs/beat-guide.js';
 import { classifyAddFile, ADD_ACCEPT, ADD_HELP_LINE } from './songs/add-source.js';
 import { createRecordDoor, transcribeAudioFile, refuseNoNotes } from './songs/record-door.js';
@@ -296,6 +296,7 @@ function mountSongsPanel(hostEl, api) {
   // mic only hears the e-kit echo, so listenDrumKit stops counting it. Held here, not
   // per listen, so it outlives a retry or the next step; cleared when no MIDI port is connected.
   let kitMidiHit = false;
+  const kitMicOff = () => { if (kitMidiHit && !api.midiConnected()) kitMidiHit = false; return kitMidiHit; }; // the e-kit is gone: an acoustic kit's mic counts again
   let library;
   try {
     library = createLibrary(indexedDbStore(indexedDB, 'bandcoach-songs'));
@@ -1967,8 +1968,7 @@ function mountSongsPanel(hostEl, api) {
         const chunk = buf.subarray(end - DRUM_HOP, end);
         const hopAtSec = (t - c * (DRUM_HOP / audio.sampleRate)) - practice.recordStartSec;
         capture.push(chunk, hopAtSec).forEach((hit) => {
-          if (kitMidiHit && !api.midiConnected()) kitMidiHit = false; // the e-kit is gone: an acoustic kit's mic counts again
-          if (kitMidiHit) return;
+          if (kitMicOff()) return;
           practice.playedEvents.push({ piece: hit.piece, atSec: hit.atSec, source: 'mic' });
           heard = true;
         });
@@ -2107,7 +2107,8 @@ function mountSongsPanel(hostEl, api) {
       now: api.now,
       latencyMs: songLatencyMs(api.db()),
       click: api.click,
-      clicksOn: help && timed && !kit && practice.instrument.input === 'midi',
+      // A kit clicks through only once a real MIDI hit has stopped the mic counting (clicksThrough, as the trainer's barClickCount does).
+      clicksOn: help && timed && (kit ? () => clicksThrough({ level: 1, levels: 1, micCounts: !kitMicOff() }) : practice.instrument.input === 'midi'),
     });
     // Hands (H3): the OTHER hand's notes are played back as accompaniment
     // during a chosen-hand try -- same per-note schedule as playPhrase()
