@@ -1,0 +1,18 @@
+{
+  "name": "band-coach-reviewed",
+  "owner": { "name": "Back Road Creative" },
+  "description": "Optional developer tools reviewed for Band Coach.",
+  "plugins": [
+    {
+      "name": "ponytail",
+      "description": "Ponytail 5.3.3 at the reviewed commit; configure locally before enabling.",
+      "source": {
+        "source": "github",
+        "repo": "DietrichGebert/ponytail",
+        "sha": "96608e078b2d5ea607c5c3b8b5a54d1c1fba6846"
+      },
+      "defaultEnabled": false,
+      "strict": false
+    }
+  ]
+}
