@@ -19,6 +19,8 @@ what you saw.
 | 7 | Drum kit (fill in section 2 as well) | | |
 | 8 | Phone | | |
 
+For step 3 on a guitar, the lane's G1 prints the filled result for you: see [The guitar takes (G1)](windows-lane.md#the-guitar-takes-g1).
+
 ## 2. Drum kit, pad by pad
 
 On an electronic kit the lane fills this section in: run the kit check (K2,

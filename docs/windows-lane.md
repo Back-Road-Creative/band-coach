@@ -43,6 +43,7 @@ profile lives inside the run directory too.
 | `--chrome <C:\...\chrome.exe>` | Use this Chrome. If it does not exist the lane exits 2 with "chrome not found". |
 | `--node <path>` | Windows `node.exe`. Default `/mnt/c/Program Files/nodejs/node.exe`. |
 | `--report <path>` | Where the JSON report goes. Default `dist/windows-lane-report.json`. |
+| `--clips <path>` | Where G1 leaves its takes. Default `dist/guitar-takes`. A folder that already holds a `manifest.json` exits 2, so a second run cannot overwrite takes a person played. |
 
 ## The kit reading (K1)
 
@@ -113,6 +114,53 @@ What it does not cover: Chrome opens with a fresh profile, so it never sees the 
 
 `--rehearse` sends every hit on `band-coach-lane` instead (by exact name, nothing is sent anywhere else), so an agent runs the whole check on real Chrome before a person's time is spent. A rehearsal is never a PASS and its sheet says it was no kit. K2 is in `attended` in `run.mjs`, so a full lane run never runs it or counts it.
 
+## The guitar takes (G1)
+
+Run it with a guitar in your hands, in your own terminal, because the prompts print there:
+
+```
+node tests/acceptance/win/run.mjs --win-root /mnt/d/band-coach-win-lane --html <staged file> --sha256 <its sha256> --only G1 --clips /mnt/d/band-coach-takes --report <path>
+```
+
+This is the one scenario that opens the machine's **real microphone**: its `attended` entry has `realMic`, which drops Chrome's fake device. It records during round 1, so run it when no one is talking nearby. It takes about 5 minutes on the release file, through its own screens (Guitar, the set-up sheet, Connect):
+
+| Round | What you do | What it records |
+|---|---|---|
+| 1 | Pluck when the terminal says `PLUCK NOW`: 12 takes, covering each open string, soft, hard, the same note twice, and a silent room | One WAV per take, plus `manifest.json`. A take is redone up to 3 times if no pluck was heard, it clipped, or something sounded before the prompt. A take that stays bad is left out and named |
+| 2 | Play the 8 notes the terminal relays from the app's screen, once each | What the app said about each one |
+
+A note in round 2 passes on exactly one "yes". A wrong note, a second reply and no reply each fail it, and three notes in a row with no reply end the round. The script decides the result from the line the app shows, not a person or an agent. The filled sheet prints at the end and is in the report as `observed.sheetMd`. `--only` always exits 1, so read the result line.
+
+BLOCKED with "pure silence" means Chrome got a mic that delivers nothing. Check that it is not muted and that Windows lets desktop apps use it. A Chrome started from WSL may also sit in a Windows session away from your monitor, and whether that session hears the mic is **not yet checked on a real run**; if it does not, start it from Windows (below).
+
+`--rehearse` runs it all on Chrome's fake mic, so the real mic stays closed and an agent can check the flow with no one there. A rehearsal is never a PASS and writes no manifest, so its beeps cannot be committed as a guitar.
+
+What it does not cover: the tuner (README step 4), any note past the first lesson a fresh profile gets, and whether the sound is good. It uses a fresh Chrome profile, so a mic chosen in your own Chrome is not used: it opens the Windows default input.
+
+### Replaying the takes in CI
+
+`tests/characterization/guitar-takes-replay.test.mjs` plays each take in `tests/fixtures/real-guitar/manifest.json` through the real worklet on Chromium's fake mic and asks for one reply per pluck, the right note, and nothing at all for the silent room. Until takes are added it runs three made-up takes that only prove the test itself. To add them:
+
+1. **Listen to every WAV first.** Anything said nearby ends up in the repository for anyone who can read it. Redo the run if you hear talk.
+2. Copy the WAVs and `manifest.json` into `tests/fixtures/real-guitar/` and open a PR. The set is about 4 MB.
+3. A red take is either the wrong string played or a real bug: the failure quotes what the app said.
+
+A replay shows the app handles what one mic once heard. It is not a real-device check, so it does not replace G1 in a release record.
+
+### Claude on Windows
+
+A brief for a Claude Code session on the Windows side, which can do what this WSL side cannot: see the desktop and the Windows sound settings. **Claude helps run the session. It does not decide the result, and it does not hear the audio.**
+
+Read this section, then:
+
+1. Find the repository: run `wsl -l -v` for the distro, then it is `\\wsl.localhost\<distro>\home\dev\workspaces\_active\app-band-coach`. Treat it as read-only. Commit nothing and push nothing.
+2. Before anyone plays, check the mic can be reached: the Windows setting "Let desktop apps access your microphone" (`HKCU:\Software\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\microphone`, `Value`) is `Allow`, and the input the person means to use is the Windows default. Tell them to set it if not. Those are settings on their machine, so change none yourself.
+3. Check the flow with no one playing: from WSL, the G1 command above with `--rehearse` and a scratch `--clips` folder. It should end OBSERVED. Report anything else.
+4. Hand the person the real G1 command to run in their own terminal, because a prompt that shows up late spoils the take. Do not run it for them, and do not open the mic without them.
+5. If it ends BLOCKED with "pure silence", start it from Windows instead, in the desktop session. Copy `tests/helpers`, `tests/fixtures/acceptance`, `tests/acceptance/win`, `src/core/i18n.js` and `src/instruments/drum-kit.js` to `D:\band-coach-g1`, keeping their folders, then hand them `node D:\band-coach-g1\tests\acceptance\win\run.mjs --run-dir D:\band-coach-g1 --html <file> --sha256 <sha> --only G1 --report D:\band-coach-g1\report.json`. The takes land in `D:\band-coach-g1\clips`.
+6. Afterwards read the report and summarize `observed.sheetMd` word for word, the result line included. A take left out goes in the summary. Never restate a FAIL as a pass or decide it was the player's mistake: say what the app said and let the person answer.
+7. Leave the takes where they are. The person listens before anything is copied into the repository.
+
 ## Results and exit codes
 
 Each scenario ends PASS, FAIL (with the finding), OBSERVED (something was seen but not
@@ -143,7 +191,8 @@ the sha256 and size of the file opened, and the wall time.
 | --- | --- | --- |
 | 1, open the file (and acceptance finding 6, red console errors on a real machine) | W1 `w1-clean-open.win.mjs` | Fresh profile, extensions off, release file only: no console error or warning, no browser log entry, no exception, exactly one request (the file itself), no debug hook, and the sha256 is the one given. |
 | 2, MIDI keyboard | none | **Not automated.** "found" to "working" needs key presses on a real keyboard. The box does have a working loopback port, `band-coach-lane` (W6 uses it), but a loopback is not a keyboard: check a real one by hand. |
-| 3, microphone instrument; 4, tuner | none | Not automated by this lane. |
+| 3, microphone instrument | G1 `g1-guitar-takes.win.mjs`, by name only | Needs a person and a guitar. Real plucks on the real mic, on guitar only; other mic instruments stay with the hand test. See "The guitar takes (G1)". |
+| 4, tuner | none | Not automated by this lane. |
 | 5, progress survives a reload | W2 `w2-progress-reload.win.mjs` | Fresh profile. A real click on Start, then the computer-key row for the nine notes the screen asks for, then End session. What is stored (`bandcoach.v1`, reported as a length and checksum) and what is shown (the "last keyboard session" line and the progress bar) must both have changed, and both must be the same after a reload. The reload is the browser's own `Page.reload` over the DevTools connection, not the F5 key (DevTools key events do not trigger a reload). |
 | 6, check for updates | W3 `w3-update-check.win.mjs` | Real clicks on Settings, then "Check for updates", with the network on. PASS needs "You're running the latest version (x.y.z)" with the version given by `--expect-version`; without it the result is OBSERVED (exit 1). "Behind", "Couldn't reach the update server", "development build" and a check still on "Checking…" after 30 s are FAIL. The offline case is **not covered**. |
 | acceptance A02, sound only on a gesture | W4 `w4-audio-gesture.win.mjs` | After the load settle no AudioContext is running and no "AudioContext was not allowed to start" message exists; a real click on Start then makes exactly one run, the button says Pause, still no warning or exception. |
