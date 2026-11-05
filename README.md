@@ -79,6 +79,8 @@ shows the live input level. An instrument plugged into only one channel of a 2-c
 is summed into the listening path rather than silenced.
 While you practise, the coach line says why nothing is being judged: "not hearing anything" or "too quiet to judge" only after about 4 seconds of quiet, counted from the start or from your last clean note (you may still be getting ready, or a note may still be ringing out), and "a chord" as soon as it hears one. In a room the check measured as quiet, an unplayed mic is simply waiting for you, so those two lines are not shown until a sound loud enough to judge arrives and is still not a clean note. The moment a clean single note is heard, that warning comes down and the line it replaced comes back.
 
+One pluck gets one answer. Plucking the same note again counts once the string gets clearly louder than it was ringing (about a third louder), so a repeat works at an ordinary mic level, while a softer re-pluck waits for the ring to fade. A reading that only flips octave inside one ring is not answered again, unless it settles on the note asked for, and a brief loss of pitch inside a pluck does not restart the count.
+
 Both checks say what they are doing and what they heard in the line beside the button ("Checking the
 room — stay quiet", then "Your room is quiet." or a background-noise warning). If you start playing
 while Connect's check is listening, it does not mistake your playing for the room: it says it heard
@@ -1205,6 +1207,8 @@ by the lock: if it still reads Both while locked the drill quietly runs Right on
 returns to Both with no extra step the moment it unlocks. See `tests/unit/hands-together-gate.test.mjs`
 and `tests/characterization/kbd-hand-alone-gate.test.mjs` for the exact rules and the real-MIDI
 walk-through.
+
+On level 13, Both needs the two keys pressed within 0.6 seconds of each other, on a MIDI keyboard, computer keys or screen taps alike. Pressed further apart earns no credit and, on real keys, the line says to let go and press together. Letting go is not timed until level 14.
 
 Level 14, "Hands together: matching rhythms", reuses the same five both-hands pairs (its own
 `j1t`-`j5t` ids — a distinct spaced-repetition mastery from the plain `j1`-`j5` both-hands item, so
