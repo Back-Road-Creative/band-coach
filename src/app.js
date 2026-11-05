@@ -596,7 +596,8 @@ import { register as registerPathway } from './ui/pathway.js';
     const M = MODS[mod], k = id[0], rest = id.slice(1);
     if (k === 'n') { const m = +rest; return { kind: 'note', midi: m, exact: true, label: nname(m) + (m < 60 ? ' (low)' : m >= 72 ? ' (high)' : ''), short: nname(m) }; }
     if (k === 'w') { const w = +rest, kind = WIND_KINDS[(M.windKind || prefs.wind || 'bb')] || WIND_KINDS.bb, wm = kind[2] === 'bass' ? w - 19 : w; return { kind: 'note', written: wm, midi: kind[2] === 'bass' ? wm : w + kind[1], clef: kind[2], label: nname(wm, true), short: nname(wm, true) }; }
-    if (k === 's') { const mm = /^(\d+)f(\d+)$/.exec(rest), s = +mm[1], f = +mm[2], ns = M.tuning.length, m = M.tuning[ns - s] + f; return { kind: 'note', midi: m, string: s, fret: f, label: nname(m) + ': string ' + s + (f ? ', fret ' + f : ', open'), short: nname(m) + ' (string ' + s + ')' }; }
+    if (k === 's') { const mm = /^(\d+)f(\d+)$/.exec(rest), s = +mm[1], f = +mm[2], ns = M.tuning.length, m = M.tuning[ns - s] + f; // shortcut: only open strings get Low/High, a fretted note at two octaves still reads by name alone; add it when a level asks for one.
+      const same = f ? [] : M.tuning.filter(x => pc(x) === pc(m)), name = (same.length > 1 ? (m === Math.min(...same) ? 'Low ' : 'High ') : '') + nname(m); return { kind: 'note', midi: m, string: s, fret: f, label: name + ': string ' + s + (f ? ', fret ' + f : ', open'), short: nname(m) + ' (string ' + s + ')' }; }
     if (k === 'p') { const p = +rest; return { kind: 'note', midi: 60 + p, anywhere: true, label: NAMES[p] + ', anywhere', short: NAMES[p] + ' by name' }; }
     if (k === 'c') return { kind: 'chord', pcs: CHORDS[rest], label: CHORD_NAMES[rest], short: CHORD_NAMES[rest], sym: rest };
     if (k === 'v') { const d = +rest, VKv = Object.assign({}, VOICE_KINDS, prefs.voiceRange ? { mine: ['My range (found by test)', tonicFromRange(exerciseRangeFor(prefs.voiceRange)).tonic] } : {}), base = (VKv[prefs.voice || 'low'] || VKv.low)[1]; return { kind: 'note', midi: base + d, degree: d, tonic: base, label: (SOLFA[d] || nname(base + d)) + ' (' + nname(base + d) + ')', short: SOLFA[d] || nname(base + d) }; }
@@ -1125,6 +1126,10 @@ import { register as registerPathway } from './ui/pathway.js';
     else if (MODS[mod].staff && $('optRef') && $('optRef').checked) t.els.forEach((el, k) => tone(el.info.midi, at + k * 0.8, 0.75));
   }
     // t is the task in present(); tl is the i18n t() imported under another name for this function.
+  // A hand needs a moment to find the next note, so its timer starts after this; a note played sooner still counts.
+  // shortcut: plucked instruments only, extend when a player of another instrument asks for the same.
+  const GET_READY_SEC = 1.5, NOW_CUE_SEC = 0.6;
+  function stageCue() { const e = playing && task && !task.done ? cur() : null; if (!e || !e.readyUntil || e.failed) return ''; const el = now() - e.readyUntil; return el < 0 ? t('stage.getReady') : el < NOW_CUE_SEC ? t('stage.now') : ''; }
   function present() {
     const t = task, M = MODS[mod], e = cur(); t.t0 = now(); if (e) e.t0 = now(); held = []; holdFor = 0; holdCents = []; wrongFor = 0; if (!heard || (heard.rms !== 0 && heard.rms < releaseFloor(gates))) released = true; // an exact-0 frame is a capture dropout, not quiet (as in the quiet rule below)
     $('choices').hidden = t.kind !== 'ear'; $('replayBtn').hidden = !(t.kind === 'ear' || mod === 'voice'); $('showMeBtn').hidden = t.kind === 'ear' || t.kind === 'bar' || t.kind === 'bar2' || t.kind === 'kit';
@@ -1134,7 +1139,7 @@ import { register as registerPathway } from './ui/pathway.js';
     else if (t.kind === 'bar2') { p = 'Read it, then <b>tap it</b>'; h = 'Listen for the count-in, then tap the bar (or bars) in time.'; startBar2(); }
     else if (t.kind === 'kit') { p = 'Read it, then <b>play it</b>'; h = (t.kit.bar.tip ? t.kit.bar.tip + ' ' : '') + 'Listen for the count-in, then play the bar on the drums it shows.'; if (t.kit.tryNo > 1) { const again = tl('kit.again', { n: t.kit.tryNo, max: KIT_MAX_TRIES }); coach(again); h = again + ' ' + h; kitAgainShown = true; } else if (kitAgainShown) { kitAgainShown = false; coach(''); } startKitBar(); }
     else if (t.kind === 'groove') { p = 'Play ' + t.els.map(el => promptFor(el.info, el.reveal)).join(' → ') + ' — <b>in time</b>'; h = 'Four clicks to count in, then play each note on the beat.'; startGroove(); }
-    else { const verb = mod === 'voice' ? 'Sing' : 'Play'; p = verb + ' ' + t.els.map((el, k) => (k === t.idx ? '<b>' : '') + promptFor(el.info, el.reveal) + (k === t.idx ? '</b>' : '')).join(' → '); if (t.kind === 'hold') p = (mod === 'voice' ? 'Hold ' : 'Hold ') + '<b>' + e.info.label + '</b> for two seconds'; h = hintFor(e); playRef(t); }
+    else { const verb = mod === 'voice' ? 'Sing' : 'Play'; p = verb + ' ' + t.els.map((el, k) => (k === t.idx ? '<b>' : '') + promptFor(el.info, el.reveal) + (k === t.idx ? '</b>' : '')).join(' → '); if (t.kind === 'hold') p = (mod === 'voice' ? 'Hold ' : 'Hold ') + '<b>' + e.info.label + '</b> for two seconds'; h = hintFor(e); playRef(t); if (M.input === 'pluck') e.t0 = e.readyUntil = now() + GET_READY_SEC; }
     $('prompt').innerHTML = p; $('hint').textContent = (t.warm ? tl('coach.warmPrefix') : '') + h; updateDesc(); updateHowPeek();
   }
   function hintFor(e) {
@@ -1204,7 +1209,7 @@ import { register as registerPathway } from './ui/pathway.js';
   // ---------- judging ----------
   const timeQ = (rt, limit) => rt <= 0.4 * limit ? 1 : clamp(1 - 0.4 * (rt - 0.4 * limit) / (0.6 * limit), 0.6, 1);
   function passEl(extraQ, msg, assistance, input) {
-    const e = cur(); e.rt = now() - e.t0; e.q = e.failed ? 0 : timeQ(e.rt, task.limit) * (extraQ === undefined ? 1 : extraQ); if (assistance) e.assistance = assistance; if (typeof input === 'string') e.input = input; flashGood = performance.now(); lastInputAt = now();
+    const e = cur(); e.rt = Math.max(0, now() - e.t0); e.q = e.failed ? 0 : timeQ(e.rt, task.limit) * (extraQ === undefined ? 1 : extraQ); if (assistance) e.assistance = assistance; if (typeof input === 'string') e.input = input; flashGood = performance.now(); lastInputAt = now();
     if (!e.failed && !e.helped) say(msg || (inf(e.id).short + ': yes, in ' + e.rt.toFixed(1) + ' s.'), 'ok'); else say('That is the one. ' + inf(e.id).short + (e.info.string ? ' lives on string ' + e.info.string + (e.info.fret ? ', fret ' + e.info.fret : ', open') : '') + '.', '');
     task.idx++; held = []; holdFor = 0; holdCents = []; wrongFor = 0;
     if (diagShown && $('coach').textContent === diagShown) { coach(diagBefore); } diagInputFrames = []; diagLastState = null; diagSince = null; diagShown = null; // a pass starts the listening afresh: no warning left beside it
@@ -1278,7 +1283,7 @@ import { register as registerPathway } from './ui/pathway.js';
     midiMisses = source === 'midi' ? midiMisses.concat([{ heardMidi: midi, targetMidi: i.midi }]).slice(-SHIFT_RUN) : [];
     const shift = midiShift(midiMisses);
     const where = shift ? midiShiftHint(shift) : wrongNoteHint({ heardMidi: midi, targetMidi: i.midi, policy, fretted: !!i.string && !MODS[mod].fretless, input: source, name: nname });
-    const wn = (x) => i.written === undefined ? nname(x) : nname(writtenMidi(i, x)); failEl('That was ' + wn(midi) + ', the note is ' + wn(i.midi) + '. ' + where, e.id + '>' + wn(midi)); // transposing winds: both names in the written key the prompt uses
+    const wn = (x, oct) => i.written === undefined ? nname(x, oct) : nname(writtenMidi(i, x), oct), oct = !!i.string && wn(midi) === wn(i.midi); failEl('That was ' + wn(midi, oct) + ', the note is ' + wn(i.midi, oct) + '. ' + where, e.id + '>' + wn(midi)); // transposing winds: both names in the written key the prompt uses
   }
   // onNote's hands-together branch: the stage machine lives in src/core/hands-together-stage.js (pure, table-tested); this applies its verdict to the UI.
   function handsCtx(e) { return { id: e.id, ex: e.info.ex, pair: e.pair, held: held, now: now, perfNow: () => performance.now(), noteState: noteState, realMidiHeld: realMidiHeld, nname: nname }; }
@@ -1811,8 +1816,11 @@ import { register as registerPathway } from './ui/pathway.js';
     // capo: frets behind it (nut side) are dimmed and unplayable; the bar sits at fret `capo`
     if (capo > 0) { const cx = fx(capo), nx = x0 - W * 0.06; g.fillStyle = '#05070c99'; g.fillRect(Math.min(nx, cx), y0 - H * 0.05, Math.abs(cx - nx), y1 - y0 + H * 0.1); g.strokeStyle = '#f3c52f'; g.lineWidth = H * 0.035; g.lineCap = 'round'; g.beginPath(); g.moveTo(cx, y0 - H * 0.04); g.lineTo(cx, y1 + H * 0.04); g.stroke(); g.lineCap = 'butt'; }
     const dot = (s, f, col, txt, a, kind) => { fv.dots.push({ string: s, fret: f, x: fx(f), y: sy(s), kind: kind }); g.globalAlpha = a; g.fillStyle = col; g.beginPath(); g.arc(fx(f), sy(s), H * 0.05, 0, 7); g.fill(); g.globalAlpha = 1; if (txt) { g.fillStyle = '#06101d'; font(H * 0.05); g.textAlign = 'center'; g.fillText(txt, fx(f), sy(s) + H * 0.018); } };
-    if (heard && heard.freq && MODS[mod].input === 'pluck') { const p = pc(heard.midi); for (let s = 1; s <= ns; s++) for (let f = capo; f <= nf; f++) if (pc(M.tuning[ns - s] + f) === p) dot(s, f, '#9fb4d8', '', 0.25, 'hint'); }
     if (e && e.info.kind === 'note' && (e.reveal || e.failed)) { if (e.info.string && e.info.fret >= capo) dot(e.info.string, e.info.fret, accent(), DB.prefs.names ? nname(e.info.midi) : '', 1, 'target'); else for (let s = 1; s <= ns; s++) for (let f = capo; f <= nf; f++) if (pc(M.tuning[ns - s] + f) === pc(e.info.midi)) dot(s, f, accent(), '', 0.85, 'target'); }
+    // Hollow, and only at the octave heard, so what the mic hears never looks like the note being asked for.
+    if (heard && heard.freq && MODS[mod].input === 'pluck') { const hm = Math.round(heard.midi); for (let s = 1; s <= ns; s++) for (let f = capo; f <= nf; f++) if (M.tuning[ns - s] + f === hm) { fv.dots.push({ string: s, fret: f, x: fx(f), y: sy(s), kind: 'hint' }); g.strokeStyle = '#9fb4d8'; g.lineWidth = H * 0.012; g.beginPath(); g.arc(fx(f), sy(s), H * 0.05, 0, 7); g.stroke(); } }
+    fv.caption = [e && e.info.kind === 'note' && !fv.dots.some(d => d.kind === 'target') ? t('stage.fromMemory') : '', fv.dots.some(d => d.kind === 'hint') ? t('stage.heardRing') : ''].filter(Boolean).slice(0, stageCue() ? 1 : 2).join('  ·  '); // one part while the corner cue shares this row
+    if (fv.caption) { g.fillStyle = '#93a0bd'; font(H * 0.05, 600); g.textAlign = 'left'; g.fillText(fv.caption, x0, H * 0.085, x1 - x0); }
     if (e && e.info.kind === 'chord') { g.fillStyle = '#e9edf6'; font(H * 0.2); g.textAlign = 'center'; g.fillText(e.info.sym, W * 0.5, H * 0.56); if (typeof e.score === 'number') { g.fillStyle = '#05070c'; rr(W * 0.3, H * 0.66, W * 0.4, H * 0.04, 4); g.fill(); g.fillStyle = e.score > 0.5 ? '#5be08a' : accent(); rr(W * 0.3, H * 0.66, W * 0.4 * c01(e.score), H * 0.04, 4); g.fill(); } }
   }
   // `offScale` (a reading beyond +-50 cents) draws a triangle pointing off
@@ -2076,6 +2084,7 @@ import { register as registerPathway } from './ui/pathway.js';
     if (task && task.kind === 'groove' && groove) drawGrooveCue(W, H);
     if (!reducedMotion && performance.now() - flashBad < 220) { g.strokeStyle = '#ff6b5e'; g.lineWidth = 8; g.strokeRect(4, 4, W - 8, H - 8); g.fillStyle = '#ff6b5e'; font(H * 0.06, 700); g.textAlign = 'left'; g.fillText('✗', 14, H * 0.09); } else if (!reducedMotion && performance.now() - flashGood < 220) { g.strokeStyle = '#5be08a'; g.lineWidth = 8; g.strokeRect(4, 4, W - 8, H - 8); g.fillStyle = '#5be08a'; font(H * 0.06, 700); g.textAlign = 'left'; g.fillText('✓', 14, H * 0.09); }
     if (!playing && !(rangeTest && mod === 'voice')) { g.fillStyle = '#93a0bd'; font(H * 0.08); g.textAlign = 'right'; g.fillText(sess ? t('stage.paused') : t(instrumentChosen ? 'stage.pressStart' : 'stage.pickFirst'), W * 0.97, H * 0.1); }
+    else { const cue = stageCue(); if (cue) { g.fillStyle = accent(); font(H * 0.08); g.textAlign = 'right'; g.fillText(cue, W * 0.97, H * 0.1); } }
   }
 
   // ---------- tools: tuner and melody capture ----------
@@ -3359,7 +3368,7 @@ import { register as registerPathway } from './ui/pathway.js';
   if (__DEBUG_HOOK__) Object.assign(hook, { judgeChord: judgeChord, chroma: chroma });
   if (__DEBUG_HOOK__) Object.assign(hook, { groove: () => groove, grooveLast: () => grooveLast, grooveBpm: () => S.grooveBpm, grooveOn: v => { grooveOn = !!v; task = null; groove = null; }, grooveInject: (midi, atAudioTime) => { const fire = () => { if (audioNow() >= atAudioTime) onNote(midi, true); else setTimeout(fire, 4); }; fire(); } });
   //
-  if (__DEBUG_HOOK__) Object.assign(hook, { fretView: () => fretViewLast });
+  if (__DEBUG_HOOK__) Object.assign(hook, { fretView: () => fretViewLast, stageCue: stageCue, inf: inf, refreshPrompt: refreshPrompt });
   if (__DEBUG_HOOK__) Object.assign(hook, { kbdTarget: () => kbdTargetDbg });
   if (__DEBUG_HOOK__) Object.assign(hook, { showMe: () => $('showMeBtn').click() });
   //

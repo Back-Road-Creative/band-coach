@@ -79,6 +79,7 @@ shows the live input level. An instrument plugged into only one channel of a 2-c
 is summed into the listening path rather than silenced.
 While you practise, the coach line says why nothing is being judged: "not hearing anything" or "too quiet to judge" only after about 4 seconds of quiet, counted from the start or from your last clean note (you may still be getting ready, or a note may still be ringing out), and "a chord" as soon as it hears one. In a room the check measured as quiet, an unplayed mic is simply waiting for you, so those two lines are not shown until a sound loud enough to judge arrives and is still not a clean note. The moment a clean single note is heard, that warning comes down and the line it replaced comes back.
 
+On a guitar and the other plucked instruments, each new note starts with GET READY in the corner of the picture while the time bar stays full, for 1.5 seconds; NOW shows as the bar starts to run. A note played during the get-ready still counts. A bright dot is the note being asked for. No dot means this one is from memory, the picture says so, and Show me lights it. A hollow ring is what the mic hears, only at the octave it hears, and rings show even before you press Start, when nothing is being judged. The two open E strings read Low E and High E, and on a string instrument a wrong note with the same name gives both octaves.
 One pluck gets one answer. Plucking the same note again counts once the string gets clearly louder than it was ringing (about a third louder), so a repeat works at an ordinary mic level, while a softer re-pluck waits for the ring to fade. A reading that only flips octave inside one ring is not answered again, unless it settles on the note asked for, and a brief loss of pitch inside a pluck does not restart the count.
 
 Both checks say what they are doing and what they heard in the line beside the button ("Checking the
@@ -1903,8 +1904,8 @@ release tests and the Windows lane on the exact staged file (its sha256 is recor
    in silence, then pluck a string once. **Fail** unless the line beside the button then says "I
    heard playing during the check, so nothing was changed. Try again in silence." Press "Check my
    microphone" again and stay quiet while the line beside the button says "Listening for 3 seconds
-   — stay quiet…". **Fail** if it then says "Could not get a reading from the microphone". Then,
-   with the exercise running, play the note it asks for softly, play a wrong note, pluck the right
+   — stay quiet…". **Fail** if it then says "Could not get a reading from the microphone". Then
+   press Start and, with the exercise running, play the note it asks for softly, play a wrong note, pluck the right
    note several times quickly, let a note ring out, and stay silent for ten seconds. **Pass** if
    every pluck gets exactly one response on screen, the wrong note gets a "That was …, the note is
    …" line naming what you played, and nothing responds while you are silent (the exercise moving
