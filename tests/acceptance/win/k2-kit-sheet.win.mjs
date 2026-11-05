@@ -133,7 +133,8 @@ const padAction = (r) => {
 // The app's describeHit() words for a fresh profile, read from the table already staged; the unit test holds them equal.
 const padPlace = (r) => en[`kit.desc.${r.id}`].replace(/\{left\}/g, en['kit.side.left']).replace(/\{right\}/g, en['kit.side.right']);
 export const padPrompt = (r) => `${padAction(r)}. ${padPlace(r)}`;
-export const stepPrompt = (r, asked) => `${asked} ${padPlace(r)}`;
+// The app's own step note already gives some pads this line.
+export const stepPrompt = (r, asked) => (asked.includes(padPlace(r)) ? asked : `${asked} ${padPlace(r)}`);
 
 // One prompt, one sheet row.
 async function padRow(page, env, r, where) {

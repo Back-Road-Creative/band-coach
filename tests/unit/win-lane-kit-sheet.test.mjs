@@ -168,3 +168,10 @@ test('every K2 prompt says where the pad sits, in the words the app itself uses'
   }
   assert.match(padPrompt(KIT_SHEET_ROWS.find((r) => r.id === 'tom-floor')), /standing on its own legs/);
 });
+
+test('a K2 walk-through step the app already explains is not explained twice', () => {
+  const r = KIT_SHEET_ROWS.find((x) => x.id === 'hihat-pedal');
+  const where = describeHit(r.id);
+  const line = stepPrompt(r, `Press the Hi-hat pedal now. ${where}`);
+  assert.equal(line.split(where).length - 1, 1, line);
+});
