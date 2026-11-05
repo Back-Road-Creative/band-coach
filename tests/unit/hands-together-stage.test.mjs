@@ -252,3 +252,38 @@ test('note-offs outside a staged exercise do nothing', () => {
   const r = rig('j1');
   assert.deepEqual(r.off(60).acts, []);
 });
+
+test('plain id, real MIDI: keys pressed too far apart get no credit and say so; pressed together they pass', () => {
+  const late = rig('j1');
+  assert.deepEqual(kinds(late.at(1000).on(60)), []);
+  const v = late.at(6000).on(48);
+  assert.deepEqual(kinds(v), ['say'], 'both keys are down, but five seconds apart');
+  assert.match(v.acts[0].msg, /together/);
+  late.off(60); late.off(48);
+  assert.deepEqual(kinds(late.at(7000).on(60)), []);
+  assert.deepEqual(kinds(late.at(7500).on(48)), ['pass'], 'half a second apart is together');
+});
+
+test('plain id, real MIDI: a key let go before the other goes down is not a pair', () => {
+  const r = rig('j1');
+  r.at(1000).on(60); r.at(1100).off(60);
+  assert.deepEqual(kinds(r.at(1200).on(48)), []);
+});
+
+test('plain id, computer keys: too far apart says so as well, instead of staying silent', () => {
+  const r = rig('j1');
+  r.at(1000).on(60, 'computer-key');
+  assert.deepEqual(kinds(r.at(6000).on(48, 'computer-key')), ['say']);
+});
+
+test('right-hand-only id, real MIDI: the one key is enough, however long the other has been down', () => {
+  const r = rig('j1r');
+  r.at(1000).on(48);
+  assert.deepEqual(kinds(r.at(6000).on(60)), ['pass']);
+});
+
+test('plain id, real MIDI: a stray key still down fails the pair however long ago it went down', () => {
+  const r = rig('j1');
+  r.at(1000).on(62);
+  assert.deepEqual(kinds(r.at(5000).on(60)), ['fail']);
+});

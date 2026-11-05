@@ -1,7 +1,7 @@
 // CURRENT BEHAVIOUR: piano "hands together" on the keyboard mod (level 13).
 // A real MIDI note-on stream (exact=true) can report two independent notes,
 // so both the right-hand and left-hand notes are checked exactly, together,
-// within a short window. A single detected pitch (exact=false, as a
+// pressed within 0.6 s of each other. A single detected pitch (exact=false, as a
 // monophonic microphone pitch detector would report) can only ever confirm
 // one of the two notes, so that grading is approximate and says so.
 import { test } from 'node:test';

@@ -90,6 +90,16 @@ export const QUIET_RELEASE_SEC = 0.1;
 const RING_HALF_LIFE_SEC = 0.5;
 export const ringBefore = (env, dt) => env * Math.pow(0.5, Math.max(0, dt || 0) / RING_HALF_LIFE_SEC);
 
+// A same-note re-pluck the onset detector cannot see (its fixed floor needs a jump only a loud pluck makes):
+// the level climbs this far past the ring as it stood this many frames back, about the 2048-sample window's
+// four hops. Measuring against the held envelope keeps a ring's own wobble from counting. Known limit: a
+// re-pluck less than this much louder than the ring still waits for the ring to decay.
+export const PLUCK_RISE = 1.3;
+export const PLUCK_RISE_FRAMES = 4;
+export const PLUCK_RISE_MAX_DT = 0.05;
+// How long a pluck can lose its pitch reading, while still loud, and remain the same pluck.
+export const PITCH_GAP_SEC = 0.06;
+
 // Maps an RMS value onto a 0..1 dB-scaled range for a level meter. Human
 // loudness perception (and mic clipping headroom) is logarithmic, so a
 // linear RMS-to-width mapping would make everything below "shouting" look

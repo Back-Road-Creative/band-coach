@@ -36,7 +36,7 @@ import { CLEF_PATHS } from './notation/glyphs.js';
 import { yin } from './audio/yin.js';
 import { createPitchNode } from './audio/pitch-worklet.js';
 //
-import { gatesFor, meterLevel, releaseFloor, classifyRoomCheck, ROOM_CHECK_VERSION, MIN_FLOOR, QUIET_RELEASE_SEC, ringBefore } from './audio/levels.js';
+import { PLUCK_RISE, PLUCK_RISE_FRAMES, PLUCK_RISE_MAX_DT, PITCH_GAP_SEC, gatesFor, meterLevel, releaseFloor, classifyRoomCheck, ROOM_CHECK_VERSION, MIN_FLOOR, QUIET_RELEASE_SEC, ringBefore } from './audio/levels.js';
 import { diagnoseInput, stepDiagnosis, heardNote } from './audio/input-diagnosis.js';
 import { createOnsetDetector } from './audio/onset.js';
 import { createDrumClassifier } from './audio/drum-classify.js';
@@ -1105,6 +1105,7 @@ import { register as registerPathway } from './ui/pathway.js';
   const coach = t => { $('coach').textContent = t; if (!$('settingsView').hidden) $('settingsSay').textContent = t; };
   const cur = () => task && task.els[task.idx];
   let pressed = {}, heard = null, held = [], holdFor = 0, holdCents = [], wrongFor = 0, lastFired = -1, stableN = 0, stableMidi = -1, released = true, flashBad = -1e12, flashGood = -1e12;
+  let ringAgo = [], noPitchFor = 0; // a re-pluck is judged against the ring as it was a few frames back; a short gap in the pitch reading does not restart a pluck
   let ringEnv = 0; // Q10d-3: decaying loudest recent pluck level; an onset below it is the ring wobbling, not a new pluck
   let quietFor = 0, quietSeen = false; // Q10d-2: delivered quiet time (dt, not frames) toward releasing a ringing pluck; the first quiet frame starts the clock
   // Field report: a strummed chord on a single-note item clears no gate the
@@ -1163,7 +1164,7 @@ import { register as registerPathway } from './ui/pathway.js';
       const hMode = handsModeFromId(e.id);
       if (hMode === 'right') return 'Right hand: finger ' + i.ex.rh.finger + ', ' + nname(i.ex.rh.midi) + '. The left hand (' + nname(i.ex.lh.midi) + ') may play along but is not checked. A MIDI keyboard or two hands on the computer keys grades the right-hand note exactly; a microphone grades it approximately.';
       if (hMode === 'left') return 'Left hand: finger ' + i.ex.lh.finger + ', ' + nname(i.ex.lh.midi) + '. The right hand (' + nname(i.ex.rh.midi) + ') may play along but is not checked. A MIDI keyboard or two hands on the computer keys grades the left-hand note exactly; a microphone grades it approximately.';
-      return fingeringLabel(i.ex) + ' (' + nname(i.ex.rh.midi) + ' right hand, ' + nname(i.ex.lh.midi) + ' left hand). A MIDI keyboard or two hands on the computer keys grades both notes exactly; a microphone only hears one note at a time, so that grading is approximate.';
+      return fingeringLabel(i.ex) + ' (' + nname(i.ex.rh.midi) + ' right hand, ' + nname(i.ex.lh.midi) + ' left hand). A MIDI keyboard or two hands on the computer keys grades both notes exactly: press them at the same moment. Letting go is not timed here. A microphone only hears one note at a time, so that grading is approximate.';
     }
     if (mod === 'voice') return task.ref === 'target' ? 'You heard the note. Sing it back in any octave and hold it.' : 'You heard Do. Find ' + i.short + ' from it.';
     if (MODS[mod].staff) return t('hint.staffNote', { label: i.label });
@@ -1329,11 +1330,15 @@ import { register as registerPathway } from './ui/pathway.js';
       // F8: an onset detector (src/audio/onset.js) catches a re-pluck of the
       // SAME note on a still-ringing string, which the RMS-drop/pitch-change
       // release check below can never see on its own.
-      if (fr.onset && Math.max(fr.rms, fr.onsetRms || 0) > ringPrev) { released = true; stableN = 0; } // Q10d-3: an onset no louder than the ring it lands on is the ring dipping and returning
+      if (dt > PLUCK_RISE_MAX_DT) ringAgo = []; // frames this far apart: the envelope has decayed between them, so a steady ring would look like a rise
+      const rose = ringAgo.length === PLUCK_RISE_FRAMES && ringAgo[0] >= gates.note && fr.rms > ringAgo[0] * PLUCK_RISE; ringAgo = ringAgo.concat([ringPrev]).slice(-PLUCK_RISE_FRAMES); // the worklet's onset needs a jump only a loud pluck makes; at an ordinary mic level this is what sees a same-note re-pluck
+      if ((rose && !released) || (fr.onset && Math.max(fr.rms, fr.onsetRms || 0) > ringPrev)) { released = true; stableN = 0; } // Q10d-3: an onset no louder than the ring it lands on is the ring dipping and returning
       if (e.info.kind === 'chord') { if (fr.rms < gates.chord || !fr.chroma) { holdFor = 0; return; } const j = judgeChord({ chroma: fr.chroma, targetPcs: e.info.pcs }); e.score = j.score; if (j.ok) { holdFor += dt; if (holdFor > 0.18) passEl(undefined, e.info.label + ': that rings true.'); } else holdFor = 0; if (fr.rms > 0.02) lastInputAt = now(); return; }
-      if (fr.rms < gates.note || !fr.freq) { stableN++; if (fr.rms !== 0) { if (fr.rms < releaseFloor(gates)) { if (quietSeen) quietFor += dt; quietSeen = true; if (quietFor >= QUIET_RELEASE_SEC) { released = true; ringEnv = 0; } } else { quietSeen = false; quietFor = 0; } } stableMidi = -1; return; } quietSeen = false; quietFor = 0; // an exact-0 rms frame is a capture dropout (with the browser's processing off, a live mic's silence is not 0.0; a device-level gate can still send zeros): it holds the quiet clock
-      const m = Math.round(fr.midi); if (m === stableMidi) stableN++; else { stableMidi = m; stableN = 1; }
-      if (stableN === 3 && (released || m !== lastFired)) { lastFired = m; released = false; if (pc(m) === pc(e.info.midi)) noteTuning((fr.midi - m) * 100); onNote(m, false, 'mic'); }
+      if (fr.rms >= gates.note && !fr.freq && stableMidi >= 0 && (noPitchFor += dt) <= PITCH_GAP_SEC) { quietSeen = false; quietFor = 0; return; } // a noisy pluck drops a frame or two of pitch: the same pluck, not a new count
+      if (fr.rms < gates.note || !fr.freq) { stableN++; if (fr.rms !== 0) { if (fr.rms < releaseFloor(gates)) { if (quietSeen) quietFor += dt; quietSeen = true; if (quietFor >= QUIET_RELEASE_SEC) { released = true; ringEnv = 0; ringAgo = []; } } else { quietSeen = false; quietFor = 0; } } stableMidi = -1; return; } quietSeen = false; quietFor = 0; // an exact-0 rms frame is a capture dropout (with the browser's processing off, a live mic's silence is not 0.0; a device-level gate can still send zeros): it holds the quiet clock
+      noPitchFor = 0; const m = Math.round(fr.midi); if (m === stableMidi) stableN++; else { stableMidi = m; stableN = 1; }
+      // Within one ring, a reading that only flips octave is the same pluck: answer it once, unless it has settled on the note asked for.
+      if (stableN === 3 && (released || (m !== lastFired && (pc(m) !== pc(lastFired) || m === e.info.midi)))) { lastFired = m; released = false; ringAgo = []; if (pc(m) === pc(e.info.midi)) noteTuning((fr.midi - m) * 100); onNote(m, false, 'mic'); }
       return;
     }
     if (M.input === 'sustain') {
