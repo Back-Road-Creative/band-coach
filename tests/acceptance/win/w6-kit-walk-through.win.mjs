@@ -19,7 +19,7 @@ export const LANE_PORT = 'band-coach-lane';
 const PIECES = ['kick', 'snare', 'hihat-closed', 'hihat-pedal', 'hihat-open', 'tom-floor', 'tom-mid', 'tom-high', 'crash', 'ride'];
 const lit = (page) => page.evaluate("(document.querySelector('#kitPreview .kit-sel') || {dataset: {}}).dataset.piece || null");
 // The loopback output, by exact name only. Returns whether it was found; sends nothing else, ever.
-const sendOnLane = (page, bytesList, gapMs) => page.evaluate(`(async () => {
+export const sendOnLane = (page, bytesList, gapMs) => page.evaluate(`(async () => {
   const access = (window.__laneMidi = window.__laneMidi || await navigator.requestMIDIAccess());
   let out = null; access.outputs.forEach((o) => { if (!out && o.name === ${JSON.stringify(LANE_PORT)}) out = o; });
   if (!out) return false;

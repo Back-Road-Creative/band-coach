@@ -122,25 +122,34 @@ export function doneListening({ hits, sinceLastMs, elapsedMs, target = TARGET_HI
   return hits >= Math.min(ENOUGH_HITS, target) && sinceLastMs >= GAVE_UP_QUIET_MS;
 }
 
-const startListening = `(async () => {
+// One MIDI connection of its own, logging every input into window.__kitLog. The lane's loopback is
+// left out unless asked for, which only a K2 rehearsal does.
+export const listenerScript = ({ includeLane = false } = {}) => `(async () => {
+  const skip = (name) => ${includeLane ? 'false' : `name === ${JSON.stringify(LANE_PORT)}`};
   const log = (window.__kitLog = []);
   const inputs = (window.__kitInputs = []);
   const openErrors = (window.__kitOpenErrors = []);
   const access = await navigator.requestMIDIAccess();
-  window.__kitPorts = () => [...access.inputs.values()].filter((i) => i.name !== ${JSON.stringify(LANE_PORT)}).map((i) => ({ name: i.name, state: i.state, connection: i.connection }));
+  window.__kitPorts = () => [...access.inputs.values()].filter((i) => !skip(i.name)).map((i) => ({ name: i.name, state: i.state, connection: i.connection }));
   const listen = (input) => {
-    if (input.name === ${JSON.stringify(LANE_PORT)} || inputs.includes(input.name)) return;
+    if (skip(input.name) || inputs.includes(input.name)) return;
     inputs.push(input.name);
     input.onmidimessage = (e) => log.push({ port: input.name, t: e.timeStamp, data: [...e.data] });
     input.open().catch((e) => openErrors.push(input.name + ': ' + e.message));
   };
   access.inputs.forEach(listen);
   access.onstatechange = (e) => { if (e.port.type === 'input' && e.port.state === 'connected') listen(e.port); };
+})()`;
+
+const showBox = `(() => {
   const box = document.createElement('div');
   box.id = 'kitReadingBox';
   box.style.cssText = 'position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;text-align:center;padding:24px;background:#111;color:#fff;font:600 28px system-ui';
   document.body.appendChild(box);
 })()`;
+
+// Read through the page's own storage, not window.__coach, which the release file does not have.
+export const savedPadsRead = `(() => { try { const db = JSON.parse(localStorage.getItem(${JSON.stringify(DB_KEY)})); return (db && db.prefs && db.prefs.kit && db.prefs.kit.midiMaps) || null; } catch (e) { return null; } })()`;
 
 const show = (page, text) => page.evaluate(`document.getElementById('kitReadingBox').textContent = ${JSON.stringify(text)}`);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -154,7 +163,8 @@ export async function run(page, ctx = {}) {
   if (bad) return { ...o, stuck: bad };
   const prompt = pad ? (n) => `Hit only the ${PIECES.find((p) => p.id === pad).name}, ${target} times, some hard and some normal. Heard ${n} of ${target}.` : (n) => `Hit each pad once, about a second apart, then again harder or softer. Heard ${n} of ${target} hits.`;
   try {
-    await page.evaluate(startListening);
+    await page.evaluate(listenerScript());
+    await page.evaluate(showBox);
     const t0 = Date.now();
     let lastAt = t0;
     let seen = 0;
@@ -169,8 +179,7 @@ export async function run(page, ctx = {}) {
     }
     o.inputs = await page.evaluate('window.__kitInputs');
     o.openErrors = await page.evaluate('window.__kitOpenErrors');
-    // Read through the page's own storage, not window.__coach, which the release file does not have.
-    o.savedPadList = await page.evaluate(`(() => { try { const db = JSON.parse(localStorage.getItem(${JSON.stringify(DB_KEY)})); return (db && db.prefs && db.prefs.kit && db.prefs.kit.midiMaps) || null; } catch (e) { return null; } })()`);
+    o.savedPadList = await page.evaluate(savedPadsRead);
     await show(page, 'Done. You can close this window.');
   } catch (e) {
     o.stuck = e.message;

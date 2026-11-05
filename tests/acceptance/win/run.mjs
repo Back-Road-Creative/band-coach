@@ -49,6 +49,7 @@ export const registry = [
 // exit code, so an unattended lane cannot sit waiting for someone to hit a drum.
 export const attended = [
   { id: 'K1', file: 'k1-kit-reading.win.mjs', maxMs: 12 * 60 * 1000 },
+  { id: 'K2', file: 'k2-kit-sheet.win.mjs', maxMs: 12 * 60 * 1000 },
 ];
 
 export const selectScenarios = (only) => (only ? [...registry, ...attended].filter((r) => r.id === only) : registry);
@@ -60,6 +61,7 @@ export function parseArgs(argv) {
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--visible') out.visible = true;
+    else if (a === '--rehearse') out.rehearse = true;
     else if (VALUE_FLAGS[a]) {
       if (i + 1 >= argv.length) throw new Error(`${a} needs a value`);
       out[VALUE_FLAGS[a]] = argv[++i];
@@ -182,7 +184,7 @@ export async function runWindows(args, log = console.log) {
     log(`lane cannot run: ${report.preflight}`);
     return finish(planLane({ found: false, results: [], registry, only: args.only }));
   }
-  const ctx = { html, sha256: args.sha256, expectVersion: args.expectVersion, visible: args.visible, pad: args.pad, hits: args.hits };
+  const ctx = { html, sha256: args.sha256, expectVersion: args.expectVersion, visible: args.visible, pad: args.pad, hits: args.hits, rehearse: args.rehearse, say: log };
   for (const entry of selected) {
     const r = await runScenario(entry, ctx);
     report.results.push(r);
@@ -222,6 +224,7 @@ export function runWsl(args, err = console.error) {
     const argv = [`${runWin}\\tests\\acceptance\\win\\run.mjs`, '--run-dir', runWin, '--html', htmlWin, '--sha256', args.sha256 || sha256Of(html), '--report', `${runWin}\\report.json`];
     for (const [flag, key] of [['--expect-version', 'expectVersion'], ['--only', 'only'], ['--chrome', 'chrome'], ['--pad', 'pad'], ['--hits', 'hits']]) if (args[key]) argv.push(flag, String(args[key]));
     if (args.visible) argv.push('--visible');
+    if (args.rehearse) argv.push('--rehearse');
     const child = spawnSync(args.node, argv, { stdio: 'inherit', cwd: runDir, timeout: WSL_CHILD_MS });
     const hasReport = existsSync(join(runDir, 'report.json'));
     code = laneExit({ status: child.status, hasReport });

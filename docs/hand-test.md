@@ -21,8 +21,14 @@ what you saw.
 
 ## 2. Drum kit, pad by pad
 
-Pick "Drum kit", connect the kit the way you really play it, open "Set up input" and go through
-the set-up sheet. Then hit each pad once, in the order below, and copy the line the app shows.
+On an electronic kit the lane fills this section in: run the kit check (K2,
+[windows-lane.md](windows-lane.md#the-kit-check-k2)), hit each pad when your terminal says to, and
+it prints these tables filled from what the app showed. Paste them here. It uses a fresh Chrome
+profile and plays no exercise, so README step 7's "Start" part in section 1 is still yours.
+
+By hand: pick "Drum kit", connect the kit the way you really play it, open "Set up input" and go
+through the set-up sheet. Then hit each pad once, in the order below, and copy the line the app
+shows.
 
 | Row | Value |
 |---|---|

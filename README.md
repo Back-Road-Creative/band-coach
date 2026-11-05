@@ -1942,8 +1942,8 @@ release tests and the Windows lane on the exact staged file (its sha256 is recor
    for are marked right. **Fail** if a piece has no name or a correct hit is not marked. The
    microphone can tell only kick, snare and hi-hat apart, so write which route you used in the
    record: a pass on the computer keys or the microphone is not an electronic-kit pass.
-   With an electronic kit, also hit each pad once and fill in the per-pad table in
-   [docs/hand-test.md](docs/hand-test.md): a snare that reads "High tom" fails this step.
+   With an electronic kit, also fill in the per-pad table in [docs/hand-test.md](docs/hand-test.md),
+   which the lane's kit check does as you hit each pad: a snare that reads "High tom" fails this step.
 8. **Phone, if you have one (1 min).** Once this release's tag has deployed the phone copy (see
    "Phone copy" above), open it on the phone, pick an instrument, press "Start" and play a few notes
    on the screen. **Pass** if you can tap each key or pad the exercise asks for without hitting its
