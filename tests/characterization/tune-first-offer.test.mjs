@@ -45,7 +45,9 @@ test('Skip hides the offer and it stays hidden after a reload', async (t) => {
   await new Promise((r) => setTimeout(r, 1000));
   await page.reload();
   await page.waitFor('typeof window.__coach !== "undefined"', 8000);
-  assert.equal((await page.evaluate(offer)).hidden, true, 'still hidden after a reload');
+  // Failed once in CI (run 42097911106) and never in 30 loaded local runs: the state after the reload says which input moved.
+  const state = await page.evaluate(`JSON.stringify({ asked: localStorage.getItem(${JSON.stringify(ASKED)}), seeded: sessionStorage.getItem('seeded'), mod: window.__coach.db().prefs.mod, sessions: window.__coach.db().sessions.length })`);
+  assert.equal((await page.evaluate(offer)).hidden, true, `still hidden after a reload; after it: ${state}`);
 });
 
 test('an instrument already practised gets no offer, and Start hides it', async (t) => {
