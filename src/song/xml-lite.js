@@ -60,7 +60,9 @@ function decodeEntities(raw, sc) {
       const isHex = body[1] === 'x' || body[1] === 'X';
       const digits = isHex ? body.slice(2) : body.slice(1);
       if (!digits || !/^[0-9a-fA-F]+$/.test(digits) || (!isHex && !/^[0-9]+$/.test(digits))) sc.fail(`invalid numeric character reference &${body};`);
-      out += String.fromCodePoint(parseInt(digits, isHex ? 16 : 10));
+      const code = parseInt(digits, isHex ? 16 : 10);
+      if (code > 0x10ffff) sc.fail(`invalid numeric character reference &${body}; (no such character)`);
+      out += String.fromCodePoint(code);
     } else if (Object.prototype.hasOwnProperty.call(NAMED_ENTITIES, body)) {
       out += NAMED_ENTITIES[body];
     } else {
