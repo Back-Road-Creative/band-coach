@@ -107,7 +107,7 @@ function buildZip(files) {
     const stored = f.method === 8 ? zlib.deflateRawSync(f.data) : f.data;
     const localHeader = Buffer.concat([
       u32(0x04034b50), u16(20), u16(0), u16(f.method), u16(0), u16(0),
-      u32(0), u32(stored.length), u32(f.data.length),
+      u32(zlib.crc32(f.data)), u32(stored.length), u32(f.data.length),
       u16(nameBuf.length), u16(0),
       nameBuf,
     ]);
@@ -117,7 +117,7 @@ function buildZip(files) {
 
     const centralHeader = Buffer.concat([
       u32(0x02014b50), u16(20), u16(20), u16(0), u16(f.method), u16(0), u16(0),
-      u32(0), u32(stored.length), u32(f.data.length),
+      u32(zlib.crc32(f.data)), u32(stored.length), u32(f.data.length),
       u16(nameBuf.length), u16(0), u16(0), u16(0), u16(0),
       u32(0), u32(localOffset),
       nameBuf,

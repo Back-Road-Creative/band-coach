@@ -9,10 +9,11 @@
 //
 // API:
 //   inflateRaw(bytes, maxBytes?) -> Uint8Array        raw DEFLATE decompress
-//   readZipEntries(bytes) -> [{ name, method, compressedSize,
+//   readZipEntries(bytes) -> [{ name, method, crc, compressedSize,
 //     uncompressedSize, localOffset }]               central directory listing
 //   readZipEntryData(bytes, entry, maxBytes?) -> Uint8Array
-//                                                      decompressed entry bytes
+//     decompressed entry bytes, refused when they do not match entry.crc
+//   crc32(bytes) -> number                            the zip checksum
 //   readMxlRootEntry(bytes) -> { name, bytes }        the score inside an .mxl,
 //     found via META-INF/container.xml, falling back to the first
 //     non-META-INF .musicxml/.xml entry
@@ -20,7 +21,8 @@
 // Every entry's unpacked size is capped at MAX_ENTRY_BYTES (a "zip bomb"
 // guard): a declared size over the cap is rejected before inflating, and
 // inflate itself stops the instant its output would exceed the cap rather
-// than after allocating it. `maxBytes` overrides the cap for tests.
+// than after allocating it. `maxBytes` overrides the cap for tests. The
+// checksum is compared only after those limits, on the unpacked bytes.
 
 // ---- bit-level reading for DEFLATE -----------------------------------
 
@@ -178,6 +180,24 @@ export function inflateRaw(bytes, maxBytes = MAX_ENTRY_BYTES) {
 
 // ---- ZIP container ------------------------------------------------------
 
+// CRC-32 (the zip checksum, as in RFC 1952). Also used by band-pack.js's writer.
+const CRC_TABLE = (() => {
+  const table = new Uint32Array(256);
+  for (let n = 0; n < 256; n += 1) {
+    let c = n;
+    for (let k = 0; k < 8; k += 1) c = (c & 1) ? (0xedb88320 ^ (c >>> 1)) : (c >>> 1);
+    table[n] = c >>> 0;
+  }
+  return table;
+})();
+
+export function crc32(bytes) {
+  let crc = 0xffffffff;
+  for (let i = 0; i < bytes.length; i += 1) crc = CRC_TABLE[(crc ^ bytes[i]) & 0xff] ^ (crc >>> 8);
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+
 function u16(bytes, pos) { return bytes[pos] | (bytes[pos + 1] << 8); }
 function u32(bytes, pos) { return (bytes[pos] | (bytes[pos + 1] << 8) | (bytes[pos + 2] << 16) | (bytes[pos + 3] << 24)) >>> 0; }
 
@@ -205,6 +225,7 @@ export function readZipEntries(bytes) {
   for (let i = 0; i < totalEntries; i += 1) {
     if (u32(bytes, pos) !== CENTRAL_SIG) throw new Error('not a valid zip archive: malformed central directory entry');
     const method = u16(bytes, pos + 10);
+    const crc = u32(bytes, pos + 16); // the central copy: a data-descriptor entry leaves the local one 0
     const compressedSize = u32(bytes, pos + 20);
     const uncompressedSize = u32(bytes, pos + 24);
     const nameLen = u16(bytes, pos + 28);
@@ -212,7 +233,7 @@ export function readZipEntries(bytes) {
     const commentLen = u16(bytes, pos + 32);
     const localOffset = u32(bytes, pos + 42);
     const name = decoder.decode(bytes.subarray(pos + 46, pos + 46 + nameLen));
-    entries.push({ name, method, compressedSize, uncompressedSize, localOffset });
+    entries.push({ name, method, crc, compressedSize, uncompressedSize, localOffset });
     pos += 46 + nameLen + extraLen + commentLen;
   }
   return entries;
@@ -226,9 +247,12 @@ export function readZipEntryData(bytes, entry, maxBytes = MAX_ENTRY_BYTES) {
   const extraLen = u16(bytes, pos + 28);
   const dataStart = pos + 30 + nameLen + extraLen;
   const compressed = bytes.subarray(dataStart, dataStart + entry.compressedSize);
-  if (entry.method === 0) return Uint8Array.from(compressed);
-  if (entry.method === 8) return inflateRaw(compressed, maxBytes);
-  throw new Error(`unsupported zip compression method ${entry.method} for "${entry.name}" (only stored and deflate are supported)`);
+  let data;
+  if (entry.method === 0) data = Uint8Array.from(compressed);
+  else if (entry.method === 8) data = inflateRaw(compressed, maxBytes);
+  else throw new Error(`unsupported zip compression method ${entry.method} for "${entry.name}" (only stored and deflate are supported)`);
+  if (crc32(data) !== entry.crc) throw new Error(`"${entry.name}" inside the archive is damaged (its checksum does not match its contents), so it was not opened`);
+  return data;
 }
 
 export function readMxlRootEntry(bytes) {

@@ -230,3 +230,26 @@ test('readBandPack: refuses a small pack that deflates past the size cap, even l
   assert.throws(() => readBandPack(bytes), /larger than/);
 });
 
+
+// ---- a pack damaged in transit is refused, not read with the wrong notes ----
+
+test('readBandPack refuses a pack whose song file was changed but still parses as valid JSON', () => {
+  const bytes = writeBandPack({ name: 'Friday practice', songs: [song('a')] });
+  const at = Buffer.from(bytes).indexOf('"midi":60');
+  assert.ok(at > 0, 'the stored song JSON is in the zip as plain text');
+  const damaged = Uint8Array.from(bytes);
+  damaged[at + '"midi":6'.length] = '1'.charCodeAt(0); // "midi":61 -- valid JSON, valid song, wrong note
+  assert.throws(() => readBandPack(damaged), /song 1 of the band pack could not be read: "songs\/0\.json" inside the archive is damaged/);
+});
+
+test('readBandPack says a damaged manifest is damaged, not that it is invalid JSON', () => {
+  const bytes = writeBandPack({ name: 'Friday practice', songs: [song('a')] });
+  const at = Buffer.from(bytes).indexOf('Friday practice');
+  const damaged = Uint8Array.from(bytes);
+  damaged[at] = 'G'.charCodeAt(0); // "Griday practice" -- still a valid manifest
+  assert.throws(() => readBandPack(damaged), (e) => {
+    assert.match(e.message, /"band-pack\.json" inside the archive is damaged/);
+    assert.doesNotMatch(e.message, /not valid JSON/);
+    return true;
+  });
+});

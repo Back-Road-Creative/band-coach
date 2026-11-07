@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { importGp7 } from '../../src/song/import-gp7.js';
 import { validateSong } from '../../src/song/model.js';
+import zlib from 'node:zlib';
 
 // Self-authored fixtures: a hand-written minimal score.gpif (Guitar Pro 7/8's
 // internal XML), zipped with the same tiny stored/deflate zip writer used by
@@ -20,7 +21,7 @@ function buildZip(files) {
     const stored = f.data;
     const localHeader = Buffer.concat([
       u32(0x04034b50), u16(20), u16(0), u16(0), u16(0), u16(0),
-      u32(0), u32(stored.length), u32(f.data.length),
+      u32(zlib.crc32(f.data)), u32(stored.length), u32(f.data.length),
       u16(nameBuf.length), u16(0),
       nameBuf,
     ]);
@@ -30,7 +31,7 @@ function buildZip(files) {
 
     const centralHeader = Buffer.concat([
       u32(0x02014b50), u16(20), u16(20), u16(0), u16(0), u16(0), u16(0),
-      u32(0), u32(stored.length), u32(f.data.length),
+      u32(zlib.crc32(f.data)), u32(stored.length), u32(f.data.length),
       u16(nameBuf.length), u16(0), u16(0), u16(0), u16(0),
       u32(0), u32(localOffset),
       nameBuf,
