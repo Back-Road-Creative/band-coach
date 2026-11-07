@@ -45,3 +45,19 @@ test('a genuinely empty library still says to add songs first', async (t) => {
   await page.waitFor("document.querySelector('.panel-songs-export-msg').textContent.length > 0");
   assert.match(await page.evaluate("document.querySelector('.panel-songs-export-msg').textContent"), /add some songs/i);
 });
+
+// The song list itself: a failed read used to show only the starter tunes, as if
+// the learner had never saved a song.
+test('opening the song list says the saved songs could not be read when storage fails', async (t) => {
+  const page = await open(t, BREAK_IDB);
+  await page.waitFor("/could not be read/i.test(document.getElementById('panelSay').textContent)");
+  const msg = await page.evaluate("document.getElementById('panelSay').textContent");
+  assert.match(msg, /saved songs could not be read from this browser/i);
+  assert.match(msg, /blocked/, 'includes the underlying error message');
+});
+
+test('opening an empty song list with working storage shows no storage message', async (t) => {
+  const page = await open(t, '');
+  await page.evaluate('new Promise((r) => setTimeout(r, 300))');
+  assert.doesNotMatch(await page.evaluate("document.getElementById('panelSay').textContent"), /could not be read/i);
+});

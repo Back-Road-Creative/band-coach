@@ -772,7 +772,7 @@ Picking one through the same file input adds every song to the library and shows
 assignments read-only, one line per song ("Song title: Alex plays Melody, Sam plays Bass"). "Share
 with your band" bundles a learner's own saved library into a downloadable `.bandpack` with no
 assignments, the same file-exchange pattern as a challenge — no account, no server, no network
-call. If the browser's song storage cannot be read, both buttons say so (with the browser's reason) instead of claiming the library is empty. A challenge over 5 MB or a band pack over 20 MB is refused at export with a plain reason, because
+call. If the browser's song storage cannot be read, both buttons say so (with the browser's reason) instead of claiming the library is empty, and opening the song list says the same above the built-in songs it can still show. A challenge over 5 MB or a band pack over 20 MB is refused at export with a plain reason, because
 no copy of the app could open it again. A band pack that unpacks past 20 MB is refused when opened, so a small crafted file can't freeze the tab. A MIDI file's drum track (channel 10) imports as a drum-kit part; the trainer reads it on
 the percussion staff; Review's "Play notes" sounds it as drums and "Practise this" opens it on the drum kit. A part with no
 playable note on the chosen instrument says so instead of passing. Bars where the part is silent are
