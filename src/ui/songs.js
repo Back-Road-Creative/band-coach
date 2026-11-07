@@ -578,7 +578,8 @@ function mountSongsPanel(hostEl, api) {
       else starterSongs.forEach((song) => add(song));
     }
     let saved = [];
-    try { saved = await library.list(); } catch (e) { saved = []; }
+    // A failed read lists only the built-in songs, so say why rather than let the list look empty.
+    try { saved = await library.list(); } catch (e) { saved = []; say(t('songs.say.listUnreadable', { reason: e && e.message ? e.message : String(e) }), 'no'); }
     listUl.querySelectorAll('li[data-saved]').forEach((li) => li.remove());
     saved
       .slice()
