@@ -18,6 +18,18 @@ test('decodes named and numeric entities', () => {
 test('rejects an unknown entity', () => {
   assert.throws(() => parseXml('<a>&bogus;</a>'), /unknown entity/);
 });
+test('a character reference past the last Unicode character gets the reader\'s own error, not a RangeError', () => {
+  for (const xml of ['<a>&#x110000;</a>', '<a>&#99999999999999999999;</a>', '<a b="&#x110000;"/>']) {
+    assert.throws(() => parseXml(xml), (e) => {
+      assert.ok(!(e instanceof RangeError), `${xml}: ${e.name}: ${e.message}`);
+      assert.match(e.message, /^malformed XML at line 1, column \d+: invalid numeric character reference &#[0-9a-fA-Fx]+; \(no such character\)$/);
+      return true;
+    });
+  }
+});
+test('the last Unicode character still decodes', () => {
+  assert.equal(text(parseXml('<a>&#x10FFFF;&#1114111;</a>')), '\u{10FFFF}\u{10FFFF}');
+});
 test('skips comments, processing instructions and DOCTYPE', () => {
   const root = parseXml('<?xml version="1.0"?>\n<!DOCTYPE a [ <!ENTITY x "y"> ]>\n<a><!-- a comment --><b/></a>');
   assert.equal(root.name, 'a');
