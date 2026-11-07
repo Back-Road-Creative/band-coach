@@ -743,7 +743,10 @@ function mountSongsPanel(hostEl, api) {
   // (plan D6).
   async function exportChallenge() {
     let songs = [];
-    try { songs = await library.exportAll(); } catch (e) { songs = []; }
+    try { songs = await library.exportAll(); } catch (e) {
+      exportMsg.textContent = 'Your saved songs could not be read from this browser\'s storage, so nothing was exported: ' + (e && e.message ? e.message : String(e));
+      return;
+    }
     if (!songs.length) {
       exportMsg.textContent = 'Add some songs to your library first, then export them as a challenge.';
       return;
@@ -780,7 +783,10 @@ function mountSongsPanel(hostEl, api) {
   // never runs against an empty library.
   async function shareBandPack() {
     let songs = [];
-    try { songs = await library.exportAll(); } catch (e) { songs = []; }
+    try { songs = await library.exportAll(); } catch (e) {
+      shareMsg.textContent = 'Your saved songs could not be read from this browser\'s storage, so nothing was shared: ' + (e && e.message ? e.message : String(e));
+      return;
+    }
     if (!songs.length) {
       shareMsg.textContent = 'Add some songs to your library first, then share them with your band.';
       return;
