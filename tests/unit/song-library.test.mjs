@@ -400,3 +400,104 @@ test('importAll: a store that cannot save still fails the whole restore', async 
   store.runTx = async () => { throw new Error('storage is full'); };
   await assert.rejects(() => createLibrary(store).importAll([song('a')]), /storage is full/);
 });
+
+// ---- one connection, atomic remove, linear restore ----
+
+function countingStore() {
+  const inner = memoryStore();
+  const counts = { get: 0, put: 0, delete: 0, keys: 0, runTx: 0 };
+  const store = {};
+  for (const k of Object.keys(counts)) store[k] = (...a) => { counts[k]++; return inner[k](...a); };
+  counts.total = () => counts.get + counts.put + counts.delete + counts.keys + counts.runTx;
+  return { store, counts };
+}
+
+test('importAll of 50 songs costs a linear number of store operations', async () => {
+  const { store, counts } = countingStore();
+  const songs = Array.from({ length: 50 }, (_, i) => song('s' + i, { title: 'T' + i }));
+  const r = await createLibrary(store).importAll(songs);
+  assert.deepEqual({ imported: r.imported, skipped: r.skipped }, { imported: 50, skipped: 0 });
+  assert.ok(counts.total() < 250, 'store ops: ' + counts.total());
+  // Restoring the same backup again skips every song, still linear.
+  const again = countingStore();
+  const lib2 = createLibrary(again.store);
+  await lib2.importAll(songs);
+  const before = again.counts.total();
+  const r2 = await lib2.importAll(songs);
+  assert.deepEqual({ imported: r2.imported, skipped: r2.skipped }, { imported: 0, skipped: 50 });
+  assert.ok(again.counts.total() - before < 500, 'second pass ops: ' + (again.counts.total() - before));
+});
+
+test('remove deletes song and metadata in one transaction (a failure leaves both)', async () => {
+  const inner = memoryStore();
+  const store = { ...inner };
+  let deletes = 0;
+  store.delete = async (k) => { if (++deletes === 2) throw new Error('disk error'); return inner.delete(k); };
+  store.runTx = async (ops) => { if (ops.some(o => o.op === 'delete')) throw new Error('disk error'); return inner.runTx(ops); };
+  const library = createLibrary(store);
+  await library.add(song('a'), { now: 1 });
+  await assert.rejects(() => library.remove('a'), /disk error/);
+  assert.ok(await library.get('a'));
+  assert.equal((await library.list()).length, 1);
+  const ok = createLibrary(memoryStore());
+  await ok.add(song('b'), { now: 1 });
+  await ok.remove('b');
+  assert.equal(await ok.get('b'), null);
+  assert.deepEqual(await ok.list(), []);
+});
+
+// Wraps the fake indexedDB: counts open() calls and gives each db a close()
+// plus a way to fire onversionchange, as a real connection has.
+function connectionSpyIdb({ failOpens = 0 } = {}) {
+  const inner = makeFakeIndexedDB();
+  const spy = { opens: 0, dbs: [], closed: 0, failOpens };
+  spy.open = (name) => {
+    spy.opens++;
+    if (spy.failOpens > 0) {
+      spy.failOpens--;
+      const req = { onerror: null, error: new Error('blocked') };
+      queueMicrotask(() => req.onerror && req.onerror({ target: req }));
+      return req;
+    }
+    const req = inner.open(name);
+    const prev = Object.getOwnPropertyDescriptor(req, 'onsuccess');
+    let handler = null;
+    Object.defineProperty(req, 'onsuccess', {
+      get: () => handler,
+      set: (fn) => { handler = (e) => { const db = req.result; if (!db.close) db.close = () => { spy.closed++; }; spy.dbs.push(db); return fn(e); }; }
+    });
+    void prev;
+    return req;
+  };
+  return spy;
+}
+
+test('indexedDbStore opens one connection however many calls it serves', async () => {
+  const idb = connectionSpyIdb();
+  const library = createLibrary(indexedDbStore(idb, 'one-conn'));
+  await library.add(song('a'), { now: 1 });
+  await library.add(song('b'), { now: 1 });
+  await library.list(); await library.get('a'); await library.remove('a');
+  await Promise.all([library.get('b'), library.list(), library.exportAll()]);
+  assert.equal(idb.opens, 1);
+});
+
+test('indexedDbStore reopens after the browser closes the connection (versionchange)', async () => {
+  const idb = connectionSpyIdb();
+  const store = indexedDbStore(idb, 'vc');
+  await store.put('k', 1);
+  assert.equal(idb.opens, 1);
+  idb.dbs[0].onversionchange();
+  assert.equal(idb.closed, 1);
+  assert.equal(await store.get('k'), 1);
+  assert.equal(idb.opens, 2);
+});
+
+test('indexedDbStore retries after a failed open instead of caching the failure', async () => {
+  const idb = connectionSpyIdb({ failOpens: 1 });
+  const store = indexedDbStore(idb, 'retry');
+  await assert.rejects(() => store.put('k', 1), /blocked/);
+  await store.put('k', 2);
+  assert.equal(await store.get('k'), 2);
+  assert.equal(idb.opens, 2);
+});

@@ -72,6 +72,45 @@ function metaFrom(song, addedAt) {
 
 // Wraps `store` (get/put/delete/keys) into the library API described above.
 export function createLibrary(store) {
+  // add()'s body. `metas` is the list of stored metadata to dedupe against; a
+  // restore passes one list it keeps current itself, so N songs cost O(N)
+  // reads instead of a fresh list() (one get per stored song) for each.
+  async function addOne(lib, song, { now, dedupe }, metas) {
+    if (!Number.isFinite(now)) {
+      throw new Error('add() requires a numeric `now` timestamp');
+    }
+    const normalized = storable(song);
+    if (dedupe) {
+      const hash = contentHash(normalized);
+      const want = canonical({ ...normalized, id: undefined });
+      for (const meta of metas || await lib.list()) {
+        if (meta.contentHash !== undefined && meta.contentHash !== hash) continue;
+        const have = await store.get(songKey(meta.id));
+        if (have && canonical({ ...have, id: undefined }) === want) return meta.id;
+      }
+    }
+    let id = normalized.id;
+    let n = 2;
+    while (starterIds.has(id)) { id = normalized.id + '-' + n; n++; }
+    for (;;) {
+      const stored = id === normalized.id ? normalized : { ...normalized, id };
+      try {
+        await store.runTx([
+          { op: 'add', key: songKey(id), value: stored },
+          { op: 'add', key: metaKey(id), value: metaFrom(stored, now) },
+        ]);
+        return id;
+      } catch (e) {
+        if (e && e.code === 'KEY_EXISTS') {
+          id = normalized.id + '-' + n;
+          n++;
+          continue;
+        }
+        throw e;
+      }
+    }
+  }
+
   return {
     // List of { id, title, addedAt, durationTicks, durationSeconds } for
     // every stored song. No note data is read or returned.
@@ -108,43 +147,11 @@ export function createLibrary(store) {
     // failure propagates with nothing stored (store.runTx rolls back the
     // whole attempt).
     async add(song, { now, dedupe = false } = {}) {
-      if (!Number.isFinite(now)) {
-        throw new Error('add() requires a numeric `now` timestamp');
-      }
-      const normalized = storable(song);
       // A restore (importAll) passes dedupe: identical content already stored
       // (hash match, then a full compare so a hash collision can never swallow a
       // different song) hands back the existing id. A plain add never dedupes:
       // a fresh pick or "Save a copy" is the learner asking for a second entry.
-      if (dedupe) {
-        const hash = contentHash(normalized);
-        const want = canonical({ ...normalized, id: undefined });
-        for (const meta of await this.list()) {
-          if (meta.contentHash !== undefined && meta.contentHash !== hash) continue;
-          const have = await store.get(songKey(meta.id));
-          if (have && canonical({ ...have, id: undefined }) === want) return meta.id;
-        }
-      }
-      let id = normalized.id;
-      let n = 2;
-      while (starterIds.has(id)) { id = normalized.id + '-' + n; n++; }
-      for (;;) {
-        const stored = id === normalized.id ? normalized : { ...normalized, id };
-        try {
-          await store.runTx([
-            { op: 'add', key: songKey(id), value: stored },
-            { op: 'add', key: metaKey(id), value: metaFrom(stored, now) },
-          ]);
-          return id;
-        } catch (e) {
-          if (e && e.code === 'KEY_EXISTS') {
-            id = normalized.id + '-' + n;
-            n++;
-            continue;
-          }
-          throw e;
-        }
-      }
+      return addOne(this, song, { now, dedupe }, null);
     },
 
     // Overwrites a stored song IN PLACE, keeping its id and its original
@@ -168,8 +175,8 @@ export function createLibrary(store) {
 
     // Removes a stored song and its metadata. No error if it did not exist.
     async remove(id) {
-      await store.delete(songKey(id));
-      await store.delete(metaKey(id));
+      // One transaction: a failure can never leave a list entry with no song.
+      await store.runTx([{ op: 'delete', key: songKey(id) }, { op: 'delete', key: metaKey(id) }]);
     },
 
     // Every stored song's full data, for backup. Returns a plain array
@@ -199,13 +206,15 @@ export function createLibrary(store) {
         throw new Error('importAll expects an array of songs (or a JSON string of one)');
       }
       const ids = [];
+      const metas = await this.list();
+      const known = new Set(metas.map(m => m.id));
       let skipped = 0;
       let failed = 0;
       for (const song of songs) {
         try { storable(song); } catch (e) { failed++; continue; }
-        const before = new Set((await this.list()).map(m => m.id));
-        const id = await this.add(song, { now: Date.now(), dedupe: true });
-        if (before.has(id)) skipped++;
+        const id = await addOne(this, song, { now: Date.now(), dedupe: true }, metas);
+        if (known.has(id)) skipped++;
+        else { known.add(id); const m = await store.get(metaKey(id)); if (m) metas.push(m); }
         ids.push(id);
       }
       return { imported: ids.length - skipped, skipped, failed, ids };
@@ -258,7 +267,20 @@ export function memoryStore() {
 export function indexedDbStore(idbFactory, dbName) {
   const STORE_NAME = 'kv';
 
+  // One connection for the page's life, opened on first use. A failed open is
+  // not cached (a later call retries); a close from onversionchange drops it so
+  // the next call reopens.
+  let dbPromise = null;
   function openDb() {
+    if (!dbPromise) {
+      const p = openFresh();
+      dbPromise = p;
+      p.catch(() => { if (dbPromise === p) dbPromise = null; });
+    }
+    return dbPromise;
+  }
+
+  function openFresh() {
     return new Promise((resolve, reject) => {
       const req = idbFactory.open(dbName, 1);
       req.onupgradeneeded = () => {
@@ -268,7 +290,7 @@ export function indexedDbStore(idbFactory, dbName) {
         }
       };
       // Let go when a delete or upgrade asks (Settings > Erase all my data), so it is never blocked by this page's own connections.
-      req.onsuccess = () => { const db = req.result; db.onversionchange = () => db.close(); resolve(db); };
+      req.onsuccess = () => { const db = req.result; db.onversionchange = () => { db.close(); dbPromise = null; }; resolve(db); };
       req.onerror = () => reject(req.error || new Error('failed to open IndexedDB database "' + dbName + '"'));
     });
   }
