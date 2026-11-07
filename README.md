@@ -186,7 +186,9 @@ note already handed over can't be taken back). Leaving or hiding the tab also st
 sends back is ignored, so its own playing is never judged as yours. With no output picked there is
 no button, and Check mode never shows it (hearing the answer would spoil the check). The scheduling
 and sending logic lives in `src/core/midi.js` (`scheduleSong`, `playOnOutput`, `stopAll`,
-`describeOutputs`).
+`describeOutputs`); the pick/stop/end-of-play rules are `createMidiOutPlayer` in
+`src/core/midi-out-player.js`. The backup save/restore decisions (size gate, which message, songs
+before profile) are in `src/core/backup.js`.
 
 When a keyboard song attempt is recorded as played on the computer keys, or pieced together from
 more than one route, "My progress" (below) does not count it as passed on your own: it is practice
