@@ -1679,6 +1679,9 @@ them is late or early.
   for a MIDI instrument outside Check. A song's drum part follows the same rule as the kit trainer: it
   has none while the microphone counts, and they start at the first real MIDI hit (a computer-key or
   on-screen hit does not count) and stop again when the kit is unplugged. Check never has them.
+  A Songs drum try that has a real MIDI hit is judged on its MIDI hits alone, so a mic sound heard
+  before the first one (room noise in the count-in) cannot shift a drums-in-order try or count as an
+  extra hit.
 
 The cues run on the same clock the judge marks hits with (`cueClock` in `src/core/beat-cues.js`: audio
 time minus the calibrated latency, and the learned offset in the trainer), so a line reaching a note
