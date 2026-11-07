@@ -8,10 +8,9 @@
 // Progress persistence: nothing extra is wired up here on purpose. The
 // bundled page already keeps its own state in `localStorage`; Electron
 // gives that `file://` origin's localStorage a real per-app profile
-// directory under Electron's userData path (see app.setPath('userData', ...)
-// below and the default per-platform location Electron picks), so progress
-// now survives across launches without the app code knowing anything about
-// desktop persistence.
+// directory under Electron's default per-platform userData path (this file
+// never overrides it), so progress survives across launches without the app
+// code knowing anything about desktop persistence.
 'use strict';
 
 const { app, BrowserWindow, Menu, session, shell } = require('electron');

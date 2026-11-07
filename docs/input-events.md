@@ -1,14 +1,11 @@
-# Input-event envelope
+# What each capture path can prove
 
-`src/core/input-event.js` (additive; no CAPTURE path -- MIDI/mic/key/tap -- is wired to it yet) is
-one envelope (`makeInputEvent`/`validateInputEvent`) shared by every future capture path.
-`evidenceFor(events, { assess, dims, nowSec, staleSec })` decides what a note can actually
-prove: silence, demo audio, unknown (`confidence: null`), or a stale held note (no `releaseSec`,
-`onsetSec` older than `nowSec - staleSec`) never counts as evidence; `assess` caps which dims are
-provable at all (`tap` only `onset`; `mic-single-note` never `chord`/`drum`; `midi` never `tune`, since a MIDI note is always in tune) regardless of
-the events seen. Dim names match the grading dims in `src/ui/songs/assessed.js`. See `tests/unit/input-event.test.mjs`.
+`src/core/input-event.js` holds `DIM_CAPABILITY`, the one table of which grading dims each
+`assess` value can ever prove: `tap` only `onset`; `mic-single-note` never `chord` or `drum`;
+`midi` never `tune`, since a MIDI note is always in tune; `none` nothing. Dim names match the
+grading dims in `src/ui/songs/assessed.js`. See `tests/unit/input-event.test.mjs`.
 
-`provableDims(assess)` exposes that same ceiling without any events, and IS wired in (unit E3b):
+`provableDims(assess)` returns that row, or `[]` for an unknown value, and is wired in (unit E3b):
 `src/ui/songs/assessed.js`'s `dimsFromStep(step, result, { assess })` moves any dim the step's
 `passRule` graded, but this capability can never prove, from `dims` into `unassessed` -- a
 keyboard's MIDI notes never report a tune verdict, a mic-only capability never reports a drum
