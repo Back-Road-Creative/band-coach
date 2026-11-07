@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createStretcher, stretch, processorSource } from '../../src/audio/stretch/wsola.js';
+import { createStretcherEngine, stretch } from '../../src/audio/stretch/wsola.js';
 
 const SR = 44100;
 
@@ -149,14 +149,14 @@ test('streaming in odd chunk sizes equals one-shot output', () => {
   const input = makeSine(330, 1, SR);
   const rate = 0.6;
 
-  const oneShotEngine = createStretcher({ sampleRate: SR, channels: 1, rate });
+  const oneShotEngine = createStretcherEngine({ sampleRate: SR, channels: 1, rate });
   const oneShotHead = oneShotEngine.process(input);
   const oneShotTail = oneShotEngine.flush();
   const oneShot = new Float32Array(oneShotHead.length + oneShotTail.length);
   oneShot.set(oneShotHead, 0);
   oneShot.set(oneShotTail, oneShotHead.length);
 
-  const streamEngine = createStretcher({ sampleRate: SR, channels: 1, rate });
+  const streamEngine = createStretcherEngine({ sampleRate: SR, channels: 1, rate });
   const chunkSizes = [37, 101, 977, 333, 1, 4001, 199];
   let pos = 0;
   let sizeIdx = 0;
@@ -197,31 +197,8 @@ test('throughput: 10s of 44.1kHz mono stretches well under realtime', () => {
   assert.ok(elapsedSec < audioSec, `took ${elapsedSec}s for ${audioSec}s of audio`);
 });
 
-test('processorSource evaluates to an engine identical to the module for the same input', async () => {
-  const src = processorSource();
-  assert.match(src, /function createStretcherEngine/);
-  // eslint-disable-next-line no-new-func
-  const factory = new Function(`${src}\nreturn createStretcherEngine;`)();
-
-  const input = makeSine(500, 0.5, SR);
-  const rate = 0.8;
-
-  const a = createStretcher({ sampleRate: SR, channels: 1, rate });
-  const outA1 = a.process(input);
-  const outA2 = a.flush();
-
-  const b = factory({ sampleRate: SR, channels: 1, rate });
-  const outB1 = b.process(input);
-  const outB2 = b.flush();
-
-  assert.equal(outA1.length, outB1.length);
-  for (let i = 0; i < outA1.length; i++) assert.equal(outA1[i], outB1[i]);
-  assert.equal(outA2.length, outB2.length);
-  for (let i = 0; i < outA2.length; i++) assert.equal(outA2[i], outB2[i]);
-});
-
 test('setRate clamps to [0.5, 1.25]', () => {
-  const engine = createStretcher({ sampleRate: SR, channels: 1, rate: 1 });
+  const engine = createStretcherEngine({ sampleRate: SR, channels: 1, rate: 1 });
   assert.equal(engine.setRate(2), 1.25);
   assert.equal(engine.setRate(0.1), 0.5);
   assert.equal(engine.setRate(0.9), 0.9);

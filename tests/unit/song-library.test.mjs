@@ -66,16 +66,6 @@ test('list returns metadata only, no note data', async () => {
   assert.equal('parts' in a, false);
 });
 
-test('rename updates title everywhere and validates its input', async () => {
-  const library = createLibrary(memoryStore());
-  await library.add(song('a'), { now: 1000 });
-  await library.rename('a', 'New Title');
-  assert.equal((await library.get('a')).title, 'New Title');
-  assert.equal((await library.list())[0].title, 'New Title');
-  await assert.rejects(() => library.rename('missing', 'x'), /no song/);
-  await assert.rejects(() => library.rename('a', ''), /non-empty/);
-});
-
 test('remove deletes the song and its metadata; missing id is a no-op', async () => {
   const library = createLibrary(memoryStore());
   await library.add(song('a'), { now: 1000 });

@@ -446,7 +446,7 @@ export function judgeAttempt(expectedNotes, playedEvents, opts = {}) {
   const velocityErrors = hits.map((m) => m.velocityError).filter((v) => v !== null);
   const dynamicsScore = notesHaveVelocity && velocityErrors.length
     ? velocityErrors.filter((v) => Math.abs(v) <= velocityTolerance).length / velocityErrors.length
-    : notesHaveVelocity ? null : null;
+    : null;
   // pieceRate: which-drum accuracy, over only the onsets that COULD be named
   // (pieceOk !== null -- see pieceOkFor above); a missed onset or one only
   // the mic heard and could not name never enters this count either way.
