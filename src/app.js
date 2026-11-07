@@ -14,6 +14,8 @@ import { DEFAULT_STABILITY_DAYS, MIN_STABILITY_DAYS, MAX_STABILITY_DAYS, GRADE, 
 import { handsTogetherById, handsModeFromId, fingeringLabel, bothUnlocked, effectiveHands, prepLine, HANDS_TOGETHER_EXERCISES, isTimedPairId, PAIR_ONSET_TOL_MS, PAIR_RELEASE_TOL_MS, isStagedPairId, handsStageFromId, heldBassMelody, SPLIT_MID_TOL_RATIO, POSITION_SHIFT_SEMITONES, HANDS_POSITION_EXERCISES, positionPrepLine } from './core/hands-together.js';
 import { step as stepHandsTogether } from './core/hands-together-stage.js';
 import { createMidiParser, createHitGuard, describeOutputs, scheduleSong, playOnOutput } from './core/midi.js';
+import { createMidiOutPlayer } from './core/midi-out-player.js';
+import { exportBackup, backupSaveOutcome, restoreBackup } from './core/backup.js';
 import { createNoteState } from './core/note-state.js';
 import { PCKEYS } from './core/pckeys.js';
 import { createTeardown } from './core/session-teardown.js';
@@ -2612,41 +2614,20 @@ import { register as registerPathway } from './ui/pathway.js';
   $('midiRangeBtn').addEventListener('click', function () { this.blur(); rangeCap = rangeCap ? null : startCapture(); rangeLast = null; if (rangeCap) coach(t('range.low')); else renderMidiRange(); });
   $('midiRangeClear').addEventListener('click', function () { this.blur(); const a = activeMidiRange(); if (a) { delete DB.prefs.midiRange[a.name]; save(); } renderMidiRange(); });
   // ---------- MIDI out: "Play it for me" ----------
-  // midiOutPorts: the live MIDIAccess.outputs that are connected; midiOutId: the one the learner picked in
-  // #midiOutSelect ('' = none, and then no Play it for me button is offered -- nothing to play to). midiOutBusy
-  // is true from the first scheduled note until the last one ends (or Stop): handleMidiMessage drops input
-  // while it is, since a keyboard that plays itself also reports those notes back as if the learner pressed them.
-  let midiOutPorts = [], midiOutId = '', midiOutBusy = false, midiOutTimer = null, midiOutStopSending = null, midiOutOnEnd = null;
-  function midiOutSelected() { return midiOutPorts.find(p => p.id === midiOutId) || null; }
+  // The state and the stop/end rules live in src/core/midi-out-player.js; midiOut.busy() is what handleMidiMessage reads to drop the keyboard's own echo.
+  const midiOut = createMidiOutPlayer({ now: () => performance.now(), setTimeout: (f, ms) => setTimeout(f, ms), clearTimeout: id => clearTimeout(id), scheduleSong, playOnOutput });
+  function midiOutSelected() { return midiOut.selected(); }
   function midiOutRefresh(access) {
     const all = []; if (access && access.outputs && access.outputs.forEach) access.outputs.forEach(p => all.push(p));
-    midiOutPorts = all.filter(p => p.state === 'connected');
-    if (midiOutId && !midiOutSelected()) { midiOutStop(); midiOutId = ''; }
+    midiOut.setPorts(all.filter(p => p.state === 'connected'));
     const sel = $('midiOutSelect'), lab = $('midiOutLabel'); if (!sel) return;
     while (sel.options.length > 1) sel.remove(1);
-    midiOutPorts.forEach((p, i) => { const o = document.createElement('option'); o.value = p.id; o.textContent = describeOutputs([p]).names[0]; sel.appendChild(o); });
-    sel.value = midiOutId; sel.hidden = lab.hidden = !midiOutPorts.length;
+    midiOut.ports().forEach((p, i) => { const o = document.createElement('option'); o.value = p.id; o.textContent = describeOutputs([p]).names[0]; sel.appendChild(o); });
+    sel.value = midiOut.selectedId(); sel.hidden = lab.hidden = !midiOut.ports().length;
   }
-  function midiOutStop() {
-    clearTimeout(midiOutTimer); midiOutTimer = null;
-    const stopSending = midiOutStopSending, done = midiOutOnEnd; midiOutStopSending = null; midiOutOnEnd = null; midiOutBusy = false;
-    if (stopSending) { try { stopSending(0); } catch (e) {} }
-    if (done) done();
-  }
-  // Schedules one part of `song` on the picked output on the performance.now() timeline (Web MIDI's own
-  // timestamp clock), following song.tempoMap. onEnd fires once, on natural end or Stop.
-  function midiOutPlay(song, partIndex, onEnd) {
-    const out = midiOutSelected(); if (!out) return false;
-    midiOutStop();
-    const startMs = performance.now() + 150;
-    let msgs; try { msgs = scheduleSong(song, { partIndex: partIndex || 0, startMs, channel: 0 }); } catch (e) { return false; }
-    if (!msgs.length) return false;
-    midiOutStopSending = playOnOutput(out, msgs);
-    midiOutOnEnd = onEnd || null; midiOutBusy = true;
-    midiOutTimer = setTimeout(midiOutStop, Math.max(0, msgs[msgs.length - 1].atMs - performance.now()) + 250);
-    return true;
-  }
-  $('midiOutSelect').addEventListener('change', function () { midiOutStop(); midiOutId = this.value || ''; });
+  function midiOutStop() { midiOut.stop(); }
+  function midiOutPlay(song, partIndex, onEnd) { return midiOut.play(song, partIndex, onEnd); }
+  $('midiOutSelect').addEventListener('change', function () { midiOut.select(this.value); });
   // One raw MIDI message from an opened port: blink, log it for the details
   // readout, parse it (createMidiParser keeps running status per port), and
   // feed note-on/off into onNote()/the real held-note set.
@@ -2686,7 +2667,7 @@ import { register as registerPathway } from './ui/pathway.js';
     const at = Number.isFinite(ev.timeStamp) ? ev.timeStamp : performance.now(), prevAt = midiLastAt.get(input); midiLastAt.set(input, at);  // gap since this port's previous message, so a player can size a double-hit filter window
     midiLog.unshift(Array.from(d).map(b => b.toString(16).padStart(2, '0')).join(' ') + (prevAt === undefined ? '' : '  +' + Math.max(0, Math.round(at - prevAt)) + ' ms')); if (midiLog.length > 8) midiLog.length = 8;
     ioRefresh();
-    if (midiOutBusy) return; // the keyboard is playing a song back for the learner and echoes its own notes as input -- not the learner playing, so not judged
+    if (midiOut.busy()) return; // the keyboard is playing a song back for the learner and echoes its own notes as input -- not the learner playing, so not judged
     let parser = midiParsers.get(input); if (!parser) { parser = createMidiParser(); midiParsers.set(input, parser); }
     parser.feed(d).forEach(evt => {
       if (evt.type === 'cc') { if (evt.controller === 64) onPedal(input, evt.value); else if (evt.controller === 4) onHatPedal(input, evt.value); return; }
@@ -3038,40 +3019,25 @@ import { register as registerPathway } from './ui/pathway.js';
   }
   function noteBackupMade(t) { lastBackupAt = t; try { localStorage.setItem(BACKUP_AT_KEY, String(t)); } catch (e) {} }
   function backupLibrary() { try { return createLibrary(indexedDbStore(indexedDB, 'bandcoach-songs')); } catch (e) { return createLibrary(memoryStore()); } }
-  // The song store opens lazily, so a blocked or broken IndexedDB surfaces here, not in backupLibrary():
-  // the progress is still exported, and `songsMissing` lets saveBackup say the songs are not in the file.
-  async function doExportProgress() { let songs = [], songsMissing = false; try { songs = await backupLibrary().exportAll(); } catch (e) { songsMissing = true; } const env = exportProgressFile(DB, { appVersion: APP_VERSION, now: Date.now, songs }); if (songsMissing) Object.defineProperty(env, 'songsMissing', { value: true }); return env; }
+  async function doExportProgress() { return exportBackup({ library: backupLibrary, exportProgressFile, db: DB, appVersion: APP_VERSION, now: Date.now }); }
   async function saveBackup() {
     const env = await doExportProgress();
     const blob = new Blob([JSON.stringify(env)], { type: 'application/json' });
-    const tooLarge = blob.size > MAX_IMPORT_BYTES; // restore would refuse this file, so it must not count as a backup made
+    const outcome = backupSaveOutcome(env, blob.size, MAX_IMPORT_BYTES);
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a'); a.href = url; a.download = 'band-coach-progress.json';
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
-    if (!tooLarge) { noteBackupMade(Date.now()); $('backupNudge').hidden = true; }
-    coach(t(tooLarge ? 'backup.savedTooLarge' : env.songsMissing ? 'backup.savedNoSongs' : 'backup.saved'));
+    if (outcome.counted) { noteBackupMade(Date.now()); $('backupNudge').hidden = true; }
+    coach(t(outcome.messageId));
   }
   async function doImportProgress(textOrChecked) {
-    const result = typeof textOrChecked === 'string' ? importProgressFile(textOrChecked) : textOrChecked; // a pre-checked result: parsed once
-    if (!result.ok) { coach(t(result.errorId)); return result; }
-    // The songs go first because that is the store that can fail (e.g.
-    // IndexedDB unavailable): if it does, nothing about the live profile
-    // has changed yet, so there is nothing to roll back. Only once the
-    // songs are safely in does this replace DB, prefs, theme and mod.
-    let songsFailed = 0;
-    if (Array.isArray(result.songs) && result.songs.length) {
-      try { songsFailed = (await backupLibrary().importAll(result.songs)).failed; }
-      catch (e) { const error = en['backup.err.songsNotStored']; coach(t('backup.err.songsNotStored')); return { ok: false, error }; }
-    }
-    // The profile as it is now, current instrument included, so Undo can put it back.
-    if (MODS[mod]) DB.mods[mod] = S = sanitizeModel(mod, S, modelNow);
-    const before = JSON.parse(JSON.stringify(DB));
-    applyProfile(result.db);
-    if (!writeDB()) { const error = en['backup.err.notSaved']; coach(t('backup.err.notSaved')); return { ok: false, error }; }
-    restoreUndoProfile = before; $('restoreUndo').hidden = false;
-    coach(songsFailed ? t('backup.restoredSongsFailed', { count: songsFailed }) : t('backup.restored'));
-    return result;
+    const r = await restoreBackup(textOrChecked, { library: backupLibrary, importProgressFile, en, applyProfile, writeDB,
+      // The profile as it is now, current instrument included, so Undo can put it back.
+      snapshot: () => { if (MODS[mod]) DB.mods[mod] = S = sanitizeModel(mod, S, modelNow); return JSON.parse(JSON.stringify(DB)); } });
+    if (r.undo) { restoreUndoProfile = r.undo; $('restoreUndo').hidden = false; }
+    coach(t(r.say.id, r.say.params));
+    return r.ret;
   }
   // Replaces DB, prefs, theme and mod with a restored (or un-restored) profile. The measured latency belongs to this device, so it is kept.
   function applyProfile(db) {
@@ -3194,7 +3160,7 @@ import { register as registerPathway } from './ui/pathway.js';
     // half of a mic instrument's first-week 'setup' step (F19).
     micProof: () => micReady,
     // midiOut: "Play it for me" (see midiOutPlay near handleMidiMessage) -- ready() is true only once the learner has picked a connected output.
-    midiOut: { ready: () => !!midiOutSelected(), playing: () => midiOutBusy, play: (song, partIndex, onEnd) => midiOutPlay(song, partIndex, onEnd), stop: () => midiOutStop() },
+    midiOut: { ready: () => !!midiOutSelected(), playing: () => midiOut.busy(), play: (song, partIndex, onEnd) => midiOutPlay(song, partIndex, onEnd), stop: () => midiOutStop() },
   };
   //
   //
