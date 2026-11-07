@@ -26,9 +26,11 @@
 // letters could otherwise be misread as pitches (a bare mid-tune `K:D`
 // line's `D` is a real note letter). A mid-tune `K:` actually changes the
 // key-signature accidentals applied to subsequent notes (song.key itself
-// still reports the tune's opening key); a mid-tune `M:`/`L:`/`Q:` is
-// consumed and warned about but not applied -- the opening M:/L: values
-// are used for the whole tune, matching the ABC default-unit-length rule.
+// still reports the tune's opening key); a mid-tune `M:`/`Q:` is
+// consumed and warned about but not applied (the opening meter and tempo
+// are used throughout). A mid-tune `L:`, on its own line or inline as
+// `[L:1/4]`, DOES apply from that point on, as in ABC 2.1; an unparseable
+// one keeps the current length and warns.
 
 import { songIdentity } from './ident.js';
 import { TICKS_PER_QUARTER } from './model.js';
@@ -196,7 +198,8 @@ export function importAbc(rawText, options = {}) {
     // An inline `[V:id]` switch can appear mid-line, amongst notes; splice
     // in the same voice marker the tokenizer looks for, registering the
     // voice at its first appearance if this is the first time it's named.
-    bodyLines.push(line.replace(/\[V:(\S+?)\]/g, (_, id) => { registerVoice(id); return VOICE_MARK + id + VOICE_MARK; }));
+    // An inline `[L:n/d]` becomes the same field marker as an own-line `L:`.
+    bodyLines.push(line.replace(/\[V:(\S+?)\]/g, (_, id) => { registerVoice(id); return VOICE_MARK + id + VOICE_MARK; }).replace(/\[L:([^\]\x01\x02]*)\]/g, (_, v) => FIELD_MARK + 'L' + v.trim() + FIELD_MARK));
   }
 
   if (!unitLengthExplicit) unitLength = defaultUnitLength(meter.num, meter.den);
@@ -225,7 +228,11 @@ export function importAbc(rawText, options = {}) {
     if (tok.type === 'voiceSwitch') { currentVoiceId = tok.id; continue; }
     if (tok.type === 'fieldChange') {
       if (tok.field === 'K') currentKeySigAcc = keySignatureAccidentals(parseKeyField(tok.value, warnings).sigFifths ?? 0);
-      else warnings.push(`mid-tune ${tok.field}: field ("${tok.value}") is not applied; the tune's opening M:/L: values are used throughout`);
+      else if (tok.field === 'L') {
+        const lm = /^(\d+)\s*\/\s*(\d+)$/.exec(tok.value.trim());
+        if (lm && Number(lm[1]) > 0 && Number(lm[2]) > 0) unitLength = Number(lm[1]) / Number(lm[2]);
+        else warnings.push(`mid-tune L: field ("${tok.value}") is not a note length like 1/8; keeping the current length`);
+      } else warnings.push(`mid-tune ${tok.field}: field ("${tok.value}") is not applied; the tune's opening M:/Q: values are used throughout`);
       continue;
     }
     const vs = voiceState(currentVoiceId);

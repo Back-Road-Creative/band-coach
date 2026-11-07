@@ -117,3 +117,26 @@ test('text with no K: line is flagged as maybe not ABC', () => {
   assert.ok(warnings.some((w) => /no K:/.test(w)));
   assert.ok(!importAbc('X:1\nK:C\nCDE|\n').warnings.some((w) => /no K:/.test(w)));
 });
+const midTune = (body) => importAbc(`X:1\nT:t\nM:4/4\nL:1/8\nQ:120\nK:C\n${body}\n`);
+const durs = (r) => r.song.parts[0].notes.map((n) => n.dur);
+test('a mid-tune L: on its own line changes the unit length from that point on', () => {
+  const r = midTune('C\nL:1/4\nD');
+  assert.deepEqual(durs(r), [TPQ / 2, TPQ]);
+  assert.ok(!r.warnings.some((w) => /mid-tune L:/.test(w)), JSON.stringify(r.warnings));
+});
+test('an inline [L:] changes the unit length from that point on', () => {
+  const r = midTune('C [L:1/4] D');
+  assert.deepEqual(durs(r), [TPQ / 2, TPQ]);
+  assert.deepEqual(r.song.parts[0].notes.map((n) => n.midi), [60, 62]);
+});
+test('an unparseable mid-tune L: keeps the current length and warns', () => {
+  const r = midTune('C\nL:banana\nD');
+  assert.deepEqual(durs(r), [TPQ / 2, TPQ / 2]);
+  assert.ok(r.warnings.some((w) => /mid-tune L:/.test(w) && /banana/.test(w)), JSON.stringify(r.warnings));
+});
+test('mid-tune M: and Q: are still warned about and not applied', () => {
+  const r = midTune('C\nM:3/4\nQ:60\nD');
+  assert.deepEqual(durs(r), [TPQ / 2, TPQ / 2]);
+  assert.ok(r.warnings.some((w) => /mid-tune M:/.test(w)));
+  assert.ok(r.warnings.some((w) => /mid-tune Q:/.test(w)));
+});
