@@ -353,7 +353,11 @@ export function judgeAttempt(expectedNotes, playedEvents, opts = {}) {
     clock,
   } = opts;
   const notes = expectedNotes || [];
-  const played = playedEvents || [];
+  // A drum take with a real MIDI hit: its mic hits are the e-kit's echo or room noise. Songs'
+  // listenDrumKit (src/ui/songs.js) stops counting the mic only from the first MIDI hit, so one
+  // heard before it would shift a drum-order take or count as an extra (#638).
+  const raw = playedEvents || [];
+  const played = percussion && raw.some((ev) => ev.source === 'midi') ? raw.filter((ev) => ev.source !== 'mic') : raw;
   const matches = [];
   const extraList = [];
   const onsetAt = (tick) => phraseSec(tick, originTick, bpm, ticksPerQuarter, clock);
@@ -442,7 +446,7 @@ export function judgeAttempt(expectedNotes, playedEvents, opts = {}) {
   const velocityErrors = hits.map((m) => m.velocityError).filter((v) => v !== null);
   const dynamicsScore = notesHaveVelocity && velocityErrors.length
     ? velocityErrors.filter((v) => Math.abs(v) <= velocityTolerance).length / velocityErrors.length
-    : notesHaveVelocity ? null : null;
+    : null;
   // pieceRate: which-drum accuracy, over only the onsets that COULD be named
   // (pieceOk !== null -- see pieceOkFor above); a missed onset or one only
   // the mic heard and could not name never enters this count either way.

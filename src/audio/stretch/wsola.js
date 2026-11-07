@@ -6,7 +6,7 @@
 // the output. Pure module: no DOM, no AudioContext, no timers, no randomness.
 //
 // Wiring notes for a later pass (do not need to read the internals below):
-//   - createStretcher({ sampleRate, channels, rate }) returns a streaming engine:
+//   - createStretcherEngine({ sampleRate, channels, rate }) returns a streaming engine:
 //       .process(inputChunk: Float32Array) -> Float32Array   (may be length 0)
 //       .flush() -> Float32Array                             (final tail; resets state)
 //       .setRate(rate) -> number                             (clamped to [0.5, 1.25])
@@ -17,23 +17,14 @@
 //     (channels: 1) is implemented; run one engine per channel for stereo.
 //   - stretch(pcm: Float32Array, rate, { sampleRate }) is the one-shot
 //     convenience wrapper (whole buffer in, whole buffer out).
-//   - processorSource() returns self-contained JS source text (the exact
-//     stretch engine, via Function.prototype.toString, so it cannot drift
-//     from this module) suitable for use inside an AudioWorkletProcessor:
-//       const src = processorSource() + 'this.__createStretcherEngine = createStretcherEngine;';
-//       // eval/new Function that text inside the worklet's registerProcessor module.
-//     It references nothing outside Math and the typed-array constructors,
-//     which are both available in AudioWorkletGlobalScope.
 
 const RATE_MIN = 0.5;
 const RATE_MAX = 1.25;
 
-// IMPORTANT: createStretcherEngine must stay fully self-contained. Its source
-// text (via .toString()) is shipped verbatim into an AudioWorklet by
-// processorSource(), so it must not reference anything at module scope
-// (only Math and typed-array globals, which exist in both places). Keep all
-// constants and helpers declared *inside* this function.
-function createStretcherEngine(options) {
+// createStretcherEngine is kept self-contained (constants and helpers live
+// inside it) so it could be shipped into an AudioWorklet later; nothing does
+// that today -- the app only calls stretch() below.
+export function createStretcherEngine(options) {
   const opts = options || {};
   const sampleRate = opts.sampleRate || 44100;
 
@@ -242,10 +233,6 @@ function createStretcherEngine(options) {
   return { process, flush, reset, setRate, getRate };
 }
 
-export function createStretcher(options) {
-  return createStretcherEngine(options);
-}
-
 // One-shot: stretch a whole buffer and return a whole buffer, trimmed/padded
 // to the length the rate implies (output duration = input duration / rate),
 // which the streaming engine only hits within one output block on its own.
@@ -268,11 +255,4 @@ export function stretch(pcm, rate, options) {
   const padded = new Float32Array(expectedLen);
   padded.set(raw, 0);
   return padded;
-}
-
-// Returns self-contained JS source text defining `createStretcherEngine`,
-// built from this exact function's own source so the AudioWorklet copy can
-// never drift from the module copy — see tests/unit/wsola.test.mjs.
-export function processorSource() {
-  return 'const createStretcherEngine = ' + createStretcherEngine.toString() + ';\n';
 }

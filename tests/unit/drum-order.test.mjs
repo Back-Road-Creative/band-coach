@@ -133,3 +133,27 @@ test('an old saved stepIndex resumes on the same musical step', () => {
   });
   assert.equal(upgradeLegacyDrumEntry(plan, { ...sanitizeLessonEntry({ key, stepIndex: 0, tail: [], level: 1, rate: null }), stepIndex: 999 }), null);
 });
+
+// #638: listenDrumKit (src/ui/songs.js) stops counting the mic only from the first real MIDI
+// hit, so a mic onset heard before it (room noise in the count-in, the stick click before the
+// first pad) is still in the take. Once a take has a MIDI hit, its mic hits are the e-kit's echo
+// or noise and are not judged.
+test('a mic hit heard before the first MIDI hit does not shift a drum-order take', () => {
+  const played = [{ piece: 'snare', atSec: -0.3, source: 'mic' }, ...beat.map((n, i) => hit(n.piece, i * 0.5))];
+  const r = judge(played);
+  assert.equal(passes(played), true);
+  assert.equal(r.extras.count, 0);
+  assert.deepEqual(r.matches.map((m) => m.pieceOk), [true, true, true, true]);
+});
+
+test('a mic hit heard before the first MIDI hit is not an extra on a timed drum step', () => {
+  const played = [{ piece: 'kick', atSec: 0.1, source: 'mic' }, ...beat.map((n, i) => hit(n.piece, i * 0.5))];
+  const r = judgeAttempt(beat, played, { bpm: 120, ticksPerQuarter: TPQ, percussion: true });
+  assert.equal(r.extras.count, 0);
+});
+
+test('a take with no MIDI hit still judges every mic hit', () => {
+  const mic = beat.map((n, i) => ({ piece: n.piece, atSec: i * 0.5, source: 'mic' }));
+  const r = judge([{ piece: 'snare', atSec: -0.3, source: 'mic' }, ...mic]);
+  assert.equal(r.extras.count, 1);
+});

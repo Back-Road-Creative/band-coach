@@ -3,7 +3,7 @@
 // Wiring pass:
 //   const library = createLibrary(indexedDbStore(window.indexedDB, 'bandcoach-songs'));
 //   library.list() -> metadata only, for a song picker; library.get(id) -> full Song or null;
-//   library.add(song, { now: Date.now() }); library.rename(id, title); library.remove(id);
+//   library.add(song, { now: Date.now() }); library.remove(id);
 //   library.exportAll()/importAll(json) -> backup/restore.
 // `store` must implement get(key)/put(key,value)/delete(key)/keys() (all Promise-returning), plus
 // runTx(ops) — ops is [{ op: 'add'|'put'|'delete', key, value }], applied as one atomic unit:
@@ -171,19 +171,6 @@ export function createLibrary(store) {
         { op: 'put', key: songKey(id), value: normalized },
         { op: 'put', key: metaKey(id), value: meta },
       ]);
-    },
-
-    // Renames a stored song's title. Throws if the id does not exist.
-    async rename(id, newTitle) {
-      const song = await store.get(songKey(id));
-      if (!song) throw new Error('no song with id "' + id + '"');
-      if (typeof newTitle !== 'string' || newTitle.length === 0) {
-        throw new Error('newTitle must be a non-empty string');
-      }
-      const renamed = { ...song, title: newTitle };
-      const meta = await store.get(metaKey(id));
-      await store.put(songKey(id), renamed);
-      await store.put(metaKey(id), { ...meta, title: newTitle });
     },
 
     // Removes a stored song and its metadata. No error if it did not exist.

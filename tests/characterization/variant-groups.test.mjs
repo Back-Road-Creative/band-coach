@@ -222,8 +222,7 @@ test('variant groups: mod ids are never merged, renamed or aliased -- each famil
 // instead extracts the actual pure build function (variantParentsFrom) out
 // of src/app.js's source and executes it directly, following the same
 // extract-and-run-with-`new Function`-precedent as
-// tests/unit/wsola.test.mjs's "processorSource evaluates to an engine
-// identical to the module" test and tests/unit/pages-sw-cache-invalidates.test.mjs.
+// tests/unit/pages-sw-cache-invalidates.test.mjs.
 test('variant groups: a MODS entry\'s own `parent` field joins VARIANT_PARENTS without a second hand-edit', () => {
   const src = readFileSync(APP_JS_PATH, 'utf8');
   const match = /function variantParentsFrom\(mods, staticPairs\) \{.*\}/.exec(src);
