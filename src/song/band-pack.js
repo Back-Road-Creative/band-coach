@@ -23,7 +23,7 @@
 // the import-route wiring and the export button.
 
 import { validateSong, normalizeSong } from './model.js';
-import { readZipEntries, readZipEntryData } from './unzip-lite.js';
+import { crc32, readZipEntries, readZipEntryData } from './unzip-lite.js';
 
 export const BAND_PACK_FORMAT = 'band-pack';
 export const BAND_PACK_VERSION = '1.0';
@@ -46,22 +46,6 @@ function messageOf(e) { return e && e.message ? e.message : String(e); }
 const LOCAL_SIG = 0x04034b50;
 const CENTRAL_SIG = 0x02014b50;
 const EOCD_SIG = 0x06054b50;
-
-const CRC_TABLE = (() => {
-  const table = new Uint32Array(256);
-  for (let n = 0; n < 256; n += 1) {
-    let c = n;
-    for (let k = 0; k < 8; k += 1) c = (c & 1) ? (0xedb88320 ^ (c >>> 1)) : (c >>> 1);
-    table[n] = c >>> 0;
-  }
-  return table;
-})();
-
-function crc32(bytes) {
-  let crc = 0xffffffff;
-  for (let i = 0; i < bytes.length; i += 1) crc = CRC_TABLE[(crc ^ bytes[i]) & 0xff] ^ (crc >>> 8);
-  return (crc ^ 0xffffffff) >>> 0;
-}
 
 function pushU16(arr, v) { arr.push(v & 0xff, (v >>> 8) & 0xff); }
 function pushU32(arr, v) { arr.push(v & 0xff, (v >>> 8) & 0xff, (v >>> 16) & 0xff, (v >>> 24) & 0xff); }
@@ -212,9 +196,10 @@ export function readBandPack(bytes) {
     throw new Error('this file has no ' + MANIFEST_NAME + ' manifest -- it does not look like a band pack');
   }
   const decoder = new TextDecoder('utf-8');
+  const manifestBytes = readEntry(manifestEntry); // a damaged or oversized manifest says so, not "not valid JSON"
   let manifest;
   try {
-    manifest = JSON.parse(decoder.decode(readEntry(manifestEntry)));
+    manifest = JSON.parse(decoder.decode(manifestBytes));
   } catch (e) {
     throw new Error('the band pack manifest is not valid JSON: ' + messageOf(e));
   }

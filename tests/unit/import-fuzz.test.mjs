@@ -109,9 +109,9 @@ function buildZip(files) {
     const name = Buffer.from(f.name, 'utf8');
     const data = Buffer.from(f.data);
     const stored = f.method === 8 ? zlib.deflateRawSync(data) : data;
-    const head = Buffer.concat([u32(0x04034b50), u16(20), u16(0), u16(f.method), u16(0), u16(0), u32(0), u32(stored.length), u32(data.length), u16(name.length), u16(0), name]);
+    const head = Buffer.concat([u32(0x04034b50), u16(20), u16(0), u16(f.method), u16(0), u16(0), u32(zlib.crc32(data)), u32(stored.length), u32(data.length), u16(name.length), u16(0), name]);
     local.push(head, stored);
-    central.push(Buffer.concat([u32(0x02014b50), u16(20), u16(20), u16(0), u16(f.method), u16(0), u16(0), u32(0), u32(stored.length), u32(data.length), u16(name.length), u16(0), u16(0), u16(0), u16(0), u32(0), u32(offset), name]));
+    central.push(Buffer.concat([u32(0x02014b50), u16(20), u16(20), u16(0), u16(f.method), u16(0), u16(0), u32(zlib.crc32(data)), u32(stored.length), u32(data.length), u16(name.length), u16(0), u16(0), u16(0), u16(0), u32(0), u32(offset), name]));
     offset += head.length + stored.length;
   }
   const cd = Buffer.concat(central);

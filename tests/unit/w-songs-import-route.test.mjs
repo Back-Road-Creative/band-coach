@@ -4,6 +4,7 @@ import { routeImportFile, importerFor } from '../../src/ui/songs/import-route.js
 import { importMidi } from '../../src/song/import-midi.js';
 import { importAbc } from '../../src/song/import-abc.js';
 import { importMusicXml } from '../../src/song/import-musicxml.js';
+import zlib from 'node:zlib';
 
 // A tiny stored-only zip writer, self-contained here so this file's
 // importerFor tests stand alone (same minimal-zip pattern as
@@ -19,7 +20,7 @@ function buildZip(files) {
     const stored = f.data;
     const localHeader = Buffer.concat([
       u32(0x04034b50), u16(20), u16(0), u16(0), u16(0), u16(0),
-      u32(0), u32(stored.length), u32(f.data.length),
+      u32(zlib.crc32(f.data)), u32(stored.length), u32(f.data.length),
       u16(nameBuf.length), u16(0),
       nameBuf,
     ]);
@@ -28,7 +29,7 @@ function buildZip(files) {
     offset += localHeader.length + stored.length;
     const centralHeader = Buffer.concat([
       u32(0x02014b50), u16(20), u16(20), u16(0), u16(0), u16(0), u16(0),
-      u32(0), u32(stored.length), u32(f.data.length),
+      u32(zlib.crc32(f.data)), u32(stored.length), u32(f.data.length),
       u16(nameBuf.length), u16(0), u16(0), u16(0), u16(0),
       u32(0), u32(localOffset),
       nameBuf,

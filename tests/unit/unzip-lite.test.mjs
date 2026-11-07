@@ -11,7 +11,8 @@ function u16(n) { const b = Buffer.alloc(2); b.writeUInt16LE(n & 0xffff, 0); ret
 function u32(n) { const b = Buffer.alloc(4); b.writeUInt32LE(n >>> 0, 0); return b; }
 
 function buildZip(files) {
-  // files: [{ name, data: Buffer, method: 0|8, declaredUncompressedSize? }]
+  // files: [{ name, data: Buffer, method: 0|8, declaredUncompressedSize?, crc? }]
+  // crc defaults to the real CRC-32 of data; pass one to simulate a damaged entry.
   // declaredUncompressedSize, when present, is written into both headers
   // INSTEAD of f.data.length — lets a test simulate a zip whose header lies
   // about how big the entry really unpacks to.
@@ -22,9 +23,10 @@ function buildZip(files) {
     const nameBuf = Buffer.from(f.name, 'utf8');
     const stored = f.method === 8 ? zlib.deflateRawSync(f.data) : f.data;
     const declaredSize = f.declaredUncompressedSize ?? f.data.length;
+    const crc = f.crc ?? zlib.crc32(f.data);
     const localHeader = Buffer.concat([
       u32(0x04034b50), u16(20), u16(0), u16(f.method), u16(0), u16(0),
-      u32(0), u32(stored.length), u32(declaredSize),
+      u32(crc), u32(stored.length), u32(declaredSize),
       u16(nameBuf.length), u16(0),
       nameBuf,
     ]);
@@ -34,7 +36,7 @@ function buildZip(files) {
 
     const centralHeader = Buffer.concat([
       u32(0x02014b50), u16(20), u16(20), u16(0), u16(f.method), u16(0), u16(0),
-      u32(0), u32(stored.length), u32(declaredSize),
+      u32(crc), u32(stored.length), u32(declaredSize),
       u16(nameBuf.length), u16(0), u16(0), u16(0), u16(0),
       u32(0), u32(localOffset),
       nameBuf,
@@ -146,4 +148,43 @@ test('readZipEntryData honors a per-call maxBytes override to reject a smaller e
   const zip = buildZip([{ name: 'song.musicxml', data, method: 8 }]);
   const entries = readZipEntries(zip);
   assert.throws(() => readZipEntryData(zip, entries[0], 1000), /larger than the.*limit|zip bomb/i);
+});
+
+// ---- CRC-32: an entry whose bytes do not match its checksum is damaged ----
+
+test('readZipEntries reports each entry\'s CRC-32 from the central directory', () => {
+  const data = Buffer.from('checked content', 'utf8');
+  const [entry] = readZipEntries(buildZip([{ name: 'a.json', data, method: 0 }]));
+  assert.equal(entry.crc, zlib.crc32(data));
+});
+
+test('readZipEntryData refuses a stored entry changed after it was zipped, even when it still reads as valid JSON', () => {
+  const data = Buffer.from('{"midi":60}', 'utf8');
+  const zip = buildZip([{ name: 'songs/0.json', data, method: 0 }]);
+  const at = Buffer.from(zip).indexOf('60');
+  zip[at + 1] = '1'.charCodeAt(0); // {"midi":61} -- still valid JSON, now the wrong note
+  const [entry] = readZipEntries(zip);
+  assert.throws(() => readZipEntryData(zip, entry), /"songs\/0\.json" inside the archive is damaged/);
+});
+
+test('readZipEntryData refuses a deflated entry whose checksum does not match what it unpacks to', () => {
+  const data = Buffer.from('ordinary musicxml content '.repeat(50), 'utf8');
+  const zip = buildZip([{ name: 'score.musicxml', data, method: 8, crc: (zlib.crc32(data) ^ 1) >>> 0 }]);
+  const [entry] = readZipEntries(zip);
+  assert.throws(() => readZipEntryData(zip, entry), /"score\.musicxml" inside the archive is damaged/);
+});
+
+test('an empty entry with checksum 0 still reads', () => {
+  const zip = buildZip([{ name: 'empty.txt', data: Buffer.alloc(0), method: 0 }]);
+  const [entry] = readZipEntries(zip);
+  assert.equal(readZipEntryData(zip, entry).length, 0);
+});
+
+test('the size limits still refuse an oversized entry before any checksum is computed', () => {
+  const bomb = Buffer.alloc(4000, 0x41);
+  const zip = buildZip([{ name: 'bomb.musicxml', data: bomb, method: 8, crc: 12345 }]);
+  const [entry] = readZipEntries(zip);
+  assert.throws(() => readZipEntryData(zip, entry, 1000), /larger than the.*limit|zip bomb/i);
+  const lying = buildZip([{ name: 'huge.musicxml', data: Buffer.from('tiny'), method: 8, crc: 1, declaredUncompressedSize: MAX_ENTRY_BYTES + 1 }]);
+  assert.throws(() => readZipEntryData(lying, readZipEntries(lying)[0]), /larger than the.*limit|zip bomb/i);
 });
